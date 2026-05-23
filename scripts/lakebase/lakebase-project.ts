@@ -96,6 +96,40 @@ interface BranchMetadata {
   is_default?: boolean;
 }
 
+export interface LakebaseProjectMetadata {
+  uid: string;
+  name: string;
+  displayName?: string;
+  state?: string;
+}
+
+/**
+ * Look up a Lakebase project's metadata (uid, display name, state).
+ * Returns undefined when the project doesn't exist or the CLI errors.
+ */
+export async function getProjectInfo(args: LakebaseProjectArgs): Promise<LakebaseProjectMetadata | undefined> {
+  const name = args.projectId.startsWith("projects/") ? args.projectId : `projects/${args.projectId}`;
+  let raw: string;
+  try {
+    raw = await dbcli(["postgres", "get-project", name, "-o", "json"], args.host);
+  } catch {
+    return undefined;
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  const status = (parsed.status as { current_state?: string } | undefined) ?? undefined;
+  return {
+    uid: (parsed.uid as string) ?? args.projectId,
+    name: (parsed.name as string) ?? name,
+    displayName: (parsed.display_name as string) ?? (parsed.displayName as string) ?? undefined,
+    state: status?.current_state ?? (parsed.state as string) ?? undefined,
+  };
+}
+
 async function dbcli(args: string[], host?: string): Promise<string> {
   const trimmedHost = host?.replace(/\/+$/, "");
   const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;

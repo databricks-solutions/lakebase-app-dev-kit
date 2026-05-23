@@ -99,7 +99,7 @@ export async function getConnection(args: ConnectionArgs): Promise<DsnResult | P
   });
 }
 
-async function resolveEndpointHost(instance: string, branch: string): Promise<string> {
+export async function resolveEndpointHost(instance: string, branch: string): Promise<string> {
   const branchPath = `projects/${instance}/branches/${branch}`;
   const raw = dbcli(["postgres", "list-endpoints", branchPath, "-o", "json"]);
   const endpoints = JSON.parse(raw) as Array<{ status?: { hosts?: { host?: string } } }>;
@@ -113,7 +113,18 @@ async function resolveEndpointHost(instance: string, branch: string): Promise<st
   return host;
 }
 
-async function mintCredential(endpointPath: string): Promise<{ token: string; email: string }> {
+/**
+ * Mint a short-lived Lakebase credential against a branch endpoint.
+ *
+ * This is the ONLY function that should call
+ * `databricks postgres generate-database-credential` anywhere in the codebase.
+ * A CI grep guard enforces that — every other workflow op (schema queries,
+ * direct pg.Pool construction, DSN building) must go through this helper.
+ *
+ * @param endpointPath Full Lakebase endpoint resource path
+ *   (e.g. `projects/my-app/branches/feature-x/endpoints/primary`)
+ */
+export async function mintCredential(endpointPath: string): Promise<{ token: string; email: string }> {
   // ── single point of credential minting in the entire codebase ──
   const raw = dbcli(["postgres", "generate-database-credential", endpointPath, "-o", "json"]);
   const token = (JSON.parse(raw)?.token ?? "") as string;
@@ -124,7 +135,7 @@ async function mintCredential(endpointPath: string): Promise<{ token: string; em
   return { token, email };
 }
 
-async function resolveCurrentUser(): Promise<string> {
+export async function resolveCurrentUser(): Promise<string> {
   const raw = dbcli(["current-user", "me", "-o", "json"]);
   const parsed = JSON.parse(raw) as {
     userName?: string;
