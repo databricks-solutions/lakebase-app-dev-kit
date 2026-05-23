@@ -52,11 +52,22 @@ export interface UpdateEnvConnectionArgs {
   username: string;
   /** Short-lived OAuth token. */
   password: string;
+  /** Optional Lakebase endpoint host. Spring's application-local.properties and
+   * the post-checkout.sh hook both write LAKEBASE_HOST=... so consumers like
+   * the JDBC URL builder can derive jdbc:postgresql://${host}:... independently
+   * of DATABASE_URL parsing. */
+  endpointHost?: string;
   /** Optional comment line prepended to the connection block. */
   comment?: string;
 }
 
-const CONNECTION_KEYS = ["DATABASE_URL", "DB_USERNAME", "DB_PASSWORD", "LAKEBASE_BRANCH_ID"] as const;
+const CONNECTION_KEYS = [
+  "DATABASE_URL",
+  "DB_USERNAME",
+  "DB_PASSWORD",
+  "LAKEBASE_BRANCH_ID",
+  "LAKEBASE_HOST",
+] as const;
 
 /**
  * Update the connection block (LAKEBASE_BRANCH_ID, DATABASE_URL, DB_USERNAME,
@@ -84,16 +95,19 @@ export function updateEnvConnection(args: UpdateEnvConnectionArgs): void {
     .join("\n")
     .replace(/\n+$/, "");
 
-  const block = [
-    args.comment ?? "",
-    `LAKEBASE_BRANCH_ID=${args.branchId}`,
-    `DATABASE_URL=${args.databaseUrl}`,
-    `DB_USERNAME=${args.username}`,
-    `DB_PASSWORD=${args.password}`,
-    "",
-  ]
-    .filter((line) => line !== "" || args.comment !== undefined)
-    .join("\n");
+  const lines: string[] = [];
+  if (args.comment !== undefined) {
+    lines.push(args.comment);
+  }
+  if (args.endpointHost !== undefined) {
+    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
+  }
+  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
+  lines.push(`DATABASE_URL=${args.databaseUrl}`);
+  lines.push(`DB_USERNAME=${args.username}`);
+  lines.push(`DB_PASSWORD=${args.password}`);
+  lines.push("");
+  const block = lines.join("\n");
 
   const content = preserved ? `${preserved}\n${block}` : block;
   // Ensure parent dir exists for the no-existing-file case

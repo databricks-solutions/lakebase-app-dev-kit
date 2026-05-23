@@ -68,6 +68,72 @@ export function endpointPath(instance: string, branch: string, endpointName = "p
   return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
 }
 
+export interface EnsureEndpointArgs {
+  instance: string;
+  branch: string;
+  /** Default: "primary" */
+  endpointName?: string;
+  /** Default: "ENDPOINT_TYPE_READ_WRITE" */
+  endpointType?: "ENDPOINT_TYPE_READ_WRITE" | "ENDPOINT_TYPE_READ_ONLY";
+  /** Autoscaling minimum compute units. Default: 2. */
+  autoscalingMinCu?: number;
+  /** Autoscaling maximum compute units. Default: 4. */
+  autoscalingMaxCu?: number;
+  /** Default: 120_000. Wait budget for the endpoint to reach ACTIVE state. */
+  timeoutMs?: number;
+}
+
+/**
+ * Get the primary endpoint for a branch, creating one if it doesn't exist.
+ *
+ * Mirrors the `get_or_create_endpoint` helper in templates/.../post-checkout.sh.
+ * Used by `checkoutPaired` to make sure a freshly-resolved Lakebase branch
+ * has a reachable endpoint before .env gets rewritten with credentials.
+ */
+export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<EndpointInfo> {
+  const endpointName = args.endpointName ?? "primary";
+  const existing = await getEndpoint({ instance: args.instance, branch: args.branch, endpointName });
+  if (existing?.host) {
+    return existing;
+  }
+
+  const branchPath = `projects/${args.instance}/branches/${args.branch}`;
+  const spec = {
+    spec: {
+      endpoint_type: args.endpointType ?? "ENDPOINT_TYPE_READ_WRITE",
+      autoscaling_limit_min_cu: args.autoscalingMinCu ?? 2,
+      autoscaling_limit_max_cu: args.autoscalingMaxCu ?? 4,
+    },
+  };
+
+  // Create endpoint (CLI may return immediately or block until ACTIVE)
+  try {
+    execFileSync(
+      "databricks",
+      ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
+      { stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }
+    );
+  } catch (err) {
+    // Race: the endpoint may have been created between our getEndpoint check
+    // and the create call. Re-check before failing.
+    const racy = await getEndpoint({ instance: args.instance, branch: args.branch, endpointName });
+    if (racy?.host) return racy;
+    throw err;
+  }
+
+  // Poll until the endpoint reports an actual host
+  const timeoutMs = args.timeoutMs ?? 120_000;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ep = await getEndpoint({ instance: args.instance, branch: args.branch, endpointName });
+    if (ep?.host) return ep;
+    await new Promise((r) => setTimeout(r, 5_000));
+  }
+  throw new Error(
+    `Endpoint for ${branchPath} did not reach ACTIVE within ${timeoutMs}ms (create succeeded but no host yet)`
+  );
+}
+
 export interface GetCredentialArgs {
   instance: string;
   branch: string;

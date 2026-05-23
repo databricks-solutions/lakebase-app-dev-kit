@@ -134,7 +134,8 @@ Each operation is a CLI bin invocation that returns JSON on stdout. JS callers c
 - `create-project` — bootstrap a fresh Lakebase-paired project
 - `schema-diff` — parent-aware diff between two Lakebase branches
 - `branch-create` / `branch-delete` — Lakebase branch lifecycle
-- `get-endpoint` / `get-credential` — branch endpoint + raw token/email
+- `create-paired-branch` / `delete-paired-branch` / `checkout-paired` / `sync-env-to-current-branch` — paired ops that keep git + Lakebase + .env in lockstep
+- `get-endpoint` / `ensure-endpoint` / `get-credential` — branch endpoint + raw token/email
 - `query-branch-schema` / `query-branch-tables` — live pg introspection
 - `get-project-info` — project metadata (uid, display name, state)
 - `pr-create` / `pr-update` / `pr-merge` — PR flow (TODO — FEIP-7076)
