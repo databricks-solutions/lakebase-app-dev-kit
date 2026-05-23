@@ -37,6 +37,61 @@ For a JS/TS host (extension, Node service) that imports substrate functions, dep
 
 Pin to a sha. `prepare` builds `dist/` on install so consumers can import from the package name.
 
+## Project state — when `.env` matters
+
+The substrate API takes explicit args (`instance`, `branch`, etc.) on every public function — agents can drive every operation without a project `.env` at all. **But** when an agent is acting AS the developer in a checked-out paired project, the project's `.env` is the source of truth for "which Lakebase branch is this workspace currently paired with."
+
+**Two modes:**
+
+| Agent context | `.env` contract |
+|---|---|
+| In a checked-out paired project (Claude Code / Cursor / Genie Code on a developer's machine) | **Respect it.** Read `LAKEBASE_PROJECT_ID` to derive `instance`. After `git checkout`, call `syncEnvToCurrentBranch({ cwd })` so `.env` matches the new branch — otherwise the bundled CI scripts (`refresh-token.sh`, `flyway-migrate.sh`) and the git hooks operate on stale credentials. |
+| Sandbox / no workspace (Claude Desktop, OpenAI Agent Builder, exploratory) | **Ignore it.** Pass `instance` and `branch` explicitly per call. Substrate never requires `.env`. |
+| Bootstrapping a new project | **N/A.** `createProject` creates the `.env` for you as step 7. No `.env` exists before that. |
+
+**Connection-block keys** (managed by `syncEnvToCurrentBranch` / `updateEnvConnection` / `post-checkout.sh`):
+
+```
+LAKEBASE_BRANCH_ID=feature-x
+DATABASE_URL=postgresql://user%40databricks.com:tok@host:5432/databricks_postgres?sslmode=require
+DB_USERNAME=user@databricks.com
+DB_PASSWORD=tok
+```
+
+These four are the rewritten set on every branch switch. Anything else in `.env` is preserved verbatim.
+
+**Project-level keys** (written once by `writeEnvFile` during project bootstrap, never rewritten):
+
+```
+DATABRICKS_HOST=https://workspace.cloud.databricks.com
+LAKEBASE_PROJECT_ID=my-app
+```
+
+If you're an agent dropping into a project mid-session, read these first to know what `instance` to pass to every subsequent operation.
+
+## Sync without an IDE — the git hooks
+
+The construct that keeps a Lakebase branch and a git branch in sync in a plain terminal session (no extension, no explicit substrate call) is the **bundled git hooks** that `scaffoldAll` / `installHooks` drops into `.git/hooks/` during project bootstrap. They are the default-on automatic sync mechanism. Agents driving raw `git` commands inherit them for free.
+
+| Hook | Fires on | What it does |
+|---|---|---|
+| `post-checkout` | `git checkout <branch>` | Reads new current branch → finds matching Lakebase branch → mints fresh credential → rewrites `.env` connection block. **The primary sync mechanism.** |
+| `post-merge` | `git merge` | Runs Flyway migrations against the now-current Lakebase branch so schema catches up. |
+| `pre-push` | `git push` | Schema-diff guard — surfaces unmigrated changes before remote sees them. |
+| `prepare-commit-msg` | `git commit` | Embeds Lakebase branch context in commit messages so the schema-diff CI workflow can find them. |
+
+**Practical implications for an agent:**
+
+1. **Don't fight the hooks.** If you run `git checkout feature-x` in a paired project, `.env` auto-updates. Don't also call `syncEnvToCurrentBranch` defensively — let the hook own that side of the workflow.
+
+2. **Hooks don't create branches.** They sync state after-the-fact. To CREATE a Lakebase branch (which has no git equivalent), use the substrate's `createPairedBranch` — it creates the Lakebase side first, then `git checkout -b` triggers the hook to populate credentials.
+
+3. **If hooks aren't installed, re-arm them.** Some workflows clone a paired project without scaffolding (e.g. cloning someone else's checkout). The substrate's `installHooks(projectDir)` is the recovery — copies `scripts/post-checkout.sh` and siblings into `.git/hooks/` with the right permissions.
+
+4. **For pure-API sessions (no checkout) the hooks are irrelevant.** A Claude Desktop sandbox or OpenAI Agent Builder session that just calls `getConnection({ instance, branch })` doesn't have a `.git/` to install hooks into — and doesn't need them. The hooks only matter when an agent (or human) is driving a working tree with `git` commands.
+
+The bundled hook scripts live in `templates/project/common/scripts/` if you want to inspect or extend them.
+
 ## Credential handoff — two helpers, one pattern
 
 Two narrow auth seams — one for Lakebase, one for GitHub. Both follow the same shape: single module, dynamic-runtime fallback chain, CI grep guard preventing any other file from resolving credentials directly.
