@@ -1,10 +1,10 @@
-<<<<<<< HEAD
+# From databricks-solutions org init
 *conf*.json
 .DS_Store
 __pycache__
 .idea/
-.env
-=======
+
+# Project-specific
 node_modules/
 dist/
 .env
@@ -12,7 +12,5 @@ dist/
 !.env.example
 *.vsix
 *.log
-.DS_Store
 coverage/
 .vitest/
->>>>>>> cc14594 (Initial commit: lakebase-scm-workflows substrate)
