@@ -82,6 +82,11 @@ export interface WorkflowRunSummary {
   conclusion: string;
   branch: string;
   event: string;
+  /** ISO 8601 timestamp from GitHub. Useful for filtering out runs older than
+   * a session start time or detecting stuck/orphaned runs whose updated_at
+   * lags. May be `undefined` if the API omitted it. */
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ─── Primitive PR ops ──────────────────────────────────────────
@@ -350,6 +355,8 @@ export async function listWorkflowRuns(
       conclusion: r.conclusion || "",
       branch: r.head_branch || "",
       event: r.event || "",
+      createdAt: r.created_at || undefined,
+      updatedAt: r.updated_at || undefined,
     }));
   } catch {
     return [];
