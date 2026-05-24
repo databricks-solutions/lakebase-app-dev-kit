@@ -26,5 +26,11 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   splitting: false,
-  shims: false,
+  // `shims: true` makes esbuild inject pathToFileURL(__filename).href for
+  // `import.meta.url` in the CJS build (and the inverse for ESM). Without
+  // it, `import.meta.url` is undefined at runtime in the CJS bundle, which
+  // breaks scaffold.ts's findTemplatesDir + sibling helpers when called
+  // from a CJS consumer like lakebase-scm-extension. Required for dual-
+  // format reach.
+  shims: true,
 });
