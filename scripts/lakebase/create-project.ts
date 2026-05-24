@@ -173,6 +173,8 @@ export async function createProject(
     try {
       await syncCiSecrets({
         projectDir,
+        databricksHost: host,
+        lakebaseProjectId,
         comment: "GitHub Actions CI",
         lifetimeSeconds: 86_400,
         ownerRepo: fullRepoName,

@@ -1,19 +1,23 @@
 // Sync CI secrets (DATABRICKS_HOST, LAKEBASE_PROJECT_ID, DATABRICKS_TOKEN)
-// to the GitHub repo. Mints a fresh Databricks PAT when possible; falls
-// back to .env's DATABRICKS_TOKEN.
+// to the GitHub repo. Mints a fresh Databricks PAT.
 //
-// Ported from src/utils/ciSecrets.ts. The agent-callable form takes the
-// projectDir + repo name as explicit args (no workspace-root assumption).
+// Caller passes the values directly. Previously this read .env from disk,
+// but since createProject no longer writes .env (option 3 — the only on-disk
+// .env is created later by the post-checkout hook, after CI secrets need to
+// be set), the values have to come from the create-project caller's scope.
 
-import * as fs from "node:fs";
-import * as path from "node:path";
 import { exec } from "./exec.js";
 import { setRepoSecrets } from "../github/secrets.js";
 import { getOwnerRepo } from "../git/remote.js";
 
 export interface SyncCiSecretsArgs {
-  /** Project root containing .env. */
+  /** Project root (used to resolve ownerRepo from `git remote` when not given,
+   *  and as the cwd for the `databricks tokens create` call). */
   projectDir: string;
+  /** Workspace host (DATABRICKS_HOST secret). Required. */
+  databricksHost: string;
+  /** Lakebase project id (LAKEBASE_PROJECT_ID secret). Required. */
+  lakebaseProjectId: string;
   /** Token comment for `databricks tokens create`. */
   comment?: string;
   /** Token lifetime in seconds (default: 24h). */
@@ -31,38 +35,33 @@ export async function syncCiSecrets(args: SyncCiSecretsArgs): Promise<void> {
   if (!ownerRepo) {
     throw new Error("Could not resolve GitHub repository from git remote");
   }
-
-  const envPath = path.join(args.projectDir, ".env");
-  if (!fs.existsSync(envPath)) {
-    throw new Error(`.env not found at ${envPath}`);
+  if (!args.databricksHost) {
+    throw new Error("syncCiSecrets: databricksHost is required");
   }
-  const envContent = fs.readFileSync(envPath, "utf-8");
-  const getEnvVal = (key: string): string => {
-    const match = envContent.match(new RegExp(`^${key}=(.+)$`, "m"));
-    return match ? match[1].trim() : "";
+  if (!args.lakebaseProjectId) {
+    throw new Error("syncCiSecrets: lakebaseProjectId is required");
+  }
+
+  const secrets: Record<string, string> = {
+    DATABRICKS_HOST: args.databricksHost,
+    LAKEBASE_PROJECT_ID: args.lakebaseProjectId,
   };
 
-  const host = getEnvVal("DATABRICKS_HOST");
-  const projectId = getEnvVal("LAKEBASE_PROJECT_ID");
-  const secrets: Record<string, string> = {};
-  if (host) secrets.DATABRICKS_HOST = host;
-  if (projectId) secrets.LAKEBASE_PROJECT_ID = projectId;
-
-  // Mint a fresh PAT; fall back to .env token if available.
+  // Mint a fresh PAT for CI. If this fails, ship the non-secret pair anyway —
+  // a partially-configured repo is still better than nothing (the user can
+  // re-mint via the in-project refresh-token script), and the caller logs the
+  // warning. Auth workflows will fail loudly with a clear message until then.
   try {
     const tokenRaw = await exec(
       `databricks tokens create --comment "${comment}" --lifetime-seconds ${lifetime} -o json`,
-      { cwd: args.projectDir, timeout: 30_000, env: { DATABRICKS_HOST: host } }
+      { cwd: args.projectDir, timeout: 30_000, env: { DATABRICKS_HOST: args.databricksHost } }
     );
     const parsed = JSON.parse(tokenRaw);
     const token = parsed.token_value || parsed.token || "";
     if (token) secrets.DATABRICKS_TOKEN = token;
   } catch {
-    const existing = getEnvVal("DATABRICKS_TOKEN");
-    if (existing) secrets.DATABRICKS_TOKEN = existing;
+    // PAT mint failed — proceed with HOST/PROJECT_ID only.
   }
 
-  if (Object.keys(secrets).length > 0) {
-    await setRepoSecrets(ownerRepo, secrets);
-  }
+  await setRepoSecrets(ownerRepo, secrets);
 }
