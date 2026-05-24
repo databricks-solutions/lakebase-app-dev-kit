@@ -102,7 +102,7 @@ Examples:
 
 Language support today:
   python (alembic)  Full: apply, rollback, status, list
-  java, kotlin      list only (apply/rollback/status: FEIP-7098)
+  java, kotlin      Full: apply, status, list (rollback unsupported in Flyway Community Edition)
   nodejs            list only (apply/rollback/status: FEIP-7099)
 `;
 
