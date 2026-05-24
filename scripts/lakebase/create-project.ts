@@ -52,19 +52,20 @@ export interface CreateProjectResult {
 export type ProgressCallback = (step: string, detail?: string) => void;
 
 /**
- * Orchestrate the 11-step project creation.
+ * Orchestrate the 10-step project creation.
  *
  *   1. Create GitHub repo (Octokit) — useGithub only
  *   2. Wait for repo visibility (SAML/propagation) — useGithub only
  *   3. Clone repo OR git init local dir
  *   4. Create Lakebase project (databricks postgres create-project)
  *   5. Resolve default branch id
- *   6. Scaffold templates (common + language-specific via Spring Initializr or static)
- *   7. Write .env
- *   8. Sync CI secrets (DATABRICKS_HOST / LAKEBASE_PROJECT_ID / DATABRICKS_TOKEN) — useGithub
- *   9. Set up self-hosted runner — useGithub + self-hosted only
- *  10. Initial commit + push (workflow-scope error surfaced clearly) — push only if useGithub
- *  11. Health check (verifyHooks + verifyWorkflows) — warnings reported, not fatal
+ *   6. Scaffold templates (common + language-specific via Spring Initializr or static).
+ *      Ships .env.example only — .env is never written or committed by this flow.
+ *      First post-checkout populates .env from .env.example with a fresh JWT.
+ *   7. Sync CI secrets (DATABRICKS_HOST / LAKEBASE_PROJECT_ID / DATABRICKS_TOKEN) — useGithub
+ *   8. Set up self-hosted runner — useGithub + self-hosted only
+ *   9. Initial commit + push (workflow-scope error surfaced clearly) — push only if useGithub
+ *  10. Health check (verifyHooks + verifyWorkflows) — warnings reported, not fatal
  */
 export async function createProject(
   input: CreateProjectArgs,
@@ -159,11 +160,14 @@ export async function createProject(
     report: (m, d) => report(m, d),
   });
 
-  // ── Step 6: Write .env ────────────────────────────────────────
-  report("Writing .env configuration...");
-  writeEnvFile({ projectDir, databricksHost: host, lakebaseProjectId });
+  // (Step 6 — write .env — intentionally removed.)
+  // Substrate ships .env.example only; .env is gitignored and never committed.
+  // The post-checkout hook bootstraps .env from .env.example on first switch
+  // and fills in the JWT-bearing connection material then. Keeping .env out
+  // of the create flow eliminates the only path by which a real JWT could
+  // end up staged in git.
 
-  // ── Step 7: CI secrets (GitHub only) ──────────────────────────
+  // ── Step 6: CI secrets (GitHub only) ──────────────────────────
   if (useGithub) {
     report("Setting up CI auth (service principal)...");
     try {
@@ -180,7 +184,7 @@ export async function createProject(
     }
   }
 
-  // ── Step 8: Self-hosted runner (GitHub + self-hosted only) ────
+  // ── Step 7: Self-hosted runner (GitHub + self-hosted only) ────
   if (useGithub && runnerType === "self-hosted") {
     report("Setting up self-hosted runner...");
     try {
@@ -200,7 +204,7 @@ export async function createProject(
     report("Skipping runner setup (no GitHub repository).");
   }
 
-  // ── Step 9: Initial commit (+ push when GitHub configured) ────
+  // ── Step 8: Initial commit (+ push when GitHub configured) ────
   const langLabels: Record<string, string> = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -215,7 +219,7 @@ export async function createProject(
     push: useGithub,
   });
 
-  // ── Step 10: Health check (advisory) ──────────────────────────
+  // ── Step 9: Health check (advisory) ───────────────────────────
   report("Verifying project...");
   const health = verifyProject(projectDir);
   for (const w of health.warnings) {

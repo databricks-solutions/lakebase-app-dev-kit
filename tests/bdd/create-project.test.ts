@@ -66,7 +66,10 @@ describe.skipIf(!liveE2E)("createProject — live end-to-end (LAKEBASE_TEST_E2E=
     });
     expect(result.projectDir.startsWith(parent)).toBe(true);
     expect(result.lakebaseProjectId).toBeTruthy();
-    expect(fs.existsSync(path.join(result.projectDir, ".env"))).toBe(true);
+    // createProject ships .env.example only; .env is gitignored and never
+    // written by this flow (post-checkout hook bootstraps it on first switch).
+    expect(fs.existsSync(path.join(result.projectDir, ".env.example"))).toBe(true);
+    expect(fs.existsSync(path.join(result.projectDir, ".env"))).toBe(false);
     expect(fs.existsSync(path.join(result.projectDir, "pyproject.toml"))).toBe(true);
   });
 });
