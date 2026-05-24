@@ -164,10 +164,19 @@ jobs:
 
           if [ -n "$DEFAULT_NAME" ]; then
             echo "Creating pre-migration snapshot: $SNAPSHOT_NAME"
-            databricks postgres create-branch "$PROJ_PATH" "$SNAPSHOT_NAME" \
-              --json "{\"spec\": {\"source_branch\": \"${DEFAULT_NAME}\", \"ttl\": \"86400s\"}}" 2>&1 || true
-            echo "SNAPSHOT_NAME=$SNAPSHOT_NAME" >> $GITHUB_ENV
-            echo "SNAPSHOT_PROJ_PATH=$PROJ_PATH" >> $GITHUB_ENV
+            # Capture stdout+stderr and exit status separately so a failure
+            # here doesn't get masked by a downstream "may have already
+            # expired" message in the cleanup step.
+            if CREATE_OUT="$(databricks postgres create-branch "$PROJ_PATH" "$SNAPSHOT_NAME" \
+                              --json "{\"spec\": {\"source_branch\": \"${DEFAULT_NAME}\", \"ttl\": \"86400s\"}}" 2>&1)"; then
+              echo "$CREATE_OUT"
+              echo "SNAPSHOT_NAME=$SNAPSHOT_NAME" >> $GITHUB_ENV
+              echo "SNAPSHOT_PROJ_PATH=$PROJ_PATH" >> $GITHUB_ENV
+            else
+              echo "$CREATE_OUT"
+              echo "::warning::Failed to create pre-migration snapshot. Proceeding without rollback safety."
+              echo "SNAPSHOT_NAME=" >> $GITHUB_ENV
+            fi
           else
             echo "::warning::Could not find default branch for snapshot. Proceeding without rollback safety."
             echo "SNAPSHOT_NAME=" >> $GITHUB_ENV
@@ -226,7 +235,11 @@ jobs:
             exit 0
           fi
 
-          MIGRATE_RESULT="${{ steps.snapshot.outcome }}"
+          # job.status reflects whether the migration step (or any earlier
+          # step in this job) failed — the failure() / success() boundary that
+          # decides preserve-vs-delete. The migration step has no `id`, so
+          # there's no per-step outcome to consult; the job-level status is
+          # the authoritative signal.
           if [ "${{ job.status }}" = "success" ]; then
             echo "Migrations succeeded. Deleting snapshot: $SNAP_PATH"
             databricks postgres delete-branch "$SNAP_PATH" 2>&1 || true
