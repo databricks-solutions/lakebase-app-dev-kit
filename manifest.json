@@ -1,12 +1,22 @@
 {
   "version": "2",
-  "updated_at": "2026-05-24T19:05:39Z",
+  "updated_at": "2026-05-24T22:55:20Z",
   "skills": {
+    "lakebase-release-workflows": {
+      "version": "0.1.0",
+      "description": "Opinionated branching + release methodology for Lakebase-paired projects. Use when designing a project's branch layout, cutting a release candidate, promoting to production, rolling back, or asking 'where should this work happen?' Encodes the prod / staging / {feature,test,uat,perf} convention and the cut-RC / regression-test / cut-prod-backup / migrate-prod release flow.",
+      "experimental": false,
+      "updated_at": "2026-05-24T22:54:10Z",
+      "files": [
+        "SKILL.md",
+        "references/branching-and-release-methodology.md"
+      ]
+    },
     "lakebase-scm-workflows": {
       "version": "0.1.0",
       "description": "Opinionated git-Lakebase branch-pairing workflows. Use when scaffolding a Lakebase-paired project, creating/deleting Lakebase branches in lockstep with git branches, diffing parent-aware schemas, opening or merging PRs that touch Lakebase, or running the same operations the lakebase-scm-extension exposes in VS Code.",
       "experimental": false,
-      "updated_at": "2026-05-24T18:53:10Z",
+      "updated_at": "2026-05-24T19:58:32Z",
       "files": [
         "SKILL.md",
         "agents/openai.yaml",
