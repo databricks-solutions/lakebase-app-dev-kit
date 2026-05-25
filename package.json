@@ -1,6 +1,6 @@
 {
   "name": "@databricks-solutions/lakebase-app-dev-kit",
-  "version": "0.2.1-alpha.2",
+  "version": "0.3.0-alpha.0",
   "description": "Lakebase-backed application development kit — shared scripts, agent skills (SCM today, TDD next), MCP server, and OpenAI Foundry tool spec. Consumed by lakebase-scm-extension and coding agents (Claude Code, Claude Desktop, OpenAI Codex, Cursor, Databricks Genie Code).",
   "type": "module",
   "private": true,
@@ -70,6 +70,7 @@
     "lakebase-github-token": "./dist/scripts/github/auth.cli.js",
     "lakebase-create-project": "./dist/scripts/lakebase/create-project.cli.js",
     "lakebase-migrate": "./dist/scripts/lakebase/migrate.cli.js",
+    "lakebase-cut-backup": "./dist/scripts/lakebase/cut-backup.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
   },
   "scripts": {

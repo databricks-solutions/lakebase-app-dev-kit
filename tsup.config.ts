@@ -19,6 +19,7 @@ export default defineConfig({
     "scripts/lakebase/schema-diff.cli": "scripts/lakebase/schema-diff.cli.ts",
     "scripts/lakebase/create-project.cli": "scripts/lakebase/create-project.cli.ts",
     "scripts/lakebase/migrate.cli": "scripts/lakebase/migrate.cli.ts",
+    "scripts/lakebase/cut-backup.cli": "scripts/lakebase/cut-backup.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },

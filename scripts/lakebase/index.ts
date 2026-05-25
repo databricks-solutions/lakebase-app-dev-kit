@@ -7,6 +7,7 @@
 
 export * from "./branch-create.js";
 export * from "./branch-delete.js";
+export * from "./cut-backup.js";
 export * from "./branch-endpoint.js";
 export * from "./branch-schema.js";
 export * from "./paired-branch.js";
