@@ -42,12 +42,25 @@ export interface ReleaseArgs {
   /** Bound the wait for merge.yml. Default: 10 minutes (comfortable
    *  headroom for cut-backup + migrate). */
   timeoutMs?: number;
+  /** Bound the wait for pr.yml (the CI gate) to complete before
+   *  merging. Default: 10 minutes. */
+  prGateTimeoutMs?: number;
   /** How often to poll listWorkflowRuns while waiting. Default: 15s. */
   pollIntervalMs?: number;
-  /** Workflow file basename (matched against the run's `name` field).
-   *  Default: 'merge.yml'. Override if the project uses a different
-   *  filename. */
+  /** Workflow file basename for the merge gate (Phases 3-4), matched
+   *  against the run's `name` field. Default: 'merge.yml'. */
   workflowFile?: string;
+  /** Workflow file basename for the PR gate (Phases 1-2), matched
+   *  against the run's `name` field. Default: 'pr.yml'. */
+  prWorkflowFile?: string;
+  /** When true (default), `release()` itself waits for pr.yml to
+   *  complete with conclusion=success before merging. This is the
+   *  belt-and-suspenders enforcement of the CI gate - it works even
+   *  in repos without branch protection (free-tier private repos
+   *  cannot configure required status checks, so the GitHub-side gate
+   *  silently allows any merge there). Set false ONLY if the caller
+   *  is enforcing the gate some other way. */
+  requireCiGate?: boolean;
 }
 
 export interface ReleaseResult {
@@ -86,15 +99,20 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 export async function release(args: ReleaseArgs): Promise<ReleaseResult> {
   const workflowFile = args.workflowFile ?? "merge.yml";
+  const prWorkflowFile = args.prWorkflowFile ?? "pr.yml";
   const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const prGateTimeoutMs = args.prGateTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const pollIntervalMs = args.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const requireCiGate = args.requireCiGate ?? true;
 
-  // Capture the latest run BEFORE the merge so the wait can filter to
-  // "runs created after this point" - protects against picking up a
-  // pre-existing run from a previous release attempt.
+  // Capture the latest runs BEFORE opening the PR so the waits can
+  // filter to "runs created after this point" - protects against
+  // picking up a pre-existing run from a previous release attempt.
   const before = await listWorkflowRuns(args.ownerRepo, 25);
-  const baselineRunId =
+  const mergeBaselineRunId =
     before.find((r) => matchesWorkflowFile(r, workflowFile))?.id ?? 0;
+  const prBaselineRunId =
+    before.find((r) => matchesWorkflowFile(r, prWorkflowFile))?.id ?? 0;
 
   // Phase setup: open the from→to PR.
   const url = await createPullRequest({
@@ -114,11 +132,61 @@ export async function release(args: ReleaseArgs): Promise<ReleaseResult> {
   }
   const prNumber = parseInt(match[1], 10);
 
-  // Phases 1-2 (ci-pr branch + regression test) run automatically on PR
-  // open. GitHub branch protection gates the merge button on them
-  // passing. mergePullRequest will fail if protection blocks the merge -
-  // that's the expected behavior; the caller should investigate the PR
-  // checks rather than retry blindly.
+  // Phases 1-2 (ci-pr branch + regression test) run automatically on
+  // PR open via pr.yml. We wait for that run to complete with
+  // conclusion=success BEFORE merging.
+  //
+  // Why we don't trust GitHub branch protection alone: required status
+  // checks are a paid feature on private repos. Free-tier private repos
+  // (including every test scaffold this primitive creates) cannot
+  // configure them - the merge button is unconditional. Without this
+  // explicit wait, mergePullRequest fires the instant the PR opens and
+  // code lands on the target tier even when pr.yml would have rejected
+  // the changes. That breaks the entire promotion methodology.
+  //
+  // In a properly-configured production repo with branch protection
+  // configured, this wait is redundant-but-cheap belt-and-suspenders;
+  // mergePullRequest would also be blocked by GitHub until pr.yml
+  // passes. Set requireCiGate: false to skip this wait when the caller
+  // is enforcing the gate some other way.
+  if (requireCiGate) {
+    const prDeadline = Date.now() + prGateTimeoutMs;
+    let prGatePassed = false;
+    while (Date.now() < prDeadline && !prGatePassed) {
+      try {
+        const runs = await listWorkflowRuns(args.ownerRepo, 25);
+        const candidate = runs
+          .filter((r) => matchesWorkflowFile(r, prWorkflowFile))
+          .filter((r) => r.id > prBaselineRunId)
+          .filter((r) => r.event === "pull_request")
+          .filter((r) => r.branch === args.from)[0];
+        if (candidate && candidate.status === "completed") {
+          if (candidate.conclusion !== "success") {
+            throw new Error(
+              `Release ${args.from} → ${args.to}: PR #${prNumber} ${prWorkflowFile} ` +
+                `concluded with '${candidate.conclusion}'. Refusing to merge.`,
+            );
+          }
+          prGatePassed = true;
+          break;
+        }
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("Refusing to merge")) {
+          throw e;
+        }
+        // Transient API errors during poll - keep waiting.
+      }
+      await sleep(pollIntervalMs);
+    }
+    if (!prGatePassed) {
+      throw new Error(
+        `Release ${args.from} → ${args.to}: ${prWorkflowFile} did not complete ` +
+          `on PR #${prNumber} within ${prGateTimeoutMs / 1000}s. Refusing to merge.`,
+      );
+    }
+  }
+
+  // CI gate passed. Now safe to merge.
   await mergePullRequest({
     ownerRepo: args.ownerRepo,
     pullNumber: prNumber,
@@ -133,7 +201,7 @@ export async function release(args: ReleaseArgs): Promise<ReleaseResult> {
       const runs = await listWorkflowRuns(args.ownerRepo, 25);
       const matching = runs.filter((r) => matchesWorkflowFile(r, workflowFile));
       for (const run of matching) {
-        if (run.id <= baselineRunId) continue;
+        if (run.id <= mergeBaselineRunId) continue;
         if (run.branch !== args.to) continue;
         if (run.event !== "push") continue;
         if (run.status === "completed") {
