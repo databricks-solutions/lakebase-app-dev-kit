@@ -75,30 +75,36 @@ The "Default merge target" column is what the substrate ships when a project doe
 
 Each type pairs to its own Lakebase branch via the substrate's `createBranch`. Schema changes live on the type's Lakebase branch until the PR merges to the type's configured target.
 
+### A release is any merge into a long-running branch
+
+The substrate maintains this uniformly. Every merge that lands in a long-running branch IS a release - there is no separate "casual PR merge" vs "formal release" path. Examples:
+
+- `feature/X → staging` is a release to `staging`.
+- `feature/X → dev` (in a three-tier shop) is a release to `dev`.
+- `dev → staging` (in a three-tier shop) is a release to `staging`.
+- `staging → prod` is a release to `prod`.
+
+`from` can be a working branch (`feature/*`, `test/*`, `uat/*`, `perf/*`) or a long-running tier; `to` is always a long-running tier. The shape of every release is identical; only the from/to labels change. `to == prod` adds the app-deploy step; intermediate-tier releases skip it.
+
+**A PR is required for every release.** No direct pushes to long-running branches. The PR triggers Phases 1-2 (ci-pr-branch + regression test); merging the PR triggers Phases 3-4 (backup + migrate).
+
 ### Release-sprint flow
 
-A release promotes one long-running branch (the **`from` tier**) into the next one above it (the **`to` tier**). In a two-tier chain there is one release: `from=staging, to=prod`. In a three-tier chain there are two adjacent releases: `from=dev, to=staging` and `from=staging, to=prod`. The shape of each release is identical; only the from/to labels change.
+A release proceeds in four ordered phases. Phases 1-2 happen automatically when the PR opens (pr.yml); Phases 3-4 happen on PR merge (merge.yml on `to` push). Each phase is a substrate primitive; the orchestrator composes them with the PR-required gate between phases 2 and 3 (GitHub branch protection blocks the merge button until Phase 2 is green). Descriptions below use `from` / `to` placeholders so the same flow applies at every tier boundary.
 
-A release proceeds in four ordered phases. Each is intended to be a substrate primitive; the orchestrator composes them with explicit gates. The descriptions below use `from` / `to` placeholders so the same flow applies at every tier boundary.
+#### Phase 1: PR open → cut `ci-pr-branch` from `to`
 
-#### Phase 1: Cut RC from `to`
-
-Branch the release candidate from *current* `to` (git + Lakebase), NOT from `from`.
+When a PR targeting a long-running branch opens, pr.yml automatically cuts an ephemeral Lakebase branch named `ci-pr-branch` (one per PR) from the *current* `to` - NOT from `from`. The PR's migration changes are applied here, against a fresh copy of the target tier's data.
 
 ```
-git fetch && git switch <to>
-git switch -c rc/<release-id>
-# substrate creates Lakebase branch paired to rc/<release-id> off <to>'s Lakebase
+# pr.yml does this automatically:
+substrate-cut-branch --instance <id> --branch ci-pr-branch-<PR#> --source <to>
+# Then applies the PR's migrations to ci-pr-branch-<PR#>
 ```
 
-Then merge `from` into the RC. This is where the "things settling on `from`" get included or held back:
+**Why off `to` and not off `from`?** Cutting from `to` locks the release surface. The test runs against the *current* target's data shape, so what passes in pr.yml is what will pass on merge to `to`. Cutting from `from` would test against whatever happens to be on the source tier (including in-progress work), which doesn't tell you whether the migration will work on the target.
 
-```
-git merge --no-ff <from>
-# resolve conflicts; remove any commit that should not ship
-```
-
-**Why off `to` and not off `from`?** Cutting from `to` locks the release surface. The RC starts from a known-shipped state (whatever is currently live one tier up) and adds *only* the changes the release manager actively merges in. Cutting from `from` would inherit whatever happens to be on `from`, including in-progress work that did not get explicit release sign-off.
+For `staging → prod` PRs, this means the ci-pr-branch is cut from a fresh prod Lakebase, and the migration runs against real production data shape - "ensure it will work on my prod" before any merge button is enabled.
 
 #### Phase 2: Regression test the RC
 

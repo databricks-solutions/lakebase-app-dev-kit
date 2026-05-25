@@ -58,16 +58,29 @@ Any chain length works (`dev → staging → preprod → prod` etc.). The substr
 
 Each working-branch type pairs to its own Lakebase branch (via [`lakebase-scm-workflows`](../lakebase-scm-workflows/SKILL.md)'s `createBranch`). Schema changes flow up the chain one release at a time.
 
+## A release is any merge into a long-running branch
+
+The substrate maintains this convention uniformly. **Every merge that lands in a long-running branch IS a release**, regardless of where the source branch came from:
+
+- `feature/X → staging` = release to `staging`
+- `feature/X → dev` (3-tier shop) = release to `dev`
+- `dev → staging` (3-tier shop) = release to `staging`
+- `staging → prod` = release to `prod`
+
+There is no separate "casual PR merge" vs "formal release" distinction. The same four-phase shape runs in all cases - what differs is whether the RC is implicit (feature branch IS the RC) or explicit (cut from `to` and merged with `from`).
+
 ## Release-sprint flow
 
-A release promotes one long-running branch (the `from` tier) into the next one above it (the `to` tier). Two-tier has one release (`staging → prod`); three-tier has two adjacent releases (`dev → staging`, then `staging → prod`). **The shape is identical at every tier** - only the from/to labels change. `to == prod` adds the app-deploy step; intermediate releases skip it.
+A release promotes one branch (the `from` source) into a long-running target (the `to` tier). `from` can be a working branch (`feature/*`, `test/*`, etc.) or a long-running tier; `to` is always a long-running tier. **The shape is identical at every release**, regardless of source kind - only the from/to labels change. `to == prod` adds the app-deploy step; intermediate-tier releases skip it.
 
-A release proceeds in four ordered phases:
+A release proceeds in four ordered phases. The first two happen automatically when the PR opens (pr.yml on `to`); the second two happen on PR merge (merge.yml on `to` push). **A PR is required for every release** - no direct pushes to long-running branches:
 
-1. **Cut RC from `to`.** Branch the release candidate off the *current* `to` (git + Lakebase). NOT off `from`. This locks the release surface and excludes anything still settling on `from`.
-2. **Regression test the RC.** Run the project's full e2e suite against the RC's Lakebase branch. Substrate primitives: `applyMigrations`, then the project's test runner.
-3. **Cut backup of `to`.** Snapshot current `to` (Lakebase branch + git tag). One-step revert target if the release misbehaves. Runs at every tier - `staging-backup-<id>` matters less than `prod-backup-<id>` but the same primitive runs for both.
-4. **Migrate `to`.** Promote the RC into `to`: substrate `applyMigrations` against `to`'s Lakebase branch + git fast-forward of `to` to the RC tip + (only when `to == prod`) app deploy.
+1. **PR open → cut ci-pr-branch from `to`.** The substrate auto-creates an ephemeral Lakebase branch named `ci-pr-branch` (per PR) forked from the *current* `to`. This is the RC. The PR's migration changes are applied here. Cutting from `to` (not `from`) is what locks the release surface - the test runs against the current target's data shape, not whatever's accumulated on `from`.
+2. **Regression test the ci-pr-branch.** pr.yml runs `applyMigrations` against `ci-pr-branch`, then the project's full test suite. **Merge is gated on this passing** - GitHub branch protection blocks the merge button until the check is green.
+3. **PR merge → cut backup of `to`.** merge.yml on the `to` push fires `lakebase-cut-backup`, snapshotting current `to` (Lakebase branch + git tag). One-step revert target. Runs at every tier - `staging-backup-<id>` matters less than `prod-backup-<id>` but the same primitive runs for both.
+4. **Migrate `to`.** merge.yml continues with substrate `applyMigrations` against `to`'s Lakebase branch + git fast-forward of `to` + (only when `to == prod`) app deploy.
+
+The 4-phase shape is identical for `feature/X → staging` and `staging → prod`. For `staging → prod`, the ci-pr-branch is cut from a fresh prod (NOT from staging) so the migration test runs against real production data shape - "ensure it will work on my prod" before merging.
 
 ## When to load the full reference
 
