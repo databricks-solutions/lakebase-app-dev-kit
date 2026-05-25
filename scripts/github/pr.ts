@@ -363,6 +363,67 @@ export async function listWorkflowRuns(
   }
 }
 
+// ─── Branch ref ops ──────────────────────────────────────────────
+
+export interface FastForwardBranchArgs {
+  /** owner/repo (e.g. "kevin-hartman/ecom-mpk123"). */
+  ownerRepo: string;
+  /** The branch whose ref will be moved (e.g. "staging"). */
+  branch: string;
+  /** The SHA or branch name to move it to (e.g. "main"). When passing
+   *  a branch name, the latest SHA on that branch is resolved first. */
+  toRef: string;
+}
+
+/**
+ * Fast-forward `branch` to point at `toRef`. Used by `release()` to
+ * keep the source tier aligned with the target tier after merge:
+ * without this, every staging→main release leaves staging trailing
+ * main by one merge commit (tree-identical but graph-divergent), and
+ * the gap compounds across releases. Tooling that displays "X behind
+ * Y" then misleadingly suggests staging has fallen out of sync when
+ * it hasn't.
+ *
+ * Uses GitHub's `git/refs` PATCH API. Idempotent: calling it twice
+ * with the same `toRef` is a no-op on the second call. Will throw if
+ * the update is not a fast-forward (i.e. `toRef` is not a descendant
+ * of `branch`). For the release-flow case, `toRef` is always the
+ * target of the merge we just landed, so it IS a descendant by
+ * construction.
+ */
+export async function fastForwardBranch(args: FastForwardBranchArgs): Promise<void> {
+  try {
+    const { owner, repo } = parseOwnerRepo(args.ownerRepo);
+    const ok = await octokit();
+    // Resolve toRef to a SHA. If toRef looks like a SHA already (40 hex
+    // chars), use it directly; otherwise treat as a branch name and
+    // fetch its head SHA.
+    let toSha: string;
+    if (/^[a-f0-9]{40}$/i.test(args.toRef)) {
+      toSha = args.toRef;
+    } else {
+      const { data } = await ok.rest.repos.getBranch({
+        owner,
+        repo,
+        branch: args.toRef,
+      });
+      toSha = data.commit.sha;
+    }
+    await ok.rest.git.updateRef({
+      owner,
+      repo,
+      ref: `heads/${args.branch}`,
+      sha: toSha,
+      // We deliberately use a fast-forward (force=false). If `branch`
+      // had diverged from `toRef`, the methodology was already broken
+      // and silently overwriting that divergence would mask the bug.
+      force: false,
+    });
+  } catch (err) {
+    wrap(err, `Failed to fast-forward ${args.branch} to ${args.toRef}`);
+  }
+}
+
 // ─── Paired op: PR merge + Lakebase feature branch cleanup ─────
 
 export interface MergePairedPullRequestArgs {

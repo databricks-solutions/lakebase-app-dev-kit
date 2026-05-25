@@ -39,7 +39,7 @@ fi
 # on what's in the project .env. Otherwise a user who sourced an activation
 # script earlier in the shell would leak LAKEBASE_PROJECT_ID into every
 # git checkout in unrelated repos and create spurious branches.
-unset LAKEBASE_PROJECT_ID LAKEBASE_TRUNK_BRANCH LAKEBASE_STAGING_BRANCH \
+unset LAKEBASE_PROJECT_ID LAKEBASE_TRUNK_BRANCH \
       LAKEBASE_BASE_BRANCH LAKEBASE_HOST LAKEBASE_BRANCH_ID \
       DATABRICKS_CONFIG_PROFILE DATABRICKS_HOST DATABASE_URL \
       DB_USERNAME DB_PASSWORD
@@ -65,13 +65,11 @@ fi
 
 # Optional: treat a non-standard git branch like main/master – common in
 # shared-monorepo conventions where the trunk is e.g. `team-alpha/project-foo`
-# rather than `main`.
+# rather than `main`. This only covers the special case where the Lakebase
+# DEFAULT branch's name (e.g. `production`) differs from the git trunk name.
+# Other long-running tiers (staging, uat, perf, ...) are auto-discovered
+# below from the Lakebase branch list – no per-tier env var needed.
 TRUNK_ALIAS="${LAKEBASE_TRUNK_BRANCH:-}"
-
-# Optional: git branch that pairs with the Lakebase `staging` branch. When the
-# user is on this git branch, .env is pointed at the `staging` Lakebase branch
-# (which must already exist – this hook does NOT auto-create it).
-STAGING_ALIAS="${LAKEBASE_STAGING_BRANCH:-}"
 
 if ! command -v databricks >/dev/null 2>&1; then
   echo "Lakebase: databricks CLI not found. Install and run 'databricks auth login'."
@@ -194,10 +192,15 @@ get_or_create_endpoint() {
   echo "$ep_host"
 }
 
-# --- Find the default (main) Lakebase branch ---
+# --- Pull the Lakebase branch list once ---
+# Used twice below: to discover the default branch UID (for the trunk path)
+# AND to discover the set of long-running tier names (for the tier path).
 # API returns { "branches": [ ... ] }; CLI may unwrap to [ ... ]. Support both.
-# Prefer the name component (last segment of .name) over uid – the create-branch API requires it.
-DEFAULT_BRANCH_UID="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/null \
+BRANCH_LIST_JSON="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/null || echo '[]')"
+
+# Default branch: prefer the name component (last segment of .name) over uid –
+# the create-branch API requires it.
+DEFAULT_BRANCH_UID="$(echo "$BRANCH_LIST_JSON" \
   | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.status.default == true) or (.is_default == true)) | (if .name then (.name | split("/") | last) else (.uid // .id // empty) end)' | head -1)"
 
 if [ -z "$DEFAULT_BRANCH_UID" ]; then
@@ -205,10 +208,19 @@ if [ -z "$DEFAULT_BRANCH_UID" ]; then
   exit 1
 fi
 
-# --- trunk branch: point to the default Lakebase branch ---
-# When LAKEBASE_TRUNK_BRANCH is set, it REPLACES main/master as this project's
-# trunk. This matters in monorepos: if you opt in with an alias, the shared
-# main/master should NOT also pair with this project's default Lakebase branch.
+# All non-default branch names (newline-separated). These are the long-running
+# tiers the architect has cut (staging, uat, perf, dev, ... or whatever they
+# named them). A git checkout to a name in this list is a tier checkout –
+# point .env at the existing Lakebase branch of the same name, don't try to
+# create a new one.
+TIER_BRANCH_NAMES="$(echo "$BRANCH_LIST_JSON" \
+  | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select(((.status.default == true) or (.is_default == true)) | not) | (if .name then (.name | split("/") | last) else (.uid // .id // empty) end)' \
+  | grep -v '^$' || true)"
+
+# --- Trunk path: git trunk → Lakebase default ---
+# Special-cased because the Lakebase default branch's name (e.g. `production`)
+# may differ from the git trunk name (`main`). LAKEBASE_TRUNK_BRANCH lets the
+# architect declare a non-`main` git trunk (e.g. `release/v3`).
 if { [ -n "$TRUNK_ALIAS" ] && [ "$BRANCH" = "$TRUNK_ALIAS" ]; } \
    || { [ -z "$TRUNK_ALIAS" ] && { [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; }; }; then
   echo "Lakebase: on $BRANCH, connecting to default Lakebase branch ($DEFAULT_BRANCH_UID)..."
@@ -232,48 +244,41 @@ if { [ -n "$TRUNK_ALIAS" ] && [ "$BRANCH" = "$TRUNK_ALIAS" ]; } \
   exit 0
 fi
 
-# --- staging branch: point to the Lakebase `staging` branch ---
-# Symmetric to the trunk match above but targets the `staging` Lakebase branch
-# instead of the default. The `staging` branch must already exist – unlike
-# feature branches, this hook does NOT auto-create it (staging is a persistent,
-# shared branch that accumulates merged schema drift and must be bootstrapped
-# deliberately).
-if [ -n "$STAGING_ALIAS" ] && [ "$BRANCH" = "$STAGING_ALIAS" ]; then
-  # Verify the Lakebase `staging` branch exists before doing anything else.
-  STAGING_EXISTS="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/null \
-    | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.name | type == "string" and (endswith("/branches/staging") or (split("/") | last == "staging"))) or (.uid == "staging") or (.id == "staging")) | (.name // .uid // .id)' | head -1)"
-
-  if [ -z "$STAGING_EXISTS" ]; then
-    echo "Lakebase: on $BRANCH but the Lakebase 'staging' branch does not exist."
-    echo "  staging is a persistent branch and must be bootstrapped deliberately – this hook will not auto-create it."
-    echo "  Create it once with: databricks postgres create-branch $PROJ_PATH staging --json '{\"spec\": {\"source_branch\": \"${PROJ_PATH}/branches/${DEFAULT_BRANCH_UID}\", \"no_expiry\": true}}'"
-    exit 0
-  fi
-
-  echo "Lakebase: on $BRANCH, connecting to Lakebase 'staging' branch..."
-  BRANCH_PATH="${PROJ_PATH}/branches/staging"
+# --- Tier path: git branch name matches an existing non-default Lakebase branch ---
+# Auto-discovers any long-running tier the architect has cut (staging, uat,
+# perf, dev, ...). The convention is: tier branches use the same name on both
+# sides (git and Lakebase). No per-tier env alias is needed; if the Lakebase
+# branch exists, this is a tier checkout. Tiers are never auto-created by
+# this hook – the architect bootstraps them deliberately (see
+# createLongRunningBranch in lakebase-app-dev-kit).
+if [ -n "$TIER_BRANCH_NAMES" ] && echo "$TIER_BRANCH_NAMES" | grep -qxF "$BRANCH"; then
+  echo "Lakebase: on $BRANCH, connecting to Lakebase tier '$BRANCH'..."
+  BRANCH_PATH="${PROJ_PATH}/branches/${BRANCH}"
 
   HOST="$(get_or_create_endpoint "$BRANCH_PATH")"
   if [ -z "$HOST" ]; then
-    echo "Lakebase: could not get endpoint host for staging branch."
+    echo "Lakebase: could not get endpoint host for tier '$BRANCH'."
     exit 0
   fi
 
   get_credential "${BRANCH_PATH}/endpoints/primary"
   if [ -z "$TOKEN" ] || [ -z "$EMAIL" ]; then
-    echo "Lakebase: could not get credential for staging. Set DATABASE_URL in .env manually."
+    echo "Lakebase: could not get credential for tier '$BRANCH'. Set DATABASE_URL in .env manually."
     exit 0
   fi
 
-  update_env "$HOST" "$EMAIL" "$TOKEN" "staging"
-  echo "Lakebase: $BRANCH -> staging branch. Updated .env."
+  update_env "$HOST" "$EMAIL" "$TOKEN" "$BRANCH"
+  echo "Lakebase: $BRANCH -> tier '$BRANCH'. Updated .env."
   maybe_npm_install
   exit 0
 fi
 
 # --- Feature branch: create Lakebase branch from the configured base ---
-# Sanitize git branch name for Lakebase branch ID
-LAKEBASE_BRANCH="$("$SCRIPT_DIR/sanitize-branch-name.sh" "$BRANCH")"
+# Sanitize git branch name for Lakebase branch ID.
+# sanitize-branch-name.sh lives at <workTree>/scripts/; the installed hook
+# at .git/hooks/post-checkout can't use $0-relative paths because git
+# invokes it from outside the scripts/ directory.
+LAKEBASE_BRANCH="$("$WORK_TREE/scripts/sanitize-branch-name.sh" "$BRANCH")"
 BRANCH_PATH="${PROJ_PATH}/branches/${LAKEBASE_BRANCH}"
 
 # Resolve the parent (source) Lakebase branch. Precedence:
