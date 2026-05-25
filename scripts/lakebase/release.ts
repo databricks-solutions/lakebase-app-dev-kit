@@ -24,6 +24,7 @@ import {
   createPullRequest,
   mergePullRequest,
   listWorkflowRuns,
+  fastForwardBranch,
   WorkflowRunSummary,
 } from "../github/pr.js";
 
@@ -205,6 +206,32 @@ export async function release(args: ReleaseArgs): Promise<ReleaseResult> {
         if (run.branch !== args.to) continue;
         if (run.event !== "push") continue;
         if (run.status === "completed") {
+          // Fast-forward `from` to match `to` so the methodology's
+          // branches stay aligned across releases. Without this, every
+          // release leaves `from` trailing `to` by exactly one merge
+          // commit (tree-identical but graph-divergent), and the gap
+          // compounds with each release - tooling that displays "X
+          // behind Y" then misleadingly suggests `from` has fallen out
+          // of sync when it hasn't. Only do it on a green release; a
+          // failed/cancelled merge.yml means the methodology decision
+          // is for the operator, not the substrate.
+          if (run.conclusion === "success") {
+            try {
+              await fastForwardBranch({
+                ownerRepo: args.ownerRepo,
+                branch: args.from,
+                toRef: args.to,
+              });
+            } catch (e) {
+              // Non-fatal: the merge already landed, the methodology
+              // branch-alignment is cosmetic in the worst case. Log
+              // shape kept minimal so this isn't a noisy failure path
+              // when callers run releases back-to-back.
+              const msg = e instanceof Error ? e.message : String(e);
+              // eslint-disable-next-line no-console
+              console.warn(`release: fast-forward of ${args.from} to ${args.to} skipped (${msg})`);
+            }
+          }
           return {
             prNumber,
             workflowRun: run,
