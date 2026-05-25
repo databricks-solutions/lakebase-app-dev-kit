@@ -69,6 +69,10 @@ export async function createLongRunningBranch(
   const created = await createLakebaseBranch({
     instance: args.projectId,
     branch: args.name,
+    // Long-running tiers (staging, uat, perf, ...) are permanent by
+    // definition; without this they'd inherit Lakebase's default
+    // expiry and silently disappear.
+    noExpiry: true,
   });
 
   // Git side: build the new tier off `forkFromBranch` on the remote.

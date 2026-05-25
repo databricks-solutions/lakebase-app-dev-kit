@@ -54,6 +54,11 @@ export async function cutBackup(args: CutBackupArgs): Promise<CutBackupResult> {
     parentBranch: args.sourceBranch,
     readyTimeoutMs: args.readyTimeoutMs,
     pollIntervalMs: args.pollIntervalMs,
+    // Backups must outlive any ephemeral-branch expiration so the
+    // rollback contract holds: if Lakebase auto-expired a backup
+    // before the operator decided to roll back, the release flow
+    // would have nothing to restore to.
+    noExpiry: true,
   });
   return {
     backup,
