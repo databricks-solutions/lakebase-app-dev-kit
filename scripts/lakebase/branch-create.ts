@@ -45,6 +45,16 @@ export interface CreateBranchArgs extends BranchLookupOpts {
   readyTimeoutMs?: number;
   /** Poll interval in milliseconds. Default 5_000. */
   pollIntervalMs?: number;
+  /**
+   * If true, the spec sets `no_expiry: true` so Lakebase never auto-deletes
+   * the branch. Use for permanent branches: long-running tiers
+   * (`createLongRunningBranch` passes this) and release-time backups
+   * (`cutBackup` passes this). Default is to omit `no_expiry` from the
+   * spec so Lakebase applies its own default expiry – which is the right
+   * safety net for ephemeral feature / ci-pr branches: if the post-merge
+   * cleanup hook misses them, they still age out on their own.
+   */
+  noExpiry?: boolean;
 }
 
 /**
@@ -100,7 +110,11 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
     return existing;
   }
 
-  const spec = JSON.stringify({ spec: { source_branch: sourceBranchPath, no_expiry: true } });
+  const specObj: { source_branch: string; no_expiry?: boolean } = { source_branch: sourceBranchPath };
+  if (args.noExpiry) {
+    specObj.no_expiry = true;
+  }
+  const spec = JSON.stringify({ spec: specObj });
   await dbcli(
     ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
     args.host
