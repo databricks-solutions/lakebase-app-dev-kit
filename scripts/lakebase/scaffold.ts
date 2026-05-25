@@ -184,10 +184,13 @@ export interface DeployEnvExampleArgs extends ScaffoldOptions {
   lakebaseProjectId?: string;
 }
 
-/** Deploy .env.example with optional value substitution. */
-export async function deployEnvExample(targetDir: string, args: DeployEnvExampleArgs = {}): Promise<void> {
+/** Render the .env template with the project's known credentials filled
+ *  in. Shared between deployEnvExample (the tracked template) and deployEnv
+ *  (the live config). Both files end up with the same non-secret values;
+ *  secrets (JWT, DB_PASSWORD, DATABASE_URL) are filled in later by the
+ *  post-checkout hook. */
+function renderEnvFromTemplate(args: DeployEnvExampleArgs): string {
   const src = path.join(commonDir(args), ".env.example");
-  const dest = path.join(targetDir, ".env.example");
   let content = fs.readFileSync(src, "utf-8");
   if (args.databricksHost) {
     content = content.replace(/DATABRICKS_HOST=.*/, `DATABRICKS_HOST=${args.databricksHost}`);
@@ -195,7 +198,24 @@ export async function deployEnvExample(targetDir: string, args: DeployEnvExample
   if (args.lakebaseProjectId) {
     content = content.replace(/LAKEBASE_PROJECT_ID=.*/, `LAKEBASE_PROJECT_ID=${args.lakebaseProjectId}`);
   }
-  fs.writeFileSync(dest, content);
+  return content;
+}
+
+/** Deploy .env.example with optional value substitution. */
+export async function deployEnvExample(targetDir: string, args: DeployEnvExampleArgs = {}): Promise<void> {
+  fs.writeFileSync(path.join(targetDir, ".env.example"), renderEnvFromTemplate(args));
+}
+
+/** Deploy .env with the project's credentials already filled in. The
+ *  create-project flow has these credentials in hand (LAKEBASE_PROJECT_ID
+ *  is the project being scaffolded; DATABRICKS_HOST is the target workspace
+ *  the user picked), so populating .env immediately avoids the gated-hook
+ *  problem where the post-checkout hook bails on empty LAKEBASE_PROJECT_ID
+ *  and never refreshes .env on subsequent checkouts. .env is gitignored
+ *  (see .gitignore.base) - never enters git history. Secrets (JWT,
+ *  DB_PASSWORD, DATABASE_URL) are written by the hook on first checkout. */
+export async function deployEnv(targetDir: string, args: DeployEnvExampleArgs = {}): Promise<void> {
+  fs.writeFileSync(path.join(targetDir, ".env"), renderEnvFromTemplate(args));
 }
 
 /** Deploy deploy-targets.yaml with optional {{PROJECT_NAME}} substitution. */
@@ -314,6 +334,13 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
 
   report("Deploying .env.example");
   await deployEnvExample(args.targetDir, {
+    ...opts,
+    databricksHost: args.databricksHost,
+    lakebaseProjectId: args.lakebaseProjectId,
+  });
+
+  report("Deploying .env");
+  await deployEnv(args.targetDir, {
     ...opts,
     databricksHost: args.databricksHost,
     lakebaseProjectId: args.lakebaseProjectId,
