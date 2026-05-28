@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { getConnection } from "../../scripts/lakebase/get-connection.js";
+import { POSTGRES_PORT } from "../../scripts/lakebase/constants.js";
 
 // Skip-when-env-missing: this suite requires a real, reachable Lakebase
 // project + branch and a `databricks` CLI authenticated to the same
@@ -32,7 +33,7 @@ describe.skipIf(skip)("get-connection --output dsn", () => {
     expect(u.protocol).toBe("postgresql:");
     expect(u.hostname).toBe(result.host);
     expect(u.port).toBe(String(result.port));
-    expect(u.port).toBe("5432");
+    expect(u.port).toBe(String(POSTGRES_PORT));
     // username/password URL-encoded – decoded values should be non-empty
     expect(decodeURIComponent(u.username)).not.toBe("");
     expect(decodeURIComponent(u.password)).not.toBe("");

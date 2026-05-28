@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { resolveBranchId, resolveBranchPath } from "./branch-utils.js";
 import { mintCredential } from "./get-connection.js";
+import { DEFAULT_ENDPOINT } from "./constants.js";
 
 export interface EndpointInfo {
   host: string;
@@ -71,7 +72,7 @@ export async function getEndpoint(args: GetEndpointArgs): Promise<EndpointInfo |
  * The async helpers in this file (getEndpoint, ensureEndpoint, getCredential)
  * normalize for you.
  */
-export function endpointPath(instance: string, branch: string, endpointName = "primary"): string {
+export function endpointPath(instance: string, branch: string, endpointName: string = DEFAULT_ENDPOINT): string {
   return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
 }
 
@@ -98,7 +99,7 @@ export interface EnsureEndpointArgs {
  * has a reachable endpoint before .env gets rewritten with credentials.
  */
 export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<EndpointInfo> {
-  const endpointName = args.endpointName ?? "primary";
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   // Normalize once. Below, branchId flows into both the create-endpoint CLI
   // path and the retry/poll getEndpoint calls.
   const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
@@ -163,6 +164,6 @@ export async function getCredential(args: GetCredentialArgs): Promise<{ token: s
   if (!branchPath) {
     throw new Error(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
-  const endpointName = args.endpointName ?? "primary";
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }

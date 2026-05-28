@@ -13,6 +13,7 @@ import { Client } from "pg";
 import { getEndpoint, endpointPath as buildEndpointPath } from "./branch-endpoint.js";
 import { resolveBranchId } from "./branch-utils.js";
 import { mintCredential } from "./get-connection.js";
+import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
 
 export interface TableSchema {
   name: string;
@@ -60,12 +61,12 @@ export async function queryBranchSchema(args: QueryBranchSchemaArgs): Promise<Ta
     return [];
   }
   const { token, email } = await mintCredential(buildEndpointPath(args.instance, branchId));
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const skipFlyway = args.skipFlyway !== false;
 
   const client = new Client({
     host: ep.host,
-    port: 5432,
+    port: POSTGRES_PORT,
     database,
     user: email,
     password: token,

@@ -30,6 +30,7 @@ import {
 import { mintCredential } from "./get-connection.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { updateEnvConnection } from "./env-file.js";
+import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
 
 // ─── Internal git helpers ───────────────────────────────────────
 
@@ -109,7 +110,7 @@ function readEnvVar(envPath: string, key: string): string | undefined {
 }
 
 function buildDsn(host: string, database: string, user: string, password: string): string {
-  const u = new URL(`postgresql://${host}:5432/${encodeURIComponent(database)}`);
+  const u = new URL(`postgresql://${host}:${POSTGRES_PORT}/${encodeURIComponent(database)}`);
   u.username = encodeURIComponent(user);
   u.password = encodeURIComponent(password);
   u.searchParams.set("sslmode", "require");
@@ -166,7 +167,7 @@ export async function createPairedBranch(
   const sanitized = sanitizeBranchName(args.branch);
   const createGitBranch = args.createGitBranch !== false;
   const syncEnv = args.syncEnv !== false;
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   // 1. Create Lakebase branch (idempotent if already exists with same name)
   const branch = await createBranch({
@@ -379,7 +380,7 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
   }
   const rawBranch = args.branch ?? gitCurrentBranch(args.cwd);
   const sanitized = sanitizeBranchName(rawBranch);
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   const ep = await getEndpoint({ instance, branch: sanitized });
   if (!ep?.host) {
@@ -511,7 +512,7 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
     );
   }
   const branchId = sanitizeBranchName(rawBranch);
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   // 3. Resolve "previous Lakebase branch" – caller arg wins over .env
   const previousBranch =
