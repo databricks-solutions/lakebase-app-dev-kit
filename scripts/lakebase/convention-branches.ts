@@ -28,28 +28,29 @@
 
 import { createBranch as createLakebaseBranch } from "./branch-create.js";
 import { LakebaseBranchInfo, BranchLookupOpts } from "./branch-utils.js";
-
-/** Lakebase TTL format is protobuf Duration JSON: "<seconds>s". */
-const DAY_SECONDS = 86_400;
-const ttlDays = (days: number): string => `${days * DAY_SECONDS}s`;
+import { KIT_TIMEOUTS, formatLakebaseTtl } from "./kit-config.js";
 
 /**
  * Tier defaults. Exported so tests + future tickets can introspect.
  *
  * **Workspace TTL caveat:** the PSA-convention TTLs below (30d feature,
  * 14d test/uat, 7d perf) are the documented norms but some Lakebase
- * workspaces enforce a tighter maximum-expiration policy. When a
- * workspace rejects a TTL, the substrate raises
- * {@link LakebaseBranchTtlTooLongError} with a typed, actionable message.
- * Callers can either override `ttl` per-call or set `noExpiry: true`
- * for the long-running tiers. The `history_retention_duration` field on
+ * workspaces enforce a tighter maximum-expiration policy. Workspaces
+ * with tighter caps can override each tier's default via the matching
+ * env var on KIT_TIMEOUTS (e.g.
+ * `LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS=604800000` for 7-day feature
+ * branches). When a workspace rejects a TTL even after override,
+ * the substrate raises {@link LakebaseBranchTtlTooLongError} with a
+ * typed, actionable message. Callers can also override `ttl` per-call
+ * or set `noExpiry: true` for the long-running tiers. The
+ * `history_retention_duration` field on
  * `databricks postgres get-project` is a conservative starting point.
  */
 export const CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: ttlDays(30), parentBranch: "staging" },
-  test: { ttl: ttlDays(14), parentBranch: "staging" },
-  uat: { ttl: ttlDays(14), parentBranch: "staging" },
-  perf: { ttl: ttlDays(7), parentBranch: "staging" },
+  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
+  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
+  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
+  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" },
 } as const;
 
 export interface CreateConventionBranchArgs extends BranchLookupOpts {

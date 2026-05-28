@@ -18,7 +18,7 @@ import { sanitizeArtifactId } from "../util/maven-coords.js";
 import { copyDirSubstituted } from "../util/copy-dir-substituted.js";
 import { extractZipToDir } from "../util/zip-extract.js";
 import { patchPomForLakebase } from "../util/pom-patch.js";
-import { KIT_TIMEOUTS } from "./kit-config.js";
+import { KIT_REGISTRIES, KIT_TIMEOUTS } from "./kit-config.js";
 
 export type SpringJvmLanguage = "java" | "kotlin";
 
@@ -61,7 +61,7 @@ interface MetadataCache {
 
 const METADATA_ACCEPT = "application/vnd.initializr.v2.3+json";
 const CACHE_TTL_MS = KIT_TIMEOUTS.initializrCacheTtl;
-const DEFAULT_BASE_URL = "https://start.spring.io";
+const DEFAULT_BASE_URL = KIT_REGISTRIES.springInitializr;
 const DEPENDENCIES = "web,data-jpa,postgresql,flyway";
 
 /** SNAPSHOT, RC, milestone, alpha/beta versions are not GA. */

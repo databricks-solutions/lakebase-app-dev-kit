@@ -46,7 +46,25 @@ export interface KitTimeouts {
   cmdShort: number;
   /** Spring Initializr metadata cache TTL. */
   initializrCacheTtl: number;
+  // ── PSA convention branch TTLs (ms) ────────────────────────────────
+  //
+  // The four short-lived tier flavors (feature/test/uat/perf) each have
+  // a documented default expiry. Workspaces with a tighter
+  // maximum-expiration policy can lower these via the matching env var
+  // — substrate will format `<seconds>s` for the Lakebase API at the
+  // call site. The defaults below match the PSA convention:
+  //   feature: 30d, test: 14d, uat: 14d, perf: 7d
+  /** Default TTL for feature-tier branches (createFeatureBranch / cutExperiment). */
+  featureBranchTtlMs: number;
+  /** Default TTL for test-tier branches (createTestBranch). */
+  testBranchTtlMs: number;
+  /** Default TTL for uat-tier branches (createUatBranch). */
+  uatBranchTtlMs: number;
+  /** Default TTL for perf-tier branches (createPerfBranch). */
+  perfBranchTtlMs: number;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * Resolved at module load. Override any field via the matching
@@ -72,4 +90,61 @@ export const KIT_TIMEOUTS: KitTimeouts = {
   cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 60_000),
   cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5_000),
   initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1000),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS),
+};
+
+/**
+ * Format an ms-typed TTL as the Lakebase API's protobuf Duration JSON
+ * encoding (`<seconds>s`). Used by CONVENTION_TIER_DEFAULTS when
+ * formatting branch TTLs for create-branch specs.
+ */
+export function formatLakebaseTtl(ms: number): string {
+  return `${Math.floor(ms / 1000)}s`;
+}
+
+// ── Package registry URLs ──────────────────────────────────────────────
+//
+// Public package-registry endpoints the kit hits during scaffolding +
+// dev-environment provisioning. Each defaults to the mainline registry;
+// override via the matching env var when running against a proxied or
+// air-gapped environment (e.g. Databricks-internal proxies for Maven
+// Central / npm / PyPI — see internal docs for the setup).
+
+export interface KitRegistries {
+  /**
+   * Maven Central root. Used to download the Flyway CLI in
+   * scripts/run-live-tests.sh and for any future Maven-resolved
+   * artifact pulls.
+   *
+   * Default: https://repo1.maven.org/maven2  (mainline Maven Central)
+   * Override: `LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL=https://your-proxy/maven2`
+   */
+  mavenCentral: string;
+  /**
+   * Spring Initializr base URL. Used by spring-initializr.ts to
+   * fetch starter projects + metadata.
+   *
+   * Default: https://start.spring.io  (mainline Spring Initializr)
+   * Override: `LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR=https://your-mirror`
+   */
+  springInitializr: string;
+}
+
+function urlFromEnv(name: string, fallback: string): string {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  // Trim trailing slashes so callers can safely concat `/path` segments.
+  return raw.replace(/\/+$/, "");
+}
+
+/**
+ * Resolved at module load. Override any field via the matching
+ * `LAKEBASE_KIT_REGISTRY_*` env var.
+ */
+export const KIT_REGISTRIES: KitRegistries = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io"),
 };
