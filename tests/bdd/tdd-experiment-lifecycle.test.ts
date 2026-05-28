@@ -52,6 +52,55 @@ describe("experiment lifecycle (hermetic)", () => {
     expect(round?.tests_passed).toBe(12);
   });
 
+  it("writeOutcomes round-trips the per-tag breakdown (api/e2e/infra)", () => {
+    const dir = join(tdd, "experiments", "F1", "exp-tags");
+    mkdirSync(dir, { recursive: true });
+    writeOutcomes(tdd, "F1", "exp-tags", {
+      status: "running",
+      tests_passed: 7,
+      tests_failed: 2,
+      by_tag: {
+        api: { passed: 5, failed: 0 },
+        e2e: { passed: 1, failed: 2 },
+        infra: { passed: 1, failed: 0 },
+      },
+    });
+    const round = readOutcomes(tdd, "F1", "exp-tags");
+    expect(round?.by_tag?.api).toEqual({ passed: 5, failed: 0 });
+    expect(round?.by_tag?.e2e).toEqual({ passed: 1, failed: 2 });
+    expect(round?.by_tag?.infra).toEqual({ passed: 1, failed: 0 });
+    // Top-level totals stay authoritative; the breakdown does not have to sum.
+    expect(round?.tests_passed).toBe(7);
+    expect(round?.tests_failed).toBe(2);
+  });
+
+  it("by_tag entries are individually optional (partial reporting is valid)", () => {
+    const dir = join(tdd, "experiments", "F1", "exp-partial");
+    mkdirSync(dir, { recursive: true });
+    writeOutcomes(tdd, "F1", "exp-partial", {
+      status: "running",
+      tests_passed: 3,
+      by_tag: { api: { passed: 3, failed: 0 } },
+    });
+    const round = readOutcomes(tdd, "F1", "exp-partial");
+    expect(round?.by_tag?.api).toEqual({ passed: 3, failed: 0 });
+    expect(round?.by_tag?.e2e).toBeUndefined();
+    expect(round?.by_tag?.infra).toBeUndefined();
+  });
+
+  it("by_tag is omitted entirely when no tag breakdown is reported (backwards compatible)", () => {
+    const dir = join(tdd, "experiments", "F1", "exp-no-tags");
+    mkdirSync(dir, { recursive: true });
+    writeOutcomes(tdd, "F1", "exp-no-tags", {
+      status: "succeeded",
+      tests_passed: 4,
+      tests_failed: 0,
+    });
+    const round = readOutcomes(tdd, "F1", "exp-no-tags");
+    expect(round?.by_tag).toBeUndefined();
+    expect(round?.tests_passed).toBe(4);
+  });
+
   it("deleteExperiment preserves on-disk record when deleteBranchToo is false", async () => {
     const dir = join(tdd, "experiments", "F1", "exp-1");
     mkdirSync(dir, { recursive: true });

@@ -10,12 +10,31 @@ function branchIdOf(info: LakebaseBranchInfo): string {
   return leaf;
 }
 
+// Tag flavors mirror the AC layer values from the spec format. The Driver's
+// tag-to-runner map keys off these (FEIP-7094): [API] → vitest, [E2E] →
+// Playwright, [Infra] → migration / schema-diff smoke. The substrate keeps
+// the names lowercase here; the spec format capitalises them ("API" / "E2E"
+// / "Infra") for display.
+export type ExperimentTag = "api" | "e2e" | "infra";
+
+export interface TagOutcome {
+  passed: number;
+  failed: number;
+}
+
 export interface ExperimentOutcomes {
   tests_passed?: number;
   tests_failed?: number;
   schema_diff_summary?: string;
   code_diff_lines?: number;
   status: "running" | "succeeded" | "failed" | "abandoned";
+  // Per-tag breakdown. Each tag is optional (a project may not exercise
+  // every flavor). When present, `tests_passed` + `tests_failed` remain
+  // authoritative totals; `by_tag` is a breakdown for downstream renderers
+  // (comparison report, feature-status) and the per-tag smell detectors
+  // (e.g. e2e-row-perma-red in FEIP-7094). Sum across tags is not enforced
+  // to match the totals — mid-cycle reporting and untagged tests are valid.
+  by_tag?: Partial<Record<ExperimentTag, TagOutcome>>;
 }
 
 export interface CutExperimentArgs extends BranchLookupOpts {
