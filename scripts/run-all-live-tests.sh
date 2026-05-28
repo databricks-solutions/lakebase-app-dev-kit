@@ -15,10 +15,12 @@
 #     provisioned project after a green run.
 #
 # Usage:
-#   scripts/run-all-live-tests.sh --profile <name>           # auto-provision + full suite
-#   scripts/run-all-live-tests.sh --profile <name> --project <id>   # reuse an existing project
-#   scripts/run-all-live-tests.sh --profile <name> --teardown       # delete the project on green
-#   scripts/run-all-live-tests.sh --profile <name> --no-prompt      # CI mode (skip the 5s grace)
+#   scripts/run-all-live-tests.sh --profile <name>                       # auto-provision + full suite
+#   scripts/run-all-live-tests.sh --profile <name> --project <id>        # reuse an existing project
+#   scripts/run-all-live-tests.sh --profile <name> --teardown            # delete the project on green
+#   scripts/run-all-live-tests.sh --profile <name> --no-prompt           # CI mode (skip grace period)
+#   scripts/run-all-live-tests.sh --profile <name> \
+#     --project-prefix smoke-ci- --grace-seconds 10 --database my_db     # fully parameterized invocation
 #
 # Required:
 #   --profile <name>     A `databricks` CLI profile (from ~/.databrickscfg).
@@ -26,14 +28,20 @@
 #                        `databricks auth env --profile <name>`.
 #
 # Optional:
-#   --project <id>       Use an existing Lakebase project (skips auto-provision).
-#                        Default branch is auto-discovered via list-branches.
-#   --branch <name>      Override LAKEBASE_TEST_BRANCH (default: project's default branch).
-#   --parent <name>      Override LAKEBASE_TEST_PARENT (default: same as --branch).
-#   --teardown           After a green run, delete the auto-provisioned project.
-#                        No-op when --project was supplied.
-#   --no-prompt          Skip the 5-second creation grace period (for CI).
-#   --help               This help.
+#   --project <id>             Use an existing Lakebase project (skips auto-provision).
+#                              Default branch is auto-discovered via list-branches.
+#   --branch <name>            Override LAKEBASE_TEST_BRANCH (default: project's default branch).
+#   --parent <name>            Override LAKEBASE_TEST_PARENT (default: same as --branch).
+#   --project-prefix <prefix>  Prefix for auto-provisioned project ids. Default: "live-all-".
+#                              The full id becomes <prefix><unix-timestamp>.
+#   --grace-seconds <n>        Seconds to wait before creating the project (Ctrl-C abort
+#                              window). Default: 5. Use 0 + --no-prompt for CI.
+#   --database <name>          LAKEBASE_TEST_DATABASE override. Default: unset, so the
+#                              substrate falls back to DEFAULT_DATABASE (constants.ts).
+#   --teardown                 After a green run, delete the auto-provisioned project.
+#                              No-op when --project was supplied.
+#   --no-prompt                Skip the grace period entirely (for CI).
+#   --help                     This help.
 #
 # What is NOT unlocked by this script:
 #   - tests/integration/detect-language-via-self-hosted-runner.test.ts
@@ -61,19 +69,28 @@ PROFILE=""
 PROJECT_ID=""
 BRANCH_OVERRIDE=""
 PARENT_OVERRIDE=""
+PROJECT_PREFIX="live-all-"
+GRACE_SECONDS=5
+DATABASE=""
 TEARDOWN_ON_GREEN=0
 NO_PROMPT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --profile)    PROFILE="$2"; shift 2 ;;
-    --project)    PROJECT_ID="$2"; shift 2 ;;
-    --branch)     BRANCH_OVERRIDE="$2"; shift 2 ;;
-    --parent)     PARENT_OVERRIDE="$2"; shift 2 ;;
-    --teardown)   TEARDOWN_ON_GREEN=1; shift ;;
-    --no-prompt)  NO_PROMPT=1; shift ;;
+    --profile)         PROFILE="$2"; shift 2 ;;
+    --project)         PROJECT_ID="$2"; shift 2 ;;
+    --branch)          BRANCH_OVERRIDE="$2"; shift 2 ;;
+    --parent)          PARENT_OVERRIDE="$2"; shift 2 ;;
+    --project-prefix)  PROJECT_PREFIX="$2"; shift 2 ;;
+    --grace-seconds)   GRACE_SECONDS="$2"; shift 2 ;;
+    --database)        DATABASE="$2"; shift 2 ;;
+    --teardown)        TEARDOWN_ON_GREEN=1; shift ;;
+    --no-prompt)       NO_PROMPT=1; shift ;;
     --help|-h)
-      sed -n '2,/^set -euo pipefail/p' "$0" | sed 's/^# \{0,1\}//' | head -n -1
+      # `sed '$d'` drops the trailing `set -euo pipefail` line that closes
+      # the range. Cross-platform: `head -n -1` is GNU-only (BSD head on
+      # macOS errors with "illegal line count -- -1").
+      sed -n '2,/^set -euo pipefail/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
       exit 0
       ;;
     *)
@@ -83,6 +100,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if ! [[ "$GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
+  red "--grace-seconds must be a non-negative integer (got: $GRACE_SECONDS)"
+  exit 2
+fi
 
 if [[ -z "$PROFILE" ]]; then
   red "--profile is required."
@@ -139,7 +161,7 @@ if [[ -n "$PROJECT_ID" ]]; then
   fi
   green "  project exists, READY"
 else
-  PROJECT_ID="live-all-$(date +%s)"
+  PROJECT_ID="${PROJECT_PREFIX}$(date +%s)"
   yellow ""
   yellow "==> About to create a fresh Lakebase project"
   yellow "    workspace:  $DATABRICKS_HOST"
@@ -147,8 +169,8 @@ else
   yellow "    teardown:   $( [[ $TEARDOWN_ON_GREEN == 1 ]] && echo 'on green run' || echo 'DISABLED — manual cleanup required at end' )"
   yellow ""
   if [[ "$NO_PROMPT" != "1" ]]; then
-    yellow "    Press Ctrl-C in the next 5 seconds to abort. Pass --no-prompt to skip in CI."
-    sleep 5
+    yellow "    Press Ctrl-C in the next ${GRACE_SECONDS} seconds to abort. Pass --no-prompt to skip in CI, or --grace-seconds to tune."
+    sleep "$GRACE_SECONDS"
   fi
   blue "==> Creating Lakebase project $PROJECT_ID (long-running, ~30s)"
   databricks postgres create-project "$PROJECT_ID" --profile "$PROFILE" -o json >/dev/null
@@ -195,7 +217,13 @@ export LAKEBASE_TEST_PROFILE="$PROFILE"
 # Optional fields: only set when the user provides them. Tests have
 # sensible defaults if absent.
 export LAKEBASE_TEST_COMPARISON_BRANCH="${LAKEBASE_TEST_COMPARISON_BRANCH:-$BRANCH}"
-export LAKEBASE_TEST_DATABASE="${LAKEBASE_TEST_DATABASE:-databricks_postgres}"
+# LAKEBASE_TEST_DATABASE: explicit --database flag wins; otherwise leave
+# whatever the caller's env already has (which may itself be unset).
+# When unset, the substrate falls back to DEFAULT_DATABASE
+# (scripts/lakebase/constants.ts) — single source of truth, no duplication.
+if [[ -n "$DATABASE" ]]; then
+  export LAKEBASE_TEST_DATABASE="$DATABASE"
+fi
 # Unlock the live Initializr fetch + the MCP peer-dep integration check.
 # Both are network/integration-side and the gate is just a "yes please".
 export LAKEBASE_TEST_INITIALIZR=1
