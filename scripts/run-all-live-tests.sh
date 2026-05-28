@@ -38,6 +38,10 @@
 #                              window). Default: 5. Use 0 + --no-prompt for CI.
 #   --database <name>          LAKEBASE_TEST_DATABASE override. Default: unset, so the
 #                              substrate falls back to DEFAULT_DATABASE (constants.ts).
+#   --feature-ttl-days <n>     Override the kit's 30-day default feature branch TTL.
+#                              Use on workspaces with a tighter maximum-expiration
+#                              policy (e.g. --feature-ttl-days 7). Sets
+#                              LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS for the run.
 #   --teardown                 After a green run, delete the auto-provisioned project.
 #                              No-op when --project was supplied.
 #   --no-prompt                Skip the grace period entirely (for CI).
@@ -72,20 +76,22 @@ PARENT_OVERRIDE=""
 PROJECT_PREFIX="live-all-"
 GRACE_SECONDS=5
 DATABASE=""
+FEATURE_TTL_DAYS=""
 TEARDOWN_ON_GREEN=0
 NO_PROMPT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --profile)         PROFILE="$2"; shift 2 ;;
-    --project)         PROJECT_ID="$2"; shift 2 ;;
-    --branch)          BRANCH_OVERRIDE="$2"; shift 2 ;;
-    --parent)          PARENT_OVERRIDE="$2"; shift 2 ;;
-    --project-prefix)  PROJECT_PREFIX="$2"; shift 2 ;;
-    --grace-seconds)   GRACE_SECONDS="$2"; shift 2 ;;
-    --database)        DATABASE="$2"; shift 2 ;;
-    --teardown)        TEARDOWN_ON_GREEN=1; shift ;;
-    --no-prompt)       NO_PROMPT=1; shift ;;
+    --profile)            PROFILE="$2"; shift 2 ;;
+    --project)            PROJECT_ID="$2"; shift 2 ;;
+    --branch)             BRANCH_OVERRIDE="$2"; shift 2 ;;
+    --parent)             PARENT_OVERRIDE="$2"; shift 2 ;;
+    --project-prefix)     PROJECT_PREFIX="$2"; shift 2 ;;
+    --grace-seconds)      GRACE_SECONDS="$2"; shift 2 ;;
+    --database)           DATABASE="$2"; shift 2 ;;
+    --feature-ttl-days)   FEATURE_TTL_DAYS="$2"; shift 2 ;;
+    --teardown)           TEARDOWN_ON_GREEN=1; shift ;;
+    --no-prompt)          NO_PROMPT=1; shift ;;
     --help|-h)
       # `sed '$d'` drops the trailing `set -euo pipefail` line that closes
       # the range. Cross-platform: `head -n -1` is GNU-only (BSD head on
@@ -103,6 +109,11 @@ done
 
 if ! [[ "$GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
   red "--grace-seconds must be a non-negative integer (got: $GRACE_SECONDS)"
+  exit 2
+fi
+
+if [[ -n "$FEATURE_TTL_DAYS" ]] && ! [[ "$FEATURE_TTL_DAYS" =~ ^[0-9]+$ ]]; then
+  red "--feature-ttl-days must be a positive integer (got: $FEATURE_TTL_DAYS)"
   exit 2
 fi
 
@@ -223,6 +234,16 @@ export LAKEBASE_TEST_COMPARISON_BRANCH="${LAKEBASE_TEST_COMPARISON_BRANCH:-$BRAN
 # (scripts/lakebase/constants.ts) — single source of truth, no duplication.
 if [[ -n "$DATABASE" ]]; then
   export LAKEBASE_TEST_DATABASE="$DATABASE"
+fi
+
+# LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS: explicit --feature-ttl-days flag wins.
+# Workspaces with maximum-expiration policies tighter than 30 days (the
+# kit's default) need this for cutExperiment / createFeatureBranch /
+# tdd-synthesis paths. We compute ms = days * 86_400_000 here so the
+# substrate's existing convention defaults pick it up.
+if [[ -n "$FEATURE_TTL_DAYS" ]]; then
+  export LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS="$(( FEATURE_TTL_DAYS * 86_400_000 ))"
+  green "  LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS=$LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS  (${FEATURE_TTL_DAYS}d)"
 fi
 # Unlock the live Initializr fetch + the MCP peer-dep integration check.
 # Both are network/integration-side and the gate is just a "yes please".
