@@ -33,7 +33,18 @@ import { LakebaseBranchInfo, BranchLookupOpts } from "./branch-utils.js";
 const DAY_SECONDS = 86_400;
 const ttlDays = (days: number): string => `${days * DAY_SECONDS}s`;
 
-/** Tier defaults. Exported so tests + future tickets can introspect. */
+/**
+ * Tier defaults. Exported so tests + future tickets can introspect.
+ *
+ * **Workspace TTL caveat:** the PSA-convention TTLs below (30d feature,
+ * 14d test/uat, 7d perf) are the documented norms but some Lakebase
+ * workspaces enforce a tighter maximum-expiration policy. When a
+ * workspace rejects a TTL, the substrate raises
+ * {@link LakebaseBranchTtlTooLongError} with a typed, actionable message.
+ * Callers can either override `ttl` per-call or set `noExpiry: true`
+ * for the long-running tiers. The `history_retention_duration` field on
+ * `databricks postgres get-project` is a conservative starting point.
+ */
 export const CONVENTION_TIER_DEFAULTS = {
   feature: { ttl: ttlDays(30), parentBranch: "staging" },
   test: { ttl: ttlDays(14), parentBranch: "staging" },

@@ -1,9 +1,42 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createProject } from "../../scripts/lakebase/create-project.js";
 import { deleteLakebaseProject } from "../../scripts/lakebase/lakebase-project.js";
+
+/**
+ * Resolve the destructive test's target host. Precedence:
+ *   1. `LAKEBASE_TEST_HOST` — explicit override (e.g. for CI where the
+ *      profile mechanism isn't available).
+ *   2. `DATABRICKS_CONFIG_PROFILE` — runs `databricks auth env --profile`
+ *      and reads back DATABRICKS_HOST. Matches the substrate's existing
+ *      profile-aware behavior so contributors who already have a working
+ *      profile don't need to also set LAKEBASE_TEST_HOST.
+ *   3. null — caller should skip the test.
+ *
+ * NB: previously this fell back to a hardcoded `workspace.cloud.databricks.com`
+ * placeholder, which DNS-failed in every run. That fallback masked the
+ * "no host configured" case as a misleading network error; surfacing
+ * null lets the suite skip cleanly with a clear message.
+ */
+function resolveTestHost(): string | null {
+  if (process.env.LAKEBASE_TEST_HOST) return process.env.LAKEBASE_TEST_HOST;
+  const profile = process.env.DATABRICKS_CONFIG_PROFILE;
+  if (!profile) return null;
+  try {
+    const raw = execFileSync("databricks", ["auth", "env", "--profile", profile], {
+      encoding: "utf-8",
+      timeout: 5_000,
+    });
+    const env = JSON.parse(raw) as { env?: Record<string, string> };
+    const host = env.env?.DATABRICKS_HOST?.replace(/\/+$/, "");
+    return host ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const tmpDirs: string[] = [];
 afterEach(() => {
@@ -52,8 +85,12 @@ describe("createProject input validation", () => {
 });
 
 const liveE2E = process.env.LAKEBASE_TEST_E2E === "1";
+// Lazily evaluated so the resolver doesn't fire (and possibly shell out)
+// at module-import time when the suite is skipped anyway.
+const e2eHost = liveE2E ? resolveTestHost() : null;
+const e2eReady = liveE2E && !!e2eHost;
 
-describe.skipIf(!liveE2E)("createProject – live end-to-end (LAKEBASE_TEST_E2E=1)", () => {
+describe.skipIf(!e2eReady)("createProject – live end-to-end (LAKEBASE_TEST_E2E=1)", () => {
   // createProject does Lakebase create + branch resolve + scaffold + commit +
   // health check end-to-end. On a cold workspace it routinely takes 30-60s,
   // well past vitest's 5s default. Bump to 3 min so a transient slow Lakebase
@@ -79,8 +116,8 @@ describe.skipIf(!liveE2E)("createProject – live end-to-end (LAKEBASE_TEST_E2E=
 
   it("creates a Lakebase-paired local-only project end-to-end", async () => {
     const parent = mkTmp();
-    const host =
-      process.env.LAKEBASE_TEST_HOST ?? "https://workspace.cloud.databricks.com";
+    // e2eHost is guaranteed non-null here — describe.skipIf gates on it.
+    const host = e2eHost!;
     const projectName = `lbscm-test-${Date.now()}`;
     // Pre-register so afterEach tears it down even on assertion failure.
     createdProjectIds.push({ id: projectName, host });
@@ -95,11 +132,23 @@ describe.skipIf(!liveE2E)("createProject – live end-to-end (LAKEBASE_TEST_E2E=
     });
     expect(result.projectDir.startsWith(parent)).toBe(true);
     expect(result.lakebaseProjectId).toBeTruthy();
-    // createProject ships .env.example only; .env is gitignored and never
-    // written by this flow (post-checkout hook bootstraps it on first switch).
+    // createProject ships BOTH .env.example (tracked template) AND a seeded
+    // .env (gitignored, populated with LAKEBASE_PROJECT_ID + DATABRICKS_HOST
+    // from the create flow). The seed avoids the gated-hook chicken-and-egg:
+    // post-checkout would otherwise bail on empty LAKEBASE_PROJECT_ID and
+    // never refresh .env on subsequent checkouts. Secrets (JWT, DB_PASSWORD,
+    // DATABASE_URL) stay deferred to the hook on first checkout. See
+    // scaffold.ts deployEnv() for the rationale.
     expect(fs.existsSync(path.join(result.projectDir, ".env.example"))).toBe(true);
-    expect(fs.existsSync(path.join(result.projectDir, ".env"))).toBe(false);
+    expect(fs.existsSync(path.join(result.projectDir, ".env"))).toBe(true);
     expect(fs.existsSync(path.join(result.projectDir, "pyproject.toml"))).toBe(true);
+
+    // The seeded .env contains the non-secret context only — the project id +
+    // workspace host. Secret fields stay empty/absent until the post-checkout
+    // hook fills them on first branch switch.
+    const seededEnv = fs.readFileSync(path.join(result.projectDir, ".env"), "utf-8");
+    expect(seededEnv).toContain(`LAKEBASE_PROJECT_ID=${result.lakebaseProjectId}`);
+    expect(seededEnv).toContain("DATABRICKS_HOST=");
   }, E2E_TIMEOUT_MS);
 });
 
@@ -111,5 +160,15 @@ describe("createProject – skip-when-e2e-disabled", () => {
       "LAKEBASE_TEST_E2E not set – live create-project end-to-end test skipped (destructive)."
     );
     expect(liveE2E).toBe(false);
+  });
+
+  it("documents the skip reason when no host is resolvable (LAKEBASE_TEST_HOST + DATABRICKS_CONFIG_PROFILE both missing)", () => {
+    if (!liveE2E || e2eHost) return;
+    // eslint-disable-next-line no-console
+    console.log(
+      "LAKEBASE_TEST_E2E=1 but no test host resolvable — set LAKEBASE_TEST_HOST explicitly " +
+        "or DATABRICKS_CONFIG_PROFILE (the test will run `databricks auth env --profile` to derive the host)."
+    );
+    expect(e2eHost).toBeNull();
   });
 });

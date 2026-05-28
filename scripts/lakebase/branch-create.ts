@@ -14,12 +14,15 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { delay } from "../util/delay.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+import { asBranchName, looksLikeBranchUid } from "./branch-id.js";
 import {
   LakebaseBranchError,
   LakebaseBranchInfo,
+  LakebaseBranchTtlTooLongError,
   BranchLookupOpts,
   getBranchByName,
   getDefaultBranch,
+  isTtlTooLongError,
   projectPath,
 } from "./branch-utils.js";
 
@@ -30,8 +33,13 @@ export interface CreateBranchArgs extends BranchLookupOpts {
   branch: string;
   /**
    * Explicit parent branch override. Use for "fork from staging" or
-   * "fork from production" hotfix scenarios. Pass the sanitized branch
-   * name, NOT the full resource path.
+   * "fork from production" hotfix scenarios.
+   *
+   * Must be a BranchName (the resource-path leaf, e.g. `production`,
+   * `staging`, `feature-x`) — NOT a BranchUid (`br-…`) and NOT a full
+   * resource path. The runtime guard inside createBranch will reject a
+   * BranchUid-shaped value with a helpful error. Use `asBranchName(s)`
+   * at the call site if you have a string of unknown provenance.
    */
   parentBranch?: string;
   /**
@@ -83,7 +91,21 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   // create AND for the idempotency-vs-conflict comparison below.
   let sourceBranchPath: string | undefined;
   if (args.parentBranch) {
-    sourceBranchPath = `${projectPath(args.instance)}/branches/${sanitizeBranchName(args.parentBranch)}`;
+    // Runtime guard: parentBranch must be a BranchName (resource-path
+    // leaf), never a BranchUid. The API rejects uids in source_branch
+    // with a confusing "branch id not found" error; asBranchName surfaces
+    // a typed, helpful message instead.
+    if (looksLikeBranchUid(args.parentBranch)) {
+      throw new LakebaseBranchError(
+        `parentBranch '${args.parentBranch}' looks like a BranchUid (br-… pattern), ` +
+          `not a BranchName. Pass the resource-path leaf (e.g. 'production', 'staging', ` +
+          `'feature-add-orders') — the Lakebase API rejects uids in source_branch fields. ` +
+          `If you have a uid and need to resolve it to its name, call resolveBranchId() ` +
+          `from branch-utils first.`
+      );
+    }
+    const validated = asBranchName(args.parentBranch);
+    sourceBranchPath = `${projectPath(args.instance)}/branches/${sanitizeBranchName(validated)}`;
   } else if (args.currentBranch && args.currentBranch !== sanitized) {
     const current = await getBranchByName(args.currentBranch, lookup);
     if (current) sourceBranchPath = current.name;
@@ -134,10 +156,19 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
     specObj.no_expiry = true;
   }
   const spec = JSON.stringify({ spec: specObj });
-  await dbcli(
-    ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
-    args.host
-  );
+  try {
+    await dbcli(
+      ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
+      args.host
+    );
+  } catch (err) {
+    // Detect the workspace-TTL-policy rejection and rewrap with a typed,
+    // actionable message. Other errors bubble through as-is.
+    if (err instanceof LakebaseBranchError && specObj.ttl && isTtlTooLongError(err.message)) {
+      throw new LakebaseBranchTtlTooLongError(specObj.ttl, err.message);
+    }
+    throw err;
+  }
 
   return waitForBranchReady({
     instance: args.instance,

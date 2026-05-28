@@ -3,6 +3,12 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  asBranchUid,
+  branchNameFromResourcePath,
+  type BranchName,
+  type BranchUid,
+} from "./branch-id.js";
 
 const execFileP = promisify(execFile);
 
@@ -13,27 +19,81 @@ export class LakebaseBranchError extends Error {
   }
 }
 
+/**
+ * Thrown when a branch create request's TTL exceeds the workspace's
+ * maximum branch-expiration policy. The workspace cap varies by
+ * deployment (some allow 30+ days, others cap below 30); the kit's
+ * convention defaults (30d feature / 14d test+uat / 7d perf) may not
+ * fit every workspace.
+ *
+ * Recovery options for the caller:
+ *   - Pass a shorter `ttl` (e.g. "604800s" for 7 days) on createBranch /
+ *     createFeatureBranch / cutExperiment.
+ *   - Pass `noExpiry: true` for branches that should persist (typically
+ *     production / staging tiers, not feature tiers).
+ *   - Probe the project's `history_retention_duration` via get-project
+ *     for a conservative upper bound (often, but not always, the cap).
+ */
+export class LakebaseBranchTtlTooLongError extends LakebaseBranchError {
+  /** The TTL that was attempted (the value passed to the API). */
+  public readonly attemptedTtl: string;
+
+  constructor(attemptedTtl: string, underlyingMessage: string) {
+    super(
+      `Branch create rejected: TTL '${attemptedTtl}' exceeds the workspace's maximum ` +
+        `expiration policy. Pass a shorter ttl arg (e.g. "604800s" for 7 days) or set ` +
+        `noExpiry: true. The workspace cap is not directly exposed by the Lakebase API; ` +
+        `the project's history_retention_duration (from \`databricks postgres get-project\`) ` +
+        `is a conservative starting point.\n\nUnderlying error: ${underlyingMessage}`
+    );
+    this.name = "LakebaseBranchTtlTooLongError";
+    this.attemptedTtl = attemptedTtl;
+  }
+}
+
+/**
+ * Pattern-match the underlying CLI stderr against the workspace
+ * TTL-too-long signal. Exported for the unit-test boundary so the
+ * detection logic stays guarded by tests if Lakebase rewords the error.
+ */
+export function isTtlTooLongError(stderr: string): boolean {
+  return /expiration time exceeds the maximum expiration time/i.test(stderr);
+}
+
 export interface LakebaseBranchInfo {
   /**
-   * Lakebase-side opaque uid, e.g. "br-broad-sky-d2k5gewt". Returned by
-   * `get-branch` / `list-branches` as the `uid` field. NOT accepted as the
-   * `{branch}` path segment in CLI subresource URLs — use {@link branchId} or
-   * the friendly leaf of {@link name} for those.
+   * Lakebase-side opaque uid, e.g. `br-broad-sky-d2k5gewt`. Returned by
+   * `get-branch` / `list-branches` as the `uid` field. NOT accepted in
+   * any path-shaped API field — the service rejects it with "branch id
+   * not found". For source_branch references, `{branch}` URL segments,
+   * .env LAKEBASE_BRANCH_NAME, etc., use {@link nameLeaf} instead.
+   *
+   * Branded {@link BranchUid} so the compiler refuses to accept it where
+   * a {@link BranchName} is expected.
    */
-  uid: string;
-  /** Full resource name, e.g. "projects/proj-abc/branches/feature-x". */
+  uid: BranchUid;
+  /**
+   * Friendly resource-path leaf, e.g. `production`. The {@link BranchName}
+   * form of the branch identifier; the segment after `/branches/` in the
+   * full resource name. THIS is the value to pass into source_branch,
+   * subresource URLs, .env LAKEBASE_BRANCH_NAME, etc.
+   *
+   * Derived from `name` on parse, so it's always present when `name` is.
+   */
+  nameLeaf: BranchName;
+  /** Full resource name, e.g. `projects/proj-abc/branches/feature-x`. */
   name: string;
-  /** "READY", "PROVISIONING", etc. */
+  /** `READY`, `PROVISIONING`, etc. */
   state: string;
   /**
-   * Parent branch full resource name (e.g. "projects/x/branches/staging"),
+   * Parent branch full resource name (e.g. `projects/x/branches/staging`),
    * sourced from `status.source_branch` in the Lakebase API response.
    *
-   * Use {@link sourceBranchId} for just the leaf segment.
+   * Use {@link sourceBranchId} for just the leaf segment (a {@link BranchName}).
    */
   sourceBranchName?: string;
-  /** Parent branch leaf id (e.g. "staging"). Derived from sourceBranchName. */
-  sourceBranchId?: string;
+  /** Parent branch leaf — a {@link BranchName} like `staging`. Derived from sourceBranchName. */
+  sourceBranchId?: BranchName;
   /** True if this is the project's default branch. */
   isDefault?: boolean;
   /**
@@ -191,11 +251,30 @@ function parseBranch(raw: unknown): LakebaseBranchInfo | undefined {
   const r = raw as RawBranch;
   const name = r.name ?? "";
   if (!name) return undefined;
-  const uid = r.uid ?? name.split("/branches/").pop() ?? "";
+
+  // BranchName: always the leaf of the resource path. NEVER fall back to
+  // the uid here — a uid in a path-shaped field is exactly the bug this
+  // brand exists to prevent.
+  const nameLeaf = branchNameFromResourcePath(name);
+  if (!nameLeaf) return undefined;
+
+  // BranchUid: prefer the API's `uid` field. If absent (older shapes),
+  // skip the branch rather than fake it from the leaf, which would be
+  // a BranchName mislabeled as a BranchUid.
+  if (!r.uid) return undefined;
+  let uid;
+  try {
+    uid = asBranchUid(r.uid);
+  } catch {
+    return undefined;
+  }
+
   const sourceBranchName = r.status?.source_branch ?? r.spec?.source_branch;
-  const sourceBranchId = sourceBranchName?.split("/branches/").pop() || undefined;
+  const sourceBranchId = sourceBranchName ? branchNameFromResourcePath(sourceBranchName) ?? undefined : undefined;
+
   return {
     uid,
+    nameLeaf,
     name,
     state: r.status?.current_state ?? r.state ?? "UNKNOWN",
     sourceBranchName,

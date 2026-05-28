@@ -119,12 +119,17 @@ describe("branch identifier pair-coverage – live", () => {
   });
 
   it.skipIf(!live)("queryBranchSchema(uid) === queryBranchSchema(branchId)", async () => {
+    // Two sequential live pg connections (one per arg shape). Each typically
+    // takes ~3-4s including credential mint + TLS + the schema query, so the
+    // pair routinely exceeds vitest's 5s default per-test budget. Bump to
+    // 30s — generous enough for a slow-starting Lakebase endpoint without
+    // hiding a real hang (resolveBranchId's normalization is already sync).
     const info = await getBranchByName(TEST_BRANCH!, { instance: TEST_INSTANCE! });
     expect(info).toBeTruthy();
     const byName = await queryBranchSchema({ instance: TEST_INSTANCE!, branch: TEST_BRANCH! });
     const byUid = await queryBranchSchema({ instance: TEST_INSTANCE!, branch: info!.uid });
     expect(byUid).toEqual(byName);
-  });
+  }, 30000);
 
   it.skipIf(!live)("endpointPath stays sync and does NOT accept a uid", async () => {
     // Sanity check: endpointPath is documented as sync + branch_id-only. We
