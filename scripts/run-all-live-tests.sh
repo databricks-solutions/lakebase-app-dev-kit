@@ -167,13 +167,28 @@ if ! command -v databricks >/dev/null 2>&1; then
   exit 1
 fi
 
-RAW_AUTH_ENV="$(databricks auth env --profile "$PROFILE" 2>&1 || true)"
-DATABRICKS_HOST="$(printf '%s\n' "$RAW_AUTH_ENV" | python3 -c "
+# `databricks auth env` was deprecated in CLI v1.1.0; the new replacement
+# is `databricks auth describe -o json` which still reports the host from
+# ~/.databrickscfg even when the token cache is invalidated by a CLI
+# upgrade (auth describe degrades gracefully).
+# The new JSON shape is { details: { host: "https://..." }, ... }; we
+# tolerate a non-JSON preamble (some CLI builds prefix a warning or
+# auth-error line) by trimming to the first `{`.
+RAW_AUTH_DESCRIBE="$(databricks auth describe --profile "$PROFILE" -o json 2>&1 || true)"
+DATABRICKS_HOST="$(printf '%s\n' "$RAW_AUTH_DESCRIBE" | python3 -c "
 import json, sys
+text = sys.stdin.read()
+start = text.find('{')
+if start < 0:
+  print('')
+  sys.exit(0)
 try:
-  d = json.load(sys.stdin)
-  host = (d.get('env') or {}).get('DATABRICKS_HOST', '').rstrip('/')
-  print(host)
+  d = json.loads(text[start:])
+  host = (d.get('details') or {}).get('host', '')
+  if isinstance(host, str):
+    print(host.rstrip('/'))
+  else:
+    print('')
 except Exception:
   print('')
 ")"
