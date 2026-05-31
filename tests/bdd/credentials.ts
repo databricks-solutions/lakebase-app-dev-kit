@@ -35,6 +35,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { DEFAULT_DATABASE } from "../../scripts/lakebase/constants.js";
 
 export type RequiredField =
   | "host"
@@ -80,7 +81,7 @@ export function requireLakebaseLiveEnv(
   const instance = (process.env.LAKEBASE_TEST_INSTANCE || "").trim();
   const branch = (process.env.LAKEBASE_TEST_BRANCH || "").trim();
   const parent = (process.env.LAKEBASE_TEST_PARENT || "").trim();
-  const database = (process.env.LAKEBASE_TEST_DATABASE || "databricks_postgres").trim();
+  const database = (process.env.LAKEBASE_TEST_DATABASE || DEFAULT_DATABASE).trim();
   const comparisonBranch = (process.env.LAKEBASE_TEST_COMPARISON_BRANCH || "").trim() || undefined;
   const e2e = process.env.LAKEBASE_TEST_E2E === "1";
   const initializr = process.env.LAKEBASE_TEST_INITIALIZR === "1";

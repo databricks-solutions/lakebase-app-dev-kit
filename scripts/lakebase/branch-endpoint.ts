@@ -8,6 +8,8 @@
 import { execFileSync } from "node:child_process";
 import { resolveBranchId, resolveBranchPath } from "./branch-utils.js";
 import { mintCredential } from "./get-connection.js";
+import { DEFAULT_ENDPOINT } from "./constants.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface EndpointInfo {
   host: string;
@@ -38,7 +40,7 @@ export async function getEndpoint(args: GetEndpointArgs): Promise<EndpointInfo |
     raw = execFileSync("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30_000,
+      timeout: KIT_TIMEOUTS.cliDefault,
     });
   } catch {
     return undefined;
@@ -71,7 +73,7 @@ export async function getEndpoint(args: GetEndpointArgs): Promise<EndpointInfo |
  * The async helpers in this file (getEndpoint, ensureEndpoint, getCredential)
  * normalize for you.
  */
-export function endpointPath(instance: string, branch: string, endpointName = "primary"): string {
+export function endpointPath(instance: string, branch: string, endpointName: string = DEFAULT_ENDPOINT): string {
   return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
 }
 
@@ -98,7 +100,7 @@ export interface EnsureEndpointArgs {
  * has a reachable endpoint before .env gets rewritten with credentials.
  */
 export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<EndpointInfo> {
-  const endpointName = args.endpointName ?? "primary";
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   // Normalize once. Below, branchId flows into both the create-endpoint CLI
   // path and the retry/poll getEndpoint calls.
   const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
@@ -121,7 +123,7 @@ export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<Endpoint
     execFileSync(
       "databricks",
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 }
+      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
     );
   } catch (err) {
     // Race: the endpoint may have been created between our getEndpoint check
@@ -132,12 +134,12 @@ export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<Endpoint
   }
 
   // Poll until the endpoint reports an actual host
-  const timeoutMs = args.timeoutMs ?? 120_000;
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const ep = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
     if (ep?.host) return ep;
-    await new Promise((r) => setTimeout(r, 5_000));
+    await new Promise((r) => setTimeout(r, KIT_TIMEOUTS.readyPoll));
   }
   throw new Error(
     `Endpoint for ${branchPath} did not reach ACTIVE within ${timeoutMs}ms (create succeeded but no host yet)`
@@ -163,6 +165,6 @@ export async function getCredential(args: GetCredentialArgs): Promise<{ token: s
   if (!branchPath) {
     throw new Error(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
-  const endpointName = args.endpointName ?? "primary";
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }

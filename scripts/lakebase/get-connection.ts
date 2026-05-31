@@ -17,6 +17,8 @@ import { execFileSync } from "node:child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import type { Pool } from "pg";
 import { resolveBranchId } from "./branch-utils.js";
+import { DEFAULT_DATABASE, DEFAULT_ENDPOINT, POSTGRES_PORT } from "./constants.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 // AppKit / @databricks/lakebase re-exports a WorkspaceClient type that
 // matches what createLakebasePool expects. We accept `unknown` at the API
 // boundary so this module doesn't have to take a hard SDK dep just to type
@@ -78,8 +80,8 @@ export interface DsnResult {
 export function getConnection(args: DsnArgs): Promise<DsnResult>;
 export function getConnection(args: PoolArgs): Promise<Pool>;
 export async function getConnection(args: ConnectionArgs): Promise<DsnResult | Pool> {
-  const endpointName = args.endpointName ?? "primary";
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   // Normalize once at the entry point. Every downstream CLI path uses
   // branchId; callers can hand us uid / branch_id / full path.
   const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
@@ -88,8 +90,8 @@ export async function getConnection(args: ConnectionArgs): Promise<DsnResult | P
   if (args.output === "dsn") {
     const host = await resolveEndpointHost(args.instance, branchId);
     const { token, email } = await mintCredential(endpointPath);
-    const url = buildPostgresUrl({ host, port: 5432, database, user: email, password: token });
-    return { url, host, port: 5432, database, user: email, endpointPath };
+    const url = buildPostgresUrl({ host, port: POSTGRES_PORT, database, user: email, password: token });
+    return { url, host, port: POSTGRES_PORT, database, user: email, endpointPath };
   }
 
   // output === "pool"
@@ -183,7 +185,7 @@ function dbcli(args: string[]): string {
     return execFileSync("databricks", args, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30_000,
+      timeout: KIT_TIMEOUTS.cliDefault,
     });
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };

@@ -30,6 +30,8 @@ import {
 import { mintCredential } from "./get-connection.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { updateEnvConnection } from "./env-file.js";
+import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 
 // ─── Internal git helpers ───────────────────────────────────────
 
@@ -38,7 +40,7 @@ function gitCurrentBranch(cwd: string): string {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 5_000,
+    timeout: KIT_TIMEOUTS.gitDefault,
   }).trim();
 }
 
@@ -47,7 +49,7 @@ function gitHasLocalBranch(cwd: string, branch: string): boolean {
     execFileSync("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd,
       stdio: "ignore",
-      timeout: 5_000,
+      timeout: KIT_TIMEOUTS.gitDefault,
     });
     return true;
   } catch {
@@ -59,7 +61,7 @@ function gitCheckoutNewBranch(cwd: string, branch: string): void {
   execFileSync("git", ["checkout", "-b", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 10_000,
+    timeout: KIT_TIMEOUTS.gitCheckout,
   });
 }
 
@@ -67,7 +69,7 @@ function gitCheckoutExistingBranch(cwd: string, branch: string): void {
   execFileSync("git", ["checkout", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 10_000,
+    timeout: KIT_TIMEOUTS.gitCheckout,
   });
 }
 
@@ -75,7 +77,7 @@ function gitDeleteLocalBranch(cwd: string, branch: string, force = true): void {
   execFileSync("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 5_000,
+    timeout: KIT_TIMEOUTS.gitDefault,
   });
 }
 
@@ -84,7 +86,7 @@ function gitHasRemoteBranch(cwd: string, remote: string, branch: string): boolea
     const out = execFileSync(
       "git",
       ["ls-remote", "--exit-code", "--heads", remote, branch],
-      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15_000 }
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
     );
     return out.trim().length > 0;
   } catch {
@@ -96,7 +98,7 @@ function gitDeleteRemoteBranch(cwd: string, remote: string, branch: string): voi
   execFileSync("git", ["push", remote, "--delete", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 30_000,
+    timeout: KIT_TIMEOUTS.gitPush,
   });
 }
 
@@ -109,7 +111,7 @@ function readEnvVar(envPath: string, key: string): string | undefined {
 }
 
 function buildDsn(host: string, database: string, user: string, password: string): string {
-  const u = new URL(`postgresql://${host}:5432/${encodeURIComponent(database)}`);
+  const u = new URL(`postgresql://${host}:${POSTGRES_PORT}/${encodeURIComponent(database)}`);
   u.username = encodeURIComponent(user);
   u.password = encodeURIComponent(password);
   u.searchParams.set("sslmode", "require");
@@ -166,7 +168,7 @@ export async function createPairedBranch(
   const sanitized = sanitizeBranchName(args.branch);
   const createGitBranch = args.createGitBranch !== false;
   const syncEnv = args.syncEnv !== false;
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   // 1. Create Lakebase branch (idempotent if already exists with same name)
   const branch = await createBranch({
@@ -182,7 +184,7 @@ export async function createPairedBranch(
       ready = await waitForBranchReady({
         instance: args.instance,
         branch: sanitized,
-        timeoutMs: args.readyTimeoutMs ?? 120_000,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
       });
     } catch (err) {
       warnings.push(
@@ -379,7 +381,7 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
   }
   const rawBranch = args.branch ?? gitCurrentBranch(args.cwd);
   const sanitized = sanitizeBranchName(rawBranch);
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   const ep = await getEndpoint({ instance, branch: sanitized });
   if (!ep?.host) {
@@ -511,7 +513,7 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
     );
   }
   const branchId = sanitizeBranchName(rawBranch);
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   // 3. Resolve "previous Lakebase branch" – caller arg wins over .env
   const previousBranch =
@@ -577,7 +579,7 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
             await waitForBranchReady({
               instance,
               branch: branchId,
-              timeoutMs: args.readyTimeoutMs ?? 120_000,
+              timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
             });
           } catch (err) {
             warnings.push(
@@ -600,7 +602,7 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
   const ep = await ensureEndpoint({
     instance,
     branch: lakebaseBranch,
-    timeoutMs: args.readyTimeoutMs ?? 120_000,
+    timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
   });
   const { token, email } = await mintCredential(endpointPath(instance, lakebaseBranch));
   const dsn = buildDsn(ep.host, database, email, token);
