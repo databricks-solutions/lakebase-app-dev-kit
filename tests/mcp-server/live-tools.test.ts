@@ -186,7 +186,7 @@ describe.skipIf(!RUN_SUITE)(
     it("tools/list advertises all 25 expected tools", async () => {
       const resp = await client.request("tools/list", {});
       const tools = (resp.result as { tools: { name: string }[] }).tools;
-      expect(tools.length).toBe(25);
+      expect(tools.length).toBe(26);
       const names = tools.map((t) => t.name).sort();
       expect(names).toContain("lakebase_branch_list");
       expect(names).toContain("lakebase_branch_show");
@@ -266,7 +266,7 @@ describe.skipIf(!RUN_SUITE)(
         overall: string;
         checks: { name: string; status: string }[];
       };
-      expect(report.checks.length).toBe(8);
+      expect(report.checks.length).toBe(9);
       expect(["ok", "warn"]).toContain(report.overall);
       const byName = (n: string) =>
         report.checks.find((c) => c.name === n)!;

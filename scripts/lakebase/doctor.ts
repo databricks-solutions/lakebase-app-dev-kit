@@ -10,6 +10,7 @@ import { resolveDatabricksHost } from "./databricks-host.js";
 import { listBranches } from "./branch-utils.js";
 import { verifyHooks } from "./project-verify.js";
 import { detectLanguage } from "./migrate.js";
+import { detectWorkflowDrift } from "./workflow-drift.js";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";
 
@@ -297,6 +298,36 @@ function checkHooks(projectDir: string): CheckResult {
   };
 }
 
+function checkWorkflowDrift(projectDir: string): CheckResult {
+  try {
+    const report = detectWorkflowDrift({ projectDir });
+    const drifted = report.files.filter((f) => f.status === "drifted").length;
+    const missing = report.files.filter((f) => f.status === "missing").length;
+    if (report.overall === "ok") {
+      return {
+        name: "workflow-drift",
+        status: "ok",
+        message: "Scaffolded .github/workflows/*.yml match the kit's templates",
+        detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
+      };
+    }
+    return {
+      name: "workflow-drift",
+      status: "warn",
+      message: `Scaffolded workflows drift from kit: ${drifted} drifted, ${missing} missing`,
+      detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
+      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until FEIP-7139 updateWorkflows lands.",
+    };
+  } catch (err) {
+    return {
+      name: "workflow-drift",
+      status: "skip",
+      message: "Could not run drift check",
+      detail: { error: (err as Error).message },
+    };
+  }
+}
+
 function worstOf(statuses: CheckStatus[]): CheckStatus {
   const order: CheckStatus[] = ["ok", "skip", "warn", "fail"];
   return statuses.reduce<CheckStatus>(
@@ -349,6 +380,7 @@ export async function runDoctor(args: DoctorArgs = {}): Promise<DoctorReport> {
   const gitRemote = await checkGitRemote(projectDir);
   const language = checkLanguage(projectDir);
   const hooks = checkHooks(projectDir);
+  const workflowDrift = checkWorkflowDrift(projectDir);
 
   const checks: CheckResult[] = [
     cli,
@@ -359,6 +391,7 @@ export async function runDoctor(args: DoctorArgs = {}): Promise<DoctorReport> {
     gitRemote,
     language,
     hooks,
+    workflowDrift,
   ];
 
   return {
