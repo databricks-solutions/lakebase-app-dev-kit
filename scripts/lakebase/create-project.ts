@@ -131,7 +131,10 @@ export async function createProject(
       );
     }
     report("Cloning repository...", projectDir);
-    await cloneRepo(`https://github.com/${fullRepoName}.git`, input.parentDir);
+    await cloneRepo({
+      repoUrl: `https://github.com/${fullRepoName}.git`,
+      parentDir: input.parentDir,
+    });
   } else {
     report("Creating local project directory...", projectDir);
     if (fs.existsSync(projectDir)) {
