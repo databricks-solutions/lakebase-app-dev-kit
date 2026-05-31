@@ -55,7 +55,7 @@ cd lakebase-app-dev-kit
 npm install   # prepare script builds dist/
 ```
 
-For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL. npm publish is gated on org/scope/runner questions and intentionally deferred:
+For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL:
 
 ```jsonc
 // host package.json
@@ -65,7 +65,9 @@ For a JS/TS host (extension, Node service) that imports substrate functions, dep
 }
 ```
 
-Pin to a sha for reproducibility. `prepare` builds `dist/` on install.
+Pin to a sha or release tag for reproducibility. `prepare` builds `dist/` on install.
+
+Package.json is publish-ready (`private: false`, `files` allow-list, `prepublishOnly` typecheck+test+build); npm publish lands once @databricks-solutions scope admin access is configured. After publish, `npm i -g @databricks-solutions/lakebase-app-dev-kit` becomes the canonical install path for the CLI bins.
 
 ### For coding agents
 
@@ -102,14 +104,30 @@ The root barrel `@databricks-solutions/lakebase-app-dev-kit` re-exports everythi
 
 ## CLIs
 
-The package exposes six bins (resolved relative to `node_modules/.bin/` when installed):
+The package exposes eleven bins (resolved relative to `node_modules/.bin/` when installed). Run any of them with `--help` for full subcommand + flag reference.
 
-- `lakebase-get-connection` – mint a DSN or pg.Pool against a branch
+**Project + connection**
+- `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap (10-step QuickPick equivalent)
+- `lakebase-get-connection` – mint a DSN or pg.Pool against a branch (single-seam credential handoff)
+- `lakebase-doctor` – health check the local env: CLI version, auth, `.env` shape, project reachability, git remote, language, hooks. Exit codes 0/1/2 = OK/WARN/FAIL.
+
+**Branch lifecycle**
+- `lakebase-branch` – list / show / create / create-paired / create-tier (feature/test/uat/perf) / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep.
+
+**PR flow**
+- `lakebase-pr` – open / merge / merge-paired (deletes Lakebase feature branch on merge) / status / files / reviews / comments
+
+**Schema + migrations**
 - `lakebase-schema-diff` – parent-aware schema diff between two Lakebase branches
-- `lakebase-github-token` – print/diagnose the resolved GitHub token
-- `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap
 - `lakebase-migrate` – apply / rollback / status / list schema migrations against a branch
-- `lakebase-mcp-server` – stdio MCP server exposing the tool registry
+- `lakebase-detect-language` – detect project language (java / kotlin / python / nodejs) for CI step outputs
+
+**Operations**
+- `lakebase-cut-backup` – cut a no-expiry backup branch off a source branch
+- `lakebase-github-token` – print / diagnose the resolved GitHub token (single-seam GitHub auth)
+
+**Agents**
+- `lakebase-mcp-server` – stdio MCP server exposing 25 tools to MCP-capable agents (Claude Desktop, OpenAI Codex, Cursor-via-MCP, Genie Code)
 
 ## Contributing
 
