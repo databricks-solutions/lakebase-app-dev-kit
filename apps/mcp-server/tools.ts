@@ -33,6 +33,8 @@ import {
 } from "../../scripts/github/pr.js";
 // FEIP-7330 P0.4: doctor MCP tool.
 import { runDoctor } from "../../scripts/lakebase/doctor.js";
+// FEIP-7140: workflow drift MCP tool.
+import { detectWorkflowDrift } from "../../scripts/lakebase/workflow-drift.js";
 // FEIP-7331 P0.1: branch MCP tools (full parity with the CLI).
 import {
   listBranches,
@@ -507,6 +509,26 @@ export const TOOLS: ToolDefinition[] = [
         projectDir: optionalString(args, "projectDir"),
         profile: optionalString(args, "profile"),
         host: optionalString(args, "host"),
+      });
+    },
+  },
+  // ------------------------- FEIP-7140 workflow drift ----------------------
+  {
+    name: "lakebase_workflow_drift",
+    description: "Detect drift between a scaffolded project's .github/workflows/*.yml and the kit's current templates. Returns per-file status (unchanged / drifted / missing / extra) and a unified diff for drifted files. Use when a maintainer wants to know if a project's CI templates are stale vs the kit it pins.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectDir: { type: "string", description: "Project directory containing .github/workflows/." },
+        kitDir: { type: "string", description: "Override the kit directory (default: bundled templates path)." },
+      },
+      required: ["projectDir"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return detectWorkflowDrift({
+        projectDir: requireString(args, "projectDir"),
+        kitDir: optionalString(args, "kitDir"),
       });
     },
   },

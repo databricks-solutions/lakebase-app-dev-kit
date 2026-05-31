@@ -136,6 +136,7 @@ describe("MCP server stdio handshake", () => {
       "lakebase_pr_status",
       "lakebase_rollback_migration",
       "lakebase_schema_diff",
+      "lakebase_workflow_drift",
     ]);
 
     const callResp = await client.request("tools/call", {

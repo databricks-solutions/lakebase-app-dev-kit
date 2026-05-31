@@ -159,7 +159,7 @@ describe.skipIf(!RUN_SUITE)(
       expect(r.parsed).toBeDefined();
       const report = r.parsed as DoctorReport;
       expect(["ok", "warn"]).toContain(report.overall);
-      expect(report.checks.length).toBe(8);
+      expect(report.checks.length).toBe(9);
       const names = report.checks.map((c) => c.name).sort();
       expect(names).toEqual(
         [
@@ -170,6 +170,7 @@ describe.skipIf(!RUN_SUITE)(
           "git-hooks",
           "git-remote",
           "lakebase-project",
+          "workflow-drift",
           "workspace-identity",
         ].sort()
       );
