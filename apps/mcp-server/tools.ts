@@ -21,6 +21,37 @@ import {
   listMigrations,
   type MigrationLanguage,
 } from "../../scripts/lakebase/migrate.js";
+// FEIP-7328 P0.2: PR-flow MCP tools.
+import {
+  createPullRequest,
+  getPullRequest,
+  getPullRequestReviews,
+  getPullRequestFiles,
+  getPullRequestComments,
+  mergePullRequest,
+  mergePairedPullRequest,
+} from "../../scripts/github/pr.js";
+// FEIP-7330 P0.4: doctor MCP tool.
+import { runDoctor } from "../../scripts/lakebase/doctor.js";
+// FEIP-7331 P0.1: branch MCP tools (full parity with the CLI).
+import {
+  listBranches,
+  getBranchByName,
+} from "../../scripts/lakebase/branch-utils.js";
+import { createBranch } from "../../scripts/lakebase/branch-create.js";
+import { deleteBranch } from "../../scripts/lakebase/branch-delete.js";
+import {
+  createFeatureBranch,
+  createTestBranch,
+  createUatBranch,
+  createPerfBranch,
+} from "../../scripts/lakebase/convention-branches.js";
+import {
+  createPairedBranch,
+  deletePairedBranch,
+  checkoutPaired,
+  syncEnvToCurrentBranch,
+} from "../../scripts/lakebase/paired-branch.js";
 
 export interface ToolDefinition {
   name: string;
@@ -299,6 +330,409 @@ export const TOOLS: ToolDefinition[] = [
         language: optionalString(args, "language") as MigrationLanguage | undefined,
         database: optionalString(args, "database"),
         endpointName: optionalString(args, "endpointName"),
+      });
+    },
+  },
+  // ------------------------- FEIP-7328 P0.2 PR tools -------------------------
+  {
+    name: "lakebase_pr_open",
+    description: "Create a GitHub pull request via the REST API. Returns the PR html_url.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        headBranch: { type: "string", description: "Head branch with the changes." },
+        title: { type: "string", description: "PR title." },
+        body: { type: "string", description: "PR body (markdown)." },
+        baseBranch: { type: "string", description: "Target base branch. Default: repo default." },
+      },
+      required: ["ownerRepo", "headBranch", "title", "body"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const url = await createPullRequest({
+        ownerRepo: requireString(args, "ownerRepo"),
+        headBranch: requireString(args, "headBranch"),
+        title: requireString(args, "title"),
+        body: requireString(args, "body"),
+        baseBranch: optionalString(args, "baseBranch"),
+      });
+      return { url };
+    },
+  },
+  {
+    name: "lakebase_pr_merge",
+    description: "Merge a GitHub pull request. Default deletes the remote head branch on merge.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        pullNumber: { type: "number", description: "PR number to merge." },
+        method: { type: "string", enum: ["merge", "squash", "rebase"], description: "Merge method. Default: merge." },
+        deleteRemoteBranch: { type: "boolean", description: "Delete remote head after merge. Default: true." },
+      },
+      required: ["ownerRepo", "pullNumber"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const num = args.pullNumber;
+      if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
+      const message = await mergePullRequest({
+        ownerRepo: requireString(args, "ownerRepo"),
+        pullNumber: num,
+        method: optionalString(args, "method") as "merge" | "squash" | "rebase" | undefined,
+        deleteRemoteBranch: typeof args.deleteRemoteBranch === "boolean" ? (args.deleteRemoteBranch as boolean) : undefined,
+      });
+      return { message };
+    },
+  },
+  {
+    name: "lakebase_pr_merge_paired",
+    description: "Merge a GitHub PR AND delete the matching feature branch in the Lakebase project. Single-call workflow cleanup.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        pullNumber: { type: "number", description: "PR number to merge." },
+        lakebaseInstance: { type: "string", description: "Lakebase project id used to clean up the feature branch." },
+        method: { type: "string", enum: ["merge", "squash", "rebase"], description: "Merge method. Default: merge." },
+        deleteRemoteBranch: { type: "boolean", description: "Delete remote head after merge. Default: true." },
+        deleteLakebaseBranch: { type: "boolean", description: "Delete the Lakebase feature branch. Default: true." },
+      },
+      required: ["ownerRepo", "pullNumber", "lakebaseInstance"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const num = args.pullNumber;
+      if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
+      return mergePairedPullRequest({
+        ownerRepo: requireString(args, "ownerRepo"),
+        pullNumber: num,
+        lakebaseInstance: requireString(args, "lakebaseInstance"),
+        method: optionalString(args, "method") as "merge" | "squash" | "rebase" | undefined,
+        deleteRemoteBranch: typeof args.deleteRemoteBranch === "boolean" ? (args.deleteRemoteBranch as boolean) : undefined,
+        deleteLakebaseBranch: typeof args.deleteLakebaseBranch === "boolean" ? (args.deleteLakebaseBranch as boolean) : undefined,
+      });
+    },
+  },
+  {
+    name: "lakebase_pr_status",
+    description: "Look up an OPEN pull request by head branch. Returns state, CI checks, counts, review decision. Returns undefined if no open PR exists for that head.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        headBranch: { type: "string", description: "Head branch to look up." },
+      },
+      required: ["ownerRepo", "headBranch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const info = await getPullRequest(
+        requireString(args, "ownerRepo"),
+        requireString(args, "headBranch")
+      );
+      return info ?? null;
+    },
+  },
+  {
+    name: "lakebase_pr_files",
+    description: "List files changed by a pull request, with status (added / modified / removed / renamed) and per-file diff stats.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        pullNumber: { type: "number", description: "PR number." },
+      },
+      required: ["ownerRepo", "pullNumber"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const num = args.pullNumber;
+      if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
+      return getPullRequestFiles(requireString(args, "ownerRepo"), num);
+    },
+  },
+  {
+    name: "lakebase_pr_reviews",
+    description: "List reviews on a pull request (APPROVED / CHANGES_REQUESTED / COMMENTED / etc.).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        pullNumber: { type: "number", description: "PR number." },
+      },
+      required: ["ownerRepo", "pullNumber"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const num = args.pullNumber;
+      if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
+      return getPullRequestReviews(requireString(args, "ownerRepo"), num);
+    },
+  },
+  {
+    name: "lakebase_pr_comments",
+    description: "List top-level issue comments on a pull request (separate from review-thread comments).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ownerRepo: { type: "string", description: "GitHub repo slug (owner/repo)." },
+        pullNumber: { type: "number", description: "PR number." },
+      },
+      required: ["ownerRepo", "pullNumber"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const num = args.pullNumber;
+      if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
+      return getPullRequestComments(requireString(args, "ownerRepo"), num);
+    },
+  },
+  // ------------------------- FEIP-7330 P0.4 doctor -------------------------
+  {
+    name: "lakebase_doctor",
+    description: "Run health checks on a Lakebase project: CLI version + auth, .env shape, project reachability, git remote, language, git hooks. Returns a structured report with per-check status + remediation hints.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectDir: { type: "string", description: "Project directory to inspect. Default: server cwd." },
+        profile: { type: "string", description: "Databricks CLI profile. Default: $DATABRICKS_CONFIG_PROFILE." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return runDoctor({
+        projectDir: optionalString(args, "projectDir"),
+        profile: optionalString(args, "profile"),
+        host: optionalString(args, "host"),
+      });
+    },
+  },
+  // ------------------------- FEIP-7331 P0.1 branch read tools -------------
+  {
+    name: "lakebase_branch_list",
+    description: "List branches on a Lakebase project (name, uid, parent, expiration, state).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      required: ["instance"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return listBranches({
+        instance: requireString(args, "instance"),
+        host: optionalString(args, "host"),
+      });
+    },
+  },
+  {
+    name: "lakebase_branch_show",
+    description: "Look up a single Lakebase branch by name or uid. Returns undefined if not found.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name or uid." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      required: ["instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const info = await getBranchByName(requireString(args, "branch"), {
+        instance: requireString(args, "instance"),
+        host: optionalString(args, "host"),
+      });
+      return info ?? null;
+    },
+  },
+  {
+    name: "lakebase_branch_create",
+    description: "Create a Lakebase branch (no git side-effects). For paired git+Lakebase creation, use lakebase_branch_create_paired. Will not exceed the workspace's TTL cap; pass noExpiry: true for long-running tiers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name (will be sanitized)." },
+        parentBranch: { type: "string", description: "Parent branch override (e.g. 'staging'). Default: project default branch." },
+        ttl: { type: "string", description: "Lifetime in Lakebase duration format (e.g. '604800s')." },
+        noExpiry: { type: "boolean", description: "Set no_expiry=true (long-running tiers only)." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      required: ["instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return createBranch({
+        instance: requireString(args, "instance"),
+        branch: requireString(args, "branch"),
+        parentBranch: optionalString(args, "parentBranch"),
+        ttl: optionalString(args, "ttl"),
+        noExpiry: typeof args.noExpiry === "boolean" ? (args.noExpiry as boolean) : undefined,
+        host: optionalString(args, "host"),
+      });
+    },
+  },
+  {
+    name: "lakebase_branch_create_paired",
+    description: "Create a Lakebase branch + matching local git branch + .env update in one call. The canonical 'fork from current' workflow op (mirrors the post-checkout git hook).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name (used for both Lakebase and git)." },
+        parentBranch: { type: "string", description: "Lakebase parent branch override." },
+        cwd: { type: "string", description: "Project directory (must contain .git/). Default: server cwd." },
+        createGitBranch: { type: "boolean", description: "Create + switch the local git branch. Default: true." },
+        syncEnv: { type: "boolean", description: "Rewrite .env to point at the new endpoint. Default: true." },
+        database: { type: "string", description: "Postgres database name. Default: 'databricks_postgres'." },
+      },
+      required: ["instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return createPairedBranch({
+        instance: requireString(args, "instance"),
+        branch: requireString(args, "branch"),
+        parentBranch: optionalString(args, "parentBranch"),
+        cwd: optionalString(args, "cwd") ?? process.cwd(),
+        createGitBranch: typeof args.createGitBranch === "boolean" ? (args.createGitBranch as boolean) : undefined,
+        syncEnv: typeof args.syncEnv === "boolean" ? (args.syncEnv as boolean) : undefined,
+        database: optionalString(args, "database"),
+      });
+    },
+  },
+  {
+    name: "lakebase_branch_create_tier",
+    description: "Create a convention-tier Lakebase branch (feature / test / uat / perf). Each tier has its own default TTL and forks from 'staging' by default. PSA branching methodology.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tier: { type: "string", enum: ["feature", "test", "uat", "perf"], description: "Convention tier." },
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name (will be sanitized)." },
+        parentBranch: { type: "string", description: "Parent override. Default: 'staging' for all four tiers." },
+        ttl: { type: "string", description: "TTL override. Default: tier-specific (30d / 14d / 14d / 7d)." },
+        strictParent: { type: "boolean", description: "Throw if convention's default parent missing instead of falling back. Default: false." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      required: ["tier", "instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const tier = requireString(args, "tier") as "feature" | "test" | "uat" | "perf";
+      const common = {
+        instance: requireString(args, "instance"),
+        branch: requireString(args, "branch"),
+        parentBranch: optionalString(args, "parentBranch"),
+        ttl: optionalString(args, "ttl"),
+        strictParent: typeof args.strictParent === "boolean" ? (args.strictParent as boolean) : undefined,
+        host: optionalString(args, "host"),
+      };
+      switch (tier) {
+        case "feature": return createFeatureBranch(common);
+        case "test": return createTestBranch(common);
+        case "uat": return createUatBranch(common);
+        case "perf": return createPerfBranch(common);
+        default: throw new Error(`Unknown tier: ${tier}`);
+      }
+    },
+  },
+  {
+    name: "lakebase_branch_delete",
+    description: "Delete a Lakebase branch (no git side-effects). For paired git+Lakebase cleanup, use lakebase_branch_delete_paired. Throws if the branch cannot be resolved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name, uid, or full resource name." },
+        host: { type: "string", description: "Workspace host override." },
+      },
+      required: ["instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      await deleteBranch({
+        instance: requireString(args, "instance"),
+        branch: requireString(args, "branch"),
+        host: optionalString(args, "host"),
+      });
+      return { deleted: true, branch: args.branch };
+    },
+  },
+  {
+    name: "lakebase_branch_delete_paired",
+    description: "Delete a Lakebase branch + local git branch + remote git branch in one call. Skips deletion of branches that are currently checked out (local) or absent (remote). Default deletes everything; pass deleteGitLocal/deleteGitRemote: false to skip a side.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        instance: { type: "string", description: "Lakebase project id." },
+        branch: { type: "string", description: "Branch name." },
+        cwd: { type: "string", description: "Project directory (must contain .git/). Default: server cwd." },
+        deleteGitLocal: { type: "boolean", description: "Delete the local git branch. Default: true." },
+        deleteGitRemote: { type: "boolean", description: "Delete the remote git branch. Default: true." },
+        gitRemote: { type: "string", description: "Git remote name. Default: 'origin'." },
+      },
+      required: ["instance", "branch"],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return deletePairedBranch({
+        instance: requireString(args, "instance"),
+        branch: requireString(args, "branch"),
+        cwd: optionalString(args, "cwd") ?? process.cwd(),
+        deleteGitLocal: typeof args.deleteGitLocal === "boolean" ? (args.deleteGitLocal as boolean) : undefined,
+        deleteGitRemote: typeof args.deleteGitRemote === "boolean" ? (args.deleteGitRemote as boolean) : undefined,
+        gitRemote: optionalString(args, "gitRemote"),
+      });
+    },
+  },
+  {
+    name: "lakebase_branch_checkout_paired",
+    description: "In-process equivalent of the post-checkout git hook: sync .env to the current git branch's matching Lakebase endpoint. Use after switching git branches outside the hook flow.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: { type: "string", description: "Project directory (must contain .env). Default: server cwd." },
+        branch: { type: "string", description: "Target git branch override. Default: read current via git." },
+        instance: { type: "string", description: "Lakebase instance override. Default: read LAKEBASE_PROJECT_ID from .env." },
+        trunkAlias: { type: "string", description: "Git branch name that should pair with the project's default Lakebase branch. Mirrors LAKEBASE_TRUNK_BRANCH from the post-checkout hook." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return checkoutPaired({
+        cwd: optionalString(args, "cwd") ?? process.cwd(),
+        branch: optionalString(args, "branch"),
+        instance: optionalString(args, "instance"),
+        trunkAlias: optionalString(args, "trunkAlias"),
+      });
+    },
+  },
+  {
+    name: "lakebase_branch_sync_env",
+    description: "Refresh .env to point at the current branch's endpoint. Recovery for .env drift; equivalent of the post-checkout hook minus the git-branch step.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cwd: { type: "string", description: "Project directory (must contain .env and .git/). Default: server cwd." },
+        instance: { type: "string", description: "Lakebase instance override. Default: read LAKEBASE_PROJECT_ID from .env." },
+        branch: { type: "string", description: "Branch name override. Default: current git branch (sanitized)." },
+        database: { type: "string", description: "Postgres database name. Default: 'databricks_postgres'." },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      return syncEnvToCurrentBranch({
+        cwd: optionalString(args, "cwd") ?? process.cwd(),
+        instance: optionalString(args, "instance"),
+        branch: optionalString(args, "branch"),
+        database: optionalString(args, "database"),
       });
     },
   },
