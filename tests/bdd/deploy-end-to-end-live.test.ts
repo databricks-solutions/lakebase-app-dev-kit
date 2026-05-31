@@ -117,7 +117,7 @@ describe.skipIf(!RUN_LIVE)(
       expect(result.stdout + result.stderr).toMatch(/validation checks passed/i);
     }, 180_000);
 
-    it("generated bundle yaml references the live Lakebase project + branch", () => {
+    it("generated bundle yaml references the live Lakebase project as instance_name", () => {
       const target: DeployTarget = {
         workspace_profile: PROFILE!,
         workspace_path: "/Workspace/Users/integration-test/deploy-e2e",
@@ -127,10 +127,11 @@ describe.skipIf(!RUN_LIVE)(
       };
 
       const bundleYaml = generateBundleYaml(target, target.app_name);
-      // Sanity-check the canonical resource-path shape made it through
-      // with the LIVE identifiers, not placeholder values.
-      expect(bundleYaml).toContain(`branch: projects/${INSTANCE}/branches/${BRANCH}`);
-      expect(bundleYaml).toContain(`database: projects/${INSTANCE}/branches/${BRANCH}/databases/databricks_postgres`);
+      // Sanity-check the canonical bundle schema with the LIVE identifiers.
+      // instance_name = Lakebase project (Lakebase API: "instance" = "project").
+      // database_name = the postgres database within the project.
+      expect(bundleYaml).toContain(`instance_name: ${INSTANCE}`);
+      expect(bundleYaml).toContain("database_name: databricks_postgres");
       expect(bundleYaml).toContain("permission: CAN_CONNECT_AND_CREATE");
     });
   },

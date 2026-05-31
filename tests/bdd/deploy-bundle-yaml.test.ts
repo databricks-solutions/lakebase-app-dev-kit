@@ -46,21 +46,24 @@ describe("generateBundleYaml: postgres resource", () => {
     expect(yaml).toContain("          database:\n");
   });
 
-  it("composes the branch path from lakebase_project and lakebase_branch", () => {
+  it("sets instance_name to the Lakebase project (canonical bundle schema)", () => {
     const yaml = generateBundleYaml(MINIMAL_TARGET, "my-app");
-    expect(yaml).toContain("            branch: projects/proj-123/branches/feature-x\n");
+    expect(yaml).toContain("            instance_name: proj-123\n");
   });
 
-  it("composes the database path using DEFAULT_DATABASE (databricks_postgres)", () => {
+  it("sets database_name to DEFAULT_DATABASE (databricks_postgres)", () => {
     const yaml = generateBundleYaml(MINIMAL_TARGET, "my-app");
-    expect(yaml).toContain(
-      "            database: projects/proj-123/branches/feature-x/databases/databricks_postgres\n"
-    );
+    expect(yaml).toContain("            database_name: databricks_postgres\n");
   });
 
   it("declares permission: CAN_CONNECT_AND_CREATE (devhub-canonical default)", () => {
     const yaml = generateBundleYaml(MINIMAL_TARGET, "my-app");
     expect(yaml).toContain("            permission: CAN_CONNECT_AND_CREATE\n");
+  });
+
+  it("does NOT declare a `branch:` field (branch is referenced via app.yaml env, not bundle)", () => {
+    const yaml = generateBundleYaml(MINIMAL_TARGET, "my-app");
+    expect(yaml).not.toMatch(/^\s+branch:/m);
   });
 });
 
