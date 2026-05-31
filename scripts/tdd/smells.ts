@@ -73,14 +73,6 @@ export interface DetectorInput {
   cycles: CycleArtifact[];
   test_list_size_at_start?: number;
   test_list_size_now?: number;
-  /**
-   * Cycle counts for ACs in the same story (excluding the scope's own
-   * AC). Caller responsibility to populate; detectDeadRequirementSignal
-   * uses it to flag this scope's AC as dead when siblings have matured
-   * past the configured threshold. Optional; the detector returns []
-   * when absent.
-   */
-  sibling_ac_cycle_counts?: Record<string, number>;
 }
 
 export interface SmellHit {
@@ -92,7 +84,6 @@ export interface SmellHit {
 const CYCLE_STALL_THRESHOLD = 3;
 const FRAGILITY_RATIO_FAILED_TESTS = 3;
 const TEST_COST_SPIRAL_FACTOR = 2;
-const DEAD_REQUIREMENT_SIBLING_THRESHOLD = 3;
 
 export function detectAll(input: DetectorInput): SmellHit[] {
   const hits: SmellHit[] = [];
@@ -102,9 +93,6 @@ export function detectAll(input: DetectorInput): SmellHit[] {
   hits.push(...detectTestDeletionAttempt(input));
   hits.push(...detectBoundaryViolation(input));
   hits.push(...detectTestListDrift(input));
-  hits.push(...detectApiCoherenceDrift(input));
-  hits.push(...detectCrossExperimentDivergence(input));
-  hits.push(...detectDeadRequirementSignal(input));
   return hits;
 }
 
@@ -188,65 +176,6 @@ export function detectTestListDrift(input: DetectorInput): SmellHit[] {
     ];
   }
   return [];
-}
-
-/**
- * api-coherence-drift: pass-through Navigator flag. The signal is "same
- * concept named differently across two consecutive PASS reviews," which
- * requires NLP-y judgment of identifier intent. Navigator flags it on
- * the relevant cycle via smell_flags; detector surfaces.
- */
-export function detectApiCoherenceDrift(input: DetectorInput): SmellHit[] {
-  return input.cycles
-    .filter((c) => (c.smell_flags ?? []).includes("api-coherence-drift"))
-    .map((c) => ({
-      smell: "api-coherence-drift" as const,
-      cycle_ids: [c.cycle_id],
-      detail: "Navigator-flagged: same concept named differently across consecutive PASS reviews",
-    }));
-}
-
-/**
- * cross-experiment-divergence: pass-through Navigator/Scrum-Master flag.
- * The signal is "two parallel experiments are solving different
- * problems," which requires the synthesis-view that Scrum-Master holds
- * across /experiments/N/. Detection lives there; this surfaces.
- */
-export function detectCrossExperimentDivergence(input: DetectorInput): SmellHit[] {
-  return input.cycles
-    .filter((c) => (c.smell_flags ?? []).includes("cross-experiment-divergence"))
-    .map((c) => ({
-      smell: "cross-experiment-divergence" as const,
-      cycle_ids: [c.cycle_id],
-      detail: "Navigator-flagged: parallel experiments diverging on what they're testing",
-    }));
-}
-
-/**
- * dead-requirement-signal: AC has 0 cycles while siblings in the same
- * story have matured past the threshold (default 3 cycles each). The
- * caller passes `sibling_ac_cycle_counts: { 'AC2': N, 'AC3': M, ... }`
- * (excluding the scope's own AC); detector compares the scope's
- * `cycles.length` against that map.
- *
- * Returns [] when sibling_ac_cycle_counts is missing or when this AC
- * isn't actually dead.
- */
-export function detectDeadRequirementSignal(input: DetectorInput): SmellHit[] {
-  const { scope, cycles, sibling_ac_cycle_counts } = input;
-  if (!sibling_ac_cycle_counts) return [];
-  if (cycles.length > 0) return [];
-  const matureSiblings = Object.entries(sibling_ac_cycle_counts).filter(
-    ([, n]) => n >= DEAD_REQUIREMENT_SIBLING_THRESHOLD
-  );
-  if (matureSiblings.length === 0) return [];
-  return [
-    {
-      smell: "dead-requirement-signal",
-      cycle_ids: [],
-      detail: `${scope.feature_id}/${scope.story_id}/${scope.ac_id} has 0 cycles while ${matureSiblings.length} sibling AC(s) have matured past ${DEAD_REQUIREMENT_SIBLING_THRESHOLD}: ${matureSiblings.map(([k, v]) => `${k}=${v}`).join(", ")}`,
-    },
-  ];
 }
 
 export interface SmellsLog {
