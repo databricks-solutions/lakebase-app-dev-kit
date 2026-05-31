@@ -12,6 +12,16 @@ export interface ExecOptions {
 }
 
 /**
+ * Common args shape for substrate functions that need only the working
+ * directory. Re-used across scripts/git/* modules so multiple
+ * `interface CwdOnly { cwd: string }` declarations don't collide at the
+ * barrel level.
+ */
+export interface CwdOnly {
+  cwd: string;
+}
+
+/**
  * POSIX-shell single-quote escape. Wraps `s` in single quotes and
  * escapes any literal single quotes as `'\''`. Resulting string is
  * safe to interpolate as a single argv element under /bin/sh: variable
