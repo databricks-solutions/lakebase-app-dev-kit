@@ -1,17 +1,14 @@
-// Sync primitives: push, pull, publish-branch, push-for-PR. Lifted
-// from the extension's GitService methods (P5c).
+// Sync primitives. P5c shipped push / pull / publishBranch /
+// pushCurrentBranchForPr; P6e (FEIP-7337) adds fetch / fetchPrune /
+// fetchAll / pullFrom / pushTo / sync.
 //
 // publishBranch and pushCurrentBranchForPr both need the current
 // branch name; they resolve it internally via `git rev-parse
 // --abbrev-ref HEAD` so callers don't have to pass it (and so the
 // "no current branch" error message is consistent).
 
-import { exec, shq } from "../util/exec.js";
+import { exec, shq, type CwdOnly } from "../util/exec.js";
 import { hasUpstream } from "./status.js";
-
-export interface CwdOnly {
-  cwd: string;
-}
 
 export interface PublishBranchArgs {
   cwd: string;
@@ -79,4 +76,65 @@ export async function pushCurrentBranchForPr(
   } else {
     await exec("git push", { cwd: args.cwd });
   }
+}
+
+// ---------- P6e additions ----------
+
+export interface FetchArgs {
+  cwd: string;
+  /** `--prune` to delete remote-tracking refs that no longer exist on the remote. */
+  prune?: boolean;
+  /** `--all` to fetch from every configured remote. */
+  all?: boolean;
+}
+
+export interface PullFromArgs {
+  cwd: string;
+  remote: string;
+  branch: string;
+}
+
+export interface PushToArgs {
+  cwd: string;
+  remote: string;
+  branch: string;
+}
+
+/**
+ * `git fetch` with optional `--prune` and `--all` flags. The flags
+ * combine: passing both fetches all remotes with pruning enabled.
+ *
+ * The extension's GitService split this into three methods (fetch,
+ * fetchPrune, fetchAll); the substrate consolidates with flags. The
+ * extension proxies preserve the original signatures.
+ */
+export async function fetch(args: FetchArgs): Promise<void> {
+  const parts = ["git fetch"];
+  if (args.prune) parts.push("--prune");
+  if (args.all) parts.push("--all");
+  await exec(parts.join(" "), { cwd: args.cwd });
+}
+
+/** `git pull <remote> <branch>`. */
+export async function pullFrom(args: PullFromArgs): Promise<void> {
+  await exec(`git pull ${shq(args.remote)} ${shq(args.branch)}`, {
+    cwd: args.cwd,
+  });
+}
+
+/** `git push <remote> <branch>`. */
+export async function pushTo(args: PushToArgs): Promise<void> {
+  await exec(`git push ${shq(args.remote)} ${shq(args.branch)}`, {
+    cwd: args.cwd,
+  });
+}
+
+/**
+ * Pull-then-push composite. Preserves the extension's GitService.sync
+ * semantics (plain `git pull` followed by `git push`, no rebase). Fails
+ * fast if pull errors; push does not run.
+ */
+export async function sync(args: CwdOnly): Promise<void> {
+  await exec("git pull", { cwd: args.cwd });
+  await exec("git push", { cwd: args.cwd });
 }
