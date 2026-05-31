@@ -33,25 +33,25 @@ afterEach(() => {
 });
 
 describe("promoteExperiment", () => {
-  it("throws when hitlApproved is false", () => {
+  it("throws when hitlApproved is false", async () => {
     seedExperiment("exp-winner", { status: "succeeded" });
-    expect(() =>
+    await expect(
       promoteExperiment({ tddDir: tdd, featureId: "F1", winnerSlug: "exp-winner", hitlApproved: false })
-    ).toThrow(/HITL/);
+    ).rejects.toThrow(/HITL/);
   });
 
-  it("throws when winnerSlug does not exist", () => {
+  it("throws when winnerSlug does not exist", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
-    expect(() =>
+    await expect(
       promoteExperiment({ tddDir: tdd, featureId: "F1", winnerSlug: "ghost", hitlApproved: true })
-    ).toThrow(/not found/);
+    ).rejects.toThrow(/not found/);
   });
 
-  it("marks winner succeeded and losers abandoned", () => {
+  it("marks winner succeeded and losers abandoned", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
     seedExperiment("exp-b", { status: "running" });
     seedExperiment("exp-c", { status: "running" });
-    const result = promoteExperiment({
+    const result = await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
       winnerSlug: "exp-a",
@@ -69,10 +69,10 @@ describe("promoteExperiment", () => {
     ).toBe(true);
   });
 
-  it("transitions feature status to ready-for-review when feature.json exists", () => {
+  it("transitions feature status to ready-for-review when feature.json exists", async () => {
     seedFeature();
     seedExperiment("exp-a", { status: "succeeded" });
-    const result = promoteExperiment({
+    const result = await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
       winnerSlug: "exp-a",
@@ -85,9 +85,9 @@ describe("promoteExperiment", () => {
     expect(feature.status).toBe("ready-for-review");
   });
 
-  it("appends a decision record to selection-log.md", () => {
+  it("appends a decision record to selection-log.md", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
-    promoteExperiment({
+    await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
       winnerSlug: "exp-a",
