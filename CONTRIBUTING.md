@@ -4,17 +4,35 @@ Thanks for your interest in contributing to `lakebase-app-dev-kit`. This is a [D
 
 ## Development setup
 
-Prerequisites:
-- Node.js 18+ and npm
-- The [Databricks CLI](https://docs.databricks.com/dev-tools/cli/) authenticated to a workspace with Lakebase enabled (required for live tests; hermetic tests run without it)
-- Python 3.10+ (used by `scripts/openai-foundry.py` and `scripts/skills.py`)
-- For Java/Flyway live tests: a JDK and the [Flyway CLI](https://flywaydb.org/documentation/usage/commandline/) – `run-live-tests.sh` will fetch Flyway on first run, or use a pre-installed one if it's on `PATH`
+### Core prerequisites (every contributor)
+
+- **Node.js 20+** and npm (matches `package.json#engines`)
+- **Databricks CLI v1.0.0 or later**, authenticated to a workspace with Lakebase enabled. Earlier versions (0.x) hit an expired-Terraform-GPG-key error during `databricks bundle deploy`. Install / upgrade with `brew upgrade databricks/tap/databricks` on macOS or per the [official install docs](https://docs.databricks.com/dev-tools/cli/install.html).
+- **Python 3.10+** (used by `scripts/openai-foundry.py`, `scripts/skills.py`, and the live driver's auto-provisioned alembic venv)
+- **git** (standard CLI)
+
+### Additional tooling unlocked by live tiers
+
+- **GitHub CLI (`gh`)** authenticated to your GitHub account, for the FEIP-7138 self-hosted-runner suite. The live driver defaults to running it; pass `--no-github-runner` to opt out (see "Live testing" below).
+- **JDK 17+ and the Flyway CLI** for `migrate-live-flyway.test.ts`. The live driver downloads Flyway Community CLI from `${LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL}` on first run if `flyway` is not already on PATH; pre-installing via `brew install flyway` is fine.
+- A Python venv with **alembic + sqlalchemy + psycopg2-binary** for `migrate-live.test.ts`. The live driver auto-provisions `.venv-live-tests/` on first run.
+
+### One-time setup
 
 ```bash
 git clone https://github.com/databricks-solutions/lakebase-app-dev-kit
 cd lakebase-app-dev-kit
 npm install   # `prepare` builds dist/ via tsup
 ```
+
+### Environment configuration
+
+The kit's substrate reads a number of `LAKEBASE_KIT_*` env vars to tune timeouts, package-registry URLs, and convention-branch TTLs (see `scripts/lakebase/kit-config.ts` for the full surface). Two committed files document the contract:
+
+- **`.env.template.config`** (committed): public-default values for every env-overridable knob. Sourced first by `scripts/run-all-live-tests.sh`.
+- **`.env.local.config`** (gitignored): your local overrides, e.g. corp-proxy package registries or a workspace-tighter `LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS`. Sourced second so local values win.
+
+Copy `.env.template.config` to `.env.local.config` and set the values your machine needs. The live driver auto-sources both.
 
 ## Build and typecheck
 
@@ -80,28 +98,53 @@ npm run test:watch  # vitest --watch
 
 Runs all of `tests/bdd/` with the live-gated suites self-skipping when their `LAKEBASE_TEST_*` env vars are unset. **Always run before pushing.** The husky `pre-push` gate runs this plus `typecheck`.
 
-### Tier 2 – Live integration (requires your own Databricks workspace, ~10-15 min)
+### Tier 2 – Live integration (requires your own Databricks workspace)
 
-The live tier hits a real Databricks workspace, creates real Lakebase projects, and exercises Alembic + Flyway against them. Run via `scripts/run-live-tests.sh` (also wired as `npm run test:live`).
+The live tier hits a real Databricks workspace, creates real Lakebase projects, exercises Alembic + Flyway, optionally creates a real GitHub repo + self-hosted runner (FEIP-7138), and optionally deploys a real Databricks App. Two runners with different scope:
+
+#### `scripts/run-all-live-tests.sh` (recommended, full suite)
+
+One command, one provisioned project, every gated test in the kit. Provisions a fresh Lakebase project, builds dist, sources `.env.template.config` + `.env.local.config`, and runs vitest with every `LAKEBASE_TEST_*` describe unlocked. Heavy: ~5 to 15 minutes including the Apps deploy + teardown.
+
+```bash
+bash scripts/run-all-live-tests.sh --profile <databricks-cli-profile> --no-prompt
+```
+
+Defaults to enabled coverage for every live-gated suite. Opt-out flags:
+
+| Flag | Disables |
+|---|---|
+| `--no-github-runner` | FEIP-7138 self-hosted-runner suite (skip if no `gh` auth) |
+| `--no-migrate-tools` | Auto-provisioning of `.venv-live-tests/` (alembic) + Flyway CLI download |
+
+Configuration flags (defaults shown in `--help`):
+
+| Flag | Purpose |
+|---|---|
+| `--profile <name>` | Required. Databricks CLI profile (from `~/.databrickscfg`). |
+| `--project <id>` | Reuse an existing Lakebase project instead of auto-provisioning. |
+| `--branch`, `--parent` | Override `LAKEBASE_TEST_BRANCH` / `LAKEBASE_TEST_PARENT`. |
+| `--feature-ttl-days <n>` | Tighten the convention feature-branch TTL when the workspace's policy is shorter than the default 30 days. |
+| `--teardown` | Delete the auto-provisioned orchestrator project on a fully green run. |
+| `--no-prompt` | Skip the 5s grace period (use in CI). |
+
+#### `scripts/run-live-tests.sh` (legacy, per-mode)
+
+Older runner that supports `--read-only` and `--all` modes. Use when you only need a subset of suites against an existing project. The `run-all-live-tests.sh` orchestrator covers the same ground plus more.
 
 | Mode | Required env + tools | What runs | Creates resources? |
 |---|---|---|---|
-| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway` | `tests/bdd/migrate-live.test.ts` (alembic) + `tests/bdd/migrate-live-flyway.test.ts` | **Yes**: `migrate-7091-<timestamp>` + `migrate-7098-<timestamp>` Lakebase projects, each deleted in their suite's `afterAll()` |
+| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway` | `tests/bdd/migrate-live.test.ts` (alembic) + `tests/bdd/migrate-live-flyway.test.ts` | Yes: `migrate-7091-<ts>` + `migrate-7098-<ts>` Lakebase projects, each deleted in their suite's `afterAll()` |
 | `--read-only` | `LAKEBASE_TEST_INSTANCE`, `LAKEBASE_TEST_BRANCH` | Read-only schema / endpoint / DSN suites against the configured branch | No |
 | `--all` | both of the above | Everything vitest discovers when gating env is satisfied | Yes (default mode) |
 
 ```bash
-# Default mode: self-provisions test projects on $DATABRICKS_HOST.
-# On first run the script creates:
-#   .venv-live-tests/                    (alembic + sqlalchemy + psycopg2-binary)
-#   .tools-live-tests/flyway-<version>/  (Flyway Community CLI; skipped when a `flyway` is already on PATH)
-# Subsequent runs reuse both.
 export DATABRICKS_HOST=https://<your-workspace>.cloud.databricks.com
 export LAKEBASE_TEST_E2E=1
 npm run test:live
 ```
 
-If your network blocks Maven Central (where the Flyway CLI is hosted), install Flyway separately (`brew install flyway`, your internal mirror, etc.) and put it on `PATH` before invoking `npm run test:live`. The script's preflight checks find the pre-installed binary and skips the download.
+If your network blocks Maven Central (where the Flyway CLI is hosted), install Flyway separately (`brew install flyway`, your internal mirror, etc.) and put it on `PATH` before invoking `npm run test:live`. The script's preflight finds the pre-installed binary and skips the download. The same `LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL` env override (set in `.env.local.config`) redirects the Flyway download to a proxy.
 
 **Consent model.** Setting `LAKEBASE_TEST_E2E=1 + DATABRICKS_HOST` authorizes the suite to create a Lakebase project on your workspace. The helper script pauses for 5 seconds before the create call with a notice showing the workspace + project name pattern; ctrl-c aborts. Set `LAKEBASE_TEST_NO_PROMPT=1` in CI to skip the pause.
 
@@ -109,11 +152,13 @@ If your network blocks Maven Central (where the Flyway CLI is hosted), install F
 
 ```bash
 databricks postgres delete-project <projectId>
+databricks apps delete <appName>     # if a slice 3 deploy test was interrupted
+gh repo delete <owner>/detect-language-verify-<ts> --yes   # if FEIP-7138 was interrupted
 ```
 
 Project names always have a timestamp suffix so re-runs and concurrent runs do not collide.
 
-Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTANCE` + `LAKEBASE_TEST_BRANCH` activates the read-only live tests in any `vitest run` invocation; `LAKEBASE_TEST_INITIALIZR=1` enables the Spring Initializr live fetch; `LAKEBASE_TEST_PARENT` configures the parent for diff suites.
+Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTANCE` + `LAKEBASE_TEST_BRANCH` activates the read-only live tests in any `vitest run` invocation; `LAKEBASE_TEST_INITIALIZR=1` enables the Spring Initializr live fetch; `LAKEBASE_TEST_PARENT` configures the parent for diff suites; `LAKEBASE_TEST_E2E_GITHUB=1` enables the FEIP-7138 self-hosted-runner suite.
 
 ### When to run which tier
 
@@ -153,7 +198,7 @@ Use GitHub Issues. Include:
 - The CLI verb or function name you ran
 - The exact error message + stderr (with secrets redacted)
 - Output of `databricks postgres list-branches "<project-path>"` for branch-related bugs
-- Versions: `node --version`, `databricks --version`, this kit's version (`package.json#version` or the pinned commit sha)
+- Versions: `node --version` (>= 20), `databricks --version` (>= 1.0.0), `python3 --version` (>= 3.10), this kit's version (`package.json#version` or the pinned commit sha). Include `flyway --version` and `java --version` if a migrate-live-flyway test was involved.
 
 ## Code of conduct
 

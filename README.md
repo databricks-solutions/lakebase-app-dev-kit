@@ -37,7 +37,17 @@ Two narrow auth seams, both enforced by CI grep guards:
 
 ## Install
 
-For agent use (running `node scripts/lakebase/<verb>.js` directly):
+### Prerequisites
+
+- **Node.js 20+** and npm
+- **Databricks CLI v1.0.0 or later**, authenticated to a workspace with Lakebase enabled. Earlier versions fail `databricks bundle deploy` on the expired-Terraform-GPG-key issue. macOS: `brew upgrade databricks/tap/databricks`. Per-platform install: [docs.databricks.com/dev-tools/cli/install.html](https://docs.databricks.com/dev-tools/cli/install.html).
+- **Python 3.10+** (for `scripts/openai-foundry.py` and the live-driver-managed alembic venv)
+- **GitHub CLI (`gh`)** authenticated, for the FEIP-7138 self-hosted-runner live test (opt out via `--no-github-runner` if you don't need it)
+- **JDK 17+** for the migrate-live-flyway live test (Flyway CLI itself is auto-downloaded by the live driver if not already on PATH)
+
+Contributors should also read [CONTRIBUTING.md](CONTRIBUTING.md) for the full live-test prerequisites + the `.env.template.config` / `.env.local.config` configuration pattern.
+
+### For agent use (running `node scripts/lakebase/<verb>.js` directly)
 
 ```bash
 git clone https://github.com/databricks-solutions/lakebase-app-dev-kit
