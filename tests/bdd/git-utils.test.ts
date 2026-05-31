@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { gitInit } from "../../scripts/git/init.js";
 import { commitAndPush, WorkflowScopeError } from "../../scripts/git/commit-push.js";
 import { commitAll } from "../../scripts/git/commits.js";
-import { exec } from "../../scripts/util/exec.js";
+import { cloneRepo } from "../../scripts/git/clone.js";
+import { exec, shq } from "../../scripts/util/exec.js";
 
 const tmpDirs: string[] = [];
 
@@ -84,5 +85,54 @@ describe("WorkflowScopeError", () => {
     expect(err.name).toBe("WorkflowScopeError");
     expect(err.message).toMatch(/cd \/tmp\/my-proj && git push -u origin main/);
     expect(err.message).toMatch(/workflow.*scope/);
+  });
+});
+
+describe("shq", () => {
+  it("suppresses shell variable expansion", () => {
+    expect(shq("$HOME")).toBe("'$HOME'");
+  });
+
+  it("suppresses command substitution backticks", () => {
+    expect(shq("a `b` c")).toBe("'a `b` c'");
+  });
+
+  it("escapes embedded single quotes", () => {
+    expect(shq("it's a test")).toBe("'it'\\''s a test'");
+  });
+});
+
+describe("cloneRepo", () => {
+  it("clones from a local bare repo into parentDir", async () => {
+    // Source: bare repo seeded with one commit
+    const sourceBare = mkTmp();
+    await exec("git init --bare -b main", { cwd: sourceBare });
+    const seed = mkTmp();
+    await gitInit(seed);
+    await configIdentity(seed);
+    fs.writeFileSync(path.join(seed, "README.md"), "# seed\n");
+    await commitAll({ cwd: seed, message: "seed" });
+    await exec(`git remote add origin ${shq(sourceBare)}`, { cwd: seed });
+    await exec("git push origin main", { cwd: seed });
+
+    // Clone into a fresh parent dir
+    const parent = mkTmp();
+    await cloneRepo({ repoUrl: sourceBare, parentDir: parent });
+
+    // git clone <bare> creates <parent>/<basename(bare)>
+    const cloned = path.join(parent, path.basename(sourceBare));
+    expect(fs.existsSync(path.join(cloned, ".git"))).toBe(true);
+    expect(fs.existsSync(path.join(cloned, "README.md"))).toBe(true);
+  });
+
+  it("propagates git's error when the URL is unreachable", async () => {
+    const parent = mkTmp();
+    await expect(
+      cloneRepo({
+        repoUrl: "/nonexistent/repo.git",
+        parentDir: parent,
+        timeoutMs: 5_000,
+      })
+    ).rejects.toThrow();
   });
 });
