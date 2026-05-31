@@ -3,7 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { gitInit } from "../../scripts/git/init.js";
-import { commit, commitAndPush, WorkflowScopeError } from "../../scripts/git/commit-push.js";
+import { commitAndPush, WorkflowScopeError } from "../../scripts/git/commit-push.js";
+import { commitAll } from "../../scripts/git/commits.js";
 import { exec } from "../../scripts/util/exec.js";
 
 const tmpDirs: string[] = [];
@@ -38,13 +39,17 @@ describe("gitInit", () => {
   });
 });
 
-describe("commit", () => {
+// The standalone `commit` export from commit-push.ts was removed in
+// FEIP-7324 in favor of the more general primitives in scripts/git/commits.ts.
+// commitAll covers the "stage everything + commit" behavior these tests
+// previously exercised via the old commit-push.commit shim.
+describe("commitAll (project-scaffold stage-and-commit equivalent)", () => {
   it("stages everything and creates a commit with the given message", async () => {
     const dir = mkTmp();
     await gitInit(dir);
     await configIdentity(dir);
     fs.writeFileSync(path.join(dir, "README.md"), "# Test\n");
-    await commit({ projectDir: dir, message: "Initial test commit" });
+    await commitAll({ cwd: dir, message: "Initial test commit" });
     const log = await exec("git log -1 --pretty=%s", { cwd: dir });
     expect(log).toBe("Initial test commit");
   });
@@ -55,7 +60,7 @@ describe("commit", () => {
     await configIdentity(dir);
     fs.writeFileSync(path.join(dir, "x"), "");
     const msg = `Initial scaffold (Java/Spring Boot + Lakebase): "test"`;
-    await commit({ projectDir: dir, message: msg });
+    await commitAll({ cwd: dir, message: msg });
     const log = await exec("git log -1 --pretty=%s", { cwd: dir });
     expect(log).toBe(msg);
   });

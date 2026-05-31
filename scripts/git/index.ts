@@ -8,3 +8,6 @@ export * from "./branches.js";
 export * from "./ancestry.js";
 export * from "./status.js";
 export * from "./migrations.js";
+export * from "./commits.js";
+export * from "./sync.js";
+export * from "./branch-tag.js";
