@@ -16,7 +16,7 @@ The control plane and data plane are owned by other Databricks artifacts. Instal
 
 ## Installing the substrate
 
-For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL until the npm-publish path settles:
+For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL:
 
 ```jsonc
 // host package.json
@@ -26,23 +26,41 @@ For a JS/TS host (extension, Node service) that imports substrate functions, dep
 }
 ```
 
-Pin to a sha. `prepare` builds `dist/` on install so consumers can import from the package name.
+Pin to a sha or release tag. `prepare` builds `dist/` on install so consumers can import from the package name. Once the npm scope admin step lands, `npm i -g @databricks-solutions/lakebase-app-dev-kit` becomes the canonical install path for the CLI bins.
 
-For agent use (running `node scripts/lakebase/<verb>.js` directly), clone this repo and run `npm install`. Same `prepare` build runs.
+For agent use (running the bins directly), clone the repo and run `npm install` once. The bins land in `node_modules/.bin/` and are also available as `node dist/scripts/.../<verb>.cli.js` for environments where adding to PATH is awkward.
 
 ## Operations
 
-Each operation is a CLI bin invocation that returns JSON on stdout. JS callers can import the same functions from the package.
+Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also import the same functions from the package. The 25-tool MCP server covers full parity with the 11 CLI bins.
 
-- `create-project` – bootstrap a fresh Lakebase-paired project
-- `schema-diff` – parent-aware diff between two Lakebase branches
-- `branch-create` / `branch-delete` – Lakebase branch lifecycle
-- `create-paired-branch` / `delete-paired-branch` / `checkout-paired` / `sync-env-to-current-branch` – paired ops that keep git + Lakebase + `.env` in lockstep
-- `get-endpoint` / `ensure-endpoint` / `get-credential` – branch endpoint + raw token/email
-- `query-branch-schema` / `query-branch-tables` – live pg introspection
-- `get-project-info` – project metadata (uid, display name, state)
-- `create-pull-request` / `get-pull-request` / `merge-pull-request` / `merge-paired-pull-request` – PR flow
-- `get-pull-request-reviews` / `get-pull-request-files` / `get-pull-request-comments` / `list-issue-comments` / `list-workflow-runs` – PR introspection
+**Branch lifecycle** (`lakebase-branch` / `lakebase_branch_*`)
+- `list` / `show` – enumerate or inspect branches on a project
+- `create` / `delete` – Lakebase branch only (no git side-effects)
+- `create-paired` / `delete-paired` – Lakebase + git + `.env` in lockstep
+- `create-tier feature|test|uat|perf` – convention-tier branches with PSA TTL defaults
+- `checkout-paired` / `sync-env` – recovery / drift-fix when `.env` lags
+
+**Schema + migrations** (`lakebase-schema-diff`, `lakebase-migrate`)
+- `lakebase-schema-diff` – parent-aware diff between any branch and its parent
+- `lakebase-migrate apply|rollback|status|list` – Flyway / Alembic / Knex migrations against a branch
+
+**PR flow** (`lakebase-pr` / `lakebase_pr_*`)
+- `open` / `merge` / `merge-paired` (Lakebase feature-branch cleanup baked into the merge)
+- `status` (by head branch) / `files` / `reviews` / `comments`
+
+**Project lifecycle** (`lakebase-create-project`, `lakebase-doctor`)
+- `lakebase-create-project` – end-to-end Lakebase + GitHub bootstrap
+- `lakebase-doctor` – health check the local env (CLI version, auth, `.env` shape, project reachability, git remote, language, hooks). Exit codes 0/1/2 = OK/WARN/FAIL for CI use.
+
+**Connection + auth** (`lakebase-get-connection`, `lakebase-github-token`)
+- `lakebase-get-connection` – mint DSN or pg.Pool against a branch (single-seam credential mint)
+- `lakebase-github-token` – resolve / diagnose the GitHub token (single-seam GitHub auth)
+
+**Backup** (`lakebase-cut-backup`)
+- Cut a no-expiry backup branch off a source branch
+
+Run any bin with `--help` for the full subcommand + flag reference.
 
 ## Under the covers
 
@@ -136,11 +154,16 @@ The agent reads the current git branch, calls `lakebase-get-connection --output 
 | Bin | Purpose |
 |---|---|
 | `lakebase-create-project` | End-to-end Lakebase + GitHub project bootstrap (see flow 1). |
+| `lakebase-branch` | Branch lifecycle: list / show / create / create-paired / create-tier / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep. |
+| `lakebase-pr` | PR flow: open / merge / merge-paired / status (by --head) / files / reviews / comments. `merge-paired` deletes the matching Lakebase feature branch on merge. |
+| `lakebase-doctor` | Health-check the local env. Run first when something looks off. Exit codes 0/1/2 = OK/WARN/FAIL for CI. |
 | `lakebase-get-connection` | Mint a DSN string (`--output dsn`) or pg.Pool (`--output pool`) against any branch. Add `--write-env` to refresh `.env`. |
 | `lakebase-schema-diff` | Parent-aware schema diff between any branch and its parent (or a comparison override). |
-| `lakebase-github-token` | Resolve the GitHub token via the same auth chain CI uses. Useful for debugging permission issues. |
-| `lakebase-migrate` | Apply / rollback / status / list schema migrations against a branch. |
-| `lakebase-mcp-server` | Stdio MCP server exposing every script as an MCP tool – for Claude Desktop / OpenAI Codex consumers. |
+| `lakebase-migrate` | Apply / rollback / status / list schema migrations against a branch (Flyway / Alembic / Knex). |
+| `lakebase-cut-backup` | Cut a no-expiry backup branch off a source branch. |
+| `lakebase-detect-language` | Detect project language for CI step outputs. |
+| `lakebase-github-token` | Resolve / diagnose the GitHub token via the same auth chain CI uses. |
+| `lakebase-mcp-server` | Stdio MCP server exposing 25 tools (full parity with the CLI bins). For Claude Desktop / OpenAI Codex / Cursor-via-MCP / Genie Code consumers. |
 
 ## Composition
 

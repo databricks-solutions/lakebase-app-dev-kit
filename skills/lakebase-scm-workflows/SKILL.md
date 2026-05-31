@@ -140,40 +140,61 @@ Eleven-step orchestration. Non-fatal failures (CI secrets sync, runner setup, ho
 
 ### 2. Branch lifecycle
 
-Lakebase branch CRUD. Git-side operations stay with the caller; these scripts handle the paired Lakebase side.
+Lakebase branch CRUD plus paired git+Lakebase+.env ops. The `lakebase-branch` bin is the shell-friendly entrypoint; same operations import directly from the package for JS/TS hosts.
 
 ```bash
-# Create a paired Lakebase branch – parent resolves from explicit override,
-# then "branch I'm currently on" hint, then project default.
-node scripts/lakebase/branch-create.js \
-  --instance proj-checkout --branch feature-add-orders \
-  [--parent staging] [--current main]
-# -> { uid, name, state: "READY", sourceBranchName, isDefault }
+# Lakebase-only branch lifecycle
+lakebase-branch list --instance proj-checkout
+lakebase-branch show --instance proj-checkout --branch feature-add-orders
+lakebase-branch create --instance proj-checkout --branch feature-add-orders --parent staging
+lakebase-branch delete --instance proj-checkout --branch feature-add-orders
 
-node scripts/lakebase/branch-delete.js --instance proj-checkout --branch feature-add-orders
+# Paired (Lakebase + git + .env in lockstep)
+lakebase-branch create-paired --instance proj-checkout --branch feature-add-orders --cwd .
+lakebase-branch delete-paired --instance proj-checkout --branch feature-add-orders --cwd .
+
+# Recovery / drift fix when .env lags the current git branch
+lakebase-branch checkout-paired --cwd .
+lakebase-branch sync-env --cwd .
+
+# Convention tiers (PSA branching methodology, TTL defaults per tier)
+lakebase-branch create-tier feature --instance proj-checkout --branch feature-add-orders
+lakebase-branch create-tier test    --instance proj-checkout --branch test-cycle-q3
 ```
 
+All 9 subcommands have matching MCP tools (`lakebase_branch_list` / `_show` / `_create` / `_create_paired` / `_create_tier` / `_delete` / `_delete_paired` / `_checkout_paired` / `_sync_env`).
+
 ```ts
-import { createBranch, waitForBranchReady, deleteBranch }
+import { createBranch, deleteBranch, createPairedBranch, deletePairedBranch,
+         checkoutPaired, syncEnvToCurrentBranch }
   from "@databricks-solutions/lakebase-app-dev-kit";
 
+// Lakebase-only
 const branch = await createBranch({
   instance: "proj-checkout",
   branch: "feature-add-orders",     // sanitized to Lakebase id (lowercase, alphanumeric+hyphen, 3-63 chars)
-  parentBranch: "staging",            // optional – overrides "current" hint and default
-  currentBranch: "main",              // optional – git-like "fork from current" semantics
-  timeoutMs: 120_000,                 // default: 2min poll budget
+  parentBranch: "staging",            // optional – overrides default
 });
-
 await deleteBranch({ instance: "proj-checkout", branch: branch.uid });
+
+// Paired (extension-style behavior)
+await createPairedBranch({
+  instance: "proj-checkout",
+  branch: "feature-add-orders",
+  cwd: process.cwd(),
+  parentBranch: "staging",
+});
+// post-checkout-hook equivalent (rewrites .env)
+await checkoutPaired({ cwd: process.cwd() });
 ```
 
 **Parent resolution precedence:**
 1. `parentBranch` arg (explicit override – "branch from prod" / "branch from staging" hotfix)
-2. `currentBranch` arg (git-like "fork from the branch you're on") – skipped if it equals the target
-3. Project default branch (usually `production`)
+2. Project default branch (usually `production`)
 
 **Idempotency.** `createBranch` returns the existing branch unchanged if one with the same sanitized name already exists. Delete is NOT idempotent – throws when the branch isn't found.
+
+**Protected branches.** `deleteBranch` and `deleteLocalBranch` refuse `production` / `main` / `master` unless the caller explicitly passes `allowProtected: true`. The CLI doesn't expose that override on purpose – production deletion is a deliberate-action thing, not a flag.
 
 ### 3. Endpoint + credential
 
@@ -265,6 +286,22 @@ const diff = await getSchemaDiff({
 
 ### PR flow
 
+```bash
+# Open + introspect + merge from a plain shell
+lakebase-pr open --owner-repo my-org/proj-checkout --head feature-add-orders \
+                 --base staging --title "Add orders table" --body "..."
+lakebase-pr status --owner-repo my-org/proj-checkout --head feature-add-orders --pretty
+lakebase-pr files --owner-repo my-org/proj-checkout --pull-number 42
+lakebase-pr reviews --owner-repo my-org/proj-checkout --pull-number 42
+
+# Merge variants
+lakebase-pr merge --owner-repo my-org/proj-checkout --pull-number 42 --method squash
+# merge-paired: also deletes the matching Lakebase feature branch
+lakebase-pr merge-paired --owner-repo my-org/proj-checkout --pull-number 42 --instance proj-checkout
+```
+
+All 7 subcommands have matching MCP tools (`lakebase_pr_open` / `_merge` / `_merge_paired` / `_status` / `_files` / `_reviews` / `_comments`).
+
 ```ts
 import {
   createPullRequest, getPullRequest, mergePullRequest, mergePairedPullRequest,
@@ -274,10 +311,9 @@ import {
 // Open a PR with the current branch's schema diff embedded in the body.
 const diff = await getSchemaDiff({ instance: "proj-checkout", branch: "feature-add-orders" });
 await createPullRequest({
-  owner: "my-org",
-  repo: "proj-checkout",
-  base: "staging",
-  head: "feature-add-orders",
+  ownerRepo: "my-org/proj-checkout",
+  baseBranch: "staging",
+  headBranch: "feature-add-orders",
   title: "Add orders table",
   body: [
     "## Summary",
@@ -292,6 +328,18 @@ await createPullRequest({
 ```
 
 `mergePairedPullRequest` merges the git PR AND tears down the Lakebase feature branch in lockstep. Use it for clean post-merge state on paired projects.
+
+### Health check / doctor
+
+Run `lakebase-doctor` first when something looks off. Eight checks: Databricks CLI presence + version, auth describe, workspace identity, `.env` shape, Lakebase project reachability, git remote, detected language, git hooks installation.
+
+```bash
+lakebase-doctor                                # human-readable table; exit 0/1/2 = OK/WARN/FAIL
+lakebase-doctor --json --pretty                # machine-readable for CI / agent consumption
+lakebase-doctor --project-dir ~/code/proj-checkout
+```
+
+Also reachable as the `lakebase_doctor` MCP tool. When an agent reports cryptic "auth failed" or ".env not found" symptoms, this is the first thing to run.
 
 ## References
 
