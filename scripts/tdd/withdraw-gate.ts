@@ -21,6 +21,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { withGatesLock } from "./gates-lock";
 import {
   readGates,
   writeGates,
@@ -74,55 +75,63 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 
-  const state = readGates(args.featureId, { tddDir });
-  const sourceRecord = state.gates[args.gate];
+  // Lock the gates.json read-modify-write critical section so concurrent
+  // withdrawGate + approveGate calls do not race (G7 / FEIP-7364).
+  return withGatesLock(
+    args.featureId,
+    (): WithdrawGateResult => {
+      const state = readGates(args.featureId, { tddDir });
+      const sourceRecord = state.gates[args.gate];
 
-  // Idempotent no-op: source gate is not currently approved.
-  if (sourceRecord.status !== "approved") {
-    return { state, withdrawn_gates: [], noop: true };
-  }
+      // Idempotent no-op: source gate is not currently approved.
+      if (sourceRecord.status !== "approved") {
+        return { state, withdrawn_gates: [], noop: true };
+      }
 
-  const ts = now().toISOString();
-  const withdrawn: GateName[] = [args.gate];
-  const nextGates: Record<GateName, GateRecord> = { ...state.gates };
+      const ts = now().toISOString();
+      const withdrawn: GateName[] = [args.gate];
+      const nextGates: Record<GateName, GateRecord> = { ...state.gates };
 
-  nextGates[args.gate] = transitionToWithdrawn(
-    sourceRecord,
-    args.approver,
-    ts,
-    args.reason,
-    null
-  );
-
-  for (const target of CASCADE_TARGETS[args.gate]) {
-    const tgtRecord = state.gates[target];
-    if (tgtRecord.status === "approved") {
-      nextGates[target] = transitionToWithdrawn(
-        tgtRecord,
+      nextGates[args.gate] = transitionToWithdrawn(
+        sourceRecord,
         args.approver,
         ts,
-        `cascade:${args.gate}`,
-        args.gate
+        args.reason,
+        null
       );
-      withdrawn.push(target);
-    }
-  }
 
-  const updatedState: GatesState = { ...state, gates: nextGates };
-  writeGates(updatedState, { tddDir });
+      for (const target of CASCADE_TARGETS[args.gate]) {
+        const tgtRecord = state.gates[target];
+        if (tgtRecord.status === "approved") {
+          nextGates[target] = transitionToWithdrawn(
+            tgtRecord,
+            args.approver,
+            ts,
+            `cascade:${args.gate}`,
+            args.gate
+          );
+          withdrawn.push(target);
+        }
+      }
 
-  if (writeLog) {
-    appendSelectionLog(tddDir, {
-      ts,
-      featureId: args.featureId,
-      sourceGate: args.gate,
-      approver: args.approver,
-      reason: args.reason,
-      cascadedGates: withdrawn.slice(1),
-    });
-  }
+      const updatedState: GatesState = { ...state, gates: nextGates };
+      writeGates(updatedState, { tddDir });
 
-  return { state: updatedState, withdrawn_gates: withdrawn, noop: false };
+      if (writeLog) {
+        appendSelectionLog(tddDir, {
+          ts,
+          featureId: args.featureId,
+          sourceGate: args.gate,
+          approver: args.approver,
+          reason: args.reason,
+          cascadedGates: withdrawn.slice(1),
+        });
+      }
+
+      return { state: updatedState, withdrawn_gates: withdrawn, noop: false };
+    },
+    { tddDir }
+  );
 }
 
 function transitionToWithdrawn(
