@@ -139,11 +139,6 @@ if ! [[ "$GRACE_SECONDS" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-if [[ -n "$FEATURE_TTL_DAYS" ]] && ! [[ "$FEATURE_TTL_DAYS" =~ ^[0-9]+$ ]]; then
-  red "--feature-ttl-days must be a positive integer (got: $FEATURE_TTL_DAYS)"
-  exit 2
-fi
-
 if [[ -z "$PROFILE" ]]; then
   red "--profile is required."
   red "See $0 --help"
