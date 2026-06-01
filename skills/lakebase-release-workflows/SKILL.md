@@ -1,7 +1,7 @@
 ---
 name: lakebase-release-workflows
 description: "Opinionated branching + release methodology for Lakebase-paired projects. Use when designing a project's branch layout, cutting a release candidate, promoting between long-running tiers, rolling back, or asking 'where should this work happen?' Encodes the prod / staging / {feature,test,uat,perf} default and the N-tier-capable cut-RC / regression-test / cut-backup / migrate release flow."
-compatibility: Requires the substrate's [lakebase-scm-workflows](../lakebase-scm-workflows/SKILL.md) skill for branch-pairing primitives, plus the substrate's migrate primitives (FEIP-7091, FEIP-7098).
+compatibility: Requires the substrate's [lakebase-scm-workflows](../lakebase-scm-workflows/SKILL.md) skill for branch-pairing primitives, plus the substrate's migrate primitives (FEIP-7091).
 metadata:
   version: "0.2.0"
 parent: databricks-lakebase

@@ -6,11 +6,12 @@
 //   migrationStatus    – report current applied version + pending migrations
 //   listMigrations     – enumerate available migration files (no DB needed)
 //
-// Language dispatch: Python/Alembic ships as the reference implementation.
-// Java+Kotlin/Flyway (FEIP-7098) and Node/Knex (FEIP-7099) are stubbed; the
-// runners throw a clear "not yet implemented" error pointing at the
-// follow-up tickets. listMigrations() works for all three languages today
-// since it is a pure file-scan with no DB or runtime dependency.
+// Language dispatch: Python/Alembic, Java+Kotlin/Flyway, and Node/Knex
+// runners are all fully implemented (apply / status / list for all three;
+// rollback for Alembic + Knex). The original primitives lift (FEIP-7091)
+// shipped Flyway + Knex as stubs; they were completed alongside FEIP-7210
+// (adapter pattern) slices 2 + 3. listMigrations() is a pure file-scan
+// with no DB or runtime dependency.
 //
 // All primitives take explicit {instance, branch} args so headless agents
 // (Claude Desktop, OpenAI Codex, CI) can call them without a project .env.

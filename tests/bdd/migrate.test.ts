@@ -227,10 +227,14 @@ describe("listMigrations: language override", () => {
   });
 });
 
-describe("flyway rollback + knex apply/rollback/status: error paths", () => {
+describe("flyway rollback + knex apply: error paths", () => {
   // Flyway: apply + status are implemented (live test covers them).
   // Rollback intentionally throws because Flyway Community Edition has
-  // no `undo`. Knex primitives are stubs pending FEIP-7099.
+  // no `undo`.
+  // Knex: runner is fully implemented as of FEIP-7210 slice 3 (the
+  // original FEIP-7091 primitives lift shipped it as a stub). Live
+  // behavior is exercised by env-gated suites; here we only lock the
+  // pre-shell-out validation (no knexfile at root).
 
   it("flyway rollback throws with the Flyway Community caveat", async () => {
     const dir = mkTempDir();
@@ -244,12 +248,12 @@ describe("flyway rollback + knex apply/rollback/status: error paths", () => {
     }
   });
 
-  it("knex apply throws MigrationError with FEIP-7099 pointer", async () => {
+  it("knex apply throws MigrationError when no knexfile is present", async () => {
     const dir = mkTempDir();
     fs.writeFileSync(path.join(dir, "package.json"), "{}");
     try {
       const { applyKnex } = await import("../../scripts/lakebase/migrate-runners/knex.js");
-      await expect(applyKnex({ projectDir: dir, dsn: "x" })).rejects.toThrow(/FEIP-7099/);
+      await expect(applyKnex({ projectDir: dir, dsn: "x" })).rejects.toThrow(/No knexfile found/);
     } finally {
       rm(dir);
     }

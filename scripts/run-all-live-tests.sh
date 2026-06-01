@@ -51,12 +51,15 @@
 #   --no-migrate-tools         Skip auto-provisioning alembic/flyway tools and
 #                              leave migrate-live + migrate-live-flyway gated
 #                              on whatever is already on PATH (default: enabled).
+#                              migrate-live-knex self-provisions via `npm install`
+#                              in beforeAll, no script-level prep needed.
 #   --help                     This help.
 #
 # What this script unlocks (every live-gated test in the kit):
 #   - All LAKEBASE_TEST_E2E-gated suites (cut-experiment, paired-branch,
 #     branch-create/delete, branch-utils, branch-endpoint, etc.).
 #   - migrate-live + migrate-live-flyway via auto-provisioned venv + tools.
+#   - migrate-live-knex (FEIP-7210 slice 3) via per-suite `npm install`.
 #   - tdd-experiment-lifecycle live describe (LAKEBASE_TEST_PROJECT_PATH).
 #   - detect-language-via-self-hosted-runner via --include-github-runner
 #     (LAKEBASE_TEST_E2E_GITHUB=1; pass --no-github-runner to opt out).

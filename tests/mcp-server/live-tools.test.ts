@@ -183,10 +183,10 @@ describe.skipIf(!RUN_SUITE)(
       }
     }, 180_000);
 
-    it("tools/list advertises all 25 expected tools", async () => {
+    it("tools/list advertises all 27 expected tools", async () => {
       const resp = await client.request("tools/list", {});
       const tools = (resp.result as { tools: { name: string }[] }).tools;
-      expect(tools.length).toBe(26);
+      expect(tools.length).toBe(27);
       const names = tools.map((t) => t.name).sort();
       expect(names).toContain("lakebase_branch_list");
       expect(names).toContain("lakebase_branch_show");
