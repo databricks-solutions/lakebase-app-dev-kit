@@ -16,6 +16,7 @@ interface FeatureStatusSnapshot {
   experiments: ExperimentStatusEntry[];
   selection_log_recent: SelectionLogEntry[];
   open_smells: SmellHit[];
+  gates: GatesSummary | null;
 }
 ```
 
@@ -29,6 +30,7 @@ interface FeatureStatusSnapshot {
 | `experiments` | array | One entry per directory under `.tdd/experiments/<F>/`. Empty when no experiments have been cut. |
 | `selection_log_recent` | array | Up to the last 5 entries from `.tdd/selection-log.md`, oldest-first. |
 | `open_smells` | array | Unresolved entries from `.tdd/smells.json` (entries with no `resolution` field). Global to the `.tdd/` tree; not filtered per feature in this version. |
+| `gates` | object \| null | Compact view of `.tdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all four gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/tdd/gates.readGates()` for the full state including history + artifact_hashes. |
 
 ## Nested types
 
@@ -102,6 +104,23 @@ interface SelectionLogEntry {
 }
 ```
 
+### GatesSummary
+
+```ts
+type GateName = "spec" | "plan" | "test_list" | "promote";
+type GateStatus = "open" | "approved" | "superseded" | "withdrawn";
+
+interface GateSummary {
+  status: GateStatus;
+  approver: string | null;     // last approver; null when never approved
+  approved_at: string | null;  // ISO 8601 of last approval; null when never approved
+}
+
+type GatesSummary = Record<GateName, GateSummary>;
+```
+
+The summary is a compact projection of `gates.json`. For full history, withdrawal reasons, or artifact_hashes, call `readGates()` from `scripts/tdd/gates.ts` directly.
+
 ### SmellHit
 
 See `scripts/tdd/smells.ts`. Each open smell entry also carries `detected_at: string` from the on-disk log.
@@ -156,7 +175,13 @@ interface SmellHit {
   "selection_log_recent": [
     { "timestamp": "2026-05-27T10:00:00Z", "title": "Experiment plan for F1-checkout" }
   ],
-  "open_smells": []
+  "open_smells": [],
+  "gates": {
+    "spec": { "status": "approved", "approver": "po@example.com", "approved_at": "2026-05-31T20:00:00.000Z" },
+    "plan": { "status": "approved", "approver": "po@example.com", "approved_at": "2026-05-31T21:00:00.000Z" },
+    "test_list": { "status": "open", "approver": null, "approved_at": null },
+    "promote": { "status": "open", "approver": null, "approved_at": null }
+  }
 }
 ```
 

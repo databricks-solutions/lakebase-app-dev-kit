@@ -8,6 +8,7 @@ import {
   type ExperimentOutcomes,
 } from "./experiment";
 import { readSmellsLog, type SmellsLog } from "./smells";
+import { GATE_NAMES, readGates, type GateName, type GateStatus } from "./gates";
 
 export type TestListStatus = TestListItem["status"];
 
@@ -40,6 +41,14 @@ export interface WorkflowPointer {
   experiment_id: string | null;
 }
 
+export interface GateSummary {
+  status: GateStatus;
+  approver: string | null;
+  approved_at: string | null;
+}
+
+export type GatesSummary = Record<GateName, GateSummary>;
+
 export interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
@@ -49,6 +58,13 @@ export interface FeatureStatusSnapshot {
   experiments: ExperimentStatusEntry[];
   selection_log_recent: SelectionLogEntry[];
   open_smells: SmellsLog["detected"];
+  /**
+   * Structured gate state surfaced from .tdd/features/<F>/gates.json
+   * (ADR-0004). null when the feature directory itself does not exist;
+   * default-open shape returned when the directory exists but no
+   * gates.json file has been written yet.
+   */
+  gates: GatesSummary | null;
 }
 
 const MAX_RECENT_LOG_ENTRIES = 5;
@@ -106,6 +122,27 @@ function readSelectionLogRecent(
     entries.push({ timestamp: match[1], title: match[2].trim() });
   }
   return entries.slice(-limit);
+}
+
+function readGatesSummary(tddDir: string, featureId: string): GatesSummary | null {
+  // readGates throws when the feature directory does not exist (a clean
+  // signal that no spec has been authored yet). Surface as null so the
+  // snapshot stays renderable for not-yet-started features.
+  try {
+    const state = readGates(featureId, { tddDir });
+    const out = {} as GatesSummary;
+    for (const name of GATE_NAMES) {
+      const rec = state.gates[name];
+      out[name] = {
+        status: rec.status,
+        approver: rec.approver ?? null,
+        approved_at: rec.approved_at ?? null,
+      };
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 function readWorkflowState(tddDir: string): {
@@ -171,6 +208,7 @@ export function getFeatureStatus(
     experiments,
     selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
     open_smells: smells,
+    gates: readGatesSummary(tddDir, featureId),
   };
 }
 
@@ -235,11 +273,22 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
     lines.push(`Experiments: none cut yet`);
   }
 
+  if (snapshot.gates) {
+    lines.push(``);
+    lines.push(`Gates:`);
+    for (const name of GATE_NAMES) {
+      const g = snapshot.gates[name];
+      const when = g.approved_at ? ` @ ${g.approved_at}` : "";
+      const by = g.approver ? ` by ${g.approver}` : "";
+      lines.push(`  ${name.padEnd(10)} ${g.status}${when}${by}`);
+    }
+  }
+
   if (snapshot.selection_log_recent.length > 0) {
     lines.push(``);
     lines.push(`Recent decisions (${snapshot.selection_log_recent.length}):`);
     for (const entry of snapshot.selection_log_recent) {
-      lines.push(`  ${entry.timestamp} — ${entry.title}`);
+      lines.push(`  ${entry.timestamp} – ${entry.title}`);
     }
   }
 
@@ -247,7 +296,7 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
   if (snapshot.open_smells.length > 0) {
     lines.push(`Open smells (${snapshot.open_smells.length}):`);
     for (const hit of snapshot.open_smells) {
-      lines.push(`  ${hit.smell} — ${hit.detail}`);
+      lines.push(`  ${hit.smell} – ${hit.detail}`);
     }
   } else {
     lines.push(`Open smells: none`);
