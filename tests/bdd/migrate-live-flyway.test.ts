@@ -1,4 +1,5 @@
-// Live integration test for the Flyway migrate runner (FEIP-7098).
+// Live integration test for the Flyway migrate runner (part of the
+// FEIP-7091 primitives lift).
 //
 // Provisions its own Lakebase project on the configured Databricks
 // workspace, scaffolds a minimal Maven-style Flyway project layout,

@@ -1,4 +1,5 @@
-// Flyway runner for Java + Kotlin projects (FEIP-7098).
+// Flyway runner for Java + Kotlin projects (part of the FEIP-7091
+// primitives lift).
 //
 // Shells to the standalone Flyway Community Edition CLI in JSON output
 // mode. The runner reads the project's migration files from

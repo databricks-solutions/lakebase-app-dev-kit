@@ -16,6 +16,7 @@ Thanks for your interest in contributing to `lakebase-app-dev-kit`. This is a [D
 - **GitHub CLI (`gh`)** authenticated to your GitHub account, for the FEIP-7138 self-hosted-runner suite. The live driver defaults to running it; pass `--no-github-runner` to opt out (see "Live testing" below).
 - **JDK 17+ and the Flyway CLI** for `migrate-live-flyway.test.ts`. The live driver downloads Flyway Community CLI from `${LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL}` on first run if `flyway` is not already on PATH; pre-installing via `brew install flyway` is fine.
 - A Python venv with **alembic + sqlalchemy + psycopg2-binary** for `migrate-live.test.ts`. The live driver auto-provisions `.venv-live-tests/` on first run.
+- **Node.js** with `npm` and `npx` on PATH for `migrate-live-knex.test.ts`. The suite self-installs `knex` + `pg` into a scratch project directory in its `beforeAll()`; no script-level provisioning needed.
 
 ### One-time setup
 
@@ -134,7 +135,7 @@ Older runner that supports `--read-only` and `--all` modes. Use when you only ne
 
 | Mode | Required env + tools | What runs | Creates resources? |
 |---|---|---|---|
-| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway` | `tests/bdd/migrate-live.test.ts` (alembic) + `tests/bdd/migrate-live-flyway.test.ts` | Yes: `migrate-7091-<ts>` + `migrate-7098-<ts>` Lakebase projects, each deleted in their suite's `afterAll()` |
+| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway`, `npm` | `tests/bdd/migrate-live.test.ts` (alembic) + `tests/bdd/migrate-live-flyway.test.ts` + `tests/bdd/migrate-live-knex.test.ts` | Yes: `migrate-7091-<ts>` + `migrate-7098-<ts>` + `migrate-7099-<ts>` Lakebase projects, each deleted in their suite's `afterAll()` |
 | `--read-only` | `LAKEBASE_TEST_INSTANCE`, `LAKEBASE_TEST_BRANCH` | Read-only schema / endpoint / DSN suites against the configured branch | No |
 | `--all` | both of the above | Everything vitest discovers when gating env is satisfied | Yes (default mode) |
 

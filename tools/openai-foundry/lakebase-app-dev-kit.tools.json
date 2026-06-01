@@ -176,7 +176,7 @@
       "type": "function",
       "function": {
         "name": "lakebase_apply_migrations",
-        "description": "Apply pending forward migrations against a Lakebase branch. Python/Alembic supported today; Java+Kotlin/Flyway (FEIP-7098) and Node/Knex (FEIP-7099) error with a clear pointer until those runners land.",
+        "description": "Apply pending forward migrations against a Lakebase branch. Supports Python/Alembic, Java+Kotlin/Flyway, and Node/Knex. Auto-detects the language from project markers (alembic.ini, pom.xml, knexfile.{js,ts}).",
         "parameters": {
           "type": "object",
           "properties": {
@@ -223,7 +223,7 @@
       "type": "function",
       "function": {
         "name": "lakebase_rollback_migration",
-        "description": "Roll back applied migrations on a Lakebase branch down to a target version. Python/Alembic only today (Flyway Community does not support rollback; Node/Knex via FEIP-7099). For Alembic, 'target' can be a revision id or a relative step like '-1'.",
+        "description": "Roll back applied migrations on a Lakebase branch down to a target version. Supported for Python/Alembic + Node/Knex; NOT supported for Java+Kotlin/Flyway (Flyway Community Edition has no `undo`). For Alembic, 'target' can be a revision id or a relative step like '-1'. For Knex, use 'all' or '0' for full rollback; other values roll back the last batch.",
         "parameters": {
           "type": "object",
           "properties": {

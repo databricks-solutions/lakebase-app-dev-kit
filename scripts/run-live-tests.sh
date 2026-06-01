@@ -2,19 +2,23 @@
 # Run the kit's live integration tests against a real Databricks workspace.
 #
 # Usage:
-#   scripts/run-live-tests.sh              # migrate-live (alembic + flyway), default
+#   scripts/run-live-tests.sh              # migrate-live (alembic + flyway + knex), default
 #   scripts/run-live-tests.sh --read-only  # tier 1 read-only suite against an existing branch
 #   scripts/run-live-tests.sh --all        # both of the above + any other live suites
+#
+# For the comprehensive "everything live, auto-provision everything"
+# entry point, use scripts/run-all-live-tests.sh instead. That driver
+# resolves DATABRICKS_HOST from a databricks CLI profile, provisions a
+# project + branch, sources .env.template.config + .env.local.config,
+# and unlocks every gated LAKEBASE_TEST_* describe. See CONTRIBUTING.md.
 #
 # Modes:
 #
 #   (default) migrate-live
 #     Provisions its own Lakebase projects on $DATABRICKS_HOST and runs
-#     the four migrate primitives (apply / rollback / status / list)
-#     once with the Alembic runner against a Python project layout and
-#     once with the Flyway runner against a Maven/Spring project layout.
-#     Each test creates and tears down its own project, suffixed with a
-#     timestamp.
+#     the migrate primitives (apply / rollback / status / list) once
+#     with the Alembic runner, once with the Flyway runner, once with
+#     the Knex runner. Each test creates + tears down its own project.
 #     Required env: DATABRICKS_HOST, LAKEBASE_TEST_E2E=1
 #     Required tools: databricks CLI (authenticated), python3, java
 #     The script auto-provisions on first run:
@@ -40,10 +44,10 @@ FLYWAY_VERSION="10.20.1"
 
 MODE="migrate"
 case "${1:-}" in
-  --read-only) MODE="read-only" ;;
-  --all)       MODE="all" ;;
-  "")          MODE="migrate" ;;
-  *)           echo "Unknown flag: $1. Use --read-only, --all, or no flag for migrate-live." >&2; exit 2 ;;
+  --read-only)  MODE="read-only" ;;
+  --all)        MODE="all" ;;
+  "")           MODE="migrate" ;;
+  *)            echo "Unknown flag: $1. Use --read-only / --all, or no flag for migrate-live." >&2; exit 2 ;;
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -173,9 +177,10 @@ if [[ "$MODE" == "migrate" || "$MODE" == "all" ]]; then
   yellow "==> About to create Lakebase projects on your workspace"
   yellow "    workspace:    $DATABRICKS_HOST"
   yellow "    project names:"
-  yellow "      migrate-7091-<timestamp>  (Alembic suite)"
-  yellow "      migrate-7098-<timestamp>  (Flyway suite)"
-  yellow "    cleanup:      automatic in each suite's afterAll() with 3-attempt retry"
+  yellow "      migrate-7091-<timestamp>  (Alembic suite, self-provisioned)"
+  yellow "      migrate-7099-<timestamp>  (Knex suite, self-provisioned)"
+  yellow "      live-fixture-<timestamp>  (globalSetup, shared by all live tests)"
+  yellow "    cleanup:      automatic in each suite's afterAll() + globalSetup teardown (3-attempt retry)"
   yellow "    manual fix:   databricks postgres delete-project <id>  (if cleanup leaks)"
   yellow ""
   yellow "    Press Ctrl-C in the next 5 seconds to abort. Setting LAKEBASE_TEST_NO_PROMPT=1"
@@ -192,7 +197,8 @@ case "$MODE" in
   migrate)
     npx vitest run \
       tests/bdd/migrate-live.test.ts \
-      tests/bdd/migrate-live-flyway.test.ts
+      tests/bdd/migrate-live-flyway.test.ts \
+      tests/bdd/migrate-live-knex.test.ts
     ;;
   read-only)
     npx vitest run \
