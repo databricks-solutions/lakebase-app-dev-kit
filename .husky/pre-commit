@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+# Refuse commits on protected branches. Belt-and-braces with GitHub branch
+# protection (server-side); this hook catches the bad commit BEFORE it
+# even lands locally so there is nothing to revert + cherry-pick.
+#
+# Protected branches (case-sensitive):
+#   main / master / production
+#
+# Escape hatch: HUSKY=0 git commit   (skips this hook entirely)
+# Use only when you genuinely intend to commit on a protected branch
+# (e.g. an emergency hotfix where branch protection has been disabled
+# by an admin for a known recovery window).
+
+set -e
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+
+case "$BRANCH" in
+  main|master|production)
+    echo ""
+    echo "✗ husky/pre-commit: refusing commit on protected branch '$BRANCH'."
+    echo ""
+    echo "  Create a feature branch first:"
+    echo "    git checkout -b kevin.hartman/<topic>"
+    echo "    git commit ..."
+    echo ""
+    echo "  Override (use sparingly): HUSKY=0 git commit ..."
+    echo ""
+    exit 1
+    ;;
+esac
+
+exit 0
