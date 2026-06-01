@@ -9,6 +9,14 @@ export * from "./branch-create.js";
 export * from "./branch-delete.js";
 export * from "./convention-branches.js";
 export * from "./cut-backup.js";
+export * from "./databricks-host.js";
+export * from "./deploy-app-endpoint.js";
+export * from "./deploy-app-yaml.js";
+export * from "./deploy-credentials.js";
+export * from "./deploy-rollback.js";
+export * from "./deploy-targets.js";
+export * from "./deploy-validate.js";
+export * from "./deploy-workspace-upload.js";
 export * from "./long-running-branch.js";
 export * from "./release.js";
 export * from "./branch-endpoint.js";
@@ -24,7 +32,9 @@ export * from "./runner-setup.js";
 export * from "./scaffold-language.js";
 export * from "./scaffold.js";
 export * from "./schema-diff.js";
+export * from "./secret-auth.js";
 export * from "./spring-initializr.js";
+export * from "./uc-resources.js";
 export {
   applyMigrations,
   rollbackMigration,

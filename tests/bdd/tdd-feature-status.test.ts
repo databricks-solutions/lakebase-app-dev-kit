@@ -150,7 +150,7 @@ describe("feature-status N=1 snapshot", () => {
 
 // Stability assertion for the JSON payload. The shape is part of the substrate's
 // public contract (consumed by agents + MCP). Any field rename or removal must
-// be a deliberate contract change — bumping this assertion is the gate.
+// be a deliberate contract change: bumping this assertion is the gate.
 //
 // See: skills/lakebase-tdd-workflows/references/feature-status-schema.md
 
@@ -191,7 +191,7 @@ const EXPERIMENT_KEYS = [
 
 const SELECTION_LOG_KEYS = ["timestamp", "title"] as const;
 
-describe("feature-status JSON payload — stable schema", () => {
+describe("feature-status JSON payload: stable schema", () => {
   it("top-level keys match the documented shape (key set is closed)", () => {
     stageN1Fixture();
     const snapshot = getFeatureStatus(tdd, FEATURE_ID);

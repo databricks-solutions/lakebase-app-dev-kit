@@ -13,6 +13,8 @@ import { Client } from "pg";
 import { getEndpoint, endpointPath as buildEndpointPath } from "./branch-endpoint.js";
 import { resolveBranchId } from "./branch-utils.js";
 import { mintCredential } from "./get-connection.js";
+import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface TableSchema {
   name: string;
@@ -60,18 +62,18 @@ export async function queryBranchSchema(args: QueryBranchSchemaArgs): Promise<Ta
     return [];
   }
   const { token, email } = await mintCredential(buildEndpointPath(args.instance, branchId));
-  const database = args.database ?? process.env.PGDATABASE ?? "databricks_postgres";
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const skipFlyway = args.skipFlyway !== false;
 
   const client = new Client({
     host: ep.host,
-    port: 5432,
+    port: POSTGRES_PORT,
     database,
     user: email,
     password: token,
     ssl: { rejectUnauthorized: false }, // Lakebase managed cert
-    connectionTimeoutMillis: 10_000,
-    statement_timeout: 15_000,
+    connectionTimeoutMillis: KIT_TIMEOUTS.pgConnect,
+    statement_timeout: KIT_TIMEOUTS.pgStatement,
   });
 
   try {

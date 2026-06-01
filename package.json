@@ -1,9 +1,20 @@
 {
   "name": "@databricks-solutions/lakebase-app-dev-kit",
-  "version": "0.3.0-alpha.21",
-  "description": "Lakebase-backed application development kit — shared scripts, agent skills (SCM today, TDD next), MCP server, and OpenAI Foundry tool spec. Consumed by lakebase-scm-extension and coding agents (Claude Code, Claude Desktop, OpenAI Codex, Cursor, Databricks Genie Code).",
+  "version": "0.3.0-alpha.30",
+  "description": "Lakebase-backed application development kit – shared scripts, agent skills (SCM today, TDD next), MCP server, and OpenAI Foundry tool spec. Consumed by lakebase-scm-extension and coding agents (Claude Code, Claude Desktop, OpenAI Codex, Cursor, Databricks Genie Code).",
   "type": "module",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "skills",
+    "install.sh",
+    "README.md",
+    "LICENSE.md"
+  ],
   "license": "SEE LICENSE IN LICENSE.md",
   "repository": {
     "type": "git",
@@ -72,12 +83,16 @@
     "lakebase-migrate": "./dist/scripts/lakebase/migrate.cli.js",
     "lakebase-cut-backup": "./dist/scripts/lakebase/cut-backup.cli.js",
     "lakebase-detect-language": "./dist/scripts/lakebase/detect-language.cli.js",
+    "lakebase-branch": "./dist/scripts/lakebase/branch.cli.js",
+    "lakebase-doctor": "./dist/scripts/lakebase/doctor.cli.js",
+    "lakebase-pr": "./dist/scripts/github/pr.cli.js",
     "lakebase-feature-status": "./dist/scripts/tdd/feature-status.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
   },
   "scripts": {
     "build": "tsup",
     "prepare": "tsx scripts/sync-devhub-skills.ts && npm run build && husky",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "sync:devhub": "tsx scripts/sync-devhub-skills.ts",
     "check:devhub": "tsx scripts/sync-devhub-skills.ts --check",
     "typecheck": "tsc --noEmit",

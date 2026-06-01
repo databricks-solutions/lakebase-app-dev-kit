@@ -37,7 +37,17 @@ Two narrow auth seams, both enforced by CI grep guards:
 
 ## Install
 
-For agent use (running `node scripts/lakebase/<verb>.js` directly):
+### Prerequisites
+
+- **Node.js 20+** and npm
+- **Databricks CLI v1.0.0 or later**, authenticated to a workspace with Lakebase enabled. Earlier versions fail `databricks bundle deploy` on the expired-Terraform-GPG-key issue. macOS: `brew upgrade databricks/tap/databricks`. Per-platform install: [docs.databricks.com/dev-tools/cli/install.html](https://docs.databricks.com/dev-tools/cli/install.html).
+- **Python 3.10+** (for `scripts/openai-foundry.py` and the live-driver-managed alembic venv)
+- **GitHub CLI (`gh`)** authenticated, for the FEIP-7138 self-hosted-runner live test (opt out via `--no-github-runner` if you don't need it)
+- **JDK 17+** for the migrate-live-flyway live test (Flyway CLI itself is auto-downloaded by the live driver if not already on PATH)
+
+Contributors should also read [CONTRIBUTING.md](CONTRIBUTING.md) for the full live-test prerequisites + the `.env.template.config` / `.env.local.config` configuration pattern.
+
+### For agent use (running `node scripts/lakebase/<verb>.js` directly)
 
 ```bash
 git clone https://github.com/databricks-solutions/lakebase-app-dev-kit
@@ -45,7 +55,7 @@ cd lakebase-app-dev-kit
 npm install   # prepare script builds dist/
 ```
 
-For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL. npm publish is gated on org/scope/runner questions and intentionally deferred:
+For a JS/TS host (extension, Node service) that imports substrate functions, depend on this repo via a git URL:
 
 ```jsonc
 // host package.json
@@ -55,7 +65,9 @@ For a JS/TS host (extension, Node service) that imports substrate functions, dep
 }
 ```
 
-Pin to a sha for reproducibility. `prepare` builds `dist/` on install.
+Pin to a sha or release tag for reproducibility. `prepare` builds `dist/` on install.
+
+Package.json is publish-ready (`private: false`, `files` allow-list, `prepublishOnly` typecheck+test+build); npm publish lands once @databricks-solutions scope admin access is configured. After publish, `npm i -g @databricks-solutions/lakebase-app-dev-kit` becomes the canonical install path for the CLI bins.
 
 ### For coding agents
 
@@ -92,14 +104,30 @@ The root barrel `@databricks-solutions/lakebase-app-dev-kit` re-exports everythi
 
 ## CLIs
 
-The package exposes six bins (resolved relative to `node_modules/.bin/` when installed):
+The package exposes eleven bins (resolved relative to `node_modules/.bin/` when installed). Run any of them with `--help` for full subcommand + flag reference.
 
-- `lakebase-get-connection` – mint a DSN or pg.Pool against a branch
+**Project + connection**
+- `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap (10-step QuickPick equivalent)
+- `lakebase-get-connection` – mint a DSN or pg.Pool against a branch (single-seam credential handoff)
+- `lakebase-doctor` – health check the local env: CLI version, auth, `.env` shape, project reachability, git remote, language, hooks. Exit codes 0/1/2 = OK/WARN/FAIL.
+
+**Branch lifecycle**
+- `lakebase-branch` – list / show / create / create-paired / create-tier (feature/test/uat/perf) / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep.
+
+**PR flow**
+- `lakebase-pr` – open / merge / merge-paired (deletes Lakebase feature branch on merge) / status / files / reviews / comments
+
+**Schema + migrations**
 - `lakebase-schema-diff` – parent-aware schema diff between two Lakebase branches
-- `lakebase-github-token` – print/diagnose the resolved GitHub token
-- `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap
 - `lakebase-migrate` – apply / rollback / status / list schema migrations against a branch
-- `lakebase-mcp-server` – stdio MCP server exposing the tool registry
+- `lakebase-detect-language` – detect project language (java / kotlin / python / nodejs) for CI step outputs
+
+**Operations**
+- `lakebase-cut-backup` – cut a no-expiry backup branch off a source branch
+- `lakebase-github-token` – print / diagnose the resolved GitHub token (single-seam GitHub auth)
+
+**Agents**
+- `lakebase-mcp-server` – stdio MCP server exposing 25 tools to MCP-capable agents (Claude Desktop, OpenAI Codex, Cursor-via-MCP, Genie Code)
 
 ## Contributing
 

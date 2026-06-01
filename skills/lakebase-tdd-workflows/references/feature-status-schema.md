@@ -97,7 +97,7 @@ interface ExperimentStatusEntry {
 
 ```ts
 interface SelectionLogEntry {
-  timestamp: string;  // ISO 8601, as parsed from the `## <ISO> — <title>` heading
+  timestamp: string;  // ISO 8601, as parsed from the `## <ISO> – <title>` heading (en-dash, U+2013)
   title: string;
 }
 ```

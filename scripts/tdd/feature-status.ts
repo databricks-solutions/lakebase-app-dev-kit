@@ -98,9 +98,9 @@ function readSelectionLogRecent(
   const path = join(tddDir, "selection-log.md");
   if (!existsSync(path)) return [];
   const text = readFileSync(path, "utf8");
-  // selection-log entries start with `## <ISO-timestamp> — <title>`
+  // selection-log entries start with `## <ISO-timestamp> – <title>` (en-dash, U+2013).
   const entries: SelectionLogEntry[] = [];
-  const headingRe = /^##\s+(\S+T\S+?)\s+—\s+(.+?)$/gm;
+  const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match: RegExpExecArray | null;
   while ((match = headingRe.exec(text)) !== null) {
     entries.push({ timestamp: match[1], title: match[2].trim() });

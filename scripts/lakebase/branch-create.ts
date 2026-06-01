@@ -14,14 +14,18 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { delay } from "../util/delay.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+import { asBranchName, looksLikeBranchUid } from "./branch-id.js";
 import {
   LakebaseBranchError,
   LakebaseBranchInfo,
+  LakebaseBranchTtlTooLongError,
   BranchLookupOpts,
   getBranchByName,
   getDefaultBranch,
+  isTtlTooLongError,
   projectPath,
 } from "./branch-utils.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 
 const execFileP = promisify(execFile);
 
@@ -30,8 +34,13 @@ export interface CreateBranchArgs extends BranchLookupOpts {
   branch: string;
   /**
    * Explicit parent branch override. Use for "fork from staging" or
-   * "fork from production" hotfix scenarios. Pass the sanitized branch
-   * name, NOT the full resource path.
+   * "fork from production" hotfix scenarios.
+   *
+   * Must be a BranchName (the resource-path leaf, e.g. `production`,
+   * `staging`, `feature-x`) – NOT a BranchUid (`br-…`) and NOT a full
+   * resource path. The runtime guard inside createBranch will reject a
+   * BranchUid-shaped value with a helpful error. Use `asBranchName(s)`
+   * at the call site if you have a string of unknown provenance.
    */
   parentBranch?: string;
   /**
@@ -59,9 +68,23 @@ export interface CreateBranchArgs extends BranchLookupOpts {
    * set, Lakebase auto-deletes the branch after this duration relative to
    * create_time. Use for finite-lifetime workflow tiers (feature / test /
    * uat / perf). Mutually exclusive with `noExpiry: true`. Format is the
-   * protobuf Duration JSON encoding — bare seconds with trailing "s".
+   * protobuf Duration JSON encoding – bare seconds with trailing "s".
    */
   ttl?: string;
+  /**
+   * Strictness for parentBranch lookup. When `parentBranch` is set but the
+   * named branch does not exist on the project, the substrate's default is
+   * to FALL BACK to the project's default branch with a stderr warning –
+   * which keeps the convention-tier defaults
+   * (CONVENTION_TIER_DEFAULTS.feature.parentBranch="staging", etc.)
+   * usable on projects that don't yet follow the PSA topology.
+   *
+   * Pass `strictParent: true` to opt OUT of the fallback and throw a
+   * typed LakebaseBranchError when the named parent is missing – useful
+   * for hotfix-from-production paths where the lineage MUST match the
+   * caller's expectation. Default: false (fallback enabled).
+   */
+  strictParent?: boolean;
 }
 
 /**
@@ -83,7 +106,55 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   // create AND for the idempotency-vs-conflict comparison below.
   let sourceBranchPath: string | undefined;
   if (args.parentBranch) {
-    sourceBranchPath = `${projectPath(args.instance)}/branches/${sanitizeBranchName(args.parentBranch)}`;
+    // Runtime guard: parentBranch must be a BranchName (resource-path
+    // leaf), never a BranchUid. The API rejects uids in source_branch
+    // with a confusing "branch id not found" error; asBranchName surfaces
+    // a typed, helpful message instead.
+    if (looksLikeBranchUid(args.parentBranch)) {
+      throw new LakebaseBranchError(
+        `parentBranch '${args.parentBranch}' looks like a BranchUid (br-… pattern), ` +
+          `not a BranchName. Pass the resource-path leaf (e.g. 'production', 'staging', ` +
+          `'feature-add-orders') – the Lakebase API rejects uids in source_branch fields. ` +
+          `If you have a uid and need to resolve it to its name, call resolveBranchId() ` +
+          `from branch-utils first.`
+      );
+    }
+    const validated = asBranchName(args.parentBranch);
+    // Verify the named parent ACTUALLY exists on the project. Without this
+    // check the substrate previously built the source_branch path via raw
+    // string interpolation; the API then errored with the opaque
+    // "branch id not found". Now: if the parent exists, use it; if not,
+    // fall back to the project default (default behavior) or throw
+    // (strictParent: true). This unblocks the CONVENTION_TIER_DEFAULTS
+    // path on bare-provisioned projects (which have `production` but no
+    // `staging`) while preserving the lineage guarantee for callers who
+    // opt into strict mode.
+    const parent = await getBranchByName(validated, lookup);
+    if (parent) {
+      sourceBranchPath = parent.name;
+    } else if (args.strictParent === true) {
+      throw new LakebaseBranchError(
+        `parentBranch '${validated}' does not exist on project '${args.instance}', ` +
+          `and strictParent: true was set. Either create '${validated}' first ` +
+          `(e.g. cut it off the project default branch) or drop strictParent: true ` +
+          `to fall back to the project default branch.`
+      );
+    } else {
+      const def = await getDefaultBranch(lookup);
+      if (!def) {
+        throw new LakebaseBranchError(
+          `parentBranch '${validated}' does not exist on project '${args.instance}' ` +
+            `and the project has no default branch to fall back to.`
+        );
+      }
+      const defaultLeaf = leafOf(def.name) ?? def.name;
+      process.stderr.write(
+        `[lakebase-branch-create] parentBranch '${validated}' not found on project ` +
+          `'${args.instance}'; falling back to default branch '${defaultLeaf}'. ` +
+          `Pass strictParent: true to throw instead.\n`
+      );
+      sourceBranchPath = def.name;
+    }
   } else if (args.currentBranch && args.currentBranch !== sanitized) {
     const current = await getBranchByName(args.currentBranch, lookup);
     if (current) sourceBranchPath = current.name;
@@ -122,7 +193,7 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   if (args.ttl && args.noExpiry === true) {
     throw new LakebaseBranchError(
       `Cannot set both ttl ("${args.ttl}") and noExpiry: true on the same ` +
-        `branch — they are mutually exclusive. Pass one or the other.`,
+        `branch – they are mutually exclusive. Pass one or the other.`,
     );
   }
   const specObj: { source_branch: string; no_expiry?: boolean; ttl?: string } = {
@@ -134,17 +205,26 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
     specObj.no_expiry = true;
   }
   const spec = JSON.stringify({ spec: specObj });
-  await dbcli(
-    ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
-    args.host
-  );
+  try {
+    await dbcli(
+      ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
+      args.host
+    );
+  } catch (err) {
+    // Detect the workspace-TTL-policy rejection and rewrap with a typed,
+    // actionable message. Other errors bubble through as-is.
+    if (err instanceof LakebaseBranchError && specObj.ttl && isTtlTooLongError(err.message)) {
+      throw new LakebaseBranchTtlTooLongError(specObj.ttl, err.message);
+    }
+    throw err;
+  }
 
   return waitForBranchReady({
     instance: args.instance,
     host: args.host,
     branch: sanitized,
-    timeoutMs: args.readyTimeoutMs ?? 120_000,
-    pollIntervalMs: args.pollIntervalMs ?? 5_000,
+    timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
+    pollIntervalMs: args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll,
   });
 }
 
@@ -156,8 +236,8 @@ export interface WaitForBranchReadyArgs extends BranchLookupOpts {
 
 /** Poll until the branch reaches READY state. Throws on timeout. */
 export async function waitForBranchReady(args: WaitForBranchReadyArgs): Promise<LakebaseBranchInfo> {
-  const timeoutMs = args.timeoutMs ?? 120_000;
-  const interval = args.pollIntervalMs ?? 5_000;
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
+  const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
@@ -185,7 +265,7 @@ async function dbcli(args: string[], host?: string): Promise<string> {
     ? ({ ...process.env, DATABRICKS_HOST: trimmedHost } as NodeJS.ProcessEnv)
     : process.env;
   try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: 60_000 });
+    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
     return stdout.toString();
   } catch (err) {
     const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };

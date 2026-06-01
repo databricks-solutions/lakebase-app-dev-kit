@@ -5,6 +5,8 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { branchNameFromResourcePath, type BranchName } from "./branch-id.js";
+import { KIT_TIMEOUTS } from "./kit-config.js";
 
 const execFileP = promisify(execFile);
 
@@ -69,7 +71,38 @@ export async function deleteLakebaseProject(args: LakebaseProjectArgs): Promise<
  * Returns the empty string if the default branch isn't ready yet (the
  * extension treats that as non-fatal in createProject step 4).
  */
-export async function getDefaultBranchId(args: LakebaseProjectArgs): Promise<string> {
+/**
+ * Resolve the project's default branch and return its {@link BranchName}
+ * (the resource-path leaf, e.g. `production`), NOT its {@link BranchUid}.
+ *
+ * Why this returns BranchName specifically: every API field that takes a
+ * branch reference – `source_branch` in create-branch specs, the
+ * `{branch}` segment in `branches/{x}/endpoints/...` URLs, .env
+ * LAKEBASE_BRANCH_NAME – wants the path leaf, not the uid. Returning a
+ * uid here (the prior contract under the misleading name
+ * `getDefaultBranchId`) caused a "branch id not found" error from the
+ * service when the value was substituted into source_branch.
+ *
+ * Returns null when the project has no default branch or the CLI errored.
+ */
+/**
+ * Pure helper: extract the default branch's BranchName from a parsed
+ * list-branches response. Exported so the regression contract is
+ * directly unit-testable without mocking the Databricks CLI.
+ *
+ * Always derives from `name`, never from `uid`. A BranchUid in this slot
+ * would be silently wrong: the API rejects uids in path-shaped fields
+ * (which is the only place this function's return value belongs).
+ */
+export function findDefaultBranchName(items: BranchMetadata[]): BranchName | null {
+  const def = items.find((b) => b.status?.default === true || b.is_default === true);
+  if (!def || !def.name) return null;
+  return branchNameFromResourcePath(def.name);
+}
+
+export async function getDefaultBranchName(
+  args: LakebaseProjectArgs
+): Promise<BranchName | null> {
   try {
     const raw = await dbcli(
       ["postgres", "list-branches", `projects/${args.projectId}`, "-o", "json"],
@@ -81,15 +114,25 @@ export async function getDefaultBranchId(args: LakebaseProjectArgs): Promise<str
     const items: BranchMetadata[] = Array.isArray(parsed)
       ? parsed
       : parsed.branches ?? parsed.items ?? [];
-    const def = items.find((b) => b.status?.default === true || b.is_default === true);
-    if (!def) return "";
-    return def.uid ?? def.name?.split("/branches/").pop() ?? "";
+    return findDefaultBranchName(items);
   } catch {
-    return "";
+    return null;
   }
 }
 
-interface BranchMetadata {
+/**
+ * @deprecated Renamed to {@link getDefaultBranchName}. The old name was
+ * ambiguous ("Id" of what?) and the old implementation returned the
+ * BranchUid, which is wrong for every caller that passes it into a
+ * path-shaped API field. This shim now returns the BranchName as a bare
+ * string for transitional callers; remove after the next major bump.
+ */
+export async function getDefaultBranchId(args: LakebaseProjectArgs): Promise<string> {
+  const name = await getDefaultBranchName(args);
+  return name ?? "";
+}
+
+export interface BranchMetadata {
   uid?: string;
   name?: string;
   status?: { default?: boolean };
@@ -136,7 +179,7 @@ async function dbcli(args: string[], host?: string): Promise<string> {
   try {
     const { stdout } = await execFileP("databricks", args, {
       env: env as NodeJS.ProcessEnv,
-      timeout: 30_000,
+      timeout: KIT_TIMEOUTS.cliDefault,
     });
     return stdout.toString();
   } catch (err) {

@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { listExperiments, readOutcomes, writeOutcomes } from "./experiment";
 import { readFeature, writeFeature } from "./spec-sync";
+import { archiveExperiment } from "./archive-experiment";
 
 export interface PromoteArgs {
   tddDir: string;
@@ -10,6 +11,19 @@ export interface PromoteArgs {
   /** Set to true to record the HITL approval. Refuses to run without it. */
   hitlApproved: boolean;
   approverEmail?: string;
+  /**
+   * Forwarded to archiveExperiment for each loser. When omitted, the
+   * loser's Lakebase branch is left in place (dir + outcomes marker
+   * still get applied). FEIP-7214: callers that want full branch
+   * teardown wire this; promote stays pure-substrate when the callback
+   * is absent.
+   */
+  deleteLakebaseBranch?: (branchId: string) => Promise<void>;
+  /**
+   * Forwarded to archiveExperiment for each loser. Same contract as
+   * deleteLakebaseBranch.
+   */
+  deleteAppDeployment?: (experimentSlug: string) => Promise<void>;
 }
 
 export interface PromoteResult {
@@ -32,7 +46,7 @@ export interface PromoteResult {
  * to run otherwise so the orchestrator cannot promote without a recorded
  * human decision.
  */
-export function promoteExperiment(args: PromoteArgs): PromoteResult {
+export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResult> {
   if (!args.hitlApproved) {
     throw new Error("promoteExperiment requires hitlApproved: true (HITL Gate)");
   }
@@ -44,24 +58,25 @@ export function promoteExperiment(args: PromoteArgs): PromoteResult {
   }
   const losers = experiments.filter((e) => e.experiment_slug !== winnerSlug);
 
-  // Update outcomes
+  // Mark winner succeeded
   const winnerOutcome = readOutcomes(tddDir, featureId, winnerSlug);
   writeOutcomes(tddDir, featureId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
 
-  const archiveDir = join(tddDir, "experiments", featureId, "_archive");
-  mkdirSync(archiveDir, { recursive: true });
+  // Archive each loser via the lifecycle primitive (FEIP-7214). Each
+  // archive is atomic + HITL-gated; promote inherits the HITL approval
+  // for the whole flow by passing hitlApproved: true to each call.
+  const archivedSlugs: string[] = [];
   for (const loser of losers) {
-    const prior = readOutcomes(tddDir, featureId, loser.experiment_slug);
-    writeOutcomes(tddDir, featureId, loser.experiment_slug, {
-      ...(prior ?? {}),
-      status: "abandoned",
+    await archiveExperiment({
+      tddDir,
+      featureId,
+      experimentSlug: loser.experiment_slug,
+      hitlApproved: true,
+      approverEmail,
+      deleteLakebaseBranch: args.deleteLakebaseBranch,
+      deleteAppDeployment: args.deleteAppDeployment,
     });
-    const dest = join(archiveDir, loser.experiment_slug);
-    if (existsSync(dest)) {
-      // Already archived; skip rename to avoid collision.
-      continue;
-    }
-    renameSync(loser.dir, dest);
+    archivedSlugs.push(loser.experiment_slug);
   }
 
   // Feature → ready-for-review
@@ -70,18 +85,19 @@ export function promoteExperiment(args: PromoteArgs): PromoteResult {
     feature.status = "ready-for-review";
     writeFeature(tddDir, feature);
   } catch {
-    // No feature.json — caller's responsibility. Don't block promotion.
+    // No feature.json – caller's responsibility. Don't block promotion.
   }
 
-  // Append to selection log
+  // Append a single "Promote" entry to selection log on top of the
+  // per-loser "Archive" entries archiveExperiment writes.
   const logPath = join(tddDir, "selection-log.md");
   const ts = new Date().toISOString();
   const lines = [
     "",
-    `## ${ts} — Promote ${winnerSlug} for ${featureId}`,
+    `## ${ts} – Promote ${winnerSlug} for ${featureId}`,
     `- **Winner:** ${winnerSlug} (branch ${winner.branch_id})`,
     losers.length > 0
-      ? `- **Archived:** ${losers.map((l) => l.experiment_slug).join(", ")}`
+      ? `- **Archived (see entries above):** ${losers.map((l) => l.experiment_slug).join(", ")}`
       : `- **Archived:** none (no parallel experiments)`,
     `- **Approved by:** ${approverEmail ?? "HITL (no email recorded)"}`,
     "",
@@ -94,7 +110,7 @@ export function promoteExperiment(args: PromoteArgs): PromoteResult {
 
   return {
     winner_slug: winnerSlug,
-    archived_slugs: losers.map((l) => l.experiment_slug),
+    archived_slugs: archivedSlugs,
     feature_status: "ready-for-review",
   };
 }

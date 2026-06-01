@@ -131,7 +131,10 @@ export async function createProject(
       );
     }
     report("Cloning repository...", projectDir);
-    await cloneRepo(`https://github.com/${fullRepoName}.git`, input.parentDir);
+    await cloneRepo({
+      repoUrl: `https://github.com/${fullRepoName}.git`,
+      parentDir: input.parentDir,
+    });
   } else {
     report("Creating local project directory...", projectDir);
     if (fs.existsSync(projectDir)) {
@@ -258,7 +261,7 @@ export { writeEnvFile, verifyHooks, verifyWorkflows, verifyProject };
  * both when the substrate is consumed via git URL (dist + src co-located) and
  * when it's invoked directly from a dev clone.
  *
- * Safe to call when <targetDir>/.tdd/ already exists — existing files are not
+ * Safe to call when <targetDir>/.tdd/ already exists – existing files are not
  * overwritten so a project that already started TDD work is preserved.
  */
 export function layDownTddScaffold(targetDir: string): void {

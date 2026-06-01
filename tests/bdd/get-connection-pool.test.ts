@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import type { Pool } from "pg";
 import { getConnection } from "../../scripts/lakebase/get-connection.js";
+import { DEFAULT_DATABASE } from "../../scripts/lakebase/constants.js";
 
 // Skip-when-env-missing. See get-connection-dsn.test.ts for env contract.
 const INSTANCE = process.env.LAKEBASE_TEST_INSTANCE;
@@ -39,7 +40,7 @@ describe.skipIf(skip)("get-connection --output pool", () => {
         database: DATABASE,
       });
     }
-    const expectedDb = DATABASE ?? "databricks_postgres";
+    const expectedDb = DATABASE ?? DEFAULT_DATABASE;
     const { rows } = await pool.query<{ db: string }>("SELECT current_database() AS db");
     expect(rows[0].db).toBe(expectedDb);
   });
