@@ -9,7 +9,7 @@
 # For the comprehensive "everything live, auto-provision everything"
 # entry point, use scripts/run-all-live-tests.sh instead. That driver
 # resolves DATABRICKS_HOST from a databricks CLI profile, provisions a
-# project + branch, sources .env.template.config + .env.local.config,
+# project + branch, sources .env.template.test.config + .env.local.test.config,
 # and unlocks every gated LAKEBASE_TEST_* describe. See CONTRIBUTING.md.
 #
 # Modes:
