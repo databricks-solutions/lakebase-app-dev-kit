@@ -51,7 +51,7 @@ scripts/                       # operations – CLI and module entry points
   git/                         # init, clone, commit-push, push, remote
   github/                      # auth, repo, pr, secrets, runner
   lakebase/                    # branch-*, get-connection, schema-diff, scaffold,
-                               #   create-project, migrate, migrate-runners, ...
+                               #   create-project, migrate, schema-migrate-runners, ...
   util/                        # exec, delay, parse, env helpers
   openai-foundry.py            # generates tools/openai-foundry/*.tools.json
   skills.py                    # regenerates manifest.json from skills/

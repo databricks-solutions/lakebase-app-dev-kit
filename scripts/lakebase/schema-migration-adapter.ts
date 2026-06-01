@@ -6,7 +6,7 @@
 // against a known set of language markers (pom.xml + Maven, alembic.ini +
 // Python, knexfile.{js,ts} + Node). Adding a new migration tool means
 // touching that dispatch. The adapter pattern inverts the dependency:
-// each tool ships a MigrationAdapter that implements the contract; the
+// each tool ships a SchemaMigrationAdapter that implements the contract; the
 // dispatcher just routes by detection.
 //
 // This slice ships types only. No behavior changes. The existing
@@ -24,19 +24,19 @@
 //             custom path-based adapter
 
 import type {
-  AppliedMigration,
-  MigrationFile,
-  MigrationLanguage,
-  MigrationToolName,
-  PendingMigration,
-} from "./migrate";
+  AppliedSchemaMigration,
+  SchemaMigrationFile,
+  SchemaMigrationLanguage,
+  SchemaMigrationToolName,
+  PendingSchemaMigration,
+} from "./schema-migrate";
 
 /**
  * Adapter id. Stable; matches `project.yaml#migration_tool` override.
  * "custom" is reserved for path-based loading via
  * `project.yaml#migration_tool_module` (slice 5+).
  */
-export type MigrationAdapterId = MigrationToolName | "custom";
+export type SchemaMigrationAdapterId = SchemaMigrationToolName | "custom";
 
 export interface ApplyArgs {
   instance: string;
@@ -47,7 +47,7 @@ export interface ApplyArgs {
 }
 
 export interface ApplyResult {
-  applied_migrations: AppliedMigration[];
+  applied_migrations: AppliedSchemaMigration[];
   status: "ok" | "noop" | "error";
   error?: string;
   /**
@@ -69,7 +69,7 @@ export interface RollbackArgs {
 }
 
 export interface RollbackResult {
-  rolled_back: AppliedMigration[];
+  rolled_back: AppliedSchemaMigration[];
   status: "ok" | "noop" | "error" | "unsupported";
   error?: string;
   tool_specific?: Record<string, unknown>;
@@ -85,8 +85,8 @@ export interface StatusArgs {
 
 export interface StatusResult {
   applied_version: string | null;
-  pending: PendingMigration[];
-  applied: AppliedMigration[];
+  pending: PendingSchemaMigration[];
+  applied: AppliedSchemaMigration[];
   status: "ok" | "error";
   error?: string;
   tool_specific?: Record<string, unknown>;
@@ -97,7 +97,7 @@ export interface ListArgs {
 }
 
 export interface ListResult {
-  files: MigrationFile[];
+  files: SchemaMigrationFile[];
 }
 
 export interface BaselineArgs {
@@ -122,10 +122,10 @@ export interface BaselineResult {
  * surface; tool-specific fields ride on `tool_specific` so the contract
  * stays uniform.
  */
-export interface MigrationAdapter {
-  readonly id: MigrationAdapterId;
+export interface SchemaMigrationAdapter {
+  readonly id: SchemaMigrationAdapterId;
   /** Languages this adapter claims. Used by auto-detection. */
-  readonly languages: ReadonlyArray<MigrationLanguage>;
+  readonly languages: ReadonlyArray<SchemaMigrationLanguage>;
 
   /**
    * Auto-detect: does this adapter own the given project? Adapters
@@ -155,39 +155,39 @@ export interface MigrationAdapter {
 
 /**
  * In-memory adapter registry. Built-in adapters register here on import;
- * resolveAdapter walks the registry by detect() for auto-routing.
+ * resolveSchemaMigrationAdapter walks the registry by detect() for auto-routing.
  *
  * Slice 1 ships an empty registry skeleton. Slices 2-3 register the
  * built-in Flyway / Alembic / Knex adapters as they land.
  */
-const REGISTRY = new Map<MigrationAdapterId, MigrationAdapter>();
+const REGISTRY = new Map<SchemaMigrationAdapterId, SchemaMigrationAdapter>();
 
-export function registerAdapter(adapter: MigrationAdapter): void {
+export function registerSchemaMigrationAdapter(adapter: SchemaMigrationAdapter): void {
   REGISTRY.set(adapter.id, adapter);
 }
 
-export function getAdapter(id: MigrationAdapterId): MigrationAdapter | undefined {
+export function getSchemaMigrationAdapter(id: SchemaMigrationAdapterId): SchemaMigrationAdapter | undefined {
   return REGISTRY.get(id);
 }
 
-export function listAdapters(): MigrationAdapter[] {
+export function listSchemaMigrationAdapters(): SchemaMigrationAdapter[] {
   return [...REGISTRY.values()];
 }
 
 /**
  * Resolution rules:
- *   1. Explicit override -> getAdapter(override); throws when not registered.
+ *   1. Explicit override -> getSchemaMigrationAdapter(override); throws when not registered.
  *   2. Auto-detect -> first registered adapter whose detect() returns true.
- *   3. None match -> throws UnresolvedAdapterError with a hint.
+ *   3. None match -> throws UnresolvedSchemaMigrationAdapterError with a hint.
  */
-export function resolveAdapter(
+export function resolveSchemaMigrationAdapter(
   projectDir: string,
-  override?: MigrationAdapterId
-): MigrationAdapter {
+  override?: SchemaMigrationAdapterId
+): SchemaMigrationAdapter {
   if (override) {
     const a = REGISTRY.get(override);
     if (!a) {
-      throw new UnresolvedAdapterError(
+      throw new UnresolvedSchemaMigrationAdapterError(
         `migration_tool=${override} is not a registered adapter. Registered: ${
           [...REGISTRY.keys()].join(", ") || "(none)"
         }`
@@ -198,16 +198,16 @@ export function resolveAdapter(
   for (const adapter of REGISTRY.values()) {
     if (adapter.detect(projectDir)) return adapter;
   }
-  throw new UnresolvedAdapterError(
+  throw new UnresolvedSchemaMigrationAdapterError(
     `Cannot resolve migration tool for ${projectDir}. ` +
       `Set project.yaml#migration_tool to one of: ${[...REGISTRY.keys()].join(", ") || "(none)"}.`
   );
 }
 
-export class UnresolvedAdapterError extends Error {
+export class UnresolvedSchemaMigrationAdapterError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "UnresolvedAdapterError";
+    this.name = "UnresolvedSchemaMigrationAdapterError";
   }
 }
 

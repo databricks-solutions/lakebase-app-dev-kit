@@ -1,7 +1,7 @@
-// AlembicAdapter: MigrationAdapter implementation for Python projects
+// AlembicAdapter: SchemaMigrationAdapter implementation for Python projects
 // using Alembic. FEIP-7210 slice 3.
 //
-// Wraps the existing scripts/lakebase/migrate-runners/alembic.ts runner
+// Wraps the existing scripts/lakebase/schema-migrate-runners/alembic.ts runner
 // in the cross-tool adapter contract from ADR-0005. The runner's
 // underlying behavior is unchanged; this is a contract adapter, not a
 // reimplementation.
@@ -19,20 +19,20 @@ import {
   applyAlembic,
   rollbackAlembic,
   statusAlembic,
-} from "../migrate-runners/alembic.js";
-import type { AppliedMigration, MigrationFile, PendingMigration } from "../migrate.js";
+} from "../schema-migrate-runners/alembic.js";
+import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
 import {
-  registerAdapter,
+  registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
-  type MigrationAdapter,
+  type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
   type StatusArgs,
   type StatusResult,
-} from "../migration-adapter.js";
+} from "../schema-migration-adapter.js";
 
 async function buildDsn(args: {
   instance: string;
@@ -63,7 +63,7 @@ function findVersionsDir(projectDir: string): string | undefined {
   return candidates.find((p) => fs.existsSync(p));
 }
 
-function listAlembicFiles(projectDir: string): MigrationFile[] {
+function listAlembicFiles(projectDir: string): SchemaMigrationFile[] {
   const dir = findVersionsDir(projectDir);
   if (!dir) return [];
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
@@ -88,7 +88,7 @@ function listAlembicFiles(projectDir: string): MigrationFile[] {
     .sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
-export const AlembicAdapter: MigrationAdapter = {
+export const AlembicAdapter: SchemaMigrationAdapter = {
   id: "alembic",
   languages: ["python"],
 
@@ -110,7 +110,7 @@ export const AlembicAdapter: MigrationAdapter = {
     try {
       const legacy = await applyAlembic({ projectDir: args.projectDir, dsn });
       return {
-        applied_migrations: legacy.applied as AppliedMigration[],
+        applied_migrations: legacy.applied as AppliedSchemaMigration[],
         status: legacy.alreadyAtLatest ? "noop" : "ok",
         tool_specific: {
           alreadyAtLatest: legacy.alreadyAtLatest,
@@ -135,7 +135,7 @@ export const AlembicAdapter: MigrationAdapter = {
         target: args.target,
       });
       return {
-        rolled_back: legacy.rolledBack as AppliedMigration[],
+        rolled_back: legacy.rolledBack as AppliedSchemaMigration[],
         status: legacy.rolledBack.length === 0 ? "noop" : "ok",
         tool_specific: { tool: legacy.tool },
       };
@@ -154,7 +154,7 @@ export const AlembicAdapter: MigrationAdapter = {
       const legacy = await statusAlembic({ projectDir: args.projectDir, dsn });
       return {
         applied_version: legacy.current ?? null,
-        pending: legacy.pending as PendingMigration[],
+        pending: legacy.pending as PendingSchemaMigration[],
         // The legacy statusAlembic returns current + pending, not the
         // full applied history. Surface what we have. Backfilling the
         // applied list requires an extra `alembic history -r base:current`
@@ -183,7 +183,7 @@ export const AlembicAdapter: MigrationAdapter = {
 };
 
 // Auto-register on import. Consumers that import this module get the
-// adapter visible to resolveAdapter; consumers that don't import it
-// see no adapter (the registry stays empty and resolveAdapter throws
-// the helpful UnresolvedAdapterError).
-registerAdapter(AlembicAdapter);
+// adapter visible to resolveSchemaMigrationAdapter; consumers that don't import it
+// see no adapter (the registry stays empty and resolveSchemaMigrationAdapter throws
+// the helpful UnresolvedSchemaMigrationAdapterError).
+registerSchemaMigrationAdapter(AlembicAdapter);

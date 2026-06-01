@@ -12,9 +12,9 @@ import { join } from "path";
 
 import {
   _clearRegistryForTests,
-  getAdapter,
-  registerAdapter,
-} from "../../scripts/lakebase/migration-adapter";
+  getSchemaMigrationAdapter,
+  registerSchemaMigrationAdapter,
+} from "../../scripts/lakebase/schema-migration-adapter";
 // Import the adapter module SECOND so we can isolate registration.
 // In production this auto-registers on first import; tests reset the
 // registry beforeEach then re-register explicitly to assert behavior.
@@ -130,8 +130,8 @@ describe("FlywayAdapter: list (pure file-scan, no DB)", () => {
 });
 
 describe("FlywayAdapter: registry integration", () => {
-  it("registerAdapter + getAdapter('flyway') roundtrip returns the same instance", () => {
-    registerAdapter(FlywayAdapter);
-    expect(getAdapter("flyway")).toBe(FlywayAdapter);
+  it("registerSchemaMigrationAdapter + getSchemaMigrationAdapter('flyway') roundtrip returns the same instance", () => {
+    registerSchemaMigrationAdapter(FlywayAdapter);
+    expect(getSchemaMigrationAdapter("flyway")).toBe(FlywayAdapter);
   });
 });

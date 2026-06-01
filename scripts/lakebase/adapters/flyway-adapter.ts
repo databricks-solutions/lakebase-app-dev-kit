@@ -1,7 +1,7 @@
-// FlywayAdapter: MigrationAdapter implementation for Java/Kotlin projects
+// FlywayAdapter: SchemaMigrationAdapter implementation for Java/Kotlin projects
 // using flyway-maven-plugin. FEIP-7210 slice 2.
 //
-// Wraps the existing scripts/lakebase/migrate-runners/flyway.ts runner
+// Wraps the existing scripts/lakebase/schema-migrate-runners/flyway.ts runner
 // in the cross-tool adapter contract from ADR-0005. The runner's
 // underlying behavior is unchanged; this is a contract adapter, not a
 // reimplementation.
@@ -17,18 +17,18 @@ import { getConnection } from "../get-connection.js";
 import {
   applyFlyway,
   statusFlyway,
-} from "../migrate-runners/flyway.js";
-import type { AppliedMigration, MigrationFile, PendingMigration } from "../migrate.js";
+} from "../schema-migrate-runners/flyway.js";
+import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
 import {
-  registerAdapter,
+  registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
-  type MigrationAdapter,
+  type SchemaMigrationAdapter,
   type StatusArgs,
   type StatusResult,
-} from "../migration-adapter.js";
+} from "../schema-migration-adapter.js";
 
 async function buildDsn(args: {
   instance: string;
@@ -46,7 +46,7 @@ async function buildDsn(args: {
   return result.url;
 }
 
-function listFlywayFiles(projectDir: string): MigrationFile[] {
+function listFlywayFiles(projectDir: string): SchemaMigrationFile[] {
   // Flyway convention: src/main/resources/db/migration/V<n>__<desc>.sql
   const dir = path.join(projectDir, "src", "main", "resources", "db", "migration");
   if (!fs.existsSync(dir)) return [];
@@ -73,7 +73,7 @@ function versionCompare(a: string, b: string): number {
   return 0;
 }
 
-export const FlywayAdapter: MigrationAdapter = {
+export const FlywayAdapter: SchemaMigrationAdapter = {
   id: "flyway",
   languages: ["java", "kotlin"],
 
@@ -86,7 +86,7 @@ export const FlywayAdapter: MigrationAdapter = {
     try {
       const legacy = await applyFlyway({ projectDir: args.projectDir, dsn });
       return {
-        applied_migrations: legacy.applied as AppliedMigration[],
+        applied_migrations: legacy.applied as AppliedSchemaMigration[],
         status: legacy.alreadyAtLatest ? "noop" : "ok",
         tool_specific: {
           alreadyAtLatest: legacy.alreadyAtLatest,
@@ -112,7 +112,7 @@ export const FlywayAdapter: MigrationAdapter = {
       const legacy = await statusFlyway({ projectDir: args.projectDir, dsn });
       return {
         applied_version: legacy.current ?? null,
-        pending: legacy.pending as PendingMigration[],
+        pending: legacy.pending as PendingSchemaMigration[],
         // Legacy statusFlyway does not return the applied history; we
         // surface only the currently-applied version + pending. Adapters
         // that complete this (Alembic, future Knex) MAY populate.
@@ -142,7 +142,7 @@ export const FlywayAdapter: MigrationAdapter = {
 };
 
 // Auto-register on import. Consumers that import this module get the
-// adapter visible to resolveAdapter; consumers that don't import it
-// see no adapter (the registry stays empty and resolveAdapter throws
-// the helpful UnresolvedAdapterError).
-registerAdapter(FlywayAdapter);
+// adapter visible to resolveSchemaMigrationAdapter; consumers that don't import it
+// see no adapter (the registry stays empty and resolveSchemaMigrationAdapter throws
+// the helpful UnresolvedSchemaMigrationAdapterError).
+registerSchemaMigrationAdapter(FlywayAdapter);

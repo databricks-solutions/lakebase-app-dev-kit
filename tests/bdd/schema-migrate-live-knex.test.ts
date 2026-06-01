@@ -26,11 +26,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  applyMigrations,
-  listMigrations,
-  migrationStatus,
-  rollbackMigration,
-} from "../../scripts/lakebase/migrate.js";
+  applySchemaMigrations,
+  listSchemaMigrations,
+  schemaMigrationStatus,
+  rollbackSchemaMigration,
+} from "../../scripts/lakebase/schema-migrate.js";
 import { getConnection } from "../../scripts/lakebase/get-connection.js";
 import {
   createLakebaseProject,
@@ -129,16 +129,16 @@ describe.skipIf(!RUN_SUITE)(
       fs.rmSync(projectDir, { recursive: true, force: true });
     }, 240_000);
 
-    it("listMigrations enumerates both scaffolded migrations in apply order", () => {
-      const files = listMigrations({ projectDir });
+    it("listSchemaMigrations enumerates both scaffolded migrations in apply order", () => {
+      const files = listSchemaMigrations({ projectDir });
       expect(files).toHaveLength(2);
       expect(files[0].tool).toBe("knex");
       expect(files[0].description.toLowerCase()).toContain("users");
       expect(files[1].description.toLowerCase()).toContain("orders");
     });
 
-    it("migrationStatus reports current=undefined and two pending before apply", async () => {
-      const status = await migrationStatus({
+    it("schemaMigrationStatus reports current=undefined and two pending before apply", async () => {
+      const status = await schemaMigrationStatus({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -148,8 +148,8 @@ describe.skipIf(!RUN_SUITE)(
       expect(status.pending).toHaveLength(2);
     }, 60_000);
 
-    it("applyMigrations applies both migrations; tables exist in DB", async () => {
-      const result = await applyMigrations({
+    it("applySchemaMigrations applies both migrations; tables exist in DB", async () => {
+      const result = await applySchemaMigrations({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -173,8 +173,8 @@ describe.skipIf(!RUN_SUITE)(
       }
     }, 180_000);
 
-    it("migrationStatus reports a current version and no pending after apply", async () => {
-      const status = await migrationStatus({
+    it("schemaMigrationStatus reports a current version and no pending after apply", async () => {
+      const status = await schemaMigrationStatus({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -183,8 +183,8 @@ describe.skipIf(!RUN_SUITE)(
       expect(status.pending).toHaveLength(0);
     }, 60_000);
 
-    it("applyMigrations is idempotent: second call reports alreadyAtLatest", async () => {
-      const result = await applyMigrations({
+    it("applySchemaMigrations is idempotent: second call reports alreadyAtLatest", async () => {
+      const result = await applySchemaMigrations({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -193,8 +193,8 @@ describe.skipIf(!RUN_SUITE)(
       expect(result.applied).toEqual([]);
     }, 60_000);
 
-    it("rollbackMigration with target='all' rolls back both migrations; tables dropped", async () => {
-      const result = await rollbackMigration({
+    it("rollbackSchemaMigration with target='all' rolls back both migrations; tables dropped", async () => {
+      const result = await rollbackSchemaMigration({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -219,7 +219,7 @@ describe.skipIf(!RUN_SUITE)(
     }, 180_000);
 
     it("re-apply after rollback restores both tables (round-trip lifecycle works)", async () => {
-      const result = await applyMigrations({
+      const result = await applySchemaMigrations({
         instance: projectId,
         branch: branchName,
         projectDir,

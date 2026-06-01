@@ -9,7 +9,7 @@ parent: databricks-lakebase
 
 # Lakebase Release Workflows
 
-The convention and release flow every Lakebase-paired project should follow. Composes on top of [`lakebase-scm-workflows`](../lakebase-scm-workflows/SKILL.md) (which gives you `createBranch`, `getSchemaDiff`, `applyMigrations`, etc.) and adds the *opinionated* answer for "how do those primitives compose into a release."
+The convention and release flow every Lakebase-paired project should follow. Composes on top of [`lakebase-scm-workflows`](../lakebase-scm-workflows/SKILL.md) (which gives you `createBranch`, `getSchemaDiff`, `applySchemaMigrations`, etc.) and adds the *opinionated* answer for "how do those primitives compose into a release."
 
 The full reasoning + decision record lives in [references/branching-and-release-methodology.md](references/branching-and-release-methodology.md). This SKILL.md is the agent-facing tldr.
 
@@ -76,9 +76,9 @@ A release promotes one branch (the `from` source) into a long-running target (th
 A release proceeds in four ordered phases. The first two happen automatically when the PR opens (pr.yml on `to`); the second two happen on PR merge (merge.yml on `to` push). **A PR is required for every release** - no direct pushes to long-running branches:
 
 1. **PR open → cut ci-pr-branch from `to`.** The substrate auto-creates an ephemeral Lakebase branch named `ci-pr-branch` (per PR) forked from the *current* `to`. This is the RC. The PR's migration changes are applied here. Cutting from `to` (not `from`) is what locks the release surface - the test runs against the current target's data shape, not whatever's accumulated on `from`.
-2. **Regression test the ci-pr-branch.** pr.yml runs `applyMigrations` against `ci-pr-branch`, then the project's full test suite. **Merge is gated on this passing** - GitHub branch protection blocks the merge button until the check is green.
+2. **Regression test the ci-pr-branch.** pr.yml runs `applySchemaMigrations` against `ci-pr-branch`, then the project's full test suite. **Merge is gated on this passing** - GitHub branch protection blocks the merge button until the check is green.
 3. **PR merge → cut backup of `to`.** merge.yml on the `to` push fires `lakebase-cut-backup`, snapshotting current `to` (Lakebase branch + git tag). One-step revert target. Runs at every tier - `staging-backup-<id>` matters less than `prod-backup-<id>` but the same primitive runs for both.
-4. **Migrate `to`.** merge.yml continues with substrate `applyMigrations` against `to`'s Lakebase branch + git fast-forward of `to` + (only when `to == prod`) app deploy.
+4. **Migrate `to`.** merge.yml continues with substrate `applySchemaMigrations` against `to`'s Lakebase branch + git fast-forward of `to` + (only when `to == prod`) app deploy.
 
 The 4-phase shape is identical for `feature/X → staging` and `staging → prod`. For `staging → prod`, the ci-pr-branch is cut from a fresh prod (NOT from staging) so the migration test runs against real production data shape - "ensure it will work on my prod" before merging.
 
@@ -100,7 +100,7 @@ The substrate doesn't yet ship the release orchestrator. These primitives are pl
 - `cutRC({from, to, releaseId})` - branches the release candidate off current `to` and merges `from` in.
 - `regressionTest({rc, suite})` - runs the project's full e2e suite against the RC branch.
 - `cutBackup({to, releaseId})` - snapshots current `to` for rollback.
-- `migrate({rc, to, releaseId})` - applies substrate `applyMigrations` against `to`'s Lakebase branch and fast-forwards the git pointer.
+- `migrate({rc, to, releaseId})` - applies substrate `applySchemaMigrations` against `to`'s Lakebase branch and fast-forwards the git pointer.
 - `release` - orchestrator that calls the four phases in order with explicit gates between each.
 
 Until these land, follow the manual procedure documented in the reference.

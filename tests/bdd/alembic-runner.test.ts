@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { resolveAlembicBin } from "../../scripts/lakebase/migrate-runners/alembic.js";
+import { resolveAlembicBin } from "../../scripts/lakebase/schema-migrate-runners/alembic.js";
 
 const tmpDirs: string[] = [];
 
