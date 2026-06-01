@@ -123,6 +123,7 @@ describe("MCP server stdio handshake", () => {
       "lakebase_branch_sync_env",
       "lakebase_create_project",
       "lakebase_doctor",
+      "lakebase_feature_status",
       "lakebase_get_connection",
       "lakebase_github_token",
       "lakebase_list_migrations",
