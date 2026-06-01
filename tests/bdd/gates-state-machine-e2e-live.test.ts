@@ -85,6 +85,13 @@ describe.skipIf(!RUN_SUITE)(
     let workDir: string;
     let tddDir: string;
     let featureDir: string;
+    /**
+     * Sanitized git branch name returned by createPairedBranch (lowercases,
+     * replaces invalid chars with hyphens). The .tdd/ feature directory uses
+     * the FEATURE_ID verbatim ("F-AUDIT"); the local git + remote branch use
+     * the sanitized form ("f-audit"). They are independent identifiers.
+     */
+    let gitBranchName: string;
     let prNumber: number | undefined;
     let testPassed = false;
 
@@ -136,13 +143,15 @@ describe.skipIf(!RUN_SUITE)(
       }
 
       console.log(`  [S0] creating paired feature branch ${FEATURE_ID}`);
-      await createPairedBranch({
+      const paired = await createPairedBranch({
         instance: projectId,
         branch: FEATURE_ID,
         cwd: workDir,
         createGitBranch: true,
         syncEnv: false,
       });
+      gitBranchName = paired.gitBranch;
+      console.log(`  [S0] paired branch ready (lakebase=${paired.branch.name ?? FEATURE_ID}, git=${gitBranchName})`);
     }, 600_000);
 
     afterAll(async () => {
@@ -306,12 +315,16 @@ describe.skipIf(!RUN_SUITE)(
       expect(state.gates.test_list.status).toBe("approved");
     });
 
-    it("S9.1: lakebase-pr open emits a real PR URL with gates summary in the body", async () => {
-      // Commit the .tdd/ tree + push the feature branch.
+    it("S9.1: lakebase-pr open emits a real PR URL with gates summary in the body", { timeout: 180_000 }, async () => {
+      // Commit the .tdd/ tree + push the feature branch. The local git
+      // branch is the sanitized name (createPairedBranch lowercases the
+      // FEATURE_ID); we push that, not the raw FEATURE_ID.
       run("git", ["add", "-A"], workDir);
       run("git", ["commit", "-m", "F-AUDIT: spec + plan + test-list + gates"], workDir);
-      const pushF = run("git", ["push", "-u", "origin", FEATURE_ID], workDir);
-      expect(pushF.status).toBe(0);
+      const pushF = run("git", ["push", "-u", "origin", gitBranchName], workDir);
+      if (pushF.status !== 0) {
+        throw new Error(`git push failed (status ${pushF.status}):\n${pushF.stderr}`);
+      }
 
       const state = readGates(FEATURE_ID, { tddDir });
       const gatesSummary = GATE_NAMES.map((name) => {
@@ -324,7 +337,7 @@ describe.skipIf(!RUN_SUITE)(
 
       const url = await createPullRequest({
         ownerRepo,
-        headBranch: FEATURE_ID,
+        headBranch: gitBranchName,
         title: `F-AUDIT: per-branch migration audit log`,
         body: `## Gates summary\n\n${gatesSummary}\n\n[FEIP-7366 e2e test PR]\n`,
         baseBranch: "main",
@@ -335,7 +348,7 @@ describe.skipIf(!RUN_SUITE)(
       prNumber = Number(m![1]);
     });
 
-    it("S9.2: mergePairedPullRequest closes the PR + cleans up the Lakebase feature branch", async () => {
+    it("S9.2: mergePairedPullRequest closes the PR + cleans up the Lakebase feature branch", { timeout: 180_000 }, async () => {
       expect(prNumber).toBeDefined();
       const result = await mergePairedPullRequest({
         ownerRepo,
