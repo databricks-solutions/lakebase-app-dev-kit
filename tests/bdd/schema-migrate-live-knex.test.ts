@@ -31,7 +31,7 @@ import {
   schemaMigrationStatus,
   rollbackSchemaMigration,
 } from "../../scripts/lakebase/schema-migrate.js";
-import { getConnection } from "../../scripts/lakebase/get-connection.js";
+import { getConnection, waitForBranchAuthReady } from "../../scripts/lakebase/get-connection.js";
 import {
   createLakebaseProject,
   deleteLakebaseProject,
@@ -89,6 +89,15 @@ describe.skipIf(!RUN_SUITE)(
       const fullName = dflt.name ?? "";
       branchName = fullName.split("/branches/").pop() ?? dflt.uid;
       console.log(`  [setup] default branch: ${branchName}`);
+
+      // Wait for the freshly-provisioned branch's IAM role to propagate
+      // before letting the `pg`-based Knex CLI try to authenticate. The
+      // `pg` driver surfaces transient "External authorization failed"
+      // errors as terminal; JDBC retries internally, hence Flyway never
+      // sees this. See scripts/lakebase/get-connection.ts.
+      console.log(`  [setup] waiting for branch auth readiness on ${branchName}`);
+      await waitForBranchAuthReady({ instance: projectId, branch: branchName });
+      console.log(`  [setup] branch auth ready`);
     }, 240_000);
 
     afterAll(async () => {
