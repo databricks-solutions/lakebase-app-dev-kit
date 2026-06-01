@@ -41,9 +41,9 @@ Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also imp
 - `create-tier feature|test|uat|perf` – convention-tier branches with PSA TTL defaults
 - `checkout-paired` / `sync-env` – recovery / drift-fix when `.env` lags
 
-**Schema + migrations** (`lakebase-schema-diff`, `lakebase-migrate`)
+**Schema + migrations** (`lakebase-schema-diff`, `lakebase-schema-migrate`)
 - `lakebase-schema-diff` – parent-aware diff between any branch and its parent
-- `lakebase-migrate apply|rollback|status|list` – Flyway / Alembic / Knex migrations against a branch
+- `lakebase-schema-migrate apply|rollback|status|list` – Flyway / Alembic / Knex migrations against a branch
 
 **PR flow** (`lakebase-pr` / `lakebase_pr_*`)
 - `open` / `merge` / `merge-paired` (Lakebase feature-branch cleanup baked into the merge)
@@ -159,7 +159,7 @@ The agent reads the current git branch, calls `lakebase-get-connection --output 
 | `lakebase-doctor` | Health-check the local env. Run first when something looks off. Exit codes 0/1/2 = OK/WARN/FAIL for CI. |
 | `lakebase-get-connection` | Mint a DSN string (`--output dsn`) or pg.Pool (`--output pool`) against any branch. Add `--write-env` to refresh `.env`. |
 | `lakebase-schema-diff` | Parent-aware schema diff between any branch and its parent (or a comparison override). |
-| `lakebase-migrate` | Apply / rollback / status / list schema migrations against a branch (Flyway / Alembic / Knex). |
+| `lakebase-schema-migrate` | Apply / rollback / status / list schema migrations against a branch (Flyway / Alembic / Knex). |
 | `lakebase-cut-backup` | Cut a no-expiry backup branch off a source branch. |
 | `lakebase-detect-language` | Detect project language for CI step outputs. |
 | `lakebase-github-token` | Resolve / diagnose the GitHub token via the same auth chain CI uses. |

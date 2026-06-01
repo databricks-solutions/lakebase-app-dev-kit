@@ -119,7 +119,7 @@ The package exposes eleven bins (resolved relative to `node_modules/.bin/` when 
 
 **Schema + migrations**
 - `lakebase-schema-diff` – parent-aware schema diff between two Lakebase branches
-- `lakebase-migrate` – apply / rollback / status / list schema migrations against a branch
+- `lakebase-schema-migrate` – apply / rollback / status / list schema migrations against a branch
 - `lakebase-detect-language` – detect project language (java / kotlin / python / nodejs) for CI step outputs
 
 **Operations**

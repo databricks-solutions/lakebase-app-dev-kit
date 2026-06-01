@@ -27,7 +27,7 @@ jobs:
       - name: Detect project language
         id: detect-lang
         # Routes through the substrate's lakebase-detect-language CLI so
-        # the kit's marker-file detection (mirrors lakebase-migrate's auto-
+        # the kit's marker-file detection (mirrors lakebase-schema-migrate's auto-
         # detect) is the single source of truth across pr.yml + merge.yml +
         # the substrate's migrate runners. {{LAKEBASE_KIT_VERSION}} is
         # substituted at scaffold time to the kit version that produced
@@ -339,7 +339,7 @@ jobs:
         id: migrate-ci
         if: steps.lakebase-db.outputs.url != ''
         env:
-          # Pull auth from secrets directly. The substrate's lakebase-migrate
+          # Pull auth from secrets directly. The substrate's lakebase-schema-migrate
           # CLI spawns `databricks postgres list-endpoints` under the hood,
           # which on Databricks CLI v1+ refuses to read the pre-v1 ~/.databricks/
           # credential cache and won't fall back to DATABRICKS_TOKEN unless
@@ -354,12 +354,12 @@ jobs:
             echo "::error::LAKEBASE_BRANCH_NAME not set; the resolve-credentials step should have populated it."
             exit 1
           fi
-          echo "Routing migrations through the substrate's lakebase-migrate CLI"
+          echo "Routing migrations through the substrate's lakebase-schema-migrate CLI"
           echo "  kit version: {{LAKEBASE_KIT_VERSION}}"
           echo "  instance:    $LAKEBASE_PROJECT_ID"
           echo "  branch:      $LAKEBASE_BRANCH_NAME"
           npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit#v{{LAKEBASE_KIT_VERSION}} \
-            lakebase-migrate apply \
+            lakebase-schema-migrate apply \
             --instance "$LAKEBASE_PROJECT_ID" \
             --branch "$LAKEBASE_BRANCH_NAME" \
             --pretty

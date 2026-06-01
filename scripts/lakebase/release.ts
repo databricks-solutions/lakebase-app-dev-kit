@@ -124,7 +124,7 @@ export async function release(args: ReleaseArgs): Promise<ReleaseResult> {
     body:
       `Automated release: promote \`${args.from}\` into \`${args.to}\`. ` +
       `Triggers ${workflowFile} on the ${args.to} push, which runs the ` +
-      `substrate-routed lakebase-cut-backup + lakebase-migrate apply ` +
+      `substrate-routed lakebase-cut-backup + lakebase-schema-migrate apply ` +
       `against the ${args.to} Lakebase branch.`,
   });
   const match = url.match(/\/pull\/(\d+)/);

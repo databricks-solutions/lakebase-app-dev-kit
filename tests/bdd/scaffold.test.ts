@@ -150,12 +150,12 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
     expect(prYml).toContain(`#v${kitPkg.version}`);
   });
 
-  it("scaffolded pr.yml routes migrations through the substrate's lakebase-migrate CLI", async () => {
+  it("scaffolded pr.yml routes migrations through the substrate's lakebase-schema-migrate CLI", async () => {
     const dir = mkTmp();
     await deployWorkflows(dir);
     const prYml = fs.readFileSync(path.join(dir, ".github", "workflows", "pr.yml"), "utf-8");
     // Substrate routing line, not the old language-branched mvnw/uv/npx-knex shape.
-    expect(prYml).toMatch(/lakebase-migrate apply/);
+    expect(prYml).toMatch(/lakebase-schema-migrate apply/);
     expect(prYml).toMatch(/github:databricks-solutions\/lakebase-app-dev-kit/);
     expect(prYml).toMatch(/--instance "\$LAKEBASE_PROJECT_ID"/);
     expect(prYml).toMatch(/--branch "\$LAKEBASE_BRANCH_NAME"/);
@@ -167,7 +167,7 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
   });
 
   it("scaffolded pr.yml's migrate step passes auth from secrets with DATABRICKS_AUTH_TYPE=pat", async () => {
-    // Regression guard: the substrate's lakebase-migrate CLI spawns
+    // Regression guard: the substrate's lakebase-schema-migrate CLI spawns
     // `databricks postgres list-endpoints` under the hood. On Databricks
     // CLI v1+ that call fails with "stored credentials from older CLI
     // versions are no longer used" unless DATABRICKS_AUTH_TYPE=pat is
@@ -230,7 +230,7 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
     // to merge.yml's migrate-target job. Locks down all four lessons
     // learned during the ecom + python-devloop integration loop:
     //   - kit version substitution at scaffold time
-    //   - migrations route through `lakebase-migrate apply`
+    //   - migrations route through `lakebase-schema-migrate apply`
     //   - snapshot routes through `lakebase-cut-backup`
     //   - Flyway-install detects existing binary + supports proxy
     //   - migrate + snapshot + cleanup pass DATABRICKS_AUTH_TYPE=pat
@@ -247,7 +247,7 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
 
     // Substrate routing for migrations (replaces the language-branched
     // mvnw/uv-run/npx-knex block).
-    expect(mergeYml).toMatch(/lakebase-migrate apply/);
+    expect(mergeYml).toMatch(/lakebase-schema-migrate apply/);
     expect(mergeYml).not.toMatch(/\.\/mvnw -q flyway:migrate/);
     expect(mergeYml).not.toMatch(/uv run alembic upgrade head/);
     expect(mergeYml).not.toMatch(/npx knex migrate:latest/);

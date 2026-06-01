@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// CLI for the migrate primitives (FEIP-7091). Four subcommands:
-//   lakebase-migrate apply    --instance <id> --branch <name> [...]
-//   lakebase-migrate rollback --instance <id> --branch <name> --target <rev> [...]
-//   lakebase-migrate status   --instance <id> --branch <name> [...]
-//   lakebase-migrate list     [--project-dir <dir>] [--language <lang>]
+// CLI for the kit's schema-migrate primitives. Four subcommands:
+//   lakebase-schema-migrate apply    --instance <id> --branch <name> [...]
+//   lakebase-schema-migrate rollback --instance <id> --branch <name> --target <rev> [...]
+//   lakebase-schema-migrate status   --instance <id> --branch <name> [...]
+//   lakebase-schema-migrate list     [--project-dir <dir>] [--language <lang>]
 //
 // Prints JSON on stdout, progress on stderr.
+//
+// Implementation: routes through scripts/lakebase/migrate.ts, which
+// itself routes through the MigrationAdapter registry (FEIP-7210
+// slices 1-3). The bin name was finalized in slice 4; the kit has no
+// prior consumers, so no deprecation alias is shipped.
 
 import {
   applyMigrations,
@@ -71,7 +76,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-migrate (FEIP-7091)
+function helpFor(binName: string): string {
+  return `${binName} (FEIP-7210 schema migration adapter)
 
 Subcommands:
   apply     Apply pending forward migrations against a branch
@@ -95,16 +101,17 @@ Common flags (any subcommand):
   --pretty                   Pretty-print JSON output
 
 Examples:
-  lakebase-migrate list
-  lakebase-migrate status --instance proj-x --branch feature/foo
-  lakebase-migrate apply --instance proj-x --branch feature/foo
-  lakebase-migrate rollback --instance proj-x --branch feature/foo --target -1
+  ${binName} list
+  ${binName} status --instance proj-x --branch feature/foo
+  ${binName} apply --instance proj-x --branch feature/foo
+  ${binName} rollback --instance proj-x --branch feature/foo --target -1
 
 Language support today:
   python (alembic)  Full: apply, rollback, status, list
   java, kotlin      Full: apply, status, list (rollback unsupported in Flyway Community Edition)
   nodejs (knex)     Full: apply, rollback, status, list
 `;
+}
 
 function printJson(result: unknown, pretty: boolean): void {
   process.stdout.write(
@@ -112,10 +119,12 @@ function printJson(result: unknown, pretty: boolean): void {
   );
 }
 
+const BIN_NAME = "lakebase-schema-migrate";
+
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.subcommand) {
-    process.stdout.write(HELP);
+    process.stdout.write(helpFor(BIN_NAME));
     return args.help ? 0 : 2;
   }
 
@@ -179,7 +188,7 @@ async function main(): Promise<number> {
         return 0;
       }
       default:
-        process.stderr.write(`Unknown subcommand: ${args.subcommand}\n\n${HELP}`);
+        process.stderr.write(`Unknown subcommand: ${args.subcommand}\n\n${helpFor(BIN_NAME)}`);
         return 2;
     }
   } catch (err) {
