@@ -23,11 +23,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  applyMigrations,
-  listMigrations,
-  migrationStatus,
-  rollbackMigration,
-} from "../../scripts/lakebase/migrate.js";
+  applySchemaMigrations,
+  listSchemaMigrations,
+  schemaMigrationStatus,
+  rollbackSchemaMigration,
+} from "../../scripts/lakebase/schema-migrate.js";
 import { getConnection } from "../../scripts/lakebase/get-connection.js";
 import {
   createLakebaseProject,
@@ -106,15 +106,15 @@ describe.skipIf(!RUN_SUITE)("migrate live (alembic against a freshly-provisioned
     fs.rmSync(projectDir, { recursive: true, force: true });
   }, 240_000);
 
-  it("listMigrations enumerates the scaffolded migration", () => {
-    const files = listMigrations({ projectDir });
+  it("listSchemaMigrations enumerates the scaffolded migration", () => {
+    const files = listSchemaMigrations({ projectDir });
     expect(files).toHaveLength(1);
     expect(files[0].tool).toBe("alembic");
     expect(files[0].description.includes("init")).toBe(true);
   });
 
-  it("migrationStatus reports current=undefined and one pending before apply", async () => {
-    const status = await migrationStatus({
+  it("schemaMigrationStatus reports current=undefined and one pending before apply", async () => {
+    const status = await schemaMigrationStatus({
       instance: projectId,
       branch: branchName,
       projectDir,
@@ -124,8 +124,8 @@ describe.skipIf(!RUN_SUITE)("migrate live (alembic against a freshly-provisioned
     expect(status.pending.some((p) => p.version === "a1b2c3d4e5f6")).toBe(true);
   }, 60_000);
 
-  it("applyMigrations applies the pending migration; table exists in DB", async () => {
-    const result = await applyMigrations({
+  it("applySchemaMigrations applies the pending migration; table exists in DB", async () => {
+    const result = await applySchemaMigrations({
       instance: projectId,
       branch: branchName,
       projectDir,
@@ -146,8 +146,8 @@ describe.skipIf(!RUN_SUITE)("migrate live (alembic against a freshly-provisioned
     }
   }, 180_000);
 
-  it("migrationStatus reports current=a1b2c3d4e5f6 and no pending after apply", async () => {
-    const status = await migrationStatus({
+  it("schemaMigrationStatus reports current=a1b2c3d4e5f6 and no pending after apply", async () => {
+    const status = await schemaMigrationStatus({
       instance: projectId,
       branch: branchName,
       projectDir,
@@ -156,8 +156,8 @@ describe.skipIf(!RUN_SUITE)("migrate live (alembic against a freshly-provisioned
     expect(status.pending.some((p) => p.version === "a1b2c3d4e5f6")).toBe(false);
   }, 60_000);
 
-  it("rollbackMigration rolls back the migration; table is dropped", async () => {
-    const result = await rollbackMigration({
+  it("rollbackSchemaMigration rolls back the migration; table is dropped", async () => {
+    const result = await rollbackSchemaMigration({
       instance: projectId,
       branch: branchName,
       target: "-1",

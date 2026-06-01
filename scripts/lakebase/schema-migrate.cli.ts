@@ -8,17 +8,17 @@
 // Prints JSON on stdout, progress on stderr.
 //
 // Implementation: routes through scripts/lakebase/migrate.ts, which
-// itself routes through the MigrationAdapter registry (FEIP-7210
+// itself routes through the SchemaMigrationAdapter registry (FEIP-7210
 // slices 1-3). The bin name was finalized in slice 4; the kit has no
 // prior consumers, so no deprecation alias is shipped.
 
 import {
-  applyMigrations,
-  listMigrations,
-  migrationStatus,
-  rollbackMigration,
-  type MigrationLanguage,
-} from "./migrate.js";
+  applySchemaMigrations,
+  listSchemaMigrations,
+  schemaMigrationStatus,
+  rollbackSchemaMigration,
+  type SchemaMigrationLanguage,
+} from "./schema-migrate.js";
 
 interface ParsedArgs {
   subcommand?: string;
@@ -26,7 +26,7 @@ interface ParsedArgs {
   branch?: string;
   target?: string;
   projectDir?: string;
-  language?: MigrationLanguage;
+  language?: SchemaMigrationLanguage;
   database?: string;
   endpointName?: string;
   pretty?: boolean;
@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.projectDir = argv[++i];
         break;
       case "--language":
-        out.language = argv[++i] as MigrationLanguage;
+        out.language = argv[++i] as SchemaMigrationLanguage;
         break;
       case "--database":
         out.database = argv[++i];
@@ -131,7 +131,7 @@ async function main(): Promise<number> {
   try {
     switch (args.subcommand) {
       case "list": {
-        const result = listMigrations({
+        const result = listSchemaMigrations({
           projectDir: args.projectDir,
           language: args.language,
         });
@@ -143,7 +143,7 @@ async function main(): Promise<number> {
           process.stderr.write("apply: --instance and --branch are required.\n");
           return 2;
         }
-        const result = await applyMigrations({
+        const result = await applySchemaMigrations({
           instance: args.instance,
           branch: args.branch,
           projectDir: args.projectDir,
@@ -159,7 +159,7 @@ async function main(): Promise<number> {
           process.stderr.write("rollback: --instance, --branch, and --target are required.\n");
           return 2;
         }
-        const result = await rollbackMigration({
+        const result = await rollbackSchemaMigration({
           instance: args.instance,
           branch: args.branch,
           target: args.target,
@@ -176,7 +176,7 @@ async function main(): Promise<number> {
           process.stderr.write("status: --instance and --branch are required.\n");
           return 2;
         }
-        const result = await migrationStatus({
+        const result = await schemaMigrationStatus({
           instance: args.instance,
           branch: args.branch,
           projectDir: args.projectDir,

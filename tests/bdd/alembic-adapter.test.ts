@@ -12,9 +12,9 @@ import { join } from "path";
 
 import {
   _clearRegistryForTests,
-  getAdapter,
-  registerAdapter,
-} from "../../scripts/lakebase/migration-adapter";
+  getSchemaMigrationAdapter,
+  registerSchemaMigrationAdapter,
+} from "../../scripts/lakebase/schema-migration-adapter";
 // Import the adapter SECOND so registration is observable. Production
 // imports auto-register; tests reset the registry beforeEach then
 // re-register to keep assertions explicit.
@@ -153,9 +153,9 @@ describe("AlembicAdapter: list (pure file-scan, no DB)", () => {
 });
 
 describe("AlembicAdapter: registry integration", () => {
-  it("registerAdapter + getAdapter('alembic') roundtrip returns the same instance", () => {
-    registerAdapter(AlembicAdapter);
-    expect(getAdapter("alembic")).toBe(AlembicAdapter);
+  it("registerSchemaMigrationAdapter + getSchemaMigrationAdapter('alembic') roundtrip returns the same instance", () => {
+    registerSchemaMigrationAdapter(AlembicAdapter);
+    expect(getSchemaMigrationAdapter("alembic")).toBe(AlembicAdapter);
   });
 });
 

@@ -13,7 +13,7 @@ Every Lakebase-paired project has two coupled axes of state: a git tree and a La
 - how rollback works
 - whether a release candidate is built from the integration branch or from production
 
-Inconsistency here makes coding agents (Claude Code, Genie, Foundry, etc.) less useful: they cannot recommend "the right place" to do work because there is no agreed answer. It also makes the substrate's `applyMigrations`, `createBranch`, `getSchemaDiff` primitives feel underspecified - they work, but the project still has to compose them by hand for every release.
+Inconsistency here makes coding agents (Claude Code, Genie, Foundry, etc.) less useful: they cannot recommend "the right place" to do work because there is no agreed answer. It also makes the substrate's `applySchemaMigrations`, `createBranch`, `getSchemaDiff` primitives feel underspecified - they work, but the project still has to compose them by hand for every release.
 
 This document records the convention and the release flow. Future substrate primitives encode it.
 
@@ -117,7 +117,7 @@ lakebase-schema-migrate apply --instance <id> --branch rc/<release-id>
 ./mvnw test              # or uv run pytest, or npx vitest, ...
 ```
 
-This is the rehearsal. The RC's Lakebase branch is created from `to`'s Lakebase, so it carries `to`'s current data and the test exercises the migration + behavior against that real shape. The substrate's `applyMigrations` is where Lakebase-specific compatibility (e.g. Flyway's `baselineOnMigrate` flag) lives, in one place.
+This is the rehearsal. The RC's Lakebase branch is created from `to`'s Lakebase, so it carries `to`'s current data and the test exercises the migration + behavior against that real shape. The substrate's `applySchemaMigrations` is where Lakebase-specific compatibility (e.g. Flyway's `baselineOnMigrate` flag) lives, in one place.
 
 #### Phase 3: Cut backup of `to`
 
@@ -145,7 +145,7 @@ git push origin <to>
 # app deploy (only when <to> == prod) or downstream propagation otherwise
 ```
 
-The substrate's `applyMigrations` applies the same migrations that already ran on the RC in Phase 2, against the real `to` Lakebase. Same primitive, same compatibility flags, same code path - the difference is only the target branch. The app-deploy step is `to == prod` specific; intermediate-tier releases (e.g. `dev → staging`) skip the deploy and continue accumulating until the next `to` is promoted.
+The substrate's `applySchemaMigrations` applies the same migrations that already ran on the RC in Phase 2, against the real `to` Lakebase. Same primitive, same compatibility flags, same code path - the difference is only the target branch. The app-deploy step is `to == prod` specific; intermediate-tier releases (e.g. `dev → staging`) skip the deploy and continue accumulating until the next `to` is promoted.
 
 ### Rollback
 

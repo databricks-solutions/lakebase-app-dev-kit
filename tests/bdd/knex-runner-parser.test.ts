@@ -10,7 +10,7 @@
 // before it ships.
 
 import { describe, expect, it } from "vitest";
-import { parseKnexStatus } from "../../scripts/lakebase/migrate-runners/knex";
+import { parseKnexStatus } from "../../scripts/lakebase/schema-migrate-runners/knex";
 
 describe("parseKnexStatus", () => {
   it("returns empty arrays for empty output", () => {

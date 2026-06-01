@@ -15,12 +15,12 @@ import { getSchemaDiff } from "../../scripts/lakebase/schema-diff.js";
 import { createProject, type CreateProjectArgs } from "../../scripts/lakebase/create-project.js";
 import { resolveGitHubToken, diagnoseGitHubAuth } from "../../scripts/github/auth.js";
 import {
-  applyMigrations,
-  rollbackMigration,
-  migrationStatus,
-  listMigrations,
-  type MigrationLanguage,
-} from "../../scripts/lakebase/migrate.js";
+  applySchemaMigrations,
+  rollbackSchemaMigration,
+  schemaMigrationStatus,
+  listSchemaMigrations,
+  type SchemaMigrationLanguage,
+} from "../../scripts/lakebase/schema-migrate.js";
 import { getFeatureStatus } from "../../scripts/tdd/feature-status.js";
 // FEIP-7328 P0.2: PR-flow MCP tools.
 import {
@@ -232,9 +232,9 @@ export const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     handler: async (args) => {
-      return listMigrations({
+      return listSchemaMigrations({
         projectDir: optionalString(args, "projectDir"),
-        language: optionalString(args, "language") as MigrationLanguage | undefined,
+        language: optionalString(args, "language") as SchemaMigrationLanguage | undefined,
       });
     },
   },
@@ -260,11 +260,11 @@ export const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     handler: async (args) => {
-      return applyMigrations({
+      return applySchemaMigrations({
         instance: requireString(args, "instance"),
         branch: requireString(args, "branch"),
         projectDir: optionalString(args, "projectDir"),
-        language: optionalString(args, "language") as MigrationLanguage | undefined,
+        language: optionalString(args, "language") as SchemaMigrationLanguage | undefined,
         database: optionalString(args, "database"),
         endpointName: optionalString(args, "endpointName"),
       });
@@ -293,12 +293,12 @@ export const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     handler: async (args) => {
-      return rollbackMigration({
+      return rollbackSchemaMigration({
         instance: requireString(args, "instance"),
         branch: requireString(args, "branch"),
         target: requireString(args, "target"),
         projectDir: optionalString(args, "projectDir"),
-        language: optionalString(args, "language") as MigrationLanguage | undefined,
+        language: optionalString(args, "language") as SchemaMigrationLanguage | undefined,
         database: optionalString(args, "database"),
         endpointName: optionalString(args, "endpointName"),
       });
@@ -326,11 +326,11 @@ export const TOOLS: ToolDefinition[] = [
       additionalProperties: false,
     },
     handler: async (args) => {
-      return migrationStatus({
+      return schemaMigrationStatus({
         instance: requireString(args, "instance"),
         branch: requireString(args, "branch"),
         projectDir: optionalString(args, "projectDir"),
-        language: optionalString(args, "language") as MigrationLanguage | undefined,
+        language: optionalString(args, "language") as SchemaMigrationLanguage | undefined,
         database: optionalString(args, "database"),
         endpointName: optionalString(args, "endpointName"),
       });

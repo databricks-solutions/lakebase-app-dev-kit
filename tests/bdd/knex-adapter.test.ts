@@ -12,9 +12,9 @@ import { join } from "path";
 
 import {
   _clearRegistryForTests,
-  getAdapter,
-  registerAdapter,
-} from "../../scripts/lakebase/migration-adapter";
+  getSchemaMigrationAdapter,
+  registerSchemaMigrationAdapter,
+} from "../../scripts/lakebase/schema-migration-adapter";
 import { KnexAdapter } from "../../scripts/lakebase/adapters/knex-adapter";
 
 const FIXTURE_ROOT = join(__dirname, "fixtures", "migrations-samples", "knex");
@@ -144,9 +144,9 @@ describe("KnexAdapter: list (pure file-scan, no DB)", () => {
 });
 
 describe("KnexAdapter: registry integration", () => {
-  it("registerAdapter + getAdapter('knex') roundtrip returns the same instance", () => {
-    registerAdapter(KnexAdapter);
-    expect(getAdapter("knex")).toBe(KnexAdapter);
+  it("registerSchemaMigrationAdapter + getSchemaMigrationAdapter('knex') roundtrip returns the same instance", () => {
+    registerSchemaMigrationAdapter(KnexAdapter);
+    expect(getSchemaMigrationAdapter("knex")).toBe(KnexAdapter);
   });
 });
 

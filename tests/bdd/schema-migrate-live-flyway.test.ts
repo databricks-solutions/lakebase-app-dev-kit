@@ -8,7 +8,7 @@
 // pg.Pool that the migration landed, and tears the project down.
 //
 // Rollback is intentionally NOT exercised: Flyway Community Edition
-// does not implement `undo`. The runner throws a clear MigrationError;
+// does not implement `undo`. The runner throws a clear SchemaMigrationError;
 // the hermetic test in tests/bdd/migrate.test.ts covers that path.
 //
 // Gating:
@@ -24,10 +24,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
-  applyMigrations,
-  listMigrations,
-  migrationStatus,
-} from "../../scripts/lakebase/migrate.js";
+  applySchemaMigrations,
+  listSchemaMigrations,
+  schemaMigrationStatus,
+} from "../../scripts/lakebase/schema-migrate.js";
 import { getConnection } from "../../scripts/lakebase/get-connection.js";
 import {
   createLakebaseProject,
@@ -112,16 +112,16 @@ describe.skipIf(!RUN_SUITE)(
       fs.rmSync(projectDir, { recursive: true, force: true });
     }, 240_000);
 
-    it("listMigrations enumerates the scaffolded V1 migration", () => {
-      const files = listMigrations({ projectDir });
+    it("listSchemaMigrations enumerates the scaffolded V1 migration", () => {
+      const files = listSchemaMigrations({ projectDir });
       expect(files).toHaveLength(1);
       expect(files[0].tool).toBe("flyway");
       expect(files[0].version).toBe("1");
       expect(files[0].description.toLowerCase().includes("init")).toBe(true);
     });
 
-    it("migrationStatus reports current=undefined and one pending before apply", async () => {
-      const status = await migrationStatus({
+    it("schemaMigrationStatus reports current=undefined and one pending before apply", async () => {
+      const status = await schemaMigrationStatus({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -131,8 +131,8 @@ describe.skipIf(!RUN_SUITE)(
       expect(status.pending.some((p) => p.version === "1")).toBe(true);
     }, 60_000);
 
-    it("applyMigrations applies the pending V1; table exists in DB", async () => {
-      const result = await applyMigrations({
+    it("applySchemaMigrations applies the pending V1; table exists in DB", async () => {
+      const result = await applySchemaMigrations({
         instance: projectId,
         branch: branchName,
         projectDir,
@@ -153,8 +153,8 @@ describe.skipIf(!RUN_SUITE)(
       }
     }, 180_000);
 
-    it("migrationStatus reports current=1 and no pending after apply", async () => {
-      const status = await migrationStatus({
+    it("schemaMigrationStatus reports current=1 and no pending after apply", async () => {
+      const status = await schemaMigrationStatus({
         instance: projectId,
         branch: branchName,
         projectDir,

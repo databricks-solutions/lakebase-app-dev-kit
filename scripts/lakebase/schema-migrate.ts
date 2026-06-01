@@ -1,16 +1,16 @@
 // Schema migration primitives for Lakebase-paired projects (FEIP-7091).
 //
 // Four canonical operations:
-//   applyMigrations    – run pending forward migrations against a branch
-//   rollbackMigration  – undo applied migrations down to a target version
-//   migrationStatus    – report current applied version + pending migrations
-//   listMigrations     – enumerate available migration files (no DB needed)
+//   applySchemaMigrations    – run pending forward migrations against a branch
+//   rollbackSchemaMigration  – undo applied migrations down to a target version
+//   schemaMigrationStatus    – report current applied version + pending migrations
+//   listSchemaMigrations     – enumerate available migration files (no DB needed)
 //
 // Language dispatch: Python/Alembic, Java+Kotlin/Flyway, and Node/Knex
 // runners are all fully implemented (apply / status / list for all three;
 // rollback for Alembic + Knex). The original primitives lift (FEIP-7091)
 // shipped Flyway + Knex as stubs; they were completed alongside FEIP-7210
-// (adapter pattern) slices 2 + 3. listMigrations() is a pure file-scan
+// (adapter pattern) slices 2 + 3. listSchemaMigrations() is a pure file-scan
 // with no DB or runtime dependency.
 //
 // All primitives take explicit {instance, branch} args so headless agents
@@ -22,19 +22,19 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConnection } from "./get-connection.js";
 // Adapter modules auto-register on import; routing below uses
-// resolveAdapter() (FEIP-7210 slice 4). The legacy public API
-// (applyMigrations / rollbackMigration / migrationStatus /
-// listMigrations) is preserved as a thin shim over adapter calls.
+// resolveSchemaMigrationAdapter() (FEIP-7210 slice 4). The legacy public API
+// (applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus /
+// listSchemaMigrations) is preserved as a thin shim over adapter calls.
 import "./adapters/alembic-adapter.js";
 import "./adapters/flyway-adapter.js";
 import "./adapters/knex-adapter.js";
-import { resolveAdapter, type MigrationAdapterId } from "./migration-adapter.js";
+import { resolveSchemaMigrationAdapter, type SchemaMigrationAdapterId } from "./schema-migration-adapter.js";
 
-export type MigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
+export type SchemaMigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
 
-export type MigrationToolName = "flyway" | "alembic" | "knex";
+export type SchemaMigrationToolName = "flyway" | "alembic" | "knex";
 
-export interface MigrationFile {
+export interface SchemaMigrationFile {
   /** Stable identifier sortable in apply-order: Flyway `V<n>`, Alembic
    *  revision hash, Knex timestamp prefix. */
   version: string;
@@ -42,79 +42,79 @@ export interface MigrationFile {
   description: string;
   type: "SQL" | "Python" | "JavaScript" | "TypeScript";
   /** Tool that should run this file. */
-  tool: MigrationToolName;
+  tool: SchemaMigrationToolName;
 }
 
-export interface ListMigrationsArgs {
+export interface ListSchemaMigrationsArgs {
   /** Project root. Defaults to process.cwd(). */
   projectDir?: string;
   /** Override language detection. Defaults to auto-detect from project files. */
-  language?: MigrationLanguage;
+  language?: SchemaMigrationLanguage;
 }
 
-export interface AppliedMigration {
+export interface AppliedSchemaMigration {
   version: string;
   description: string;
   executionTimeMs?: number;
 }
 
-export interface ApplyMigrationsArgs {
+export interface ApplySchemaMigrationsArgs {
   instance: string;
   branch: string;
   projectDir?: string;
-  language?: MigrationLanguage;
+  language?: SchemaMigrationLanguage;
   database?: string;
   endpointName?: string;
 }
 
-export interface ApplyMigrationsResult {
-  applied: AppliedMigration[];
+export interface ApplySchemaMigrationsResult {
+  applied: AppliedSchemaMigration[];
   alreadyAtLatest: boolean;
-  tool: MigrationToolName;
+  tool: SchemaMigrationToolName;
 }
 
-export interface RollbackMigrationArgs {
+export interface RollbackSchemaMigrationArgs {
   instance: string;
   branch: string;
   /** Target version or revision to roll back to. For Alembic this can be a
    *  revision identifier ("ae103…") or a relative step ("-1"). */
   target: string;
   projectDir?: string;
-  language?: MigrationLanguage;
+  language?: SchemaMigrationLanguage;
   database?: string;
   endpointName?: string;
 }
 
-export interface RollbackMigrationResult {
-  rolledBack: AppliedMigration[];
-  tool: MigrationToolName;
+export interface RollbackSchemaMigrationResult {
+  rolledBack: AppliedSchemaMigration[];
+  tool: SchemaMigrationToolName;
 }
 
-export interface MigrationStatusArgs {
+export interface SchemaMigrationStatusArgs {
   instance: string;
   branch: string;
   projectDir?: string;
-  language?: MigrationLanguage;
+  language?: SchemaMigrationLanguage;
   database?: string;
   endpointName?: string;
 }
 
-export interface PendingMigration {
+export interface PendingSchemaMigration {
   version: string;
   filename: string;
   description: string;
 }
 
-export interface MigrationStatusResult {
+export interface SchemaMigrationStatusResult {
   current: string | undefined;
-  pending: PendingMigration[];
-  tool: MigrationToolName;
+  pending: PendingSchemaMigration[];
+  tool: SchemaMigrationToolName;
 }
 
-export class MigrationError extends Error {
+export class SchemaMigrationError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
     super(message);
-    this.name = "MigrationError";
+    this.name = "SchemaMigrationError";
   }
 }
 
@@ -123,7 +123,7 @@ export class MigrationError extends Error {
 /** Detect the project language from filesystem markers. Mirrors the
  *  detection in templates/project/common/scripts/flyway-migrate.sh so the
  *  kit primitive and the bundled hook agree on which tool to run. */
-export function detectLanguage(projectDir: string): MigrationLanguage {
+export function detectLanguage(projectDir: string): SchemaMigrationLanguage {
   if (fs.existsSync(path.join(projectDir, "pom.xml"))) {
     // pom.xml present, default to "java"; kotlin still uses pom + Flyway.
     return "java";
@@ -138,7 +138,7 @@ export function detectLanguage(projectDir: string): MigrationLanguage {
   if (fs.existsSync(path.join(projectDir, "package.json"))) {
     return "nodejs";
   }
-  throw new MigrationError(
+  throw new SchemaMigrationError(
     `Could not detect project language in ${projectDir}. ` +
       `Expected one of: pom.xml (java/kotlin), pyproject.toml or alembic.ini (python), package.json (nodejs). ` +
       `Pass {language} explicitly to override.`
@@ -146,7 +146,7 @@ export function detectLanguage(projectDir: string): MigrationLanguage {
 }
 
 /** Map a language to the migration tool the kit invokes for it. */
-export function toolForLanguage(language: MigrationLanguage): MigrationToolName {
+export function toolForLanguage(language: SchemaMigrationLanguage): SchemaMigrationToolName {
   switch (language) {
     case "java":
     case "kotlin":
@@ -158,7 +158,7 @@ export function toolForLanguage(language: MigrationLanguage): MigrationToolName 
   }
 }
 
-// ---- listMigrations: pure file-scan (works for all three languages) ------
+// ---- listSchemaMigrations: pure file-scan (works for all three languages) ------
 //
 // Stays sync (no I/O beyond fs.readdirSync) to preserve the legacy public
 // API shape. Adapter `list()` methods are Promise-returning by interface;
@@ -168,7 +168,7 @@ export function toolForLanguage(language: MigrationLanguage): MigrationToolName 
 /** Enumerate migration files in a project. No DB connection required.
  *  Order is apply-order (V1, V2, ... for Flyway; chronological for Alembic
  *  via alembic.ini-resolved order; timestamp-ascending for Knex). */
-export function listMigrations(args: ListMigrationsArgs = {}): MigrationFile[] {
+export function listSchemaMigrations(args: ListSchemaMigrationsArgs = {}): SchemaMigrationFile[] {
   const projectDir = args.projectDir ?? process.cwd();
   const language = args.language ?? detectLanguage(projectDir);
   const tool = toolForLanguage(language);
@@ -183,7 +183,7 @@ export function listMigrations(args: ListMigrationsArgs = {}): MigrationFile[] {
   }
 }
 
-function listFlywayMigrations(projectDir: string): MigrationFile[] {
+function listFlywayMigrations(projectDir: string): SchemaMigrationFile[] {
   // Flyway convention: src/main/resources/db/migration/V<n>__<desc>.sql
   const dir = path.join(projectDir, "src", "main", "resources", "db", "migration");
   if (!fs.existsSync(dir)) return [];
@@ -198,7 +198,7 @@ function listFlywayMigrations(projectDir: string): MigrationFile[] {
     .sort((a, b) => versionCompare(a.version, b.version));
 }
 
-function listAlembicMigrations(projectDir: string): MigrationFile[] {
+function listAlembicMigrations(projectDir: string): SchemaMigrationFile[] {
   const candidates = [
     path.join(projectDir, "migrations", "versions"),
     path.join(projectDir, "alembic", "versions"),
@@ -217,7 +217,7 @@ function listAlembicMigrations(projectDir: string): MigrationFile[] {
     .sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
-function listKnexMigrations(projectDir: string): MigrationFile[] {
+function listKnexMigrations(projectDir: string): SchemaMigrationFile[] {
   const dir = path.join(projectDir, "migrations");
   if (!fs.existsSync(dir)) return [];
   const files = fs
@@ -272,22 +272,22 @@ async function dsnFor(args: {
 
 // ---- Adapter routing -----------------------------------------------------
 //
-// Public API (applyMigrations / rollbackMigration / migrationStatus /
-// listMigrations) is preserved verbatim for backward compatibility. It
+// Public API (applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus /
+// listSchemaMigrations) is preserved verbatim for backward compatibility. It
 // resolves the adapter (auto-detect or via the `language` override) and
 // translates adapter results back to the legacy shapes.
 
 /** Resolve an adapter, honoring an explicit language override. */
-function adapterFor(projectDir: string, language?: MigrationLanguage) {
-  const override: MigrationAdapterId | undefined = language
+function adapterFor(projectDir: string, language?: SchemaMigrationLanguage) {
+  const override: SchemaMigrationAdapterId | undefined = language
     ? toolForLanguage(language)
     : undefined;
-  return resolveAdapter(projectDir, override);
+  return resolveSchemaMigrationAdapter(projectDir, override);
 }
 
-// ---- applyMigrations -----------------------------------------------------
+// ---- applySchemaMigrations -----------------------------------------------------
 
-export async function applyMigrations(args: ApplyMigrationsArgs): Promise<ApplyMigrationsResult> {
+export async function applySchemaMigrations(args: ApplySchemaMigrationsArgs): Promise<ApplySchemaMigrationsResult> {
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.apply({
@@ -298,22 +298,22 @@ export async function applyMigrations(args: ApplyMigrationsArgs): Promise<ApplyM
     endpointName: args.endpointName,
   });
   if (r.status === "error") {
-    throw new MigrationError(r.error ?? "apply failed");
+    throw new SchemaMigrationError(r.error ?? "apply failed");
   }
   return {
     applied: r.applied_migrations,
     alreadyAtLatest: r.status === "noop",
-    tool: adapter.id as MigrationToolName,
+    tool: adapter.id as SchemaMigrationToolName,
   };
 }
 
-// ---- rollbackMigration ---------------------------------------------------
+// ---- rollbackSchemaMigration ---------------------------------------------------
 
-export async function rollbackMigration(args: RollbackMigrationArgs): Promise<RollbackMigrationResult> {
+export async function rollbackSchemaMigration(args: RollbackSchemaMigrationArgs): Promise<RollbackSchemaMigrationResult> {
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   if (!adapter.rollback) {
-    throw new MigrationError(
+    throw new SchemaMigrationError(
       `Adapter '${adapter.id}' does not support rollback. ` +
         `(Flyway Community Edition has no \`undo\`; other adapters may omit rollback by design.)`
     );
@@ -327,17 +327,17 @@ export async function rollbackMigration(args: RollbackMigrationArgs): Promise<Ro
     endpointName: args.endpointName,
   });
   if (r.status === "error") {
-    throw new MigrationError(r.error ?? "rollback failed");
+    throw new SchemaMigrationError(r.error ?? "rollback failed");
   }
   return {
     rolledBack: r.rolled_back,
-    tool: adapter.id as MigrationToolName,
+    tool: adapter.id as SchemaMigrationToolName,
   };
 }
 
-// ---- migrationStatus -----------------------------------------------------
+// ---- schemaMigrationStatus -----------------------------------------------------
 
-export async function migrationStatus(args: MigrationStatusArgs): Promise<MigrationStatusResult> {
+export async function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Promise<SchemaMigrationStatusResult> {
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.status({
@@ -348,11 +348,11 @@ export async function migrationStatus(args: MigrationStatusArgs): Promise<Migrat
     endpointName: args.endpointName,
   });
   if (r.status === "error") {
-    throw new MigrationError(r.error ?? "status failed");
+    throw new SchemaMigrationError(r.error ?? "status failed");
   }
   return {
     current: r.applied_version ?? undefined,
     pending: r.pending,
-    tool: adapter.id as MigrationToolName,
+    tool: adapter.id as SchemaMigrationToolName,
   };
 }

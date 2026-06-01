@@ -26,13 +26,13 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
 import {
-  MigrationError,
-  type ApplyMigrationsResult,
-  type RollbackMigrationResult,
-  type MigrationStatusResult,
-  type AppliedMigration,
-  type PendingMigration,
-} from "../migrate.js";
+  SchemaMigrationError,
+  type ApplySchemaMigrationsResult,
+  type RollbackSchemaMigrationResult,
+  type SchemaMigrationStatusResult,
+  type AppliedSchemaMigration,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 
 interface FlywayCtx {
   projectDir: string;
@@ -87,7 +87,7 @@ function runFlyway(ctx: FlywayCtx, args: string[]): Promise<FlywayRun> {
     });
     child.on("error", (err) => {
       reject(
-        new MigrationError(
+        new SchemaMigrationError(
           `Could not spawn flyway. Is the Flyway Community CLI installed and on PATH? ${err.message}`,
           err
         )
@@ -98,7 +98,7 @@ function runFlyway(ctx: FlywayCtx, args: string[]): Promise<FlywayRun> {
         resolve({ stdout, stderr });
       } else {
         reject(
-          new MigrationError(
+          new SchemaMigrationError(
             `flyway ${args.join(" ")} exited with code ${code}.\n` +
               `stdout: ${stdout}\nstderr: ${stderr}`
           )
@@ -141,19 +141,19 @@ function parseFlywayJson(stdout: string): FlywayJson {
   // -outputType=json is set in older versions. Find the first '{'.
   const start = stdout.indexOf("{");
   if (start === -1) {
-    throw new MigrationError(`flyway JSON output missing: ${stdout.slice(0, 200)}`);
+    throw new SchemaMigrationError(`flyway JSON output missing: ${stdout.slice(0, 200)}`);
   }
   try {
     return JSON.parse(stdout.slice(start)) as FlywayJson;
   } catch (err) {
-    throw new MigrationError(
+    throw new SchemaMigrationError(
       `flyway JSON parse failed: ${err instanceof Error ? err.message : String(err)}.\n` +
         `Body (first 400 chars): ${stdout.slice(start, start + 400)}`
     );
   }
 }
 
-export async function applyFlyway(ctx: FlywayCtx): Promise<ApplyMigrationsResult> {
+export async function applyFlyway(ctx: FlywayCtx): Promise<ApplySchemaMigrationsResult> {
   // Lakebase's default Postgres database always has a non-empty `public`
   // schema (system tables, extensions). Without these flags Flyway 9+
   // refuses to migrate against it: `NON_EMPTY_SCHEMA_WITHOUT_SCHEMA_HISTORY_TABLE`.
@@ -169,7 +169,7 @@ export async function applyFlyway(ctx: FlywayCtx): Promise<ApplyMigrationsResult
   const json = parseFlywayJson(stdout);
   const entries = json.migrations ?? [];
 
-  const applied: AppliedMigration[] = [];
+  const applied: AppliedSchemaMigration[] = [];
   for (const m of entries) {
     if (m.category === "INIT") continue; // baseline placeholder
     if (m.state && m.state !== "SUCCESS") continue;
@@ -190,21 +190,21 @@ export async function applyFlyway(ctx: FlywayCtx): Promise<ApplyMigrationsResult
 
 export async function rollbackFlyway(
   _ctx: FlywayCtx & { target: string }
-): Promise<RollbackMigrationResult> {
-  throw new MigrationError(
+): Promise<RollbackSchemaMigrationResult> {
+  throw new SchemaMigrationError(
     "Flyway Community Edition does not support undo / rollback. " +
       "Roll forward with a compensating migration. " +
       "(Flyway Teams Edition has `flyway undo`, but the kit targets Community.)"
   );
 }
 
-export async function statusFlyway(ctx: FlywayCtx): Promise<MigrationStatusResult> {
+export async function statusFlyway(ctx: FlywayCtx): Promise<SchemaMigrationStatusResult> {
   const { stdout } = await runFlyway(ctx, ["info"]);
   const json = parseFlywayJson(stdout);
   const entries = json.migrations ?? [];
 
   let current: string | undefined;
-  const pending: PendingMigration[] = [];
+  const pending: PendingSchemaMigration[] = [];
 
   for (const m of entries) {
     if (!m.version) continue;

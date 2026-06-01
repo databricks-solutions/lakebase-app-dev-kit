@@ -1,7 +1,7 @@
-// KnexAdapter: MigrationAdapter implementation for Node.js projects
+// KnexAdapter: SchemaMigrationAdapter implementation for Node.js projects
 // using Knex. FEIP-7210 slice 3.
 //
-// Wraps scripts/lakebase/migrate-runners/knex.ts, which shells out to
+// Wraps scripts/lakebase/schema-migrate-runners/knex.ts, which shells out to
 // `npx knex` and derives results via before/after `migrate:status`
 // state diff. rollback is implemented because Knex supports it
 // natively. baseline is omitted: Knex has no native baseline concept.
@@ -14,20 +14,20 @@ import {
   applyKnex,
   rollbackKnex,
   statusKnex,
-} from "../migrate-runners/knex.js";
-import type { AppliedMigration, MigrationFile, PendingMigration } from "../migrate.js";
+} from "../schema-migrate-runners/knex.js";
+import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
 import {
-  registerAdapter,
+  registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
-  type MigrationAdapter,
+  type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
   type StatusArgs,
   type StatusResult,
-} from "../migration-adapter.js";
+} from "../schema-migration-adapter.js";
 
 async function buildDsn(args: {
   instance: string;
@@ -47,7 +47,7 @@ async function buildDsn(args: {
 
 const KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 
-function listKnexFiles(projectDir: string): MigrationFile[] {
+function listKnexFiles(projectDir: string): SchemaMigrationFile[] {
   // Knex convention: ./migrations/*.{js,ts} with a numeric timestamp
   // prefix that doubles as the version identifier.
   const dir = path.join(projectDir, "migrations");
@@ -67,7 +67,7 @@ function listKnexFiles(projectDir: string): MigrationFile[] {
     .sort((a, b) => a.version.localeCompare(b.version));
 }
 
-export const KnexAdapter: MigrationAdapter = {
+export const KnexAdapter: SchemaMigrationAdapter = {
   id: "knex",
   languages: ["nodejs"],
 
@@ -86,7 +86,7 @@ export const KnexAdapter: MigrationAdapter = {
     try {
       const legacy = await applyKnex({ projectDir: args.projectDir, dsn });
       return {
-        applied_migrations: legacy.applied as AppliedMigration[],
+        applied_migrations: legacy.applied as AppliedSchemaMigration[],
         status: legacy.alreadyAtLatest ? "noop" : "ok",
         tool_specific: {
           alreadyAtLatest: legacy.alreadyAtLatest,
@@ -111,7 +111,7 @@ export const KnexAdapter: MigrationAdapter = {
         target: args.target,
       });
       return {
-        rolled_back: legacy.rolledBack as AppliedMigration[],
+        rolled_back: legacy.rolledBack as AppliedSchemaMigration[],
         status: legacy.rolledBack.length === 0 ? "noop" : "ok",
         tool_specific: { tool: legacy.tool },
       };
@@ -130,7 +130,7 @@ export const KnexAdapter: MigrationAdapter = {
       const legacy = await statusKnex({ projectDir: args.projectDir, dsn });
       return {
         applied_version: legacy.current ?? null,
-        pending: legacy.pending as PendingMigration[],
+        pending: legacy.pending as PendingSchemaMigration[],
         applied: [],
         status: "ok",
         tool_specific: { tool: legacy.tool },
@@ -156,4 +156,4 @@ export const KnexAdapter: MigrationAdapter = {
 };
 
 // Auto-register on import.
-registerAdapter(KnexAdapter);
+registerSchemaMigrationAdapter(KnexAdapter);

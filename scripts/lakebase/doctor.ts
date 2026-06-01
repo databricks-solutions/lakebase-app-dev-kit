@@ -9,7 +9,7 @@ import { exec } from "../util/exec.js";
 import { resolveDatabricksHost } from "./databricks-host.js";
 import { listBranches } from "./branch-utils.js";
 import { verifyHooks } from "./project-verify.js";
-import { detectLanguage } from "./migrate.js";
+import { detectLanguage } from "./schema-migrate.js";
 import { detectWorkflowDrift } from "./workflow-drift.js";
 
 export type CheckStatus = "ok" | "warn" | "fail" | "skip";

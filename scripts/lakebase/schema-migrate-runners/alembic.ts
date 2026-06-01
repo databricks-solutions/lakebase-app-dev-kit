@@ -18,13 +18,13 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  MigrationError,
-  type ApplyMigrationsResult,
-  type RollbackMigrationResult,
-  type MigrationStatusResult,
-  type AppliedMigration,
-  type PendingMigration,
-} from "../migrate.js";
+  SchemaMigrationError,
+  type ApplySchemaMigrationsResult,
+  type RollbackSchemaMigrationResult,
+  type SchemaMigrationStatusResult,
+  type AppliedSchemaMigration,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 
 interface RunnerCtx {
   projectDir: string;
@@ -72,7 +72,7 @@ function runAlembic(ctx: RunnerCtx, args: string[]): Promise<{ stdout: string; s
     });
     child.on("error", (err) => {
       reject(
-        new MigrationError(
+        new SchemaMigrationError(
           `Could not spawn alembic. Is it installed and on PATH? ${err.message}`,
           err
         )
@@ -83,7 +83,7 @@ function runAlembic(ctx: RunnerCtx, args: string[]): Promise<{ stdout: string; s
         resolve({ stdout, stderr });
       } else {
         reject(
-          new MigrationError(
+          new SchemaMigrationError(
             `alembic ${args.join(" ")} exited with code ${code}.\nstdout: ${stdout}\nstderr: ${stderr}`
           )
         );
@@ -111,9 +111,9 @@ async function getHeadRevision(ctx: RunnerCtx): Promise<string | undefined> {
  * "->target, description" half of each line, newest-first as alembic
  * emits them.
  */
-async function listHistory(ctx: RunnerCtx, range: string): Promise<AppliedMigration[]> {
+async function listHistory(ctx: RunnerCtx, range: string): Promise<AppliedSchemaMigration[]> {
   const { stdout } = await runAlembic(ctx, ["history", "-r", range]);
-  const out: AppliedMigration[] = [];
+  const out: AppliedSchemaMigration[] = [];
   for (const line of stdout.split(/\r?\n/)) {
     const m = line.match(/^(?:<base>|[a-f0-9]+)\s*->\s*([a-f0-9]+)(?:\s*\(head\))?,\s*(.*)$/);
     if (m) out.push({ version: m[1].trim(), description: m[2].trim() });
@@ -121,7 +121,7 @@ async function listHistory(ctx: RunnerCtx, range: string): Promise<AppliedMigrat
   return out;
 }
 
-export async function applyAlembic(ctx: RunnerCtx): Promise<ApplyMigrationsResult> {
+export async function applyAlembic(ctx: RunnerCtx): Promise<ApplySchemaMigrationsResult> {
   const before = await getCurrentRevision(ctx);
   await runAlembic(ctx, ["upgrade", "head"]);
   const after = await getCurrentRevision(ctx);
@@ -142,7 +142,7 @@ export async function applyAlembic(ctx: RunnerCtx): Promise<ApplyMigrationsResul
 
 export async function rollbackAlembic(
   ctx: RunnerCtx & { target: string }
-): Promise<RollbackMigrationResult> {
+): Promise<RollbackSchemaMigrationResult> {
   const before = await getCurrentRevision(ctx);
   if (!before) {
     // Nothing applied; nothing to roll back.
@@ -162,11 +162,11 @@ export async function rollbackAlembic(
   return { rolledBack, tool: "alembic" };
 }
 
-export async function statusAlembic(ctx: RunnerCtx): Promise<MigrationStatusResult> {
+export async function statusAlembic(ctx: RunnerCtx): Promise<SchemaMigrationStatusResult> {
   const current = await getCurrentRevision(ctx);
   const head = await getHeadRevision(ctx);
 
-  const pending: PendingMigration[] = [];
+  const pending: PendingSchemaMigration[] = [];
   if (head && head !== current) {
     const range = current ? `${current}:head` : `base:head`;
     const inRange = await listHistory(ctx, range);

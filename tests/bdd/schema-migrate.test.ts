@@ -1,8 +1,8 @@
 // Unit BDD tests for the migrate primitives (FEIP-7091).
 //
 // These tests cover the dispatch logic and the file-scan implementation
-// of listMigrations() for all three languages, using temp project
-// directories. The applyMigrations / rollbackMigration / migrationStatus
+// of listSchemaMigrations() for all three languages, using temp project
+// directories. The applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus
 // primitives are exercised end-to-end against a real Lakebase branch in
 // migrate-live.test.ts (gated on LAKEBASE_TEST_E2E=1).
 //
@@ -14,10 +14,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   detectLanguage,
-  listMigrations,
+  listSchemaMigrations,
   toolForLanguage,
-  MigrationError,
-} from "../../scripts/lakebase/migrate.js";
+  SchemaMigrationError,
+} from "../../scripts/lakebase/schema-migrate.js";
 
 function mkTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "migrate-bdd-"));
@@ -83,12 +83,12 @@ describe("detectLanguage", () => {
   });
 
   it("throws when no marker found", () => {
-    expect(() => detectLanguage(dir)).toThrow(MigrationError);
+    expect(() => detectLanguage(dir)).toThrow(SchemaMigrationError);
     expect(() => detectLanguage(dir)).toThrow(/Could not detect project language/);
   });
 });
 
-describe("listMigrations: flyway (java)", () => {
+describe("listSchemaMigrations: flyway (java)", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkTempDir();
@@ -106,14 +106,14 @@ describe("listMigrations: flyway (java)", () => {
   });
 
   it("enumerates V*.sql files and sorts numerically (V10 after V2)", () => {
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files.map((f) => f.version)).toEqual(["1", "2", "10"]);
     expect(files.every((f) => f.tool === "flyway")).toBe(true);
     expect(files.every((f) => f.type === "SQL")).toBe(true);
   });
 
   it("description is the slug with underscores replaced by spaces", () => {
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files[0].description).toBe("init");
     expect(files[1].description).toBe("add y");
     expect(files[2].description).toBe("add z");
@@ -121,11 +121,11 @@ describe("listMigrations: flyway (java)", () => {
 
   it("returns empty when the migration dir is missing", () => {
     rm(path.join(dir, "src", "main", "resources", "db", "migration"));
-    expect(listMigrations({ projectDir: dir })).toEqual([]);
+    expect(listSchemaMigrations({ projectDir: dir })).toEqual([]);
   });
 });
 
-describe("listMigrations: alembic (python)", () => {
+describe("listSchemaMigrations: alembic (python)", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkTempDir();
@@ -141,7 +141,7 @@ describe("listMigrations: alembic (python)", () => {
   });
 
   it("enumerates *.py files in migrations/versions/, skips __init__", () => {
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files.map((f) => f.filename).sort()).toEqual([
       "ae103abc_init.py",
       "bf204def_add_users.py",
@@ -151,7 +151,7 @@ describe("listMigrations: alembic (python)", () => {
   });
 
   it("parses version (revid before underscore) and description", () => {
-    const files = listMigrations({ projectDir: dir }).sort((a, b) =>
+    const files = listSchemaMigrations({ projectDir: dir }).sort((a, b) =>
       a.filename.localeCompare(b.filename)
     );
     expect(files[0].version).toBe("ae103abc");
@@ -165,13 +165,13 @@ describe("listMigrations: alembic (python)", () => {
     const versions = path.join(dir, "alembic", "versions");
     fs.mkdirSync(versions, { recursive: true });
     fs.writeFileSync(path.join(versions, "cc305ghi_alt.py"), "");
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files).toHaveLength(1);
     expect(files[0].filename).toBe("cc305ghi_alt.py");
   });
 });
 
-describe("listMigrations: knex (nodejs)", () => {
+describe("listSchemaMigrations: knex (nodejs)", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkTempDir();
@@ -187,7 +187,7 @@ describe("listMigrations: knex (nodejs)", () => {
   });
 
   it("enumerates timestamped *.js and *.ts files, sorts by timestamp", () => {
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files.map((f) => f.filename)).toEqual([
       "20260101120000_init.js",
       "20260102140000_add_users.ts",
@@ -200,13 +200,13 @@ describe("listMigrations: knex (nodejs)", () => {
   });
 
   it("parses description from name slug", () => {
-    const files = listMigrations({ projectDir: dir });
+    const files = listSchemaMigrations({ projectDir: dir });
     expect(files[0].description).toBe("init");
     expect(files[1].description).toBe("add users");
   });
 });
 
-describe("listMigrations: language override", () => {
+describe("listSchemaMigrations: language override", () => {
   let dir: string;
   beforeEach(() => {
     dir = mkTempDir();
@@ -220,8 +220,8 @@ describe("listMigrations: language override", () => {
   });
 
   it("honors explicit language argument when detection would fail", () => {
-    expect(() => listMigrations({ projectDir: dir })).toThrow(MigrationError);
-    const files = listMigrations({ projectDir: dir, language: "python" });
+    expect(() => listSchemaMigrations({ projectDir: dir })).toThrow(SchemaMigrationError);
+    const files = listSchemaMigrations({ projectDir: dir, language: "python" });
     expect(files).toHaveLength(1);
     expect(files[0].tool).toBe("alembic");
   });
@@ -239,7 +239,7 @@ describe("flyway rollback + knex apply: error paths", () => {
   it("flyway rollback throws with the Flyway Community caveat", async () => {
     const dir = mkTempDir();
     try {
-      const { rollbackFlyway } = await import("../../scripts/lakebase/migrate-runners/flyway.js");
+      const { rollbackFlyway } = await import("../../scripts/lakebase/schema-migrate-runners/flyway.js");
       await expect(
         rollbackFlyway({ projectDir: dir, dsn: "x", target: "-1" })
       ).rejects.toThrow(/Flyway Community Edition does not support/);
@@ -248,11 +248,11 @@ describe("flyway rollback + knex apply: error paths", () => {
     }
   });
 
-  it("knex apply throws MigrationError when no knexfile is present", async () => {
+  it("knex apply throws SchemaMigrationError when no knexfile is present", async () => {
     const dir = mkTempDir();
     fs.writeFileSync(path.join(dir, "package.json"), "{}");
     try {
-      const { applyKnex } = await import("../../scripts/lakebase/migrate-runners/knex.js");
+      const { applyKnex } = await import("../../scripts/lakebase/schema-migrate-runners/knex.js");
       await expect(applyKnex({ projectDir: dir, dsn: "x" })).rejects.toThrow(/No knexfile found/);
     } finally {
       rm(dir);

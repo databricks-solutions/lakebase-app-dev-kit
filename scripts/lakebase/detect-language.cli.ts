@@ -19,7 +19,7 @@
 //         lakebase-detect-language)"
 //       echo "lang=$LANG" >> $GITHUB_OUTPUT
 
-import { detectLanguage } from "./migrate.js";
+import { detectLanguage } from "./schema-migrate.js";
 
 function parseProjectDir(argv: string[]): string {
   for (let i = 0; i < argv.length; i++) {

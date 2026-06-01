@@ -19,13 +19,13 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  MigrationError,
-  type ApplyMigrationsResult,
-  type RollbackMigrationResult,
-  type MigrationStatusResult,
-  type AppliedMigration,
-  type PendingMigration,
-} from "../migrate.js";
+  SchemaMigrationError,
+  type ApplySchemaMigrationsResult,
+  type RollbackSchemaMigrationResult,
+  type SchemaMigrationStatusResult,
+  type AppliedSchemaMigration,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 
 interface KnexCtx {
   projectDir: string;
@@ -48,7 +48,7 @@ function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr
     const knexfile = findKnexfile(ctx.projectDir);
     if (!knexfile) {
       reject(
-        new MigrationError(
+        new SchemaMigrationError(
           `No knexfile found in ${ctx.projectDir}. ` +
             `Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
         )
@@ -73,7 +73,7 @@ function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr
     });
     child.on("error", (err) => {
       reject(
-        new MigrationError(
+        new SchemaMigrationError(
           `Could not spawn knex via npx. Is Node installed and is 'knex' in the project's node_modules? ${err.message}`,
           err
         )
@@ -84,7 +84,7 @@ function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr
         resolve({ stdout, stderr });
       } else {
         reject(
-          new MigrationError(
+          new SchemaMigrationError(
             `knex ${args.join(" ")} exited with code ${code}.\nstdout: ${stdout}\nstderr: ${stderr}`
           )
         );
@@ -139,7 +139,7 @@ function parseKnexFilename(filename: string): { version: string; description: st
   return { version, description };
 }
 
-export async function applyKnex(ctx: KnexCtx): Promise<ApplyMigrationsResult> {
+export async function applyKnex(ctx: KnexCtx): Promise<ApplySchemaMigrationsResult> {
   const beforeOut = await runKnex(ctx, ["migrate:status"]);
   const before = parseKnexStatus(beforeOut.stdout);
   await runKnex(ctx, ["migrate:latest"]);
@@ -150,7 +150,7 @@ export async function applyKnex(ctx: KnexCtx): Promise<ApplyMigrationsResult> {
   if (newlyCompleted.length === 0) {
     return { applied: [], alreadyAtLatest: true, tool: "knex" };
   }
-  const applied: AppliedMigration[] = newlyCompleted.map((filename) => {
+  const applied: AppliedSchemaMigration[] = newlyCompleted.map((filename) => {
     const { version, description } = parseKnexFilename(filename);
     return { version, description };
   });
@@ -159,7 +159,7 @@ export async function applyKnex(ctx: KnexCtx): Promise<ApplyMigrationsResult> {
 
 export async function rollbackKnex(
   ctx: KnexCtx & { target: string }
-): Promise<RollbackMigrationResult> {
+): Promise<RollbackSchemaMigrationResult> {
   const beforeOut = await runKnex(ctx, ["migrate:status"]);
   const before = parseKnexStatus(beforeOut.stdout);
 
@@ -179,21 +179,21 @@ export async function rollbackKnex(
   const after = parseKnexStatus(afterOut.stdout);
 
   const rolledBackFiles = before.completed.filter((f) => !after.completed.includes(f));
-  const rolledBack: AppliedMigration[] = rolledBackFiles.map((filename) => {
+  const rolledBack: AppliedSchemaMigration[] = rolledBackFiles.map((filename) => {
     const { version, description } = parseKnexFilename(filename);
     return { version, description };
   });
   return { rolledBack, tool: "knex" };
 }
 
-export async function statusKnex(ctx: KnexCtx): Promise<MigrationStatusResult> {
+export async function statusKnex(ctx: KnexCtx): Promise<SchemaMigrationStatusResult> {
   const { stdout } = await runKnex(ctx, ["migrate:status"]);
   const { completed, pending } = parseKnexStatus(stdout);
   const current =
     completed.length > 0
       ? parseKnexFilename(completed[completed.length - 1]).version
       : undefined;
-  const pendingOut: PendingMigration[] = pending.map((filename) => {
+  const pendingOut: PendingSchemaMigration[] = pending.map((filename) => {
     const { version, description } = parseKnexFilename(filename);
     return { version, filename, description };
   });

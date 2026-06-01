@@ -1,4 +1,4 @@
-// FEIP-7210 slice 1: MigrationAdapter interface + registry contract.
+// FEIP-7210 slice 1: SchemaMigrationAdapter interface + registry contract.
 //
 // Types-only PR. Tests assert the registry shape + resolution logic so
 // later slices that register concrete adapters (Flyway / Alembic / Knex)
@@ -7,23 +7,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   _clearRegistryForTests,
-  getAdapter,
-  listAdapters,
-  registerAdapter,
-  resolveAdapter,
-  UnresolvedAdapterError,
+  getSchemaMigrationAdapter,
+  listSchemaMigrationAdapters,
+  registerSchemaMigrationAdapter,
+  resolveSchemaMigrationAdapter,
+  UnresolvedSchemaMigrationAdapterError,
   type ApplyResult,
   type BaselineResult,
   type ListResult,
-  type MigrationAdapter,
+  type SchemaMigrationAdapter,
   type RollbackResult,
   type StatusResult,
-} from "../../scripts/lakebase/migration-adapter";
+} from "../../scripts/lakebase/schema-migration-adapter";
 
 function fakeAdapter(
-  id: MigrationAdapter["id"],
+  id: SchemaMigrationAdapter["id"],
   detect: (projectDir: string) => boolean = () => false
-): MigrationAdapter {
+): SchemaMigrationAdapter {
   return {
     id,
     languages: [],
@@ -49,31 +49,31 @@ afterEach(() => {
 
 describe("migration-adapter: registry shape", () => {
   it("starts empty", () => {
-    expect(listAdapters()).toEqual([]);
+    expect(listSchemaMigrationAdapters()).toEqual([]);
   });
 
   it("register + get + list roundtrip", () => {
     const flyway = fakeAdapter("flyway");
-    registerAdapter(flyway);
-    expect(getAdapter("flyway")).toBe(flyway);
-    expect(listAdapters()).toEqual([flyway]);
+    registerSchemaMigrationAdapter(flyway);
+    expect(getSchemaMigrationAdapter("flyway")).toBe(flyway);
+    expect(listSchemaMigrationAdapters()).toEqual([flyway]);
   });
 
   it("re-registering an id overwrites the prior adapter (last write wins)", () => {
     const a = fakeAdapter("flyway");
     const b = fakeAdapter("flyway");
-    registerAdapter(a);
-    registerAdapter(b);
-    expect(getAdapter("flyway")).toBe(b);
-    expect(listAdapters()).toHaveLength(1);
+    registerSchemaMigrationAdapter(a);
+    registerSchemaMigrationAdapter(b);
+    expect(getSchemaMigrationAdapter("flyway")).toBe(b);
+    expect(listSchemaMigrationAdapters()).toHaveLength(1);
   });
 
   it("supports the four canonical ids: flyway, alembic, knex, custom", () => {
-    registerAdapter(fakeAdapter("flyway"));
-    registerAdapter(fakeAdapter("alembic"));
-    registerAdapter(fakeAdapter("knex"));
-    registerAdapter(fakeAdapter("custom"));
-    expect(listAdapters().map((a) => a.id).sort()).toEqual([
+    registerSchemaMigrationAdapter(fakeAdapter("flyway"));
+    registerSchemaMigrationAdapter(fakeAdapter("alembic"));
+    registerSchemaMigrationAdapter(fakeAdapter("knex"));
+    registerSchemaMigrationAdapter(fakeAdapter("custom"));
+    expect(listSchemaMigrationAdapters().map((a) => a.id).sort()).toEqual([
       "alembic",
       "custom",
       "flyway",
@@ -82,24 +82,24 @@ describe("migration-adapter: registry shape", () => {
   });
 });
 
-describe("migration-adapter: resolveAdapter explicit override", () => {
+describe("migration-adapter: resolveSchemaMigrationAdapter explicit override", () => {
   it("returns the registered adapter when the override matches", () => {
     const flyway = fakeAdapter("flyway");
-    registerAdapter(flyway);
-    expect(resolveAdapter("/any", "flyway")).toBe(flyway);
+    registerSchemaMigrationAdapter(flyway);
+    expect(resolveSchemaMigrationAdapter("/any", "flyway")).toBe(flyway);
   });
 
-  it("throws UnresolvedAdapterError when the override is not registered", () => {
-    registerAdapter(fakeAdapter("flyway"));
-    expect(() => resolveAdapter("/any", "alembic")).toThrow(UnresolvedAdapterError);
-    expect(() => resolveAdapter("/any", "alembic")).toThrow(/not a registered adapter/);
+  it("throws UnresolvedSchemaMigrationAdapterError when the override is not registered", () => {
+    registerSchemaMigrationAdapter(fakeAdapter("flyway"));
+    expect(() => resolveSchemaMigrationAdapter("/any", "alembic")).toThrow(UnresolvedSchemaMigrationAdapterError);
+    expect(() => resolveSchemaMigrationAdapter("/any", "alembic")).toThrow(/not a registered adapter/);
   });
 
   it("the error message lists the registered ids", () => {
-    registerAdapter(fakeAdapter("flyway"));
-    registerAdapter(fakeAdapter("alembic"));
+    registerSchemaMigrationAdapter(fakeAdapter("flyway"));
+    registerSchemaMigrationAdapter(fakeAdapter("alembic"));
     try {
-      resolveAdapter("/any", "knex");
+      resolveSchemaMigrationAdapter("/any", "knex");
     } catch (err) {
       expect((err as Error).message).toMatch(/flyway/);
       expect((err as Error).message).toMatch(/alembic/);
@@ -107,34 +107,34 @@ describe("migration-adapter: resolveAdapter explicit override", () => {
   });
 });
 
-describe("migration-adapter: resolveAdapter auto-detect", () => {
+describe("migration-adapter: resolveSchemaMigrationAdapter auto-detect", () => {
   it("returns the first adapter whose detect() returns true", () => {
     const flyway = fakeAdapter("flyway", () => false);
     const alembic = fakeAdapter("alembic", () => true);
-    registerAdapter(flyway);
-    registerAdapter(alembic);
-    expect(resolveAdapter("/any")).toBe(alembic);
+    registerSchemaMigrationAdapter(flyway);
+    registerSchemaMigrationAdapter(alembic);
+    expect(resolveSchemaMigrationAdapter("/any")).toBe(alembic);
   });
 
   it("returns the first match in registration order (stable for tie-breaks)", () => {
     const flyway = fakeAdapter("flyway", () => true);
     const alembic = fakeAdapter("alembic", () => true);
-    registerAdapter(flyway);
-    registerAdapter(alembic);
-    expect(resolveAdapter("/any")).toBe(flyway);
+    registerSchemaMigrationAdapter(flyway);
+    registerSchemaMigrationAdapter(alembic);
+    expect(resolveSchemaMigrationAdapter("/any")).toBe(flyway);
   });
 
-  it("throws UnresolvedAdapterError when no adapter detects + no override", () => {
-    registerAdapter(fakeAdapter("flyway", () => false));
-    expect(() => resolveAdapter("/any")).toThrow(UnresolvedAdapterError);
-    expect(() => resolveAdapter("/any")).toThrow(/Cannot resolve migration tool/);
+  it("throws UnresolvedSchemaMigrationAdapterError when no adapter detects + no override", () => {
+    registerSchemaMigrationAdapter(fakeAdapter("flyway", () => false));
+    expect(() => resolveSchemaMigrationAdapter("/any")).toThrow(UnresolvedSchemaMigrationAdapterError);
+    expect(() => resolveSchemaMigrationAdapter("/any")).toThrow(/Cannot resolve migration tool/);
   });
 
   it("error hint enumerates the registered adapters", () => {
-    registerAdapter(fakeAdapter("flyway", () => false));
-    registerAdapter(fakeAdapter("knex", () => false));
+    registerSchemaMigrationAdapter(fakeAdapter("flyway", () => false));
+    registerSchemaMigrationAdapter(fakeAdapter("knex", () => false));
     try {
-      resolveAdapter("/any");
+      resolveSchemaMigrationAdapter("/any");
     } catch (err) {
       const msg = (err as Error).message;
       expect(msg).toMatch(/migration_tool/);
@@ -147,13 +147,13 @@ describe("migration-adapter: resolveAdapter auto-detect", () => {
 describe("migration-adapter: optional capability protocol", () => {
   it("rollback + baseline are optional; absence is observable via property check", () => {
     const minimal = fakeAdapter("flyway"); // no rollback, no baseline
-    registerAdapter(minimal);
+    registerSchemaMigrationAdapter(minimal);
     expect(typeof minimal.rollback).toBe("undefined");
     expect(typeof minimal.baseline).toBe("undefined");
   });
 
   it("adapters can opt into rollback + baseline", () => {
-    const full: MigrationAdapter = {
+    const full: SchemaMigrationAdapter = {
       ...fakeAdapter("alembic"),
       rollback: async (): Promise<RollbackResult> => ({
         rolled_back: [],
@@ -164,7 +164,7 @@ describe("migration-adapter: optional capability protocol", () => {
         baseline_version: "0",
       }),
     };
-    registerAdapter(full);
+    registerSchemaMigrationAdapter(full);
     expect(typeof full.rollback).toBe("function");
     expect(typeof full.baseline).toBe("function");
   });
