@@ -163,7 +163,11 @@ const TOP_LEVEL_KEYS = [
   "experiments",
   "selection_log_recent",
   "open_smells",
+  "gates",
 ] as const;
+
+const GATE_NAMES = ["spec", "plan", "test_list", "promote"] as const;
+const GATE_SUMMARY_KEYS = ["status", "approver", "approved_at"] as const;
 
 const POINTER_KEYS = [
   "feature_id",
@@ -358,5 +362,82 @@ describe("feature-status N≥2 race snapshot", () => {
     for (const exp of s.experiments) {
       expect(Object.keys(exp).sort()).toEqual([...EXPERIMENT_KEYS].sort());
     }
+  });
+});
+
+describe("feature-status gates field (G8 / FEIP-7365)", () => {
+  it("returns null gates when the feature directory does not exist", () => {
+    // Fresh tdd dir with no feature subtree at all.
+    const s = getFeatureStatus(tdd, "F-NEVER-AUTHORED");
+    expect(s.gates).toBeNull();
+  });
+
+  it("returns the default-open shape when the feature dir exists but gates.json does not", () => {
+    stageN1Fixture();
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.gates).not.toBeNull();
+    for (const name of GATE_NAMES) {
+      expect(s.gates![name].status).toBe("open");
+      expect(s.gates![name].approver).toBeNull();
+      expect(s.gates![name].approved_at).toBeNull();
+    }
+  });
+
+  it("surfaces approved gate state when approveGate has been called", async () => {
+    stageN1Fixture();
+    const { approveGate } = await import("../../scripts/tdd/approve-gate");
+    approveGate({
+      featureId: FEATURE_ID,
+      gate: "spec",
+      approver: "po@example.com",
+      hitlApproved: true,
+      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      tddDir: tdd,
+      now: () => new Date("2026-05-31T20:00:00Z"),
+      writeSelectionLog: false,
+    });
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.gates!.spec.status).toBe("approved");
+    expect(s.gates!.spec.approver).toBe("po@example.com");
+    expect(s.gates!.spec.approved_at).toBe("2026-05-31T20:00:00.000Z");
+    expect(s.gates!.plan.status).toBe("open");
+  });
+
+  it("each gate summary entry has exactly the documented keys", () => {
+    stageN1Fixture();
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.gates).not.toBeNull();
+    for (const name of GATE_NAMES) {
+      expect(Object.keys(s.gates![name]).sort()).toEqual(
+        [...GATE_SUMMARY_KEYS].sort()
+      );
+    }
+  });
+
+  it("renders a Gates section listing all four gates", () => {
+    stageN1Fixture();
+    const text = renderFeatureStatus(getFeatureStatus(tdd, FEATURE_ID));
+    expect(text).toMatch(/Gates:/);
+    expect(text).toMatch(/spec\s+open/);
+    expect(text).toMatch(/plan\s+open/);
+    expect(text).toMatch(/test_list\s+open/);
+    expect(text).toMatch(/promote\s+open/);
+  });
+
+  it("renders approver + approved_at when a gate is approved", async () => {
+    stageN1Fixture();
+    const { approveGate } = await import("../../scripts/tdd/approve-gate");
+    approveGate({
+      featureId: FEATURE_ID,
+      gate: "plan",
+      approver: "po@example.com",
+      hitlApproved: true,
+      artifactInputs: { "plan.json": "{}" },
+      tddDir: tdd,
+      now: () => new Date("2026-05-31T21:00:00Z"),
+      writeSelectionLog: false,
+    });
+    const text = renderFeatureStatus(getFeatureStatus(tdd, FEATURE_ID));
+    expect(text).toMatch(/plan\s+approved @ 2026-05-31T21:00:00\.000Z by po@example\.com/);
   });
 });
