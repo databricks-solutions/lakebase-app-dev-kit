@@ -65,11 +65,11 @@
 #   Kit users      set LAKEBASE_KIT_* in their app's env / shell (substrate
 #                  behavior: registries, TTL caps, timeouts).
 #   Contributors   set BOTH LAKEBASE_KIT_* + LAKEBASE_TEST_* in
-#                  .env.local.config (gitignored, sourced below). One file
+#                  .env.local.test.config (gitignored, sourced below). One file
 #                  per machine; no per-flag duplication.
 # Per-run choices (which project, which branch, whether to teardown) stay
 # as CLI flags above. Everything else (database name, GitHub owner, TTL
-# overrides) lives in .env.local.config; you set it once.
+# overrides) lives in .env.local.test.config; you set it once.
 #
 # What this script gates on (substrate convention):
 #   LAKEBASE_TEST_NO_TEARDOWN=1 is set by default. The orchestrator-level
@@ -116,7 +116,7 @@ while [[ $# -gt 0 ]]; do
     --no-github-runner)   INCLUDE_GITHUB_RUNNER=0; shift ;;
     --no-migrate-tools)   INCLUDE_MIGRATE_TOOLS=0; shift ;;
     --database|--feature-ttl-days|--github-owner)
-      red "$1 was removed: set LAKEBASE_TEST_DATABASE / LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS / LAKEBASE_TEST_GITHUB_OWNER in .env.local.config instead."
+      red "$1 was removed: set LAKEBASE_TEST_DATABASE / LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS / LAKEBASE_TEST_GITHUB_OWNER in .env.local.test.config instead."
       exit 2
       ;;
     --help|-h)
@@ -145,21 +145,21 @@ if [[ -z "$PROFILE" ]]; then
   exit 2
 fi
 
-# Load .env.template.config (public defaults, committed) then
-# .env.local.config (local overrides, gitignored). Both use `export
+# Load .env.template.test.config (public defaults, committed) then
+# .env.local.test.config (local overrides, gitignored). Both use `export
 # VAR=value` so values propagate to child processes (npx vitest, etc.).
 # Variables passed inline at script invocation are stomped by the
 # template; if you need an invocation-time override, set it in
-# .env.local.config or pass via the script's --flags.
-if [[ -f "$REPO_ROOT/.env.template.config" ]]; then
-  blue "==> Sourcing .env.template.config (public defaults)"
+# .env.local.test.config or pass via the script's --flags.
+if [[ -f "$REPO_ROOT/.env.template.test.config" ]]; then
+  blue "==> Sourcing .env.template.test.config (public defaults)"
   # shellcheck source=/dev/null
-  . "$REPO_ROOT/.env.template.config"
+  . "$REPO_ROOT/.env.template.test.config"
 fi
-if [[ -f "$REPO_ROOT/.env.local.config" ]]; then
-  blue "==> Sourcing .env.local.config (local overrides)"
+if [[ -f "$REPO_ROOT/.env.local.test.config" ]]; then
+  blue "==> Sourcing .env.local.test.config (local overrides)"
   # shellcheck source=/dev/null
-  . "$REPO_ROOT/.env.local.config"
+  . "$REPO_ROOT/.env.local.test.config"
 fi
 
 blue "==> Resolving workspace host from profile '$PROFILE'"
@@ -284,7 +284,7 @@ export LAKEBASE_TEST_PROFILE="$PROFILE"
 export LAKEBASE_TEST_COMPARISON_BRANCH="${LAKEBASE_TEST_COMPARISON_BRANCH:-$BRANCH}"
 # LAKEBASE_TEST_DATABASE, LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS,
 # LAKEBASE_TEST_GITHUB_OWNER: all read from the caller's env (sourced from
-# .env.local.config by the kit's entry point). Set them there once per
+# .env.local.test.config by the kit's entry point). Set them there once per
 # machine; no per-flag duplication in this script.
 if [[ -n "${LAKEBASE_TEST_DATABASE:-}" ]]; then
   green "  LAKEBASE_TEST_DATABASE=$LAKEBASE_TEST_DATABASE"
@@ -296,7 +296,7 @@ if [[ -n "${LAKEBASE_TEST_GITHUB_OWNER:-}" ]]; then
   green "  LAKEBASE_TEST_GITHUB_OWNER=$LAKEBASE_TEST_GITHUB_OWNER  (unlocks gates-state-machine-e2e-live + lakebase-pr-cli-live)"
 else
   yellow "  LAKEBASE_TEST_GITHUB_OWNER unset  (gates-state-machine-e2e-live + lakebase-pr-cli-live will skip)"
-  yellow "    Set in .env.local.config to unlock those suites."
+  yellow "    Set in .env.local.test.config to unlock those suites."
 fi
 # Unlock the live Initializr fetch + the MCP peer-dep integration check.
 # Both are network/integration-side and the gate is just a "yes please".

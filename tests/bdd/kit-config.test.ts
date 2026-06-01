@@ -36,7 +36,7 @@ const KIT_ENV_VARS = [
 // Load kit-config under a controlled env. The `overrides` map is the
 // only kit env active during module init; every other LAKEBASE_KIT_* is
 // scrubbed so the documented-default branch runs deterministically even
-// when the surrounding process inherits values (e.g. .env.local.config
+// when the surrounding process inherits values (e.g. .env.local.test.config
 // sourced by run-all-live-tests.sh).
 async function loadKitConfig(overrides: Record<string, string | undefined> = {}) {
   const saved: Record<string, string | undefined> = {};

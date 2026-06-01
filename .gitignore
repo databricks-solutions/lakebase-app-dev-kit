@@ -10,7 +10,8 @@ dist/
 .env
 .env.*
 !.env.example
-!.env.template.config
+!.env.kit.example
+!.env.template.test.config
 *.vsix
 *.log
 coverage/

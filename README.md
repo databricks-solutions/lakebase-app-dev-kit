@@ -45,7 +45,7 @@ Two narrow auth seams, both enforced by CI grep guards:
 - **GitHub CLI (`gh`)** authenticated, for the FEIP-7138 self-hosted-runner live test (opt out via `--no-github-runner` if you don't need it)
 - **JDK 17+** for the migrate-live-flyway live test (Flyway CLI itself is auto-downloaded by the live driver if not already on PATH)
 
-Contributors should also read [CONTRIBUTING.md](CONTRIBUTING.md) for the full live-test prerequisites + the `.env.template.config` / `.env.local.config` configuration pattern.
+Contributors should also read [CONTRIBUTING.md](CONTRIBUTING.md) for the full live-test prerequisites + the `.env.template.test.config` / `.env.local.test.config` configuration pattern.
 
 ### For agent use (running `node scripts/lakebase/<verb>.js` directly)
 

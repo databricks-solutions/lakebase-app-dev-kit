@@ -34,7 +34,7 @@ beforeEach(() => {
 // Asserting hardcoded numeric TTLs would conflate that contract with the
 // "PSA defaults are 30/14/14/7 days" contract (already covered in
 // kit-config.test.ts). We derive expected values from KIT_TIMEOUTS so the
-// test stays correct when .env.local.config tightens a tier's TTL cap.
+// test stays correct when .env.local.test.config tightens a tier's TTL cap.
 
 describe("convention-branches: default tier values", () => {
   it("createFeatureBranch defaults parentBranch=staging, ttl from KIT_TIMEOUTS", async () => {

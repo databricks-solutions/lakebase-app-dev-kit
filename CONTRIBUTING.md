@@ -30,10 +30,10 @@ npm install   # `prepare` builds dist/ via tsup
 
 The kit's substrate reads a number of `LAKEBASE_KIT_*` env vars to tune timeouts, package-registry URLs, and convention-branch TTLs (see `scripts/lakebase/kit-config.ts` for the full surface). Two committed files document the contract:
 
-- **`.env.template.config`** (committed): public-default values for every env-overridable knob. Sourced first by `scripts/run-all-live-tests.sh`.
-- **`.env.local.config`** (gitignored): your local overrides, e.g. corp-proxy package registries or a workspace-tighter `LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS`. Sourced second so local values win.
+- **`.env.template.test.config`** (committed): public-default values for every env-overridable knob. Sourced first by `scripts/run-all-live-tests.sh`.
+- **`.env.local.test.config`** (gitignored): your local overrides, e.g. corp-proxy package registries or a workspace-tighter `LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS`. Sourced second so local values win.
 
-Copy `.env.template.config` to `.env.local.config` and set the values your machine needs. The live driver auto-sources both.
+Copy `.env.template.test.config` to `.env.local.test.config` and set the values your machine needs. The live driver auto-sources both.
 
 ## Build and typecheck
 
@@ -105,7 +105,7 @@ The live tier hits a real Databricks workspace, creates real Lakebase projects, 
 
 #### `scripts/run-all-live-tests.sh` (recommended, full suite)
 
-One command, one provisioned project, every gated test in the kit. Provisions a fresh Lakebase project, builds dist, sources `.env.template.config` + `.env.local.config`, and runs vitest with every `LAKEBASE_TEST_*` describe unlocked. Heavy: ~5 to 15 minutes including the Apps deploy + teardown.
+One command, one provisioned project, every gated test in the kit. Provisions a fresh Lakebase project, builds dist, sources `.env.template.test.config` + `.env.local.test.config`, and runs vitest with every `LAKEBASE_TEST_*` describe unlocked. Heavy: ~5 to 15 minutes including the Apps deploy + teardown.
 
 ```bash
 bash scripts/run-all-live-tests.sh --profile <databricks-cli-profile> --no-prompt
@@ -145,7 +145,7 @@ export LAKEBASE_TEST_E2E=1
 npm run test:live
 ```
 
-If your network blocks Maven Central (where the Flyway CLI is hosted), install Flyway separately (`brew install flyway`, your internal mirror, etc.) and put it on `PATH` before invoking `npm run test:live`. The script's preflight finds the pre-installed binary and skips the download. The same `LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL` env override (set in `.env.local.config`) redirects the Flyway download to a proxy.
+If your network blocks Maven Central (where the Flyway CLI is hosted), install Flyway separately (`brew install flyway`, your internal mirror, etc.) and put it on `PATH` before invoking `npm run test:live`. The script's preflight finds the pre-installed binary and skips the download. The same `LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL` env override (set in `.env.local.test.config`) redirects the Flyway download to a proxy.
 
 **Consent model.** Setting `LAKEBASE_TEST_E2E=1 + DATABRICKS_HOST` authorizes the suite to create a Lakebase project on your workspace. The helper script pauses for 5 seconds before the create call with a notice showing the workspace + project name pattern; ctrl-c aborts. Set `LAKEBASE_TEST_NO_PROMPT=1` in CI to skip the pause.
 
