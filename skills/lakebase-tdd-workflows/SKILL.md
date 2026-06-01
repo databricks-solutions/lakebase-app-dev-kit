@@ -257,6 +257,96 @@ writePerAcViews(".tdd", "F1", list);
 // Emits .tdd/features/<F>/stories/<S>/test-list-per-ac.json under each story dir.
 ```
 
+### Gates state machine (structured HITL approvals)
+
+Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md). Implementation: FEIP-7357.
+
+`.tdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
+
+Named gates: `spec` / `plan` / `test_list` / `promote`. Statuses: `open` / `approved` / `superseded` / `withdrawn`. Each gate's record carries the approver, timestamp, captured artifact hashes (sha256 of normalized content), and a `history[]` log of every action.
+
+```ts
+import {
+  readGates,
+  writeGates,
+  defaultGatesState,
+} from "@databricks-solutions/lakebase-app-dev-kit/tdd/gates";
+import { approveGate } from "@databricks-solutions/lakebase-app-dev-kit/tdd/approve-gate";
+import { verifyGateIntegrity } from "@databricks-solutions/lakebase-app-dev-kit/tdd/verify-gate-integrity";
+import { withdrawGate } from "@databricks-solutions/lakebase-app-dev-kit/tdd/withdraw-gate";
+
+// Read current state (returns default-open shape when gates.json absent).
+const state = readGates("F1", { tddDir: ".tdd" });
+
+// Approve a gate (HITL-gated at the function boundary).
+approveGate({
+  featureId: "F1",
+  gate: "spec",
+  approver: "po@example.com",
+  hitlApproved: true,
+  artifactInputs: { "spec.md": specContent, "feature.json": featureJsonContent },
+  tddDir: ".tdd",
+});
+
+// Verify integrity: did the artifact change since approval?
+const v = verifyGateIntegrity({
+  featureId: "F1",
+  gate: "spec",
+  currentInputs: { "spec.md": currentSpec, "feature.json": currentFeatureJson },
+  tddDir: ".tdd",
+});
+// v.status: "ok" | "drift" | "gate-not-approved"
+// Hash normalization survives CRLF/LF + trailing-whitespace + blank-line edits;
+// semantic edits flip the verdict to "drift".
+
+// Withdraw with cascade: spec withdraw -> plan + test_list also withdrawn.
+withdrawGate({
+  featureId: "F1",
+  gate: "spec",
+  approver: "po@example.com",
+  reason: "scope rewrite",
+  tddDir: ".tdd",
+});
+```
+
+**Per-gate artifact scope (convention enforced at the orchestrator call site, not in the substrate):**
+
+| Gate | artifactInputs keys |
+|---|---|
+| `spec` | `spec.md`, `feature.json` |
+| `plan` | `plan.json` |
+| `test_list` | `test-list.json` |
+| `promote` | `promote_ref` (synthesized string: `<winner-slug>:<branch_id>`) |
+
+**Concurrent-safe:** `approveGate` and `withdrawGate` serialize through a `.gates.lock` file (`fs.openSync` with `wx` flag). Two callers cannot lose either approval. Override: `HUSKY=0` not applicable here; the lock is mandatory.
+
+#### Brownfield adoption
+
+For features that pre-date the gates state machine (approvals only in `selection-log.md`):
+
+```ts
+import { migrateGatesFromSelectionLog } from "@databricks-solutions/lakebase-app-dev-kit/tdd/migrate-gates";
+
+migrateGatesFromSelectionLog({
+  featureId: "F1",
+  tddDir: ".tdd",
+  // Optional: pass current artifact content so the synthesized state has
+  // hashes that future verifyGateIntegrity() calls can match against.
+  currentInputsByGate: {
+    spec: { "spec.md": readFileSync("...spec.md", "utf8"), "feature.json": readFileSync("...feature.json", "utf8") },
+    plan: { "plan.json": readFileSync("...plan.json", "utf8") },
+    test_list: { "test-list.json": readFileSync("...test-list.json", "utf8") },
+  },
+});
+// History entries flagged migrated: true so auditors can tell synthesized
+// entries apart from native ones. Refuses if gates.json already exists
+// unless force: true.
+```
+
+#### Feature-status integration
+
+`feature-status` surfaces the compact gates view via the `gates` field of `FeatureStatusSnapshot`. See [`references/feature-status-schema.md`](references/feature-status-schema.md). For full state including history + artifact_hashes, call `readGates()` directly.
+
 ## Flow patterns
 
 End-to-end orchestrator patterns the Scrum-Master agent runs in response to `/design` and `/build`. Each flow is what the agent assembles from the primitives above; the human-facing prompts that trigger each flow live in [`README.md`](README.md).
