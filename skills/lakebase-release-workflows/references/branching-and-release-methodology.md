@@ -112,7 +112,7 @@ Run the project's full e2e suite against the RC's Lakebase branch.
 
 ```
 # substrate primitive
-lakebase-migrate apply --instance <id> --branch rc/<release-id>
+lakebase-schema-migrate apply --instance <id> --branch rc/<release-id>
 # project's test command
 ./mvnw test              # or uv run pytest, or npx vitest, ...
 ```
@@ -138,7 +138,7 @@ Promote the RC into `to`.
 
 ```
 # substrate primitive
-lakebase-migrate apply --instance <id> --branch <to>
+lakebase-schema-migrate apply --instance <id> --branch <to>
 git switch <to>
 git merge --ff-only rc/<release-id>
 git push origin <to>

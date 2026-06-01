@@ -21,9 +21,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConnection } from "./get-connection.js";
-import { applyAlembic, rollbackAlembic, statusAlembic } from "./migrate-runners/alembic.js";
-import { applyFlyway, rollbackFlyway, statusFlyway } from "./migrate-runners/flyway.js";
-import { applyKnex, rollbackKnex, statusKnex } from "./migrate-runners/knex.js";
+// Adapter modules auto-register on import; routing below uses
+// resolveAdapter() (FEIP-7210 slice 4). The legacy public API
+// (applyMigrations / rollbackMigration / migrationStatus /
+// listMigrations) is preserved as a thin shim over adapter calls.
+import "./adapters/alembic-adapter.js";
+import "./adapters/flyway-adapter.js";
+import "./adapters/knex-adapter.js";
+import { resolveAdapter, type MigrationAdapterId } from "./migration-adapter.js";
 
 export type MigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
 
@@ -154,6 +159,11 @@ export function toolForLanguage(language: MigrationLanguage): MigrationToolName 
 }
 
 // ---- listMigrations: pure file-scan (works for all three languages) ------
+//
+// Stays sync (no I/O beyond fs.readdirSync) to preserve the legacy public
+// API shape. Adapter `list()` methods are Promise-returning by interface;
+// tightening that to sync is a follow-up (every implementation today is
+// synchronous internally).
 
 /** Enumerate migration files in a project. No DB connection required.
  *  Order is apply-order (V1, V2, ... for Flyway; chronological for Alembic
@@ -181,7 +191,6 @@ function listFlywayMigrations(projectDir: string): MigrationFile[] {
   return files
     .map((filename) => {
       const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
-      // Detection regex above ensures m is non-null.
       const version = m![1];
       const description = m![2].replace(/_/g, " ");
       return { version, filename, description, type: "SQL" as const, tool: "flyway" as const };
@@ -190,8 +199,6 @@ function listFlywayMigrations(projectDir: string): MigrationFile[] {
 }
 
 function listAlembicMigrations(projectDir: string): MigrationFile[] {
-  // Alembic convention: <alembic-dir>/versions/*.py
-  // We support both `migrations/versions/` and `alembic/versions/`.
   const candidates = [
     path.join(projectDir, "migrations", "versions"),
     path.join(projectDir, "alembic", "versions"),
@@ -199,11 +206,6 @@ function listAlembicMigrations(projectDir: string): MigrationFile[] {
   const dir = candidates.find((p) => fs.existsSync(p));
   if (!dir) return [];
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
-  // Alembic files are named <revid>_<slug>.py – slug is the description.
-  // True apply-order needs to parse `down_revision = '...'` chains, but for
-  // listing purposes the substring before `_` (the revid) plus mtime gives
-  // a usable stable order. Real ordering is enforced by Alembic at apply
-  // time via its DAG, not by our file listing.
   return files
     .map((filename) => {
       const stem = filename.replace(/\.py$/, "");
@@ -216,7 +218,6 @@ function listAlembicMigrations(projectDir: string): MigrationFile[] {
 }
 
 function listKnexMigrations(projectDir: string): MigrationFile[] {
-  // Knex convention: ./migrations/*.{js,ts} with timestamp prefix.
   const dir = path.join(projectDir, "migrations");
   if (!fs.existsSync(dir)) return [];
   const files = fs
@@ -247,9 +248,12 @@ function versionCompare(a: string, b: string): number {
   return 0;
 }
 
-// ---- DSN helper ----------------------------------------------------------
+// ---- DSN helper (kept for any out-of-tree caller that imports it; the
+// adapter routing above builds DSNs inside each adapter) ------------------
 
-/** Build a Postgres DSN for the target branch. Used by every runner. */
+/** Build a Postgres DSN for the target branch. Retained as part of the
+ *  public surface for backward compatibility with any consumer that
+ *  imports it directly. */
 async function dsnFor(args: {
   instance: string;
   branch: string;
@@ -266,56 +270,89 @@ async function dsnFor(args: {
   return result.url;
 }
 
+// ---- Adapter routing -----------------------------------------------------
+//
+// Public API (applyMigrations / rollbackMigration / migrationStatus /
+// listMigrations) is preserved verbatim for backward compatibility. It
+// resolves the adapter (auto-detect or via the `language` override) and
+// translates adapter results back to the legacy shapes.
+
+/** Resolve an adapter, honoring an explicit language override. */
+function adapterFor(projectDir: string, language?: MigrationLanguage) {
+  const override: MigrationAdapterId | undefined = language
+    ? toolForLanguage(language)
+    : undefined;
+  return resolveAdapter(projectDir, override);
+}
+
 // ---- applyMigrations -----------------------------------------------------
 
 export async function applyMigrations(args: ApplyMigrationsArgs): Promise<ApplyMigrationsResult> {
   const projectDir = args.projectDir ?? process.cwd();
-  const language = args.language ?? detectLanguage(projectDir);
-  const tool = toolForLanguage(language);
-  const dsn = await dsnFor(args);
-
-  switch (tool) {
-    case "alembic":
-      return applyAlembic({ projectDir, dsn });
-    case "flyway":
-      return applyFlyway({ projectDir, dsn });
-    case "knex":
-      return applyKnex({ projectDir, dsn });
+  const adapter = adapterFor(projectDir, args.language);
+  const r = await adapter.apply({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status === "error") {
+    throw new MigrationError(r.error ?? "apply failed");
   }
+  return {
+    applied: r.applied_migrations,
+    alreadyAtLatest: r.status === "noop",
+    tool: adapter.id as MigrationToolName,
+  };
 }
 
 // ---- rollbackMigration ---------------------------------------------------
 
 export async function rollbackMigration(args: RollbackMigrationArgs): Promise<RollbackMigrationResult> {
   const projectDir = args.projectDir ?? process.cwd();
-  const language = args.language ?? detectLanguage(projectDir);
-  const tool = toolForLanguage(language);
-  const dsn = await dsnFor(args);
-
-  switch (tool) {
-    case "alembic":
-      return rollbackAlembic({ projectDir, dsn, target: args.target });
-    case "flyway":
-      return rollbackFlyway({ projectDir, dsn, target: args.target });
-    case "knex":
-      return rollbackKnex({ projectDir, dsn, target: args.target });
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.rollback) {
+    throw new MigrationError(
+      `Adapter '${adapter.id}' does not support rollback. ` +
+        `(Flyway Community Edition has no \`undo\`; other adapters may omit rollback by design.)`
+    );
   }
+  const r = await adapter.rollback({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    target: args.target,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status === "error") {
+    throw new MigrationError(r.error ?? "rollback failed");
+  }
+  return {
+    rolledBack: r.rolled_back,
+    tool: adapter.id as MigrationToolName,
+  };
 }
 
 // ---- migrationStatus -----------------------------------------------------
 
 export async function migrationStatus(args: MigrationStatusArgs): Promise<MigrationStatusResult> {
   const projectDir = args.projectDir ?? process.cwd();
-  const language = args.language ?? detectLanguage(projectDir);
-  const tool = toolForLanguage(language);
-  const dsn = await dsnFor(args);
-
-  switch (tool) {
-    case "alembic":
-      return statusAlembic({ projectDir, dsn });
-    case "flyway":
-      return statusFlyway({ projectDir, dsn });
-    case "knex":
-      return statusKnex({ projectDir, dsn });
+  const adapter = adapterFor(projectDir, args.language);
+  const r = await adapter.status({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status === "error") {
+    throw new MigrationError(r.error ?? "status failed");
   }
+  return {
+    current: r.applied_version ?? undefined,
+    pending: r.pending,
+    tool: adapter.id as MigrationToolName,
+  };
 }

@@ -19,7 +19,7 @@
 //   slice 2: port Flyway out of migrate.ts into FlywayAdapter
 //   slice 3: port Alembic + Knex (list-only)
 //   slice 4: ship lakebase-schema-migrate CLI + deprecation alias for
-//            lakebase-migrate
+//            lakebase-schema-migrate
 //   slice 5+: doctor checks, optional Knex completion, Liquibase,
 //             custom path-based adapter
 
