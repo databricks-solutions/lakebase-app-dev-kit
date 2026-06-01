@@ -24,6 +24,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { hashArtifact } from "./gate-hash";
+import { withGatesLock } from "./gates-lock";
 import {
   readGates,
   writeGates,
@@ -91,53 +92,61 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 
-  const state = readGates(args.featureId, { tddDir });
-  const record = state.gates[args.gate];
-  if (record.status !== "open") {
-    throw new GateAlreadyClosedError(args.gate, record.status);
-  }
+  // Lock the gates.json read-modify-write critical section so concurrent
+  // approveGate calls cannot lose either approval (G7 / FEIP-7364).
+  return withGatesLock(
+    args.featureId,
+    (): ApproveGateResult => {
+      const state = readGates(args.featureId, { tddDir });
+      const record = state.gates[args.gate];
+      if (record.status !== "open") {
+        throw new GateAlreadyClosedError(args.gate, record.status);
+      }
 
-  const capturedHashes: Record<string, string> = {};
-  for (const name of artifactNames) {
-    capturedHashes[name] = hashArtifact(args.artifactInputs[name]);
-  }
+      const capturedHashes: Record<string, string> = {};
+      for (const name of artifactNames) {
+        capturedHashes[name] = hashArtifact(args.artifactInputs[name]);
+      }
 
-  const ts = now().toISOString();
-  const updatedState: GatesState = {
-    ...state,
-    gates: {
-      ...state.gates,
-      [args.gate]: {
-        status: "approved",
-        approver: args.approver,
-        approved_at: ts,
-        artifact_hashes: capturedHashes,
-        history: [
-          ...record.history,
-          {
-            action: "approved",
-            at: ts,
+      const ts = now().toISOString();
+      const updatedState: GatesState = {
+        ...state,
+        gates: {
+          ...state.gates,
+          [args.gate]: {
+            status: "approved",
             approver: args.approver,
+            approved_at: ts,
             artifact_hashes: capturedHashes,
+            history: [
+              ...record.history,
+              {
+                action: "approved",
+                at: ts,
+                approver: args.approver,
+                artifact_hashes: capturedHashes,
+              },
+            ],
           },
-        ],
-      },
+        },
+      };
+
+      writeGates(updatedState, { tddDir });
+
+      if (writeLog) {
+        appendSelectionLog(tddDir, {
+          ts,
+          gate: args.gate,
+          featureId: args.featureId,
+          approver: args.approver,
+          capturedHashes,
+        });
+      }
+
+      return { state: updatedState, capturedHashes };
     },
-  };
-
-  writeGates(updatedState, { tddDir });
-
-  if (writeLog) {
-    appendSelectionLog(tddDir, {
-      ts,
-      gate: args.gate,
-      featureId: args.featureId,
-      approver: args.approver,
-      capturedHashes,
-    });
-  }
-
-  return { state: updatedState, capturedHashes };
+    { tddDir }
+  );
 }
 
 interface SelectionLogEntry {
