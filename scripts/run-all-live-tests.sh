@@ -36,12 +36,6 @@
 #                              The full id becomes <prefix><unix-timestamp>.
 #   --grace-seconds <n>        Seconds to wait before creating the project (Ctrl-C abort
 #                              window). Default: 5. Use 0 + --no-prompt for CI.
-#   --database <name>          LAKEBASE_TEST_DATABASE override. Default: unset, so the
-#                              substrate falls back to DEFAULT_DATABASE (constants.ts).
-#   --feature-ttl-days <n>     Override the kit's 30-day default feature branch TTL.
-#                              Use on workspaces with a tighter maximum-expiration
-#                              policy (e.g. --feature-ttl-days 7). Sets
-#                              LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS for the run.
 #   --teardown                 After a green run, delete the auto-provisioned project.
 #                              No-op when --project was supplied.
 #   --no-prompt                Skip the grace period entirely (for CI).
@@ -66,6 +60,16 @@
 # A clean run reports zero contributor-actionable skips. Skips that remain
 # are pure assertion-shape decisions inside the test files themselves
 # (e.g. kit-config defaults vs env overrides).
+#
+# Configuration model (two surfaces, by persona):
+#   Kit users      set LAKEBASE_KIT_* in their app's env / shell (substrate
+#                  behavior: registries, TTL caps, timeouts).
+#   Contributors   set BOTH LAKEBASE_KIT_* + LAKEBASE_TEST_* in
+#                  .env.local.config (gitignored, sourced below). One file
+#                  per machine; no per-flag duplication.
+# Per-run choices (which project, which branch, whether to teardown) stay
+# as CLI flags above. Everything else (database name, GitHub owner, TTL
+# overrides) lives in .env.local.config; you set it once.
 #
 # What this script gates on (substrate convention):
 #   LAKEBASE_TEST_NO_TEARDOWN=1 is set by default. The orchestrator-level
@@ -94,8 +98,6 @@ BRANCH_OVERRIDE=""
 PARENT_OVERRIDE=""
 PROJECT_PREFIX="live-all-"
 GRACE_SECONDS=5
-DATABASE=""
-FEATURE_TTL_DAYS=""
 TEARDOWN_ON_GREEN=0
 NO_PROMPT=0
 INCLUDE_GITHUB_RUNNER=1
@@ -109,12 +111,14 @@ while [[ $# -gt 0 ]]; do
     --parent)             PARENT_OVERRIDE="$2"; shift 2 ;;
     --project-prefix)     PROJECT_PREFIX="$2"; shift 2 ;;
     --grace-seconds)      GRACE_SECONDS="$2"; shift 2 ;;
-    --database)           DATABASE="$2"; shift 2 ;;
-    --feature-ttl-days)   FEATURE_TTL_DAYS="$2"; shift 2 ;;
     --teardown)           TEARDOWN_ON_GREEN=1; shift ;;
     --no-prompt)          NO_PROMPT=1; shift ;;
     --no-github-runner)   INCLUDE_GITHUB_RUNNER=0; shift ;;
     --no-migrate-tools)   INCLUDE_MIGRATE_TOOLS=0; shift ;;
+    --database|--feature-ttl-days|--github-owner)
+      red "$1 was removed: set LAKEBASE_TEST_DATABASE / LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS / LAKEBASE_TEST_GITHUB_OWNER in .env.local.config instead."
+      exit 2
+      ;;
     --help|-h)
       # `sed '$d'` drops the trailing `set -euo pipefail` line that closes
       # the range. Cross-platform: `head -n -1` is GNU-only (BSD head on
@@ -283,25 +287,21 @@ export LAKEBASE_TEST_PROFILE="$PROFILE"
 # Optional fields: only set when the user provides them. Tests have
 # sensible defaults if absent.
 export LAKEBASE_TEST_COMPARISON_BRANCH="${LAKEBASE_TEST_COMPARISON_BRANCH:-$BRANCH}"
-# LAKEBASE_TEST_DATABASE: explicit --database flag wins; otherwise leave
-# whatever the caller's env already has (which may itself be unset).
-# When unset, the substrate falls back to DEFAULT_DATABASE
-# (scripts/lakebase/constants.ts) – single source of truth, no duplication.
-if [[ -n "$DATABASE" ]]; then
-  export LAKEBASE_TEST_DATABASE="$DATABASE"
+# LAKEBASE_TEST_DATABASE, LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS,
+# LAKEBASE_TEST_GITHUB_OWNER: all read from the caller's env (sourced from
+# .env.local.config by the kit's entry point). Set them there once per
+# machine; no per-flag duplication in this script.
+if [[ -n "${LAKEBASE_TEST_DATABASE:-}" ]]; then
+  green "  LAKEBASE_TEST_DATABASE=$LAKEBASE_TEST_DATABASE"
 fi
-
-# LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS: explicit --feature-ttl-days flag wins.
-# Workspaces with maximum-expiration policies tighter than 30 days (the
-# kit's default) need this for cutExperiment / createFeatureBranch /
-# tdd-synthesis paths. We compute ms = days * 86_400_000 here so the
-# substrate's existing convention defaults pick it up.
-if [[ -n "$FEATURE_TTL_DAYS" ]]; then
-  # Bash arithmetic: avoid underscore separators (86_400_000 is parsed as
-  # octal in some bash modes and fails with "value too great for base").
-  # Plain digits work everywhere.
-  export LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS="$(( FEATURE_TTL_DAYS * 86400000 ))"
-  green "  LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS=$LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS  (${FEATURE_TTL_DAYS}d)"
+if [[ -n "${LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS:-}" ]]; then
+  green "  LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS=$LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS"
+fi
+if [[ -n "${LAKEBASE_TEST_GITHUB_OWNER:-}" ]]; then
+  green "  LAKEBASE_TEST_GITHUB_OWNER=$LAKEBASE_TEST_GITHUB_OWNER  (unlocks gates-state-machine-e2e-live + lakebase-pr-cli-live)"
+else
+  yellow "  LAKEBASE_TEST_GITHUB_OWNER unset  (gates-state-machine-e2e-live + lakebase-pr-cli-live will skip)"
+  yellow "    Set in .env.local.config to unlock those suites."
 fi
 # Unlock the live Initializr fetch + the MCP peer-dep integration check.
 # Both are network/integration-side and the gate is just a "yes please".
