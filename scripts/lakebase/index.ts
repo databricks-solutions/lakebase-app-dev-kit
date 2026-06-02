@@ -5,6 +5,7 @@
 // re-export ambiguity, we only pull `createProject` from it and let the
 // canonical owner files (env-file.ts, project-verify.ts) export those names.
 
+export * from "./adopt-tdd.js";
 export * from "./branch-create.js";
 export * from "./branch-delete.js";
 export * from "./convention-branches.js";
