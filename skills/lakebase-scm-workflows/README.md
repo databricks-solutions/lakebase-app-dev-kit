@@ -72,6 +72,12 @@ Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also imp
 **Workflow drift** (`lakebase_workflow_drift` MCP tool, `verifyProject` JS export)
 - Checks that a project's `.githooks/` and `.github/workflows/*.yml` match the templates `lakebase-create-project` would lay down today. Exposed as an MCP tool and via `verifyProject(projectDir)` / `verifyHooks(projectDir)` / `verifyWorkflows(projectDir)` from the package; `lakebase-doctor` rolls this into its overall health check.
 
+**Scaffolded-file drift** (`detectScaffoldedDrift` JS export, `detectCommandDrift` JS export)
+- One umbrella primitive that reports drift across every scaffolded surface that stamps a kit version pin: `.github/workflows/*.yml` (via `detectWorkflowDrift`) and `.claude/commands/*.md` (via `detectCommandDrift`). Each command entry carries the project's pinned version (`Pinned to:`) plus the kit's current version, with the placeholder substitution re-applied so version-pin updates alone never register as drift. Hook files (`<name>.{pre,post}-hook.md`) are excluded from the walk: substrate doesn't own them.
+
+**Slash-command refresh** (`lakebase-update-commands`)
+- Refresh a scaffolded project's `.claude/commands/{design,build}.md` from the kit's current templates. Interactive per-file confirm by default; `--force` skips the prompt for unattended use; `--dry-run` previews without writing; `--json` emits a structured report. Hook files are NEVER touched. Sibling to `updateWorkflows` for the workflow surface; both consume the matching drift detector's vocabulary.
+
 Run any bin with `--help` for the full subcommand + flag reference.
 
 ## Under the covers
@@ -164,6 +170,46 @@ Happens when the post-checkout hook is missing, disabled, or you switched branch
 
 The agent reads the current git branch, calls `lakebase-get-connection --output dsn --write-env` for that branch, and confirms the new `DATABASE_URL`. If you hit this often, ask: "Reinstall the git hooks" – that runs `bash .githooks/install.sh`.
 
+### 5. Catch drifted scaffold files and refresh them safely
+
+The kit's scaffolded surfaces (`.github/workflows/*.yml`, `.claude/commands/{design,build}.md`) stamp a kit version pin at scaffold time. As the kit evolves those project-side files lag. The drift detector surfaces the gap; the refresher closes it without touching project-owned hook files.
+
+> "Are my Lakebase scaffolded files in sync with the current kit?"
+
+The agent runs `detectScaffoldedDrift({ projectDir })` (or `lakebase-update-commands --dry-run` for the command surface specifically) and shows a report grouped by file. For the workflow surface, `updateWorkflows()` fast-forwards; for the command surface, `lakebase-update-commands` defaults to an interactive per-file confirm so a project that customised `/design` deliberately gets to keep its edits.
+
+**End-to-end verification recipe** (use this when validating a substrate change, not just the kit's hermetic BDD):
+
+```bash
+# 1. Scaffold a fresh project (any language).
+lakebase-create-project \
+  --project-name drift-smoke \
+  --parent-dir /tmp \
+  --databricks-host https://your-workspace.cloud.databricks.com \
+  --no-github \
+  --language nodejs
+
+# 2. Baseline: should be all-unchanged.
+lakebase-update-commands --project-dir /tmp/drift-smoke --dry-run
+
+# 3. Introduce drift in design.md (project customization).
+sed -i.bak 's/^# \/design/# \/design (project-customized)/' \
+  /tmp/drift-smoke/.claude/commands/design.md
+
+# 4. Detector should flag design.md as `updated` (in dry-run); build.md `unchanged`.
+lakebase-update-commands --project-dir /tmp/drift-smoke --dry-run
+
+# 5. Refresh; --force skips the per-file confirm.
+lakebase-update-commands --project-dir /tmp/drift-smoke --force
+
+# 6. Add a project-owned hook and confirm the refresher does NOT touch it.
+echo '# project hook' > /tmp/drift-smoke/.claude/commands/design.pre-hook.md
+lakebase-update-commands --project-dir /tmp/drift-smoke --force
+diff <(echo '# project hook') /tmp/drift-smoke/.claude/commands/design.pre-hook.md
+```
+
+The same flow applies to the `--enable-e2e`-scaffolded `playwright.config.ts` + `tests/e2e/smoke.spec.ts`: a future drift on those files will surface here once they're brought under the detector's umbrella. For the `[E2E]`-tag agent contract (which connects an `[E2E]` AC's outcome back to `outcomes.json`), see [`../lakebase-tdd-workflows/`](../lakebase-tdd-workflows/) under "Comparison, promote, synthesize".
+
 ## CLI cheat sheet
 
 | Bin | Purpose |
@@ -180,6 +226,7 @@ The agent reads the current git branch, calls `lakebase-get-connection --output 
 | `lakebase-github-token` | Resolve / diagnose the GitHub token via the same auth chain CI uses. |
 | `lakebase-adopt-tdd` | Drop the `.tdd/` workflow tree into an existing repo. Supports `--update`, `--force`, `--dry-run`. |
 | `lakebase-infra-runner` | Run the `[Infra]`-tag suite (schema-diff + migration status + endpoint readiness) for a branch. Used by scaffolded `test:infra` scripts. |
+| `lakebase-update-commands` | Refresh a scaffolded project's `.claude/commands/{design,build}.md` from the kit's current templates. Interactive per-file confirm by default; `--force` skips prompts, `--dry-run` previews, `--json` emits a structured report. Hook files (`<name>.{pre,post}-hook.md`) are NEVER touched. |
 | `lakebase-feature-status` | One-screen snapshot of a TDD feature's workflow state. Pairs with `lakebase-tdd-workflows`. |
 | `lakebase-mcp-server` | Stdio MCP server exposing the full tool surface (parity with the CLI bins). For Claude Desktop / OpenAI Codex / Cursor-via-MCP / Genie Code consumers. |
 
@@ -216,6 +263,10 @@ Every CLI bin is a thin wrapper around a substrate function published from `@dat
 **Project verification**:
 - `verifyProject`, `verifyHooks`, `verifyWorkflows` (drift checks against the templates `create-project` would lay down today; `lakebase-doctor` consumes these)
 - `runDoctor(args)` (the orchestrator behind `lakebase-doctor`; returns `DoctorReport` with per-check `ok` / `warn` / `fail` / `skip` status)
+
+**Scaffolded-file drift + refresh**:
+- `detectWorkflowDrift`, `detectCommandDrift`, `detectScaffoldedDrift` (per-surface + umbrella drift reports. Command entries carry pinned + current kit version; placeholder substitution is re-applied so version-pin updates do not register as drift. Hook files are excluded from the walk.)
+- `updateWorkflows`, `updateCommands` (in-place refresh primitives. `updateCommands({ force: false })` leaves drifted files alone and reports them as `preserved` so a per-file confirm flow can decide one at a time.)
 
 **GitHub** (from `./github` subpath or root):
 - `resolveGitHubToken`, `diagnoseGitHubAuth`, `tryVsCodeSession`, `tryGhAuthToken`, `GITHUB_SCOPES` (token resolution chain: env → VS Code session → `gh auth token`)

@@ -353,6 +353,59 @@ lakebase-doctor --project-dir ~/code/proj-checkout
 
 Also reachable as the `lakebase_doctor` MCP tool. When an agent reports cryptic "auth failed" or ".env not found" symptoms, this is the first thing to run.
 
+### Scaffolded-file drift detection and refresh
+
+Scaffolded projects ship copies of the kit's templates at scaffold time. As the kit evolves, those project-side files lag behind. Two surfaces stamp a kit version pin and are eligible for the drift loop: `.github/workflows/*.yml` (via `{{LAKEBASE_KIT_VERSION}}`) and `.claude/commands/*.md` (via `${KIT_VERSION_AT_SCAFFOLD}`). Both report through one umbrella primitive.
+
+```ts
+import {
+  detectWorkflowDrift,
+  detectCommandDrift,
+  detectScaffoldedDrift,
+  updateWorkflows,
+  updateCommands,
+} from "@databricks-solutions/lakebase-app-dev-kit";
+
+// One verdict across every scaffolded surface.
+const report = detectScaffoldedDrift({ projectDir });
+// report.overall: "ok" | "drift"
+// report.workflows.files[]: WorkflowFileStatus with status drifted/missing/extra/unchanged + unified diff
+// report.commands.files[]: CommandFileEntry with pinned_version, kit_version, diff. Hook files
+//   (<name>.{pre,post}-hook.md) are excluded; substrate does not own them.
+
+// Refresh per surface. updateCommands(force: false) leaves drifted files alone
+// and reports them as "preserved" so a per-file confirm flow can decide one at a time.
+updateWorkflows({ projectDir, dryRun: false });
+updateCommands({ projectDir, dryRun: false, force: true });
+```
+
+```bash
+# Refresh design.md + build.md from the current kit. Interactive per-file
+# confirm by default; --force skips prompts for unattended use; --dry-run
+# prints outcomes without writing.
+lakebase-update-commands                              # human-readable summary
+lakebase-update-commands --dry-run                    # preview without writing
+lakebase-update-commands --force                      # unattended
+lakebase-update-commands --json                       # structured report for CI
+lakebase-update-commands --project-dir ~/code/proj    # explicit target
+```
+
+Hook files (`design.{pre,post}-hook.md`, `build.{pre,post}-hook.md`) are NEVER touched by either the detector or the refresher: substrate doesn't own them.
+
+#### How to verify end-to-end on a real project
+
+Hermetic BDD covers every code path; the end-to-end smoke is what proves the substrate-to-disk loop works against a real scaffolded tree:
+
+1. Scaffold a fresh project: `lakebase-create-project --project-name drift-smoke --parent-dir /tmp --databricks-host https://your-workspace.cloud.databricks.com --no-github --language nodejs`.
+2. Confirm baseline: `lakebase-update-commands --project-dir /tmp/drift-smoke --dry-run`. Expected: every command file reports `unchanged`.
+3. Introduce drift: hand-edit `/tmp/drift-smoke/.claude/commands/design.md` so the first line reads `# /design (project-customized)`.
+4. Detector: `lakebase-update-commands --project-dir /tmp/drift-smoke --dry-run`. Expected: `design.md` reports `updated`; `build.md` reports `unchanged`. No file content changed.
+5. Refresh: `lakebase-update-commands --project-dir /tmp/drift-smoke --force`. Expected: `design.md` reports `updated`; the file body is now byte-identical to `templates/project/common/.claude/commands/design.md` with `${KIT_VERSION_AT_SCAFFOLD}` substituted to the kit's current version.
+6. Add a hook file: `echo '# project hook' > /tmp/drift-smoke/.claude/commands/design.pre-hook.md`.
+7. Re-run `lakebase-update-commands --project-dir /tmp/drift-smoke --force`. Expected: no entry for `design.pre-hook.md`; the file is byte-identical before and after.
+
+For the `[E2E]`-tag testing story that ships alongside scaffolded Playwright projects, the drift loop matters because the same `--enable-e2e`-installed `playwright.config.ts` + smoke fixture could fall behind as the kit evolves; running `lakebase-update-commands --dry-run` in CI catches that surface drifting alongside `/design` and `/build`. See [`../lakebase-tdd-workflows/SKILL.md`](../lakebase-tdd-workflows/SKILL.md) for the runner contract that ties an `[E2E]` AC's outcome back to `outcomes.json`.
+
 ## References
 
 - [`references/get-connection.md`](references/get-connection.md) – Lakebase credential seam (DSN + Pool, OAuth refresh, fallback chain).
