@@ -126,6 +126,10 @@ lakebase-create-project --project-name proj-checkout --parent-dir ~/code \
 # Default-on for --language nodejs; opt in elsewhere with --enable-e2e or
 # turn off with --no-e2e:
 lakebase-create-project ... --language nodejs --enable-e2e
+
+# Skip the .claude/commands/{design,build}.md scaffold (for projects
+# that already have their own slash commands or non-Claude-Code consumers):
+lakebase-create-project ... --skip-commands
 ```
 
 ```ts
@@ -140,6 +144,7 @@ const result = await createProject({
   enableTdd: true,                // default: true – lays down .tdd/ scaffold
   enableE2e: undefined,           // default: true for nodejs, false otherwise.
                                   // Explicit boolean overrides the language default.
+  skipCommands: false,            // default: false – writes .claude/commands/{design,build}.md
 });
 ```
 

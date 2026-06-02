@@ -83,6 +83,7 @@ When create-project finishes you get a scaffolded layout shaped like:
     merge.yml                              ← migrate parent on merge
   playwright.config.ts                     ← Playwright config (only with --enable-e2e; default-on for nodejs)
   tests/e2e/smoke.spec.ts                  ← Playwright smoke fixture, same gate as the config
+  .claude/commands/                        ← /design + /build slash commands (opt-out via --skip-commands)
   .tdd/                                    ← lakebase-tdd-workflows scaffold (opt-out via --enable-tdd false)
   README.md, .gitignore, package.json/pom.xml/pyproject.toml, ...
 ```

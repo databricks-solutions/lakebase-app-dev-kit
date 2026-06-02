@@ -19,6 +19,7 @@ interface ParsedArgs {
   language?: "java" | "kotlin" | "python" | "nodejs";
   runnerType?: "self-hosted" | "github-hosted";
   enableE2e?: boolean;
+  skipCommands?: boolean;
   help?: boolean;
 }
 
@@ -60,6 +61,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--no-e2e":
         out.enableE2e = false;
         break;
+      case "--skip-commands":
+        out.skipCommands = true;
+        break;
       case "--help":
       case "-h":
         out.help = true;
@@ -89,6 +93,8 @@ Flags:
   --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
   --no-e2e            Force-disable Playwright E2E wire-up
                       (default: on for --language nodejs, off otherwise)
+  --skip-commands     Skip scaffolding .claude/commands/{design,build}.md
+                      (default: commands are written)
   --json-input        Pass all args as a single JSON object (BDD harness)
 
 Output: JSON on stdout (CreateProjectResult). Progress to stderr.
@@ -124,6 +130,7 @@ async function main(): Promise<number> {
       language: args.language,
       runnerType: args.runnerType,
       enableE2e: args.enableE2e,
+      skipCommands: args.skipCommands,
     };
   }
 

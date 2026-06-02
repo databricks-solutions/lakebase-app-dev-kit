@@ -116,7 +116,7 @@ Before cutting any new experiment, the orchestrator checks the budget – at the
 
 Three flows – shown as what you'd prompt your agent to do, using a cart-checkout example throughout. The agent reads [`SKILL.md`](SKILL.md) (plus the Scrum-Master / Navigator / Driver agent prompts) and runs the underlying substrate primitives on your behalf.
 
-The project-level slash commands `/design` and `/build` are the canonical entry points. They're thin wrappers that project skills install on top of this substrate – they handle project-specific concerns (JIRA hierarchy, IDE branch suggestions, manual review gates) and delegate the workflow facilitation here. If a slash command isn't installed in your project, just describe what you want to your agent directly; the prompts below work either way.
+The project-level slash commands `/design` and `/build` are the canonical entry points. They're thin wrappers around this substrate, scaffolded into new projects by `lakebase-create-project` under `.claude/commands/` (opt-out via `--skip-commands`). Projects extend them with their own concerns (JIRA hierarchy, IDE branch suggestions, manual review gates) by dropping sibling `design.{pre,post}-hook.md` or `build.{pre,post}-hook.md` files next to the scaffolded command. If a slash command isn't installed in your project, just describe what you want to your agent directly; the prompts below work either way.
 
 ### 1. Author a feature spec
 
@@ -170,11 +170,11 @@ For when you want to run something directly without the agent. Most TDD work goe
 
 ## Project-level entry points
 
-- **`/design`** – wraps Spec Author + Architect Reviewer + Test Strategist phases. Project-specific JIRA hierarchy creation lives here.
-- **`/build`** – wraps Orchestrator. Project-specific PR/merge ceremony lives here.
+- **`/design`** – wraps Spec Author + Architect Reviewer + Test Strategist phases. Scaffolded into new projects by `lakebase-create-project`. Project-specific JIRA hierarchy creation lives in `design.pre-hook.md`.
+- **`/build`** – wraps Orchestrator. Scaffolded into new projects by `lakebase-create-project`. Project-specific PR/merge ceremony lives in `build.post-hook.md`.
 - **`/ship`** – lives in `lakebase-release-workflows`. Not part of this skill.
 
-Substrate ships no slash commands. It ships skills + agents + scripts + CLI bins. The MCP server (`apps/mcp-server/`) exposes the tool surface for MCP-capable consumers.
+The substrate itself ships no installed slash commands; the scaffolder writes the command files into the project at `lakebase-create-project` time (templated, with a kit-version pin). The substrate's runtime surface stays skills + agents + scripts + CLI bins. The MCP server (`apps/mcp-server/`) exposes the tool surface for MCP-capable consumers.
 
 ## Integration with sibling skills
 

@@ -54,6 +54,13 @@ export interface CreateProjectArgs {
    * FEIP-7094 Phase 2.
    */
   enableE2e?: boolean;
+  /**
+   * Skip the `.claude/commands/{design,build}.md` scaffold. Default:
+   * false (commands are written). Set to true for projects that already
+   * have their own slash commands they want to keep, or for non-Claude-Code
+   * consumers that only use the substrate library.
+   */
+  skipCommands?: boolean;
 }
 
 export interface CreateProjectResult {
@@ -100,6 +107,7 @@ export async function createProject(
   // overrides regardless of language.
   const enableE2e =
     input.enableE2e !== undefined ? input.enableE2e : language === "nodejs";
+  const skipCommands = input.skipCommands === true;
   const warnings: string[] = [];
 
   if (useGithub && !input.githubOwner) {
@@ -182,6 +190,7 @@ export async function createProject(
     lakebaseProjectId,
     language,
     runnerType,
+    skipCommands,
     report: (m, d) => report(m, d),
   });
 
