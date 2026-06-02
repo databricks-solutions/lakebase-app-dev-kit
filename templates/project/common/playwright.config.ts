@@ -20,6 +20,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.BASE_URL ?? "http://localhost:3000";
 
+// FEIP-7423: skip the local webServer boot when BASE_URL came from env.
+// pr.yml's "Resolve CI app endpoint" step exports LAKEBASE_APP_ENDPOINT ->
+// BASE_URL for paired-branch runs; in that mode Playwright should hit the
+// deployed app directly rather than booting a duplicate local server (which
+// would race the remote app's data and double the run time).
+const externalBaseUrl = !!process.env.BASE_URL;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   // Run files in parallel; tests within a file run serially. This matches
@@ -37,6 +44,21 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
+  // Local webServer fires ONLY when BASE_URL is not env-set. Adapt the
+  // command to your stack:
+  //   - Node.js / Express: keep `npm start`
+  //   - Python / FastAPI:  `uv run uvicorn server.app:app --port 3000`
+  //   - Java / Spring:     `./mvnw -q spring-boot:run`
+  // Set `webServer: undefined` (or delete this block) if your project
+  // boots its server some other way and Playwright should never start it.
+  webServer: externalBaseUrl
+    ? undefined
+    : {
+        command: "npm start",
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
   projects: [
     {
       name: "chromium",

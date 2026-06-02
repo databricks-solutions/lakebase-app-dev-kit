@@ -24,6 +24,7 @@ export default defineConfig({
     "scripts/lakebase/update-commands.cli": "scripts/lakebase/update-commands.cli.ts",
     "scripts/lakebase/cut-backup.cli": "scripts/lakebase/cut-backup.cli.ts",
     "scripts/lakebase/detect-language.cli": "scripts/lakebase/detect-language.cli.ts",
+    "scripts/lakebase/ci-app-endpoint.cli": "scripts/lakebase/ci-app-endpoint.cli.ts",
     "scripts/lakebase/branch.cli": "scripts/lakebase/branch.cli.ts",
     "scripts/lakebase/doctor.cli": "scripts/lakebase/doctor.cli.ts",
     "scripts/github/pr.cli": "scripts/github/pr.cli.ts",

@@ -426,6 +426,42 @@ jobs:
       # endpoint when available; the project's playwright.config.ts is
       # responsible for booting a local server via webServer when BASE_URL
       # is not set.
+      #
+      # FEIP-7423: resolve the deployed CI app URL via the kit's
+      # lakebase-ci-app-endpoint CLI and export LAKEBASE_APP_ENDPOINT
+      # to $GITHUB_ENV when the app exists. The CLI exits 0 with empty
+      # stdout when the app does not exist (e.g. no CI-deploy step has
+      # been wired into the project, or the deploy step was skipped due
+      # to missing secrets); we keep LAKEBASE_APP_ENDPOINT unset in that
+      # case so the project-root Playwright step falls back to its
+      # playwright.config.ts webServer block.
+      - name: Resolve CI app endpoint
+        if: hashFiles('playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs') != '' && steps.lakebase-db.outputs.url != ''
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_AUTH_TYPE: pat
+          LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          CI_BRANCH="ci-pr-${PR}"
+          # Capture stdout only; the CLI prints a "does not exist" note
+          # to stderr which we want visible in the log but NOT in the
+          # exported URL value. On any infra error the CLI exits 1; the
+          # `|| URL=""` clause keeps the workflow green and the env var
+          # unset so the downstream Playwright step degrades cleanly.
+          URL="$(npx --yes \
+            --package=github:databricks-solutions/lakebase-app-dev-kit#v{{LAKEBASE_KIT_VERSION}} \
+            lakebase-ci-app-endpoint \
+            --instance "$LAKEBASE_PROJECT_ID" \
+            --branch "$CI_BRANCH")" || URL=""
+          if [ -n "$URL" ]; then
+            echo "LAKEBASE_APP_ENDPOINT=$URL" >> $GITHUB_ENV
+            echo "Resolved CI app endpoint: $URL"
+          else
+            echo "No CI app endpoint resolved; project-root E2E will use the playwright.config.ts webServer fallback."
+          fi
+
       - name: Install Playwright browsers (project root)
         if: hashFiles('playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs') != ''
         run: npx --yes playwright install --with-deps chromium

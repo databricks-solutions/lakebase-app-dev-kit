@@ -111,6 +111,33 @@ export interface GetAppEndpointResult {
   info: Record<string, unknown> | undefined;
 }
 
+export interface GetCiAppEndpointArgs {
+  /** Lakebase project id (LAKEBASE_PROJECT_ID). Used in the derived app name. */
+  instance: string;
+  /** Lakebase CI branch name (e.g. "ci-pr-42"). Used in the derived app name. */
+  branch: string;
+  /** Optional Databricks CLI profile. When omitted, the CLI uses
+   *  DATABRICKS_HOST / DATABRICKS_TOKEN env vars (the CI default). */
+  profile?: string;
+  /** Optional explicit Databricks App name override. When unset, the name
+   *  is derived from `<instance>-<branch>` (lowercased, sanitized,
+   *  truncated to the Databricks Apps 26-char limit). */
+  appName?: string;
+  /** Per-call timeout. Default: KIT_TIMEOUTS.cliDefault. */
+  timeoutMs?: number;
+}
+
+export interface GetCiAppEndpointResult {
+  /** Public URL of the deployed CI app; undefined when the app does not
+   *  exist yet (deploy step was skipped or has not run). */
+  url: string | undefined;
+  /** App name that was queried (resolved override or derived). Useful when
+   *  the caller wants to log which name was probed. */
+  appName: string;
+  /** True iff the app exists on the workspace. */
+  exists: boolean;
+}
+
 /**
  * Look up an existing app endpoint by name. Returns `exists: false`
  * (without throwing) when the app does not exist; throws on auth or
@@ -276,6 +303,64 @@ export async function ensureAppEndpoint(args: EnsureAppEndpointArgs): Promise<En
     deployStdout: stdout,
     deployStderr: stderr,
   };
+}
+
+/**
+ * Look up the deployed Databricks Apps endpoint for a Lakebase CI branch
+ * by convention. The CI app name is derived from `<instance>-<branch>`
+ * (matching the Databricks Apps name constraints: <=26 chars, lowercase
+ * letters / digits / hyphens). An explicit `appName` overrides the
+ * derivation for projects that ship their CI app under a different name.
+ *
+ * Designed for pr.yml: after the (separate) CI app-deploy step, this
+ * primitive resolves the public URL to export as `LAKEBASE_APP_ENDPOINT`
+ * for the project-root Playwright step (FEIP-7094 Phase 2). When the
+ * app does not exist yet (e.g. deploy step skipped due to missing
+ * secrets, or no CI-deploy has been wired into the project), the
+ * primitive resolves with `url: undefined` rather than throwing, so the
+ * downstream Playwright step degrades to its webServer fallback.
+ *
+ * Infrastructure failures (auth expired, CLI not on PATH) still throw.
+ */
+export async function getCiAppEndpoint(args: GetCiAppEndpointArgs): Promise<GetCiAppEndpointResult> {
+  const appName = args.appName ?? deriveCiAppName(args.instance, args.branch);
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
+  const profileFlag = args.profile ? ` --profile "${escapeShellArg(args.profile)}"` : "";
+  try {
+    const stdout = await exec(
+      `databricks apps get "${escapeShellArg(appName)}"${profileFlag} -o json`,
+      { timeout: timeoutMs }
+    );
+    const info = JSON.parse(stdout) as Record<string, unknown>;
+    return {
+      appName,
+      exists: true,
+      url: typeof info.url === "string" ? info.url : undefined,
+    };
+  } catch (err) {
+    const msg = (err as Error).message;
+    if (
+      /RESOURCE_DOES_NOT_EXIST|does not exist or is deleted|App .* does not exist|status:? 404\b/i.test(msg)
+    ) {
+      return { appName, exists: false, url: undefined };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Derive the Databricks App name for a CI branch. Lowercases, replaces
+ * non-alphanumeric runs with a single hyphen, trims leading/trailing
+ * hyphens, and truncates to the Databricks Apps 26-char limit.
+ */
+export function deriveCiAppName(instance: string, branch: string): string {
+  const raw = `${instance}-${branch}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // 26 chars is the Databricks Apps name limit; truncate cleanly and
+  // re-trim a trailing hyphen if the cut landed on one.
+  return raw.slice(0, 26).replace(/-+$/, "");
 }
 
 // ─── helpers ────────────────────────────────────────────────────

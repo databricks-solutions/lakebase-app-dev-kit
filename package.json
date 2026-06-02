@@ -86,6 +86,7 @@
     "lakebase-update-commands": "./dist/scripts/lakebase/update-commands.cli.js",
     "lakebase-cut-backup": "./dist/scripts/lakebase/cut-backup.cli.js",
     "lakebase-detect-language": "./dist/scripts/lakebase/detect-language.cli.js",
+    "lakebase-ci-app-endpoint": "./dist/scripts/lakebase/ci-app-endpoint.cli.js",
     "lakebase-branch": "./dist/scripts/lakebase/branch.cli.js",
     "lakebase-doctor": "./dist/scripts/lakebase/doctor.cli.js",
     "lakebase-pr": "./dist/scripts/github/pr.cli.js",
