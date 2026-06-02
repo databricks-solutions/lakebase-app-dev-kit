@@ -251,6 +251,250 @@ function applyPlaceholders(content: string, version: string): string {
 }
 
 /**
+ * Substitute the `${KIT_VERSION_AT_SCAFFOLD}` placeholder the
+ * `.claude/commands/{design,build}.md` templates use. Distinct from
+ * `applyPlaceholders` so the workflow path can stay focused on its
+ * `{{LAKEBASE_KIT_VERSION}}` shape and the command path can stay
+ * focused on its own.
+ */
+function applyCommandPlaceholders(content: string, version: string): string {
+  return content.replace(/\$\{KIT_VERSION_AT_SCAFFOLD\}/g, version);
+}
+
+// ─── detectCommandDrift: FEIP-7424 .claude/commands/*.md walker ──
+
+/** Files the kit ships under `.claude/commands/`. Sub-set of the dir's
+ *  contents: hook files are project-owned and never reported as drift. */
+const COMMAND_HOOK_FILE_PATTERN = /\.(pre|post)-hook\.md$/;
+
+function findKitCommandsDir(start: string): string {
+  let dir = start;
+  for (let i = 0; i < 6; i++) {
+    const candidate = path.join(
+      dir,
+      "templates",
+      "project",
+      "common",
+      ".claude",
+      "commands"
+    );
+    if (fs.existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `Could not locate templates/project/common/.claude/commands/ relative to ${start}. ` +
+      `Pass explicit kitDir.`
+  );
+}
+
+export type CommandFileStatus = WorkflowStatus;
+
+export interface CommandFileEntry {
+  /** File name (e.g. "design.md"). */
+  name: string;
+  status: CommandFileStatus;
+  /**
+   * Project's pinned kit version, parsed from the file's
+   * `Pinned to: <version>` line. Undefined when the file doesn't
+   * carry a pin (e.g. legacy hand-rolled command files).
+   */
+  pinned_version?: string;
+  /**
+   * Kit's current version (the version the detector compared against).
+   * Same for every file in a single report; surfaced per-entry so a
+   * downstream consumer can diff pinned vs current without re-reading
+   * package.json.
+   */
+  kit_version?: string;
+  /**
+   * Unified diff when status is "drifted". Project's lines marked -,
+   * template's +. Substitutions are re-applied to the template before
+   * the diff so version-pin updates don't show up as noise (the
+   * project's pinned version is replaced with the kit's current
+   * version on both sides).
+   */
+  diff?: string;
+}
+
+export interface CommandDriftReport {
+  /** Aggregate: ok if every file is unchanged + no template missing. */
+  overall: "ok" | "drift";
+  /** Per-file status. Hook files NEVER appear here. */
+  files: CommandFileEntry[];
+}
+
+export interface DetectCommandDriftArgs {
+  /** Project directory containing `.claude/commands/`. */
+  projectDir: string;
+  /**
+   * Kit directory containing
+   * `templates/project/common/.claude/commands/`. Default: walks up
+   * from this module looking for the templates marker (same logic as
+   * `detectWorkflowDrift`).
+   */
+  kitDir?: string;
+}
+
+/**
+ * Parse `Pinned to: <version>` (case-insensitive, allows surrounding
+ * markdown decoration) from a command file. Returns undefined when no
+ * pin line is present.
+ */
+function parsePinnedVersion(content: string): string | undefined {
+  const m = content.match(/^\s*[*_>`\s]*pinned\s+to\s*:\s*[`*_]*([^\s`*_]+)[`*_]*\s*$/im);
+  return m ? m[1] : undefined;
+}
+
+/**
+ * Compare a project's `.claude/commands/*.md` against the kit's
+ * canonical templates. Hook files
+ * (`<name>.{pre,post}-hook.md`) are excluded from the walk; projects
+ * own those.
+ *
+ * Each entry reports the project's pinned kit version (from the
+ * `Pinned to:` line) plus the kit's current version. Drifted entries
+ * include a unified diff with the version placeholder re-applied to
+ * the template on both sides, so a version bump alone never shows up
+ * as drift.
+ */
+export function detectCommandDrift(args: DetectCommandDriftArgs): CommandDriftReport {
+  const projectCommandsDir = path.join(args.projectDir, ".claude", "commands");
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const kitCommandsDir = args.kitDir
+    ? path.join(args.kitDir, "templates", "project", "common", ".claude", "commands")
+    : findKitCommandsDir(here);
+
+  // The "current kit version" is shared across every entry in a single
+  // report; resolve it once.
+  const kitVersion = readKitVersionFromCommandsDir(kitCommandsDir);
+
+  const templateFiles = fs.existsSync(kitCommandsDir)
+    ? fs
+        .readdirSync(kitCommandsDir)
+        .filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f))
+    : [];
+  const projectFiles = fs.existsSync(projectCommandsDir)
+    ? fs
+        .readdirSync(projectCommandsDir)
+        .filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f))
+    : [];
+
+  const seen = new Set<string>();
+  const files: CommandFileEntry[] = [];
+
+  for (const name of templateFiles) {
+    seen.add(name);
+    const projectPath = path.join(projectCommandsDir, name);
+    const templatePath = path.join(kitCommandsDir, name);
+    const templateRaw = fs.readFileSync(templatePath, "utf8");
+    if (!fs.existsSync(projectPath)) {
+      files.push({ name, status: "missing", kit_version: kitVersion });
+      continue;
+    }
+    const projectContent = fs.readFileSync(projectPath, "utf8");
+    const pinned = parsePinnedVersion(projectContent);
+    // Re-apply the placeholder substitution on the template using the
+    // project's pinned version (when present). This neutralizes
+    // version-pin updates: a project pinned to 0.3.0 vs a kit at 0.4.0
+    // would otherwise look drifted on every `Pinned to:` line.
+    const versionForCompare = pinned ?? kitVersion;
+    const templateContent = applyCommandPlaceholders(templateRaw, versionForCompare);
+    if (projectContent === templateContent) {
+      files.push({
+        name,
+        status: "unchanged",
+        pinned_version: pinned,
+        kit_version: kitVersion,
+      });
+    } else {
+      files.push({
+        name,
+        status: "drifted",
+        pinned_version: pinned,
+        kit_version: kitVersion,
+        diff: unifiedDiff(name, projectContent, templateContent),
+      });
+    }
+  }
+
+  for (const name of projectFiles) {
+    if (seen.has(name)) continue;
+    files.push({ name, status: "extra", kit_version: kitVersion });
+  }
+
+  const order: Record<CommandFileStatus, number> = {
+    drifted: 0,
+    missing: 1,
+    extra: 2,
+    unchanged: 3,
+  };
+  files.sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name));
+
+  const hasDrift = files.some((f) => f.status === "drifted" || f.status === "missing");
+  return { overall: hasDrift ? "drift" : "ok", files };
+}
+
+/**
+ * Read the kit's `package.json` version from the commands templates
+ * directory. The commands dir lives at
+ * `<kitRoot>/templates/project/common/.claude/commands`, so walk up
+ * 5 levels to `<kitRoot>`. Mirrors `readKitVersion` above but the
+ * starting directory is different.
+ */
+function readKitVersionFromCommandsDir(kitCommandsDir: string): string {
+  let dir = kitCommandsDir;
+  for (let i = 0; i < 5; i++) {
+    dir = path.dirname(dir);
+  }
+  try {
+    const raw = fs.readFileSync(path.join(dir, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw) as { version?: unknown };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+// ─── detectScaffoldedDrift: FEIP-7424 umbrella ───────────────────
+
+export interface ScaffoldedDriftReport {
+  /** Aggregate across every scaffolded surface. */
+  overall: "ok" | "drift";
+  workflows: WorkflowDriftReport;
+  commands: CommandDriftReport;
+}
+
+export interface DetectScaffoldedDriftArgs {
+  projectDir: string;
+  kitDir?: string;
+}
+
+/**
+ * One-shot drift detection across every scaffolded surface the kit
+ * stamps with a version pin. Currently covers
+ * `.github/workflows/*.yml` (via {@link detectWorkflowDrift}) and
+ * `.claude/commands/*.md` (via {@link detectCommandDrift}). Future
+ * scaffolded surfaces with a similar template-plus-pin shape can plug
+ * into the same report shape.
+ *
+ * Use this when you want a single ok/drift verdict for a project;
+ * call the per-surface functions when you only care about one.
+ */
+export function detectScaffoldedDrift(
+  args: DetectScaffoldedDriftArgs
+): ScaffoldedDriftReport {
+  const workflows = detectWorkflowDrift(args);
+  const commands = detectCommandDrift(args);
+  return {
+    overall: workflows.overall === "drift" || commands.overall === "drift" ? "drift" : "ok",
+    workflows,
+    commands,
+  };
+}
+
+/**
  * Refresh a scaffolded project's `.github/workflows/*.yml` in place
  * from the kit's current templates.
  *
