@@ -97,6 +97,55 @@ export async function deployScripts(targetDir: string, opts?: ScaffoldOptions): 
   return copyDir(path.join(commonDir(opts), "scripts"), path.join(targetDir, "scripts"), true);
 }
 
+export interface DeployClaudeCommandsResult {
+  /** Paths (relative to targetDir) that were written. */
+  written: string[];
+  /** Paths that already existed and were left untouched (force=false). */
+  skipped: string[];
+}
+
+export interface DeployClaudeCommandsOptions extends ScaffoldOptions {
+  /** Overwrite existing .claude/commands/*.md. Default: false. */
+  force?: boolean;
+}
+
+/**
+ * Deploy `.claude/commands/{design,build}.md` from
+ * `common/.claude/commands/`. Substitutes `${KIT_VERSION_AT_SCAFFOLD}`
+ * with the kit version that ran the scaffold so the project file pins
+ * to a specific substrate revision (the future drift detector reads
+ * this back). Skips files that already exist in the project unless
+ * `force: true` so a re-run does not clobber a user's edits.
+ */
+export async function deployClaudeCommands(
+  targetDir: string,
+  opts?: DeployClaudeCommandsOptions
+): Promise<DeployClaudeCommandsResult> {
+  const src = path.join(commonDir(opts), ".claude", "commands");
+  if (!fs.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path.join(targetDir, ".claude", "commands");
+  fs.mkdirSync(destDir, { recursive: true });
+  const version = kitVersion(opts);
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const entry of fs.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path.join(".claude", "commands", entry);
+    const destPath = path.join(targetDir, relDest);
+    if (fs.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    const before = fs.readFileSync(path.join(src, entry), "utf-8");
+    const after = before.replace(/\$\{KIT_VERSION_AT_SCAFFOLD\}/g, version);
+    fs.writeFileSync(destPath, after);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
+
 /** Deploy GitHub Actions workflows from common/.github/workflows/. */
 export async function deployWorkflows(targetDir: string, opts?: ScaffoldOptions): Promise<string[]> {
   const written = copyDir(
@@ -339,6 +388,13 @@ export interface ScaffoldStaticAllArgs extends ScaffoldOptions {
   language?: ProjectLanguage;
   runnerType?: RunnerType;
   report?: ScaffoldReportFn;
+  /**
+   * Skip `.claude/commands/{design,build}.md`. Default: false (commands
+   * are scaffolded). Set to true when the project already has its own
+   * commands or when scaffolding programmatically (CI bootstrap) for
+   * a consumer that does not use Claude Code.
+   */
+  skipCommands?: boolean;
 }
 
 export interface ScaffoldAllArgs extends ScaffoldStaticAllArgs {
@@ -350,6 +406,8 @@ export interface ScaffoldStaticAllResult {
   scripts: string[];
   workflows: string[];
   hooksInstalled: string;
+  /** `.claude/commands/*.md` files written this run. Empty when skipped. */
+  claudeCommands: string[];
 }
 
 /**
@@ -401,7 +459,14 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
   report("Installing git hooks");
   const hooksInstalled = await installHooks(args.targetDir);
 
-  return { scripts, workflows, hooksInstalled };
+  let claudeCommands: string[] = [];
+  if (!args.skipCommands) {
+    report("Deploying .claude/commands/");
+    const cmd = await deployClaudeCommands(args.targetDir, opts);
+    claudeCommands = cmd.written;
+  }
+
+  return { scripts, workflows, hooksInstalled, claudeCommands };
 }
 
 /**
