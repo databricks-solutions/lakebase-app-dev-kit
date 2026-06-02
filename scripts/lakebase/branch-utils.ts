@@ -161,6 +161,34 @@ export async function getDefaultBranch(opts: BranchLookupOpts): Promise<Lakebase
 }
 
 /**
+ * Tier check: returns true iff `name` matches a non-default Lakebase branch
+ * by exact branchId. Mirrors the post-checkout hook's auto-discovery model
+ * (see templates/project/common/scripts/post-checkout.sh:252-279): the
+ * architect cuts long-running tiers (staging, uat, perf, ...) deliberately
+ * via createLongRunningBranch, and a git checkout to a name matching any
+ * such non-default Lakebase branch is a "tier checkout" that pairs the
+ * existing branch rather than creating a feature branch.
+ *
+ * Pure utility – callers supply the branch list. This keeps the helper
+ * sync, mockable, and cheap to call multiple times against the same
+ * cached list during a single workflow.
+ */
+export function isTier(name: string, branches: LakebaseBranchInfo[]): boolean {
+  if (!name) { return false; }
+  return branches.some((b) => !b.isDefault && b.nameLeaf === name);
+}
+
+/**
+ * Returns the names (branchId leaves) of every non-default Lakebase branch
+ * in the project. The "long-running tier" set the architect has cut. Useful
+ * for surfaces that need to enumerate tiers (e.g. extension UI grouping)
+ * rather than just test membership via {@link isTier}.
+ */
+export function tierBranchNames(branches: LakebaseBranchInfo[]): string[] {
+  return branches.filter((b) => !b.isDefault).map((b) => b.nameLeaf as string);
+}
+
+/**
  * Resolve a branch reference to its full resource name (projects/.../branches/...).
  * Returns undefined when the branch can't be found.
  */

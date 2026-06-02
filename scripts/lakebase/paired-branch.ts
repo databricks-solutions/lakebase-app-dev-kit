@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createBranch, waitForBranchReady } from "./branch-create.js";
 import { deleteBranch } from "./branch-delete.js";
-import { getBranchByName, getDefaultBranch } from "./branch-utils.js";
+import { getBranchByName, isTier, listBranches } from "./branch-utils.js";
 import type { LakebaseBranchInfo } from "./branch-utils.js";
 import {
   endpointPath,
@@ -406,7 +406,7 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
 
 // ─── checkoutPaired ────────────────────────────────────────────
 
-export type CheckoutMode = "trunk" | "staging" | "feature" | "feature-created";
+export type CheckoutMode = "trunk" | "tier" | "feature" | "feature-created";
 
 export interface CheckoutPairedArgs {
   /** Project directory (must contain .env). */
@@ -421,12 +421,6 @@ export interface CheckoutPairedArgs {
    * the post-checkout hook. Default: no alias – uses main/master.
    */
   trunkAlias?: string;
-  /**
-   * Override: when the current git branch equals this name, pair with the
-   * Lakebase `staging` branch (which must already exist; this function does
-   * NOT auto-create it). Mirrors LAKEBASE_STAGING_BRANCH.
-   */
-  stagingAlias?: string;
   /**
    * Pinned base branch for feature mode. Mirrors LAKEBASE_BASE_BRANCH. When
    * set, new feature branches always fork from this branch instead of using
@@ -474,12 +468,17 @@ export interface CheckoutPairedResult {
  * developers running `git checkout` in a terminal, the hook handles this
  * automatically – calling checkoutPaired then is redundant.
  *
- * Mirrors the hook's three-mode logic and parent fallback chain:
+ * Mirrors the hook's three-mode logic and parent fallback chain. Tier
+ * discovery is auto from the Lakebase branch list – no per-tier alias
+ * is needed (this is the post-alpha.9 model, see FEIP-7098):
  *
  *   1. **trunk** – current branch == `trunkAlias` (or main/master if no
  *      alias). Pairs .env with the project's default Lakebase branch.
- *   2. **staging** – current branch == `stagingAlias`. Pairs .env with the
- *      Lakebase `staging` branch IF it already exists; does NOT auto-create.
+ *   2. **tier** – current branch name matches a non-default Lakebase branch
+ *      by exact branchId (any long-running tier the architect has cut:
+ *      staging / uat / perf / dev / ...). Pairs .env with that branch;
+ *      does NOT auto-create. Tiers must be bootstrapped deliberately via
+ *      {@link createLongRunningBranch}.
  *   3. **feature** – anything else. Auto-creates a Lakebase branch with the
  *      same sanitized name, using parent precedence:
  *        a. `baseBranch` arg (pinned 3-tier base)
@@ -519,45 +518,40 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
   const previousBranch =
     args.previousBranch ?? readEnvVar(envPath, "LAKEBASE_BRANCH_ID") ?? "";
 
-  // 4. Determine mode
+  // 4. Determine mode. One listBranches() call powers both the default-branch
+  // resolution AND the tier check, mirroring the hook's "pull the branch
+  // list once" pattern (post-checkout.sh:198-221). Auto-discovers any
+  // long-running tier the architect has cut – no per-tier alias is needed.
   const trunkAlias = args.trunkAlias?.trim();
-  const stagingAlias = args.stagingAlias?.trim();
   let mode: CheckoutMode = "feature";
   let lakebaseBranch = branchId;
 
   const isTrunkAlias = trunkAlias && rawBranch === trunkAlias;
   const isMainOrMaster = !trunkAlias && (rawBranch === "main" || rawBranch === "master");
-  const isStagingAlias = stagingAlias && rawBranch === stagingAlias;
+
+  const lakebaseBranches = await listBranches({ instance });
+  // Match the hook's tier-discovery rule: a git branch maps to a tier when
+  // its raw name (NOT the sanitized form) exactly matches a non-default
+  // Lakebase branch. The hook compares against $BRANCH directly; we do the
+  // same so a `feature/x` git branch never accidentally pairs with a tier
+  // just because its sanitized form happens to collide.
+  const tierMatch = isTier(rawBranch, lakebaseBranches);
 
   if (isTrunkAlias || isMainOrMaster) {
     mode = "trunk";
-    const def = await getDefaultBranch({ instance });
+    const def = lakebaseBranches.find((b) => b.isDefault);
     if (!def) {
       throw new Error(
         `Could not resolve default Lakebase branch for instance "${instance}"`
       );
     }
     lakebaseBranch = def.name.split("/branches/").pop() ?? def.uid;
-  } else if (isStagingAlias) {
-    mode = "staging";
-    const staging = await getBranchByName("staging", { instance });
-    if (!staging) {
-      warnings.push(
-        `On git branch "${rawBranch}" (staging alias) but Lakebase "staging" branch does not exist. ` +
-          `It must be bootstrapped deliberately – this function does not auto-create it.`
-      );
-      // Don't update .env when staging is missing – return a hollow result
-      return {
-        branchId,
-        mode,
-        matchedLakebaseBranch: "staging",
-        endpointHost: "",
-        databaseUrl: "",
-        envUpdated: false,
-        warnings,
-      };
-    }
-    lakebaseBranch = "staging";
+  } else if (tierMatch) {
+    mode = "tier";
+    // rawBranch is guaranteed by isTier() to match an existing non-default
+    // Lakebase branch by exact branchId. No auto-create branch; tiers must
+    // be cut deliberately via createLongRunningBranch.
+    lakebaseBranch = rawBranch;
   } else {
     // Feature mode – find or create the Lakebase branch with parent fallback
     let existing = await getBranchByName(branchId, { instance });
