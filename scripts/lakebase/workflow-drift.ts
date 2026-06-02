@@ -1,12 +1,14 @@
-// Drift detector: scaffolded project's .github/workflows/*.yml vs the
-// kit's current templates (FEIP-7140).
+// Drift detector + in-place refresh for a scaffolded project's
+// .github/workflows/*.yml against the kit's current templates
+// (FEIP-7140 + FEIP-7139).
 //
 // Scaffolded projects ship copies of pr.yml, merge.yml, cleanup-orphans.yml
 // at scaffold time. The kit's templates evolve (new lint steps, schema-
 // diff gates, bug fixes) but existing projects never auto-pick those
-// changes up. This primitive surfaces the drift so a maintainer can
-// decide whether to refresh (via FEIP-7139 updateWorkflows when that
-// lands) or pin intentionally.
+// changes up. `detectWorkflowDrift` surfaces the gap; `updateWorkflows`
+// (FEIP-7139) closes it by writing the current kit templates into the
+// project's .github/workflows/, with the same {{LAKEBASE_KIT_VERSION}}
+// substitution the scaffolder does.
 //
 // The "kit version pinned by the project" surfaces via npm's installed
 // view: if the project depends on @databricks-solutions/lakebase-app-dev-kit,
@@ -175,4 +177,186 @@ export function detectWorkflowDrift(
     overall: hasDrift ? "drift" : "ok",
     files,
   };
+}
+
+// ─── updateWorkflows: FEIP-7139 in-place refresh ────────────────
+
+export type WorkflowUpdateOutcome = "added" | "updated" | "unchanged" | "removed";
+
+export interface WorkflowFileUpdate {
+  /** File name (e.g. "pr.yml"). */
+  name: string;
+  outcome: WorkflowUpdateOutcome;
+}
+
+export interface UpdateWorkflowsArgs {
+  /** Project directory containing .github/workflows/. */
+  projectDir: string;
+  /**
+   * Kit directory containing templates/project/common/.github/workflows/.
+   * Default: walk up from this module looking for the templates marker
+   * (same logic as {@link detectWorkflowDrift}).
+   */
+  kitDir?: string;
+  /**
+   * When true, removes project workflow .yml files that aren't in the
+   * kit templates. Default: false – projects legitimately add their own
+   * workflows alongside the kit's set.
+   */
+  pruneExtras?: boolean;
+  /**
+   * When true, report what WOULD change but don't write to disk.
+   * Default: false.
+   */
+  dryRun?: boolean;
+  /**
+   * When true, substitute `{{LAKEBASE_KIT_VERSION}}` with the kit's
+   * current version (read from its package.json) before writing.
+   * Default: true – matches the scaffolder's behavior.
+   */
+  substitute?: boolean;
+}
+
+export interface UpdateWorkflowsResult {
+  /** Per-file outcome (added / updated / unchanged / removed). */
+  files: WorkflowFileUpdate[];
+  /** True iff anything actually changed on disk (or would, in dryRun). */
+  changed: boolean;
+}
+
+/**
+ * Read the kit's `package.json` version. Walks up from the workflows
+ * templates dir to find `<kitRoot>/package.json`. Returns "unknown"
+ * (the same fallback the scaffolder uses) when the file can't be read,
+ * so refreshes don't fail on test fixture trees without a package.json.
+ */
+function readKitVersion(kitWorkflowsDir: string): string {
+  // kitWorkflowsDir = <kitRoot>/templates/project/common/.github/workflows
+  // Walk up 5 levels to reach <kitRoot>.
+  let dir = kitWorkflowsDir;
+  for (let i = 0; i < 5; i++) {
+    dir = path.dirname(dir);
+  }
+  try {
+    const raw = fs.readFileSync(path.join(dir, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw) as { version?: unknown };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function applyPlaceholders(content: string, version: string): string {
+  return content.replace(/\{\{LAKEBASE_KIT_VERSION\}\}/g, version);
+}
+
+/**
+ * Refresh a scaffolded project's `.github/workflows/*.yml` in place
+ * from the kit's current templates.
+ *
+ * Defaults to:
+ *   - WRITES the kit's template content into the project, overwriting
+ *     any drifted copies. `{{LAKEBASE_KIT_VERSION}}` is substituted with
+ *     the kit's current version (read from its package.json).
+ *   - LEAVES extra project workflow files in place (the project might
+ *     have added its own .yml alongside the kit's set). Pass
+ *     `pruneExtras: true` to remove them.
+ *   - CREATES .github/workflows/ if missing.
+ *
+ * Designed to be the safe counterpart to {@link detectWorkflowDrift}:
+ * after a drift report flags drifted/missing files, `updateWorkflows()`
+ * closes the gap in one call. The per-file `outcome` list mirrors the
+ * drift report's vocabulary so callers can diff before vs after if
+ * needed.
+ *
+ * Set `dryRun: true` to surface the same per-file outcomes without
+ * touching disk – useful for previews in lakebase-doctor.
+ */
+export function updateWorkflows(
+  args: UpdateWorkflowsArgs
+): UpdateWorkflowsResult {
+  const projectWorkflowsDir = path.join(
+    args.projectDir,
+    ".github",
+    "workflows"
+  );
+  const here = path.dirname(new URL(import.meta.url).pathname);
+  const kitWorkflowsDir = args.kitDir
+    ? path.join(
+        args.kitDir,
+        "templates",
+        "project",
+        "common",
+        ".github",
+        "workflows"
+      )
+    : findKitTemplatesDir(here);
+
+  const substitute = args.substitute !== false;
+  const dryRun = args.dryRun === true;
+  const pruneExtras = args.pruneExtras === true;
+
+  const templateFiles = fs.existsSync(kitWorkflowsDir)
+    ? fs.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml"))
+    : [];
+  const projectFiles = fs.existsSync(projectWorkflowsDir)
+    ? fs.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml"))
+    : [];
+
+  // Ensure the project directory exists before we write anything (unless
+  // dryRun OR the template set is empty).
+  if (!dryRun && templateFiles.length > 0 && !fs.existsSync(projectWorkflowsDir)) {
+    fs.mkdirSync(projectWorkflowsDir, { recursive: true });
+  }
+
+  const version = substitute ? readKitVersion(kitWorkflowsDir) : "";
+  const seen = new Set<string>();
+  const files: WorkflowFileUpdate[] = [];
+
+  for (const name of templateFiles) {
+    seen.add(name);
+    const projectPath = path.join(projectWorkflowsDir, name);
+    const templatePath = path.join(kitWorkflowsDir, name);
+    const templateRaw = fs.readFileSync(templatePath, "utf-8");
+    const desired = substitute ? applyPlaceholders(templateRaw, version) : templateRaw;
+    const existed = fs.existsSync(projectPath);
+    const current = existed ? fs.readFileSync(projectPath, "utf-8") : "";
+
+    let outcome: WorkflowUpdateOutcome;
+    if (!existed) {
+      outcome = "added";
+    } else if (current === desired) {
+      outcome = "unchanged";
+    } else {
+      outcome = "updated";
+    }
+
+    if (!dryRun && outcome !== "unchanged") {
+      fs.writeFileSync(projectPath, desired);
+    }
+    files.push({ name, outcome });
+  }
+
+  if (pruneExtras) {
+    for (const name of projectFiles) {
+      if (seen.has(name)) continue;
+      const projectPath = path.join(projectWorkflowsDir, name);
+      if (!dryRun) {
+        fs.unlinkSync(projectPath);
+      }
+      files.push({ name, outcome: "removed" });
+    }
+  }
+
+  // Sort to match detectWorkflowDrift's "interesting first" ordering.
+  const order: Record<WorkflowUpdateOutcome, number> = {
+    added: 0,
+    updated: 1,
+    removed: 2,
+    unchanged: 3,
+  };
+  files.sort((a, b) => order[a.outcome] - order[b.outcome] || a.name.localeCompare(b.name));
+
+  const changed = files.some((f) => f.outcome !== "unchanged");
+  return { files, changed };
 }
