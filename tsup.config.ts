@@ -21,6 +21,7 @@ export default defineConfig({
     "scripts/lakebase/create-project.cli": "scripts/lakebase/create-project.cli.ts",
     "scripts/lakebase/adopt-tdd.cli": "scripts/lakebase/adopt-tdd.cli.ts",
     "scripts/lakebase/infra-runner.cli": "scripts/lakebase/infra-runner.cli.ts",
+    "scripts/lakebase/update-commands.cli": "scripts/lakebase/update-commands.cli.ts",
     "scripts/lakebase/cut-backup.cli": "scripts/lakebase/cut-backup.cli.ts",
     "scripts/lakebase/detect-language.cli": "scripts/lakebase/detect-language.cli.ts",
     "scripts/lakebase/branch.cli": "scripts/lakebase/branch.cli.ts",
