@@ -251,7 +251,61 @@ describe("createBranch – TTL auto-recovery (FEIP-7436)", () => {
     expect(getCachedProjectRetention("test-project")).toBe("604800s");
   });
 
-  it("throws LakebaseBranchTtlTooLongError when get-project returns no retention duration", async () => {
+  it("retries with hardcoded 7d fallback when get-project returns no retention duration", async () => {
+    // Previously this threw without retrying. Now: when retention is
+    // undiscoverable, fall back to 604800s (the value the typed error
+    // message recommends) so creates against workspaces with restrictive
+    // caps + bare project metadata still succeed.
+    let targetCreated = false;
+    mockGetBranchByName.mockImplementation((branchName: string) => {
+      if (branchName === "staging") return Promise.resolve(fakeBranch("staging", "production"));
+      if (branchName === "feature-x") {
+        return Promise.resolve(targetCreated ? fakeBranch("feature-x", "staging") : undefined);
+      }
+      return Promise.resolve(undefined);
+    });
+    mockGetProjectRetentionDuration.mockResolvedValue(undefined);
+
+    const capError = Object.assign(new Error("Command failed"), {
+      stderr: "Error: expiration time exceeds the maximum expiration time",
+    });
+    mockExecFile
+      .mockImplementationOnce(execFileCallbackShape({ error: capError }))
+      .mockImplementationOnce((...args: unknown[]) => {
+        targetCreated = true;
+        const cb = args[args.length - 1] as (
+          err: Error | null,
+          value?: { stdout: string; stderr: string },
+        ) => void;
+        cb(null, {
+          stdout: '{"name":"projects/test-project/branches/feature-x"}',
+          stderr: "",
+        });
+      });
+
+    const result = await createBranch({
+      instance: "test-project",
+      branch: "feature-x",
+      parentBranch: "staging",
+      ttl: "2592000s",
+    });
+
+    // Retry happened with the hardcoded 604800s fallback.
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
+    const secondCallArgs = mockExecFile.mock.calls[1][1] as string[];
+    const specIdx = secondCallArgs.indexOf("--json");
+    const retrySpec = JSON.parse(secondCallArgs[specIdx + 1]) as { spec: { ttl?: string } };
+    expect(retrySpec.spec.ttl).toBe("604800s");
+
+    // Stderr documents that we used the hardcoded fallback (not retention).
+    expect(stderrChunks.join("")).toMatch(
+      /workspace TTL cap rejected '2592000s'.*hardcoded fallback '604800s'.*history_retention_duration not discoverable/,
+    );
+
+    expect(result.nameLeaf).toBe("feature-x");
+  });
+
+  it("throws LakebaseBranchTtlTooLongError when the fallback retry also hits the cap", async () => {
     mockGetBranchByName.mockImplementation((branchName: string) => {
       if (branchName === "staging") return Promise.resolve(fakeBranch("staging", "production"));
       return Promise.resolve(undefined);
@@ -261,7 +315,10 @@ describe("createBranch – TTL auto-recovery (FEIP-7436)", () => {
     const capError = Object.assign(new Error("Command failed"), {
       stderr: "Error: expiration time exceeds the maximum expiration time",
     });
-    mockExecFile.mockImplementationOnce(execFileCallbackShape({ error: capError }));
+    // Both create attempts fail with the cap (workspace caps below 7d).
+    mockExecFile
+      .mockImplementationOnce(execFileCallbackShape({ error: capError }))
+      .mockImplementationOnce(execFileCallbackShape({ error: capError }));
 
     await expect(
       createBranch({
@@ -272,8 +329,8 @@ describe("createBranch – TTL auto-recovery (FEIP-7436)", () => {
       }),
     ).rejects.toThrow(LakebaseBranchTtlTooLongError);
 
-    // Only one create-branch attempt was made (no retry without a cap to clamp against).
-    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    // Both the original and fallback attempts ran.
+    expect(mockExecFile).toHaveBeenCalledTimes(2);
   });
 
   it("does not probe get-project when no TTL was set (noExpiry path)", async () => {

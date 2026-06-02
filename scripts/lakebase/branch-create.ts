@@ -295,15 +295,18 @@ async function createWithTtlRecovery(
     if (retention === undefined) {
       retention = await getProjectRetentionDuration({ projectId: instance, host });
       // Cache even an undefined probe result so we don't re-shell for it
-      // every time. callers can clear via clearRetentionCache() in tests.
+      // every time. Callers can clear via clearRetentionCache() in tests.
       cacheProjectRetention(instance, retention);
     }
-    if (!retention) {
-      // No cap to clamp against. Surface the original error with the
-      // typed wrapper so callers can route on instanceof.
-      throw new LakebaseBranchTtlTooLongError(originalTtl, err.message);
-    }
-    const clamped = minLakebaseTtl(originalTtl, retention) ?? retention;
+    // No retention discoverable (project metadata didn't expose it,
+    // get-project failed, or the field was absent). Fall back to a
+    // hardcoded 7-day TTL: it fits inside almost every workspace
+    // policy and is the value the typed error message itself recommends.
+    // If the workspace caps below 7 days too, the retry will fail and
+    // we'll surface the typed error so the user can manually override.
+    const FALLBACK_TTL = "604800s";
+    const effectiveRetention = retention ?? FALLBACK_TTL;
+    const clamped = minLakebaseTtl(originalTtl, effectiveRetention) ?? effectiveRetention;
     if (clamped === originalTtl) {
       // Retention is >= originalTtl; clamping won't help. Original cap
       // applies; rethrow typed.
@@ -311,7 +314,8 @@ async function createWithTtlRecovery(
     }
     process.stderr.write(
       `[lakebase-branch-create] workspace TTL cap rejected '${originalTtl}' for ` +
-        `project '${instance}'; retrying with retention-clamped '${clamped}'.\n`,
+        `project '${instance}'; retrying with ` +
+        (retention ? `retention-clamped '${clamped}'.\n` : `hardcoded fallback '${clamped}' (history_retention_duration not discoverable).\n`),
     );
     const retrySpec = { ...specObj, ttl: clamped };
     try {
