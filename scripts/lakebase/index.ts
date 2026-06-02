@@ -26,6 +26,7 @@ export * from "./branch-utils.js";
 export { createProject } from "./create-project.js";
 export * from "./env-file.js";
 export * from "./get-connection.js";
+export * from "./install-playwright.js";
 export * from "./lakebase-project.js";
 export * from "./project-verify.js";
 export * from "./runner-setup.js";
