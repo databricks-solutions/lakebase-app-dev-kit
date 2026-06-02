@@ -4,12 +4,29 @@ import { readMasterTestList } from "./test-list";
 import type { TestList, TestListItem } from "./test-list";
 import { readAcLayer } from "./run-cycle";
 import type { AcLayer } from "./experiment";
+import { collectSpikeInputs, type SpikeInput } from "./spike-carryforward";
 
 export interface ExperimentStrategy {
   /** Human-readable strategy label, e.g. "postgres-arrays" or "json-blob". */
   name: string;
   /** One-sentence summary of the design choice this strategy makes. */
   rationale: string;
+}
+
+export interface PerExperimentCap {
+  /**
+   * Maximum number of cycles a single experiment may run before the
+   * orchestrator caps it. Independent of the race-level wall-clock
+   * budget; one runaway experiment burns its own cycles, not the
+   * shared phase budget. Undefined or non-positive = no cap.
+   */
+  max_cycles?: number;
+  /**
+   * Maximum wall-clock budget for a single experiment, in minutes.
+   * Distinct from the race-level wall-clock budget. Undefined or
+   * non-positive = no cap.
+   */
+  max_wall_clock_minutes?: number;
 }
 
 export interface BudgetProposal {
@@ -19,6 +36,13 @@ export interface BudgetProposal {
   wall_clock_minutes: number;
   /** Number of Navigator+Driver agent pairs available. */
   agent_pairs: number;
+  /**
+   * Per-experiment caps. When set, the orchestrator stops a single
+   * experiment's cycles when its cap is hit and surfaces "experiment
+   * X capped" to the PO without starving its siblings. Optional;
+   * absent means no per-experiment cap is enforced (legacy behavior).
+   */
+  per_experiment?: PerExperimentCap;
 }
 
 export interface ExperimentPlan {
@@ -28,6 +52,14 @@ export interface ExperimentPlan {
   strategies: ExperimentStrategy[];
   budget: BudgetProposal;
   rationale: string;
+  /**
+   * Spike notes that reference this feature, surfaced from
+   * `.tdd/spikes/<slug>/notes.md` by `collectSpikeInputs`. The gate
+   * analyzer populates this automatically when matching spikes exist;
+   * the orchestrator presents them to the PO at Gate 4 and the PO
+   * decides which to keep via `attachSpikeInputs`.
+   */
+  spike_inputs?: SpikeInput[];
 }
 
 export interface OpinionGap {
@@ -101,12 +133,22 @@ export function analyzeForGate(
       concurrent_branches: mode === "N=1" ? 1 : Math.min(gaps.length, 3),
       wall_clock_minutes: 180,
       agent_pairs: mode === "N=1" ? 1 : 2,
+      // Default per-experiment caps: 30 cycles + 60 min wall-clock.
+      // Generous enough that healthy TDD work never trips them; tight
+      // enough that a runaway agent loop doesn't starve siblings.
+      // Project-level config overrides via the orchestrator before
+      // writePlan is called.
+      per_experiment: { max_cycles: 30, max_wall_clock_minutes: 60 },
     },
     rationale:
       mode === "N=1"
         ? "Fewer than 2 opinion gaps detected – refine iteratively on a single branch."
         : `${gaps.length} opinion gaps detected – race up to 3 parallel strategies, then HITL chooses promote vs synthesize.`,
   };
+  const spike_inputs = collectSpikeInputs({ tddDir, featureId });
+  if (spike_inputs.length > 0) {
+    proposed.spike_inputs = spike_inputs;
+  }
   return { feature_id: featureId, opinion_gaps: gaps, proposed_plan: proposed, transition_blockers };
 }
 

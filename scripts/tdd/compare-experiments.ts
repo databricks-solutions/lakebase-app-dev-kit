@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { listExperiments, readOutcomes } from "./experiment";
-import type { ExperimentOutcomes, ExperimentTag, TagOutcome } from "./experiment";
+import type { ExperimentCap, ExperimentOutcomes, ExperimentTag, TagOutcome } from "./experiment";
 import { listArtifacts } from "./artifacts";
 
 export interface ExperimentRow {
@@ -12,10 +12,12 @@ export interface ExperimentRow {
   tests_failed?: number;
   schema_diff_summary?: string;
   code_diff_lines?: number;
-  signal: "winning" | "stalled" | "abandoned" | "running" | "unknown";
+  signal: "winning" | "stalled" | "abandoned" | "running" | "unknown" | "capped";
   // Structured-payload fields (FEIP-7092 slice 4). Backwards compatible:
   // older callers reading the prior shape ignore these.
   by_tag?: Partial<Record<ExperimentTag, TagOutcome>>;
+  /** Set when checkPerExperimentCap has stopped this experiment. */
+  capped?: ExperimentCap;
   cycle_count: number;
   artifact_count: number;
   duration_ms?: number;
@@ -97,6 +99,7 @@ export function compareExperiments(tddDir: string, featureId: string): Compariso
       code_diff_lines: o?.code_diff_lines,
       signal: classifySignal(o),
       by_tag: o?.by_tag,
+      capped: o?.capped,
       cycle_count: readCycleCount(exp.dir),
       artifact_count: listArtifacts(tddDir, featureId, exp.experiment_slug).length,
       duration_ms: readDurationMs(exp.dir),
@@ -116,6 +119,11 @@ export function compareExperiments(tddDir: string, featureId: string): Compariso
 
 function classifySignal(o: ExperimentOutcomes | null): ExperimentRow["signal"] {
   if (!o) return "unknown";
+  // A capped experiment is a distinct signal: the orchestrator stopped
+  // it, the PO has not yet remediated. Comes before status-based
+  // classification so a capped-then-still-marked-running outcome reads
+  // as "capped" rather than "running".
+  if (o.capped) return "capped";
   if (o.status === "succeeded" && (o.tests_failed ?? 0) === 0 && (o.tests_passed ?? 0) > 0) {
     return "winning";
   }
