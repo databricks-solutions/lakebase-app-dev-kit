@@ -19,6 +19,7 @@ interface ParsedArgs {
   language?: "java" | "kotlin" | "python" | "nodejs";
   runnerType?: "self-hosted" | "github-hosted";
   enableE2e?: boolean;
+  enableInfra?: boolean;
   help?: boolean;
 }
 
@@ -60,6 +61,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--no-e2e":
         out.enableE2e = false;
         break;
+      case "--enable-infra":
+        out.enableInfra = true;
+        break;
+      case "--no-infra":
+        out.enableInfra = false;
+        break;
       case "--help":
       case "-h":
         out.help = true;
@@ -88,6 +95,9 @@ Flags:
   --runner            self-hosted | github-hosted        (default: self-hosted)
   --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
   --no-e2e            Force-disable Playwright E2E wire-up
+                      (default: on for --language nodejs, off otherwise)
+  --enable-infra      Force-enable [Infra]-tag runner wire-up
+  --no-infra          Force-disable [Infra]-tag runner wire-up
                       (default: on for --language nodejs, off otherwise)
   --json-input        Pass all args as a single JSON object (BDD harness)
 
@@ -124,6 +134,7 @@ async function main(): Promise<number> {
       language: args.language,
       runnerType: args.runnerType,
       enableE2e: args.enableE2e,
+      enableInfra: args.enableInfra,
     };
   }
 

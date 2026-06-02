@@ -81,6 +81,7 @@
     "lakebase-schema-migrate": "./dist/scripts/lakebase/schema-migrate.cli.js",
     "lakebase-github-token": "./dist/scripts/github/auth.cli.js",
     "lakebase-create-project": "./dist/scripts/lakebase/create-project.cli.js",
+    "lakebase-infra-runner": "./dist/scripts/lakebase/infra-runner.cli.js",
     "lakebase-cut-backup": "./dist/scripts/lakebase/cut-backup.cli.js",
     "lakebase-detect-language": "./dist/scripts/lakebase/detect-language.cli.js",
     "lakebase-branch": "./dist/scripts/lakebase/branch.cli.js",
