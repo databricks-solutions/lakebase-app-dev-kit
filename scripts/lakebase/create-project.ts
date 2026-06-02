@@ -19,6 +19,7 @@ import {
 } from "./lakebase-project.js";
 import { scaffoldAll } from "./scaffold.js";
 import { enableE2eForProject } from "./enable-e2e.js";
+import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
 import { syncCiSecrets } from "../util/ci-secrets.js";
 import { delay } from "../util/delay.js";
@@ -54,6 +55,17 @@ export interface CreateProjectArgs {
    * FEIP-7094 Phase 2.
    */
   enableE2e?: boolean;
+  /**
+   * Wire the [Infra]-tag runner into the project: adds a `test:infra`
+   * script to package.json (which invokes the kit's
+   * `lakebase-infra-runner` bin) and appends an infra block to
+   * `scripts/run-tests.sh`. Default: true for `nodejs`, false otherwise
+   * (mirrors the enableE2e default). Java/Kotlin/Python projects can
+   * opt in via `--enable-infra`; the package.json patch is a no-op
+   * when there is no package.json, so the wire-up is partial
+   * (run-tests.sh only) until the project hand-rolls its own runner.
+   */
+  enableInfra?: boolean;
   /**
    * Skip the `.claude/commands/{design,build}.md` scaffold. Default:
    * false (commands are written). Set to true for projects that already
@@ -107,6 +119,8 @@ export async function createProject(
   // overrides regardless of language.
   const enableE2e =
     input.enableE2e !== undefined ? input.enableE2e : language === "nodejs";
+  const enableInfra =
+    input.enableInfra !== undefined ? input.enableInfra : language === "nodejs";
   const skipCommands = input.skipCommands === true;
   const warnings: string[] = [];
 
@@ -214,6 +228,20 @@ export async function createProject(
     }
     if (e2e.runTestsScript.inserted) {
       report("  patched scripts/run-tests.sh");
+    }
+  }
+
+  // ── Step 5d: [Infra]-tag runner wire-up ──────────────────
+  if (enableInfra) {
+    report("Wiring [Infra]-tag runner support...");
+    const infra = enableInfraForProject({ projectDir });
+    if (infra.packageJson.patched && infra.packageJson.scriptAdded) {
+      report("  patched package.json (test:infra)");
+    } else if (!infra.packageJson.patched) {
+      report("  package.json absent, skipped npm wiring (non-Node project)");
+    }
+    if (infra.runTestsScript.inserted) {
+      report("  patched scripts/run-tests.sh (infra block)");
     }
   }
 

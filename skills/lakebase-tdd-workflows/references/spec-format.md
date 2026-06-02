@@ -81,6 +81,19 @@ The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and w
 | `test-list.schema.json` | feature_id, ordered_for, items (id, description, ac_id, status, scenario_file) |
 | `workflow-state.schema.json` | phase, feature_id, story_id, ac_id, cycle_id, experiment_id, timestamps |
 
+### AC layer semantics
+
+The `layer` field on each AC drives the Driver's runner dispatch (the `tagToRunner` table in SKILL.md). Each layer has its own ownership boundary:
+
+- **`API`**: behavior reachable through the project's primary public boundary (HTTP endpoint, exported library function, CLI invocation). Owned by the project's primary test runner (vitest, JUnit, pytest). The substrate does not run these; the project does.
+- **`E2E`**: user-visible behavior driven through the deployed application stack (HTTP UI, browser flows, multi-service journeys). Runs via Playwright against the paired-branch app endpoint. The kit ships `playwright.config.ts` and a smoke fixture; the project owns the scenario specs under `tests/e2e/`.
+- **`Infra`**: substrate-side invariants the kit promises on behalf of the project. The kit ships the runner (`lakebase-infra-runner`); v1 covers three checks:
+  - **migrations-clean**: `schemaMigrationStatus` reports no pending migrations for the branch.
+  - **schema-diff-computable**: `getSchemaDiff` against the parent branch returns a `SchemaDiffResult` without throwing (the introspection seam is healthy).
+  - **connection-reachable**: `getConnection` mints a usable DSN against the branch (the credential mint path is healthy).
+
+`[Infra]` rows therefore assert that the project's database substrate is operating correctly, not that the project's domain logic does anything specific. Use them sparingly: one per feature is usually enough; chasing every check at every cycle dilutes the signal.
+
 Schemas live at `scripts/tdd/schemas/`. The substrate consumes them via Ajv in `spec-sync.ts`.
 
 ## Adapter sync
