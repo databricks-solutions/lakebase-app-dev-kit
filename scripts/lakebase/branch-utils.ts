@@ -161,31 +161,48 @@ export async function getDefaultBranch(opts: BranchLookupOpts): Promise<Lakebase
 }
 
 /**
- * Tier check: returns true iff `name` matches a non-default Lakebase branch
- * by exact branchId. Mirrors the post-checkout hook's auto-discovery model
- * (see templates/project/common/scripts/post-checkout.sh:252-279): the
- * architect cuts long-running tiers (staging, uat, perf, ...) deliberately
- * via createLongRunningBranch, and a git checkout to a name matching any
- * such non-default Lakebase branch is a "tier checkout" that pairs the
- * existing branch rather than creating a feature branch.
+ * Tier predicate: a branch is a long-running tier iff it's non-default
+ * AND has no expireTime (the architect cut it deliberately via
+ * {@link createLongRunningBranch}, which sets `no_expiry: true` and
+ * therefore leaves expireTime absent on the API response).
  *
- * Pure utility – callers supply the branch list. This keeps the helper
- * sync, mockable, and cheap to call multiple times against the same
- * cached list during a single workflow.
+ * Mirrors the methodology's intent: feature branches carry a TTL
+ * (LakebaseBranchInfo.expireTime is set) and are transient; tiers
+ * (staging, uat, perf, ...) are no_expiry and persistent. The earlier
+ * "non-default" filter incorrectly swept in every feature branch.
+ *
+ * Pure utility – callers supply the branch list. This keeps the
+ * helper sync, mockable, and cheap to call multiple times against
+ * the same cached list during a single workflow.
  */
-export function isTier(name: string, branches: LakebaseBranchInfo[]): boolean {
-  if (!name) { return false; }
-  return branches.some((b) => !b.isDefault && b.nameLeaf === name);
+export function isLongRunningTierBranch(b: LakebaseBranchInfo): boolean {
+  return !b.isDefault && !b.expireTime;
 }
 
 /**
- * Returns the names (branchId leaves) of every non-default Lakebase branch
- * in the project. The "long-running tier" set the architect has cut. Useful
- * for surfaces that need to enumerate tiers (e.g. extension UI grouping)
- * rather than just test membership via {@link isTier}.
+ * Tier check: returns true iff `name` matches a long-running tier
+ * Lakebase branch by exact branchId leaf. See
+ * {@link isLongRunningTierBranch} for the underlying classification.
+ *
+ * Mirrors the post-checkout hook's auto-discovery model
+ * (templates/project/common/scripts/post-checkout.sh:252-279).
+ */
+export function isTier(name: string, branches: LakebaseBranchInfo[]): boolean {
+  if (!name) { return false; }
+  return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
+}
+
+/**
+ * Returns the names (branchId leaves) of every long-running tier
+ * Lakebase branch in the project (staging, uat, perf, ...). Useful
+ * for surfaces that need to enumerate tiers (e.g. extension UI
+ * grouping) rather than just test membership via {@link isTier}.
+ *
+ * Filters on {@link isLongRunningTierBranch} so feature branches
+ * (which are non-default but carry an expireTime) are excluded.
  */
 export function tierBranchNames(branches: LakebaseBranchInfo[]): string[] {
-  return branches.filter((b) => !b.isDefault).map((b) => b.nameLeaf as string);
+  return branches.filter(isLongRunningTierBranch).map((b) => b.nameLeaf as string);
 }
 
 /**
