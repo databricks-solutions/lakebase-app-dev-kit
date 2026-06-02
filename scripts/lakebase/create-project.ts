@@ -18,6 +18,7 @@ import {
   getDefaultBranchId,
 } from "./lakebase-project.js";
 import { scaffoldAll } from "./scaffold.js";
+import { enableE2eForProject } from "./enable-e2e.js";
 import { setupRunner } from "./runner-setup.js";
 import { syncCiSecrets } from "../util/ci-secrets.js";
 import { delay } from "../util/delay.js";
@@ -41,6 +42,18 @@ export interface CreateProjectArgs {
   runnerType?: "self-hosted" | "github-hosted";
   /** Lay down the .tdd/ scaffold from templates/tdd-bootstrap/ (default: true). */
   enableTdd?: boolean;
+  /**
+   * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
+   * runner: drops `playwright.config.ts` + `tests/e2e/smoke.spec.ts`,
+   * adds `test:e2e` script + `@playwright/test` to `package.json`, and
+   * appends an E2E block to `scripts/run-tests.sh`. Default: true for
+   * `nodejs`, false otherwise. Java/Kotlin/Python projects can still
+   * opt-in via `--enable-e2e`; the package.json patch is a no-op when
+   * there is no package.json so the wire-up is partial (templates +
+   * run-tests.sh only) until the project hand-rolls its own runner.
+   * FEIP-7094 Phase 2.
+   */
+  enableE2e?: boolean;
 }
 
 export interface CreateProjectResult {
@@ -81,6 +94,12 @@ export async function createProject(
   const language = input.language ?? "java";
   const runnerType = input.runnerType ?? "self-hosted";
   const enableTdd = input.enableTdd !== false;
+  // FEIP-7094 Phase 2: default-on for Node/React templates only. Java/
+  // Kotlin/Python backends opt in explicitly. An undefined input.enableE2e
+  // means "fall back to the language default"; an explicit boolean
+  // overrides regardless of language.
+  const enableE2e =
+    input.enableE2e !== undefined ? input.enableE2e : language === "nodejs";
   const warnings: string[] = [];
 
   if (useGithub && !input.githubOwner) {
@@ -170,6 +189,23 @@ export async function createProject(
   if (enableTdd) {
     report("Scaffolding .tdd/ workflow directory...");
     layDownTddScaffold(projectDir);
+  }
+
+  // ── Step 5c: Playwright E2E wire-up (FEIP-7094 Phase 2) ────────
+  if (enableE2e) {
+    report("Wiring Playwright E2E support...");
+    const e2e = enableE2eForProject({ projectDir });
+    if (e2e.templatesWritten.length > 0) {
+      report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
+    }
+    if (e2e.packageJson.patched && (e2e.packageJson.scriptAdded || e2e.packageJson.depAdded)) {
+      report("  patched package.json (test:e2e + @playwright/test)");
+    } else if (!e2e.packageJson.patched) {
+      report("  package.json absent, skipped npm wiring (non-Node project)");
+    }
+    if (e2e.runTestsScript.inserted) {
+      report("  patched scripts/run-tests.sh");
+    }
   }
 
   // (Step 6 – write .env – intentionally removed.)

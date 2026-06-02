@@ -43,7 +43,7 @@ afterEach(() => {
 });
 
 describe("smells catalog", () => {
-  it("ships all 9 smell entries from spec section 9", () => {
+  it("ships the canonical smell entries from the spec plus the per-tag E2E detector", () => {
     const names = SMELL_CATALOG.map((s) => s.name).sort();
     expect(names).toEqual(
       [
@@ -52,6 +52,7 @@ describe("smells catalog", () => {
         "cross-experiment-divergence",
         "cycle-stall",
         "dead-requirement-signal",
+        "e2e-row-perma-red",
         "fragility-ratio",
         "test-cost-spiral",
         "test-deletion-attempt",

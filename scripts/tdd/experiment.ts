@@ -17,9 +17,62 @@ function branchIdOf(info: LakebaseBranchInfo): string {
 // / "Infra") for display.
 export type ExperimentTag = "api" | "e2e" | "infra";
 
+/** Title-case form (matches the AC schema enum). */
+export type AcLayer = "API" | "E2E" | "Infra";
+
 export interface TagOutcome {
   passed: number;
   failed: number;
+}
+
+/**
+ * Convert the AC schema's title-case `layer` to the lowercase tag the
+ * substrate uses internally (outcomes.by_tag keys, smell detectors,
+ * markGreen runner-contract guard). One-way: tags never get title-cased
+ * back at substrate boundaries.
+ */
+export function acLayerToTag(layer: AcLayer): ExperimentTag {
+  switch (layer) {
+    case "API":
+      return "api";
+    case "E2E":
+      return "e2e";
+    case "Infra":
+      return "infra";
+  }
+}
+
+/**
+ * Idempotently bump the per-tag run counter on an outcomes record, AND
+ * mirror the change into the top-level `tests_passed` / `tests_failed`
+ * totals so those stay accurate. Mutates the passed object and returns
+ * it so callers can chain a writeOutcomes() call.
+ *
+ * The substrate doesn't enforce that `by_tag` summed across tags equals
+ * the totals (untagged tests are valid, mid-cycle reports drift), but
+ * every call through this helper keeps them aligned.
+ */
+export function recordTagRun(
+  outcomes: ExperimentOutcomes,
+  tag: ExperimentTag,
+  passed: boolean
+): ExperimentOutcomes {
+  const byTag = (outcomes.by_tag ??= {});
+  const slot = (byTag[tag] ??= { passed: 0, failed: 0 });
+  if (passed) {
+    slot.passed += 1;
+    outcomes.tests_passed = (outcomes.tests_passed ?? 0) + 1;
+  } else {
+    slot.failed += 1;
+    outcomes.tests_failed = (outcomes.tests_failed ?? 0) + 1;
+  }
+  return outcomes;
+}
+
+/** Total runs (pass + fail) recorded for a given tag in outcomes. */
+export function tagRunCount(outcomes: ExperimentOutcomes, tag: ExperimentTag): number {
+  const slot = outcomes.by_tag?.[tag];
+  return slot ? slot.passed + slot.failed : 0;
 }
 
 export interface ExperimentOutcomes {

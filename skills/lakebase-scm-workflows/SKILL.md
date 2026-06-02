@@ -121,6 +121,11 @@ lakebase-create-project \
 # Local-only (no GitHub side effects):
 lakebase-create-project --project-name proj-checkout --parent-dir ~/code \
   --databricks-host https://workspace.cloud.databricks.com --no-github
+
+# Wire Playwright into the project so [E2E]-tagged AC rows have a runner.
+# Default-on for --language nodejs; opt in elsewhere with --enable-e2e or
+# turn off with --no-e2e:
+lakebase-create-project ... --language nodejs --enable-e2e
 ```
 
 ```ts
@@ -133,6 +138,8 @@ const result = await createProject({
   language: "java",
   runnerType: "self-hosted",
   enableTdd: true,                // default: true – lays down .tdd/ scaffold
+  enableE2e: undefined,           // default: true for nodejs, false otherwise.
+                                  // Explicit boolean overrides the language default.
 });
 ```
 

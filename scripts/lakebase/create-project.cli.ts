@@ -18,6 +18,7 @@ interface ParsedArgs {
   privateRepo?: boolean;
   language?: "java" | "kotlin" | "python" | "nodejs";
   runnerType?: "self-hosted" | "github-hosted";
+  enableE2e?: boolean;
   help?: boolean;
 }
 
@@ -53,6 +54,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--runner":
         out.runnerType = argv[++i] as ParsedArgs["runnerType"];
         break;
+      case "--enable-e2e":
+        out.enableE2e = true;
+        break;
+      case "--no-e2e":
+        out.enableE2e = false;
+        break;
       case "--help":
       case "-h":
         out.help = true;
@@ -79,6 +86,9 @@ Flags:
   --public            Make the GitHub repo public (default: private)
   --language          java | kotlin | python | nodejs    (default: java)
   --runner            self-hosted | github-hosted        (default: self-hosted)
+  --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
+  --no-e2e            Force-disable Playwright E2E wire-up
+                      (default: on for --language nodejs, off otherwise)
   --json-input        Pass all args as a single JSON object (BDD harness)
 
 Output: JSON on stdout (CreateProjectResult). Progress to stderr.
@@ -113,6 +123,7 @@ async function main(): Promise<number> {
       privateRepo: args.privateRepo,
       language: args.language,
       runnerType: args.runnerType,
+      enableE2e: args.enableE2e,
     };
   }
 

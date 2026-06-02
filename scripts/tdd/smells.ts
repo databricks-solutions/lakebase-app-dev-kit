@@ -12,7 +12,8 @@ export type SmellName =
   | "cross-experiment-divergence"
   | "dead-requirement-signal"
   | "test-deletion-attempt"
-  | "boundary-violation";
+  | "boundary-violation"
+  | "e2e-row-perma-red";
 
 export interface SmellDefinition {
   name: SmellName;
@@ -66,6 +67,13 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     description: "Test references a private method or internal helper.",
     proposed_remediation: "Refactor to public boundary or move to inner-loop list.",
   },
+  {
+    name: "e2e-row-perma-red",
+    description:
+      "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
+    proposed_remediation:
+      "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner.",
+  },
 ];
 
 export interface DetectorInput {
@@ -93,6 +101,7 @@ const CYCLE_STALL_THRESHOLD = 3;
 const FRAGILITY_RATIO_FAILED_TESTS = 3;
 const TEST_COST_SPIRAL_FACTOR = 2;
 const DEAD_REQUIREMENT_SIBLING_THRESHOLD = 3;
+const E2E_PERMA_RED_THRESHOLD = 3;
 
 export function detectAll(input: DetectorInput): SmellHit[] {
   const hits: SmellHit[] = [];
@@ -105,6 +114,7 @@ export function detectAll(input: DetectorInput): SmellHit[] {
   hits.push(...detectApiCoherenceDrift(input));
   hits.push(...detectCrossExperimentDivergence(input));
   hits.push(...detectDeadRequirementSignal(input));
+  hits.push(...detectE2eRowPermaRed(input));
   return hits;
 }
 
@@ -247,6 +257,46 @@ export function detectDeadRequirementSignal(input: DetectorInput): SmellHit[] {
       detail: `${scope.feature_id}/${scope.story_id}/${scope.ac_id} has 0 cycles while ${matureSiblings.length} sibling AC(s) have matured past ${DEAD_REQUIREMENT_SIBLING_THRESHOLD}: ${matureSiblings.map(([k, v]) => `${k}=${v}`).join(", ")}`,
     },
   ];
+}
+
+/**
+ * Fire when an E2E-tagged AC has accumulated `E2E_PERMA_RED_THRESHOLD`
+ * or more consecutive cycles whose `green_at` is undefined. Since
+ * markGreen refuses to advance a layer-tagged cycle without a recorded
+ * runner outcome, "no green" captures both real failures and the
+ * "runner didn't fire" case. One smell hit per offending ac_id; the
+ * cycle_ids array carries the offending tail.
+ *
+ * Detector is scope-local (groups by ac_id within the input cycles),
+ * so it operates on a single AC per scope. The orchestrator iterates
+ * scopes to cover the whole feature.
+ */
+export function detectE2eRowPermaRed(input: DetectorInput): SmellHit[] {
+  const e2eCycles = input.cycles.filter((c) => c.layer === "E2E");
+  if (e2eCycles.length < E2E_PERMA_RED_THRESHOLD) return [];
+  const byAc = new Map<string, CycleArtifact[]>();
+  for (const c of e2eCycles) {
+    const arr = byAc.get(c.ac_id) ?? [];
+    arr.push(c);
+    byAc.set(c.ac_id, arr);
+  }
+  const hits: SmellHit[] = [];
+  for (const [acId, group] of byAc) {
+    if (group.length < E2E_PERMA_RED_THRESHOLD) continue;
+    const tail = group.slice(-E2E_PERMA_RED_THRESHOLD);
+    if (tail.every((c) => !c.green_at)) {
+      hits.push({
+        smell: "e2e-row-perma-red",
+        cycle_ids: tail.map((c) => c.cycle_id),
+        detail:
+          `${input.scope.feature_id}/${input.scope.story_id}/${acId}: ` +
+          `${E2E_PERMA_RED_THRESHOLD} consecutive E2E cycles ended without GREEN. ` +
+          "Check runner wiring (BASE_URL, paired-branch endpoint, playwright.config) " +
+          "before tightening the scenario.",
+      });
+    }
+  }
+  return hits;
 }
 
 export interface SmellsLog {
