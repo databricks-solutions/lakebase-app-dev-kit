@@ -62,7 +62,7 @@ N=1:
 20. There is **no** promote/synthesize ceremony in N=1 – the branch IS the feature. Surface to PO for PR creation.
 
 N≥2:
-21. When experiments converge, run `compareExperiments()`. Show the report to PO.
+21. When experiments converge, run `compareExperiments()` and then `writeComparisonReport({ tddDir, featureId, report })` to render a single markdown file (`.tdd/features/<F>/comparison-<timestamp>.md`) that the PO can read top-to-bottom. The renderer covers the per-experiment table, tag×experiment matrix, schema-diff side-by-side, and an HITL decision block; it also appends a one-line breadcrumb to `selection-log.md`. Surface the file path to the PO.
 22. PO chooses:
     - **promote** → call `promoteExperiment({hitlApproved: true, approverEmail})`, then `approveGate({ featureId, gate: "promote", approver, hitlApproved: true, artifactInputs: { promote_ref: "<winner-slug>:<branch_id>" } })`.
     - **synthesize** → call `synthesizeExperiments({hitlApproved: true, picks, ...})`; spec is renegotiated; transition phase back to "test-list-construction" with the new tree. Call `withdrawGate({ featureId, gate: "spec", approver, reason: "synthesis renegotiation" })` to cascade-withdraw plan + test_list so the next iteration re-runs the gate flow on the new tree.
