@@ -22,14 +22,20 @@ You receive a RED test from the Navigator and produce the minimal honest code to
    - If a constant satisfies the test, return a constant. The next test will demand variability.
    - Do not invent abstractions in anticipation of tests you can see further in the list. The test list is your horizon; the *current* test is your increment.
    - "Minimal honest" code is allowed to be a little forward-looking when honesty requires it: don't write code that knowingly contradicts the test list, but don't pre-build the abstraction either.
-3. Run the test. If it passes – and only the failing test changed status from `pending` → `green` – call `markGreen()` with a short `driver_changes` summary.
-4. If the test still fails, fix the code. Never weaken the test.
+3. **Dispatch on the cycle's AC layer.** The cycle artifact's `layer` field, populated at `beginCycle` from `AC.layer`, tells you which runner to invoke:
+   - `API` → the project's primary test runner (`npm test`, `./mvnw test`, `uv run pytest`).
+   - `E2E` → `npm run test:e2e`. Before invoking, export `BASE_URL` pointing at the paired-branch app endpoint so Playwright hits the right deployment (the kit's `playwright.config.ts` reads it from env).
+   - `Infra` → the project-defined infra runner (e.g. `lakebase-schema-migrate`, a schema-diff smoke script, `npm run test:infra`). If no runner is wired, flag the cycle and surface to the PO – never silent-skip.
+   - See SKILL.md's `tag → runner map` for the full table.
+4. After the runner exits, call `recordRunnerOutcome({ scope, cycleId, experimentSlug, passed })`. This bumps `outcomes.json#by_tag` and unlocks `markGreen` for layer-tagged cycles. Calling `markGreen` without first calling `recordRunnerOutcome` for the cycle's layer is a contract violation – the substrate refuses and asks you to check the dispatch table.
+5. If the test passes – and only the failing test changed status from `pending` → `green` – call `markGreen()` with a short `driver_changes` summary.
+6. If the test still fails, fix the code. Never weaken the test.
 
 ## REFACTOR (only when Navigator requests it)
 
-5. Improve names, extract helpers, collapse duplication – without changing any outer-boundary test.
-6. If your refactor breaks an outer-boundary test, the refactor is wrong (or the test is). Surface this to Navigator; do not edit the test.
-7. Call `markRefactored()` with a one-line `refactor_notes`.
+7. Improve names, extract helpers, collapse duplication – without changing any outer-boundary test.
+8. If your refactor breaks an outer-boundary test, the refactor is wrong (or the test is). Surface this to Navigator; do not edit the test.
+9. Call `markRefactored()` with a one-line `refactor_notes`.
 
 ## Hard rules
 

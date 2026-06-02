@@ -54,6 +54,28 @@ Load the per-role prompt for the phase you're in:
 - `scripts/tdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
 - [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, DTSTTCPW, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
 
+## tag → runner map
+
+Every AC declares a `layer` ("API" / "E2E" / "Infra" in `ac.schema.json`). The Driver dispatches to the runner that matches the current cycle's layer, not a single uniform `npm test`. The substrate enforces this: `markGreen` refuses to advance a layer-tagged cycle until `recordRunnerOutcome` has logged at least one run for the matching tag.
+
+| AC.layer | tag | Default runner | Notes |
+|---|---|---|---|
+| `API` | `api` | `npm test` (Node), `./mvnw test` (Java/Kotlin), `uv run pytest` (Python) | The project's primary test runner. Driver runs it as-is. |
+| `E2E` | `e2e` | `npm run test:e2e` (alias for `playwright test`) | Wired by `lakebase-create-project --enable-e2e`. Driver must export `BASE_URL` pointing at the paired-branch app endpoint before invoking. |
+| `Infra` | `infra` | Project-defined (`lakebase-schema-migrate`, schema-diff smoke, custom `npm run test:infra`) | When no runner is wired, the Driver flags the cycle and surfaces to PO; do not silent-skip. |
+
+Each cycle records its runner outcome via `recordRunnerOutcome({ scope, cycleId, experimentSlug, layer, passed })`. The substrate uses these counts for `outcomes.by_tag`, the `e2e-row-perma-red` smell detector, and the design-spec gate guard.
+
+```ts
+import { recordRunnerOutcome, markGreen } from "@databricks-solutions/lakebase-app-dev-kit/tdd/run-cycle";
+
+// Run the runner mapped to the current cycle's layer, then:
+recordRunnerOutcome({ scope, cycleId: c1.cycle_id, experimentSlug: "checkout", passed: true });
+
+// markGreen now sees at least one run for the layer's tag and allows the cycle to advance.
+markGreen(scope, c1.cycle_id, "added POST handler + repository write");
+```
+
 ## Operations
 
 Concrete invocations of the substrate primitives.

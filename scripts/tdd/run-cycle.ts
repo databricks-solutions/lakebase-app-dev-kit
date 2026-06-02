@@ -1,7 +1,16 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { getConnection } from "../lakebase/get-connection";
 import type { DsnResult } from "../lakebase/get-connection";
+import {
+  acLayerToTag,
+  readOutcomes,
+  recordTagRun,
+  tagRunCount,
+  writeOutcomes,
+  type AcLayer,
+  type ExperimentTag,
+} from "./experiment";
 
 export type CycleStage = "PLAN" | "RED" | "GREEN" | "REFACTOR";
 export type CycleVerdict = "passed" | "failed" | "skipped";
@@ -23,6 +32,44 @@ export interface CycleArtifact {
   green_at?: string;
   refactored_at?: string;
   smell_flags?: string[];
+  /**
+   * AC layer the Driver dispatched on (FEIP-7094). Stamped at beginCycle
+   * time: caller may pass it explicitly, otherwise the substrate looks
+   * up the AC file under stories and lifts AC.layer. When set,
+   * markGreen enforces the runner contract: outcomes.json must record
+   * at least one run for the matching tag before the cycle is allowed
+   * to advance.
+   */
+  layer?: AcLayer;
+}
+
+/**
+ * Walk every story under `<tddDir>/features/<featureId>/stories/` and
+ * return the matching AC's `layer` value. Used by beginCycle to
+ * auto-stamp the layer on the cycle artifact without forcing callers
+ * to thread it through. Returns undefined when the AC file is absent
+ * or the field is missing (a brownfield project that pre-dates the
+ * layer enum).
+ */
+export function readAcLayer(tddDir: string, featureId: string, acId: string): AcLayer | undefined {
+  const featureDir = join(tddDir, "features", featureId);
+  const storiesDir = join(featureDir, "stories");
+  if (!existsSync(storiesDir)) return undefined;
+  for (const storyDirName of readdirSync(storiesDir)) {
+    const storyDir = join(storiesDir, storyDirName);
+    if (!statSync(storyDir).isDirectory()) continue;
+    const acFile = join(storyDir, "acs", `${acId}.json`);
+    if (!existsSync(acFile)) continue;
+    try {
+      const ac = JSON.parse(readFileSync(acFile, "utf8")) as { layer?: AcLayer };
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") {
+        return ac.layer;
+      }
+    } catch {
+      /* ignore malformed AC, treat as "no layer" */
+    }
+  }
+  return undefined;
 }
 
 export interface CycleScope {
@@ -94,10 +141,18 @@ export interface BeginCycleArgs extends CycleScope {
   test_id: string;
   test_description: string;
   navigator_plan?: string;
+  /**
+   * AC layer for this cycle (FEIP-7094). Explicit value wins; otherwise
+   * the substrate derives it from the AC file under the story dir. When
+   * resolved, the cycle artifact carries it and markGreen enforces the
+   * runner contract (at least one recorded run for the matching tag).
+   */
+  layer?: AcLayer;
 }
 
 export function beginCycle(args: BeginCycleArgs): CycleArtifact {
   const cycle_id = nextCycleId(args);
+  const layer = args.layer ?? readAcLayer(args.tddDir, args.feature_id, args.ac_id);
   const artifact: CycleArtifact = {
     cycle_id,
     feature_id: args.feature_id,
@@ -109,9 +164,68 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     branch_id: args.branch_id,
     navigator_plan: args.navigator_plan,
     red_at: new Date().toISOString(),
+    layer,
   };
   writeCycleArtifact(args, artifact);
   return artifact;
+}
+
+export interface RecordRunnerOutcomeArgs {
+  scope: CycleScope;
+  cycleId: string;
+  /** Experiment slug whose outcomes.json receives the per-tag bump. */
+  experimentSlug: string;
+  /** True iff the runner reported a pass. */
+  passed: boolean;
+  /**
+   * Layer the runner ran for. Defaults to the cycle artifact's stamped
+   * layer; pass this explicitly if the cycle is layer-less (legacy)
+   * but you still want to record the run.
+   */
+  layer?: AcLayer;
+}
+
+export interface RecordRunnerOutcomeResult {
+  cycle: CycleArtifact;
+  tag: ExperimentTag;
+  /** Total runs recorded for this tag after the increment (pass + fail). */
+  runsForTag: number;
+}
+
+/**
+ * Record a runner outcome for the current cycle (FEIP-7094 Phase 3).
+ * Drivers call this after invoking the runner mapped to the current
+ * cycle's layer (the tagToRunner table in SKILL.md), passing
+ * `passed: true` on green and `passed: false` on red-with-real-failure
+ * (not on red-by-design from the Navigator's failing test).
+ *
+ * Throws if no layer can be resolved for the cycle: the Driver must
+ * supply one explicitly or the AC must declare its layer.
+ */
+export function recordRunnerOutcome(args: RecordRunnerOutcomeArgs): RecordRunnerOutcomeResult {
+  const cycle = readCycleArtifact(args.scope, args.cycleId);
+  if (!cycle) throw new Error(`cycle ${args.cycleId} not found`);
+  const layer = args.layer ?? cycle.layer;
+  if (!layer) {
+    throw new Error(
+      `cycle ${args.cycleId} has no layer and recordRunnerOutcome was called without one. ` +
+        "Either stamp AC.layer or pass {layer} explicitly."
+    );
+  }
+  const tag = acLayerToTag(layer);
+  const outcomes =
+    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug) ?? {
+      status: "running",
+    };
+  recordTagRun(outcomes, tag, args.passed);
+  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug, outcomes);
+  // Stamp the layer back onto the cycle when it was inferred from the
+  // argument so subsequent reads see it.
+  if (!cycle.layer && args.layer) {
+    cycle.layer = args.layer;
+    writeCycleArtifact(args.scope, cycle);
+  }
+  return { cycle, tag, runsForTag: tagRunCount(outcomes, tag) };
 }
 
 export function markGreen(
@@ -121,6 +235,26 @@ export function markGreen(
 ): CycleArtifact {
   const a = readCycleArtifact(scope, cycleId);
   if (!a) throw new Error(`cycle ${cycleId} not found`);
+
+  // FEIP-7094 Phase 3 runner contract: when the cycle is tagged with a
+  // layer, the Driver MUST have invoked a runner (recordRunnerOutcome)
+  // before calling markGreen. Zero runs for the matching tag almost
+  // always means the runner-dispatch map was wrong (npm test invoked
+  // for an [E2E] row, [Infra] row with no runner wired, etc.).
+  if (a.layer && a.experiment_slug) {
+    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, a.experiment_slug);
+    const tag = acLayerToTag(a.layer);
+    const runs = outcomes ? tagRunCount(outcomes, tag) : 0;
+    if (runs === 0) {
+      throw new Error(
+        `markGreen refused: cycle ${cycleId} is tagged [${a.layer}] but outcomes.json ` +
+          `records zero runs for "${tag}" on experiment "${a.experiment_slug}". The ` +
+          "Driver must call recordRunnerOutcome before markGreen so the substrate can " +
+          "verify the right runner fired (see SKILL.md tagToRunner table)."
+      );
+    }
+  }
+
   a.green_at = new Date().toISOString();
   a.driver_changes = driverChanges;
   a.navigator_verdict = "passed";
