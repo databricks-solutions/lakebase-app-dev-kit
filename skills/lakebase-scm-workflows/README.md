@@ -32,7 +32,7 @@ For agent use (running the bins directly), clone the repo and run `npm install` 
 
 ## Operations
 
-Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also import the same functions from the package. The 25-tool MCP server covers full parity with the 11 CLI bins.
+Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also import the same functions from the package. The MCP server covers full parity with the CLI bins; the precise tool inventory is generated from `apps/mcp-server/tools.ts`.
 
 **Branch lifecycle** (`lakebase-branch` / `lakebase_branch_*`)
 - `list` / `show` – enumerate or inspect branches on a project
@@ -59,6 +59,18 @@ Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also imp
 
 **Backup** (`lakebase-cut-backup`)
 - Cut a no-expiry backup branch off a source branch
+
+**TDD adoption** (`lakebase-adopt-tdd`)
+- Brownfield-only sibling to `lakebase-create-project`. Drops the `.tdd/` workflow tree into an existing repo, reports drift on re-runs (`--update`), and can overwrite drifted templates (`--force`) or preview without writing (`--dry-run`).
+
+**Infra test runner** (`lakebase-infra-runner`)
+- Runs the `[Infra]`-tag suite for a Lakebase branch (schema-diff, migration status, endpoint readiness). Reads `--instance` / `--branch` flags first, then falls back to `LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` so the same invocation works in a fresh dev shell (env set by the post-checkout hook) and in CI (env set by the resolve-credentials step). Exit codes: 0 = pass, 1 = check failed, 2 = input-validation. `--junit-output <path>` emits a JUnit XML report.
+
+**Feature status** (`lakebase-feature-status`)
+- One-screen snapshot of a feature's TDD workflow state. Reads `.tdd/<feature-id>/...` and renders either human-readable or `--json` output. The TDD-paired companion command for `lakebase-tdd-workflows` consumers; see that skill for the experiment / cycle / synthesis surface this drives.
+
+**Workflow drift** (`lakebase_workflow_drift` MCP tool, `verifyProject` JS export)
+- Checks that a project's `.githooks/` and `.github/workflows/*.yml` match the templates `lakebase-create-project` would lay down today. Exposed as an MCP tool and via `verifyProject(projectDir)` / `verifyHooks(projectDir)` / `verifyWorkflows(projectDir)` from the package; `lakebase-doctor` rolls this into its overall health check.
 
 Run any bin with `--help` for the full subcommand + flag reference.
 
@@ -164,9 +176,85 @@ The agent reads the current git branch, calls `lakebase-get-connection --output 
 | `lakebase-schema-diff` | Parent-aware schema diff between any branch and its parent (or a comparison override). |
 | `lakebase-schema-migrate` | Apply / rollback / status / list schema migrations against a branch (Flyway / Alembic / Knex). |
 | `lakebase-cut-backup` | Cut a no-expiry backup branch off a source branch. |
-| `lakebase-detect-language` | Detect project language for CI step outputs. |
+| `lakebase-detect-language` | Detect project language for CI step outputs (`java` / `kotlin` / `python` / `nodejs`). |
 | `lakebase-github-token` | Resolve / diagnose the GitHub token via the same auth chain CI uses. |
-| `lakebase-mcp-server` | Stdio MCP server exposing 25 tools (full parity with the CLI bins). For Claude Desktop / OpenAI Codex / Cursor-via-MCP / Genie Code consumers. |
+| `lakebase-adopt-tdd` | Drop the `.tdd/` workflow tree into an existing repo. Supports `--update`, `--force`, `--dry-run`. |
+| `lakebase-infra-runner` | Run the `[Infra]`-tag suite (schema-diff + migration status + endpoint readiness) for a branch. Used by scaffolded `test:infra` scripts. |
+| `lakebase-feature-status` | One-screen snapshot of a TDD feature's workflow state. Pairs with `lakebase-tdd-workflows`. |
+| `lakebase-mcp-server` | Stdio MCP server exposing the full tool surface (parity with the CLI bins). For Claude Desktop / OpenAI Codex / Cursor-via-MCP / Genie Code consumers. |
+
+## JS/TS exports
+
+Every CLI bin is a thin wrapper around a substrate function published from `@databricks-solutions/lakebase-app-dev-kit`. Hosts that embed the substrate (the `lakebase-scm-extension` VS Code/Cursor extension, custom Node services, agent tools) import these directly instead of shelling out. The full list comes from `dist/scripts/index.d.ts`; the most-used entry points by area:
+
+**Branch lifecycle** (`./lakebase` subpath or root):
+- `createBranch`, `deleteBranch`, `waitForBranchReady` (Lakebase-only CRUD)
+- `createPairedBranch`, `deletePairedBranch`, `checkoutPaired`, `syncEnvToCurrentBranch` (git + Lakebase + `.env` lockstep)
+- `createFeatureBranch`, `createTestBranch`, `createUatBranch`, `createPerfBranch` plus `CONVENTION_TIER_DEFAULTS` (tier conventions with PSA TTLs)
+- `asBranchName`, `asBranchUid`, `looksLikeBranchUid`, `branchNameFromResourcePath` (id parsing; the substrate accepts uid, sanitized name, or resource path interchangeably)
+
+**Connection + endpoint**:
+- `getConnection({ output: "dsn" | "pool", ... })` (single-seam credential mint, overloaded return type)
+- `getEndpoint`, `ensureEndpoint`, `resolveEndpointHost`, `endpointPath` (raw endpoint metadata without minting credentials)
+- `mintCredential`, `getCredential`, `waitForBranchAuthReady`, `resolveCurrentUser` (OAuth + auth-readiness primitives)
+- `POSTGRES_PORT`, `DEFAULT_DATABASE`, `DEFAULT_ENDPOINT` (constants)
+
+**Schema**:
+- `getSchemaDiff` (parent-aware structured diff; returns `SchemaDiffResult` with `tablesAdded` / `tablesRemoved` / `tablesModified` / `inSync`)
+- `queryBranchSchema`, `queryBranchTables` (live `information_schema` introspection over a branch's DSN)
+
+**Migrations**:
+- `applySchemaMigrations`, `rollbackSchemaMigration`, `schemaMigrationStatus`, `listSchemaMigrations` (Flyway / Alembic / Knex via a shared adapter)
+- `detectLanguage(projectDir)`, `toolForLanguage(language)` (language to migration tool mapping)
+- `FlywayAdapter`, `AlembicAdapter`, `KnexAdapter` (per-tool adapter values, for custom orchestration)
+
+**Project bootstrap**:
+- `createProject(args, onProgress?)` (the orchestrator behind `lakebase-create-project`; returns `CreateProjectResult` with the warnings list non-fatal steps collect into)
+- `layDownTddScaffold(targetDir)` and `adoptTdd(args)` (greenfield + brownfield TDD scaffolds)
+- `deployLanguageProject`, `deploySpringStarter`, `SpringInitializrClient`, `resolveLatestBootVersion`, `resolveLatestLtsJavaVersion`, `isPrereleaseBootVersion`, `isLtsJavaVersion` (language scaffolds; Spring Initializr for Java / Kotlin, static templates for Python / Node)
+
+**Project verification**:
+- `verifyProject`, `verifyHooks`, `verifyWorkflows` (drift checks against the templates `create-project` would lay down today; `lakebase-doctor` consumes these)
+- `runDoctor(args)` (the orchestrator behind `lakebase-doctor`; returns `DoctorReport` with per-check `ok` / `warn` / `fail` / `skip` status)
+
+**GitHub** (from `./github` subpath or root):
+- `resolveGitHubToken`, `diagnoseGitHubAuth`, `tryVsCodeSession`, `tryGhAuthToken`, `GITHUB_SCOPES` (token resolution chain: env → VS Code session → `gh auth token`)
+- `createPullRequest`, `getPullRequest`, `mergePullRequest`, `mergePairedPullRequest`, `getPullRequestReviews`, `getPullRequestFiles`, `getPullRequestComments`, `listIssueComments`, `listWorkflowRuns`, `fastForwardBranch` (PR flow primitives behind `lakebase-pr`)
+- `createRepo`, `deleteRepo`, `repoExists`, `getRepoFullName`, `getCurrentUser` (GitHub repo CRUD used by `create-project`)
+- `createRegistrationToken`, `listRepoRunners`, `getRunnerIdByName`, `getRunnerStatus`, `deleteRunner` (self-hosted runner management)
+- `setRepoSecret`, `setRepoSecrets`, `listSecretNames` (CI secrets sync)
+
+**Env file** (`./lakebase`):
+- `writeEnvFile`, `updateEnvConnection` (the `.env` writes behind `--write-env` and the post-checkout hook)
+
+**Infra runner**:
+- `runInfraSuite(args)` returning `InfraSuiteResult`, plus `formatJUnit(result)` for CI report emission. This is what `lakebase-infra-runner` and the scaffolded `test:infra` script call.
+
+**Backup**:
+- `cutBackup(args)` returning `CutBackupResult` (the substrate behind `lakebase-cut-backup`)
+
+Typical call sites:
+
+```ts
+import {
+  getConnection,
+  getSchemaDiff,
+  createPairedBranch,
+} from "@databricks-solutions/lakebase-app-dev-kit";
+
+const { dsn } = await getConnection({
+  output: "dsn",
+  instance: "proj-checkout",
+  branch: "feature-add-orders",
+});
+
+const diff = await getSchemaDiff({
+  instance: "proj-checkout",
+  branch: "feature-add-orders",
+});
+```
+
+Subpath imports (`@databricks-solutions/lakebase-app-dev-kit/lakebase`, `/github`, `/git`, `/util`) are available for hosts that want narrower bundles.
 
 ## Composition
 

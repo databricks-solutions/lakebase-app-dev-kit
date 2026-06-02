@@ -112,6 +112,28 @@ The branch is deleted by default after notes are captured. **Spike code is never
 
 Before cutting any new experiment, the orchestrator checks the budget – at the concurrent-branch or wall-clock limit, it asks the PO to extend or stop, rather than cutting anyway.
 
+### 4. Cycle (RED / GREEN / REFACTOR)
+
+Inside an experiment branch the orchestrator advances one test-list item at a time through a Beck-style cycle. Each cycle is persisted as a JSON artifact under `.tdd/experiments/<feature>/<slug>/cycles/<cycleId>.json`, with stage transitions (`PLAN` → `RED` → `GREEN` → `REFACTOR`), the verdict (`passed | failed | skipped`), runner output, and any smells flagged during the cycle. The cycle primitives (`beginCycle`, `recordRunnerOutcome`, `markGreen`, `markRefactored`, `flagSmells`) are the only sanctioned way to write that history – the agent never edits cycle JSON by hand.
+
+### 5. Smells
+
+After every cycle, and at each gate transition, the orchestrator runs the detector catalog (`detectAll`) over the feature state and writes any hits to `.tdd/features/<feature>/smells.json`. A hit surfaces a proposed remediation to the HITL – the orchestrator does not auto-fix. The catalog covers: cycle stall, fragility ratio, test cost spiral, test deletion attempts, boundary violations, test-list drift, API coherence drift, cross-experiment divergence, dead-requirement signal, and E2E-row perma-red.
+
+### 6. Comparison, promote, synthesize (N≥2)
+
+At convergence of a parallel race, the orchestrator builds a `ComparisonReport` (`compareExperiments`) – one row per experiment with tag-matrix outcomes, plus a Markdown render written next to the feature. The PO then chooses:
+
+- **Promote** (`promoteExperiment`) – one experiment becomes the feature PR; losers are moved to `_archive/`.
+- **Synthesize** (`synthesizeExperiments`) – PO picks capabilities across experiments; the spec is renegotiated and a fresh branch runs the next cycle.
+- **Archive** (`archiveExperiment`) – move an experiment record into `_archive/` without promoting.
+
+Both promote and synthesize require `hitlApproved: true` at the function boundary; the gate cannot be skipped programmatically.
+
+### 7. Gates and integrity
+
+Every HITL decision is recorded in `.tdd/features/<feature>/gates.json` via `approveGate` / `withdrawGate`. `verifyGateIntegrity` hashes the artifacts referenced by an approved gate (`hashArtifact`, `normalizeForHash`) and reports drift if the underlying files have changed since approval. `withGatesLock` serializes concurrent writes to the gates file so two agents (e.g. Navigator + Driver running in parallel) cannot corrupt state. `migrateGatesFromSelectionLog` upgrades legacy projects that pre-date the gates schema.
+
 ## How to use
 
 Three flows – shown as what you'd prompt your agent to do, using a cart-checkout example throughout. The agent reads [`SKILL.md`](SKILL.md) (plus the Scrum-Master / Navigator / Driver agent prompts) and runs the underlying substrate primitives on your behalf.
@@ -164,6 +186,7 @@ For when you want to run something directly without the agent. Most TDD work goe
 | Command | Purpose |
 |---|---|
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). |
+| `lakebase-infra-runner [--instance <id>] [--branch <id>] [--project-dir <path>] [--comparison-branch <id>] [--junit-output <file>]` | Run the `[Infra]`-tag suite against a paired Lakebase branch. Backs the scaffolded `test:infra` script; reads `LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` when flags are absent. Emits JUnit XML when `--junit-output` is set. |
 | `node dist/scripts/tdd/spec-sync.cli.js <tddDir>` | Walk the `.tdd/` tree and print drift reports. Exit 0 even when reports exist (warn-only by design). |
 | `node dist/scripts/tdd/test-list.cli.js <tddDir> <featureId>` | Regenerate per-AC views from the feature-level master test list. |
 | `bash tests/run_all.sh` (per scaffolded project) | Run every `validate_*.sh` in the project's `tests/` directory (the project's full validation suite). |
@@ -175,6 +198,139 @@ For when you want to run something directly without the agent. Most TDD work goe
 - **`/ship`** – lives in `lakebase-release-workflows`. Not part of this skill.
 
 The substrate itself ships no installed slash commands; the scaffolder writes the command files into the project at `lakebase-create-project` time (templated, with a kit-version pin). The substrate's runtime surface stays skills + agents + scripts + CLI bins. The MCP server (`apps/mcp-server/`) exposes the tool surface for MCP-capable consumers.
+
+## Agents
+
+The role agents under [`agents/`](agents/) are invokable directly with `@lakebase-tdd-workflows/<agent-name>` in Claude Code, or referenced by the Scrum-Master when it delegates a phase. Each agent file is a self-contained prompt; the Scrum-Master coordinates them.
+
+| Agent | File | Invoked when |
+|---|---|---|
+| Scrum-Master | [`agents/scrum-master.md`](agents/scrum-master.md) | `/build` or "build the feature." Top-level orchestrator: runs the design-spec gate, spawns experiments to budget, drives cycles, watches smells, surfaces gate decisions. |
+| Architect Reviewer | [`agents/architect-reviewer.md`](agents/architect-reviewer.md) | Phase 1. Applies the layering lens to each AC and populates `layer` + `architectural_notes`. Imports `software-design-principles`. |
+| Test Strategist | [`agents/test-strategist.md`](agents/test-strategist.md) | Phase 2. Converts annotated ACs into the ordered master test list and emits per-AC views. |
+| Navigator | [`agents/navigator.md`](agents/navigator.md) | Each cycle, RED step. Writes the failing test for the current test-list item and reviews the Driver's GREEN code. Never weakens an assertion. |
+| Driver | [`agents/driver.md`](agents/driver.md) | Each cycle, GREEN + REFACTOR steps. Writes the minimal honest code to make the failing test pass, then cleans up. Never deletes or weakens a test. |
+
+## Under the covers (JS/TS primitives)
+
+The substrate's behavior is exposed as a TypeScript surface under `scripts/tdd/`. The agents call these; you can also call them directly from a Node script or from your own tooling. Import paths shown are the in-repo source paths; published consumers import from the kit package.
+
+```ts
+import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-solutions/lakebase-app-dev-kit/scripts/tdd/experiment.js";
+```
+
+### Experiments and spikes
+
+| Primitive | Purpose |
+|---|---|
+| `cutExperiment(args)` | Cut a paired Lakebase branch for an experiment and write its record under `.tdd/experiments/<feature>/<slug>/`. |
+| `listExperiments(tddDir, featureId)` | Enumerate experiment records for a feature. |
+| `readOutcomes(tddDir, featureId, slug)` / `writeOutcomes(...)` | Read/write the per-experiment `outcomes.json` (tag matrix, tests passed/failed, schema diff summary). |
+| `recordTagRun(outcomes, tag, verdict)` / `tagRunCount(outcomes, tag)` / `acLayerToTag(layer)` | Helpers for maintaining the tag-matrix bookkeeping on `outcomes.json`. |
+| `deleteExperiment(args)` | Tear down a Lakebase branch and (optionally) the on-disk experiment record. HITL-gated. |
+| `cutSpike(args)` / `listSpikes(tddDir)` / `deleteSpike(args)` | Same lifecycle for the spike side-mode under `.tdd/spikes/`. |
+| `archiveExperiment(args)` | Move an experiment record into `_archive/` without tearing down its branch. |
+
+### Cycle and runner
+
+| Primitive | Purpose |
+|---|---|
+| `beginCycle({ tddDir, featureId, slug, acId, stage })` | Start a new RED/GREEN/REFACTOR cycle and return the cycle artifact. |
+| `nextCycleId(scope)` / `listCycles(scope)` | Cycle-id allocation and history walk. |
+| `writeCycleArtifact(scope, artifact)` / `readCycleArtifact(scope, cycleId)` | Low-level cycle artifact IO; prefer `beginCycle` + the stage helpers. |
+| `recordRunnerOutcome(args)` | Attach a test-runner outcome (pass/fail/skip + raw output) to a cycle. |
+| `markGreen(scope, cycleId)` / `markRefactored(scope, cycleId, notes?)` / `flagSmells(scope, cycleId, smells)` | Stage transitions on an in-flight cycle. |
+| `readAcLayer(tddDir, featureId, acId)` | Resolve the architect-assigned layer for an AC. |
+| `openBranchDsn(args)` | Open a per-branch Postgres DSN for the cycle's runner (delegates to `lakebase-scm-workflows`). |
+
+### Test list
+
+| Primitive | Purpose |
+|---|---|
+| `readMasterTestList(tddDir, featureId)` / `writeMasterTestList(tddDir, list)` | Read/write the feature-level ordered test list. |
+| `viewByAc(list, acId)` / `viewsForAllAcs(list)` | Build per-AC slices of the master list. |
+| `writePerAcViews(tddDir, featureId, list)` | Regenerate the per-AC view files on disk (also what `test-list.cli.js` calls). |
+| `mutateTestList(args)` | Authorized mutation path: enforces ordering invariants and rejects unsafe deletes. Throws `TestListImmutabilityError` when the list is gate-protected. |
+| `isTestListProtected(featureId, opts?)` | True once Gate 3 has approved the list; further mutation requires explicit reopen. |
+
+### Plan and design-spec gate
+
+| Primitive | Purpose |
+|---|---|
+| `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget, rationale). |
+| `recordPlan(tddDir, plan, deciderEmail?)` | Persist an approved plan to `plan.json` and append the decision to `selection-log.md`. |
+| `readPlan(tddDir, featureId)` / `writePlan(tddDir, plan)` | Direct plan IO. |
+| `checkE2eGate({ tddDir, featureId })` | Pre-merge guard: refuses to advance if any `[E2E]`-tagged AC is still red. |
+
+### Gates and integrity
+
+| Primitive | Purpose |
+|---|---|
+| `approveGate({ featureId, gate, decider, artifacts })` | Record HITL approval for one of `spec | plan | test_list | promote`. Throws `GateAlreadyClosedError` on double-approve. |
+| `withdrawGate(args)` | Revoke a previously approved gate (e.g. after a smell flags drift). |
+| `verifyGateIntegrity({ tddDir, featureId, gate })` | Re-hash referenced artifacts and report drift since approval. |
+| `readGates(featureId, opts?)` / `writeGates(state, opts?)` / `defaultGatesState(featureId)` | Direct gate-state IO. |
+| `withGatesLock(featureId, fn, opts?)` | Serialize concurrent writes; throws `GatesLockBusyError` if another process holds the lock. |
+| `migrateGatesFromSelectionLog(args)` | One-shot migration for legacy projects that pre-date `gates.json`. |
+| `hashArtifact(content)` / `normalizeForHash(content)` | Content-addressable hashing used by gate integrity checks. |
+
+### Comparison, promote, synthesize
+
+| Primitive | Purpose |
+|---|---|
+| `compareExperiments(tddDir, featureId)` | Build a `ComparisonReport` (rows + tag matrix) over a feature's experiments. |
+| `writeComparisonReport(args)` / `renderComparisonReport(report)` | Persist and render the Markdown comparison artifact. |
+| `promoteExperiment({ tddDir, featureId, slug, hitlApproved })` | Promote one experiment into the feature PR; archive the rest. `hitlApproved` is mandatory. |
+| `synthesizeExperiments({ tddDir, featureId, picks, hitlApproved })` | Cut a fresh synthesis branch built from capabilities picked across experiments. `hitlApproved` is mandatory. |
+
+### Smells
+
+| Primitive | Purpose |
+|---|---|
+| `detectAll(input)` | Run every detector in `SMELL_CATALOG` against the current feature state. |
+| `detectCycleStall` / `detectFragilityRatio` / `detectTestCostSpiral` / `detectTestDeletionAttempt` / `detectBoundaryViolation` / `detectTestListDrift` / `detectApiCoherenceDrift` / `detectCrossExperimentDivergence` / `detectDeadRequirementSignal` / `detectE2eRowPermaRed` | Individual detectors; call directly when you want to bound the scope. |
+| `runDetectorsForScope(scope, input)` | Run the subset of detectors appropriate to a given scope (cycle, gate, comparison). |
+| `readSmellsLog(tddDir)` / `writeSmellsLog(tddDir, hits)` | Read/write the persisted smells log. |
+| `SMELL_CATALOG` | The canonical catalog of detectors with id, description, and severity. |
+
+### Budget
+
+| Primitive | Purpose |
+|---|---|
+| `snapshotBudget(tddDir, featureId)` | Current usage (open experiment count, wall-clock minutes spent) against the approved plan budget. |
+| `checkBudget(snapshot)` | Compute violations from a snapshot. |
+| `canCutAnotherExperiment(tddDir, featureId)` | Pre-flight check used by the Scrum-Master before `cutExperiment`. |
+
+### Spec IO and validation
+
+| Primitive | Purpose |
+|---|---|
+| `readFeature(tddDir, featureId)` / `writeFeature(tddDir, feature)` | Read/write the feature record (`.tdd/features/<id>/feature.json`). |
+| `readWorkflowState(tddDir)` / `writeWorkflowState(tddDir, state)` | Cross-feature workflow pointer (which feature is "current", last gate, etc.). |
+| `validateSpec(tddDir)` | Walk the `.tdd/` tree and return `DriftReport[]`. Backs `spec-sync.cli.js`. |
+| `writeArtifact(args)` / `listArtifacts(tddDir, featureId, kind?)` / `readArtifact(args)` | Generic artifact IO under `.tdd/features/<id>/artifacts/`. |
+
+### Status
+
+| Primitive | Purpose |
+|---|---|
+| `getFeatureStatus(tddDir, featureId)` | Build a `FeatureStatusSnapshot` (phase, plan, test-list summary, experiments, recent decisions, open smells). |
+| `renderFeatureStatus(snapshot)` | Pretty-print the snapshot for terminals. Backs `lakebase-feature-status`. |
+
+### Parallel runner
+
+| Primitive | Purpose |
+|---|---|
+| `runExperimentsInParallel<T>(args)` | Fan out a worker function across N experiments with concurrency + per-task timeout, collecting `ExperimentRunResult<T>` for each. Used by the Scrum-Master when racing strategies under N≥2. |
+
+### Spec adapters
+
+`SpecAdapter` is the pluggable surface that syncs `.tdd/` entities to/from an external tracker. The skill ships two implementations:
+
+- `markdownAdapter` (instance) / `MarkdownAdapter` (class) – the default; treats the on-disk Markdown + JSON pair as the source of truth.
+- `JiraAdapter` (constructed with `JiraAdapterConfig`) – mirrors features/stories/ACs to JIRA hierarchy. Configured by the project's `design.pre-hook.md` in scaffolded projects.
+
+Implement your own adapter against the `SpecAdapter` interface (with the `SyncEventHooks` lifecycle) to bridge to Linear, GitHub Issues, or any other tracker.
 
 ## Integration with sibling skills
 
