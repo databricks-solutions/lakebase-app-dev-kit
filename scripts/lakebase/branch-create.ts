@@ -20,11 +20,15 @@ import {
   LakebaseBranchInfo,
   LakebaseBranchTtlTooLongError,
   BranchLookupOpts,
+  cacheProjectRetention,
   getBranchByName,
+  getCachedProjectRetention,
   getDefaultBranch,
   isTtlTooLongError,
+  minLakebaseTtl,
   projectPath,
 } from "./branch-utils.js";
+import { getProjectRetentionDuration } from "./lakebase-project.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 const execFileP = promisify(execFile);
@@ -204,20 +208,7 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   } else if (args.noExpiry ?? true) {
     specObj.no_expiry = true;
   }
-  const spec = JSON.stringify({ spec: specObj });
-  try {
-    await dbcli(
-      ["postgres", "create-branch", projectPath(args.instance), sanitized, "--json", spec],
-      args.host
-    );
-  } catch (err) {
-    // Detect the workspace-TTL-policy rejection and rewrap with a typed,
-    // actionable message. Other errors bubble through as-is.
-    if (err instanceof LakebaseBranchError && specObj.ttl && isTtlTooLongError(err.message)) {
-      throw new LakebaseBranchTtlTooLongError(specObj.ttl, err.message);
-    }
-    throw err;
-  }
+  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
 
   return waitForBranchReady({
     instance: args.instance,
@@ -257,6 +248,87 @@ function leafOf(pathOrName: string | undefined): string | undefined {
   if (!pathOrName) return undefined;
   const segments = pathOrName.split("/");
   return segments[segments.length - 1] || undefined;
+}
+
+/**
+ * Run `databricks postgres create-branch` with workspace-TTL auto-recovery
+ * (FEIP-7436). When the workspace rejects the requested TTL as exceeding
+ * its maximum branch-expiration policy, this helper:
+ *
+ *   1. Probes `databricks postgres get-project` for the project's
+ *      `history_retention_duration` (a conservative upper bound for the
+ *      workspace cap; the API does not directly expose the cap itself).
+ *   2. Retries the create with `min(originalTtl, retentionDuration)`. The
+ *      retention duration is cached per-instance for the rest of the
+ *      session via {@link cacheProjectRetention} so subsequent creates
+ *      against the same project don't re-shell get-project.
+ *   3. If retention duration is missing OR the retry STILL hits the cap,
+ *      throws {@link LakebaseBranchTtlTooLongError} with both attempted
+ *      TTLs surfaced in the message.
+ *
+ * No extra API calls on the happy path: the get-project probe only fires
+ * after a TTL rejection. Non-TTL errors bubble through the first attempt
+ * untouched.
+ */
+async function createWithTtlRecovery(
+  instance: string,
+  sanitized: string,
+  specObj: { source_branch: string; no_expiry?: boolean; ttl?: string },
+  host: string | undefined,
+): Promise<void> {
+  const originalTtl = specObj.ttl;
+  try {
+    await dbcli(
+      ["postgres", "create-branch", projectPath(instance), sanitized, "--json", JSON.stringify({ spec: specObj })],
+      host,
+    );
+    return;
+  } catch (err) {
+    // Only attempt recovery when this looks like the workspace-TTL-cap
+    // rejection AND we actually had a TTL set (no_expiry: true requests
+    // never hit this code path).
+    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
+      throw err;
+    }
+    // Resolve retention duration: prefer per-session cache, then probe.
+    let retention = getCachedProjectRetention(instance);
+    if (retention === undefined) {
+      retention = await getProjectRetentionDuration({ projectId: instance, host });
+      // Cache even an undefined probe result so we don't re-shell for it
+      // every time. callers can clear via clearRetentionCache() in tests.
+      cacheProjectRetention(instance, retention);
+    }
+    if (!retention) {
+      // No cap to clamp against. Surface the original error with the
+      // typed wrapper so callers can route on instanceof.
+      throw new LakebaseBranchTtlTooLongError(originalTtl, err.message);
+    }
+    const clamped = minLakebaseTtl(originalTtl, retention) ?? retention;
+    if (clamped === originalTtl) {
+      // Retention is >= originalTtl; clamping won't help. Original cap
+      // applies; rethrow typed.
+      throw new LakebaseBranchTtlTooLongError(originalTtl, err.message);
+    }
+    process.stderr.write(
+      `[lakebase-branch-create] workspace TTL cap rejected '${originalTtl}' for ` +
+        `project '${instance}'; retrying with retention-clamped '${clamped}'.\n`,
+    );
+    const retrySpec = { ...specObj, ttl: clamped };
+    try {
+      await dbcli(
+        ["postgres", "create-branch", projectPath(instance), sanitized, "--json", JSON.stringify({ spec: retrySpec })],
+        host,
+      );
+    } catch (retryErr) {
+      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
+        throw new LakebaseBranchTtlTooLongError(
+          clamped,
+          `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`,
+        );
+      }
+      throw retryErr;
+    }
+  }
 }
 
 async function dbcli(args: string[], host?: string): Promise<string> {

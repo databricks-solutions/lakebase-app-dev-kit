@@ -173,6 +173,63 @@ export async function getProjectInfo(args: LakebaseProjectArgs): Promise<Lakebas
   };
 }
 
+/**
+ * Pure helper: extract the protobuf-Duration `history_retention_duration`
+ * from a parsed `databricks postgres get-project -o json` payload.
+ * Returns the duration as a Lakebase-format TTL string ("<seconds>s") or
+ * undefined when the field is absent / unparseable.
+ *
+ * The Lakebase API does not directly expose the workspace's maximum
+ * branch-expiration policy, but the project's `history_retention_duration`
+ * is a conservative upper bound for branch TTLs: a branch cannot retain
+ * history longer than the project does. {@link createBranch} uses this to
+ * recover from `LakebaseBranchTtlTooLongError` by retrying with a clamped
+ * TTL.
+ */
+export function findHistoryRetentionDuration(parsed: Record<string, unknown>): string | undefined {
+  // Two-shape tolerance: protobuf-style snake_case AND lower-camelCase,
+  // matching the API's actual-vs-documented JSON encoding drift.
+  const raw =
+    (parsed.history_retention_duration as string | undefined) ??
+    (parsed.historyRetentionDuration as string | undefined);
+  if (!raw || typeof raw !== "string") return undefined;
+  // Tolerate "604800s", "604800", "Ns" – normalise to "<seconds>s".
+  const m = raw.trim().match(/^(\d+)s?$/);
+  if (!m) return undefined;
+  const seconds = Number.parseInt(m[1], 10);
+  if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+  return `${seconds}s`;
+}
+
+/**
+ * Query a Lakebase project's `history_retention_duration` and return it
+ * as a Lakebase-format TTL string ("<seconds>s"). Returns undefined when
+ * the project does not exist, the CLI fails, or the field is absent.
+ *
+ * The kit caches the result per-instance for the rest of the session via
+ * the branch-utils retention cache (see {@link cacheProjectRetention}) so
+ * repeated branch creates against the same instance pay the get-project
+ * cost at most once.
+ */
+export async function getProjectRetentionDuration(
+  args: LakebaseProjectArgs,
+): Promise<string | undefined> {
+  const name = args.projectId.startsWith("projects/") ? args.projectId : `projects/${args.projectId}`;
+  let raw: string;
+  try {
+    raw = await dbcli(["postgres", "get-project", name, "-o", "json"], args.host);
+  } catch {
+    return undefined;
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  return findHistoryRetentionDuration(parsed);
+}
+
 async function dbcli(args: string[], host?: string): Promise<string> {
   const trimmedHost = host?.replace(/\/+$/, "");
   const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;

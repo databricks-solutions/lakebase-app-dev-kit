@@ -61,6 +61,56 @@ export function isTtlTooLongError(stderr: string): boolean {
   return /expiration time exceeds the maximum expiration time/i.test(stderr);
 }
 
+/**
+ * Parse a Lakebase-format TTL string ("<seconds>s") to integer seconds.
+ * Returns undefined for malformed input. Pure; used in TTL-clamp math.
+ */
+export function parseLakebaseTtl(ttl: string | undefined): number | undefined {
+  if (!ttl) return undefined;
+  const m = ttl.trim().match(/^(\d+)s?$/);
+  if (!m) return undefined;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/**
+ * Return the smaller of two Lakebase-format TTL strings (min by seconds).
+ * Returns the parseable one when only one parses; undefined when neither
+ * does. Used to clamp a requested TTL against the workspace cap.
+ */
+export function minLakebaseTtl(
+  a: string | undefined,
+  b: string | undefined,
+): string | undefined {
+  const sa = parseLakebaseTtl(a);
+  const sb = parseLakebaseTtl(b);
+  if (sa === undefined && sb === undefined) return undefined;
+  if (sa === undefined) return `${sb}s`;
+  if (sb === undefined) return `${sa}s`;
+  return `${Math.min(sa, sb)}s`;
+}
+
+// Per-instance cache of the project's `history_retention_duration`.
+// Populated lazily by `createBranch` on the first TTL-too-long retry
+// path; subsequent branch creates against the same instance reuse the
+// cached value rather than re-shelling get-project. Cleared via
+// {@link clearRetentionCache} (kept for tests; production agents never
+// need to invalidate this cache because the project's retention policy
+// is stable for the duration of any agent's lifetime).
+const RETENTION_CACHE = new Map<string, string | undefined>();
+
+export function getCachedProjectRetention(instance: string): string | undefined {
+  return RETENTION_CACHE.get(instance);
+}
+
+export function cacheProjectRetention(instance: string, ttl: string | undefined): void {
+  RETENTION_CACHE.set(instance, ttl);
+}
+
+export function clearRetentionCache(): void {
+  RETENTION_CACHE.clear();
+}
+
 export interface LakebaseBranchInfo {
   /**
    * Lakebase-side opaque uid, e.g. `br-broad-sky-d2k5gewt`. Returned by
