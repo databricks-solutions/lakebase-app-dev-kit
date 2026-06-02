@@ -83,6 +83,7 @@
     "lakebase-adopt-tdd": "./dist/scripts/lakebase/adopt-tdd.cli.js",
     "lakebase-create-project": "./dist/scripts/lakebase/create-project.cli.js",
     "lakebase-infra-runner": "./dist/scripts/lakebase/infra-runner.cli.js",
+    "lakebase-update-commands": "./dist/scripts/lakebase/update-commands.cli.js",
     "lakebase-cut-backup": "./dist/scripts/lakebase/cut-backup.cli.js",
     "lakebase-detect-language": "./dist/scripts/lakebase/detect-language.cli.js",
     "lakebase-branch": "./dist/scripts/lakebase/branch.cli.js",

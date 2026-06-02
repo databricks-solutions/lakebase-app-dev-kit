@@ -38,6 +38,8 @@ export * from "./scaffold-language.js";
 export * from "./scaffold.js";
 export * from "./schema-diff.js";
 export * from "./secret-auth.js";
+export * from "./update-commands.js";
+export * from "./workflow-drift.js";
 export * from "./spring-initializr.js";
 export * from "./uc-resources.js";
 export {
