@@ -75,6 +75,17 @@ export function tagRunCount(outcomes: ExperimentOutcomes, tag: ExperimentTag): n
   return slot ? slot.passed + slot.failed : 0;
 }
 
+export interface ExperimentCap {
+  /** Stable reason code so renderers and the orchestrator can dispatch. */
+  reason: "max_cycles" | "max_wall_clock_minutes";
+  /** Cycle number the cap fired on (cycles past this one are not run). */
+  at_cycle: number;
+  /** Wall-clock minutes elapsed when the cap fired (informational). */
+  at_minutes?: number;
+  /** Cap threshold from the plan, copied here so the renderer needn't look it up. */
+  cap_value: number;
+}
+
 export interface ExperimentOutcomes {
   tests_passed?: number;
   tests_failed?: number;
@@ -88,6 +99,14 @@ export interface ExperimentOutcomes {
   // (e.g. e2e-row-perma-red in FEIP-7094). Sum across tags is not enforced
   // to match the totals – mid-cycle reporting and untagged tests are valid.
   by_tag?: Partial<Record<ExperimentTag, TagOutcome>>;
+  /**
+   * Per-experiment cap-hit record. Set by `recordExperimentCap` when
+   * the orchestrator's `checkPerExperimentCap` fires. The comparison
+   * report renders "capped" alongside pass/fail; the orchestrator
+   * surfaces a remediation menu (continue / extend cap / abandon) to
+   * the PO. Absent when the experiment ran within its caps.
+   */
+  capped?: ExperimentCap;
 }
 
 export interface CutExperimentArgs extends BranchLookupOpts {

@@ -130,8 +130,8 @@ function renderRecommendationBlock(report: ComparisonReport): string {
 function renderExperimentTable(rows: ExperimentRow[]): string {
   if (rows.length === 0) return `_No experiments cut yet._`;
   const header = [
-    "| Experiment | Branch | Status | Signal | Cycles | Tests pass / fail | Code diff | Runtime | Artifacts |",
-    "|---|---|---|---|---|---|---|---|---|",
+    "| Experiment | Branch | Status | Signal | Cycles | Tests pass / fail | Cap | Code diff | Runtime | Artifacts |",
+    "|---|---|---|---|---|---|---|---|---|---|",
   ];
   const body = rows.map((r) => {
     const tests =
@@ -140,7 +140,12 @@ function renderExperimentTable(rows: ExperimentRow[]): string {
         : `${r.tests_passed ?? 0} / ${r.tests_failed ?? 0}`;
     const codeDiff = r.code_diff_lines === undefined ? "-" : `${r.code_diff_lines} lines`;
     const runtime = r.duration_ms === undefined ? "-" : formatDurationMs(r.duration_ms);
-    return `| \`${r.experiment_slug}\` | \`${r.branch_id}\` | ${r.status} | ${r.signal} | ${r.cycle_count} | ${tests} | ${codeDiff} | ${runtime} | ${r.artifact_count} |`;
+    const cap = r.capped
+      ? r.capped.reason === "max_cycles"
+        ? `${r.capped.reason} (>=${r.capped.cap_value} @ cycle ${r.capped.at_cycle})`
+        : `${r.capped.reason} (>=${r.capped.cap_value}m${r.capped.at_minutes ? ` @ ${r.capped.at_minutes}m` : ""})`
+      : "-";
+    return `| \`${r.experiment_slug}\` | \`${r.branch_id}\` | ${r.status} | ${r.signal} | ${r.cycle_count} | ${tests} | ${cap} | ${codeDiff} | ${runtime} | ${r.artifact_count} |`;
   });
   return [...header, ...body].join("\n");
 }
@@ -184,17 +189,22 @@ function renderSchemaDiffTable(rows: ExperimentRow[]): string {
 function renderDecisionBlock(report: ComparisonReport): string {
   const slugs = report.rows.map((r) => `\`${r.experiment_slug}\``);
   const winners = report.rows.filter((r) => r.signal === "winning").map((r) => r.experiment_slug);
+  const cappedSlugs = report.rows.filter((r) => r.signal === "capped").map((r) => r.experiment_slug);
   const winnerLine =
     winners.length === 1
       ? `Substrate signal indicates a single winner: \`${winners[0]}\`.`
       : winners.length > 1
         ? `Substrate signal indicates multiple winning experiments: ${winners.map((s) => `\`${s}\``).join(", ")}.`
         : `No experiment is currently signalling "winning"; substrate recommendation is \`${report.recommendation}\`.`;
+  const cappedLine =
+    cappedSlugs.length > 0
+      ? `\nCapped experiment(s) awaiting PO remediation: ${cappedSlugs.map((s) => `\`${s}\``).join(", ")}. For each, choose: \`extend\` (raise the cap and resume), \`abandon\` (archive this experiment, let siblings continue), or \`continue-suite\` (leave capped, decide at end).\n`
+      : "";
   return [
     `## HITL decision`,
     ``,
     winnerLine,
-    ``,
+    cappedLine,
     `Choose one path forward (the Scrum-Master orchestrator will route accordingly):`,
     ``,
     `1. **Promote** \`<slug>\` - take a single experiment to the feature PR as-is. Loser branches are archived.`,
