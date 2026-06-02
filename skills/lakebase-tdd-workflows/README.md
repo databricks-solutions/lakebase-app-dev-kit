@@ -110,7 +110,9 @@ Side-mode for exploration that sits outside the main flow. No test list, no gate
 
 The branch is deleted by default after notes are captured. **Spike code is never promoted into a TDD branch** – only the learning carries over.
 
-Before cutting any new experiment, the orchestrator checks the budget – at the concurrent-branch or wall-clock limit, it asks the PO to extend or stop, rather than cutting anyway.
+**Spike → design-spec carry-forward.** Tag a spike with the feature it informs (either YAML frontmatter `for_feature: F1-checkout` or a body line `For feature: F1-checkout`, with `feature:`, `feature_id:`, and `for_feature:` all accepted, tolerant of markdown bold). When that feature later goes through `analyzeForGate`, the analyzer's `proposed_plan.spike_inputs[]` automatically lists every matching spike with a short notes preview. The orchestrator surfaces these to the PO at Gate 4 and `attachSpikeInputs` persists the kept ones onto `plan.json` so the experiment record always carries the rationale.
+
+Before cutting any new experiment, the orchestrator checks the budget – at the concurrent-branch or wall-clock limit, it asks the PO to extend or stop, rather than cutting anyway. The plan also carries a `budget.per_experiment` cap (default 30 cycles + 60 minutes wall-clock) so one runaway experiment cannot starve its siblings: `checkPerExperimentCap` fires when an experiment crosses its cycle or wall-clock threshold, `recordExperimentCap` writes a `capped: { reason, at_cycle, ... }` record onto `outcomes.json`, and the comparison report tags the experiment with a `capped` signal and prompts the PO to `extend`, `abandon`, or `continue-suite`.
 
 ### 4. Cycle (RED / GREEN / REFACTOR)
 
@@ -129,6 +131,8 @@ At convergence of a parallel race, the orchestrator builds a `ComparisonReport` 
 - **Archive** (`archiveExperiment`) – move an experiment record into `_archive/` without promoting.
 
 Both promote and synthesize require `hitlApproved: true` at the function boundary; the gate cannot be skipped programmatically.
+
+Experiments that hit a per-experiment cap (`max_cycles` or `max_wall_clock_minutes`) appear in the report with signal `capped` and a new `Cap` column showing the reason. The HITL decision block then lists capped experiments separately and prompts the PO to choose `extend` (raise the cap and resume via `clearExperimentCap`), `abandon` (archive this experiment, let siblings continue), or `continue-suite` (leave it capped and decide at end).
 
 ### 7. Gates and integrity
 
@@ -229,7 +233,9 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 | `recordTagRun(outcomes, tag, verdict)` / `tagRunCount(outcomes, tag)` / `acLayerToTag(layer)` | Helpers for maintaining the tag-matrix bookkeeping on `outcomes.json`. |
 | `deleteExperiment(args)` | Tear down a Lakebase branch and (optionally) the on-disk experiment record. HITL-gated. |
 | `cutSpike(args)` / `listSpikes(tddDir)` / `deleteSpike(args)` | Same lifecycle for the spike side-mode under `.tdd/spikes/`. |
+| `collectSpikeInputs({ tddDir, featureId })` / `attachSpikeInputs(args)` | Scan `.tdd/spikes/` for notes tagged with a feature id (via YAML frontmatter or body line) and persist the resolved inputs onto the feature's `plan.json`. |
 | `archiveExperiment(args)` | Move an experiment record into `_archive/` without tearing down its branch. |
+| `checkPerExperimentCap(args)` / `recordExperimentCap(args)` / `clearExperimentCap(args)` | Per-experiment cap helpers. `checkPerExperimentCap` is a pure read; `recordExperimentCap` writes `outcomes.capped`; `clearExperimentCap` removes it on the PO's `extend` reply. |
 
 ### Cycle and runner
 
@@ -257,7 +263,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget, rationale). |
+| `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget incl. `per_experiment` default cap, rationale, plus `spike_inputs[]` populated automatically from any tagged spike under `.tdd/spikes/`). |
 | `recordPlan(tddDir, plan, deciderEmail?)` | Persist an approved plan to `plan.json` and append the decision to `selection-log.md`. |
 | `readPlan(tddDir, featureId)` / `writePlan(tddDir, plan)` | Direct plan IO. |
 | `checkE2eGate({ tddDir, featureId })` | Pre-merge guard: refuses to advance if any `[E2E]`-tagged AC is still red. |
@@ -327,7 +333,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 `SpecAdapter` is the pluggable surface that syncs `.tdd/` entities to/from an external tracker. The skill ships two implementations:
 
-- `markdownAdapter` (instance) / `MarkdownAdapter` (class) – the default; treats the on-disk Markdown + JSON pair as the source of truth.
+- `markdownAdapter` (instance) / `MarkdownAdapter` (class) – the default; treats the on-disk Markdown + JSON pair as the source of truth. `pushFeature` / `pushStory` / `pushAC` emit typed external_ids (`markdown:feature:<id>` / `markdown:story:<feature>:<id>` / `markdown:ac:_:<story>:<id>`). `pull(externalId, ctx)` resolves the matching entity from disk and also accepts the legacy `markdown:<id>` shape via a tree scan for backward compatibility.
 - `JiraAdapter` (constructed with `JiraAdapterConfig`) – mirrors features/stories/ACs to JIRA hierarchy. Configured by the project's `design.pre-hook.md` in scaffolded projects.
 
 Implement your own adapter against the `SpecAdapter` interface (with the `SyncEventHooks` lifecycle) to bridge to Linear, GitHub Issues, or any other tracker.

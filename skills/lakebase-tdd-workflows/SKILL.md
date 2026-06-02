@@ -85,14 +85,23 @@ Concrete invocations of the substrate primitives.
 ```ts
 import { analyzeForGate, recordPlan, writePlan } from "@databricks-solutions/lakebase-app-dev-kit/tdd/design-spec-gate";
 import { canCutAnotherExperiment } from "@databricks-solutions/lakebase-app-dev-kit/tdd/budget";
+import { attachSpikeInputs } from "@databricks-solutions/lakebase-app-dev-kit/tdd/spike-carryforward";
 
 const analysis = analyzeForGate(".tdd", "F1");
-// analysis.opinion_gaps[]  – items the analyzer flagged as opinion gaps
-// analysis.proposed_plan   – { mode: "N=1" | "N>=2", N, strategies[], budget, rationale }
+// analysis.opinion_gaps[]            – items the analyzer flagged as opinion gaps
+// analysis.proposed_plan              – { mode: "N=1" | "N>=2", N, strategies[], budget, rationale }
+// analysis.proposed_plan.budget.per_experiment
+//                                     – default cap { max_cycles: 30, max_wall_clock_minutes: 60 }
+//                                       the orchestrator can override before writePlan
+// analysis.proposed_plan.spike_inputs – auto-populated from `.tdd/spikes/<slug>/notes.md`
+//                                       entries tagged with `for_feature: F1` (frontmatter
+//                                       or body line). Surface to PO at Gate 4; pass the
+//                                       kept slugs to attachSpikeInputs.
 
 // Surface to PO. On Gate 4 approval, persist:
 recordPlan(".tdd", analysis.proposed_plan, "kevin@example.com");
 writePlan(".tdd", analysis.proposed_plan);
+attachSpikeInputs({ tddDir: ".tdd", featureId: "F1", slugs: ["explore-cart-storage"] });
 
 // Before cutting any experiment, check the budget:
 const ok = canCutAnotherExperiment(".tdd", "F1");
@@ -134,6 +143,8 @@ await deleteExperiment({
 ```ts
 import { cutSpike, listSpikes, deleteSpike }
   from "@databricks-solutions/lakebase-app-dev-kit/tdd/spike";
+import { collectSpikeInputs, attachSpikeInputs }
+  from "@databricks-solutions/lakebase-app-dev-kit/tdd/spike-carryforward";
 
 await cutSpike({
   instance: "proj-checkout",
@@ -141,6 +152,8 @@ await cutSpike({
   spikeSlug: "explore-cart-storage",
   branch: "spike-explore-cart-storage",
   parentBranch: "staging",
+  // Tag the notes so future design-spec gates pick it up:
+  notes: "---\nfor_feature: F1-checkout\n---\n\n# explore-cart-storage\n\nTried postgres arrays. Worked.\n",
 });
 
 // Notes captured, branch deleted by default (throwaway).
@@ -150,6 +163,18 @@ await deleteSpike({
   spikeSlug: "explore-cart-storage",
 });
 // Notes preserved at .tdd/spikes/explore-cart-storage/notes.md.
+
+// When the related feature shows up at the design-spec gate, surface
+// the spike's learning to the PO:
+const inputs = collectSpikeInputs({ tddDir: ".tdd", featureId: "F1-checkout" });
+// inputs[].slug, .notes_path, .preview (capped at ~200 chars), .matched_marker
+// Accepts YAML frontmatter (for_feature / feature_id / feature) and body lines
+// (`For feature:`, `feature:`, `feature_id:`, `for_feature:`, tolerant of
+// markdown bold like `**For feature:**`). Feature id is matched verbatim, no
+// prefix match.
+
+// On PO approval, persist the kept slugs onto plan.json:
+attachSpikeInputs({ tddDir: ".tdd", featureId: "F1-checkout", slugs: ["explore-cart-storage"] });
 ```
 
 ### Cycle (RED → GREEN → REFACTOR)
@@ -202,16 +227,70 @@ if (hits.length) {
 }
 ```
 
+### Per-experiment cap (every cycle, N≥2)
+
+```ts
+import { checkPerExperimentCap, recordExperimentCap, clearExperimentCap }
+  from "@databricks-solutions/lakebase-app-dev-kit/tdd/experiment-cap";
+import { readPlan } from "@databricks-solutions/lakebase-app-dev-kit/tdd/design-spec-gate";
+
+// Each cycle, after recording the runner outcome and before queuing
+// the next one, ask the substrate if this experiment is over its cap.
+const plan = readPlan(".tdd", "F1");
+const check = checkPerExperimentCap({
+  tddDir: ".tdd",
+  featureId: "F1",
+  experimentSlug: "exp-postgres-arrays",
+  cap: plan?.budget.per_experiment,
+  cycleCount: listCycles(scope).length,
+  // now: optional override for the BDD harness.
+});
+if (check.capped) {
+  recordExperimentCap({
+    tddDir: ".tdd",
+    featureId: "F1",
+    experimentSlug: "exp-postgres-arrays",
+    hit: check.hit!,
+  });
+  // outcomes.json now carries { capped: { reason, at_cycle, cap_value, at_minutes? } }.
+  // Surface to PO with the three reply options:
+  //   extend         – raise the cap on plan.json and call clearExperimentCap()
+  //   abandon        – archiveExperiment + let siblings continue
+  //   continue-suite – leave capped on disk, decide at end-of-race
+}
+
+// On the PO's "extend" reply, raise the cap and clear the capped record:
+clearExperimentCap({
+  tddDir: ".tdd",
+  featureId: "F1",
+  experimentSlug: "exp-postgres-arrays",
+});
+```
+
+The default cap (30 cycles, 60 minutes wall-clock) is seeded by `analyzeForGate`. Cycle cap is evaluated before wall-clock cap so a cycle-bound experiment that is also slow returns the `max_cycles` reason deterministically.
+
 ### Compare (N≥2 convergence)
 
 ```ts
 import { compareExperiments }
   from "@databricks-solutions/lakebase-app-dev-kit/tdd/compare-experiments";
+import { renderComparisonReport, writeComparisonReport }
+  from "@databricks-solutions/lakebase-app-dev-kit/tdd/comparison-report";
 
 const report = compareExperiments(".tdd", "F1");
-// report.rows[].signal       – "winning" | "stalled" | "abandoned" | "running" | "unknown"
+// report.rows[].signal       – "winning" | "stalled" | "abandoned" | "running"
+//                              | "capped" | "unknown"
+// report.rows[].capped       – populated when a per-experiment cap fired:
+//                              { reason: "max_cycles" | "max_wall_clock_minutes",
+//                                at_cycle, cap_value, at_minutes? }
 // report.recommendation      – "promote" | "synthesize" | "continue" | "abandon-all"
 // report.rationale           – short explanation surfaced to the PO
+
+// Render to markdown and persist next to the feature so the PO reads one
+// file end-to-end (the HITL decision block lists any capped experiments
+// with the extend / abandon / continue-suite reply options inline).
+const md = renderComparisonReport(report);
+writeComparisonReport({ tddDir: ".tdd", featureId: "F1", report });
 ```
 
 ### Promote (N≥2, single winner)
