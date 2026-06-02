@@ -19,6 +19,7 @@ export default defineConfig({
     "scripts/lakebase/schema-diff.cli": "scripts/lakebase/schema-diff.cli.ts",
     "scripts/lakebase/schema-migrate.cli": "scripts/lakebase/schema-migrate.cli.ts",
     "scripts/lakebase/create-project.cli": "scripts/lakebase/create-project.cli.ts",
+    "scripts/lakebase/adopt-tdd.cli": "scripts/lakebase/adopt-tdd.cli.ts",
     "scripts/lakebase/cut-backup.cli": "scripts/lakebase/cut-backup.cli.ts",
     "scripts/lakebase/detect-language.cli": "scripts/lakebase/detect-language.cli.ts",
     "scripts/lakebase/branch.cli": "scripts/lakebase/branch.cli.ts",
