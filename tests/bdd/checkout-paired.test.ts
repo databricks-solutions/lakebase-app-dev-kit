@@ -41,7 +41,7 @@ describe("checkoutPaired – shape", () => {
   });
 
   it("CheckoutMode is the documented union", () => {
-    const modes: CheckoutMode[] = ["trunk", "staging", "feature", "feature-created"];
+    const modes: CheckoutMode[] = ["trunk", "tier", "feature", "feature-created"];
     expect(modes.length).toBe(4);
   });
 
@@ -90,8 +90,9 @@ describe("checkoutPaired – input validation", () => {
 
 describe.skipIf(!live)("checkoutPaired – destructive live E2E", () => {
   // Live E2E here only covers the FEATURE mode against an existing test branch.
-  // Trunk and staging modes need workspace-specific aliases configured; skip
-  // those at the live tier and rely on integration tests in the extension.
+  // Trunk and tier modes depend on the workspace's Lakebase branch list state
+  // (which tiers the architect has cut); skip those at the live tier and rely
+  // on integration tests in the extension.
   it("pairs an existing feature branch and writes a valid .env", async () => {
     const dir = makeFakeGitRepo();
     try {
