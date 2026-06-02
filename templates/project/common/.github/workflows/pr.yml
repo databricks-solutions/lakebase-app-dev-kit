@@ -419,6 +419,35 @@ jobs:
           DATABRICKS_AUTH_TYPE: pat
         run: npx playwright test
 
+      # FEIP-7094 Phase 2: project-root Playwright wire-up (separate from
+      # the client/ workspace path above). Scaffolded by `lakebase-create-project
+      # --enable-e2e` for [E2E]-tagged AC rows. Runs Playwright at the
+      # project root and points BASE_URL at the CI branch's deployed app
+      # endpoint when available; the project's playwright.config.ts is
+      # responsible for booting a local server via webServer when BASE_URL
+      # is not set.
+      - name: Install Playwright browsers (project root)
+        if: hashFiles('playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs') != ''
+        run: npx --yes playwright install --with-deps chromium
+
+      - name: Run E2E tests (Playwright, project root)
+        if: hashFiles('playwright.config.ts', 'playwright.config.js', 'playwright.config.mjs') != ''
+        env:
+          # Honor a paired-branch app endpoint when an earlier step exported
+          # one to $GITHUB_ENV (LAKEBASE_APP_ENDPOINT). Otherwise the
+          # project's playwright.config.ts decides (defaults to
+          # http://localhost:3000 in the kit template).
+          BASE_URL: ${{ env.LAKEBASE_APP_ENDPOINT }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_AUTH_TYPE: pat
+        run: |
+          if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
+            npm run test:e2e
+          else
+            npx --yes playwright test
+          fi
+
       - name: Install PostgreSQL client (for schema dump)
         if: success() && steps.datasource.outputs.ci_branch_used == 'true'
         run: |
