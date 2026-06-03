@@ -30,6 +30,27 @@ iteration has a credible motivation that maps to a real refactor
 pattern. The smoke can therefore exercise the SCM workflow across
 five distinct schema-modifying PRs without contrived scope changes.
 
+## Tier topology: 2-tier (prod + staging)
+
+This smoke is opinionated: **the bug-tracker project is 2-tier**.
+The kit's tier nomenclature counts long-running tiers only, NOT
+feature branches:
+
+| --tiers | Long-running tiers | Where features fork from |
+|---------|-------------------|--------------------------|
+| 1 | prod | prod |
+| 2 | prod + staging | staging |
+| 3 | prod + staging + dev | dev |
+
+Iterations v1-v5 all declare `Lakebase parent: staging`, so the
+project must be 2-tier. `run-smoke.sh` enforces `--tiers 2` at
+startup; 1 or 3 are rejected because either would break the
+staging-as-parent assumption in the iteration specs.
+
+If you need a different tier topology for your own smoke, fork these
+iteration specs and replace every `Lakebase parent: staging` line
+with the parent your topology calls for.
+
 ## Iteration arc (5 PRs)
 
 | Iter | Branch | Headline change | Refactor type |

@@ -45,21 +45,24 @@ export interface CreateProjectArgs {
   /**
    * Lakebase tier topology for this project. An architectural choice
    * the caller (typically a wizard) should surface to the user rather
-   * than picking silently.
+   * than picking silently. Features are short-lived branches, NOT
+   * tiers; they are not counted in this number.
    *
-   *   2 (or undefined) - production + feature branches. Simple,
-   *                       greenfield-friendly.
-   *   3                 - production + staging + feature branches.
-   *                       PSA-style 3-tier flow where features merge
-   *                       into staging and staging promotes to
-   *                       production via a separate release PR.
+   *   1 (or undefined) - prod only. Features fork from prod.
+   *   2                 - prod + staging. Features fork from staging.
+   *                       Staging accumulates merged features between
+   *                       release windows; releases promote staging
+   *                       to prod via a separate PR.
+   *   3                 - prod + staging + dev. Features fork from dev.
+   *                       Dev accumulates day-to-day feature integration;
+   *                       periodically dev is promoted to staging.
    *
-   * When `tiers === 3`, scaffolding cuts a `staging` Lakebase branch
-   * (no_expiry, parent = production) so feature work has a non-prod
-   * parent to fork from. The kit's PSA-convention TTL defaults then
-   * fork feature branches off `staging` automatically.
+   * Scaffolding cuts the extra tiers off prod (staging) and off staging
+   * (dev) via `createLongRunningBranch` (Lakebase no_expiry + git push
+   * to origin). When `tiers === 1` (or omitted), only the prod default
+   * branch exists.
    */
-  tiers?: 2 | 3;
+  tiers?: 1 | 2 | 3;
   /** Lay down the .tdd/ scaffold from templates/tdd-bootstrap/ (default: true). */
   enableTdd?: boolean;
   /**
@@ -327,28 +330,26 @@ export async function createProject(
   });
 
   // ── Step 8b: Long-running tier setup (architectural choice) ───
-  // When tiers === 3 the project follows the PSA-convention 3-tier
-  // flow (production -> staging -> features). The substrate's
-  // createLongRunningBranch primitive is the only supported path to
-  // cut a tier: it creates BOTH the Lakebase side (no_expiry, forked
-  // from the project default) AND the git side (forked from `main`,
-  // pushed to origin), enforcing "every git branch gets a Lakebase
-  // branch" for tiers too. Anything that calls createBranch directly
-  // for a tier is bypassing the SCM workflow and is wrong.
+  // Tier semantics (features are NOT tiers, they are short-lived branches):
+  //   tiers === 1 (default): prod only. No extra tiers cut.
+  //   tiers === 2: cut staging (off prod).
+  //   tiers === 3: cut staging (off prod) + dev (off staging).
   //
-  // When tiers !== 3 (default), do nothing: the project is 2-tier
-  // (features fork directly from production).
+  // The substrate's createLongRunningBranch primitive is the only
+  // supported path to cut a tier: it creates BOTH the Lakebase side
+  // (no_expiry, forked from the named parent) AND the git side
+  // (forked + pushed to origin), enforcing "every git branch gets a
+  // Lakebase branch" for tiers too.
   //
-  // Runs AFTER commitAndPush because createLongRunningBranch's git
-  // side does `git fetch origin main` + `git push -u origin staging`,
-  // which requires origin to already have `main`.
-  if (tiers === 3) {
+  // Runs AFTER commitAndPush because createLongRunningBranch needs
+  // origin to already have the parent ref (e.g. main, staging).
+  if (tiers === 2 || tiers === 3) {
     if (!useGithub) {
       warnings.push(
-        "tiers === 3 requires a GitHub repository (createLongRunningBranch pushes the tier's git side to origin). Staging tier was NOT cut.",
+        `tiers === ${tiers} requires a GitHub repository (createLongRunningBranch pushes the tier's git side to origin). Extra tiers were NOT cut.`,
       );
     } else {
-      report("Cutting staging tier (tiers=3) via createLongRunningBranch...");
+      report(`Cutting staging tier (tiers=${tiers}) via createLongRunningBranch...`);
       try {
         await createLongRunningBranch({
           name: "staging",
@@ -358,13 +359,26 @@ export async function createProject(
           databricksHost: host,
         });
       } catch (err) {
-        // Non-fatal: surface as a warning so the project still exists
-        // but the user knows the tier wasn't cut. They can retry via
-        // `lakebase-branch create-paired --branch staging --no-expiry` or
-        // the dedicated tier-creation CLI flow.
         warnings.push(
-          `tiers === 3 requested but createLongRunningBranch for staging failed: ${err instanceof Error ? err.message : String(err)}.`,
+          `tiers === ${tiers} requested but createLongRunningBranch for staging failed: ${err instanceof Error ? err.message : String(err)}.`,
         );
+      }
+
+      if (tiers === 3) {
+        report("Cutting dev tier (tiers=3) via createLongRunningBranch (off staging)...");
+        try {
+          await createLongRunningBranch({
+            name: "dev",
+            forkFromBranch: "staging",
+            projectId: lakebaseProjectId,
+            workTreeDir: projectDir,
+            databricksHost: host,
+          });
+        } catch (err) {
+          warnings.push(
+            `tiers === 3 requested but createLongRunningBranch for dev failed: ${err instanceof Error ? err.message : String(err)}.`,
+          );
+        }
       }
     }
   }
