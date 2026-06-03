@@ -1,3 +1,7 @@
+---
+author: Feature Requester
+---
+
 # v3: First-class Status Workflow
 
 The team's three states (just-filed, someone-is-working-on-it, done)

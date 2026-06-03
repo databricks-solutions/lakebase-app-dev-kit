@@ -1,3 +1,7 @@
+---
+author: Feature Requester
+---
+
 # v2: Add Owners
 
 The team has been using the bug tracker for a few weeks. Bugs are

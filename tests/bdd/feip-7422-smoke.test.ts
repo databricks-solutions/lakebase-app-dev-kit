@@ -77,6 +77,16 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature.md voice)", 
     describe(iter, () => {
       const md = fs.readFileSync(path.join(SMOKE_DIR, "iterations", `${iter}.md`), "utf8");
 
+      it("carries YAML frontmatter declaring author: Feature Requester", () => {
+        // Every artifact in the kit's workflow records the ROLE that
+        // authored it (not the person). Iteration specs ARE feature.md
+        // files, authored by the feature requester. Spec Author /
+        // Architect Reviewer / Test Strategist / driver+navigator
+        // outputs each carry their own role in this frontmatter slot
+        // when they land.
+        expect(md).toMatch(/^---\n[\s\S]*?\bauthor:\s*Feature Requester\b[\s\S]*?\n---\n/);
+      });
+
       it("has a top-level H1 title", () => {
         expect(md).toMatch(/^#\s+v\d/m);
       });

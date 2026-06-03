@@ -1,3 +1,7 @@
+---
+author: Feature Requester
+---
+
 # v5: A View of the Bug List
 
 So far the team has been retrieving bugs one at a time by
