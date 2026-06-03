@@ -4,6 +4,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmRecoverError,
   recoverOrphans,
@@ -198,7 +199,7 @@ export async function runScmRecoverOrphansCli(
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-recover-orphans.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmRecoverOrphansCli(process.argv.slice(2)).then((c) =>
     process.exit(c),
   );

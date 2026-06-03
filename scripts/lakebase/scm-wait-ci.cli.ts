@@ -2,6 +2,7 @@
 // CLI: pr-ready -> ci-green (FEIP-7458 phase B+).
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmWaitCiError,
   waitForCi,
@@ -150,6 +151,6 @@ export async function runScmWaitCiCli(argv: string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-wait-ci.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmWaitCiCli(process.argv.slice(2)).then((c) => process.exit(c));
 }

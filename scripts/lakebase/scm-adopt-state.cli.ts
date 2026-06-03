@@ -18,6 +18,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmAdoptError,
   adoptScmState,
@@ -191,6 +192,6 @@ export async function runScmAdoptStateCli(argv: string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-adopt-state.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmAdoptStateCli(process.argv.slice(2)).then((c) => process.exit(c));
 }

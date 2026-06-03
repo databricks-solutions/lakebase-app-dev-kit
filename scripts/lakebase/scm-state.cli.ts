@@ -15,6 +15,7 @@
 //   2 = state file present but invalid (parse / validation failure)
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   describeGates,
   readWorkflowState,
@@ -219,7 +220,7 @@ function main(argv: string[]): number {
   return exitCodeFor(report);
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-state.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   process.exit(main(process.argv.slice(2)));
 }
 

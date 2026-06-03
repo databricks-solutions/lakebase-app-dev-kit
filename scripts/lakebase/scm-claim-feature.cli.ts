@@ -20,6 +20,7 @@
 //   3 = substrate failure (Lakebase create / git checkout / .env sync failed)
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmClaimError,
   claimFeatureBranch,
@@ -218,10 +219,7 @@ export async function runScmClaimFeatureCli(
   }
 }
 
-if (
-  process.argv[1] &&
-  process.argv[1].endsWith("scm-claim-feature.cli.js")
-) {
+if (isCliEntry(import.meta.url)) {
   void runScmClaimFeatureCli(process.argv.slice(2)).then((code) =>
     process.exit(code),
   );

@@ -2,6 +2,7 @@
 // CLI: ci-green -> merged (FEIP-7458 phase B+).
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmMergeError,
   mergeFeature,
@@ -202,6 +203,6 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-merge.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmMergeCli(process.argv.slice(2)).then((c) => process.exit(c));
 }

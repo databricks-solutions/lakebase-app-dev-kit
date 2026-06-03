@@ -3,6 +3,7 @@
 // FEIP-7458 phase B+.
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmAbandonError,
   abandonFeatureBranch,
@@ -151,7 +152,7 @@ export async function runScmAbandonFeatureCli(
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-abandon-feature.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmAbandonFeatureCli(process.argv.slice(2)).then((c) =>
     process.exit(c),
   );

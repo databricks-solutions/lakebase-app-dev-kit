@@ -3,6 +3,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   FIXABLE_FINDING_IDS,
   ScmDoctorFixError,
@@ -211,6 +212,6 @@ export async function runScmDoctorCli(argv: string[]): Promise<number> {
   return exitCodeFor(report);
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-doctor.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmDoctorCli(process.argv.slice(2)).then((c) => process.exit(c));
 }

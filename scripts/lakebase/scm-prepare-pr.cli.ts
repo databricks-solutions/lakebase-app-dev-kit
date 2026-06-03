@@ -2,6 +2,7 @@
 // CLI: feature-claimed -> pr-ready (FEIP-7458 phase B+).
 
 import * as path from "node:path";
+import { isCliEntry } from "../util/cli-entry.js";
 import {
   ScmPreparePrError,
   preparePr,
@@ -161,6 +162,6 @@ export async function runScmPreparePrCli(argv: string[]): Promise<number> {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith("scm-prepare-pr.cli.js")) {
+if (isCliEntry(import.meta.url)) {
   void runScmPreparePrCli(process.argv.slice(2)).then((c) => process.exit(c));
 }
