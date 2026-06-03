@@ -8315,6 +8315,41 @@ function isCliEntry(importMetaUrl) {
   }
   return invokedResolved === moduleResolved;
 }
+
+// scripts/util/proxy-env.ts
+var PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "npm_config_proxy",
+  "npm_config_https_proxy",
+  "npm_config_no_proxy",
+  "npm_config_registry"
+];
+function proxyEnvSubset(source = process.env) {
+  const out = {};
+  for (const key of PROXY_ENV_KEYS) {
+    const v = source[key];
+    if (v !== void 0 && v !== "") {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+function withProxyEnv(base = {}) {
+  const out = {};
+  const inherited = proxyEnvSubset();
+  for (const [k, v] of Object.entries(inherited)) {
+    out[k] = v;
+  }
+  for (const [k, v] of Object.entries(base)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
 export {
   CONVENTION_TIER_DEFAULTS,
   FIXABLE_FINDING_IDS,
@@ -8330,6 +8365,7 @@ export {
   LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROXY_ENV_KEYS,
   ProtectedBranchError,
   SCM_STATES,
   STATE_FILE_REL,
@@ -8528,6 +8564,7 @@ export {
   preparePr,
   projectPath,
   propagateCredentials,
+  proxyEnvSubset,
   publishBranch,
   pull,
   pullFrom,
@@ -8607,6 +8644,7 @@ export {
   waitForBranchAuthReady,
   waitForBranchReady,
   waitForCi,
+  withProxyEnv,
   workflowStateFileExists,
   writeEnvFile,
   writePlaywrightTemplates,

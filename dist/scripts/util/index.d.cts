@@ -58,4 +58,35 @@ declare function syncCiSecrets(args: SyncCiSecretsArgs): Promise<void>;
  */
 declare function isCliEntry(importMetaUrl: string): boolean;
 
-export { type CopyDirSubstitutedArgs, type OwnerRepo, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets };
+/** Proxy-related env var names; lower + upper case variants both. */
+declare const PROXY_ENV_KEYS: readonly ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy", "npm_config_proxy", "npm_config_https_proxy", "npm_config_no_proxy", "npm_config_registry"];
+/**
+ * Return ONLY the proxy-related env vars from `process.env` (or the
+ * provided source), filtered to those actually set. Empty / undefined
+ * values are omitted so callers don't accidentally overwrite an
+ * inherited value with an empty string.
+ */
+declare function proxyEnvSubset(source?: NodeJS.ProcessEnv): Record<string, string>;
+/**
+ * Compose an env object that always includes the user's proxy env on
+ * top of whatever the caller passes. Use when constructing a child
+ * process's env from scratch in a test fixture:
+ *
+ * ```ts
+ * spawnSync("npm", ["install"], {
+ *   env: withProxyEnv({ FOO: "bar" }),  // proxy keys auto-included
+ *   stdio: "inherit",
+ * });
+ * ```
+ *
+ * If `base` is `process.env`, this is a no-op (the keys are already
+ * present). If `base` is a minimal object, the proxy keys are merged
+ * in from process.env so the child still sees them.
+ *
+ * Caller-provided values take precedence over the inherited proxy
+ * keys, so a test can deliberately override (e.g. tunnel through a
+ * mock proxy) by setting the same key in `base`.
+ */
+declare function withProxyEnv(base?: Record<string, string | undefined>): Record<string, string>;
+
+export { type CopyDirSubstitutedArgs, type OwnerRepo, PROXY_ENV_KEYS, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, proxyEnvSubset, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets, withProxyEnv };

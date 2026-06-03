@@ -30,6 +30,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // scripts/util/index.ts
 var util_exports = {};
 __export(util_exports, {
+  PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
   copyDirSubstituted: () => copyDirSubstituted,
   delay: () => delay,
   exec: () => exec2,
@@ -38,10 +39,12 @@ __export(util_exports, {
   isCliEntry: () => isCliEntry,
   parseOwnerRepo: () => parseOwnerRepo,
   patchPomForLakebase: () => patchPomForLakebase,
+  proxyEnvSubset: () => proxyEnvSubset,
   sanitizeArtifactId: () => sanitizeArtifactId,
   sanitizeBranchName: () => sanitizeBranchName,
   shq: () => shq,
-  syncCiSecrets: () => syncCiSecrets
+  syncCiSecrets: () => syncCiSecrets,
+  withProxyEnv: () => withProxyEnv
 });
 module.exports = __toCommonJS(util_exports);
 
@@ -400,8 +403,44 @@ function isCliEntry(importMetaUrl2) {
   }
   return invokedResolved === moduleResolved;
 }
+
+// scripts/util/proxy-env.ts
+var PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "npm_config_proxy",
+  "npm_config_https_proxy",
+  "npm_config_no_proxy",
+  "npm_config_registry"
+];
+function proxyEnvSubset(source = process.env) {
+  const out = {};
+  for (const key of PROXY_ENV_KEYS) {
+    const v = source[key];
+    if (v !== void 0 && v !== "") {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+function withProxyEnv(base = {}) {
+  const out = {};
+  const inherited = proxyEnvSubset();
+  for (const [k, v] of Object.entries(inherited)) {
+    out[k] = v;
+  }
+  for (const [k, v] of Object.entries(base)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  PROXY_ENV_KEYS,
   copyDirSubstituted,
   delay,
   exec,
@@ -410,9 +449,11 @@ function isCliEntry(importMetaUrl2) {
   isCliEntry,
   parseOwnerRepo,
   patchPomForLakebase,
+  proxyEnvSubset,
   sanitizeArtifactId,
   sanitizeBranchName,
   shq,
-  syncCiSecrets
+  syncCiSecrets,
+  withProxyEnv
 });
 //# sourceMappingURL=index.cjs.map

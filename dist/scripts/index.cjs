@@ -44,6 +44,7 @@ __export(scripts_exports, {
   LakebaseProjectError: () => LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES: () => PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE: () => PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
   ProtectedBranchError: () => ProtectedBranchError,
   SCM_STATES: () => SCM_STATES,
   STATE_FILE_REL: () => STATE_FILE_REL,
@@ -242,6 +243,7 @@ __export(scripts_exports, {
   preparePr: () => preparePr,
   projectPath: () => projectPath,
   propagateCredentials: () => propagateCredentials,
+  proxyEnvSubset: () => proxyEnvSubset,
   publishBranch: () => publishBranch,
   pull: () => pull,
   pullFrom: () => pullFrom,
@@ -321,6 +323,7 @@ __export(scripts_exports, {
   waitForBranchAuthReady: () => waitForBranchAuthReady,
   waitForBranchReady: () => waitForBranchReady,
   waitForCi: () => waitForCi,
+  withProxyEnv: () => withProxyEnv,
   workflowStateFileExists: () => workflowStateFileExists,
   writeEnvFile: () => writeEnvFile,
   writePlaywrightTemplates: () => writePlaywrightTemplates,
@@ -8643,6 +8646,41 @@ function isCliEntry(importMetaUrl2) {
   }
   return invokedResolved === moduleResolved;
 }
+
+// scripts/util/proxy-env.ts
+var PROXY_ENV_KEYS = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "npm_config_proxy",
+  "npm_config_https_proxy",
+  "npm_config_no_proxy",
+  "npm_config_registry"
+];
+function proxyEnvSubset(source = process.env) {
+  const out = {};
+  for (const key of PROXY_ENV_KEYS) {
+    const v = source[key];
+    if (v !== void 0 && v !== "") {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+function withProxyEnv(base = {}) {
+  const out = {};
+  const inherited = proxyEnvSubset();
+  for (const [k, v] of Object.entries(inherited)) {
+    out[k] = v;
+  }
+  for (const [k, v] of Object.entries(base)) {
+    if (v !== void 0) out[k] = v;
+  }
+  return out;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CONVENTION_TIER_DEFAULTS,
@@ -8659,6 +8697,7 @@ function isCliEntry(importMetaUrl2) {
   LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROXY_ENV_KEYS,
   ProtectedBranchError,
   SCM_STATES,
   STATE_FILE_REL,
@@ -8857,6 +8896,7 @@ function isCliEntry(importMetaUrl2) {
   preparePr,
   projectPath,
   propagateCredentials,
+  proxyEnvSubset,
   publishBranch,
   pull,
   pullFrom,
@@ -8936,6 +8976,7 @@ function isCliEntry(importMetaUrl2) {
   waitForBranchAuthReady,
   waitForBranchReady,
   waitForCi,
+  withProxyEnv,
   workflowStateFileExists,
   writeEnvFile,
   writePlaywrightTemplates,

@@ -10,3 +10,4 @@ export * from "./copy-dir-substituted.js";
 export * from "./sanitize-branch-name.js";
 export * from "./ci-secrets.js";
 export * from "./cli-entry.js";
+export * from "./proxy-env.js";
