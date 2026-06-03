@@ -55,6 +55,7 @@ PROJECT_NAME="bug-tracker"
 PROJECT_DIR=""
 SKIP_SCAFFOLD=0
 KEEP_ON_FAILURE=1
+TIERS=""                      # 2 or 3; required architectural choice, no default
 ITERATIONS=(v1-initial-domain v2-add-owners v3-status-table v4-split-bug-entity v5-list-view)
 
 ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,6 +75,7 @@ while [[ $# -gt 0 ]]; do
     --resume)            RESUME_AT="$2"; shift 2 ;;
     --project-name)      PROJECT_NAME="$2"; shift 2 ;;
     --project-dir)       PROJECT_DIR="$2"; shift 2 ;;
+    --tiers)             TIERS="$2"; shift 2 ;;
     --skip-scaffold)     SKIP_SCAFFOLD=1; shift ;;
     --keep-on-failure)   KEEP_ON_FAILURE=1; shift ;;
     --no-keep-on-failure) KEEP_ON_FAILURE=0; shift ;;
@@ -83,6 +85,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
+
+# --tiers is required when scaffolding (architectural choice; iteration
+# specs assume 3-tier with `staging` as parent). When --skip-scaffold is
+# set the project's tier topology is already on disk, no opt-in needed.
+if [[ "$SKIP_SCAFFOLD" -eq 0 ]]; then
+  if [[ "$TIERS" != "2" && "$TIERS" != "3" ]]; then
+    echo "smoke: --tiers <2|3> is required. Pick 3 for the standard smoke" >&2
+    echo "       (iteration specs assume a 'staging' parent); 2 for a flat" >&2
+    echo "       production-only flow (iteration specs will need adjustment)." >&2
+    exit 10
+  fi
+fi
 
 # ─── prereqs ──────────────────────────────────────────────────
 
@@ -187,6 +201,7 @@ scaffold_project() {
       --github-owner "$GITHUB_OWNER" \
       --language python \
       --runner github-hosted \
+      --tiers "$TIERS" \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 
@@ -216,15 +231,21 @@ run_iteration() {
   local feature_id
   feature_id="$(iteration_feature_id "$iter")"
 
-  # 1. branch (kit's post-checkout hook creates the paired Lakebase branch)
-  log "  step 1: checkout -b $branch (post-checkout hook will pair Lakebase)"
+  # 1. Return to trunk before staging the feature spec. The orchestrator
+  # does NOT `git checkout -b` here: branch creation is the substrate's
+  # responsibility, invoked from /design's pre-hook
+  # (templates/project/common/.claude/commands/design.pre-hook.md ships
+  # with the kit). The pre-hook calls `lakebase-branch create-paired`
+  # which atomically creates the Lakebase branch + git branch, so the
+  # invariant "every git branch gets a Lakebase branch" can't be broken
+  # by a partial failure here.
+  log "  step 1: return to trunk; /design's pre-hook will claim the paired branch"
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
-  git checkout -b "$branch"
 
   # 2. Stage the .tdd/features/<feature-id>/feature.md from the iteration
-  # spec. /design + /build read this directory; the kit's TDD workflow
-  # contract is .tdd/features/<id>/{feature.md,feature.json}+ subtree.
+  # spec. /design reads this; the kit's TDD workflow contract is
+  # .tdd/features/<id>/{feature.md,feature.json,...}.
   log "  step 2: stage .tdd/features/${feature_id}/feature.md"
   local feature_dir=".tdd/features/${feature_id}"
   mkdir -p "$feature_dir"
@@ -232,13 +253,13 @@ run_iteration() {
     cp "$spec" "$feature_dir/feature.md"
   fi
 
-  # 3. /design <feature-id>: the skill expects a positional feature id,
-  # NOT the spec text. It reads $feature_dir/feature.md from disk.
-  log "  step 3: claude -p '/design ${feature_id}'"
+  # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired
+  # feature branch via the substrate BEFORE phase 1 runs. The
+  # orchestrator never touches `git checkout -b`.
+  log "  step 3: claude -p '/design ${feature_id}' (pre-hook claims branch via substrate)"
   claude -p "/design ${feature_id}"
 
-  # 4. /build <feature-id>: same shape; reads test-list.json that /design
-  # produced.
+  # 4. /build <feature-id>: reads test-list.json that /design produced.
   log "  step 4: claude -p '/build ${feature_id}'"
   claude -p "/build ${feature_id}"
 

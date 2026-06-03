@@ -18,6 +18,7 @@ import {
   getDefaultBranchId,
 } from "./lakebase-project.js";
 import { scaffoldAll } from "./scaffold.js";
+import { createBranch } from "./branch-create.js";
 import { enableE2eForProject } from "./enable-e2e.js";
 import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
@@ -41,6 +42,24 @@ export interface CreateProjectArgs {
   language?: "java" | "kotlin" | "python" | "nodejs";
   /** CI runner type (default: 'self-hosted'). */
   runnerType?: "self-hosted" | "github-hosted";
+  /**
+   * Lakebase tier topology for this project. An architectural choice
+   * the caller (typically a wizard) should surface to the user rather
+   * than picking silently.
+   *
+   *   2 (or undefined) - production + feature branches. Simple,
+   *                       greenfield-friendly.
+   *   3                 - production + staging + feature branches.
+   *                       PSA-style 3-tier flow where features merge
+   *                       into staging and staging promotes to
+   *                       production via a separate release PR.
+   *
+   * When `tiers === 3`, scaffolding cuts a `staging` Lakebase branch
+   * (no_expiry, parent = production) so feature work has a non-prod
+   * parent to fork from. The kit's PSA-convention TTL defaults then
+   * fork feature branches off `staging` automatically.
+   */
+  tiers?: 2 | 3;
   /** Lay down the .tdd/ scaffold from templates/tdd-bootstrap/ (default: true). */
   enableTdd?: boolean;
   /**
@@ -122,6 +141,7 @@ export async function createProject(
   const enableInfra =
     input.enableInfra !== undefined ? input.enableInfra : language === "nodejs";
   const skipCommands = input.skipCommands === true;
+  const tiers = input.tiers;
   const warnings: string[] = [];
 
   if (useGithub && !input.githubOwner) {
@@ -195,6 +215,39 @@ export async function createProject(
     projectId: lakebaseProjectId,
     host,
   });
+
+  // ── Step 4b: Tier topology (architectural choice surfaced by the caller) ─
+  // When tiers === 3, cut a `staging` Lakebase branch (no_expiry) off
+  // production. The PSA-convention TTL helpers
+  // (createFeatureBranch/createTestBranch/...) then default to `staging`
+  // as the parent, so subsequent feature work forks off it cleanly.
+  // When tiers !== 3 (default), do nothing - the project is 2-tier
+  // (features fork directly from production).
+  if (tiers === 3) {
+    if (!defaultBranchId) {
+      warnings.push(
+        "tiers === 3 was requested but the project's default branch isn't ready yet; staging tier was NOT cut. Cut it manually via `lakebase-branch create --branch staging --parent-branch production --no-expiry`.",
+      );
+    } else {
+      report("Cutting staging tier (tiers=3)...");
+      try {
+        await createBranch({
+          instance: lakebaseProjectId,
+          host,
+          branch: "staging",
+          parentBranch: defaultBranchId,
+          noExpiry: true,
+        });
+      } catch (err) {
+        // Non-fatal: surface as a warning so the project still exists
+        // but the user knows the tier wasn't cut. They can retry the
+        // bare create-branch call manually.
+        warnings.push(
+          `tiers === 3 requested but staging tier creation failed: ${err instanceof Error ? err.message : String(err)}. Cut it manually via \`lakebase-branch create --branch staging --parent-branch production --no-expiry\`.`,
+        );
+      }
+    }
+  }
 
   // ── Step 5: Scaffold (templates + language project) ───────────
   report("Scaffolding project files...");
