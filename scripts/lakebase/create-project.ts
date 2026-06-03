@@ -24,6 +24,10 @@ import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
 import { syncCiSecrets } from "../util/ci-secrets.js";
 import { delay } from "../util/delay.js";
+import {
+  initWorkflowState,
+  writeWorkflowState,
+} from "./scm-workflow-state.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -381,6 +385,26 @@ export async function createProject(
         }
       }
     }
+  }
+
+  // ── Step 8c: SCM workflow-state seed (FEIP-7458 phase A) ──────
+  // Stamp the scaffold-complete row so .lakebase/workflow-state.json
+  // exists at the same moment .env does. Advisory at this phase: the
+  // file is the gate surface phase B's transition CLIs will read; no
+  // existing operation depends on its presence yet, so a write failure
+  // surfaces as a warning rather than aborting the scaffold.
+  try {
+    writeWorkflowState(
+      projectDir,
+      initWorkflowState({
+        projectId: lakebaseProjectId,
+        tierTopology: (tiers ?? 1) as 1 | 2 | 3,
+      }),
+    );
+  } catch (err) {
+    warnings.push(
+      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`,
+    );
   }
 
   // ── Step 9: Health check (advisory) ───────────────────────────
