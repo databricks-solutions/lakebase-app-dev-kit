@@ -56,6 +56,10 @@ PROJECT_DIR=""
 SKIP_SCAFFOLD=0
 KEEP_ON_FAILURE=1
 TIERS=""                      # 2 or 3; required architectural choice, no default
+# Default to kit @ main; smoke can validate a feature branch via --kit-ref.
+# Exported so the kit's templated /design + /design.pre-hook (which both
+# invoke `npx ... lakebase-scm-claim-feature-branch`) can read the same ref.
+KIT_REF="${LAKEBASE_KIT_REF:-}"
 ITERATIONS=(v1-initial-domain v2-add-owners v3-status-table v4-split-bug-entity v5-list-view)
 
 ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,6 +80,7 @@ while [[ $# -gt 0 ]]; do
     --project-name)      PROJECT_NAME="$2"; shift 2 ;;
     --project-dir)       PROJECT_DIR="$2"; shift 2 ;;
     --tiers)             TIERS="$2"; shift 2 ;;
+    --kit-ref)           KIT_REF="$2"; shift 2 ;;
     --skip-scaffold)     SKIP_SCAFFOLD=1; shift ;;
     --keep-on-failure)   KEEP_ON_FAILURE=1; shift ;;
     --no-keep-on-failure) KEEP_ON_FAILURE=0; shift ;;
@@ -85,6 +90,18 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
+
+# The kit npx URL. When KIT_REF is set, suffix the GitHub ref so npx
+# clones that branch / tag / sha. Empty KIT_REF means "kit main" (the
+# default-published-pin behavior). Exported so any subprocess + the
+# templated /design pre-hook can pick the same ref.
+if [[ -n "$KIT_REF" ]]; then
+  KIT_NPX="${KIT_NPX}#${KIT_REF}"
+  export LAKEBASE_KIT_REF="$KIT_REF"
+else
+  KIT_NPX="${KIT_NPX}"
+fi
+log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
 # --tiers is required when scaffolding (architectural choice). The
 # bug-tracker iteration specs all declare `Lakebase parent: staging`,
@@ -202,7 +219,7 @@ scaffold_project() {
   # rather than waiting for the purge.
   (
     npx --yes \
-      --package=github:databricks-solutions/lakebase-app-dev-kit \
+      --package=${KIT_NPX} \
       lakebase-create-project \
       --project-name "$PROJECT_NAME" \
       --parent-dir "$(dirname "$PROJECT_DIR")" \
@@ -296,7 +313,7 @@ run_iteration() {
   if is_full_cycle "$iter"; then
     log "  step 7: full cycle via SCM workflow CLIs (FEIP-7458 phase B/C+)"
     log "  step 7a: lakebase-scm-prepare-pr (push + open PR + advance to pr-ready)"
-    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+    npx --yes --package=${KIT_NPX} \
       lakebase-scm-prepare-pr \
         --project-dir "$PROJECT_DIR" \
         --title "$iter" \
@@ -305,14 +322,14 @@ run_iteration() {
     "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" pr-ready "$feature_id"
     local pr_url
     pr_url="$(
-      npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+      npx --yes --package=${KIT_NPX} \
         lakebase-scm-state --project-dir "$PROJECT_DIR" --json \
       | jq -r '.state.pr_url'
     )"
     log "  PR opened: $pr_url"
 
     log "  step 7b: lakebase-scm-wait-ci (poll until ci-green)"
-    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+    npx --yes --package=${KIT_NPX} \
       lakebase-scm-wait-ci --project-dir "$PROJECT_DIR" \
       || { err "wait-ci failed for $iter (exit code carries the reason: 3=ci failed, 4=timeout)"; exit 3; }
     "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" ci-green "$feature_id"
@@ -323,7 +340,7 @@ run_iteration() {
     fi
 
     log "  step 7c: lakebase-scm-merge (squash + wait-migrate)"
-    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+    npx --yes --package=${KIT_NPX} \
       lakebase-scm-merge --project-dir "$PROJECT_DIR" --method squash \
       || { err "merge or downstream migrate failed for $iter"; exit 3; }
     "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" merged "$feature_id"
@@ -339,7 +356,7 @@ run_iteration() {
   # asserts above are the hard gates).
   log "  step 8: lakebase-scm-doctor (advisory cross-check)"
   local doctor_exit=0
-  npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+  npx --yes --package=${KIT_NPX} \
     lakebase-scm-doctor --project-dir "$PROJECT_DIR" --json --pretty \
     || doctor_exit=$?
   if [[ "$doctor_exit" -ne 0 ]]; then

@@ -15,7 +15,8 @@ positional argument to `/design` (e.g. `F1-initial-domain`).
 1. Verify the SCM workflow state file is present:
 
    ```bash
-   npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+   KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
+   npx --yes --package="$KIT_PKG" \
      lakebase-scm-state --project-dir "$PWD"
    ```
 
@@ -26,11 +27,13 @@ positional argument to `/design` (e.g. `F1-initial-domain`).
 2. Invoke the claim CLI:
 
    ```bash
-   npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+   npx --yes --package="$KIT_PKG" \
      lakebase-scm-claim-feature-branch "<feature-id>" \
        --project-dir "$PWD" \
        --json --pretty
    ```
+
+   `LAKEBASE_KIT_REF` overrides the kit-main default with a branch/tag/sha so smoke runs and feature validation can pin an unreleased kit build.
 
    The bin handles everything end-to-end:
    - Reads `.lakebase/workflow-state.json` and refuses unless the

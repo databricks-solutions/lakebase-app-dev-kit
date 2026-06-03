@@ -22,11 +22,14 @@ Concretely, the agent:
 2. Invokes the workflow CLI with the feature id (no path/branch math required: the bin derives `feature/<slug>` and picks the parent from `tier_topology`):
 
    ```bash
-   npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+   KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
+   npx --yes --package="$KIT_PKG" \
      lakebase-scm-claim-feature-branch "<feature-id>" \
        --project-dir "$PWD" \
        --json --pretty
    ```
+
+   When `LAKEBASE_KIT_REF` is unset the npx target is the kit's main branch (the default-published-pin behavior). Setting it to a branch/tag/sha (e.g. `feip-7458-scm-state-phase-a-c`) pulls that ref, useful for smoke runs that validate an unreleased kit build.
 
    The bin's `--parent` flag overrides the tier-default parent when the feature must fork from somewhere else (e.g. a hotfix off production on a 2-tier project). The bin's `--instance` flag overrides the `project_id` recorded in the workflow state; usually unneeded.
 
