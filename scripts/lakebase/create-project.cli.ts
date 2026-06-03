@@ -18,6 +18,7 @@ interface ParsedArgs {
   privateRepo?: boolean;
   language?: "java" | "kotlin" | "python" | "nodejs";
   runnerType?: "self-hosted" | "github-hosted";
+  tiers?: 2 | 3;
   enableE2e?: boolean;
   enableInfra?: boolean;
   skipCommands?: boolean;
@@ -56,6 +57,18 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--runner":
         out.runnerType = argv[++i] as ParsedArgs["runnerType"];
         break;
+      case "--tiers": {
+        const v = Number.parseInt(argv[++i], 10);
+        if (v !== 2 && v !== 3) {
+          process.stderr.write(
+            `--tiers: expected 2 (production + features) or 3 (production + staging + features). Got: ${argv[i]}\n`,
+          );
+          out.help = true;
+        } else {
+          out.tiers = v as 2 | 3;
+        }
+        break;
+      }
       case "--enable-e2e":
         out.enableE2e = true;
         break;
@@ -97,6 +110,10 @@ Flags:
   --public            Make the GitHub repo public (default: private)
   --language          java | kotlin | python | nodejs    (default: java)
   --runner            self-hosted | github-hosted        (default: self-hosted)
+  --tiers             2 (prod + features) or 3 (prod + staging + features).
+                      When omitted, no staging is cut + the project is 2-tier
+                      by default. Architectural choice; surface this in your
+                      wizard rather than picking silently.
   --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
   --no-e2e            Force-disable Playwright E2E wire-up
                       (default: on for --language nodejs, off otherwise)
@@ -139,6 +156,7 @@ async function main(): Promise<number> {
       privateRepo: args.privateRepo,
       language: args.language,
       runnerType: args.runnerType,
+      tiers: args.tiers,
       enableE2e: args.enableE2e,
       enableInfra: args.enableInfra,
       skipCommands: args.skipCommands,

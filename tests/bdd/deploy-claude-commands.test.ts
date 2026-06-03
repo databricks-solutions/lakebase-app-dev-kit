@@ -35,14 +35,19 @@ describe("deployClaudeCommands", () => {
   });
   afterEach(() => rmTempProject(targetDir));
 
-  it("writes design.md and build.md under .claude/commands/", async () => {
+  it("writes design.md, design.pre-hook.md, and build.md under .claude/commands/", async () => {
     const result = await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     expect(result.written.sort()).toEqual(
-      [path.join(".claude", "commands", "build.md"), path.join(".claude", "commands", "design.md")].sort()
+      [
+        path.join(".claude", "commands", "build.md"),
+        path.join(".claude", "commands", "design.md"),
+        path.join(".claude", "commands", "design.pre-hook.md"),
+      ].sort()
     );
     expect(result.skipped).toEqual([]);
     expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.md"))).toBe(true);
     expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "build.md"))).toBe(true);
+    expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.pre-hook.md"))).toBe(true);
   });
 
   it("substitutes ${KIT_VERSION_AT_SCAFFOLD} with the real kit version", async () => {
@@ -142,9 +147,17 @@ describe("scaffoldStaticAll integration", () => {
       language: "nodejs",
     });
     expect(result.claudeCommands.sort()).toEqual(
-      [path.join(".claude", "commands", "build.md"), path.join(".claude", "commands", "design.md")].sort()
+      [
+        path.join(".claude", "commands", "build.md"),
+        path.join(".claude", "commands", "design.md"),
+        path.join(".claude", "commands", "design.pre-hook.md"),
+      ].sort()
     );
     expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.md"))).toBe(true);
+    // The default design.pre-hook.md (which claims a paired feature branch
+    // via the substrate before /design phase 1) ships in every scaffold so
+    // "every git branch gets a Lakebase branch" is enforced by default.
+    expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.pre-hook.md"))).toBe(true);
   });
 
   it("skipCommands=true skips the scaffold and reports an empty claudeCommands list", async () => {
