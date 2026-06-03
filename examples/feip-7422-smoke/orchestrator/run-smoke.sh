@@ -86,14 +86,23 @@ done
 
 PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
 
-# --tiers is required when scaffolding (architectural choice; iteration
-# specs assume 3-tier with `staging` as parent). When --skip-scaffold is
-# set the project's tier topology is already on disk, no opt-in needed.
+# --tiers is required when scaffolding (architectural choice). The
+# bug-tracker iteration specs all declare `Lakebase parent: staging`,
+# so this smoke is 2-tier (prod + staging) by definition. --tiers 1
+# (prod only) and --tiers 3 (prod + staging + dev) are rejected because
+# either would break the staging-as-parent assumption.
+#
+# Tier semantics (features are NOT tiers; they are branches):
+#   1 = prod only        (features fork from prod)
+#   2 = prod + staging   (features fork from staging)
+#   3 = prod + staging + dev (features fork from dev)
 if [[ "$SKIP_SCAFFOLD" -eq 0 ]]; then
-  if [[ "$TIERS" != "2" && "$TIERS" != "3" ]]; then
-    echo "smoke: --tiers <2|3> is required. Pick 3 for the standard smoke" >&2
-    echo "       (iteration specs assume a 'staging' parent); 2 for a flat" >&2
-    echo "       production-only flow (iteration specs will need adjustment)." >&2
+  if [[ "$TIERS" != "2" ]]; then
+    echo "smoke: --tiers 2 is required for this smoke. Got: '${TIERS:-<unset>}'." >&2
+    echo "       The bug-tracker iteration specs declare 'Lakebase parent: staging'," >&2
+    echo "       so the project must be 2-tier (prod + staging). 1-tier would have" >&2
+    echo "       features forking from prod; 3-tier would add a dev layer and require" >&2
+    echo "       rewriting every iteration spec." >&2
     exit 10
   fi
 fi
