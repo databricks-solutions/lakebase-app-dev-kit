@@ -149,21 +149,24 @@ scaffold_project() {
     return 0
   fi
 
+  : "${DATABRICKS_HOST:?smoke: DATABRICKS_HOST env var required for scaffold (or pass --skip-scaffold)}"
+  : "${GITHUB_OWNER:?smoke: GITHUB_OWNER env var required for scaffold (or pass --skip-scaffold)}"
+
   log "scaffolding bug-tracker into $PROJECT_DIR via lakebase-create-project..."
-  # Headless scaffold: language=python, enable-tdd so /design+/build skills
-  # land in the project's .claude/. Subshell-isolated so a non-zero exit
-  # surfaces our scaffold-failed code.
+  # Headless scaffold: language=python, github-hosted runner, e2e enabled.
+  # /design + /build commands scaffold by default (no --skip-commands).
+  # Subshell-isolated so a non-zero exit surfaces our scaffold-failed code.
   (
     npx --yes \
       --package=github:databricks-solutions/lakebase-app-dev-kit \
       lakebase-create-project \
-      --name "bug-tracker" \
+      --project-name "bug-tracker" \
       --parent-dir "$(dirname "$PROJECT_DIR")" \
+      --databricks-host "$DATABRICKS_HOST" \
+      --github-owner "$GITHUB_OWNER" \
       --language python \
-      --enable-tdd \
-      --enable-e2e \
-      --runner-type github-hosted \
-      --non-interactive
+      --runner github-hosted \
+      --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 
   log "scaffold complete. Project at $PROJECT_DIR."
