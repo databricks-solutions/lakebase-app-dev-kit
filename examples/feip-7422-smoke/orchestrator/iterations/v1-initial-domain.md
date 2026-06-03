@@ -1,3 +1,7 @@
+---
+author: Feature Requester
+---
+
 # v1: Initial Domain
 
 A team has started using a shared bug tracker. Right now nothing
