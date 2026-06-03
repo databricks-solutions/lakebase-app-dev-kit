@@ -60,43 +60,59 @@ describe("FEIP-7422 smoke: directory structure", () => {
   });
 });
 
-describe("FEIP-7422 smoke: iteration specs are well-formed", () => {
+describe("FEIP-7422 smoke: iteration specs are well-formed (feature.md voice)", () => {
+  // Iteration specs are feature.md files: pure feature-requester narrative
+  // describing WHAT the user wants, in user-behavior language. They do NOT
+  // contain implementation details (no SQL, no HTTP verbs, no table names,
+  // no file paths), no Acceptance Criteria tables (the kit's
+  // test-strategist phase produces those from the prose), and no
+  // operational metadata (branch name, Lakebase parent, migration version
+  // are all derived by the orchestrator from convention).
+  //
+  // These assertions guard the requester-voice invariant: future edits
+  // that try to re-insert implementation specifics into the iteration
+  // specs will fail the BDD.
+
   for (const iter of ITERATIONS) {
     describe(iter, () => {
       const md = fs.readFileSync(path.join(SMOKE_DIR, "iterations", `${iter}.md`), "utf8");
 
-      it("declares its branch name in a header line", () => {
-        expect(md).toMatch(/^\*\*Branch\*\*:\s*`feature\/.+`/m);
+      it("has a top-level H1 title", () => {
+        expect(md).toMatch(/^#\s+v\d/m);
       });
 
-      it("declares its Lakebase parent", () => {
-        expect(md).toMatch(/^\*\*Lakebase parent\*\*:/m);
+      it("contains substantive narrative prose (>=400 chars beyond the title)", () => {
+        const body = md.replace(/^#.*$/m, "").trim();
+        expect(body.length, `${iter} should have substantive narrative; got ${body.length} chars`).toBeGreaterThanOrEqual(400);
       });
 
-      it("declares its migration version (or none for v5)", () => {
-        expect(md).toMatch(/^\*\*Migration\*\*:/m);
+      it("documents what's out of scope", () => {
+        expect(md).toMatch(/##\s*Out of scope/i);
       });
 
-      it("has an Acceptance Criteria table with at least 3 ACs", () => {
-        expect(md).toMatch(/##\s*Acceptance Criteria/i);
-        // Count AC table rows: lines starting with | AC<n> | ...
-        const acRows = md.match(/^\|\s*\*?\*?AC\d/gm) ?? [];
-        expect(acRows.length, `${iter} should have >=3 AC rows; found ${acRows.length}`).toBeGreaterThanOrEqual(3);
+      it("does NOT include implementation-leaking sections (architect's voice)", () => {
+        // Schema / Migration / Files-/build-produces sections belong to
+        // the architect-reviewer + driver phases of /design + /build, not
+        // to the feature requester's narrative.
+        expect(md, `${iter} should not have a 'Schema' or 'Schema delta' section`).not.toMatch(/##\s*Schema/im);
+        expect(md, `${iter} should not have a 'Migration' header`).not.toMatch(/^\*\*Migration\*\*:/m);
+        expect(md, `${iter} should not list files /build is expected to produce`).not.toMatch(/##.*Files.*\/build.*produce/i);
+      });
+
+      it("does NOT include operational metadata (derived by orchestrator)", () => {
+        expect(md, `${iter} should not declare its branch name (orchestrator derives it)`).not.toMatch(/^\*\*Branch\*\*:/m);
+        expect(md, `${iter} should not declare its Lakebase parent (smoke is 2-tier by convention)`).not.toMatch(/^\*\*Lakebase parent\*\*:/m);
+      });
+
+      it("does NOT include a pre-decided Acceptance Criteria table", () => {
+        // ACs are the test-strategist's output (acs/AC*.json + acs/AC*.md
+        // per .tdd/ spec-format), not the requester's pre-decision.
+        expect(md, `${iter} should not have an 'Acceptance Criteria' section`).not.toMatch(/##\s*Acceptance Criteria/i);
+        // Stricter: no markdown table rows starting with | AC<n> |
+        expect(md, `${iter} should not contain | AC<n> | table rows`).not.toMatch(/^\|\s*\*?\*?AC\d/m);
       });
     });
   }
-
-  it("v5 carries an [E2E] AC tag", () => {
-    const v5 = fs.readFileSync(path.join(SMOKE_DIR, "iterations", "v5-list-view.md"), "utf8");
-    expect(v5).toMatch(/\[E2E\]/);
-  });
-
-  it("v3 + v4 describe data-migration steps (the hardest refactors)", () => {
-    const v3 = fs.readFileSync(path.join(SMOKE_DIR, "iterations", "v3-status-table.md"), "utf8");
-    expect(v3).toMatch(/backfill/i);
-    const v4 = fs.readFileSync(path.join(SMOKE_DIR, "iterations", "v4-split-bug-entity.md"), "utf8");
-    expect(v4).toMatch(/backfill|INSERT INTO bug_details/);
-  });
 });
 
 describe("FEIP-7422 smoke: orchestrator references all 5 iterations + 3 modes", () => {

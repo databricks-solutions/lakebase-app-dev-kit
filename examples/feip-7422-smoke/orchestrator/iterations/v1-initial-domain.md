@@ -1,53 +1,38 @@
-# v1: Initial Domain (Bug CRUD)
+# v1: Initial Domain
 
-**Branch**: `feature/initial-domain`
-**Lakebase parent**: `staging`
-**Migration**: V1 (`CREATE TABLE bugs`)
+A team has started using a shared bug tracker. Right now nothing
+exists in the system, and they need a way to file bugs, find them
+again, change their state as work progresses, and reject obviously
+invalid entries at the moment of filing.
 
-## Story
+A team member should be able to file a bug. They describe what went
+wrong by giving the bug a short title, a longer description of the
+situation, and noting whether anyone is already working on it. Once
+filed, the bug has a stable identifier they can hand to someone
+else, paste into a chat message, or refer back to days later.
 
-Establish the bug-tracking app's core domain. A `Bug` has an id,
-title, free-text description, and a status drawn from a fixed enum
-(`open`, `in_progress`, `closed`). CRUD endpoints support filing,
-reading, and updating bugs.
+When a team member has an identifier, they should be able to look
+up the bug and see what was originally reported, exactly as filed.
+If they ask for an identifier nobody has used, they should be told
+the bug does not exist, clearly and without ambiguity.
 
-## Acceptance Criteria
+As work progresses, the bug's status should be able to change. The
+team has agreed on three states: a bug starts out as just-filed, may
+be picked up by someone working on it, and eventually reaches done.
+A team member moving the bug forward expects the new state to stick
+across subsequent lookups.
 
-| ID | Given | When | Then |
-|----|-------|------|------|
-| AC1 | the `bugs` table is empty | POST /bugs with `{title: "broken", description: "X", status: "open"}` | the response is 201 with a generated id, and a row exists in `bugs` with the same fields |
-| AC2 | a bug with id=42 exists | GET /bugs/42 | the response is 200 with the bug's title, description, and status |
-| AC3 | no bug with id=999 exists | GET /bugs/999 | the response is 404 |
-| AC4 | a bug exists with status="open" | PATCH /bugs/{id} with `{status: "in_progress"}` | the response is 200 and the bug's status is "in_progress" |
-| AC5 | the request body has `status: "frobnicate"` (not in the enum) | POST /bugs | the response is 422 with a validation error |
+The team has agreed these three states are the only legitimate ones
+for a bug. If someone tries to file a bug with a status outside this
+agreed set, whether by typo or by mistake, the system should refuse
+the attempt rather than silently store an unknown value. The team
+member should be told the value is not one of the recognised states.
 
-## Schema (V1__init_bugs.sql equivalent in Alembic form)
+## Out of scope
 
-```python
-op.create_table(
-    "bugs",
-    sa.Column("id", sa.Integer, primary_key=True),
-    sa.Column("title", sa.String(200), nullable=False),
-    sa.Column("description", sa.Text, nullable=False, server_default=""),
-    sa.Column("status", sa.String(20), nullable=False, server_default="open"),
-)
-op.create_check_constraint(
-    "ck_bugs_status",
-    "bugs",
-    "status IN ('open', 'in_progress', 'closed')",
-)
-```
-
-## Files /build is expected to produce
-
-- `alembic/versions/0001_init_bugs.py`
-- `app/models.py` (`Bug` SQLAlchemy model)
-- `app/main.py` (FastAPI app with the 4 endpoints + Pydantic schemas)
-- `tests/test_bugs.py` (one test per AC, against the paired Lakebase branch's DSN)
-
-## Out of scope for v1
-
-- Multi-user / owners (v2)
-- Status as a relation (v3)
-- Splitting description into its own table (v4)
-- HTML rendering (v5)
+Assigning bugs to specific people is deferred. So is categorising
+bugs by what they affect. Splitting longer reproduction notes from
+the short description is deferred until reproduction steps start
+outgrowing the description field. The team is not yet asking for a
+bug list rendered in a browser; for now, retrieval is one-at-a-time
+by identifier.
