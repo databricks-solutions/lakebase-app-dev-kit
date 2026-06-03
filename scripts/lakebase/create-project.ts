@@ -338,17 +338,19 @@ export { writeEnvFile, verifyHooks, verifyWorkflows, verifyProject };
  * overwritten so a project that already started TDD work is preserved.
  */
 export function layDownTddScaffold(targetDir: string): void {
-  const fs = require("fs") as typeof import("fs");
-  const pathMod = require("path") as typeof import("path");
+  // Use the top-level fs + path imports. The prior implementation used
+  // dynamic `require()` calls which break in the ESM bundle ("Dynamic
+  // require of 'fs' is not supported"); tsup's shims: true gives us
+  // __dirname-equivalent semantics via the top-of-file imports.
   const candidates = [
-    pathMod.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
-    pathMod.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd"),
+    path.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
+    path.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd"),
   ];
   const source = candidates.find((c) => fs.existsSync(c));
   if (!source) {
     throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
-  const dest = pathMod.join(targetDir, ".tdd");
+  const dest = path.join(targetDir, ".tdd");
   if (fs.existsSync(dest)) {
     return;
   }
