@@ -209,7 +209,10 @@ scaffold_project() {
   : "${GITHUB_OWNER:?smoke: GITHUB_OWNER env var required for scaffold (or pass --skip-scaffold)}"
 
   log "scaffolding $PROJECT_NAME into $PROJECT_DIR via lakebase-create-project..."
-  # Headless scaffold: language=python, github-hosted runner, e2e enabled.
+  # Headless scaffold: language=python, self-hosted runner (kit default),
+  # e2e enabled. Self-hosted is required because the Databricks workspace
+  # IP ACL blocks github-hosted runners; the kit's setupRunner registers
+  # a runner on this machine which can reach the workspace.
   # /design + /build commands scaffold by default (no --skip-commands).
   # Subshell-isolated so a non-zero exit surfaces our scaffold-failed code.
   #
@@ -227,7 +230,7 @@ scaffold_project() {
       --databricks-host "$DATABRICKS_HOST" \
       --github-owner "$GITHUB_OWNER" \
       --language python \
-      --runner github-hosted \
+      --runner self-hosted \
       --tiers "$TIERS" \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
