@@ -128,6 +128,19 @@ iteration_verify() {
   echo "${ASSERT_DIR}/verify-${short}.sh"
 }
 
+# Feature id used by /design + /build. The kit's TDD workflow expects
+# .tdd/features/<feature-id>/feature.md + feature.json to exist; we
+# stage feature.md from the iteration spec and let /design fill in the
+# JSON + downstream artifacts. F<N>-<slug> matches the kit's example
+# id shape ("F1-partner-submits-assets").
+iteration_feature_id() {
+  # v1-initial-domain -> F1-initial-domain
+  local iter="$1"
+  local num="${iter%%-*}"   # v1
+  num="${num#v}"            # 1
+  echo "F${num}-${iter#*-}"
+}
+
 # Whether THIS iteration should run the full PR + CI + merge cycle in the
 # current mode. fast: never. standard: only v5. full: always.
 is_full_cycle() {
@@ -200,39 +213,54 @@ run_iteration() {
 
   cd "$PROJECT_DIR"
 
+  local feature_id
+  feature_id="$(iteration_feature_id "$iter")"
+
   # 1. branch (kit's post-checkout hook creates the paired Lakebase branch)
   log "  step 1: checkout -b $branch (post-checkout hook will pair Lakebase)"
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
   git checkout -b "$branch"
 
-  # 2. /design
-  log "  step 2: claude -p '/design <spec>'"
-  claude -p "/design $(cat "$spec")"
+  # 2. Stage the .tdd/features/<feature-id>/feature.md from the iteration
+  # spec. /design + /build read this directory; the kit's TDD workflow
+  # contract is .tdd/features/<id>/{feature.md,feature.json}+ subtree.
+  log "  step 2: stage .tdd/features/${feature_id}/feature.md"
+  local feature_dir=".tdd/features/${feature_id}"
+  mkdir -p "$feature_dir"
+  if [[ ! -f "$feature_dir/feature.md" ]]; then
+    cp "$spec" "$feature_dir/feature.md"
+  fi
 
-  # 3. /build
-  log "  step 3: claude -p '/build'"
-  claude -p "/build"
+  # 3. /design <feature-id>: the skill expects a positional feature id,
+  # NOT the spec text. It reads $feature_dir/feature.md from disk.
+  log "  step 3: claude -p '/design ${feature_id}'"
+  claude -p "/design ${feature_id}"
 
-  # 4. local tests
-  log "  step 4: ./scripts/run-tests.sh"
+  # 4. /build <feature-id>: same shape; reads test-list.json that /design
+  # produced.
+  log "  step 4: claude -p '/build ${feature_id}'"
+  claude -p "/build ${feature_id}"
+
+  # 5. local tests
+  log "  step 5: ./scripts/run-tests.sh"
   if [[ -x "./scripts/run-tests.sh" ]]; then
     ./scripts/run-tests.sh
   else
     uv run pytest || python -m pytest
   fi
 
-  # 5. per-iteration verification (asserts the right files / migration shape exist)
+  # 6. per-iteration verification (asserts the right files / migration shape exist)
   if [[ -x "$verify" ]]; then
-    log "  step 5: $verify"
+    log "  step 6: $verify"
     "$verify" "$PROJECT_DIR"
   else
-    log "  step 5: no verify script for $iter (skipping)."
+    log "  step 6: no verify script for $iter (skipping)."
   fi
 
-  # 6. mode-dependent gate
+  # 7. mode-dependent gate
   if is_full_cycle "$iter"; then
-    log "  step 6: full cycle (push + PR + CI + merge)"
+    log "  step 7: full cycle (push + PR + CI + merge)"
     git push -u origin "$branch"
     local pr_url
     pr_url="$(gh pr create --title "$iter" --body "FEIP-7422 smoke iteration $iter. See orchestrator/iterations/${iter}.md for ACs.")"
