@@ -135,6 +135,23 @@ export interface CreatePairedBranchArgs {
   readyTimeoutMs?: number;
   /** Default: "databricks_postgres". */
   database?: string;
+  /**
+   * Lakebase-format TTL string ("<seconds>s", e.g. "2592000s" = 30 days)
+   * for the Lakebase branch. Mutually exclusive with `noExpiry: true`.
+   * When neither is set, createBranch's default (`no_expiry: true`)
+   * applies - which is wrong for feature/test/uat/perf branches that
+   * should expire. Per-tier-type wrappers in convention-branches.ts
+   * (createFeaturePairedBranch / createTestPairedBranch / ...) plumb the
+   * right convention TTL here.
+   */
+  ttl?: string;
+  /**
+   * When true, force `no_expiry: true` on the Lakebase branch. Use for
+   * long-running tiers (production, staging). Mutually exclusive with
+   * `ttl`. When neither is set, createBranch's default fires (no_expiry
+   * true), but new callers should be explicit.
+   */
+  noExpiry?: boolean;
 }
 
 export interface CreatePairedBranchResult {
@@ -171,10 +188,17 @@ export async function createPairedBranch(
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   // 1. Create Lakebase branch (idempotent if already exists with same name)
+  // TTL semantics: callers that want a tier (no expiry) pass noExpiry: true;
+  // callers that want a finite-lifetime convention branch pass ttl. If
+  // neither is set, the underlying createBranch defaults to no_expiry: true
+  // (legacy behavior); per-tier-type wrappers in convention-branches.ts are
+  // the supported way to pick the right convention TTL.
   const branch = await createBranch({
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch,
+    ttl: args.ttl,
+    noExpiry: args.noExpiry,
   });
 
   // 2. Wait for READY (createBranch already polls, but make budget explicit)

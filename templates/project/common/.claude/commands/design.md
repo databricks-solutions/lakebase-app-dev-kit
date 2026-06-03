@@ -22,11 +22,11 @@ Concretely, the agent:
    - `LAKEBASE_BASE_BRANCH` from `.env` if set (explicit override).
    - Otherwise `staging` if the project's `lakebase-branch list` shows it (3-tier scaffold).
    - Otherwise the project default branch (2-tier scaffold; usually `production`).
-4. Invokes the substrate primitive via the kit CLI:
+4. Invokes the canonical substrate primitive via the kit CLI:
 
    ```bash
    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
-     lakebase-branch create-paired \
+     lakebase-branch create-paired-tier feature \
        --instance "$LAKEBASE_PROJECT_ID" \
        --branch "feature/<slug>" \
        --parent-branch "<resolved-parent>" \
@@ -34,7 +34,7 @@ Concretely, the agent:
        --pretty
    ```
 
-   `create-paired` is atomic via the substrate's `createPairedBranch`: the Lakebase side comes first (with TTL auto-recovery), then `git checkout -b` triggers the post-checkout hook to populate `.env` credentials. If the Lakebase side fails, no git branch is left dangling.
+   `create-paired-tier feature` is the ONLY supported way to claim a feature branch: it combines `createPairedBranch`'s atomicity (Lakebase first, then git, then `.env` sync, all-or-nothing) with the 30-day convention TTL feature branches require. Do NOT use `create-paired` (lower-level, defaults to `no_expiry: true` which would silently create a long-running tier instead of a feature branch).
 
 5. If `create-paired` errors with `branch already exists`, the feature branch was claimed in a prior session: proceed to step 6.
 6. Run `.claude/commands/design.pre-hook.md` if present. The default pre-hook (shipped with the kit) documents this very step for reference; projects may APPEND project-specific gestures to it (claim a JIRA epic, post to Slack, etc.). The pre-hook does NOT replace step 0 above; it extends it.

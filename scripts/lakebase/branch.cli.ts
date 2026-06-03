@@ -22,6 +22,10 @@ import {
   createTestBranch,
   createUatBranch,
   createPerfBranch,
+  createFeaturePairedBranch,
+  createTestPairedBranch,
+  createUatPairedBranch,
+  createPerfPairedBranch,
 } from "./convention-branches.js";
 import {
   createPairedBranch,
@@ -139,7 +143,12 @@ Subcommands:
   create           Create a Lakebase branch (no git side-effects)
   create-paired    Create Lakebase branch + matching git branch + .env update
   create-tier <feature|test|uat|perf>
-                   Create a convention-tier branch (default fork from staging)
+                   Create a convention-tier Lakebase branch (default fork from staging).
+                   No git side-effects; use create-paired-tier for the paired variant.
+  create-paired-tier <feature|test|uat|perf>
+                   Create the convention-tier PAIRED branch (Lakebase + git + .env)
+                   atomically. The canonical way to claim a feature branch:
+                   substrate is the only path, convention TTL is applied automatically.
   delete           Delete a Lakebase branch (no git side-effects)
   delete-paired    Delete Lakebase branch + local git branch + remote git branch
   checkout-paired  Equivalent of post-checkout hook (sync .env to current git branch)
@@ -292,6 +301,42 @@ async function main(): Promise<number> {
               : tier === "uat"
                 ? await createUatBranch(common)
                 : await createPerfBranch(common);
+        printJson(result, pretty);
+        return 0;
+      }
+
+      case "create-paired-tier": {
+        // Atomic paired (Lakebase + git + .env) + convention TTL per tier.
+        // This is the canonical "claim a feature branch" primitive: every
+        // git branch gets a Lakebase branch via the substrate, with the
+        // convention TTL (30d feature / 14d test / 14d uat / 7d perf).
+        const tier = args.positional as Tier | undefined;
+        if (!tier || !["feature", "test", "uat", "perf"].includes(tier)) {
+          process.stderr.write(
+            `create-paired-tier: expected one of feature|test|uat|perf as the first positional arg.\n`
+          );
+          return 2;
+        }
+        if (!requireFlags("create-paired-tier", args, ["instance", "branch"]))
+          return 2;
+        const common = {
+          instance: args.instance!,
+          branch: args.branch!,
+          parentBranch: args.parentBranch,
+          ttl: args.ttl,
+          cwd: args.cwd ?? process.cwd(),
+          createGitBranch: !args.noGitBranch,
+          syncEnv: !args.noSyncEnv,
+          database: args.database,
+        };
+        const result =
+          tier === "feature"
+            ? await createFeaturePairedBranch(common)
+            : tier === "test"
+              ? await createTestPairedBranch(common)
+              : tier === "uat"
+                ? await createUatPairedBranch(common)
+                : await createPerfPairedBranch(common);
         printJson(result, pretty);
         return 0;
       }
