@@ -95,11 +95,12 @@ PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
 # clones that branch / tag / sha. Empty KIT_REF means "kit main" (the
 # default-published-pin behavior). Exported so any subprocess + the
 # templated /design pre-hook can pick the same ref.
+KIT_PACKAGE_BASE="github:databricks-solutions/lakebase-app-dev-kit"
 if [[ -n "$KIT_REF" ]]; then
-  KIT_NPX="${KIT_NPX}#${KIT_REF}"
+  KIT_NPX="${KIT_PACKAGE_BASE}#${KIT_REF}"
   export LAKEBASE_KIT_REF="$KIT_REF"
 else
-  KIT_NPX="${KIT_NPX}"
+  KIT_NPX="$KIT_PACKAGE_BASE"
 fi
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
