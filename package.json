@@ -101,6 +101,7 @@
     "lakebase-scm-doctor": "./dist/scripts/lakebase/scm-doctor.cli.js",
     "lakebase-pr": "./dist/scripts/github/pr.cli.js",
     "lakebase-feature-status": "./dist/scripts/tdd/feature-status.cli.js",
+    "lakebase-tdd-mock-approver": "./dist/scripts/tdd/mock-approver.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
   },
   "scripts": {

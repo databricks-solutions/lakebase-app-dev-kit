@@ -167,6 +167,26 @@ export interface EnableE2eForProjectResult {
 export function enableE2eForProject(
   args: EnableE2eForProjectArgs
 ): EnableE2eForProjectResult {
+  // Guard: only ship playwright templates when the npm side can be wired
+  // (i.e. a root package.json exists). Python / Java / non-Node project
+  // shapes had previously written playwright.config.ts unconditionally;
+  // CI's E2E step then fired because the config file existed, but
+  // `@playwright/test` was never installed, blowing up with
+  // "Cannot find module '@playwright/test'". Skipping the template
+  // write when there's nowhere to wire it keeps the CI step from
+  // firing at all (it's gated on hashFiles('playwright.config.*')).
+  const rootPkg = path.join(args.projectDir, "package.json");
+  if (!fs.existsSync(rootPkg)) {
+    return {
+      templatesWritten: [],
+      // Same shape as writePlaywrightTemplates would have returned; the
+      // template paths show up under skipped with the npm-wiring caveat
+      // captured in packageJson.patched=false.
+      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir }),
+    };
+  }
   const templates = writePlaywrightTemplates({
     projectDir: args.projectDir,
     force: args.force,

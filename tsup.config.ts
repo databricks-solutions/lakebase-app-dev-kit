@@ -40,6 +40,7 @@ export default defineConfig({
     "scripts/tdd/feature-status.cli": "scripts/tdd/feature-status.cli.ts",
     "scripts/tdd/test-list.cli": "scripts/tdd/test-list.cli.ts",
     "scripts/tdd/spec-sync.cli": "scripts/tdd/spec-sync.cli.ts",
+    "scripts/tdd/mock-approver.cli": "scripts/tdd/mock-approver.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },
