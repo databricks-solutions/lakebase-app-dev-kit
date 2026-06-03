@@ -266,6 +266,12 @@ run_iteration() {
   log "  step 3: claude -p '/design ${feature_id}' (pre-hook claims branch via substrate)"
   claude -p "/design ${feature_id}"
 
+  # 3.5 (FEIP-7458 phase A+): assert the SCM workflow state advanced
+  # to feature-claimed via the claim CLI. This catches the case where
+  # /design ran but Step 0's substrate call silently failed.
+  log "  step 3.5: verify-workflow-state feature-claimed ${feature_id}"
+  "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$feature_id"
+
   # 4. /build <feature-id>: reads test-list.json that /design produced.
   log "  step 4: claude -p '/build ${feature_id}'"
   claude -p "/build ${feature_id}"
@@ -288,25 +294,56 @@ run_iteration() {
 
   # 7. mode-dependent gate
   if is_full_cycle "$iter"; then
-    log "  step 7: full cycle (push + PR + CI + merge)"
-    git push -u origin "$branch"
+    log "  step 7: full cycle via SCM workflow CLIs (FEIP-7458 phase B/C+)"
+    log "  step 7a: lakebase-scm-prepare-pr (push + open PR + advance to pr-ready)"
+    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+      lakebase-scm-prepare-pr \
+        --project-dir "$PROJECT_DIR" \
+        --title "$iter" \
+        --body "FEIP-7422 smoke iteration $iter. See orchestrator/iterations/${iter}.md for ACs." \
+        || { err "prepare-pr failed for $iter"; exit 3; }
+    "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" pr-ready "$feature_id"
     local pr_url
-    pr_url="$(gh pr create --title "$iter" --body "FEIP-7422 smoke iteration $iter. See orchestrator/iterations/${iter}.md for ACs.")"
+    pr_url="$(
+      npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+        lakebase-scm-state --project-dir "$PROJECT_DIR" --json \
+      | jq -r '.state.pr_url'
+    )"
     log "  PR opened: $pr_url"
-    log "  waiting for CI..."
-    gh pr checks --watch "$pr_url" || { err "CI failed for $iter"; exit 3; }
+
+    log "  step 7b: lakebase-scm-wait-ci (poll until ci-green)"
+    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+      lakebase-scm-wait-ci --project-dir "$PROJECT_DIR" \
+      || { err "wait-ci failed for $iter (exit code carries the reason: 3=ci failed, 4=timeout)"; exit 3; }
+    "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" ci-green "$feature_id"
 
     if [[ "$iter" == v5-* ]]; then
       log "  v5 special: asserting Playwright [E2E] saw a real BASE_URL"
       bash "${ASSERT_DIR}/verify-v5-e2e.sh" "$pr_url" || { err "v5 [E2E] verification failed"; exit 4; }
     fi
 
-    log "  merging $pr_url..."
-    gh pr merge --squash --delete-branch "$pr_url" || { err "merge failed for $iter"; exit 3; }
+    log "  step 7c: lakebase-scm-merge (squash + wait-migrate)"
+    npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+      lakebase-scm-merge --project-dir "$PROJECT_DIR" --method squash \
+      || { err "merge or downstream migrate failed for $iter"; exit 3; }
+    "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" merged "$feature_id"
+    log "  merged: $pr_url; downstream migrate confirmed on parent_branch"
   else
-    log "  step 6: fast mode (local commit only)"
+    log "  step 7: fast mode (local commit only; workflow stays at feature-claimed)"
     git add -A
     git commit -m "smoke $iter: local commit"
+  fi
+
+  # 8. SCM doctor check at iteration end. Advisory: doctor failures
+  # surface as warnings rather than aborting the smoke (the per-state
+  # asserts above are the hard gates).
+  log "  step 8: lakebase-scm-doctor (advisory cross-check)"
+  local doctor_exit=0
+  npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+    lakebase-scm-doctor --project-dir "$PROJECT_DIR" --json --pretty \
+    || doctor_exit=$?
+  if [[ "$doctor_exit" -ne 0 ]]; then
+    log "  WARNING: doctor exited $doctor_exit (1=warn, 2=fail). Findings above. Smoke continues."
   fi
 
   log "✓ $iter complete"
