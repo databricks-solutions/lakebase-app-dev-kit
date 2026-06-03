@@ -14,6 +14,9 @@ interface ParsedArgs {
   switchTo?: string;
   method?: "merge" | "squash" | "rebase";
   skipLocalCleanup?: boolean;
+  noWaitMigrate?: boolean;
+  migrateTimeoutSec?: number;
+  migratePollSec?: number;
   json?: boolean;
   pretty?: boolean;
   help?: boolean;
@@ -39,6 +42,15 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--skip-local-cleanup":
         out.skipLocalCleanup = true;
+        break;
+      case "--no-wait-migrate":
+        out.noWaitMigrate = true;
+        break;
+      case "--migrate-timeout-sec":
+        out.migrateTimeoutSec = Number.parseInt(argv[++i], 10);
+        break;
+      case "--migrate-poll-sec":
+        out.migratePollSec = Number.parseInt(argv[++i], 10);
         break;
       case "--json":
         out.json = true;
@@ -71,15 +83,22 @@ Flags:
   --method <merge|squash|rebase>
                           GitHub merge method (default: squash)
   --skip-local-cleanup    Skip the local HEAD switch + branch delete
+  --no-wait-migrate       Skip waiting for the downstream migrate workflow
+                          on parent_branch. Default is to wait (the workflow
+                          state is the workflow's success contract).
+  --migrate-timeout-sec <n>
+                          Migrate poll budget (default: 1800 = 30 minutes)
+  --migrate-poll-sec <n>  Seconds between migrate polls (default: 30)
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
 
 Exit codes:
-  0 = merged (state advanced; warnings may be present)
+  0 = merged + migrate succeeded (or --no-wait-migrate)
   1 = no state file
   2 = precondition refused (wrong state, missing PR URL / branch fields)
   3 = merge failed (GitHub merge / network)
+  4 = downstream migrate failed or timed out (state IS merged)
 `;
 
 interface Report {
@@ -100,6 +119,22 @@ function renderHuman(r: Report): string {
   lines.push(`  local_branch_deleted : ${res.localBranchDeleted}`);
   lines.push(`  lakebase_deleted     : ${res.paired.lakebaseBranchDeleted}`);
   lines.push(`  merge_message        : ${res.paired.message}`);
+  if (res.migrate) {
+    lines.push(
+      `  migrate_waited       : ${res.migrate.waited}${res.migrate.waited ? ` (polls=${res.migrate.polls})` : ""}`,
+    );
+    if (res.migrate.runUrl) {
+      lines.push(`  migrate_run_url      : ${res.migrate.runUrl}`);
+    }
+    if (res.migrate.conclusion) {
+      lines.push(`  migrate_conclusion   : ${res.migrate.conclusion}`);
+    }
+    if (res.state.migrate_completed_at) {
+      lines.push(
+        `  migrate_completed_at : ${res.state.migrate_completed_at}`,
+      );
+    }
+  }
   if (res.warnings.length > 0) {
     lines.push("");
     lines.push("warnings:");
@@ -112,6 +147,9 @@ function exitCodeForError(err: Error): number {
   if (err instanceof ScmMergeError) {
     if (err.code === "no-state-file") return 1;
     if (err.code === "merge-failed") return 3;
+    if (err.code === "migrate-failed" || err.code === "migrate-timeout") {
+      return 4;
+    }
     return 2;
   }
   return 3;
@@ -131,6 +169,13 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
       switchTo: args.switchTo,
       method: args.method,
       skipLocalCleanup: args.skipLocalCleanup,
+      waitMigrate: args.noWaitMigrate ? false : true,
+      migrateTimeoutMs: args.migrateTimeoutSec
+        ? args.migrateTimeoutSec * 1000
+        : undefined,
+      migratePollMs: args.migratePollSec
+        ? args.migratePollSec * 1000
+        : undefined,
     });
     const report: Report = { ok: true, result };
     if (args.json) {

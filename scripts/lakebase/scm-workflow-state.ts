@@ -48,6 +48,8 @@ export interface ScmWorkflowState {
   ci_run_url?: string;
   ci_green_at?: string;
   merged_at?: string;
+  migrate_run_url?: string;
+  migrate_completed_at?: string;
 }
 
 /** Project-root-relative path to the gate-surface file. */
@@ -193,6 +195,8 @@ export function validateWorkflowState(value: unknown): ValidationResult {
     "ci_run_url",
     "ci_green_at",
     "merged_at",
+    "migrate_run_url",
+    "migrate_completed_at",
     "$schema",
   ];
   for (const key of stringFields) {
@@ -274,6 +278,8 @@ export function validateWorkflowState(value: unknown): ValidationResult {
     "ci_run_url",
     "ci_green_at",
     "merged_at",
+    "migrate_run_url",
+    "migrate_completed_at",
   ]);
   for (const key of Object.keys(v)) {
     if (!allowedKeys.has(key)) {
@@ -384,6 +390,8 @@ function orderForOutput(state: ScmWorkflowState): ScmWorkflowState {
     "ci_run_url",
     "ci_green_at",
     "merged_at",
+    "migrate_run_url",
+    "migrate_completed_at",
   ];
   const out: Partial<ScmWorkflowState> = {};
   for (const k of keyOrder) {

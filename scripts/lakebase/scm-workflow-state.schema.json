@@ -85,6 +85,16 @@
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 timestamp of merge. Required from merged state."
+    },
+    "migrate_run_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "GitHub Actions URL for the downstream migrate workflow that applied migrations to the parent branch's Lakebase pair. Optional on merged: populated only when scm-merge ran with --wait-migrate (default)."
+    },
+    "migrate_completed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when the downstream migrate workflow finished. Paired with migrate_run_url."
     }
   },
   "allOf": [

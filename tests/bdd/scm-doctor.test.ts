@@ -8,6 +8,8 @@ import * as path from "node:path";
 const mockListBranches = vi.fn();
 const mockGetBranchByName = vi.fn();
 const mockGetCurrentBranch = vi.fn();
+const mockExec = vi.fn();
+const mockCreateFeaturePaired = vi.fn();
 
 vi.mock("../../scripts/lakebase/branch-utils.js", async () => {
   const actual = await vi.importActual<
@@ -23,6 +25,14 @@ vi.mock("../../scripts/git/inspect.js", () => ({
   getCurrentBranch: (...args: unknown[]) => mockGetCurrentBranch(...args),
   getRepoRoot: vi.fn(),
 }));
+vi.mock("../../scripts/util/exec.js", () => ({
+  exec: (...args: unknown[]) => mockExec(...args),
+  shq: (s: string) => `'${s}'`,
+}));
+vi.mock("../../scripts/lakebase/convention-branches.js", () => ({
+  createFeaturePairedBranch: (...args: unknown[]) =>
+    mockCreateFeaturePaired(...args),
+}));
 
 const doctor = await import("../../scripts/lakebase/scm-doctor.js");
 const state = await import("../../scripts/lakebase/scm-workflow-state.js");
@@ -34,6 +44,16 @@ beforeEach(() => {
   mockListBranches.mockReset();
   mockGetBranchByName.mockReset();
   mockGetCurrentBranch.mockReset();
+  mockExec.mockReset();
+  mockCreateFeaturePaired.mockReset();
+  mockExec.mockResolvedValue("");
+  mockCreateFeaturePaired.mockResolvedValue({
+    branch: { name: "p/branches/feature-x", uid: "br-x" },
+    gitBranch: "feature/x",
+    gitBranchCreated: false,
+    envSynced: true,
+    warnings: [],
+  });
 });
 
 afterEach(() => {
@@ -167,6 +187,71 @@ describe("runDoctor", () => {
     const report = await doctor.runDoctor({ projectDir: tmpDir });
     expect(report.findings).toEqual([]);
     expect(report.worstSeverity).toBe("ok");
+  });
+
+  it("clean run after fixing head-branch-drift", async () => {
+    writeEnv("p", "feature-x");
+    state.writeWorkflowState(tmpDir, {
+      version: 1,
+      state: "feature-claimed",
+      tier_topology: 2,
+      project_id: "p",
+      feature_id: "x",
+      branch: "feature/x",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-x",
+      claimed_at: "2026-05-01T00:00:00Z",
+    });
+    mockListBranches.mockResolvedValue([
+      ...lakebase2Tier(),
+      { name: "p/branches/feature-x", uid: "br-x" },
+    ]);
+    mockGetBranchByName.mockResolvedValue({
+      name: "p/branches/feature-x",
+      uid: "br-x",
+    });
+    // Before fix: HEAD on staging (drift); after fix: HEAD on feature/x.
+    mockGetCurrentBranch
+      .mockResolvedValueOnce("staging")
+      .mockResolvedValueOnce("feature/x");
+    const result = await doctor.fixFinding({
+      projectDir: tmpDir,
+      findingId: "head-branch-drift",
+    });
+    expect(result.action).toContain("git checkout");
+    expect(mockExec).toHaveBeenCalledWith(
+      expect.stringContaining("git checkout 'feature/x'"),
+      expect.objectContaining({ cwd: tmpDir }),
+    );
+    expect(result.postReport.findings).toEqual([]);
+  });
+
+  it("refuses --fix when the finding is not present", async () => {
+    writeEnv("p");
+    state.writeWorkflowState(tmpDir, {
+      version: 1,
+      state: "scaffold-complete",
+      tier_topology: 2,
+      project_id: "p",
+    });
+    mockListBranches.mockResolvedValue(lakebase2Tier());
+    mockGetCurrentBranch.mockResolvedValue("staging");
+    await expect(
+      doctor.fixFinding({
+        projectDir: tmpDir,
+        findingId: "head-branch-drift",
+      }),
+    ).rejects.toMatchObject({ code: "finding-not-present" });
+  });
+
+  it("rejects unsupported finding id", async () => {
+    writeEnv("p");
+    await expect(
+      doctor.fixFinding({
+        projectDir: tmpDir,
+        findingId: "no-state-file" as never,
+      }),
+    ).rejects.toMatchObject({ code: "unsupported-finding" });
   });
 
   it("flags .env branch drift when LAKEBASE_BRANCH_ID disagrees with state", async () => {

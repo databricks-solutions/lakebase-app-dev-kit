@@ -1,12 +1,12 @@
-// SCM workflow doctor (FEIP-7458 phase C): read-only diagnostic that
+// SCM workflow doctor (FEIP-7458 phase C+): read-only diagnostic that
 // cross-checks .lakebase/workflow-state.json against the actual git +
 // Lakebase + .env state and reports inconsistencies.
 //
-// Read-only first cut. The CLI prints a human-readable report; a
-// future iteration can offer `--fix <check-id>` to apply targeted
-// remediations (e.g. resync .env when LAKEBASE_BRANCH_ID drifts). For
-// now, every finding ends with a one-line suggested command the user
-// can run to address it.
+// Phase C ships --fix <id> for a curated set of findings (env-branch-
+// drift, head-branch-drift, tier-topology-mismatch, orphan-current-
+// branch). Each fix maps to one shell command, executed only when the
+// finding is present in the current report; unsupported fix ids return
+// an error rather than performing a related-but-different remediation.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -16,13 +16,15 @@ import {
   type LakebaseBranchInfo,
 } from "./branch-utils.js";
 import { getCurrentBranch } from "../git/inspect.js";
-import { inferTierTopology } from "./scm-adopt-state.js";
+import { adoptScmState, inferTierTopology } from "./scm-adopt-state.js";
+import { recoverOrphans } from "./scm-recover-orphans.js";
 import {
   readWorkflowState,
   type ScmWorkflowState,
   type TierTopology,
 } from "./scm-workflow-state.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+import { exec } from "../util/exec.js";
 
 export type DoctorSeverity = "ok" | "warn" | "fail";
 
@@ -231,4 +233,149 @@ function finalize(report: Omit<DoctorReport, "worstSeverity">): DoctorReport {
     worst = worstOf(worst, f.severity);
   }
   return { ...report, worstSeverity: worst };
+}
+
+export class ScmDoctorFixError extends Error {
+  constructor(
+    message: string,
+    public readonly code:
+      | "finding-not-present"
+      | "unsupported-finding"
+      | "fix-failed",
+  ) {
+    super(message);
+    this.name = "ScmDoctorFixError";
+  }
+}
+
+/** Findings the doctor can auto-fix. Others require manual intervention. */
+export const FIXABLE_FINDING_IDS = [
+  "env-branch-drift",
+  "head-branch-drift",
+  "tier-topology-mismatch",
+  "orphan-current-branch",
+] as const;
+
+export type FixableFindingId = (typeof FIXABLE_FINDING_IDS)[number];
+
+export interface FixFindingArgs {
+  projectDir: string;
+  instance?: string;
+  findingId: FixableFindingId;
+  /** Use the supplied report instead of re-running runDoctor (for tests). */
+  report?: DoctorReport;
+}
+
+export interface FixFindingResult {
+  /** Finding that was acted on. */
+  findingId: FixableFindingId;
+  /** One-line summary of the remediation that ran. */
+  action: string;
+  /** Doctor report captured after the remediation. */
+  postReport: DoctorReport;
+}
+
+/**
+ * Apply a targeted remediation for one finding. Refuses if the
+ * finding isn't present in the current report (so the user can't
+ * accidentally run a `--fix` against a stale plan). Refuses on
+ * unsupported finding ids.
+ */
+export async function fixFinding(
+  args: FixFindingArgs,
+): Promise<FixFindingResult> {
+  if (!FIXABLE_FINDING_IDS.includes(args.findingId)) {
+    throw new ScmDoctorFixError(
+      `Finding "${args.findingId}" is not supported by --fix. Supported: ${FIXABLE_FINDING_IDS.join(", ")}.`,
+      "unsupported-finding",
+    );
+  }
+  const report =
+    args.report ??
+    (await runDoctor({ projectDir: args.projectDir, instance: args.instance }));
+  const present = report.findings.find((f) => f.id === args.findingId);
+  if (!present) {
+    throw new ScmDoctorFixError(
+      `Finding "${args.findingId}" is not present in the current report. Re-run lakebase-scm-doctor to see what needs fixing.`,
+      "finding-not-present",
+    );
+  }
+
+  let action = "";
+  try {
+    switch (args.findingId) {
+      case "env-branch-drift":
+      case "head-branch-drift": {
+        const branch = report.state?.branch;
+        if (!branch) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: workflow state has no branch field.",
+            "fix-failed",
+          );
+        }
+        await exec(`git checkout ${shellEscape(branch)}`, {
+          cwd: args.projectDir,
+          timeout: 15_000,
+        });
+        action = `git checkout ${branch} (re-fires post-checkout to resync .env)`;
+        break;
+      }
+      case "tier-topology-mismatch": {
+        const instance = args.instance ?? report.state?.project_id;
+        if (!instance) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: missing Lakebase project id.",
+            "fix-failed",
+          );
+        }
+        await adoptScmState({
+          projectDir: args.projectDir,
+          instance,
+          force: true,
+        });
+        action = `adopted state with --force to re-infer tier_topology`;
+        break;
+      }
+      case "orphan-current-branch": {
+        const instance = args.instance ?? report.state?.project_id;
+        if (!instance) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: missing Lakebase project id.",
+            "fix-failed",
+          );
+        }
+        const headBranch = await getCurrentBranch({ cwd: args.projectDir });
+        if (!headBranch) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: detached HEAD or no current branch.",
+            "fix-failed",
+          );
+        }
+        await recoverOrphans({
+          projectDir: args.projectDir,
+          instance,
+          claim: true,
+          onlyBranch: headBranch,
+        });
+        action = `recovered orphan ${headBranch} via createFeaturePairedBranch`;
+        break;
+      }
+    }
+  } catch (err) {
+    if (err instanceof ScmDoctorFixError) throw err;
+    throw new ScmDoctorFixError(
+      `Remediation failed: ${err instanceof Error ? err.message : String(err)}`,
+      "fix-failed",
+    );
+  }
+
+  const postReport = await runDoctor({
+    projectDir: args.projectDir,
+    instance: args.instance,
+  });
+  return { findingId: args.findingId, action, postReport };
+}
+
+function shellEscape(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }

@@ -133,6 +133,7 @@ describe("mergeFeature happy path", () => {
     seedCiGreen();
     const result = await merge.mergeFeature({
       projectDir: tmpDir,
+      waitMigrate: false,
       now: () => new Date("2026-06-03T12:00:00Z"),
     });
     expect(mockMergePaired).toHaveBeenCalledWith(
@@ -154,6 +155,7 @@ describe("mergeFeature happy path", () => {
     await merge.mergeFeature({
       projectDir: tmpDir,
       method: "rebase",
+      waitMigrate: false,
       now: () => new Date(),
     });
     expect(mockMergePaired.mock.calls[0][0].method).toBe("rebase");
@@ -164,6 +166,7 @@ describe("mergeFeature happy path", () => {
     const result = await merge.mergeFeature({
       projectDir: tmpDir,
       skipLocalCleanup: true,
+      waitMigrate: false,
       now: () => new Date(),
     });
     expect(result.localBranchDeleted).toBe(false);
@@ -185,11 +188,143 @@ describe("mergeFeature happy path", () => {
     });
     const result = await merge.mergeFeature({
       projectDir: tmpDir,
+      waitMigrate: false,
       now: () => new Date(),
     });
     expect(result.warnings).toContain(
       "Lakebase delete failed: branch already gone",
     );
     expect(result.state.state).toBe("merged");
+  });
+});
+
+describe("mergeFeature wait-migrate", () => {
+  function makeRun(
+    status: string,
+    conclusion: string,
+    createdAt: string,
+    overrides: Partial<{ event: string; branch: string; id: number }> = {},
+  ) {
+    return {
+      id: overrides.id ?? 9999,
+      name: "merge",
+      status,
+      conclusion,
+      branch: overrides.branch ?? "staging",
+      event: overrides.event ?? "push",
+      createdAt,
+      updatedAt: createdAt,
+    };
+  }
+
+  it("waits for downstream workflow, records run url + completed_at on success", async () => {
+    seedCiGreen();
+    // Merge timestamp = 12:00:00; subsequent now() calls advance the clock.
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 100;
+      return out;
+    };
+    const fetchRuns = vi
+      .fn()
+      .mockResolvedValueOnce([
+        makeRun("in_progress", "", "2026-06-03T12:00:05Z"),
+      ])
+      .mockResolvedValueOnce([
+        makeRun("completed", "success", "2026-06-03T12:00:05Z"),
+      ]);
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      fetchRuns,
+      sleep: () => Promise.resolve(),
+      now: clock,
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+    });
+    expect(result.migrate?.waited).toBe(true);
+    expect(result.migrate?.conclusion).toBe("success");
+    expect(result.state.migrate_run_url).toContain(
+      "https://github.com/kevin-hartman/demo/actions/runs/9999",
+    );
+    expect(result.state.migrate_completed_at).toBeDefined();
+  });
+
+  it("throws migrate-failed when downstream conclusion is failure", async () => {
+    seedCiGreen();
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 100;
+      return out;
+    };
+    const fetchRuns = vi
+      .fn()
+      .mockResolvedValue([
+        makeRun("completed", "failure", "2026-06-03T12:00:05Z"),
+      ]);
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        fetchRuns,
+        sleep: () => Promise.resolve(),
+        now: clock,
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-failed" });
+    // State IS already merged (the GH merge succeeded before the wait).
+    expect(state.readWorkflowState(tmpDir)?.state).toBe("merged");
+  });
+
+  it("throws migrate-timeout if the run never completes", async () => {
+    seedCiGreen();
+    // Clock advances faster than the timeout budget so the loop exits.
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 30_000;
+      return out;
+    };
+    const fetchRuns = vi
+      .fn()
+      .mockResolvedValue([
+        makeRun("in_progress", "", "2026-06-03T12:00:05Z"),
+      ]);
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        fetchRuns,
+        sleep: () => Promise.resolve(),
+        now: clock,
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-timeout" });
+  });
+
+  it("ignores non-push events on parent_branch (no false-positive workflow_dispatch match)", async () => {
+    seedCiGreen();
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 30_000;
+      return out;
+    };
+    const fetchRuns = vi.fn().mockResolvedValue([
+      makeRun("completed", "success", "2026-06-03T12:00:05Z", {
+        event: "workflow_dispatch",
+      }),
+    ]);
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        fetchRuns,
+        sleep: () => Promise.resolve(),
+        now: clock,
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-timeout" });
   });
 });

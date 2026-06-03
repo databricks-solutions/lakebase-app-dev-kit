@@ -11,8 +11,13 @@
 // (merge.yml applying migrations to production) once the kit emits a
 // stable surface for that signal.
 
-import { mergePairedPullRequest } from "../github/pr.js";
+import {
+  listWorkflowRuns,
+  mergePairedPullRequest,
+  type WorkflowRunSummary,
+} from "../github/pr.js";
 import { getOwnerRepo } from "../git/remote.js";
+import { delay } from "../util/delay.js";
 import { exec } from "../util/exec.js";
 import { getCurrentBranch } from "../git/inspect.js";
 import {
@@ -30,7 +35,9 @@ export class ScmMergeError extends Error {
       | "no-github-remote"
       | "no-pr-url"
       | "bad-pr-url"
-      | "merge-failed",
+      | "merge-failed"
+      | "migrate-failed"
+      | "migrate-timeout",
   ) {
     super(message);
     this.name = "ScmMergeError";
@@ -47,6 +54,30 @@ export interface MergeArgs {
   switchTo?: string;
   /** Skip the local branch + HEAD switch (useful for CI-only merges). */
   skipLocalCleanup?: boolean;
+  /**
+   * Wait for the downstream migrate workflow on parent_branch to complete
+   * before returning. Default: true. Set false for "merge and walk away"
+   * flows where the user does not need migration confirmation.
+   */
+  waitMigrate?: boolean;
+  /** Total budget for the migrate poll loop, milliseconds. Default: 30 minutes. */
+  migrateTimeoutMs?: number;
+  /** Interval between migrate polls, milliseconds. Default: 30 seconds. */
+  migratePollMs?: number;
+  /**
+   * Predicate identifying the downstream migrate workflow run among
+   * recent runs on parent_branch. Default: any push-event run on
+   * parent_branch newer than the merge timestamp. Tests can pass a
+   * tighter predicate (e.g. filter by workflow name).
+   */
+  migrateRunPredicate?: (run: WorkflowRunSummary, mergedAt: Date) => boolean;
+  /**
+   * Override the workflow-runs fetcher (mostly for tests). The default
+   * uses the substrate's listWorkflowRuns.
+   */
+  fetchRuns?: (ownerRepo: string, limit?: number) => Promise<WorkflowRunSummary[]>;
+  /** Override the sleep step (for tests). */
+  sleep?: (ms: number) => Promise<void>;
   /** Clock injection for testability. */
   now?: () => Date;
 }
@@ -59,7 +90,35 @@ export interface MergeResult {
   localBranchDeleted: boolean;
   /** Branch HEAD points at after the merge step (parent_branch on success). */
   headAfter: string;
+  /** Information about the downstream migrate workflow when --wait-migrate was on. */
+  migrate?: {
+    waited: boolean;
+    runUrl?: string;
+    conclusion?: string;
+    polls: number;
+  };
   warnings: string[];
+}
+
+const DEFAULT_MIGRATE_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_MIGRATE_POLL_MS = 30 * 1000;
+
+function defaultMigratePredicate(
+  run: WorkflowRunSummary,
+  mergedAt: Date,
+): boolean {
+  if (!run.createdAt) return false;
+  const created = Date.parse(run.createdAt);
+  if (!Number.isFinite(created)) return false;
+  // Workflow runs on the parent branch triggered by the merge commit are
+  // ALWAYS push-event runs (gh's merge POSTs to base, which fires
+  // `on: push`). Filtering out non-push runs avoids matching
+  // workflow_dispatch / schedule runs that happen to land in the window.
+  if (run.event && run.event !== "push") return false;
+  // Allow a small grace window in case the merge endpoint returns
+  // before the workflow_run record is fully created (observed lag up
+  // to a few seconds).
+  return created >= mergedAt.getTime() - 5_000;
 }
 
 export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
@@ -157,21 +216,106 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
     }
   }
 
-  const now = (args.now ?? (() => new Date()))();
-  const next: ScmWorkflowState = {
+  const nowFn = args.now ?? (() => new Date());
+  const mergedAt = nowFn();
+  let next: ScmWorkflowState = {
     ...current,
     state: "merged",
-    merged_at: now.toISOString(),
+    merged_at: mergedAt.toISOString(),
   };
   writeWorkflowState(args.projectDir, next);
+
+  // ─── Optional: wait for the downstream migrate workflow ───────
+  // After a feature PR merges, the kit's templated merge.yml fires on
+  // the parent branch (typically staging or main) and applies the
+  // feature's migrations to that branch's Lakebase pair. When the
+  // parent is the production tier, that pair IS prod. Waiting here
+  // turns "PR merged" into "migrations applied" as the workflow's
+  // observable success condition.
+  let migrate: MergeResult["migrate"];
+  const waitMigrate = args.waitMigrate !== false;
+  if (waitMigrate) {
+    const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
+    const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
+    const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
+    const sleep = args.sleep ?? delay;
+    const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+
+    let polls = 0;
+    let matched: WorkflowRunSummary | undefined;
+    let lastSeen: WorkflowRunSummary | undefined;
+    try {
+      while (nowFn().getTime() - mergedAt.getTime() < timeoutMs) {
+        polls += 1;
+        const runs = await fetchRuns(ownerRepo, 20);
+        const candidates = runs
+          .filter((r) => r.branch === current.parent_branch)
+          .filter((r) => predicate(r, mergedAt));
+        if (candidates.length > 0) {
+          // Pick the newest matching run (sort by createdAt desc).
+          candidates.sort(
+            (a, b) =>
+              Date.parse(b.createdAt ?? "0") - Date.parse(a.createdAt ?? "0"),
+          );
+          lastSeen = candidates[0];
+          const status = (lastSeen.status ?? "").toLowerCase();
+          if (status === "completed") {
+            matched = lastSeen;
+            break;
+          }
+        }
+        await sleep(pollMs);
+      }
+    } catch (err) {
+      warnings.push(
+        `Downstream migrate poll errored: ${err instanceof Error ? err.message : String(err)}. Treating as advisory.`,
+      );
+    }
+    if (matched) {
+      const runUrl = workflowRunUrl(ownerRepo, matched);
+      const conclusion = (matched.conclusion ?? "").toLowerCase();
+      migrate = {
+        waited: true,
+        runUrl,
+        conclusion,
+        polls,
+      };
+      if (conclusion === "success") {
+        next = {
+          ...next,
+          migrate_run_url: runUrl,
+          migrate_completed_at: nowFn().toISOString(),
+        };
+        writeWorkflowState(args.projectDir, next);
+      } else {
+        throw new ScmMergeError(
+          `Downstream migrate workflow finished with conclusion=${conclusion}. Run ${runUrl} for details.`,
+          "migrate-failed",
+        );
+      }
+    } else {
+      migrate = { waited: true, polls };
+      throw new ScmMergeError(
+        `Timed out after ${Math.round((args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1000)}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastSeen?.status ?? "(no matching run)"}.`,
+        "migrate-timeout",
+      );
+    }
+  } else {
+    migrate = { waited: false, polls: 0 };
+  }
 
   return {
     state: next,
     paired,
     localBranchDeleted,
     headAfter,
+    migrate,
     warnings,
   };
+}
+
+function workflowRunUrl(ownerRepo: string, run: WorkflowRunSummary): string {
+  return `https://github.com/${ownerRepo}/actions/runs/${run.id}`;
 }
 
 /** Pull "123" out of "https://github.com/owner/repo/pull/123" (and similar). */
