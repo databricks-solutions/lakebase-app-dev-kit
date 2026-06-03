@@ -388,6 +388,52 @@ function withProxyEnv(base = {}) {
   }
   return out;
 }
+
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
+async function pollUntilDefined(probe, opts) {
+  return pollUntil({
+    ...opts,
+    probe: async (ctx) => {
+      const value = await probe(ctx);
+      return value === void 0 ? { done: false } : { done: true, value };
+    }
+  });
+}
 export {
   PROXY_ENV_KEYS,
   copyDirSubstituted,
@@ -398,6 +444,8 @@ export {
   isCliEntry,
   parseOwnerRepo,
   patchPomForLakebase,
+  pollUntil,
+  pollUntilDefined,
   proxyEnvSubset,
   sanitizeArtifactId,
   sanitizeBranchName,

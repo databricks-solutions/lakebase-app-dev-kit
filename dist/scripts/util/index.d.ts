@@ -89,4 +89,72 @@ declare function proxyEnvSubset(source?: NodeJS.ProcessEnv): Record<string, stri
  */
 declare function withProxyEnv(base?: Record<string, string | undefined>): Record<string, string>;
 
-export { type CopyDirSubstitutedArgs, type OwnerRepo, PROXY_ENV_KEYS, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, proxyEnvSubset, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets, withProxyEnv };
+interface PollProbeDone<T> {
+    done: true;
+    value: T;
+}
+interface PollProbePending {
+    done: false;
+}
+type PollProbeResult<T> = PollProbeDone<T> | PollProbePending;
+interface PollUntilArgs<T> {
+    /**
+     * The probe function. Returns `{ done: true, value }` to terminate
+     * the loop with success, or `{ done: false }` to keep polling. Throw
+     * from inside the probe for irrecoverable conditions; the throw
+     * propagates out of pollUntil.
+     */
+    probe: (ctx: {
+        pollIndex: number;
+        elapsedMs: number;
+    }) => Promise<PollProbeResult<T>>;
+    /** Total budget for the loop, milliseconds. */
+    timeoutMs: number;
+    /** Interval between probes, milliseconds. */
+    intervalMs: number;
+    /**
+     * Optional label embedded in the default `onPoll` log line. Has no
+     * effect when `onPoll` is supplied.
+     */
+    label?: string;
+    /**
+     * Fires after every probe. The poll index is 1-based; elapsedMs is
+     * since the loop started, not since the last probe. The default is a
+     * no-op so silent polling stays silent unless the caller opts in.
+     */
+    onPoll?: (info: {
+        pollIndex: number;
+        elapsedMs: number;
+        result: PollProbeResult<T>;
+    }) => void;
+    /** Inject `now` for tests. Default: `() => new Date()`. */
+    now?: () => Date;
+    /** Inject sleep for tests. Default: the shared `delay` util. */
+    sleep?: (ms: number) => Promise<void>;
+}
+interface PollUntilDoneResult<T> {
+    outcome: "done";
+    value: T;
+    polls: number;
+    elapsedMs: number;
+}
+interface PollUntilTimeoutResult {
+    outcome: "timeout";
+    polls: number;
+    elapsedMs: number;
+}
+type PollUntilResult<T> = PollUntilDoneResult<T> | PollUntilTimeoutResult;
+declare function pollUntil<T>(args: PollUntilArgs<T>): Promise<PollUntilResult<T>>;
+/**
+ * Convenience wrapper for the common case where the probe returns
+ * `T | undefined` (undefined = keep polling). Defined values count as
+ * done. Use this when the probe naturally returns optional data and
+ * "defined" already means "ready" (e.g. branch lookups, workflow run
+ * lookups).
+ */
+declare function pollUntilDefined<T>(probe: (ctx: {
+    pollIndex: number;
+    elapsedMs: number;
+}) => Promise<T | undefined>, opts: Omit<PollUntilArgs<T>, "probe">): Promise<PollUntilResult<T>>;
+
+export { type CopyDirSubstitutedArgs, type OwnerRepo, PROXY_ENV_KEYS, type PollProbeDone, type PollProbePending, type PollProbeResult, type PollUntilArgs, type PollUntilDoneResult, type PollUntilResult, type PollUntilTimeoutResult, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, pollUntil, pollUntilDefined, proxyEnvSubset, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets, withProxyEnv };

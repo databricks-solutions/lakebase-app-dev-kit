@@ -485,6 +485,43 @@ function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
+
 // scripts/git/inspect.ts
 async function getCurrentBranch(args) {
   try {
@@ -839,28 +876,35 @@ async function mergeFeature(args) {
     const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
     const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
     const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
-    const sleep = args.sleep ?? delay;
     const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+    const elapsedSinceMerge = nowFn().getTime() - mergedAt.getTime();
+    const remainingTimeoutMs = Math.max(0, timeoutMs - elapsedSinceMerge);
     let polls = 0;
     let matched;
     let lastSeen;
     try {
-      while (nowFn().getTime() - mergedAt.getTime() < timeoutMs) {
-        polls += 1;
-        const runs = await fetchRuns(ownerRepo, 20);
-        const candidates = runs.filter((r) => r.branch === current.parent_branch).filter((r) => predicate(r, mergedAt));
-        if (candidates.length > 0) {
+      const result = await pollUntil({
+        timeoutMs: remainingTimeoutMs,
+        intervalMs: pollMs,
+        now: nowFn,
+        sleep: args.sleep,
+        probe: async () => {
+          const runs = await fetchRuns(ownerRepo, 20);
+          const candidates = runs.filter((r) => r.branch === current.parent_branch).filter((r) => predicate(r, mergedAt));
+          if (candidates.length === 0) {
+            return { done: false };
+          }
           candidates.sort(
             (a, b) => Date.parse(b.createdAt ?? "0") - Date.parse(a.createdAt ?? "0")
           );
           lastSeen = candidates[0];
           const status = (lastSeen.status ?? "").toLowerCase();
-          if (status === "completed") {
-            matched = lastSeen;
-            break;
-          }
+          return status === "completed" ? { done: true, value: lastSeen } : { done: false };
         }
-        await sleep(pollMs);
+      });
+      polls = result.polls;
+      if (result.outcome === "done") {
+        matched = result.value;
       }
     } catch (err) {
       warnings.push(

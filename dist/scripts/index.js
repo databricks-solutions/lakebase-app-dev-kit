@@ -1650,15 +1650,27 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     return;
   }
   const localJdkStep = [
-    "- name: Set up JDK (local)",
+    "- name: Set up JDK (probe local)",
+    "        id: jdk-probe",
+    "        if: steps.detect-lang.outputs.lang == 'java'",
     "        run: |",
-    '          echo "Using local JDK:"',
-    "          java -version",
-    '          if [ -z "$JAVA_HOME" ]; then',
-    '            export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
-    '            echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV',
+    "          if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
+    '            JH="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
+    '            echo "JAVA_HOME=$JH" >> $GITHUB_ENV',
+    '            echo "local_jdk=found" >> $GITHUB_OUTPUT',
+    '            echo "Using local JDK: $JH"',
+    "            java -version",
+    "          else",
+    '            echo "local_jdk=missing" >> $GITHUB_OUTPUT',
+    '            echo "No local JDK; will fall back to actions/setup-java in the next step."',
     "          fi",
-    '          echo "JAVA_HOME=$JAVA_HOME"',
+    "",
+    "      - name: Set up JDK (download via actions/setup-java fallback)",
+    "        if: steps.detect-lang.outputs.lang == 'java' && steps.jdk-probe.outputs.local_jdk == 'missing'",
+    "        uses: actions/setup-java@v4",
+    "        with:",
+    "          java-version: '25'",
+    "          distribution: 'temurin'",
     ""
   ].join("\n");
   for (const file of ["pr.yml", "merge.yml"]) {
@@ -1997,6 +2009,18 @@ function addE2eToRunTestsScript(args) {
   return { patched: true, inserted: true };
 }
 function enableE2eForProject(args) {
+  const rootPkg = path9.join(args.projectDir, "package.json");
+  if (!fs9.existsSync(rootPkg)) {
+    return {
+      templatesWritten: [],
+      // Same shape as writePlaywrightTemplates would have returned; the
+      // template paths show up under skipped with the npm-wiring caveat
+      // captured in packageJson.patched=false.
+      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir })
+    };
+  }
   const templates = writePlaywrightTemplates({
     projectDir: args.projectDir,
     force: args.force,
@@ -2192,6 +2216,52 @@ function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep2 = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep2(args.intervalMs);
+  }
+}
+async function pollUntilDefined(probe, opts) {
+  return pollUntil({
+    ...opts,
+    probe: async (ctx) => {
+      const value = await probe(ctx);
+      return value === void 0 ? { done: false } : { done: true, value };
+    }
+  });
+}
+
 // scripts/lakebase/branch-create.ts
 var execFileP4 = promisify4(execFile4);
 async function createBranch(args) {
@@ -2275,15 +2345,19 @@ async function createBranch(args) {
 async function waitForBranchReady(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
   const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
-    if (branch && branch.state === "READY") return branch;
-    await delay(interval);
-  }
-  throw new LakebaseBranchError(
-    `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+  const result = await pollUntilDefined(
+    async () => {
+      const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
+      return branch && branch.state === "READY" ? branch : void 0;
+    },
+    { timeoutMs, intervalMs: interval }
   );
+  if (result.outcome === "timeout") {
+    throw new LakebaseBranchError(
+      `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+    );
+  }
+  return result.value;
 }
 function leafOf(pathOrName) {
   if (!pathOrName) return void 0;
@@ -6600,44 +6674,51 @@ async function waitForCi(args) {
   const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS2;
   const pollMs = args.pollMs ?? DEFAULT_POLL_MS;
   const fetchPr = args.fetchPr ?? getPullRequest;
-  const sleep2 = args.sleep ?? delay;
   const now = args.now ?? (() => /* @__PURE__ */ new Date());
-  const startedAt = now().getTime();
-  let polls = 0;
+  const headBranch = current.branch;
   let lastPr;
-  while (now().getTime() - startedAt < timeoutMs) {
-    polls += 1;
-    lastPr = await fetchPr(ownerRepo, current.branch);
-    if (!lastPr) {
-      throw new ScmWaitCiError(
-        `No open PR found for head=${current.branch} on ${ownerRepo}. Did the PR get closed?`,
-        "pr-not-found"
-      );
+  const result = await pollUntil({
+    timeoutMs,
+    intervalMs: pollMs,
+    now,
+    sleep: args.sleep,
+    probe: async () => {
+      lastPr = await fetchPr(ownerRepo, headBranch);
+      if (!lastPr) {
+        throw new ScmWaitCiError(
+          `No open PR found for head=${headBranch} on ${ownerRepo}. Did the PR get closed?`,
+          "pr-not-found"
+        );
+      }
+      if (lastPr.ciStatus === "success") {
+        return { done: true, value: lastPr };
+      }
+      if (lastPr.ciStatus === "failure") {
+        const failed = lastPr.checks.filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion)).map((c) => `${c.name} (${c.conclusion})`);
+        throw new ScmWaitCiError(
+          `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
+          "ci-failed"
+        );
+      }
+      return { done: false };
     }
-    if (lastPr.ciStatus === "success") {
-      const runUrl = pickRunUrl(lastPr);
-      const next = {
-        ...current,
-        state: "ci-green",
-        ci_run_url: runUrl,
-        ci_green_at: now().toISOString()
-      };
-      writeWorkflowState(args.projectDir, next);
-      return { state: next, pr: lastPr, polls };
-    }
-    if (lastPr.ciStatus === "failure") {
-      const failed = lastPr.checks.filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion)).map((c) => `${c.name} (${c.conclusion})`);
-      throw new ScmWaitCiError(
-        `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
-        "ci-failed"
-      );
-    }
-    await sleep2(pollMs);
+  });
+  if (result.outcome === "timeout") {
+    throw new ScmWaitCiError(
+      `Timed out after ${Math.round(timeoutMs / 1e3)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
+      "timeout"
+    );
   }
-  throw new ScmWaitCiError(
-    `Timed out after ${Math.round(timeoutMs / 1e3)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
-    "timeout"
-  );
+  const greenPr = result.value;
+  const runUrl = pickRunUrl(greenPr);
+  const next = {
+    ...current,
+    state: "ci-green",
+    ci_run_url: runUrl,
+    ci_green_at: now().toISOString()
+  };
+  writeWorkflowState(args.projectDir, next);
+  return { state: next, pr: greenPr, polls: result.polls };
 }
 function pickRunUrl(pr) {
   const withUrl = pr.checks.find((c) => c.detailsUrl);
@@ -6766,28 +6847,35 @@ async function mergeFeature(args) {
     const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
     const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
     const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
-    const sleep2 = args.sleep ?? delay;
     const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+    const elapsedSinceMerge = nowFn().getTime() - mergedAt.getTime();
+    const remainingTimeoutMs = Math.max(0, timeoutMs - elapsedSinceMerge);
     let polls = 0;
     let matched;
     let lastSeen;
     try {
-      while (nowFn().getTime() - mergedAt.getTime() < timeoutMs) {
-        polls += 1;
-        const runs = await fetchRuns(ownerRepo, 20);
-        const candidates = runs.filter((r) => r.branch === current.parent_branch).filter((r) => predicate(r, mergedAt));
-        if (candidates.length > 0) {
+      const result = await pollUntil({
+        timeoutMs: remainingTimeoutMs,
+        intervalMs: pollMs,
+        now: nowFn,
+        sleep: args.sleep,
+        probe: async () => {
+          const runs = await fetchRuns(ownerRepo, 20);
+          const candidates = runs.filter((r) => r.branch === current.parent_branch).filter((r) => predicate(r, mergedAt));
+          if (candidates.length === 0) {
+            return { done: false };
+          }
           candidates.sort(
             (a, b) => Date.parse(b.createdAt ?? "0") - Date.parse(a.createdAt ?? "0")
           );
           lastSeen = candidates[0];
           const status = (lastSeen.status ?? "").toLowerCase();
-          if (status === "completed") {
-            matched = lastSeen;
-            break;
-          }
+          return status === "completed" ? { done: true, value: lastSeen } : { done: false };
         }
-        await sleep2(pollMs);
+      });
+      polls = result.polls;
+      if (result.outcome === "done") {
+        matched = result.value;
       }
     } catch (err) {
       warnings.push(
@@ -8561,6 +8649,8 @@ export {
   parseTargetsYaml,
   patchPomForLakebase,
   patchWorkflowsForRunnerType,
+  pollUntil,
+  pollUntilDefined,
   preparePr,
   projectPath,
   propagateCredentials,

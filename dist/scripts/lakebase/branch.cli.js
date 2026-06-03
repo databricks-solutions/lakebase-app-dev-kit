@@ -245,6 +245,52 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
+async function pollUntilDefined(probe, opts) {
+  return pollUntil({
+    ...opts,
+    probe: async (ctx) => {
+      const value = await probe(ctx);
+      return value === void 0 ? { done: false } : { done: true, value };
+    }
+  });
+}
+
 // scripts/util/sanitize-branch-name.ts
 function sanitizeBranchName(gitBranch) {
   let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
@@ -389,15 +435,19 @@ async function createBranch(args) {
 async function waitForBranchReady(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
   const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
-    if (branch && branch.state === "READY") return branch;
-    await delay(interval);
-  }
-  throw new LakebaseBranchError(
-    `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+  const result = await pollUntilDefined(
+    async () => {
+      const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
+      return branch && branch.state === "READY" ? branch : void 0;
+    },
+    { timeoutMs, intervalMs: interval }
   );
+  if (result.outcome === "timeout") {
+    throw new LakebaseBranchError(
+      `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+    );
+  }
+  return result.value;
 }
 function leafOf(pathOrName) {
   if (!pathOrName) return void 0;

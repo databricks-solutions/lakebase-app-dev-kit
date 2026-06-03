@@ -311,6 +311,43 @@ function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
+
 // scripts/lakebase/scm-workflow-state.ts
 var fs = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
@@ -572,44 +609,51 @@ async function waitForCi(args) {
   const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const pollMs = args.pollMs ?? DEFAULT_POLL_MS;
   const fetchPr = args.fetchPr ?? getPullRequest;
-  const sleep = args.sleep ?? delay;
   const now = args.now ?? (() => /* @__PURE__ */ new Date());
-  const startedAt = now().getTime();
-  let polls = 0;
+  const headBranch = current.branch;
   let lastPr;
-  while (now().getTime() - startedAt < timeoutMs) {
-    polls += 1;
-    lastPr = await fetchPr(ownerRepo, current.branch);
-    if (!lastPr) {
-      throw new ScmWaitCiError(
-        `No open PR found for head=${current.branch} on ${ownerRepo}. Did the PR get closed?`,
-        "pr-not-found"
-      );
+  const result = await pollUntil({
+    timeoutMs,
+    intervalMs: pollMs,
+    now,
+    sleep: args.sleep,
+    probe: async () => {
+      lastPr = await fetchPr(ownerRepo, headBranch);
+      if (!lastPr) {
+        throw new ScmWaitCiError(
+          `No open PR found for head=${headBranch} on ${ownerRepo}. Did the PR get closed?`,
+          "pr-not-found"
+        );
+      }
+      if (lastPr.ciStatus === "success") {
+        return { done: true, value: lastPr };
+      }
+      if (lastPr.ciStatus === "failure") {
+        const failed = lastPr.checks.filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion)).map((c) => `${c.name} (${c.conclusion})`);
+        throw new ScmWaitCiError(
+          `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
+          "ci-failed"
+        );
+      }
+      return { done: false };
     }
-    if (lastPr.ciStatus === "success") {
-      const runUrl = pickRunUrl(lastPr);
-      const next = {
-        ...current,
-        state: "ci-green",
-        ci_run_url: runUrl,
-        ci_green_at: now().toISOString()
-      };
-      writeWorkflowState(args.projectDir, next);
-      return { state: next, pr: lastPr, polls };
-    }
-    if (lastPr.ciStatus === "failure") {
-      const failed = lastPr.checks.filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion)).map((c) => `${c.name} (${c.conclusion})`);
-      throw new ScmWaitCiError(
-        `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
-        "ci-failed"
-      );
-    }
-    await sleep(pollMs);
+  });
+  if (result.outcome === "timeout") {
+    throw new ScmWaitCiError(
+      `Timed out after ${Math.round(timeoutMs / 1e3)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
+      "timeout"
+    );
   }
-  throw new ScmWaitCiError(
-    `Timed out after ${Math.round(timeoutMs / 1e3)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
-    "timeout"
-  );
+  const greenPr = result.value;
+  const runUrl = pickRunUrl(greenPr);
+  const next = {
+    ...current,
+    state: "ci-green",
+    ci_run_url: runUrl,
+    ci_green_at: now().toISOString()
+  };
+  writeWorkflowState(args.projectDir, next);
+  return { state: next, pr: greenPr, polls: result.polls };
 }
 function pickRunUrl(pr) {
   const withUrl = pr.checks.find((c) => c.detailsUrl);

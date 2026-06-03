@@ -1534,15 +1534,27 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     return;
   }
   const localJdkStep = [
-    "- name: Set up JDK (local)",
+    "- name: Set up JDK (probe local)",
+    "        id: jdk-probe",
+    "        if: steps.detect-lang.outputs.lang == 'java'",
     "        run: |",
-    '          echo "Using local JDK:"',
-    "          java -version",
-    '          if [ -z "$JAVA_HOME" ]; then',
-    '            export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
-    '            echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV',
+    "          if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
+    '            JH="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
+    '            echo "JAVA_HOME=$JH" >> $GITHUB_ENV',
+    '            echo "local_jdk=found" >> $GITHUB_OUTPUT',
+    '            echo "Using local JDK: $JH"',
+    "            java -version",
+    "          else",
+    '            echo "local_jdk=missing" >> $GITHUB_OUTPUT',
+    '            echo "No local JDK; will fall back to actions/setup-java in the next step."',
     "          fi",
-    '          echo "JAVA_HOME=$JAVA_HOME"',
+    "",
+    "      - name: Set up JDK (download via actions/setup-java fallback)",
+    "        if: steps.detect-lang.outputs.lang == 'java' && steps.jdk-probe.outputs.local_jdk == 'missing'",
+    "        uses: actions/setup-java@v4",
+    "        with:",
+    "          java-version: '25'",
+    "          distribution: 'temurin'",
     ""
   ].join("\n");
   for (const file of ["pr.yml", "merge.yml"]) {
@@ -1625,6 +1637,52 @@ var import_node_util3 = require("util");
 // scripts/util/delay.ts
 function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
+}
+
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
+async function pollUntilDefined(probe, opts) {
+  return pollUntil({
+    ...opts,
+    probe: async (ctx) => {
+      const value = await probe(ctx);
+      return value === void 0 ? { done: false } : { done: true, value };
+    }
+  });
 }
 
 // scripts/util/sanitize-branch-name.ts
@@ -1717,15 +1775,19 @@ async function createBranch(args) {
 async function waitForBranchReady(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
   const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
-    if (branch && branch.state === "READY") return branch;
-    await delay(interval);
-  }
-  throw new LakebaseBranchError(
-    `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+  const result = await pollUntilDefined(
+    async () => {
+      const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
+      return branch && branch.state === "READY" ? branch : void 0;
+    },
+    { timeoutMs, intervalMs: interval }
   );
+  if (result.outcome === "timeout") {
+    throw new LakebaseBranchError(
+      `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+    );
+  }
+  return result.value;
 }
 function leafOf(pathOrName) {
   if (!pathOrName) return void 0;
@@ -1930,6 +1992,18 @@ function addE2eToRunTestsScript(args) {
   return { patched: true, inserted: true };
 }
 function enableE2eForProject(args) {
+  const rootPkg = path9.join(args.projectDir, "package.json");
+  if (!fs10.existsSync(rootPkg)) {
+    return {
+      templatesWritten: [],
+      // Same shape as writePlaywrightTemplates would have returned; the
+      // template paths show up under skipped with the npm-wiring caveat
+      // captured in packageJson.patched=false.
+      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir })
+    };
+  }
   const templates = writePlaywrightTemplates({
     projectDir: args.projectDir,
     force: args.force,
