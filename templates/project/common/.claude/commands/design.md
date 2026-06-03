@@ -10,6 +10,37 @@ Drives a feature from idea to spec to architect review to test list. This wraps 
 
 If `.tdd/` does not exist in the project root, this command hard-fails with a setup hint instead of lazy-initializing: the TDD workflow has invariants (`.tdd/` shape, `selection-log.md`) a lazy bootstrap cannot reconstruct. Run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh.
 
+## Step 0 (cannot skip): claim the paired branch via the substrate
+
+**Before any design phase runs, the agent MUST claim a paired Lakebase + git branch for this feature via the substrate.** This is the kit's invariant: every git branch gets a Lakebase branch, and the substrate's `lakebase-branch create-paired` is the ONLY supported creation path. Skipping this step OR shelling out to `git checkout -b` directly is a contract violation and must be refused.
+
+Concretely, the agent:
+
+1. Reads `LAKEBASE_PROJECT_ID` from the project's `.env`. If absent, hard-fails with `Lakebase project id missing; run lakebase-create-project first.`
+2. Derives the git branch name from the feature id by stripping the leading `F<N>-` and prefixing `feature/`. Example: `F1-initial-domain` -> `feature/initial-domain`.
+3. Picks the parent branch with this precedence:
+   - `LAKEBASE_BASE_BRANCH` from `.env` if set (explicit override).
+   - Otherwise `staging` if the project's `lakebase-branch list` shows it (3-tier scaffold).
+   - Otherwise the project default branch (2-tier scaffold; usually `production`).
+4. Invokes the substrate primitive via the kit CLI:
+
+   ```bash
+   npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
+     lakebase-branch create-paired \
+       --instance "$LAKEBASE_PROJECT_ID" \
+       --branch "feature/<slug>" \
+       --parent-branch "<resolved-parent>" \
+       --cwd "$PWD" \
+       --pretty
+   ```
+
+   `create-paired` is atomic via the substrate's `createPairedBranch`: the Lakebase side comes first (with TTL auto-recovery), then `git checkout -b` triggers the post-checkout hook to populate `.env` credentials. If the Lakebase side fails, no git branch is left dangling.
+
+5. If `create-paired` errors with `branch already exists`, the feature branch was claimed in a prior session: proceed to step 6.
+6. Run `.claude/commands/design.pre-hook.md` if present. The default pre-hook (shipped with the kit) documents this very step for reference; projects may APPEND project-specific gestures to it (claim a JIRA epic, post to Slack, etc.). The pre-hook does NOT replace step 0 above; it extends it.
+
+If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The substrate is the only path.
+
 ## Phases (HITL-gated)
 
 1. **Spec Author** drafts `spec.md` + `feature.json` from the prompt.
@@ -23,16 +54,14 @@ Each phase is implemented by the substrate agent of the same name:
 
 References resolve through Claude Code's `@skill-name/agent-name` lookup, so agent renames inside the substrate skill stay safe.
 
-## Project pre/post hooks
-
-If `.claude/commands/design.pre-hook.md` exists in this project, it runs before phase 1. Common uses: create a JIRA epic for the feature, claim a working branch in Lakebase.
+## Project post-hook
 
 If `.claude/commands/design.post-hook.md` exists in this project, it runs after phase 3. Common uses: notify a Slack channel, assign reviewers, link the spec into a tracking doc.
 
-The hooks are owned by the project, not the substrate: this command file only consults them when present. Author the markdown files freely; one pre-hook plus one post-hook per command (no chains in v1).
+The post-hook is owned by the project, not the substrate: this command file only consults it when present. Author the markdown file freely; one post-hook per command (no chains in v1).
 
 ## Substrate version
 
 Pinned to: `${KIT_VERSION_AT_SCAFFOLD}`
 
-Bumping the kit may shift agent prompts. The future `lakebase-update-commands` bin will re-pull canonical templates while preserving the pre/post hook files above.
+Bumping the kit may shift agent prompts. The future `lakebase-update-commands` bin will re-pull canonical templates while preserving the post-hook file above.

@@ -18,7 +18,7 @@ import {
   getDefaultBranchId,
 } from "./lakebase-project.js";
 import { scaffoldAll } from "./scaffold.js";
-import { createBranch } from "./branch-create.js";
+import { createLongRunningBranch } from "./long-running-branch.js";
 import { enableE2eForProject } from "./enable-e2e.js";
 import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
@@ -216,39 +216,6 @@ export async function createProject(
     host,
   });
 
-  // ── Step 4b: Tier topology (architectural choice surfaced by the caller) ─
-  // When tiers === 3, cut a `staging` Lakebase branch (no_expiry) off
-  // production. The PSA-convention TTL helpers
-  // (createFeatureBranch/createTestBranch/...) then default to `staging`
-  // as the parent, so subsequent feature work forks off it cleanly.
-  // When tiers !== 3 (default), do nothing - the project is 2-tier
-  // (features fork directly from production).
-  if (tiers === 3) {
-    if (!defaultBranchId) {
-      warnings.push(
-        "tiers === 3 was requested but the project's default branch isn't ready yet; staging tier was NOT cut. Cut it manually via `lakebase-branch create --branch staging --parent-branch production --no-expiry`.",
-      );
-    } else {
-      report("Cutting staging tier (tiers=3)...");
-      try {
-        await createBranch({
-          instance: lakebaseProjectId,
-          host,
-          branch: "staging",
-          parentBranch: defaultBranchId,
-          noExpiry: true,
-        });
-      } catch (err) {
-        // Non-fatal: surface as a warning so the project still exists
-        // but the user knows the tier wasn't cut. They can retry the
-        // bare create-branch call manually.
-        warnings.push(
-          `tiers === 3 requested but staging tier creation failed: ${err instanceof Error ? err.message : String(err)}. Cut it manually via \`lakebase-branch create --branch staging --parent-branch production --no-expiry\`.`,
-        );
-      }
-    }
-  }
-
   // ── Step 5: Scaffold (templates + language project) ───────────
   report("Scaffolding project files...");
   await scaffoldAll({
@@ -358,6 +325,49 @@ export async function createProject(
     message: `Initial project scaffold (${langLabel} + Lakebase)`,
     push: useGithub,
   });
+
+  // ── Step 8b: Long-running tier setup (architectural choice) ───
+  // When tiers === 3 the project follows the PSA-convention 3-tier
+  // flow (production -> staging -> features). The substrate's
+  // createLongRunningBranch primitive is the only supported path to
+  // cut a tier: it creates BOTH the Lakebase side (no_expiry, forked
+  // from the project default) AND the git side (forked from `main`,
+  // pushed to origin), enforcing "every git branch gets a Lakebase
+  // branch" for tiers too. Anything that calls createBranch directly
+  // for a tier is bypassing the SCM workflow and is wrong.
+  //
+  // When tiers !== 3 (default), do nothing: the project is 2-tier
+  // (features fork directly from production).
+  //
+  // Runs AFTER commitAndPush because createLongRunningBranch's git
+  // side does `git fetch origin main` + `git push -u origin staging`,
+  // which requires origin to already have `main`.
+  if (tiers === 3) {
+    if (!useGithub) {
+      warnings.push(
+        "tiers === 3 requires a GitHub repository (createLongRunningBranch pushes the tier's git side to origin). Staging tier was NOT cut.",
+      );
+    } else {
+      report("Cutting staging tier (tiers=3) via createLongRunningBranch...");
+      try {
+        await createLongRunningBranch({
+          name: "staging",
+          forkFromBranch: "main",
+          projectId: lakebaseProjectId,
+          workTreeDir: projectDir,
+          databricksHost: host,
+        });
+      } catch (err) {
+        // Non-fatal: surface as a warning so the project still exists
+        // but the user knows the tier wasn't cut. They can retry via
+        // `lakebase-branch create-paired --branch staging --no-expiry` or
+        // the dedicated tier-creation CLI flow.
+        warnings.push(
+          `tiers === 3 requested but createLongRunningBranch for staging failed: ${err instanceof Error ? err.message : String(err)}.`,
+        );
+      }
+    }
+  }
 
   // ── Step 9: Health check (advisory) ───────────────────────────
   report("Verifying project...");

@@ -232,14 +232,12 @@ run_iteration() {
   feature_id="$(iteration_feature_id "$iter")"
 
   # 1. Return to trunk before staging the feature spec. The orchestrator
-  # does NOT `git checkout -b` here: branch creation is the substrate's
-  # responsibility, invoked from /design's pre-hook
-  # (templates/project/common/.claude/commands/design.pre-hook.md ships
-  # with the kit). The pre-hook calls `lakebase-branch create-paired`
-  # which atomically creates the Lakebase branch + git branch, so the
-  # invariant "every git branch gets a Lakebase branch" can't be broken
-  # by a partial failure here.
-  log "  step 1: return to trunk; /design's pre-hook will claim the paired branch"
+  # does NOT do branch creation itself: that's the kit's responsibility
+  # via /design's mandatory Step 0 (see
+  # templates/project/common/.claude/commands/design.md). /design's
+  # body enforces the substrate-only-path invariant at the kit level;
+  # the smoke just invokes /design and trusts the contract.
+  log "  step 1: return to trunk; /design's Step 0 claims the paired branch via substrate"
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
 
