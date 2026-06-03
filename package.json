@@ -1,6 +1,6 @@
 {
   "name": "@databricks-solutions/lakebase-app-dev-kit",
-  "version": "0.3.0-alpha.47",
+  "version": "0.3.0-alpha.48",
   "description": "Lakebase-backed application development kit – shared scripts, agent skills (SCM today, TDD next), MCP server, and OpenAI Foundry tool spec. Consumed by lakebase-scm-extension and coding agents (Claude Code, Claude Desktop, OpenAI Codex, Cursor, Databricks Genie Code).",
   "type": "module",
   "private": false,
@@ -105,7 +105,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "prepare": "tsx scripts/sync-devhub-skills.ts && npm run build && husky",
+    "prepare": "node scripts/prepare.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "sync:devhub": "tsx scripts/sync-devhub-skills.ts",
     "check:devhub": "tsx scripts/sync-devhub-skills.ts --check",
