@@ -51,7 +51,13 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   fi
   echo "Running Alembic migrations..."
   uv run alembic upgrade head
-  uv run pytest "$@"
+  # pytest + httpx live in [project.optional-dependencies].dev in the
+  # Python scaffold, so they aren't installed by a default `uv run` /
+  # `uv sync`. Without --extra dev, uv falls back to a system pytest
+  # that can't see the venv's fastapi etc., and test collection crashes
+  # with ModuleNotFoundError. Pass --extra dev so uv resolves against
+  # the dev extras for the test invocation.
+  uv run --extra dev pytest "$@"
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js / Knex + Jest
   echo "Running Knex migrations..."
