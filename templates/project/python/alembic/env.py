@@ -17,7 +17,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# Escape literal '%' as '%%' before handing DATABASE_URL to alembic's
+# config.set_main_option: alembic stores it in a configparser section
+# whose BasicInterpolation treats '%' as the start of a substitution
+# token. Lakebase DSNs URL-encode the user's email '@' as '%40', so an
+# unescaped value crashes alembic with 'invalid interpolation syntax'
+# at the '%4' position. SQLAlchemy unescapes the doubled percents when
+# it parses the URL, so the engine sees the original DSN.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 
 def run_migrations_offline():
