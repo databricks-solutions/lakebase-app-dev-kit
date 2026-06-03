@@ -17,7 +17,7 @@ import {
   type WorkflowRunSummary,
 } from "../github/pr.js";
 import { getOwnerRepo } from "../git/remote.js";
-import { delay } from "../util/delay.js";
+import { pollUntil } from "../util/poll-until.js";
 import { exec } from "../util/exec.js";
 import { getCurrentBranch } from "../git/inspect.js";
 import {
@@ -238,33 +238,49 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
     const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
     const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
     const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
-    const sleep = args.sleep ?? delay;
     const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+
+    // The poll deadline is measured from mergedAt (the moment GitHub
+    // recorded the merge), not from the start of the probe, so the
+    // budget reflects "how long after merge can the downstream
+    // workflow take." Translate that into a timeoutMs relative to
+    // pollUntil's startedAt by shrinking the budget by however long
+    // we've already burned between mergedAt and now.
+    const elapsedSinceMerge = nowFn().getTime() - mergedAt.getTime();
+    const remainingTimeoutMs = Math.max(0, timeoutMs - elapsedSinceMerge);
 
     let polls = 0;
     let matched: WorkflowRunSummary | undefined;
     let lastSeen: WorkflowRunSummary | undefined;
     try {
-      while (nowFn().getTime() - mergedAt.getTime() < timeoutMs) {
-        polls += 1;
-        const runs = await fetchRuns(ownerRepo, 20);
-        const candidates = runs
-          .filter((r) => r.branch === current.parent_branch)
-          .filter((r) => predicate(r, mergedAt));
-        if (candidates.length > 0) {
-          // Pick the newest matching run (sort by createdAt desc).
+      const result = await pollUntil<WorkflowRunSummary>({
+        timeoutMs: remainingTimeoutMs,
+        intervalMs: pollMs,
+        now: nowFn,
+        sleep: args.sleep,
+        probe: async () => {
+          const runs = await fetchRuns(ownerRepo, 20);
+          const candidates = runs
+            .filter((r) => r.branch === current.parent_branch)
+            .filter((r) => predicate(r, mergedAt));
+          if (candidates.length === 0) {
+            return { done: false };
+          }
+          // Newest matching run wins.
           candidates.sort(
             (a, b) =>
               Date.parse(b.createdAt ?? "0") - Date.parse(a.createdAt ?? "0"),
           );
           lastSeen = candidates[0];
           const status = (lastSeen.status ?? "").toLowerCase();
-          if (status === "completed") {
-            matched = lastSeen;
-            break;
-          }
-        }
-        await sleep(pollMs);
+          return status === "completed"
+            ? { done: true, value: lastSeen }
+            : { done: false };
+        },
+      });
+      polls = result.polls;
+      if (result.outcome === "done") {
+        matched = result.value;
       }
     } catch (err) {
       warnings.push(

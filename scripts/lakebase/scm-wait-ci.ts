@@ -9,7 +9,7 @@
 
 import { getPullRequest, type PullRequestInfo } from "../github/pr.js";
 import { getOwnerRepo } from "../git/remote.js";
-import { delay } from "../util/delay.js";
+import { pollUntil } from "../util/poll-until.js";
 import {
   readWorkflowState,
   writeWorkflowState,
@@ -98,47 +98,60 @@ export async function waitForCi(args: WaitCiArgs): Promise<WaitCiResult> {
   const timeoutMs = args.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const pollMs = args.pollMs ?? DEFAULT_POLL_MS;
   const fetchPr = args.fetchPr ?? getPullRequest;
-  const sleep = args.sleep ?? delay;
   const now = args.now ?? (() => new Date());
+  // Hoist into a local so the async closure sees a narrowed string.
+  const headBranch = current.branch;
 
-  const startedAt = now().getTime();
-  let polls = 0;
+  // The probe encodes the three terminal outcomes: success (done +
+  // value), pending (done: false), and the two throw-cases (PR
+  // disappeared, CI failed). pollUntil propagates throws unchanged, so
+  // those errors land at the caller with the right code.
   let lastPr: PullRequestInfo | undefined;
-  while (now().getTime() - startedAt < timeoutMs) {
-    polls += 1;
-    lastPr = await fetchPr(ownerRepo, current.branch);
-    if (!lastPr) {
-      throw new ScmWaitCiError(
-        `No open PR found for head=${current.branch} on ${ownerRepo}. Did the PR get closed?`,
-        "pr-not-found",
-      );
-    }
-    if (lastPr.ciStatus === "success") {
-      const runUrl = pickRunUrl(lastPr);
-      const next: ScmWorkflowState = {
-        ...current,
-        state: "ci-green",
-        ci_run_url: runUrl,
-        ci_green_at: now().toISOString(),
-      };
-      writeWorkflowState(args.projectDir, next);
-      return { state: next, pr: lastPr, polls };
-    }
-    if (lastPr.ciStatus === "failure") {
-      const failed = lastPr.checks
-        .filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion))
-        .map((c) => `${c.name} (${c.conclusion})`);
-      throw new ScmWaitCiError(
-        `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
-        "ci-failed",
-      );
-    }
-    await sleep(pollMs);
+  const result = await pollUntil<PullRequestInfo>({
+    timeoutMs,
+    intervalMs: pollMs,
+    now,
+    sleep: args.sleep,
+    probe: async () => {
+      lastPr = await fetchPr(ownerRepo, headBranch);
+      if (!lastPr) {
+        throw new ScmWaitCiError(
+          `No open PR found for head=${headBranch} on ${ownerRepo}. Did the PR get closed?`,
+          "pr-not-found",
+        );
+      }
+      if (lastPr.ciStatus === "success") {
+        return { done: true, value: lastPr };
+      }
+      if (lastPr.ciStatus === "failure") {
+        const failed = lastPr.checks
+          .filter((c) => /(FAILURE|TIMED_OUT|CANCELLED|ACTION_REQUIRED)/i.test(c.conclusion))
+          .map((c) => `${c.name} (${c.conclusion})`);
+        throw new ScmWaitCiError(
+          `CI failed for PR ${lastPr.url}. Failed checks: ${failed.join(", ") || "(unknown)"}.`,
+          "ci-failed",
+        );
+      }
+      return { done: false };
+    },
+  });
+
+  if (result.outcome === "timeout") {
+    throw new ScmWaitCiError(
+      `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
+      "timeout",
+    );
   }
-  throw new ScmWaitCiError(
-    `Timed out after ${Math.round(timeoutMs / 1000)}s waiting for CI on PR ${lastPr?.url ?? current.pr_url ?? "(unknown)"}. Last status: ${lastPr?.ciStatus ?? "(no poll completed)"}.`,
-    "timeout",
-  );
+  const greenPr = result.value;
+  const runUrl = pickRunUrl(greenPr);
+  const next: ScmWorkflowState = {
+    ...current,
+    state: "ci-green",
+    ci_run_url: runUrl,
+    ci_green_at: now().toISOString(),
+  };
+  writeWorkflowState(args.projectDir, next);
+  return { state: next, pr: greenPr, polls: result.polls };
 }
 
 function pickRunUrl(pr: PullRequestInfo): string {
