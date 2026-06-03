@@ -64,8 +64,18 @@ if (isDevClone) {
   run("npm-build", "npm", ["run", "build"]);
   run("husky", "npx", ["--no-install", "husky"]);
 } else {
-  log("consumer install path: build only");
-  run("npm-build", "npm", ["run", "build"]);
+  // Consumer install (npx / npm install github:...). devDependencies are
+  // NOT installed for non-dev installs, so `npm run build` (tsup) would
+  // fail with `tsup: not found`. The kit ships pre-built dist/ on every
+  // tagged release (force-added to git despite .gitignore), so consumers
+  // don't need to build. Verify dist/ is present and skip build.
+  const distMain = join(REPO_ROOT, "dist", "scripts", "index.js");
+  if (!existsSync(distMain)) {
+    log(`FAIL: consumer install missing pre-built dist/ at ${distMain}`);
+    log("This indicates a release-pipeline gap; the kit's tag should ship dist/.");
+    process.exit(1);
+  }
+  log(`consumer install path: skipping build (dist/ already shipped at tag time)`);
 }
 
 log("done");
