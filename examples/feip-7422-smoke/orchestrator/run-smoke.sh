@@ -51,6 +51,7 @@ set -o pipefail
 SMOKE_ROOT_DEFAULT="${HOME}/code/feip-7422-smoke"
 MODE="standard"
 RESUME_AT=""
+PROJECT_NAME="bug-tracker"
 PROJECT_DIR=""
 SKIP_SCAFFOLD=0
 KEEP_ON_FAILURE=1
@@ -71,6 +72,7 @@ while [[ $# -gt 0 ]]; do
     --standard)          MODE="standard"; shift ;;
     --full)              MODE="full"; shift ;;
     --resume)            RESUME_AT="$2"; shift 2 ;;
+    --project-name)      PROJECT_NAME="$2"; shift 2 ;;
     --project-dir)       PROJECT_DIR="$2"; shift 2 ;;
     --skip-scaffold)     SKIP_SCAFFOLD=1; shift ;;
     --keep-on-failure)   KEEP_ON_FAILURE=1; shift ;;
@@ -80,7 +82,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/bug-tracker}"
+PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
 
 # ─── prereqs ──────────────────────────────────────────────────
 
@@ -152,15 +154,21 @@ scaffold_project() {
   : "${DATABRICKS_HOST:?smoke: DATABRICKS_HOST env var required for scaffold (or pass --skip-scaffold)}"
   : "${GITHUB_OWNER:?smoke: GITHUB_OWNER env var required for scaffold (or pass --skip-scaffold)}"
 
-  log "scaffolding bug-tracker into $PROJECT_DIR via lakebase-create-project..."
+  log "scaffolding $PROJECT_NAME into $PROJECT_DIR via lakebase-create-project..."
   # Headless scaffold: language=python, github-hosted runner, e2e enabled.
   # /design + /build commands scaffold by default (no --skip-commands).
   # Subshell-isolated so a non-zero exit surfaces our scaffold-failed code.
+  #
+  # Project name collision note: Lakebase keeps deleted projects in a
+  # soft-delete state for 7 days (until purge_time), and rejects creates
+  # against the same name during that window. If a smoke run fails after
+  # the Lakebase project is created, re-run with --project-name <other>
+  # rather than waiting for the purge.
   (
     npx --yes \
       --package=github:databricks-solutions/lakebase-app-dev-kit \
       lakebase-create-project \
-      --project-name "bug-tracker" \
+      --project-name "$PROJECT_NAME" \
       --parent-dir "$(dirname "$PROJECT_DIR")" \
       --databricks-host "$DATABRICKS_HOST" \
       --github-owner "$GITHUB_OWNER" \
