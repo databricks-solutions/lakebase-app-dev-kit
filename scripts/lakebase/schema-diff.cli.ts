@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // CLI wrapper for getSchemaDiff. Prints the SchemaDiffResult JSON to stdout.
 
-import { getSchemaDiff } from "./schema-diff.js";
+import { getSchemaDiff, formatSchemaDiffAsMarkdown } from "./schema-diff.js";
+
+type OutputFormat = "json" | "markdown";
 
 interface ParsedArgs {
   instance?: string;
   branch?: string;
   comparisonBranch?: string;
   database?: string;
+  format?: OutputFormat;
   pretty?: boolean;
   help?: boolean;
 }
@@ -30,6 +33,17 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--database":
         out.database = argv[++i];
         break;
+      case "--format": {
+        const v = argv[++i];
+        if (v === "json" || v === "markdown") {
+          out.format = v;
+        } else {
+          // Tolerate unknown values silently here; main() will surface a
+          // usage error if format is unexpected after parse.
+          out.format = v as OutputFormat;
+        }
+        break;
+      }
       case "--pretty":
         out.pretty = true;
         break;
@@ -64,11 +78,18 @@ Flags:
   --against / --comparison-branch
                        Explicit parent branch (default: resolved from metadata)
   --database           Database name (default: $PGDATABASE or "databricks_postgres")
-  --pretty             Pretty-print the JSON output (default: minified)
+  --format <json|markdown>
+                       Output format. "json" (default) emits the structured
+                       SchemaDiffResult. "markdown" emits the canonical
+                       "SCHEMA CHANGES (Lakebase diff)" block consumed by
+                       prepare-commit-msg hook, GH Actions PR comment, and
+                       the extension's commit-detail view.
+  --pretty             Pretty-print JSON output (no effect on markdown)
 
 Examples:
   lakebase-schema-diff --instance proj-abc --branch br-feature
   lakebase-schema-diff --instance proj-abc --branch br-feature --against br-staging --pretty
+  lakebase-schema-diff --instance proj-abc --branch br-feature --format markdown
 `;
 
 async function main(): Promise<number> {
@@ -86,6 +107,14 @@ async function main(): Promise<number> {
     return 2;
   }
 
+  const format: OutputFormat = args.format ?? "json";
+  if (format !== "json" && format !== "markdown") {
+    process.stderr.write(
+      `Error: --format must be "json" or "markdown" (got "${format}")\n`
+    );
+    return 2;
+  }
+
   const result = await getSchemaDiff({
     instance: args.instance,
     branch: args.branch,
@@ -93,9 +122,13 @@ async function main(): Promise<number> {
     database: args.database,
   });
 
-  process.stdout.write(
-    args.pretty ? JSON.stringify(result, null, 2) + "\n" : JSON.stringify(result) + "\n"
-  );
+  if (format === "markdown") {
+    process.stdout.write(formatSchemaDiffAsMarkdown(result));
+  } else {
+    process.stdout.write(
+      args.pretty ? JSON.stringify(result, null, 2) + "\n" : JSON.stringify(result) + "\n"
+    );
+  }
   return result.error ? 1 : 0;
 }
 

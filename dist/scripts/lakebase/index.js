@@ -1777,6 +1777,18 @@ async function deleteBranch(args) {
   if (!fullPath) {
     throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
   await dbcli4(["postgres", "delete-branch", fullPath], args.host);
 }
 async function dbcli4(args, host) {
@@ -4928,6 +4940,42 @@ function diffSchemas(branch, comparisonBranch, target, comparison, timestamp) {
   };
 }
 var colKey = (c) => `${c.name}:${c.dataType}`;
+function formatSchemaDiffAsMarkdown(result) {
+  const lines = ["**SCHEMA CHANGES (Lakebase diff)**", ""];
+  if (result.error) {
+    lines.push(`Could not compute schema diff: ${result.error}`);
+    return lines.join("\n") + "\n";
+  }
+  const blocks = [];
+  for (const obj of result.created) {
+    const block = [`+ ${obj.type} ${obj.name} (CREATED)`];
+    if (obj.type === "TABLE" && obj.columns) {
+      for (const col of obj.columns) {
+        block.push(`  L ${col.name} ${col.dataType}`);
+      }
+    }
+    blocks.push(block);
+  }
+  for (const obj of result.modified) {
+    const block = [`~ TABLE ${obj.name} (MODIFIED)`];
+    for (const col of obj.addedColumns) {
+      block.push(`  + ${col.name} ${col.dataType}`);
+    }
+    blocks.push(block);
+  }
+  for (const obj of result.removed) {
+    blocks.push([`- ${obj.type} ${obj.name} (REMOVED)`]);
+  }
+  if (blocks.length === 0) {
+    lines.push("No schema changes (in sync).");
+  } else {
+    for (let i = 0; i < blocks.length; i++) {
+      if (i > 0) lines.push("");
+      lines.push(...blocks[i]);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
 function resolveComparisonBranch(instance, branch) {
   const branchInfo = describeBranch(instance, branch);
   const sourceBranch = branchInfo?.status?.source_branch ?? branchInfo?.spec?.source_branch;
@@ -7872,6 +7920,7 @@ export {
   findHistoryRetentionDuration,
   fixFinding,
   formatJUnit,
+  formatSchemaDiffAsMarkdown,
   generateAppYaml,
   getAppEndpoint,
   getAppServicePrincipal,

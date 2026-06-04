@@ -3867,6 +3867,18 @@ async function deleteBranch(args) {
   if (!fullPath) {
     throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
   await dbcli6(["postgres", "delete-branch", fullPath], args.host);
 }
 async function dbcli6(args, host) {

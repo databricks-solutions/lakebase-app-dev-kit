@@ -33,6 +33,7 @@ import {
   checkoutPaired,
   syncEnvToCurrentBranch,
 } from "./paired-branch.js";
+import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
 type Tier = "feature" | "test" | "uat" | "perf";
 
@@ -53,6 +54,7 @@ interface ParsedArgs {
   noGitLocal?: boolean;
   noGitRemote?: boolean;
   strictParent?: boolean;
+  allowDefault?: boolean;
   pretty?: boolean;
   help?: boolean;
   // positional after subcommand (used by create-tier)
@@ -121,6 +123,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--strict-parent":
         out.strictParent = true;
         break;
+      case "--allow-default":
+        out.allowDefault = true;
+        break;
       case "--pretty":
         out.pretty = true;
         break;
@@ -149,10 +154,16 @@ Subcommands:
                    Create the convention-tier PAIRED branch (Lakebase + git + .env)
                    atomically. The canonical way to claim a feature branch:
                    substrate is the only path, convention TTL is applied automatically.
-  delete           Delete a Lakebase branch (no git side-effects)
+  delete           Delete a Lakebase branch (no git side-effects). Refuses
+                   the project's default branch unless --allow-default is set.
   delete-paired    Delete Lakebase branch + local git branch + remote git branch
   checkout-paired  Equivalent of post-checkout hook (sync .env to current git branch)
   sync-env         Refresh .env to point at the current branch's endpoint
+  sanitize-name [<input>]
+                   Print the kit's canonical sanitization of a git branch name
+                   into a Lakebase-safe leaf. Single source of truth for shells
+                   that need the mapping (CI / post-checkout / ad-hoc scripts).
+                   Input via --branch or the positional after the subcommand.
 
 Common flags:
   --instance <id>          Lakebase project id (required for most subcommands)
@@ -185,9 +196,12 @@ Examples:
   lakebase-branch delete-paired --instance proj-x --branch feat/foo --cwd .
   lakebase-branch checkout-paired --cwd .
   lakebase-branch sync-env --cwd .
+  lakebase-branch sanitize-name feature/foo
+  lakebase-branch delete --instance proj-x --branch production --allow-default
 
-Refuses production / main / master under delete + delete-paired without
-the dedicated guardrail bypass (not exposed by the CLI on purpose).
+Refuses the project's default Lakebase branch under delete (the trunk every
+other branch was forked from). Pass --allow-default to override only when
+tearing down the entire project.
 `;
 
 function printJson(result: unknown, pretty: boolean): void {
@@ -347,6 +361,7 @@ async function main(): Promise<number> {
           instance: args.instance!,
           host: args.host,
           branch: args.branch!,
+          allowDefault: args.allowDefault,
         });
         printJson({ deleted: true, branch: args.branch }, pretty);
         return 0;
@@ -385,6 +400,30 @@ async function main(): Promise<number> {
           database: args.database,
         });
         printJson(result, pretty);
+        return 0;
+      }
+
+      case "sanitize-name": {
+        // Print the kit's canonical sanitization of a git branch name
+        // into a Lakebase-safe leaf. Single source of truth for shells
+        // and CI workflows that need the mapping (post-checkout.sh,
+        // ci/resolve-lakebase-branch.sh) without re-implementing it.
+        // Input via --branch <name> OR the positional after the subcommand.
+        const input = args.branch ?? args.positional;
+        if (!input) {
+          process.stderr.write(
+            "sanitize-name: --branch <name> (or positional) required\n"
+          );
+          return 2;
+        }
+        const sanitized = sanitizeBranchName(input);
+        if (pretty) {
+          printJson({ input, sanitized }, true);
+        } else {
+          // Default: bare sanitized name on stdout, suitable for shell
+          // command-substitution: `LAKEBASE_NAME="$(lakebase-branch sanitize-name "$git_branch")"`.
+          process.stdout.write(`${sanitized}\n`);
+        }
         return 0;
       }
 

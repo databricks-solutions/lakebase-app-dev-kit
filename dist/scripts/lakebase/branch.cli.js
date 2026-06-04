@@ -527,6 +527,18 @@ async function deleteBranch(args) {
   if (!fullPath) {
     throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
   await dbcli4(["postgres", "delete-branch", fullPath], args.host);
 }
 async function dbcli4(args, host) {
@@ -1230,6 +1242,9 @@ function parseArgs(argv) {
       case "--strict-parent":
         out.strictParent = true;
         break;
+      case "--allow-default":
+        out.allowDefault = true;
+        break;
       case "--pretty":
         out.pretty = true;
         break;
@@ -1257,10 +1272,16 @@ Subcommands:
                    Create the convention-tier PAIRED branch (Lakebase + git + .env)
                    atomically. The canonical way to claim a feature branch:
                    substrate is the only path, convention TTL is applied automatically.
-  delete           Delete a Lakebase branch (no git side-effects)
+  delete           Delete a Lakebase branch (no git side-effects). Refuses
+                   the project's default branch unless --allow-default is set.
   delete-paired    Delete Lakebase branch + local git branch + remote git branch
   checkout-paired  Equivalent of post-checkout hook (sync .env to current git branch)
   sync-env         Refresh .env to point at the current branch's endpoint
+  sanitize-name [<input>]
+                   Print the kit's canonical sanitization of a git branch name
+                   into a Lakebase-safe leaf. Single source of truth for shells
+                   that need the mapping (CI / post-checkout / ad-hoc scripts).
+                   Input via --branch or the positional after the subcommand.
 
 Common flags:
   --instance <id>          Lakebase project id (required for most subcommands)
@@ -1293,9 +1314,12 @@ Examples:
   lakebase-branch delete-paired --instance proj-x --branch feat/foo --cwd .
   lakebase-branch checkout-paired --cwd .
   lakebase-branch sync-env --cwd .
+  lakebase-branch sanitize-name feature/foo
+  lakebase-branch delete --instance proj-x --branch production --allow-default
 
-Refuses production / main / master under delete + delete-paired without
-the dedicated guardrail bypass (not exposed by the CLI on purpose).
+Refuses the project's default Lakebase branch under delete (the trunk every
+other branch was forked from). Pass --allow-default to override only when
+tearing down the entire project.
 `;
 function printJson(result, pretty) {
   process.stdout.write(
@@ -1423,7 +1447,8 @@ async function main() {
         await deleteBranch({
           instance: args.instance,
           host: args.host,
-          branch: args.branch
+          branch: args.branch,
+          allowDefault: args.allowDefault
         });
         printJson({ deleted: true, branch: args.branch }, pretty);
         return 0;
@@ -1459,6 +1484,23 @@ async function main() {
           database: args.database
         });
         printJson(result, pretty);
+        return 0;
+      }
+      case "sanitize-name": {
+        const input = args.branch ?? args.positional;
+        if (!input) {
+          process.stderr.write(
+            "sanitize-name: --branch <name> (or positional) required\n"
+          );
+          return 2;
+        }
+        const sanitized = sanitizeBranchName(input);
+        if (pretty) {
+          printJson({ input, sanitized }, true);
+        } else {
+          process.stdout.write(`${sanitized}
+`);
+        }
         return 0;
       }
       default:
