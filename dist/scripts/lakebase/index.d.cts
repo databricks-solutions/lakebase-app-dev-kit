@@ -526,6 +526,13 @@ interface SyncEnvArgs {
     instance?: string;
     /** Override the branch name. Default: use current git branch (sanitized). */
     branch?: string;
+    /**
+     * Override: when the current git branch equals this name, pair with the
+     * project's default Lakebase branch (whose leaf may differ, e.g.
+     * `production`). Mirrors `checkoutPaired`'s trunkAlias. Default: no
+     * alias, falls back to `main`/`master` as trunk indicators.
+     */
+    trunkAlias?: string;
     /** Default: "databricks_postgres". */
     database?: string;
 }

@@ -371,6 +371,13 @@ export interface SyncEnvArgs {
   instance?: string;
   /** Override the branch name. Default: use current git branch (sanitized). */
   branch?: string;
+  /**
+   * Override: when the current git branch equals this name, pair with the
+   * project's default Lakebase branch (whose leaf may differ, e.g.
+   * `production`). Mirrors `checkoutPaired`'s trunkAlias. Default: no
+   * alias, falls back to `main`/`master` as trunk indicators.
+   */
+  trunkAlias?: string;
   /** Default: "databricks_postgres". */
   database?: string;
 }
@@ -404,7 +411,29 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
     );
   }
   const rawBranch = args.branch ?? gitCurrentBranch(args.cwd);
-  const sanitized = sanitizeBranchName(rawBranch);
+  // When the git branch is the trunk (alias-matched or main/master),
+  // the Lakebase branch we sync to is the project's default leaf, NOT
+  // the sanitized git branch name. The Lakebase default is commonly
+  // `production`; a fresh `git checkout main` against a default-named
+  // `production` branch would 404 here otherwise. Mirrors checkoutPaired
+  // (see "trunk" mode lookup in this file).
+  const trunkAlias = args.trunkAlias?.trim();
+  const isTrunk =
+    (trunkAlias && rawBranch === trunkAlias) ||
+    (!trunkAlias && (rawBranch === "main" || rawBranch === "master"));
+  let sanitized: string;
+  if (isTrunk) {
+    const lakebaseBranches = await listBranches({ instance });
+    const def = lakebaseBranches.find((b) => b.isDefault);
+    if (!def) {
+      throw new Error(
+        `Could not resolve default Lakebase branch for instance "${instance}"`
+      );
+    }
+    sanitized = def.name.split("/branches/").pop() ?? def.uid;
+  } else {
+    sanitized = sanitizeBranchName(rawBranch);
+  }
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
   const ep = await getEndpoint({ instance, branch: sanitized });

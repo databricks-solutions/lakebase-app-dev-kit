@@ -4175,7 +4175,21 @@ async function syncEnvToCurrentBranch(args) {
     );
   }
   const rawBranch = args.branch ?? gitCurrentBranch(args.cwd);
-  const sanitized = sanitizeBranchName(rawBranch);
+  const trunkAlias = args.trunkAlias?.trim();
+  const isTrunk = trunkAlias && rawBranch === trunkAlias || !trunkAlias && (rawBranch === "main" || rawBranch === "master");
+  let sanitized;
+  if (isTrunk) {
+    const lakebaseBranches = await listBranches({ instance });
+    const def = lakebaseBranches.find((b) => b.isDefault);
+    if (!def) {
+      throw new Error(
+        `Could not resolve default Lakebase branch for instance "${instance}"`
+      );
+    }
+    sanitized = def.name.split("/branches/").pop() ?? def.uid;
+  } else {
+    sanitized = sanitizeBranchName(rawBranch);
+  }
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const ep = await getEndpoint({ instance, branch: sanitized });
   if (!ep?.host) {
