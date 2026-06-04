@@ -224,12 +224,12 @@ const colKey = (c: SchemaColumn): string => `${c.name}:${c.dataType}`;
 
 /**
  * Render a SchemaDiffResult as the canonical "SCHEMA CHANGES (Lakebase diff)"
- * markdown block. This is the same format the legacy shell formatter at
- * templates/.../scripts/format-schema-diff.sh emitted; consumers (the
- * scaffolded prepare-commit-msg hook, the GH Actions PR comment, the
- * extension's commit-detail view) parse this shape. Keep the surface
- * stable; if you need new fields, add them as additional sections rather
- * than altering the established prefixes.
+ * markdown block. Consumers (the scaffolded prepare-commit-msg hook, the
+ * GH Actions PR comment, the extension's commit-detail view) parse this
+ * shape. Keep the surface stable; if you need new fields, add them as
+ * additional sections rather than altering the established prefixes.
+ * (Pre-FEIP-7494 the same format was emitted by the now-removed shell
+ * formatter templates/.../scripts/format-schema-diff.sh.)
  *
  * Output shape (per object, blank line between objects):
  *
