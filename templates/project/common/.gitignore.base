@@ -1,6 +1,0 @@
-# Lakebase project — common ignores
-.env
-application-local.properties
-.tmp/
-*.log
-.DS_Store
