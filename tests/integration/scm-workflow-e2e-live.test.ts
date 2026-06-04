@@ -69,6 +69,7 @@ import {
   readWorkflowState,
   type ScmWorkflowState,
 } from "../../scripts/lakebase/scm-workflow-state.js";
+import { queryBranchSchema } from "../../scripts/lakebase/branch-schema.js";
 
 const E2E = process.env.LAKEBASE_TEST_E2E_GITHUB === "1";
 const DATABRICKS_HOST = process.env.DATABRICKS_HOST ?? "";
@@ -150,6 +151,41 @@ function readState(projectDir: string): ScmWorkflowState {
   const s = readWorkflowState(projectDir);
   if (!s) throw new Error(`No workflow-state.json at ${projectDir}/.lakebase/`);
   return s;
+}
+
+/**
+ * Extract the PR number from a github.com pull URL.
+ *   "https://github.com/owner/repo/pull/42" -> 42
+ * Throws on malformed input so the caller can fail loudly.
+ */
+function pullNumber(prUrl: string): number {
+  const m = prUrl.match(/\/pull\/(\d+)$/);
+  if (!m) throw new Error(`Cannot parse PR number from ${prUrl}`);
+  return Number(m[1]);
+}
+
+/**
+ * Assert that a Lakebase branch's public schema contains a table with
+ * the given name. Used to prove that an alembic / flyway / knex
+ * migration committed in the PR actually applied on the right branch
+ * (ci-pr-N during wait-ci; staging after merge --wait-migrate).
+ */
+async function assertTableExists(args: {
+  instance: string;
+  branch: string;
+  table: string;
+}): Promise<void> {
+  const schema = await queryBranchSchema({
+    instance: args.instance,
+    branch: args.branch,
+  });
+  const tableNames = schema.map((t) => t.name);
+  if (!tableNames.includes(args.table)) {
+    throw new Error(
+      `expected table "${args.table}" on Lakebase branch "${args.branch}" of project "${args.instance}", ` +
+        `but only found: [${tableNames.join(", ")}]`,
+    );
+  }
 }
 
 /**
@@ -280,19 +316,60 @@ describe.skipIf(!RUN_SUITE)(
         expect(stateAfterClaim.lakebase_branch_uid).toBeTruthy();
         expect(stateAfterClaim.claimed_at).toBeTruthy();
 
-        // ─── 2. MAKE A PASSING COMMIT ON THE FEATURE BRANCH ──────
-        // The substrate's claim already checked out the feature branch.
-        // We add a trivial benign change (README line) so the PR has
-        // content but CI still passes.
-        fs.appendFileSync(
-          path.join(projectDir, "README.md"),
-          `\nlive test happy-path commit ${Date.now()}\n`,
+        // ─── 2. ADD A REAL ALEMBIC MIGRATION ─────────────────────
+        // The PR must carry actual code that exercises the migration
+        // tool through the PR + merge cycle, not just a README touch.
+        // pr.yml's "Run migrations" step calls alembic upgrade head
+        // against the ci-pr-N Lakebase branch; merge.yml then re-runs
+        // it against the parent branch (staging). Both transitions
+        // are proven by querying the Lakebase schema afterwards.
+        const markerTable = `live_e2e_marker_alembic_${Date.now()}`;
+        const migrationFile = path.join(
+          projectDir,
+          "alembic",
+          "versions",
+          "100_live_e2e_marker.py",
         );
-        git(projectDir, ["add", "README.md"]);
+        fs.writeFileSync(
+          migrationFile,
+          [
+            `"""Live e2e marker (alembic).`,
+            ``,
+            `Revision ID: 100`,
+            `Revises: 001`,
+            `"""`,
+            `from typing import Sequence, Union`,
+            ``,
+            `import sqlalchemy as sa`,
+            `from alembic import op`,
+            ``,
+            `revision: str = "100"`,
+            `down_revision: Union[str, None] = "001"`,
+            `branch_labels: Union[str, Sequence[str], None] = None`,
+            `depends_on: Union[str, Sequence[str], None] = None`,
+            ``,
+            ``,
+            `def upgrade() -> None:`,
+            `    op.create_table(`,
+            `        "${markerTable}",`,
+            `        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),`,
+            `        sa.Column("note", sa.String(length=128), nullable=False),`,
+            `    )`,
+            ``,
+            ``,
+            `def downgrade() -> None:`,
+            `    op.drop_table("${markerTable}")`,
+            ``,
+          ].join("\n"),
+        );
+        git(projectDir, ["add", migrationFile]);
         gitCommit(
           projectDir,
           owner,
-          `live test: happy path SCM workflow e2e (${featureId})`,
+          `live test: happy path SCM workflow e2e + alembic migration (${featureId})`,
+        );
+        console.log(
+          `  [happy/2] committed alembic migration creating table ${markerTable}`,
         );
 
         // ─── 3. PREPARE-PR ───────────────────────────────────────
@@ -334,7 +411,22 @@ describe.skipIf(!RUN_SUITE)(
         expect(stateAfterCi.ci_run_url).toBeTruthy();
         expect(stateAfterCi.ci_green_at).toBeTruthy();
 
-        // ─── 4a. WORKFLOW STEP REGRESSION: JDK probe MUST be ─────
+        // ─── 4a. MIGRATION ROUND-TRIP: ci-pr-N Lakebase branch ───
+        //         must have the marker table after pr.yml's "Run
+        //         migrations" step. This proves alembic was actually
+        //         invoked against the right paired branch, not just
+        //         that the workflow run reported success.
+        const ciPrBranch = `ci-pr-${pullNumber(stateAfterCi.pr_url!)}`;
+        console.log(
+          `  [happy/4a] querying Lakebase schema on ${ciPrBranch} for ${markerTable}`,
+        );
+        await assertTableExists({
+          instance: projectName,
+          branch: ciPrBranch,
+          table: markerTable,
+        });
+
+        // ─── 4b. WORKFLOW STEP REGRESSION: JDK probe MUST be ─────
         //         skipped on a Python project. This is the live
         //         regression test for the scaffold.ts fix that gated
         //         setup-java behind lang == 'java'.
@@ -385,7 +477,23 @@ describe.skipIf(!RUN_SUITE)(
         );
         expect(stateAfterMerge.migrate_completed_at).toBeTruthy();
 
-        // ─── 5a. MIGRATE WORKFLOW STEP REGRESSION: JDK probe ─────
+        // ─── 5a. MIGRATION ROUND-TRIP ON THE PARENT BRANCH ───────
+        //         merge.yml runs alembic against the parent branch
+        //         (staging) after the merge commit lands. Assert the
+        //         marker table now exists on staging too. This is
+        //         the actual proof that "merge --wait-migrate
+        //         applies the PR's migrations to the parent Lakebase
+        //         pair."
+        console.log(
+          `  [happy/5a] querying Lakebase schema on staging for ${markerTable}`,
+        );
+        await assertTableExists({
+          instance: projectName,
+          branch: "staging",
+          table: markerTable,
+        });
+
+        // ─── 5b. MIGRATE WORKFLOW STEP REGRESSION: JDK probe ─────
         //         must also skip in merge.yml on the parent branch.
         const migrateSteps = await fetchRunSteps(
           octokit,
