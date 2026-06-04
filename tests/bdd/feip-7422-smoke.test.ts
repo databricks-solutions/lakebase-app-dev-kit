@@ -125,7 +125,7 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature.md voice)", 
   }
 });
 
-describe("FEIP-7422 smoke: orchestrator references all 5 iterations + 3 modes", () => {
+describe("FEIP-7422 smoke: orchestrator is TDD-only (SCM workflow tested elsewhere)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("declares ITERATIONS in order v1..v5", () => {
@@ -135,23 +135,43 @@ describe("FEIP-7422 smoke: orchestrator references all 5 iterations + 3 modes", 
     expect(declared).toEqual(ITERATIONS);
   });
 
-  it("documents and implements --fast, --standard, --full modes", () => {
-    expect(runSmoke).toMatch(/--fast/);
-    expect(runSmoke).toMatch(/--standard/);
-    expect(runSmoke).toMatch(/--full/);
-    expect(runSmoke).toMatch(/MODE="(fast|standard|full)"/);
-  });
-
   it("requires claude on PATH (for /design + /build skill invocations)", () => {
     expect(runSmoke).toMatch(/require_cmd\s+claude/);
   });
 
-  it("requires gh on PATH only outside --fast mode", () => {
-    expect(runSmoke).toMatch(/\$MODE.*!=\s*"fast"[\s\S]*?require_cmd\s+gh/);
+  it("does NOT invoke the SCM workflow CLIs (those live in tests/integration/scm-workflow-e2e-live.test.ts)", () => {
+    // The TDD smoke MUST NOT shell out to lakebase-scm-prepare-pr /
+    // wait-ci / merge. Those CLIs are the contract of the SCM workflow
+    // substrate; testing them belongs in the live integration suite.
+    // Match only invocation lines (not comment mentions in the header).
+    const invocations = runSmoke
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    expect(invocations).not.toMatch(/lakebase-scm-prepare-pr\b/);
+    expect(invocations).not.toMatch(/lakebase-scm-wait-ci\b/);
+    expect(invocations).not.toMatch(/lakebase-scm-merge\b/);
   });
 
-  it("calls is_full_cycle gate that only fires v5 in --standard", () => {
-    // The case body for "standard" must restrict to v5-*.
-    expect(runSmoke).toMatch(/standard\)\s*\[\[\s*"\$iter"\s*==\s*v5-\*/);
+  it("does NOT define an is_full_cycle gate (TDD-only smoke; no PR cycle)", () => {
+    expect(runSmoke).not.toMatch(/is_full_cycle\b/);
+  });
+
+  it("does NOT require gh (no GitHub PR/merge ops in the TDD smoke)", () => {
+    expect(runSmoke).not.toMatch(/require_cmd\s+gh\b/);
+  });
+
+  it("invokes lakebase-tdd-mock-approver between claude passes (gate-drain loop)", () => {
+    // The mock-approver replaces the human HITL approver so the TDD
+    // smoke can run headless. Stripping this would let the smoke hang
+    // at the first /design gate.
+    expect(runSmoke).toMatch(/lakebase-tdd-mock-approver\b/);
+  });
+
+  it("abandons the prior feature before claiming the next (substrate CLI)", () => {
+    // Each iteration claims a fresh feature; the SCM state machine
+    // refuses concurrent claims, so the orchestrator must abandon the
+    // prior one between iterations.
+    expect(runSmoke).toMatch(/lakebase-scm-abandon-feature\b/);
   });
 });
