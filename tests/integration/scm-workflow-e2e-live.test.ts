@@ -362,7 +362,11 @@ describe.skipIf(!RUN_SUITE)(
             ``,
           ].join("\n"),
         );
-        git(projectDir, ["add", migrationFile]);
+        // git add -A: the migration file PLUS the modified
+        // .lakebase/workflow-state.json (claim updated it; substrate
+        // CLIs don't auto-commit state-file changes). prepare-pr
+        // requires a clean tree; both must land in this commit.
+        git(projectDir, ["add", "-A"]);
         gitCommit(
           projectDir,
           owner,
@@ -527,11 +531,31 @@ describe.skipIf(!RUN_SUITE)(
     it(
       "failure path: code that breaks CI -> wait-ci exits ci-failed, state stays at pr-ready",
       async () => {
-        // Precondition: previous test left state at `merged`. Claim a
-        // fresh feature on top of merged. (Per the SCM state machine,
-        // claim is valid from scaffold-complete OR merged.)
-        const failingFeatureId = "F2-ci-failure";
+        // Defensive setup: claim requires state to be scaffold-complete
+        // or merged. If the happy-path test left us anywhere else
+        // (e.g. mid-flight on failure), abandon --force resets to
+        // scaffold-complete so this test can stand alone.
+        const before = readState(projectDir);
+        if (
+          before.state !== "scaffold-complete" &&
+          before.state !== "merged"
+        ) {
+          console.log(
+            `  [fail/0] state=${before.state}; abandoning to reset before claim`,
+          );
+          const reset = runCli(
+            ABANDON_CLI,
+            ["--project-dir", projectDir, "--force"],
+            projectDir,
+          );
+          logCli("abandon (reset)", reset);
+        }
+        // Make sure HEAD is on a tier branch before claiming. claim's
+        // pre-hook will then check out the new feature branch off
+        // staging.
+        git(projectDir, ["checkout", "main"]);
 
+        const failingFeatureId = "F2-ci-failure";
         console.log("  [fail/1] lakebase-scm-claim-feature-branch (new feature)");
         const claim = runCli(
           CLAIM_CLI,
@@ -563,7 +587,11 @@ describe.skipIf(!RUN_SUITE)(
             "",
           ].join("\n"),
         );
-        git(projectDir, ["add", "tests/test_live_e2e_intentional_failure.py"]);
+        // git add -A captures the new failing test AND the
+        // .lakebase/workflow-state.json edit claim made (the substrate
+        // updates the state file but doesn't commit it; prepare-pr
+        // requires a clean tree, so both must land in this commit).
+        git(projectDir, ["add", "-A"]);
         gitCommit(
           projectDir,
           owner,

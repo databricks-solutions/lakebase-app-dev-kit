@@ -326,10 +326,29 @@ export async function runScmWorkflowMigrationE2E(
 
   // ─── 2. WRITE THE MIGRATION ───────────────────────────────────
   const markerTable = `live_e2e_marker_${cfg.tool}_${Date.now()}`;
-  const writtenPaths = cfg.writeMigration({ projectDir, markerTable });
-  for (const p of writtenPaths) {
-    git(projectDir, ["add", p]);
+  cfg.writeMigration({ projectDir, markerTable });
+  // Log the dirty state for diagnostics; the substrate's claim +
+  // post-checkout may have left other untracked files (e.g. .env
+  // already in .gitignore, or scaffold artifacts not yet tracked).
+  // Then stage EVERYTHING. The test mirrors a real user's `git add -A`
+  // pattern: the migration plus any substrate-produced files in the
+  // same commit. prepare-pr requires a clean tree, so anything the
+  // claim left behind must be committed too (or stashed; we go with
+  // commit to keep the round-trip end-to-end visible in git history).
+  const dirty = execFileSync("git", ["status", "--porcelain"], {
+    cwd: projectDir,
+    encoding: "utf8",
+  });
+  if (dirty.trim()) {
+    console.log(
+      `  [step 2] git status --porcelain before commit:\n${dirty
+        .split("\n")
+        .filter((l) => l)
+        .map((l) => `    ${l}`)
+        .join("\n")}`,
+    );
   }
+  git(projectDir, ["add", "-A"]);
   gitCommit(
     projectDir,
     owner,

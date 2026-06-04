@@ -199,10 +199,16 @@ describe.skipIf(!RUN_SUITE)(
         const branchesBeforeAbandon = gitOutput(projectDir, ["branch", "--list"]);
         expect(branchesBeforeAbandon).toMatch(new RegExp(`\\b${featureBranch}\\b`));
 
-        // Action: abandon.
+        // Action: abandon. claim modifies .lakebase/workflow-state.json
+        // (tracked), so the working tree is dirty immediately after.
+        // The substrate's --force flag is the documented escape for
+        // "claimed-but-not-committed -> abandon" (the only thing the
+        // delete loses is the state-file edit, not user code). A
+        // typical user flow that includes intervening commits would
+        // not need --force; here we exercise the bare CLI path.
         const abandon = runCli(
           ABANDON_CLI,
-          ["--project-dir", projectDir],
+          ["--project-dir", projectDir, "--force"],
           projectDir,
         );
         logCli("abandon", abandon);
@@ -228,60 +234,71 @@ describe.skipIf(!RUN_SUITE)(
     it(
       "adopt-state: workflow-state.json missing -> adopt rebuilds it from on-disk reality",
       async () => {
-        // Setup: ensure state is at scaffold-complete (previous test
-        // left it there). Then DELETE the workflow-state.json to
-        // simulate a project that was scaffolded by an older kit
-        // version (pre-FEIP-7458) and has no state file.
-        const stateFile = path.join(projectDir, ".lakebase", "workflow-state.json");
+        // Setup: adopt-state can only seed from a tier branch (main /
+        // staging / etc.), not from a feature/* branch. Switch to
+        // main first; the previous test left HEAD on
+        // feature-f-abandon's now-deleted parent, so we may be in
+        // detached state.
+        git(projectDir, ["checkout", "main"]);
+
+        const stateFile = path.join(
+          projectDir,
+          ".lakebase",
+          "workflow-state.json",
+        );
         const beforeBlob = fs.readFileSync(stateFile, "utf8");
         fs.rmSync(stateFile);
         expect(fs.existsSync(stateFile)).toBe(false);
 
-        // Action: adopt-state. Reads project_id from .env / Lakebase
-        // reality and writes a fresh scaffold-complete state file.
-        const adopt = runCli(
-          ADOPT_CLI,
-          ["--project-dir", projectDir],
-          projectDir,
-        );
-        logCli("adopt", adopt);
-        expect(adopt.status).toBe(0);
+        try {
+          // Action: adopt-state. Reads project_id from .env / Lakebase
+          // reality and writes a fresh scaffold-complete state file.
+          const adopt = runCli(
+            ADOPT_CLI,
+            ["--project-dir", projectDir],
+            projectDir,
+          );
+          logCli("adopt", adopt);
+          expect(adopt.status).toBe(0);
 
-        // Assert the file was rebuilt with the expected invariants.
-        expect(fs.existsSync(stateFile)).toBe(true);
-        const rebuilt = readState(projectDir);
-        expect(rebuilt.state).toBe("scaffold-complete");
-        expect(rebuilt.tier_topology).toBe(2);
-        expect(rebuilt.project_id).toBe(projectName);
+          // Assert the file was rebuilt with the expected invariants.
+          expect(fs.existsSync(stateFile)).toBe(true);
+          const rebuilt = readState(projectDir);
+          expect(rebuilt.state).toBe("scaffold-complete");
+          expect(rebuilt.tier_topology).toBe(2);
+          expect(rebuilt.project_id).toBe(projectName);
 
-        // Sanity: lakebase-scm-state CLI agrees (round-trip).
-        const stateRead = runCli(
-          STATE_CLI,
-          ["--project-dir", projectDir, "--json"],
-          projectDir,
-        );
-        expect(stateRead.status).toBe(0);
-        const parsed = JSON.parse(stateRead.stdout);
-        expect(parsed.found).toBe(true);
-        expect(parsed.state.state).toBe("scaffold-complete");
+          // Sanity: lakebase-scm-state CLI agrees (round-trip).
+          const stateRead = runCli(
+            STATE_CLI,
+            ["--project-dir", projectDir, "--json"],
+            projectDir,
+          );
+          expect(stateRead.status).toBe(0);
+          const parsed = JSON.parse(stateRead.stdout);
+          expect(parsed.found).toBe(true);
+          expect(parsed.state.state).toBe("scaffold-complete");
 
-        // Restore the original blob too, so subsequent tests start
-        // from the same canonical scaffold state. (adopt-state's
-        // output is byte-equivalent in normal flow, but we want zero
-        // ambiguity for the next assertion.)
-        fs.writeFileSync(stateFile, beforeBlob);
-
-        scenarioPassed.adopt = true;
+          scenarioPassed.adopt = true;
+        } finally {
+          // Always restore the original blob so subsequent tests
+          // start from the canonical scaffold state, regardless of
+          // whether an assertion above threw.
+          fs.writeFileSync(stateFile, beforeBlob);
+        }
       },
       5 * 60_000,
     );
 
     it(
-      "recover-orphans: dangling feature git branch with no Lakebase pair is removed",
+      "recover-orphans: dangling feature git branch is reported; --claim retroactively pairs it",
       async () => {
-        // Setup: create a "feature/orphan-branch" via plain git that
-        // has no Lakebase pair (no claim, no workflow-state change).
-        // recover-orphans should detect + remove it.
+        // Setup: create a "feature-orphan-live-test" via plain git
+        // that has no Lakebase pair (claim was bypassed). This
+        // simulates a developer who shelled out to `git checkout -b
+        // feature-X` directly instead of using the substrate.
+        // recover-orphans is the substrate's tool for detecting +
+        // remediating that drift.
         const orphanBranch = "feature-orphan-live-test";
         git(projectDir, ["checkout", "-b", orphanBranch]);
         // Make a trivial commit so the branch is non-empty.
@@ -300,24 +317,59 @@ describe.skipIf(!RUN_SUITE)(
           "-m",
           "orphan branch commit for recover-orphans live test",
         ]);
-        // Switch back to main so the orphan branch can be deleted.
+        // Switch back to main so the orphan can be considered.
         git(projectDir, ["checkout", "main"]);
 
         const branchesBefore = gitOutput(projectDir, ["branch", "--list"]);
         expect(branchesBefore).toMatch(new RegExp(`\\b${orphanBranch}\\b`));
 
-        // Action: recover-orphans with the destructive flag.
-        const recover = runCli(
+        // First, the REPORT mode (default, non-destructive). The CLI
+        // contract: stdout (or JSON) lists every non-tier git branch
+        // that has no Lakebase pair. The orphan we just created must
+        // appear in that list.
+        const reportRun = runCli(
           RECOVER_CLI,
-          ["--project-dir", projectDir, "--apply"],
+          ["--project-dir", projectDir, "--json"],
           projectDir,
         );
-        logCli("recover-orphans", recover);
-        expect(recover.status).toBe(0);
+        logCli("recover-orphans (report)", reportRun);
+        expect(reportRun.status).toBe(0);
+        const report = JSON.parse(reportRun.stdout);
+        const reportedNames: string[] = (report.orphans ?? []).map(
+          (o: { branch: string }) => o.branch,
+        );
+        expect(reportedNames).toContain(orphanBranch);
 
-        // Assert: the orphan branch is gone.
-        const branchesAfter = gitOutput(projectDir, ["branch", "--list"]);
-        expect(branchesAfter).not.toMatch(new RegExp(`\\b${orphanBranch}\\b`));
+        // Now the RECOVERY action: --claim retroactively pairs the
+        // orphan via the substrate. After --claim, the orphan should
+        // no longer be in the report (it has a Lakebase pair now).
+        // --only-branch limits the action to our test orphan so we
+        // don't pair every dangling branch the project may have.
+        const claimRun = runCli(
+          RECOVER_CLI,
+          [
+            "--project-dir",
+            projectDir,
+            "--claim",
+            "--only-branch",
+            orphanBranch,
+            "--json",
+          ],
+          projectDir,
+        );
+        logCli("recover-orphans (--claim)", claimRun);
+        expect(claimRun.status).toBe(0);
+
+        const recheckRun = runCli(
+          RECOVER_CLI,
+          ["--project-dir", projectDir, "--json"],
+          projectDir,
+        );
+        const recheck = JSON.parse(recheckRun.stdout);
+        const recheckNames: string[] = (recheck.orphans ?? []).map(
+          (o: { branch: string }) => o.branch,
+        );
+        expect(recheckNames).not.toContain(orphanBranch);
 
         scenarioPassed.recover = true;
       },
@@ -401,8 +453,14 @@ describe.skipIf(!RUN_SUITE)(
         );
         expect(driftAfter).toBeUndefined();
 
-        // Tidy: abandon so subsequent describe runs (if any) start clean.
-        runCli(ABANDON_CLI, ["--project-dir", projectDir], projectDir);
+        // Tidy: abandon so subsequent describe runs (if any) start
+        // clean. --force in case the state file or working tree is
+        // dirty from the doctor --fix that ran git checkout above.
+        runCli(
+          ABANDON_CLI,
+          ["--project-dir", projectDir, "--force"],
+          projectDir,
+        );
 
         scenarioPassed.doctor = true;
       },

@@ -318,6 +318,29 @@ export async function createProject(
     report("Skipping runner setup (no GitHub repository).");
   }
 
+  // ── Step 7c: SCM workflow-state seed (FEIP-7458 phase A) ──────
+  // Stamp the scaffold-complete row so .lakebase/workflow-state.json
+  // exists BEFORE the initial commit. The state file is intentionally
+  // tracked in git (it is the gate surface phase B's transition CLIs
+  // read + write); if it were written AFTER the initial commit it
+  // would be left untracked, and every consumer would hit
+  // "dirty-working-tree" on the next prepare-pr / abandon. The write
+  // is best-effort: a failure surfaces as a warning rather than
+  // aborting the scaffold, since the file is advisory until phase B.
+  try {
+    writeWorkflowState(
+      projectDir,
+      initWorkflowState({
+        projectId: lakebaseProjectId,
+        tierTopology: (tiers ?? 1) as 1 | 2 | 3,
+      }),
+    );
+  } catch (err) {
+    warnings.push(
+      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`,
+    );
+  }
+
   // ── Step 8: Initial commit (+ push when GitHub configured) ────
   const langLabels: Record<string, string> = {
     java: "Java/Spring Boot",
@@ -387,25 +410,6 @@ export async function createProject(
     }
   }
 
-  // ── Step 8c: SCM workflow-state seed (FEIP-7458 phase A) ──────
-  // Stamp the scaffold-complete row so .lakebase/workflow-state.json
-  // exists at the same moment .env does. Advisory at this phase: the
-  // file is the gate surface phase B's transition CLIs will read; no
-  // existing operation depends on its presence yet, so a write failure
-  // surfaces as a warning rather than aborting the scaffold.
-  try {
-    writeWorkflowState(
-      projectDir,
-      initWorkflowState({
-        projectId: lakebaseProjectId,
-        tierTopology: (tiers ?? 1) as 1 | 2 | 3,
-      }),
-    );
-  } catch (err) {
-    warnings.push(
-      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`,
-    );
-  }
 
   // ── Step 9: Health check (advisory) ───────────────────────────
   report("Verifying project...");
