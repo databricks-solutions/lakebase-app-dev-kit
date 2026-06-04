@@ -343,7 +343,7 @@ describe("patchWorkflowsForRunnerType", () => {
     expect(after).toMatch(/runs-on: ubuntu-latest/);
   });
 
-  it("swaps setup-java for self-hosted and leaves mvnw calls online", async () => {
+  it("swaps setup-java for self-hosted (local-JDK probe + gated fallback) and leaves mvnw calls online", async () => {
     const dir = mkTmp();
     await deployWorkflows(dir);
     await patchWorkflowsForRunnerType(dir, "self-hosted");
@@ -351,9 +351,27 @@ describe("patchWorkflowsForRunnerType", () => {
       const filePath = path.join(dir, ".github", "workflows", file);
       if (!fs.existsSync(filePath)) continue;
       const content = fs.readFileSync(filePath, "utf-8");
-      // After patch, setup-java@v4 should not appear (self-hosted runner
-      // brings its own JDK; the scaffold swaps to a local JDK step).
-      expect(content).not.toMatch(/uses: actions\/setup-java@v4/);
+      // After patch, the local-JDK probe step must be present. This is
+      // the fast path: a self-hosted runner that already has java on
+      // PATH skips the download entirely.
+      expect(content).toMatch(/Set up JDK \(probe local\)/);
+      expect(content).toMatch(/local_jdk=found/);
+      expect(content).toMatch(/local_jdk=missing/);
+      // setup-java@v4 may still appear, but ONLY inside the gated
+      // fallback step (i.e. on the same patch as an
+      // `if: ... local_jdk == 'missing'` guard). A bare
+      // `uses: actions/setup-java@v4` with no preceding if-guard
+      // would mean the runner always pays the download cost.
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (/uses:\s*actions\/setup-java@v4/.test(lines[i])) {
+          // Look back up to ~10 lines for the if-guard tied to this
+          // step. The patched composite places the if: a couple of
+          // lines above the uses:.
+          const back = lines.slice(Math.max(0, i - 10), i).join("\n");
+          expect(back).toMatch(/local_jdk\s*==\s*'missing'/);
+        }
+      }
       // mvnw calls stay online. Maven resolves through the user's
       // ~/.m2/settings.xml mirror; forcing -o here would block
       // plugin-prefix lookups (e.g. `flyway:migrate`) on a cold runner.

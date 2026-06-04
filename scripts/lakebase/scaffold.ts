@@ -347,17 +347,53 @@ export async function patchWorkflowsForRunnerType(targetDir: string, runnerType:
   }
 
   // self-hosted: keep `runs-on: self-hosted` (template default) and swap in
-  // local-JDK detection in place of actions/setup-java.
+  // a probe-then-fallback JDK composite in place of actions/setup-java.
+  //
+  // Two steps:
+  //   (a) Probe for a local JDK. If present, capture JAVA_HOME and set
+  //       local_jdk=found. Step exits 0 regardless so the next step's
+  //       `if:` clause sees the output.
+  //   (b) If probe came back missing, fall back to actions/setup-java@v4
+  //       to download + cache a JDK. Works on self-hosted runners
+  //       (the action targets a runner-local cache; no sudo needed).
+  //
+  // The probe is platform-aware:
+  //   - macOS: /usr/bin/java is a stub that pops a GUI Software Update
+  //     dialog when no JDK is installed, blocking forever on headless
+  //     self-hosted runners. Probe via /usr/libexec/java_home instead,
+  //     which exits non-zero with no dialog when no JDK is present.
+  //   - Linux (and others): probe via `command -v java && java -version`
+  //     against the binary on PATH directly; no GUI stub exists.
+  //
+  // Both steps gated on `lang == 'java'` so Python / Node projects
+  // skip them entirely.
   const localJdkStep = [
-    "- name: Set up JDK (local)",
+    "- name: Set up JDK (probe local)",
+    "        id: jdk-probe",
+    "        if: steps.detect-lang.outputs.lang == 'java'",
     "        run: |",
-    '          echo "Using local JDK:"',
-    "          java -version",
-    '          if [ -z "$JAVA_HOME" ]; then',
-    '            export JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
-    '            echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV',
+    '          JH=""',
+    '          if [ "$(uname)" = "Darwin" ]; then',
+    '            JH="$(/usr/libexec/java_home 2>/dev/null || true)"',
+    "          elif command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
+    '            JH="$(dirname $(dirname $(readlink -f $(which java))))"',
     "          fi",
-    '          echo "JAVA_HOME=$JAVA_HOME"',
+    '          if [ -n "$JH" ] && [ -x "$JH/bin/java" ]; then',
+    '            echo "JAVA_HOME=$JH" >> $GITHUB_ENV',
+    '            echo "local_jdk=found" >> $GITHUB_OUTPUT',
+    '            echo "Using local JDK: $JH"',
+    '            "$JH/bin/java" -version',
+    "          else",
+    '            echo "local_jdk=missing" >> $GITHUB_OUTPUT',
+    '            echo "No local JDK; will fall back to actions/setup-java in the next step."',
+    "          fi",
+    "",
+    "      - name: Set up JDK (download via actions/setup-java fallback)",
+    "        if: steps.detect-lang.outputs.lang == 'java' && steps.jdk-probe.outputs.local_jdk == 'missing'",
+    "        uses: actions/setup-java@v4",
+    "        with:",
+    "          java-version: '25'",
+    "          distribution: 'temurin'",
     "",
   ].join("\n");
 

@@ -24,6 +24,10 @@ import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
 import { syncCiSecrets } from "../util/ci-secrets.js";
 import { delay } from "../util/delay.js";
+import {
+  initWorkflowState,
+  writeWorkflowState,
+} from "./scm-workflow-state.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -314,6 +318,29 @@ export async function createProject(
     report("Skipping runner setup (no GitHub repository).");
   }
 
+  // ── Step 7c: SCM workflow-state seed (FEIP-7458 phase A) ──────
+  // Stamp the scaffold-complete row so .lakebase/workflow-state.json
+  // exists BEFORE the initial commit. The state file is intentionally
+  // tracked in git (it is the gate surface phase B's transition CLIs
+  // read + write); if it were written AFTER the initial commit it
+  // would be left untracked, and every consumer would hit
+  // "dirty-working-tree" on the next prepare-pr / abandon. The write
+  // is best-effort: a failure surfaces as a warning rather than
+  // aborting the scaffold, since the file is advisory until phase B.
+  try {
+    writeWorkflowState(
+      projectDir,
+      initWorkflowState({
+        projectId: lakebaseProjectId,
+        tierTopology: (tiers ?? 1) as 1 | 2 | 3,
+      }),
+    );
+  } catch (err) {
+    warnings.push(
+      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`,
+    );
+  }
+
   // ── Step 8: Initial commit (+ push when GitHub configured) ────
   const langLabels: Record<string, string> = {
     java: "Java/Spring Boot",
@@ -382,6 +409,7 @@ export async function createProject(
       }
     }
   }
+
 
   // ── Step 9: Health check (advisory) ───────────────────────────
   report("Verifying project...");

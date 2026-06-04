@@ -12,7 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { delay } from "../util/delay.js";
+import { pollUntilDefined } from "../util/poll-until.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { asBranchName, looksLikeBranchUid } from "./branch-id.js";
 import {
@@ -229,15 +229,19 @@ export interface WaitForBranchReadyArgs extends BranchLookupOpts {
 export async function waitForBranchReady(args: WaitForBranchReadyArgs): Promise<LakebaseBranchInfo> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
   const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
-    if (branch && branch.state === "READY") return branch;
-    await delay(interval);
-  }
-  throw new LakebaseBranchError(
-    `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
+  const result = await pollUntilDefined<LakebaseBranchInfo>(
+    async () => {
+      const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
+      return branch && branch.state === "READY" ? branch : undefined;
+    },
+    { timeoutMs, intervalMs: interval },
   );
+  if (result.outcome === "timeout") {
+    throw new LakebaseBranchError(
+      `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`,
+    );
+  }
+  return result.value;
 }
 
 /** Extract the branch leaf name from either a full path

@@ -10,36 +10,33 @@ Drives a feature from idea to spec to architect review to test list. This wraps 
 
 If `.tdd/` does not exist in the project root, this command hard-fails with a setup hint instead of lazy-initializing: the TDD workflow has invariants (`.tdd/` shape, `selection-log.md`) a lazy bootstrap cannot reconstruct. Run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh.
 
-## Step 0 (cannot skip): claim the paired branch via the substrate
+## Step 0 (cannot skip): claim the paired branch via the SCM workflow
 
-**Before any design phase runs, the agent MUST claim a paired Lakebase + git branch for this feature via the substrate.** This is the kit's invariant: every git branch gets a Lakebase branch, and the substrate's `lakebase-branch create-paired` is the ONLY supported creation path. Skipping this step OR shelling out to `git checkout -b` directly is a contract violation and must be refused.
+**Before any design phase runs, the agent MUST claim a paired Lakebase + git branch for this feature through the SCM workflow.** This is the kit's invariant: every git branch gets a Lakebase branch, the SCM workflow state machine is its enforcement surface, and `lakebase-scm-claim-feature-branch` is the ONLY supported creation path. Skipping this step OR shelling out to `git checkout -b` directly is a contract violation and must be refused.
+
+The bin handles precondition gating (refuses unless `.lakebase/workflow-state.json` is at `scaffold-complete` or `merged`), parent-branch resolution from the project's tier topology, the paired Lakebase + git + .env creation via `createFeaturePairedBranch` (30-day TTL), and the state-file transition to `feature-claimed` in a single call. Idempotent: re-running with the same feature-id on a `feature-claimed` row returns a no-op success.
 
 Concretely, the agent:
 
-1. Reads `LAKEBASE_PROJECT_ID` from the project's `.env`. If absent, hard-fails with `Lakebase project id missing; run lakebase-create-project first.`
-2. Derives the git branch name from the feature id by stripping the leading `F<N>-` and prefixing `feature/`. Example: `F1-initial-domain` -> `feature/initial-domain`.
-3. Picks the parent branch with this precedence:
-   - `LAKEBASE_BASE_BRANCH` from `.env` if set (explicit override).
-   - Otherwise `staging` if the project's `lakebase-branch list` shows it (3-tier scaffold).
-   - Otherwise the project default branch (2-tier scaffold; usually `production`).
-4. Invokes the canonical substrate primitive via the kit CLI:
+1. Verifies `.lakebase/workflow-state.json` exists (run `lakebase-scm-state` to inspect). If absent, hard-fail with `SCM workflow state missing; run lakebase-create-project first.`
+2. Invokes the workflow CLI with the feature id (no path/branch math required: the bin derives `feature/<slug>` and picks the parent from `tier_topology`):
 
    ```bash
-   npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
-     lakebase-branch create-paired-tier feature \
-       --instance "$LAKEBASE_PROJECT_ID" \
-       --branch "feature/<slug>" \
-       --parent-branch "<resolved-parent>" \
-       --cwd "$PWD" \
-       --pretty
+   KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
+   npx --yes --package="$KIT_PKG" \
+     lakebase-scm-claim-feature-branch "<feature-id>" \
+       --project-dir "$PWD" \
+       --json --pretty
    ```
 
-   `create-paired-tier feature` is the ONLY supported way to claim a feature branch: it combines `createPairedBranch`'s atomicity (Lakebase first, then git, then `.env` sync, all-or-nothing) with the 30-day convention TTL feature branches require. Do NOT use `create-paired` (lower-level, defaults to `no_expiry: true` which would silently create a long-running tier instead of a feature branch).
+   When `LAKEBASE_KIT_REF` is unset the npx target is the kit's main branch (the default-published-pin behavior). Setting it to a branch/tag/sha (e.g. `feip-7458-scm-state-phase-a-c`) pulls that ref, useful for smoke runs that validate an unreleased kit build.
 
-5. If `create-paired` errors with `branch already exists`, the feature branch was claimed in a prior session: proceed to step 6.
-6. Run `.claude/commands/design.pre-hook.md` if present. The default pre-hook (shipped with the kit) documents this very step for reference; projects may APPEND project-specific gestures to it (claim a JIRA epic, post to Slack, etc.). The pre-hook does NOT replace step 0 above; it extends it.
+   The bin's `--parent` flag overrides the tier-default parent when the feature must fork from somewhere else (e.g. a hotfix off production on a 2-tier project). The bin's `--instance` flag overrides the `project_id` recorded in the workflow state; usually unneeded.
 
-If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The substrate is the only path.
+3. If the bin exits non-zero, do NOT fall back to a lower-level substrate primitive. Diagnose via `lakebase-scm-state --json --pretty` and surface the error message to the user. Exit codes: `1` no state file, `2` precondition refused (wrong state, invalid feature-id, already claimed for a different feature), `3` substrate failure.
+4. Run `.claude/commands/design.pre-hook.md` if present. The default pre-hook (shipped with the kit) documents this very step for reference; projects may APPEND project-specific gestures to it (claim a JIRA epic, post to Slack, etc.). The pre-hook does NOT replace step 0 above; it extends it.
+
+If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The substrate is the only path; the SCM workflow is how that path is enforced.
 
 ## Phases (HITL-gated)
 

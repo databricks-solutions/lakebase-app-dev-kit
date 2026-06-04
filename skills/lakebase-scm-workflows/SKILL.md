@@ -45,6 +45,110 @@ LAKEBASE_PROJECT_ID=my-app
 
 If you're an agent dropping into a project mid-session, read these first to know what `instance` to pass to every subsequent operation.
 
+## Workflow state surface – `.lakebase/workflow-state.json`
+
+The SCM workflow is a five-state machine: `scaffold-complete` → `feature-claimed` → `pr-ready` → `ci-green` → `merged`. Its gate surface is a single JSON file at the project root, validated against [`scm-workflow-state.schema.json`](../../scripts/lakebase/scm-workflow-state.schema.json). The current state plus its invariants (feature id, branch, parent branch, Lakebase UID, PR URL, CI URL) are persisted there.
+
+Inspect it via:
+
+```bash
+lakebase-scm-state                          # human-readable, with gate ladder
+lakebase-scm-state --json --pretty          # machine-readable report
+lakebase-scm-state --project-dir ~/repos/x  # different project root
+```
+
+Read / write programmatically:
+
+```ts
+import {
+  readWorkflowState,
+  writeWorkflowState,
+  initWorkflowState,
+  describeGates,
+} from "@databricks-solutions/lakebase-app-dev-kit";
+
+const s = readWorkflowState(projectDir);    // ScmWorkflowState | null
+writeWorkflowState(projectDir, {            // validates first; atomic write
+  ...initWorkflowState({ projectId: "demo", tierTopology: 2 }),
+});
+const gates = describeGates(s!);            // gate ladder for tooling
+```
+
+Phase A (advisory data layer): `lakebase-create-project` seeds the `scaffold-complete` row at end-of-scaffold and `lakebase-scm-state` reads it. A seed failure surfaces as a project warning, not a scaffold abort.
+
+Phase B (first blocking transition): `lakebase-scm-claim-feature-branch` is the canonical "start a new feature" verb. It enforces its precondition in code (state must be `scaffold-complete` or `merged`), calls the substrate primitive `createFeaturePairedBranch` (Lakebase branch + git branch + .env sync, 30-day TTL), and advances the state file to `feature-claimed`. /design's pre-hook invokes it; the substrate-only-path invariant is enforced through this bin.
+
+```bash
+lakebase-scm-claim-feature-branch initial-domain          # claim
+lakebase-scm-claim-feature-branch initial-domain --json   # machine-readable
+lakebase-scm-claim-feature-branch hotfix-x --parent main  # override tier-default parent
+lakebase-scm-claim-feature-branch initial-domain          # idempotent re-run = no-op
+```
+
+Exit codes: `0` success (incl. idempotent no-op), `1` no state file, `2` precondition refused, `3` substrate failure.
+
+Programmatic equivalent:
+
+```ts
+import { claimFeatureBranch } from "@databricks-solutions/lakebase-app-dev-kit";
+
+const { state, paired, alreadyClaimed } = await claimFeatureBranch({
+  projectDir,
+  featureId: "initial-domain",
+});
+```
+
+### Full SCM CLI surface (alpha.45, phase C)
+
+The workflow is driven entirely by CLI bins, one per transition. Each enforces its precondition in code, calls the underlying substrate primitives, and writes the new state row.
+
+| Bin | Transition | Substrate it wraps |
+|-----|------------|--------------------|
+| `lakebase-scm-state` | inspect (read-only) | (reads `.lakebase/workflow-state.json`) |
+| `lakebase-scm-doctor` | diagnose (read-only) | cross-checks state + git + Lakebase + .env |
+| `lakebase-scm-adopt-state` | seed for existing projects | listBranches + getBranchByName + getCurrentBranch |
+| `lakebase-scm-recover-orphans [--claim]` | retroactively pair orphan git branches | createFeaturePairedBranch per orphan |
+| `lakebase-scm-claim-feature-branch <id>` | scaffold-complete \| merged -> feature-claimed | createFeaturePairedBranch |
+| `lakebase-scm-abandon-feature` | feature-claimed -> scaffold-complete | deletePairedBranch + git checkout |
+| `lakebase-scm-prepare-pr` | feature-claimed -> pr-ready | git push + createPullRequest |
+| `lakebase-scm-wait-ci [--timeout-sec N]` | pr-ready -> ci-green | getPullRequest poll loop |
+| `lakebase-scm-merge [--method squash\|merge\|rebase]` | ci-green -> merged | mergePairedPullRequest + git cleanup |
+
+All bins support `--project-dir <dir>` (default cwd), `--json`, `--pretty`, and `--help`.
+
+End-to-end usage (alpha.45):
+
+```bash
+# Scaffold a fresh project (Step 8c seeds scaffold-complete).
+lakebase-create-project --tiers 2 ...
+
+# Existing projects opt in once.
+lakebase-scm-adopt-state
+# Or, if they have pre-phase-C orphan branches:
+lakebase-scm-recover-orphans          # detect-only
+lakebase-scm-recover-orphans --claim  # pair every orphan via the substrate
+
+# Per-feature cycle.
+lakebase-scm-claim-feature-branch initial-domain
+# ... write code, run tests ...
+lakebase-scm-prepare-pr
+lakebase-scm-wait-ci
+lakebase-scm-merge
+# state is now merged; the next claim returns from merged to feature-claimed.
+
+# Inspect / diagnose at any point.
+lakebase-scm-state --json --pretty
+lakebase-scm-doctor
+```
+
+Exit-code conventions across all bins: `0` success / idempotent no-op / clean doctor report, `1` no state file (or doctor warnings only), `2` precondition refused (or doctor failures), `3` substrate failure. `lakebase-scm-wait-ci` adds `3` for CI failure (state unchanged) and `4` for timeout (state unchanged).
+
+### Phase C: substrate-only-path is now enforced
+
+The post-checkout git hook (`templates/project/common/scripts/post-checkout.sh`) used to silently create Lakebase branches as a fallback for orphan git branches. Phase C retires that fallback: a `git checkout -b feature/foo` with no prior substrate call leaves `.env` untouched and the hook prints a clear error pointing the user at `lakebase-scm-claim-feature-branch` or `lakebase-scm-recover-orphans`. The substrate is the only path; the SCM workflow is how that path is enforced in code.
+
+Future work past phase C: downstream-CI wait in `lakebase-scm-merge` (block until merge.yml applies migrations to production) and `lakebase-scm-doctor --fix <id>` for targeted remediations.
+
 ## Sync without an IDE – the git hooks
 
 The construct that keeps a Lakebase branch and a git branch in sync in a plain terminal session (no extension, no explicit substrate call) is the **bundled git hooks** that `scaffoldAll` / `installHooks` drops into `.git/hooks/` during project bootstrap. They are the default-on automatic sync mechanism. Agents driving raw `git` commands inherit them for free.

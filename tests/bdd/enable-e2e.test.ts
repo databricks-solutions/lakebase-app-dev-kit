@@ -161,13 +161,27 @@ describe("enableE2eForProject orchestrator", () => {
     }
   });
 
-  it("is safe on non-Node projects: templates land, package.json is untouched, run-tests.sh patched", () => {
+  it("is safe on non-Node projects: templates SKIPPED, package.json untouched, run-tests.sh still patched", () => {
+    // Non-Node project shape (no root package.json). Previously the
+    // orchestrator wrote playwright.config.ts unconditionally, which
+    // then tripped pr.yml's E2E step (gated on hashFiles
+    // 'playwright.config.*') and blew up with
+    // "Cannot find module '@playwright/test'" because no Node deps
+    // could be installed. Behavior now: skip the templates entirely
+    // when there is nowhere to wire the npm side, so the CI step
+    // never fires.
     seedRunTestsScript(projectDir);
     const result = enableE2eForProject({ projectDir, templatesDir: REPO_TEMPLATES });
-    expect(result.templatesWritten.length).toBeGreaterThan(0);
+    expect(result.templatesWritten).toEqual([]);
+    expect(result.templatesSkipped.length).toBeGreaterThan(0);
     expect(result.packageJson).toEqual({ patched: false, scriptAdded: false, depAdded: false });
+    // run-tests.sh patch still happens; the inserted block is itself
+    // gated on playwright.config.* presence at run time, so a Python
+    // project just no-ops through the E2E block.
     expect(result.runTestsScript.inserted).toBe(true);
     expect(fs.existsSync(path.join(projectDir, "package.json"))).toBe(false);
+    // And the config file itself must NOT have been written.
+    expect(fs.existsSync(path.join(projectDir, "playwright.config.ts"))).toBe(false);
   });
 
   it("is idempotent end-to-end: second call reports zero new work", () => {

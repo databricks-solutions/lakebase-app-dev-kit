@@ -316,16 +316,33 @@ BRANCH_EXISTS="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/n
   | jq -r --arg uid "$LAKEBASE_BRANCH" '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.name | type == "string" and (endswith("/branches/" + $uid) or (split("/") | last == $uid))) or (.uid == $uid) or (.id == $uid)) | (.name // .uid // .id)' | head -1)"
 
 if [ -z "$BRANCH_EXISTS" ]; then
-  echo "Lakebase: creating branch '$LAKEBASE_BRANCH' from '$BASE_BRANCH_ID'..."
-  CREATE_RESPONSE="$(databricks postgres create-branch "$PROJ_PATH" "$LAKEBASE_BRANCH" \
-    --json "{\"spec\": {\"source_branch\": \"$SOURCE_BRANCH\", \"no_expiry\": true}}" 2>&1)" || true
-  # Log fork point for audit trail
-  FORK_LSN="$(echo "$CREATE_RESPONSE" | jq -r '.status.source_branch_lsn // empty' 2>/dev/null)"
-  FORK_TIME="$(echo "$CREATE_RESPONSE" | jq -r '.status.source_branch_time // empty' 2>/dev/null)"
-  [ -n "$FORK_LSN" ] && echo "Lakebase: forked at LSN=$FORK_LSN time=$FORK_TIME"
-else
-  echo "Lakebase: branch '$LAKEBASE_BRANCH' already exists."
+  # Phase C (FEIP-7458): the hook used to create Lakebase branches as a
+  # fallback for orphan git branches. That fallback let agents and humans
+  # bypass the SCM workflow's claim CLI (and the substrate-only-path
+  # invariant), so it has been removed. The hook now REFUSES to create
+  # a paired branch out-of-band; the recovery path is explicit.
+  echo "Lakebase: REFUSING to auto-create Lakebase branch '$LAKEBASE_BRANCH'." >&2
+  echo "" >&2
+  echo "Git branch '$BRANCH' has no matching Lakebase pair. Phase C of the" >&2
+  echo "SCM workflow retires the post-checkout fallback that used to create" >&2
+  echo "the Lakebase side silently. The supported paths are:" >&2
+  echo "" >&2
+  echo "  1. If this is a new feature you want to start, rewind the branch" >&2
+  echo "     and use the canonical claim path:" >&2
+  echo "        git checkout -" >&2
+  echo "        git branch -D '$BRANCH'" >&2
+  echo "        lakebase-scm-claim-feature-branch <feature-id>" >&2
+  echo "" >&2
+  echo "  2. If this is an existing orphan you need to keep:" >&2
+  echo "        lakebase-scm-recover-orphans --claim --only-branch '$BRANCH'" >&2
+  echo "" >&2
+  echo "Inspect orphans first with: lakebase-scm-recover-orphans" >&2
+  echo "" >&2
+  echo "Leaving .env untouched. The shell stays on '$BRANCH' but no Lakebase" >&2
+  echo "branch was created and credentials were not synced." >&2
+  exit 1
 fi
+echo "Lakebase: branch '$LAKEBASE_BRANCH' already exists."
 
 # Wait for branch READY (up to 2 min)
 echo "Lakebase: waiting for branch to be ready..."
