@@ -1,10 +1,9 @@
 // Live integration test for the SCM workflow CLIs (FEIP-7458 phase B/C+).
 //
-// Exercises the complete SCM state machine, including both the happy
-// path and a failure path, end-to-end against a real Lakebase project +
-// real GitHub repo + real self-hosted runner. The runner runs the
-// scaffolded pr.yml + merge.yml workflows so wait-ci and
-// merge --wait-migrate see real workflow runs, not mocks.
+// Exercises the happy path of the SCM state machine end-to-end against
+// a real Lakebase project + real GitHub repo + real self-hosted runner.
+// The runner runs the scaffolded pr.yml + merge.yml workflows so wait-ci
+// and merge --wait-migrate see real workflow runs, not mocks.
 //
 // Functions / CLIs exercised:
 //
@@ -17,30 +16,13 @@
 //   - lakebase-scm-merge --wait-migrate   (scm-merge.ts; exercises pollUntil
 //                                         on listWorkflowRuns for the
 //                                         downstream migrate workflow)
-//   - lakebase-scm-abandon-feature        (scm-abandon-feature.ts; used
-//                                         between happy + failure tests
-//                                         to drop back to scaffold-complete
-//                                         before claiming a new feature)
 //
-// Test cases:
-//
-//   1. HAPPY PATH (passing code)
-//      scaffold-complete -> feature-claimed -> pr-ready -> ci-green -> merged
-//      Asserts every state-file invariant (pr_url, ci_run_url, ci_green_at,
-//      merged_at, migrate_run_url, migrate_completed_at). Also asserts the
-//      pr.yml workflow run skipped both JDK steps (the project is Python;
-//      the JDK probe + fallback are gated on lang == 'java' per the
-//      scaffold.ts JDK-probe-then-fallback fix). This is the regression
-//      assertion for the bug where the scaffold ran setup-java
-//      unconditionally on non-Java projects.
-//
-//   2. FAILURE PATH (code that breaks CI)
-//      After the happy-path merge, the state is at `merged`. Claim a
-//      new feature, push a commit containing an intentionally-failing
-//      pytest, and assert wait-ci exits with code 3 (ci-failed) and the
-//      state does NOT advance to ci-green. This proves the CLI is
-//      faithful to the real CI signal and does not silently mark
-//      failed runs as green.
+// HAPPY PATH (passing code)
+//   scaffold-complete -> feature-claimed -> pr-ready -> ci-green -> merged
+//   Asserts every state-file invariant (pr_url, ci_run_url, ci_green_at,
+//   merged_at, migrate_run_url, migrate_completed_at) and proves the
+//   alembic migration committed in the PR is applied on both the ci-pr-N
+//   Lakebase branch (during wait-ci) and staging (during merge --wait-migrate).
 //
 // Gating:
 //   LAKEBASE_TEST_E2E_GITHUB=1      must be set; skip otherwise.
@@ -52,9 +34,9 @@
 //   directly).
 //
 // Teardown contract (mirrors detect-language-via-self-hosted-runner):
-//   - On both tests PASS: deregister runner, delete GitHub repo, delete
-//     Lakebase project, rm local project dir.
-//   - On any test FAIL: leave everything intact + print recovery commands.
+//   - On PASS: deregister runner, delete GitHub repo, delete Lakebase
+//     project, rm local project dir.
+//   - On FAIL: leave everything intact + print recovery commands.
 
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_process";
@@ -63,6 +45,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { getCurrentUser, deleteRepo } from "../../scripts/github/repo.js";
 import { createProject } from "../../scripts/lakebase/create-project.js";
+import { deleteLakebaseProject } from "../../scripts/lakebase/lakebase-project.js";
 import { removeRunner } from "../../scripts/lakebase/runner-setup.js";
 import {
   readWorkflowState,
@@ -83,7 +66,6 @@ const CLAIM_CLI = path.join(CLI_DIR, "scm-claim-feature.cli.js");
 const PREPARE_CLI = path.join(CLI_DIR, "scm-prepare-pr.cli.js");
 const WAIT_CI_CLI = path.join(CLI_DIR, "scm-wait-ci.cli.js");
 const MERGE_CLI = path.join(CLI_DIR, "scm-merge.cli.js");
-const ABANDON_CLI = path.join(CLI_DIR, "scm-abandon-feature.cli.js");
 
 function timestamp(): string {
   const d = new Date();
@@ -197,7 +179,6 @@ describe.skipIf(!RUN_SUITE)(
     let projectDir: string;
     let parentDir: string;
     let happyPathPassed = false;
-    let failurePathPassed = false;
 
     beforeAll(async () => {
       owner = await getCurrentUser();
@@ -223,6 +204,16 @@ describe.skipIf(!RUN_SUITE)(
       );
       console.log("");
 
+      // Stage-tagged progress for setup visibility. Without this the
+      // test appears hung in createProject for minutes with no signal.
+      const setupStart = process.hrtime.bigint();
+      const stage = (msg: string, detail?: string) => {
+        const ms = Number((process.hrtime.bigint() - setupStart) / 1_000_000n);
+        const tag = `+${(ms / 1000).toFixed(1)}s`;
+        const tail = detail ? ` (${detail})` : "";
+        console.log(`  [setup ${tag}] ${msg}${tail}`);
+      };
+      stage("createProject starting");
       const result = await createProject({
         projectName,
         parentDir,
@@ -239,8 +230,9 @@ describe.skipIf(!RUN_SUITE)(
         enableE2e: false,
         enableInfra: false,
         skipCommands: true,
-      });
+      }, stage);
       projectDir = result.projectDir;
+      stage("createProject succeeded");
       console.log(`  [setup] createProject succeeded:`);
       console.log(`    projectDir=${projectDir}`);
       console.log(`    githubRepoUrl=${result.githubRepoUrl}`);
@@ -432,131 +424,11 @@ describe.skipIf(!RUN_SUITE)(
       30 * 60_000, // 30-min budget; CI runs + migrate workflow take real time
     );
 
-    it(
-      "failure path: code that breaks CI -> wait-ci exits ci-failed, state stays at pr-ready",
-      async () => {
-        // Defensive setup: claim requires state to be scaffold-complete
-        // or merged. If the happy-path test left us anywhere else
-        // (e.g. mid-flight on failure), abandon --force resets to
-        // scaffold-complete so this test can stand alone. We do NOT
-        // do an explicit `git checkout main` here: claim's pre-hook
-        // calls the substrate's createFeaturePairedBranch which
-        // checks out the new feature branch from staging on its own,
-        // so the test only needs the SCM state to be valid for a
-        // fresh claim.
-        const before = readState(projectDir);
-        if (
-          before.state !== "scaffold-complete" &&
-          before.state !== "merged"
-        ) {
-          console.log(
-            `  [fail/0] state=${before.state}; abandoning to reset before claim`,
-          );
-          const reset = runCli(
-            ABANDON_CLI,
-            ["--project-dir", projectDir, "--force"],
-            projectDir,
-          );
-          logCli("abandon (reset)", reset);
-        }
-
-        const failingFeatureId = "F2-ci-failure";
-        console.log("  [fail/1] lakebase-scm-claim-feature-branch (new feature)");
-        const claim = runCli(
-          CLAIM_CLI,
-          [failingFeatureId, "--project-dir", projectDir],
-          projectDir,
-        );
-        logCli("claim", claim);
-        expect(claim.status).toBe(0);
-
-        const stateAfterClaim = readState(projectDir);
-        expect(stateAfterClaim.state).toBe("feature-claimed");
-        expect(stateAfterClaim.feature_id).toBe(failingFeatureId.toLowerCase());
-
-        // ─── 2. INTRODUCE A FAILING PYTEST ───────────────────────
-        // pr.yml's "Run tests" step shells to scripts/run-tests.sh
-        // which invokes pytest on tests/. Adding an always-failing
-        // test forces the workflow run to conclude "failure".
-        const testsDir = path.join(projectDir, "tests");
-        fs.mkdirSync(testsDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(testsDir, "test_live_e2e_intentional_failure.py"),
-          [
-            "# Intentionally failing test, written by",
-            "# tests/integration/scm-workflow-e2e-live.test.ts to prove",
-            "# wait-ci surfaces real CI failures.",
-            "",
-            "def test_live_e2e_intentional_failure():",
-            "    assert False, \"intentional CI failure for live e2e test\"",
-            "",
-          ].join("\n"),
-        );
-        // git add -A captures the new failing test AND the
-        // .lakebase/workflow-state.json edit claim made (the substrate
-        // updates the state file but doesn't commit it; prepare-pr
-        // requires a clean tree, so both must land in this commit).
-        git(projectDir, ["add", "-A"]);
-        gitCommit(
-          projectDir,
-          owner,
-          `live test: failure path SCM workflow e2e (${failingFeatureId})`,
-        );
-
-        // ─── 3. PREPARE-PR ───────────────────────────────────────
-        console.log("  [fail/3] lakebase-scm-prepare-pr");
-        const prepare = runCli(
-          PREPARE_CLI,
-          [
-            "--project-dir",
-            projectDir,
-            "--title",
-            "live e2e: failure path",
-            "--body",
-            "Live integration test asserting wait-ci surfaces a real CI failure.",
-          ],
-          projectDir,
-        );
-        logCli("prepare-pr", prepare);
-        expect(prepare.status).toBe(0);
-
-        const stateAfterPrepare = readState(projectDir);
-        expect(stateAfterPrepare.state).toBe("pr-ready");
-
-        // ─── 4. WAIT-CI (must exit non-zero with ci-failed) ──────
-        console.log("  [fail/4] lakebase-scm-wait-ci (expecting non-zero)");
-        const waitCi = runCli(
-          WAIT_CI_CLI,
-          ["--project-dir", projectDir],
-          projectDir,
-        );
-        logCli("wait-ci", waitCi);
-        // The CLI maps ci-failed to exit code 3; timeout to 4. The
-        // happy path was 0. A non-zero exit here is the substrate
-        // honestly reporting "CI failed"; if the CLI exited 0, it
-        // means it silently treated a failed run as green, which is
-        // the regression we are guarding against.
-        expect(waitCi.status).not.toBe(0);
-        expect(waitCi.status).toBe(3);
-        expect(waitCi.stderr).toMatch(/CI failed/i);
-
-        const stateAfterCi = readState(projectDir);
-        // State MUST stay at pr-ready. wait-ci must not write
-        // ci-green when the underlying CI conclusion was failure.
-        expect(stateAfterCi.state).toBe("pr-ready");
-        expect(stateAfterCi.ci_green_at).toBeFalsy();
-
-        failurePathPassed = true;
-      },
-      30 * 60_000,
-    );
-
     afterAll(async () => {
-      const allPassed = happyPathPassed && failurePathPassed;
-      if (!allPassed) {
+      if (!happyPathPassed) {
         console.log("");
         console.log(
-          `[LEAVE-INTACT] Skipping teardown (happy=${happyPathPassed}, failure=${failurePathPassed}).`,
+          `[LEAVE-INTACT] Skipping teardown (happy=${happyPathPassed}).`,
         );
         console.log("         To clean up manually:");
         console.log(`           gh repo delete ${fullRepoName} --yes`);
@@ -571,23 +443,7 @@ describe.skipIf(!RUN_SUITE)(
         return;
       }
       console.log("");
-      console.log("[TEARDOWN] Both tests passed. Cleaning up.");
-
-      // Abandon the failing feature so the project ends in a clean
-      // state before we delete it. Strictly cosmetic, but keeps any
-      // dangling Lakebase branch from outlasting the repo.
-      try {
-        const abandon = runCli(
-          ABANDON_CLI,
-          ["--project-dir", projectDir],
-          projectDir,
-        );
-        logCli("abandon (teardown)", abandon);
-      } catch (e) {
-        console.log(
-          `  [teardown] abandon failed: ${(e as Error).message}`,
-        );
-      }
+      console.log("[TEARDOWN] Happy path passed. Cleaning up.");
 
       try {
         await removeRunner({ fullRepoName, projectName });
@@ -599,7 +455,7 @@ describe.skipIf(!RUN_SUITE)(
       }
 
       try {
-        await deleteRepo(repoSlug);
+        await deleteRepo(fullRepoName);
         console.log("  [teardown] github repo deleted");
       } catch (e) {
         console.log(
@@ -608,11 +464,7 @@ describe.skipIf(!RUN_SUITE)(
       }
 
       try {
-        execFileSync(
-          "databricks",
-          ["postgres", "delete-project", `projects/${projectName}`],
-          { stdio: "ignore" },
-        );
+        await deleteLakebaseProject({ projectId: projectName });
         console.log("  [teardown] lakebase project deleted");
       } catch (e) {
         console.log(

@@ -1987,12 +1987,17 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     "        id: jdk-probe",
     "        if: steps.detect-lang.outputs.lang == 'java'",
     "        run: |",
-    "          if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
-    '            JH="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
+    '          JH=""',
+    '          if [ "$(uname)" = "Darwin" ]; then',
+    '            JH="$(/usr/libexec/java_home 2>/dev/null || true)"',
+    "          elif command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
+    '            JH="$(dirname $(dirname $(readlink -f $(which java))))"',
+    "          fi",
+    '          if [ -n "$JH" ] && [ -x "$JH/bin/java" ]; then',
     '            echo "JAVA_HOME=$JH" >> $GITHUB_ENV',
     '            echo "local_jdk=found" >> $GITHUB_OUTPUT',
     '            echo "Using local JDK: $JH"',
-    "            java -version",
+    '            "$JH/bin/java" -version',
     "          else",
     '            echo "local_jdk=missing" >> $GITHUB_OUTPUT',
     '            echo "No local JDK; will fall back to actions/setup-java in the next step."',
@@ -5167,6 +5172,19 @@ Last probe error:
   } else {
     report("Skipping runner setup (no GitHub repository).");
   }
+  try {
+    writeWorkflowState(
+      projectDir,
+      initWorkflowState({
+        projectId: lakebaseProjectId,
+        tierTopology: tiers ?? 1
+      })
+    );
+  } catch (err) {
+    warnings.push(
+      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
+    );
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -5217,19 +5235,6 @@ Last probe error:
         }
       }
     }
-  }
-  try {
-    writeWorkflowState(
-      projectDir,
-      initWorkflowState({
-        projectId: lakebaseProjectId,
-        tierTopology: tiers ?? 1
-      })
-    );
-  } catch (err) {
-    warnings.push(
-      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
-    );
   }
   report("Verifying project...");
   const health = verifyProject(projectDir);
@@ -6631,7 +6636,7 @@ function parentForTier(topology, branches) {
   const def = branches.find((b) => b.isDefault === true);
   return def?.name.split("/").pop() ?? "main";
 }
-var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 function leafName(b) {
   return b.name.split("/").pop() ?? b.name;
 }
@@ -7355,7 +7360,7 @@ var ScmRecoverError = class extends Error {
   }
   code;
 };
-var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 async function recoverOrphans(args) {
   if (!args.instance) {
     throw new ScmRecoverError(
@@ -7673,7 +7678,25 @@ async function fixFinding(args) {
   let action = "";
   try {
     switch (args.findingId) {
-      case "env-branch-drift":
+      case "env-branch-drift": {
+        const branch = report.state?.branch;
+        if (!branch) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: workflow state has no branch field.",
+            "fix-failed"
+          );
+        }
+        const sanitized = sanitizeBranchName(branch);
+        updateEnvConnection({
+          envPath: path26.join(args.projectDir, ".env"),
+          branchId: sanitized,
+          databaseUrl: "",
+          username: "",
+          password: ""
+        });
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        break;
+      }
       case "head-branch-drift": {
         const branch = report.state?.branch;
         if (!branch) {
@@ -7686,7 +7709,7 @@ async function fixFinding(args) {
           cwd: args.projectDir,
           timeout: 15e3
         });
-        action = `git checkout ${branch} (re-fires post-checkout to resync .env)`;
+        action = `git checkout ${branch} (re-fires post-checkout to resync HEAD)`;
         break;
       }
       case "tier-topology-mismatch": {

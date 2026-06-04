@@ -1110,7 +1110,7 @@ var ScmRecoverError = class extends Error {
   }
   code;
 };
-var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 async function recoverOrphans(args) {
   if (!args.instance) {
     throw new ScmRecoverError(

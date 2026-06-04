@@ -558,7 +558,7 @@ function parentForTier(topology, branches) {
   const def = branches.find((b) => b.isDefault === true);
   return def?.name.split("/").pop() ?? "main";
 }
-var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 function leafName(b) {
   return b.name.split("/").pop() ?? b.name;
 }
@@ -1228,7 +1228,7 @@ var ScmRecoverError = class extends Error {
   }
   code;
 };
-var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var TIER_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 async function recoverOrphans(args) {
   if (!args.instance) {
     throw new ScmRecoverError(
@@ -1544,7 +1544,25 @@ async function fixFinding(args) {
   let action = "";
   try {
     switch (args.findingId) {
-      case "env-branch-drift":
+      case "env-branch-drift": {
+        const branch = report.state?.branch;
+        if (!branch) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: workflow state has no branch field.",
+            "fix-failed"
+          );
+        }
+        const sanitized = sanitizeBranchName(branch);
+        updateEnvConnection({
+          envPath: path4.join(args.projectDir, ".env"),
+          branchId: sanitized,
+          databaseUrl: "",
+          username: "",
+          password: ""
+        });
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        break;
+      }
       case "head-branch-drift": {
         const branch = report.state?.branch;
         if (!branch) {
@@ -1557,7 +1575,7 @@ async function fixFinding(args) {
           cwd: args.projectDir,
           timeout: 15e3
         });
-        action = `git checkout ${branch} (re-fires post-checkout to resync .env)`;
+        action = `git checkout ${branch} (re-fires post-checkout to resync HEAD)`;
         break;
       }
       case "tier-topology-mismatch": {

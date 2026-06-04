@@ -1509,12 +1509,17 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     "        id: jdk-probe",
     "        if: steps.detect-lang.outputs.lang == 'java'",
     "        run: |",
-    "          if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
-    '            JH="$(/usr/libexec/java_home 2>/dev/null || dirname $(dirname $(readlink -f $(which java))))"',
+    '          JH=""',
+    '          if [ "$(uname)" = "Darwin" ]; then',
+    '            JH="$(/usr/libexec/java_home 2>/dev/null || true)"',
+    "          elif command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then",
+    '            JH="$(dirname $(dirname $(readlink -f $(which java))))"',
+    "          fi",
+    '          if [ -n "$JH" ] && [ -x "$JH/bin/java" ]; then',
     '            echo "JAVA_HOME=$JH" >> $GITHUB_ENV',
     '            echo "local_jdk=found" >> $GITHUB_OUTPUT',
     '            echo "Using local JDK: $JH"',
-    "            java -version",
+    '            "$JH/bin/java" -version',
     "          else",
     '            echo "local_jdk=missing" >> $GITHUB_OUTPUT',
     '            echo "No local JDK; will fall back to actions/setup-java in the next step."',
@@ -2806,6 +2811,19 @@ Last probe error:
   } else {
     report("Skipping runner setup (no GitHub repository).");
   }
+  try {
+    writeWorkflowState(
+      projectDir,
+      initWorkflowState({
+        projectId: lakebaseProjectId,
+        tierTopology: tiers ?? 1
+      })
+    );
+  } catch (err) {
+    warnings.push(
+      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
+    );
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -2856,19 +2874,6 @@ Last probe error:
         }
       }
     }
-  }
-  try {
-    writeWorkflowState(
-      projectDir,
-      initWorkflowState({
-        projectId: lakebaseProjectId,
-        tierTopology: tiers ?? 1
-      })
-    );
-  } catch (err) {
-    warnings.push(
-      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
-    );
   }
   report("Verifying project...");
   const health = verifyProject(projectDir);

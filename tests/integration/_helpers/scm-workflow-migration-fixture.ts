@@ -37,6 +37,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { getCurrentUser, deleteRepo } from "../../../scripts/github/repo.js";
 import { createProject } from "../../../scripts/lakebase/create-project.js";
+import { deleteLakebaseProject } from "../../../scripts/lakebase/lakebase-project.js";
 import { removeRunner } from "../../../scripts/lakebase/runner-setup.js";
 import {
   readWorkflowState,
@@ -209,25 +210,43 @@ export async function runScmWorkflowMigrationE2E(
   console.log(`         local project dir: ${parentDir}/${projectName}`);
   console.log("");
 
-  const result = await createProject({
-    projectName,
-    parentDir,
-    databricksHost:
-      process.env.DATABRICKS_HOST ||
-      (process.env.LAKEBASE_TEST_HOST ?? "https://workspace.invalid"),
-    githubOwner: owner,
-    createGithubRepo: true,
-    privateRepo: true,
-    language: cfg.language,
-    runnerType: "self-hosted",
-    tiers: 2,
-    enableTdd: false,
-    enableE2e: false,
-    enableInfra: false,
-    skipCommands: true,
-  });
+  // Progress callback: stamps every createProject substep with a
+  // relative elapsed-second offset, so when a stage is slow the log
+  // shows WHICH stage it was (GH repo create, Lakebase wait-for-READY,
+  // scaffold, runner registration, etc.). Without this the test
+  // appears hung in setup with zero signal for several minutes.
+  const setupStart = process.hrtime.bigint();
+  const stage = (msg: string, detail?: string) => {
+    const elapsedMs = Number(
+      (process.hrtime.bigint() - setupStart) / 1_000_000n,
+    );
+    const tag = `+${(elapsedMs / 1000).toFixed(1)}s`;
+    const detailPart = detail ? ` (${detail})` : "";
+    console.log(`  [setup ${tag}] ${msg}${detailPart}`);
+  };
+  stage("createProject starting");
+  const result = await createProject(
+    {
+      projectName,
+      parentDir,
+      databricksHost:
+        process.env.DATABRICKS_HOST ||
+        (process.env.LAKEBASE_TEST_HOST ?? "https://workspace.invalid"),
+      githubOwner: owner,
+      createGithubRepo: true,
+      privateRepo: true,
+      language: cfg.language,
+      runnerType: "self-hosted",
+      tiers: 2,
+      enableTdd: false,
+      enableE2e: false,
+      enableInfra: false,
+      skipCommands: true,
+    },
+    stage,
+  );
   const projectDir = result.projectDir;
-  console.log(`  [setup] createProject succeeded at ${projectDir}`);
+  stage("createProject succeeded", projectDir);
 
   const initialState = readState(projectDir);
   expect(initialState.state).toBe("scaffold-complete");
@@ -376,17 +395,13 @@ export async function teardownScmWorkflowMigrationE2E(
     console.log(`  [teardown] removeRunner failed: ${(e as Error).message}`);
   }
   try {
-    await deleteRepo(ctx.projectName);
+    await deleteRepo(ctx.fullRepoName);
     console.log("  [teardown] github repo deleted");
   } catch (e) {
     console.log(`  [teardown] repo delete failed: ${(e as Error).message}`);
   }
   try {
-    execFileSync(
-      "databricks",
-      ["postgres", "delete-project", `projects/${ctx.projectName}`],
-      { stdio: "ignore" },
-    );
+    await deleteLakebaseProject({ projectId: ctx.projectName });
     console.log("  [teardown] lakebase project deleted");
   } catch (e) {
     console.log(`  [teardown] lakebase delete failed: ${(e as Error).message}`);

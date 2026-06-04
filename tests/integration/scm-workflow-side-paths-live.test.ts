@@ -34,6 +34,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { getCurrentUser, deleteRepo } from "../../scripts/github/repo.js";
 import { createProject } from "../../scripts/lakebase/create-project.js";
+import { deleteLakebaseProject } from "../../scripts/lakebase/lakebase-project.js";
 import { removeRunner } from "../../scripts/lakebase/runner-setup.js";
 import {
   readWorkflowState,
@@ -148,6 +149,17 @@ describe.skipIf(!RUN_SUITE)(
       console.log(`         local project dir: ${parentDir}/${projectName}`);
       console.log("");
 
+      // Stage-tagged progress: every createProject substep prints its
+      // elapsed-since-setup-start offset, so a slow stage is visible
+      // immediately instead of presenting as a multi-minute hang.
+      const setupStart = process.hrtime.bigint();
+      const stage = (msg: string, detail?: string) => {
+        const ms = Number((process.hrtime.bigint() - setupStart) / 1_000_000n);
+        const tag = `+${(ms / 1000).toFixed(1)}s`;
+        const tail = detail ? ` (${detail})` : "";
+        console.log(`  [setup ${tag}] ${msg}${tail}`);
+      };
+      stage("createProject starting");
       const result = await createProject({
         projectName,
         parentDir,
@@ -164,9 +176,9 @@ describe.skipIf(!RUN_SUITE)(
         enableE2e: false,
         enableInfra: false,
         skipCommands: true,
-      });
+      }, stage);
       projectDir = result.projectDir;
-      console.log(`  [setup] createProject succeeded at ${projectDir}`);
+      stage("createProject succeeded", projectDir);
 
       const initialState = readState(projectDir);
       expect(initialState.state).toBe("scaffold-complete");
@@ -376,6 +388,27 @@ describe.skipIf(!RUN_SUITE)(
     it(
       "doctor --fix env-branch-drift: introduce drift -> doctor flags -> --fix clears",
       async () => {
+        // Defensive setup: prior tests in this describe (recover-orphans
+        // with --claim) may have left workflow state at feature-claimed
+        // for an unrelated branch. The substrate's claim refuses if
+        // state is already feature-claimed for a different feature, so
+        // abandon --force first to reset to scaffold-complete before
+        // we claim our own.
+        const stateBefore = readState(projectDir);
+        if (
+          stateBefore.state !== "scaffold-complete" &&
+          stateBefore.state !== "merged"
+        ) {
+          console.log(
+            `  [doctor/0] state=${stateBefore.state}; abandoning to reset before claim`,
+          );
+          runCli(
+            ABANDON_CLI,
+            ["--project-dir", projectDir, "--force"],
+            projectDir,
+          );
+        }
+
         // Setup: claim a feature so .env is populated with the
         // feature branch's LAKEBASE_BRANCH_ID.
         const featureId = "F-doctor-drift";
@@ -491,7 +524,7 @@ describe.skipIf(!RUN_SUITE)(
         );
       }
       try {
-        await deleteRepo(repoSlug);
+        await deleteRepo(fullRepoName);
         console.log("  [teardown] github repo deleted");
       } catch (e) {
         console.log(
@@ -499,11 +532,7 @@ describe.skipIf(!RUN_SUITE)(
         );
       }
       try {
-        execFileSync(
-          "databricks",
-          ["postgres", "delete-project", `projects/${projectName}`],
-          { stdio: "ignore" },
-        );
+        await deleteLakebaseProject({ projectId: projectName });
         console.log("  [teardown] lakebase project deleted");
       } catch (e) {
         console.log(

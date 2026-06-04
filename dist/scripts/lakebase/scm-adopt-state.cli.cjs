@@ -502,7 +502,7 @@ function parentForTier(topology, branches) {
   const def = branches.find((b) => b.isDefault === true);
   return def?.name.split("/").pop() ?? "main";
 }
-var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev"]);
+var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
 function leafName(b) {
   return b.name.split("/").pop() ?? b.name;
 }
