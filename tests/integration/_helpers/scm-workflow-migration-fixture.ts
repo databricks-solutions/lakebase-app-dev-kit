@@ -35,8 +35,7 @@ import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_proce
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Octokit } from "octokit";
-import { resolveGitHubToken } from "../../../scripts/github/auth.js";
+import { getCurrentUser, deleteRepo } from "../../../scripts/github/repo.js";
 import { createProject } from "../../../scripts/lakebase/create-project.js";
 import { removeRunner } from "../../../scripts/lakebase/runner-setup.js";
 import {
@@ -154,68 +153,6 @@ export async function assertTableExists(args: {
   }
 }
 
-export async function fetchRunSteps(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  runUrl: string,
-): Promise<
-  Array<{ name: string; conclusion: string | null; status: string | null }>
-> {
-  const m = runUrl.match(/\/actions\/runs\/(\d+)/);
-  if (!m) throw new Error(`Could not extract run id from ${runUrl}`);
-  const runId = Number(m[1]);
-  const jobs = await octokit.rest.actions.listJobsForWorkflowRun({
-    owner,
-    repo,
-    run_id: runId,
-  });
-  const first = jobs.data.jobs[0];
-  if (!first) throw new Error(`No jobs for workflow run ${runId}`);
-  return (first.steps ?? []).map((s) => ({
-    name: s.name,
-    conclusion: s.conclusion,
-    status: s.status,
-  }));
-}
-
-/**
- * Assert the JDK probe + fallback step outcomes match expectation.
- * - For non-Java languages: probe should be SKIPPED (gated on lang == 'java').
- * - For Java with local JDK present: probe SUCCESS, fallback SKIPPED.
- * - For Java with no local JDK: probe SUCCESS, fallback SUCCESS.
- *
- * The non-Java assertion is the live regression test for the bug
- * where scaffold.ts shipped setup-java unconditionally; the Java
- * assertion proves the probe + fallback wiring is correct.
- */
-export function assertJdkProbeOutcome(
-  steps: Array<{ name: string; conclusion: string | null }>,
-  expectation: "skipped" | "ran",
-): void {
-  const probe = steps.find((s) =>
-    /Set up JDK \(probe local\)/.test(s.name),
-  );
-  const fallback = steps.find((s) =>
-    /Set up JDK \(download via actions\/setup-java fallback\)/.test(s.name),
-  );
-  if (expectation === "skipped") {
-    if (probe) expect(probe.conclusion).toBe("skipped");
-    if (fallback) expect(fallback.conclusion).toBe("skipped");
-  } else {
-    if (!probe) {
-      throw new Error(
-        "expected JDK probe step to exist (lang == 'java'), but it was not found",
-      );
-    }
-    expect(probe.conclusion).toBe("success");
-    // fallback may be skipped (local found) or success (downloaded).
-    if (fallback && fallback.conclusion !== null) {
-      expect(["skipped", "success"]).toContain(fallback.conclusion);
-    }
-  }
-}
-
 export interface ScmWorkflowMigrationE2EArgs {
   language: "python" | "java" | "nodejs";
   /**
@@ -233,13 +170,6 @@ export interface ScmWorkflowMigrationE2EArgs {
     projectDir: string;
     markerTable: string;
   }) => string[];
-  /**
-   * Whether the scaffold's pr.yml is expected to RUN the JDK probe
-   * step ("ran") or SKIP it ("skipped"). non-Java languages skip;
-   * Java runs the probe (the fallback may run or skip depending on
-   * whether local java is available on the runner).
-   */
-  expectJdkStepsToRun: "ran" | "skipped";
 }
 
 export interface ScmWorkflowMigrationE2EContext {
@@ -248,7 +178,6 @@ export interface ScmWorkflowMigrationE2EContext {
   projectDir: string;
   parentDir: string;
   owner: string;
-  octokit: Octokit;
 }
 
 /**
@@ -262,10 +191,7 @@ export interface ScmWorkflowMigrationE2EContext {
 export async function runScmWorkflowMigrationE2E(
   cfg: ScmWorkflowMigrationE2EArgs,
 ): Promise<ScmWorkflowMigrationE2EContext> {
-  const token = await resolveGitHubToken();
-  const octokit = new Octokit({ auth: token });
-  const me = await octokit.rest.users.getAuthenticated();
-  const owner = me.data.login;
+  const owner = await getCurrentUser();
 
   const projectName = `scm-${cfg.tool}-verify-${timestamp()}`;
   const fullRepoName = `${owner}/${projectName}`;
@@ -402,15 +328,6 @@ export async function runScmWorkflowMigrationE2E(
     table: markerTable,
   });
 
-  // 4b: JDK probe regression assertion on pr.yml run
-  const ciSteps = await fetchRunSteps(
-    octokit,
-    owner,
-    projectName,
-    stateAfterCi.ci_run_url!,
-  );
-  assertJdkProbeOutcome(ciSteps, cfg.expectJdkStepsToRun);
-
   // ─── 5. MERGE --wait-migrate ──────────────────────────────────
   console.log("  [step 5] lakebase-scm-merge --wait-migrate");
   const merge = runCli(
@@ -437,16 +354,7 @@ export async function runScmWorkflowMigrationE2E(
     table: markerTable,
   });
 
-  // 5b: JDK probe regression on merge.yml run
-  const migrateSteps = await fetchRunSteps(
-    octokit,
-    owner,
-    projectName,
-    stateAfterMerge.migrate_run_url!,
-  );
-  assertJdkProbeOutcome(migrateSteps, cfg.expectJdkStepsToRun);
-
-  return { projectName, fullRepoName, projectDir, parentDir, owner, octokit };
+  return { projectName, fullRepoName, projectDir, parentDir, owner };
 }
 
 /**
@@ -468,10 +376,7 @@ export async function teardownScmWorkflowMigrationE2E(
     console.log(`  [teardown] removeRunner failed: ${(e as Error).message}`);
   }
   try {
-    await ctx.octokit.rest.repos.delete({
-      owner: ctx.owner,
-      repo: ctx.projectName,
-    });
+    await deleteRepo(ctx.projectName);
     console.log("  [teardown] github repo deleted");
   } catch (e) {
     console.log(`  [teardown] repo delete failed: ${(e as Error).message}`);

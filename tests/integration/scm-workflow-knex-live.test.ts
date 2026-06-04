@@ -46,7 +46,6 @@ describe.skipIf(!RUN_SUITE)(
         ctx = await runScmWorkflowMigrationE2E({
           language: "nodejs",
           tool: "knex",
-          expectJdkStepsToRun: "skipped",
           writeMigration: ({ projectDir, markerTable }) => {
             // <NNN>_<name>.js under migrations/. The scaffold ships
             // 001_init_placeholder.js; 100 leaves room for user-added

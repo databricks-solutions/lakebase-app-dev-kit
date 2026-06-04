@@ -32,8 +32,7 @@ import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_proce
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Octokit } from "octokit";
-import { resolveGitHubToken } from "../../scripts/github/auth.js";
+import { getCurrentUser, deleteRepo } from "../../scripts/github/repo.js";
 import { createProject } from "../../scripts/lakebase/create-project.js";
 import { removeRunner } from "../../scripts/lakebase/runner-setup.js";
 import {
@@ -118,8 +117,6 @@ function readState(projectDir: string): ScmWorkflowState {
 describe.skipIf(!RUN_SUITE)(
   "SCM workflow side-path CLIs - live e2e (FEIP-7458 phase C)",
   () => {
-    let token: string;
-    let octokit: Octokit;
     let owner: string;
     let projectName: string;
     let repoSlug: string;
@@ -134,10 +131,7 @@ describe.skipIf(!RUN_SUITE)(
     };
 
     beforeAll(async () => {
-      token = await resolveGitHubToken();
-      octokit = new Octokit({ auth: token });
-      const me = await octokit.rest.users.getAuthenticated();
-      owner = me.data.login;
+      owner = await getCurrentUser();
 
       projectName = `scm-side-paths-verify-${timestamp()}`;
       repoSlug = projectName;
@@ -334,10 +328,13 @@ describe.skipIf(!RUN_SUITE)(
         );
         logCli("recover-orphans (report)", reportRun);
         expect(reportRun.status).toBe(0);
+        // The CLI's JSON shape is { ok, result: { orphans, skipped,
+        // claimed, tierTopology } }; each orphan has fields
+        // { gitBranch, sanitized, reason, isCurrent }.
         const report = JSON.parse(reportRun.stdout);
-        const reportedNames: string[] = (report.orphans ?? []).map(
-          (o: { branch: string }) => o.branch,
-        );
+        const orphanList: Array<{ gitBranch: string }> =
+          report.result?.orphans ?? [];
+        const reportedNames = orphanList.map((o) => o.gitBranch);
         expect(reportedNames).toContain(orphanBranch);
 
         // Now the RECOVERY action: --claim retroactively pairs the
@@ -366,9 +363,9 @@ describe.skipIf(!RUN_SUITE)(
           projectDir,
         );
         const recheck = JSON.parse(recheckRun.stdout);
-        const recheckNames: string[] = (recheck.orphans ?? []).map(
-          (o: { branch: string }) => o.branch,
-        );
+        const recheckOrphans: Array<{ gitBranch: string }> =
+          recheck.result?.orphans ?? [];
+        const recheckNames = recheckOrphans.map((o) => o.gitBranch);
         expect(recheckNames).not.toContain(orphanBranch);
 
         scenarioPassed.recover = true;
@@ -494,7 +491,7 @@ describe.skipIf(!RUN_SUITE)(
         );
       }
       try {
-        await octokit.rest.repos.delete({ owner, repo: repoSlug });
+        await deleteRepo(repoSlug);
         console.log("  [teardown] github repo deleted");
       } catch (e) {
         console.log(

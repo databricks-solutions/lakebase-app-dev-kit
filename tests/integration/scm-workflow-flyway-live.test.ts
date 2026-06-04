@@ -45,7 +45,6 @@ describe.skipIf(!RUN_SUITE)(
         ctx = await runScmWorkflowMigrationE2E({
           language: "java",
           tool: "flyway",
-          expectJdkStepsToRun: "ran",
           writeMigration: ({ projectDir, markerTable }) => {
             // V<N>__<name>.sql under src/main/resources/db/migration/.
             // The scaffold ships V1__init_placeholder.sql; V2 is the

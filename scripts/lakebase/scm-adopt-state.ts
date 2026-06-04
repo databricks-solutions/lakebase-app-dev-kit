@@ -107,7 +107,14 @@ function parentForTier(
   return (def?.name.split("/").pop() ?? "main") as string;
 }
 
-const LONG_RUNNING_LEAFS = new Set(["staging", "dev"]);
+// The git-side default branch can be named "main" (modern) or "master"
+// (legacy); the Lakebase-side default is typically "production" but the
+// kit allows arbitrary names via the project's default_branch. Treat
+// the git defaults as long-running tiers explicitly so adopt-state
+// works when invoked from a fresh clone whose git HEAD is "main"
+// (paired with Lakebase "production"). The defaultLeaf check below
+// catches custom-named pairings.
+const LONG_RUNNING_LEAFS = new Set(["staging", "dev", "main", "master"]);
 
 /**
  * Convert a Lakebase branch info into the leaf name (`feature-x` from

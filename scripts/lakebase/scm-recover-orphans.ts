@@ -109,7 +109,13 @@ export interface RecoverOrphansResult {
   stateUpdatedFor?: string;
 }
 
-const TIER_LEAFS = new Set(["staging", "dev"]);
+// "main" / "master" are git's default-branch names; "staging" / "dev"
+// are the kit's tier-branch leaves. None of them are orphans: each is
+// a long-running tier (the Lakebase side may pair them with
+// "production" / "staging" / "dev", but the git side keeps the
+// conventional name). Without "main" here, every fresh project shows
+// its default branch as an orphan, which is wrong.
+const TIER_LEAFS = new Set(["staging", "dev", "main", "master"]);
 
 export async function recoverOrphans(
   args: RecoverOrphansArgs,

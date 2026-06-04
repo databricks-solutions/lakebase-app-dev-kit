@@ -25,6 +25,7 @@ import {
 } from "./scm-workflow-state.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { exec } from "../util/exec.js";
+import { updateEnvConnection } from "./env-file.js";
 
 export type DoctorSeverity = "ok" | "warn" | "fail";
 
@@ -304,7 +305,44 @@ export async function fixFinding(
   let action = "";
   try {
     switch (args.findingId) {
-      case "env-branch-drift":
+      case "env-branch-drift": {
+        // Rewrite .env's LAKEBASE_BRANCH_ID line directly. Earlier
+        // versions of this fix ran `git checkout <state.branch>` and
+        // expected the post-checkout hook to resync .env, but that
+        // path has two failure modes that left users stuck:
+        //   1. If git's HEAD was already on state.branch, the
+        //      checkout was a no-op for HEAD-change purposes and the
+        //      post-checkout hook (which gates on a real branch
+        //      switch in some setups) silently did nothing.
+        //   2. post-checkout bails early on databricks CLI auth
+        //      failure, leaving .env untouched even when the
+        //      workflow-state.json knew the right branch.
+        // The drift this finding flags is purely about the
+        // LAKEBASE_BRANCH_ID line; updateEnvConnection rewrites just
+        // the connection block (preserving every other line) and
+        // doesn't depend on the post-checkout chain. Credentials
+        // (DATABASE_URL / DB_USERNAME / DB_PASSWORD / LAKEBASE_HOST)
+        // are left empty here; the next post-checkout (or a manual
+        // mint) refreshes them. The BRANCH_ID is the load-bearing
+        // value -- everything else can be re-derived.
+        const branch = report.state?.branch;
+        if (!branch) {
+          throw new ScmDoctorFixError(
+            "Cannot fix: workflow state has no branch field.",
+            "fix-failed",
+          );
+        }
+        const sanitized = sanitizeBranchName(branch);
+        updateEnvConnection({
+          envPath: path.join(args.projectDir, ".env"),
+          branchId: sanitized,
+          databaseUrl: "",
+          username: "",
+          password: "",
+        });
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        break;
+      }
       case "head-branch-drift": {
         const branch = report.state?.branch;
         if (!branch) {
@@ -317,7 +355,7 @@ export async function fixFinding(
           cwd: args.projectDir,
           timeout: 15_000,
         });
-        action = `git checkout ${branch} (re-fires post-checkout to resync .env)`;
+        action = `git checkout ${branch} (re-fires post-checkout to resync HEAD)`;
         break;
       }
       case "tier-topology-mismatch": {

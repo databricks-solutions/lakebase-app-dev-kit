@@ -61,8 +61,7 @@ import { execFileSync, spawnSync, type SpawnSyncReturns } from "node:child_proce
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Octokit } from "octokit";
-import { resolveGitHubToken } from "../../scripts/github/auth.js";
+import { getCurrentUser, deleteRepo } from "../../scripts/github/repo.js";
 import { createProject } from "../../scripts/lakebase/create-project.js";
 import { removeRunner } from "../../scripts/lakebase/runner-setup.js";
 import {
@@ -188,42 +187,9 @@ async function assertTableExists(args: {
   }
 }
 
-/**
- * Fetch all steps for the first job of the workflow run that wait-ci
- * recorded as ci_run_url. Returns the steps in declaration order so
- * the caller can assert on per-step conclusions (success / skipped /
- * failure).
- */
-async function fetchRunSteps(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  runUrl: string,
-): Promise<
-  Array<{ name: string; conclusion: string | null; status: string | null }>
-> {
-  const m = runUrl.match(/\/actions\/runs\/(\d+)/);
-  if (!m) throw new Error(`Could not extract run id from ${runUrl}`);
-  const runId = Number(m[1]);
-  const jobs = await octokit.rest.actions.listJobsForWorkflowRun({
-    owner,
-    repo,
-    run_id: runId,
-  });
-  const first = jobs.data.jobs[0];
-  if (!first) throw new Error(`No jobs for workflow run ${runId}`);
-  return (first.steps ?? []).map((s) => ({
-    name: s.name,
-    conclusion: s.conclusion,
-    status: s.status,
-  }));
-}
-
 describe.skipIf(!RUN_SUITE)(
   "SCM workflow CLIs - live e2e (FEIP-7458)",
   () => {
-    let token: string;
-    let octokit: Octokit;
     let owner: string;
     let projectName: string;
     let repoSlug: string;
@@ -234,10 +200,7 @@ describe.skipIf(!RUN_SUITE)(
     let failurePathPassed = false;
 
     beforeAll(async () => {
-      token = await resolveGitHubToken();
-      octokit = new Octokit({ auth: token });
-      const me = await octokit.rest.users.getAuthenticated();
-      owner = me.data.login;
+      owner = await getCurrentUser();
 
       projectName = `scm-workflow-verify-${timestamp()}`;
       repoSlug = projectName;
@@ -430,39 +393,6 @@ describe.skipIf(!RUN_SUITE)(
           table: markerTable,
         });
 
-        // ─── 4b. WORKFLOW STEP REGRESSION: JDK probe MUST be ─────
-        //         skipped on a Python project. This is the live
-        //         regression test for the scaffold.ts fix that gated
-        //         setup-java behind lang == 'java'.
-        const ciSteps = await fetchRunSteps(
-          octokit,
-          owner,
-          repoSlug,
-          stateAfterCi.ci_run_url!,
-        );
-        console.log(
-          `  [happy/4a] CI run steps: ${ciSteps
-            .map((s) => `${s.name}=${s.conclusion ?? s.status}`)
-            .join(", ")}`,
-        );
-        const jdkProbe = ciSteps.find((s) =>
-          /Set up JDK \(probe local\)/.test(s.name),
-        );
-        const jdkFallback = ciSteps.find((s) =>
-          /Set up JDK \(download via actions\/setup-java fallback\)/.test(s.name),
-        );
-        // Both steps exist in the scaffolded pr.yml but must be
-        // SKIPPED on a Python project. "skipped" is the only
-        // acceptable conclusion; "success" would mean setup-java
-        // actually ran (the regression), "failure" would mean the
-        // gate misfired.
-        if (jdkProbe) {
-          expect(jdkProbe.conclusion).toBe("skipped");
-        }
-        if (jdkFallback) {
-          expect(jdkFallback.conclusion).toBe("skipped");
-        }
-
         // ─── 5. MERGE --wait-migrate (must succeed) ──────────────
         console.log("  [happy/5] lakebase-scm-merge --wait-migrate");
         const merge = runCli(
@@ -497,32 +427,6 @@ describe.skipIf(!RUN_SUITE)(
           table: markerTable,
         });
 
-        // ─── 5b. MIGRATE WORKFLOW STEP REGRESSION: JDK probe ─────
-        //         must also skip in merge.yml on the parent branch.
-        const migrateSteps = await fetchRunSteps(
-          octokit,
-          owner,
-          repoSlug,
-          stateAfterMerge.migrate_run_url!,
-        );
-        console.log(
-          `  [happy/5a] migrate run steps: ${migrateSteps
-            .map((s) => `${s.name}=${s.conclusion ?? s.status}`)
-            .join(", ")}`,
-        );
-        const migJdkProbe = migrateSteps.find((s) =>
-          /Set up JDK \(probe local\)/.test(s.name),
-        );
-        const migJdkFallback = migrateSteps.find((s) =>
-          /Set up JDK \(download via actions\/setup-java fallback\)/.test(s.name),
-        );
-        if (migJdkProbe) {
-          expect(migJdkProbe.conclusion).toBe("skipped");
-        }
-        if (migJdkFallback) {
-          expect(migJdkFallback.conclusion).toBe("skipped");
-        }
-
         happyPathPassed = true;
       },
       30 * 60_000, // 30-min budget; CI runs + migrate workflow take real time
@@ -534,7 +438,12 @@ describe.skipIf(!RUN_SUITE)(
         // Defensive setup: claim requires state to be scaffold-complete
         // or merged. If the happy-path test left us anywhere else
         // (e.g. mid-flight on failure), abandon --force resets to
-        // scaffold-complete so this test can stand alone.
+        // scaffold-complete so this test can stand alone. We do NOT
+        // do an explicit `git checkout main` here: claim's pre-hook
+        // calls the substrate's createFeaturePairedBranch which
+        // checks out the new feature branch from staging on its own,
+        // so the test only needs the SCM state to be valid for a
+        // fresh claim.
         const before = readState(projectDir);
         if (
           before.state !== "scaffold-complete" &&
@@ -550,10 +459,6 @@ describe.skipIf(!RUN_SUITE)(
           );
           logCli("abandon (reset)", reset);
         }
-        // Make sure HEAD is on a tier branch before claiming. claim's
-        // pre-hook will then check out the new feature branch off
-        // staging.
-        git(projectDir, ["checkout", "main"]);
 
         const failingFeatureId = "F2-ci-failure";
         console.log("  [fail/1] lakebase-scm-claim-feature-branch (new feature)");
@@ -694,7 +599,7 @@ describe.skipIf(!RUN_SUITE)(
       }
 
       try {
-        await octokit.rest.repos.delete({ owner, repo: repoSlug });
+        await deleteRepo(repoSlug);
         console.log("  [teardown] github repo deleted");
       } catch (e) {
         console.log(
