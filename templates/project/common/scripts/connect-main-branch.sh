@@ -92,18 +92,25 @@ get_credential() {
     | jq -r '.userName // .emails[0].value // empty')"
 }
 
-# Find the default (main) Lakebase branch
-DEFAULT_BRANCH_UID="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/null \
-  | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.status.default == true) or (.is_default == true)) | (.uid // .id // (if .name then (.name | split("/") | last) else empty end))' | head -1)"
+# Find the default (main) Lakebase branch.
+#
+# The Lakebase API expects the branch LEAF (e.g. "production") in
+# `projects/<id>/branches/<leaf>/...` path-shaped fields, not the
+# opaque UID (e.g. "br-..."). The TS substrate's resolveBranchId
+# (scripts/lakebase/branch-utils.ts) extracts the leaf from `.name`;
+# this jq mirrors that. Using .uid here is what caused the original
+# "could not get endpoint host" 404 + duplicate-endpoint bug.
+DEFAULT_BRANCH_LEAF="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/null \
+  | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.status.default == true) or (.is_default == true)) | (if .name then (.name | split("/") | last) elif .uid then .uid else (.id // empty) end)' | head -1)"
 
-if [ -z "$DEFAULT_BRANCH_UID" ]; then
+if [ -z "$DEFAULT_BRANCH_LEAF" ]; then
   echo "connect-main-branch: could not find default Lakebase branch. Check LAKEBASE_PROJECT_ID and 'databricks auth'."
   exit 1
 fi
 
-echo "Main Lakebase branch: $DEFAULT_BRANCH_UID"
+echo "Main Lakebase branch: $DEFAULT_BRANCH_LEAF"
 
-BRANCH_PATH="${PROJ_PATH}/branches/${DEFAULT_BRANCH_UID}"
+BRANCH_PATH="${PROJ_PATH}/branches/${DEFAULT_BRANCH_LEAF}"
 
 # Get existing endpoint host (create if missing, like post-checkout)
 HOST="$(databricks postgres list-endpoints "$BRANCH_PATH" -o json 2>/dev/null \
@@ -135,5 +142,5 @@ if [ -z "$TOKEN" ] || [ -z "$EMAIL" ]; then
   exit 1
 fi
 
-update_env "$HOST" "$EMAIL" "$TOKEN" "$DEFAULT_BRANCH_UID"
-echo "Connected to main branch ($DEFAULT_BRANCH_UID). Updated .env and application-local.properties."
+update_env "$HOST" "$EMAIL" "$TOKEN" "$DEFAULT_BRANCH_LEAF"
+echo "Connected to main branch ($DEFAULT_BRANCH_LEAF). Updated .env and application-local.properties."

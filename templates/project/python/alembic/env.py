@@ -11,6 +11,13 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 from app.database import Base, DATABASE_URL
 
+# Register all model classes with SQLAlchemy's declarative metadata so
+# alembic's autogenerate sees the full schema. Without this side-effect
+# import, Base.metadata is empty and `alembic revision --autogenerate`
+# produces an empty diff (silent failure mode that every user hits on
+# their first migration).
+import app.models  # noqa: F401
+
 config = context.config
 
 if config.config_file_name is not None:
