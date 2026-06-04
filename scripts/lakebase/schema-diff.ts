@@ -223,6 +223,77 @@ function diffSchemas(
 const colKey = (c: SchemaColumn): string => `${c.name}:${c.dataType}`;
 
 /**
+ * Render a SchemaDiffResult as the canonical "SCHEMA CHANGES (Lakebase diff)"
+ * markdown block. Consumers (the scaffolded prepare-commit-msg hook, the
+ * GH Actions PR comment, the extension's commit-detail view) parse this
+ * shape. Keep the surface stable; if you need new fields, add them as
+ * additional sections rather than altering the established prefixes.
+ * (Pre-FEIP-7494 the same format was emitted by the now-removed shell
+ * formatter templates/.../scripts/format-schema-diff.sh.)
+ *
+ * Output shape (per object, blank line between objects):
+ *
+ *   **SCHEMA CHANGES (Lakebase diff)**
+ *
+ *   + TABLE name (CREATED)
+ *     L col_name data_type
+ *
+ *   + INDEX name (CREATED)
+ *
+ *   ~ TABLE name (MODIFIED)
+ *     + col_name data_type
+ *
+ *   - TABLE name (REMOVED)
+ *
+ *   - INDEX name (REMOVED)
+ *
+ * Empty-diff emits `No schema changes (in sync).` after the header.
+ */
+export function formatSchemaDiffAsMarkdown(result: SchemaDiffResult): string {
+  const lines: string[] = ["**SCHEMA CHANGES (Lakebase diff)**", ""];
+
+  if (result.error) {
+    lines.push(`Could not compute schema diff: ${result.error}`);
+    return lines.join("\n") + "\n";
+  }
+
+  const blocks: string[][] = [];
+
+  for (const obj of result.created) {
+    const block: string[] = [`+ ${obj.type} ${obj.name} (CREATED)`];
+    if (obj.type === "TABLE" && obj.columns) {
+      for (const col of obj.columns) {
+        block.push(`  L ${col.name} ${col.dataType}`);
+      }
+    }
+    blocks.push(block);
+  }
+
+  for (const obj of result.modified) {
+    const block: string[] = [`~ TABLE ${obj.name} (MODIFIED)`];
+    for (const col of obj.addedColumns) {
+      block.push(`  + ${col.name} ${col.dataType}`);
+    }
+    blocks.push(block);
+  }
+
+  for (const obj of result.removed) {
+    blocks.push([`- ${obj.type} ${obj.name} (REMOVED)`]);
+  }
+
+  if (blocks.length === 0) {
+    lines.push("No schema changes (in sync).");
+  } else {
+    for (let i = 0; i < blocks.length; i++) {
+      if (i > 0) lines.push("");
+      lines.push(...blocks[i]);
+    }
+  }
+
+  return lines.join("\n") + "\n";
+}
+
+/**
  * Resolve the comparison branch via Lakebase metadata:
  *   1. target branch's `status.source_branch` (its parent), if set – this is
  *      a full resource path like `projects/x/branches/staging`; we trim to

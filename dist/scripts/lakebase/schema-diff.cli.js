@@ -378,6 +378,42 @@ function diffSchemas(branch, comparisonBranch, target, comparison, timestamp) {
   };
 }
 var colKey = (c) => `${c.name}:${c.dataType}`;
+function formatSchemaDiffAsMarkdown(result) {
+  const lines = ["**SCHEMA CHANGES (Lakebase diff)**", ""];
+  if (result.error) {
+    lines.push(`Could not compute schema diff: ${result.error}`);
+    return lines.join("\n") + "\n";
+  }
+  const blocks = [];
+  for (const obj of result.created) {
+    const block = [`+ ${obj.type} ${obj.name} (CREATED)`];
+    if (obj.type === "TABLE" && obj.columns) {
+      for (const col of obj.columns) {
+        block.push(`  L ${col.name} ${col.dataType}`);
+      }
+    }
+    blocks.push(block);
+  }
+  for (const obj of result.modified) {
+    const block = [`~ TABLE ${obj.name} (MODIFIED)`];
+    for (const col of obj.addedColumns) {
+      block.push(`  + ${col.name} ${col.dataType}`);
+    }
+    blocks.push(block);
+  }
+  for (const obj of result.removed) {
+    blocks.push([`- ${obj.type} ${obj.name} (REMOVED)`]);
+  }
+  if (blocks.length === 0) {
+    lines.push("No schema changes (in sync).");
+  } else {
+    for (let i = 0; i < blocks.length; i++) {
+      if (i > 0) lines.push("");
+      lines.push(...blocks[i]);
+    }
+  }
+  return lines.join("\n") + "\n";
+}
 function resolveComparisonBranch(instance, branch) {
   const branchInfo = describeBranch(instance, branch);
   const sourceBranch = branchInfo?.status?.source_branch ?? branchInfo?.spec?.source_branch;
@@ -444,6 +480,15 @@ function parseArgs(argv) {
       case "--database":
         out.database = argv[++i];
         break;
+      case "--format": {
+        const v = argv[++i];
+        if (v === "json" || v === "markdown") {
+          out.format = v;
+        } else {
+          out.format = v;
+        }
+        break;
+      }
       case "--pretty":
         out.pretty = true;
         break;
@@ -477,11 +522,18 @@ Flags:
   --against / --comparison-branch
                        Explicit parent branch (default: resolved from metadata)
   --database           Database name (default: $PGDATABASE or "databricks_postgres")
-  --pretty             Pretty-print the JSON output (default: minified)
+  --format <json|markdown>
+                       Output format. "json" (default) emits the structured
+                       SchemaDiffResult. "markdown" emits the canonical
+                       "SCHEMA CHANGES (Lakebase diff)" block consumed by
+                       prepare-commit-msg hook, GH Actions PR comment, and
+                       the extension's commit-detail view.
+  --pretty             Pretty-print JSON output (no effect on markdown)
 
 Examples:
   lakebase-schema-diff --instance proj-abc --branch br-feature
   lakebase-schema-diff --instance proj-abc --branch br-feature --against br-staging --pretty
+  lakebase-schema-diff --instance proj-abc --branch br-feature --format markdown
 `;
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -497,15 +549,27 @@ async function main() {
     process.stderr.write("Error: --branch is required.\n");
     return 2;
   }
+  const format = args.format ?? "json";
+  if (format !== "json" && format !== "markdown") {
+    process.stderr.write(
+      `Error: --format must be "json" or "markdown" (got "${format}")
+`
+    );
+    return 2;
+  }
   const result = await getSchemaDiff({
     instance: args.instance,
     branch: args.branch,
     comparisonBranch: args.comparisonBranch,
     database: args.database
   });
-  process.stdout.write(
-    args.pretty ? JSON.stringify(result, null, 2) + "\n" : JSON.stringify(result) + "\n"
-  );
+  if (format === "markdown") {
+    process.stdout.write(formatSchemaDiffAsMarkdown(result));
+  } else {
+    process.stdout.write(
+      args.pretty ? JSON.stringify(result, null, 2) + "\n" : JSON.stringify(result) + "\n"
+    );
+  }
   return result.error ? 1 : 0;
 }
 main().then(

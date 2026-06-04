@@ -33,24 +33,34 @@ describe("scaffold output contract: alembic env.py", () => {
 });
 
 describe("scaffold output contract: connect-main-branch.sh", () => {
-  it("resolves the Lakebase default branch via leaf (.name | split | last), not UID", () => {
-    // The Lakebase API expects the branch LEAF (e.g. "production") in
-    // path-shaped fields, not the opaque UID (e.g. "br-..."). Using the
-    // UID produces "could not get endpoint host" 404s + duplicate
-    // endpoint creation attempts. The fix mirrors the TS substrate's
-    // resolveBranchId (scripts/lakebase/branch-utils.ts).
+  it("delegates to the kit's lakebase-branch sync-env CLI (no inline substrate logic)", () => {
+    // FEIP-7494: scaffolded shells that previously duplicated substrate
+    // logic now thin-wrap the kit's TS bins. connect-main-branch.sh
+    // must invoke lakebase-branch sync-env --branch main; the leaf
+    // resolution lives in the TS sync-env handler so the shell cannot
+    // drift from the substrate. The bug class "UID where leaf is needed"
+    // becomes structurally impossible because the shell no longer
+    // constructs paths at all.
     const sh = readTemplate("common/scripts/connect-main-branch.sh");
-    // Must contain the leaf-extraction pattern.
-    expect(sh).toMatch(/\.name\s*\|\s*split\(["']\/["']\)\s*\|\s*last/);
-    // And the resolved value must NOT carry a UID-suggesting suffix.
-    expect(sh).not.toMatch(/\bDEFAULT_BRANCH_UID\b/);
+    expect(sh).toMatch(/lakebase-branch[^\n]*sync-env[^\n]*--branch[^\n]*main/);
   });
 
-  it("constructs branch paths using the resolved leaf variable", () => {
+  it("does NOT construct Lakebase API paths or shell out to `databricks postgres` directly", () => {
     const sh = readTemplate("common/scripts/connect-main-branch.sh");
-    // The variable holding the resolved default branch is interpolated
-    // into the path. After the fix it's *_LEAF; any other suffix is
-    // suspect.
-    expect(sh).toMatch(/branches\/\$\{?DEFAULT_BRANCH_LEAF\}?/);
+    expect(sh).not.toMatch(/databricks\s+postgres/);
+    expect(sh).not.toMatch(/projects\/[^/]*\/branches\//);
+  });
+});
+
+describe("scaffold output contract: refresh-token.sh", () => {
+  it("delegates to lakebase-branch sync-env (no inline credential mint)", () => {
+    const sh = readTemplate("common/scripts/refresh-token.sh");
+    expect(sh).toMatch(/lakebase-branch[^\n]*sync-env/);
+  });
+
+  it("does NOT shell out to `databricks postgres` directly", () => {
+    const sh = readTemplate("common/scripts/refresh-token.sh");
+    expect(sh).not.toMatch(/databricks\s+postgres/);
+    expect(sh).not.toMatch(/generate-database-credential/);
   });
 });

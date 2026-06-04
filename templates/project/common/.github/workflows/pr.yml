@@ -576,15 +576,36 @@ jobs:
             [ "$port" = "$host" ] && port=5432
             echo "$host|$port|$db"
           }
-          # Schema diff from prod + CI schema SQL (format-schema-diff.sh), or fallback to migration version comparison
-          if [ -n "$PRODUCTION_DATASOURCE_URL" ] && command -v pg_dump >/dev/null 2>&1; then
+          # Schema diff: substrate-only via lakebase-schema-diff --format markdown.
+          # The TS substrate queries information_schema directly on both Lakebase
+          # branches (target = CI ci-pr-N, parent = PR_BASE_REF), so no pg_dump
+          # or format-schema-diff.sh is needed. The pg_dump preamble below is
+          # retained for fallback parity with the pre-FEIP-7494 workflow but is
+          # only used when the substrate call fails for any reason.
+          if [ -n "$PRODUCTION_DATASOURCE_URL" ] && [ -n "$LAKEBASE_BRANCH_NAME" ]; then
+            echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
+            echo "" >> "$MD"
+            if ! npx --yes --package=@databricks-solutions/lakebase-app-dev-kit@{{LAKEBASE_KIT_VERSION}} \
+                 lakebase-schema-diff \
+                 --instance "$LAKEBASE_PROJECT_ID" \
+                 --branch "$LAKEBASE_BRANCH_NAME" \
+                 --against "$PR_BASE_REF" \
+                 --format markdown >> "$MD" 2>>"$MD.err"; then
+              echo "" >> "$MD"
+              echo "Schema diff via substrate failed:" >> "$MD"
+              [ -s "$MD.err" ] && sed 's/^/  > /' "$MD.err" >> "$MD"
+            fi
+            rm -f "$MD.err"
+          elif [ -n "$PRODUCTION_DATASOURCE_URL" ] && command -v pg_dump >/dev/null 2>&1; then
+            # Legacy fallback (kept for runners that pre-date FEIP-7494): pg_dump
+            # both branches into .tmp/*.sql for downstream comparison. After
+            # FEIP-7494 lands this path is dead; remove in a future PR.
             PROD_HP=$(parse_jdbc "$PRODUCTION_DATASOURCE_URL")
             CI_HP=$(parse_jdbc "$CI_JDBC_URL")
             PROD_HOST=$(echo "$PROD_HP" | cut -d'|' -f1); PROD_PORT=$(echo "$PROD_HP" | cut -d'|' -f2); PROD_DB=$(echo "$PROD_HP" | cut -d'|' -f3)
             CI_HOST=$(echo "$CI_HP" | cut -d'|' -f1); CI_PORT=$(echo "$CI_HP" | cut -d'|' -f2); CI_DB=$(echo "$CI_HP" | cut -d'|' -f3)
             export PGSSLMODE=require
             mkdir -p .tmp
-            # Unsorted schema so formatter can parse CREATE TABLE ... ( columns ); blocks (same as scripts/prepare-schema-diff.sh)
             PROD_ERR=$(mktemp); CI_ERR=$(mktemp); trap "rm -f '$PROD_ERR' '$CI_ERR'" EXIT
             PGPASSWORD="${PRODUCTION_DATASOURCE_PASSWORD:-}" pg_dump -h "$PROD_HOST" -p "$PROD_PORT" -U "${PRODUCTION_DATASOURCE_USERNAME:-}" -d "$PROD_DB" --schema-only --no-owner --no-privileges 2>"$PROD_ERR" | grep -v '^--' | grep -v '^$' > .tmp/prod-schema.sql || true
             PGPASSWORD="${CI_DB_PASSWORD:-}" pg_dump -h "$CI_HOST" -p "$CI_PORT" -U "${CI_DB_USERNAME:-}" -d "$CI_DB" --schema-only --no-owner --no-privileges 2>"$CI_ERR" | grep -v '^--' | grep -v '^$' > .tmp/ci-schema.sql || true
@@ -592,7 +613,13 @@ jobs:
               trap - EXIT; rm -f "$PROD_ERR" "$CI_ERR"
               echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
               echo "" >> "$MD"
-              bash scripts/format-schema-diff.sh .tmp/prod-schema.sql .tmp/ci-schema.sql >> "$MD" 2>/dev/null || true
+              # Legacy formatter was templates/.../scripts/format-schema-diff.sh (deleted in
+              # FEIP-7494). Reach into kit dist if available; otherwise emit a table.
+              if [ -x ./node_modules/.bin/lakebase-schema-diff ]; then
+                ./node_modules/.bin/lakebase-schema-diff --instance "$LAKEBASE_PROJECT_ID" --branch "$LAKEBASE_BRANCH_NAME" --against "$PR_BASE_REF" --format markdown >> "$MD" 2>/dev/null || true
+              else
+                echo "# (pg_dump captured to .tmp/, but no formatter available; install kit)" >> "$MD"
+              fi
             else
               echo "# pg_dump failed or empty; falling back to migration version comparison." >> "$MD"
               if [ ! -s .tmp/prod-schema.sql ] && [ -s "$PROD_ERR" ]; then echo "# Production: $(head -1 "$PROD_ERR" 2>/dev/null)" >> "$MD"; fi

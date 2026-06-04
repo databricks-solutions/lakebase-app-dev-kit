@@ -3887,6 +3887,18 @@ async function deleteBranch(args) {
   if (!fullPath) {
     throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
   }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
   await dbcli6(["postgres", "delete-branch", fullPath], args.host);
 }
 async function dbcli6(args, host) {
@@ -4195,7 +4207,21 @@ async function syncEnvToCurrentBranch(args) {
     );
   }
   const rawBranch = args.branch ?? gitCurrentBranch(args.cwd);
-  const sanitized = sanitizeBranchName(rawBranch);
+  const trunkAlias = args.trunkAlias?.trim();
+  const isTrunk = trunkAlias && rawBranch === trunkAlias || !trunkAlias && (rawBranch === "main" || rawBranch === "master");
+  let sanitized;
+  if (isTrunk) {
+    const lakebaseBranches = await listBranches({ instance });
+    const def = lakebaseBranches.find((b) => b.isDefault);
+    if (!def) {
+      throw new Error(
+        `Could not resolve default Lakebase branch for instance "${instance}"`
+      );
+    }
+    sanitized = def.name.split("/branches/").pop() ?? def.uid;
+  } else {
+    sanitized = sanitizeBranchName(rawBranch);
+  }
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const ep = await getEndpoint({ instance, branch: sanitized });
   if (!ep?.host) {
