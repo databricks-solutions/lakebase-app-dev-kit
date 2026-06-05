@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/tdd/feature-status.ts
-import { existsSync as existsSync8, readFileSync as readFileSync8 } from "fs";
+import { existsSync as existsSync9, readFileSync as readFileSync9 } from "fs";
 import { join as join8 } from "path";
 
 // scripts/tdd/test-list.ts
@@ -28,7 +28,7 @@ function findFeatureDir(tddDir, featureId) {
 }
 
 // scripts/tdd/design-spec-gate.ts
-import { appendFileSync, existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync4, mkdirSync as mkdirSync4 } from "fs";
+import { appendFileSync, existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4 } from "fs";
 import { dirname as dirname3, join as join5 } from "path";
 
 // scripts/lakebase/get-connection.ts
@@ -86,7 +86,7 @@ var KIT_REGISTRIES = {
 var execFileP = promisify(execFile);
 
 // scripts/tdd/experiment.ts
-import { existsSync as existsSync4, mkdirSync as mkdirSync3, readdirSync as readdirSync2, readFileSync as readFileSync4, statSync as statSync2, writeFileSync as writeFileSync3 } from "fs";
+import { existsSync as existsSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2, writeFileSync as writeFileSync4 } from "fs";
 import { join as join4 } from "path";
 
 // scripts/lakebase/branch-create.ts
@@ -102,7 +102,7 @@ var execFileP2 = promisify2(execFile2);
 var execFileP3 = promisify3(execFile3);
 
 // scripts/lakebase/paired-branch.ts
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 import * as path2 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
@@ -118,6 +118,12 @@ import { execFileSync as execFileSync2 } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
+
+// scripts/util/exec.ts
+import * as cp from "child_process";
+
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {
   feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
@@ -129,17 +135,17 @@ var CONVENTION_TIER_DEFAULTS = {
 // scripts/tdd/experiment.ts
 function listExperiments(tddDir, featureId) {
   const root = join4(tddDir, "experiments", featureId);
-  if (!existsSync4(root)) return [];
+  if (!existsSync5(root)) return [];
   const out = [];
   for (const slug of readdirSync2(root)) {
     const dir = join4(root, slug);
     if (!statSync2(dir).isDirectory()) continue;
     const branchFile = join4(dir, "branch.txt");
-    if (!existsSync4(branchFile)) continue;
+    if (!existsSync5(branchFile)) continue;
     out.push({
       feature_id: featureId,
       experiment_slug: slug,
-      branch_id: readFileSync4(branchFile, "utf8").trim(),
+      branch_id: readFileSync5(branchFile, "utf8").trim(),
       created_at: statSync2(branchFile).birthtime.toISOString(),
       dir
     });
@@ -148,28 +154,28 @@ function listExperiments(tddDir, featureId) {
 }
 function readOutcomes(tddDir, featureId, slug) {
   const file = join4(tddDir, "experiments", featureId, slug, "outcomes.json");
-  if (!existsSync4(file)) return null;
-  return JSON.parse(readFileSync4(file, "utf8"));
+  if (!existsSync5(file)) return null;
+  return JSON.parse(readFileSync5(file, "utf8"));
 }
 
 // scripts/tdd/design-spec-gate.ts
 function readPlan(tddDir, featureId) {
   const planPath = join5(tddDir, "features", `${featureId}`, "plan.json");
-  if (!existsSync5(planPath)) return null;
-  return JSON.parse(readFileSync5(planPath, "utf8"));
+  if (!existsSync6(planPath)) return null;
+  return JSON.parse(readFileSync6(planPath, "utf8"));
 }
 
 // scripts/tdd/smells.ts
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5 } from "fs";
+import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "fs";
 import { join as join6 } from "path";
 function readSmellsLog(tddDir) {
   const file = join6(tddDir, "smells.json");
-  if (!existsSync6(file)) return { detected: [] };
-  return JSON.parse(readFileSync6(file, "utf8"));
+  if (!existsSync7(file)) return { detected: [] };
+  return JSON.parse(readFileSync7(file, "utf8"));
 }
 
 // scripts/tdd/gates.ts
-import { existsSync as existsSync7, readFileSync as readFileSync7, readdirSync as readdirSync3, renameSync, unlinkSync, writeFileSync as writeFileSync6 } from "fs";
+import { existsSync as existsSync8, readFileSync as readFileSync8, readdirSync as readdirSync3, renameSync, unlinkSync, writeFileSync as writeFileSync7 } from "fs";
 import { join as join7 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
@@ -189,10 +195,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync7(file)) {
+  if (!existsSync8(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync7(file, "utf8");
+  const raw = readFileSync8(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -207,7 +213,7 @@ function gatesFilePath(tddDir, featureId) {
 }
 function findFeatureDir2(tddDir, featureId) {
   const featuresDir = join7(tddDir, "features");
-  if (!existsSync7(featuresDir)) {
+  if (!existsSync8(featuresDir)) {
     throw new Error(`${featuresDir} does not exist`);
   }
   const candidates = readdirSync3(featuresDir).filter((d) => d.startsWith(featureId));
@@ -271,8 +277,8 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path3) {
-  if (!existsSync8(path3)) return null;
-  return JSON.parse(readFileSync8(path3, "utf8"));
+  if (!existsSync9(path3)) return null;
+  return JSON.parse(readFileSync9(path3, "utf8"));
 }
 function timelineCycleCount(experimentDir) {
   const timeline = readJsonIfExists(
@@ -304,8 +310,8 @@ function summarizeTestList(tddDir, featureId) {
 }
 function readSelectionLogRecent(tddDir, limit) {
   const path3 = join8(tddDir, "selection-log.md");
-  if (!existsSync8(path3)) return [];
-  const text = readFileSync8(path3, "utf8");
+  if (!existsSync9(path3)) return [];
+  const text = readFileSync9(path3, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;

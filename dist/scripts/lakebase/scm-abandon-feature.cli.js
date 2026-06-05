@@ -25,7 +25,7 @@ function isCliEntry(importMetaUrl) {
 }
 
 // scripts/lakebase/paired-branch.ts
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 import * as path2 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
@@ -261,6 +261,31 @@ import { Client } from "pg";
 import * as fs from "fs";
 import * as path from "path";
 
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
+
+// scripts/util/exec.ts
+import * as cp from "child_process";
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return execFileSync3("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -359,28 +384,6 @@ async function deletePairedBranch(args) {
   return { lakebaseDeleted, gitLocalDeleted, gitRemoteDeleted, warnings };
 }
 
-// scripts/util/exec.ts
-import * as cp from "child_process";
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
-  });
-}
-
 // scripts/git/inspect.ts
 async function getCurrentBranch(args) {
   try {
@@ -404,7 +407,7 @@ async function isDirty(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-import * as fs3 from "fs";
+import * as fs4 from "fs";
 import * as path3 from "path";
 var SCM_STATES = [
   "scaffold-complete",
@@ -423,8 +426,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs3.existsSync(p)) return null;
-  const raw = fs3.readFileSync(p, "utf8");
+  if (!fs4.existsSync(p)) return null;
+  const raw = fs4.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -453,13 +456,13 @@ function writeWorkflowState(projectDir, state) {
 ${summary}`);
   }
   const dir = path3.join(projectDir, ".lakebase");
-  fs3.mkdirSync(dir, { recursive: true });
+  fs4.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs3.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs4.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs3.renameSync(tmp, target);
+  fs4.renameSync(tmp, target);
 }
 function validateWorkflowState(value) {
   const errors = [];

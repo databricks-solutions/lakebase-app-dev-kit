@@ -125,7 +125,7 @@ var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.exe
 var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
 
 // scripts/lakebase/paired-branch.ts
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -140,6 +140,12 @@ var import_node_child_process6 = require("child_process");
 // scripts/lakebase/env-file.ts
 var fs = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+var fs2 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {

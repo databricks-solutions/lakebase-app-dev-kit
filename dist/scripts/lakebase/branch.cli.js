@@ -558,7 +558,7 @@ stderr: ${stderr.trim()}` : ""}`
 }
 
 // scripts/lakebase/paired-branch.ts
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 import * as path2 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
@@ -726,6 +726,87 @@ ${block}` : block;
   fs.writeFileSync(args.envPath, content);
 }
 
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
+
+// scripts/util/exec.ts
+import * as cp from "child_process";
+function exec2(command, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs2.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return execFileSync3("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -788,8 +869,8 @@ function gitDeleteRemoteBranch(cwd, remote, branch) {
   });
 }
 function readEnvVar(envPath, key) {
-  if (!fs2.existsSync(envPath)) return void 0;
-  const content = fs2.readFileSync(envPath, "utf-8");
+  if (!fs3.existsSync(envPath)) return void 0;
+  const content = fs3.readFileSync(envPath, "utf-8");
   const match = content.match(new RegExp(`^${key}=(.*)$`, "m"));
   if (!match) return void 0;
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -852,14 +933,16 @@ async function createPairedBranch(args) {
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn(ep.host, database, email, token);
+        const envPath = path2.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path2.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host
         });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
         envSynced = true;
       }
     } catch (err) {
@@ -967,6 +1050,7 @@ async function syncEnvToCurrentBranch(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return { branchId: sanitized, endpointHost: ep.host, databaseUrl: dsn };
 }
 async function checkoutPaired(args) {
@@ -1059,6 +1143,7 @@ async function checkoutPaired(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return {
     branchId,
     mode,

@@ -3888,7 +3888,7 @@ var import_fs2 = require("fs");
 var import_path2 = require("path");
 
 // scripts/lakebase/paired-branch.ts
-var fs21 = __toESM(require("fs"), 1);
+var fs22 = __toESM(require("fs"), 1);
 var path21 = __toESM(require("path"), 1);
 var import_node_child_process12 = require("child_process");
 
@@ -4015,6 +4015,63 @@ async function getCredential(args) {
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }
 
+// scripts/lakebase/databricks-profile.ts
+var fs21 = __toESM(require("fs"), 1);
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs21.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs21.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs21.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return (0, import_node_child_process12.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -4077,8 +4134,8 @@ function gitDeleteRemoteBranch(cwd, remote, branch) {
   });
 }
 function readEnvVar(envPath, key) {
-  if (!fs21.existsSync(envPath)) return void 0;
-  const content = fs21.readFileSync(envPath, "utf-8");
+  if (!fs22.existsSync(envPath)) return void 0;
+  const content = fs22.readFileSync(envPath, "utf-8");
   const match = content.match(new RegExp(`^${key}=(.*)$`, "m"));
   if (!match) return void 0;
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -4141,14 +4198,16 @@ async function createPairedBranch(args) {
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn4(ep.host, database, email, token);
+        const envPath = path21.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path21.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host
         });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
         envSynced = true;
       }
     } catch (err) {
@@ -4256,6 +4315,7 @@ async function syncEnvToCurrentBranch(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return { branchId: sanitized, endpointHost: ep.host, databaseUrl: dsn };
 }
 async function checkoutPaired(args) {
@@ -4348,6 +4408,7 @@ async function checkoutPaired(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return {
     branchId,
     mode,
@@ -4914,7 +4975,7 @@ async function mergePairedPullRequest(args) {
 }
 
 // scripts/lakebase/doctor.ts
-var fs23 = __toESM(require("fs"), 1);
+var fs24 = __toESM(require("fs"), 1);
 var path23 = __toESM(require("path"), 1);
 
 // scripts/lakebase/databricks-host.ts
@@ -4945,7 +5006,7 @@ function escapeShellArg(s) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-var fs22 = __toESM(require("fs"), 1);
+var fs23 = __toESM(require("fs"), 1);
 var path22 = __toESM(require("path"), 1);
 function findKitTemplatesDir(start) {
   let dir = start;
@@ -4958,7 +5019,7 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs22.existsSync(candidate)) return candidate;
+    if (fs23.existsSync(candidate)) return candidate;
     const parent = path22.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -4997,20 +5058,20 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs22.existsSync(kitWorkflowsDir) ? fs22.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs22.existsSync(projectWorkflowsDir) ? fs22.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs23.existsSync(kitWorkflowsDir) ? fs23.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs23.existsSync(projectWorkflowsDir) ? fs23.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path22.join(projectWorkflowsDir, name);
     const templatePath = path22.join(kitWorkflowsDir, name);
-    if (!fs22.existsSync(projectPath2)) {
+    if (!fs23.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs22.readFileSync(projectPath2, "utf8");
-    const templateContent = fs22.readFileSync(templatePath, "utf8");
+    const projectContent = fs23.readFileSync(projectPath2, "utf8");
+    const templateContent = fs23.readFileSync(templatePath, "utf8");
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -5042,9 +5103,9 @@ function detectWorkflowDrift(args) {
 // scripts/lakebase/doctor.ts
 function readEnvFile(projectDir) {
   const envPath = path23.join(projectDir, ".env");
-  if (!fs23.existsSync(envPath)) return {};
+  if (!fs24.existsSync(envPath)) return {};
   const out = {};
-  for (const line of fs23.readFileSync(envPath, "utf8").split("\n")) {
+  for (const line of fs24.readFileSync(envPath, "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!m) continue;
     let val = m[2];
@@ -5171,6 +5232,44 @@ function checkEnv(projectDir) {
     status: "ok",
     message: `.env present with required keys (LAKEBASE_PROJECT_ID=${env.LAKEBASE_PROJECT_ID})`,
     detail: { keys: Object.keys(env).length, projectId: env.LAKEBASE_PROJECT_ID }
+  };
+}
+async function checkConfigProfile(env) {
+  const host = env.DATABRICKS_HOST;
+  if (env.DATABRICKS_CONFIG_PROFILE) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: `CLI profile pinned: ${env.DATABRICKS_CONFIG_PROFILE}`,
+      detail: { profile: env.DATABRICKS_CONFIG_PROFILE }
+    };
+  }
+  if (!host) {
+    return {
+      name: "config-profile",
+      status: "skip",
+      message: "Skipped: no DATABRICKS_HOST in .env"
+    };
+  }
+  let resolved;
+  try {
+    resolved = await resolveProfileForHost(host);
+  } catch {
+  }
+  if (!resolved) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: "No profile pin needed (no unique CLI profile matches this host)",
+      detail: { host }
+    };
+  }
+  return {
+    name: "config-profile",
+    status: "warn",
+    message: `.env has no DATABRICKS_CONFIG_PROFILE; host maps to valid profile "${resolved}"`,
+    detail: { host, resolvedProfile: resolved },
+    hint: `Run \`lakebase-doctor --fix\` (or add DATABRICKS_CONFIG_PROFILE=${resolved} to .env) so the hooks' auth preflight resolves the cached token.`
   };
 }
 async function checkLakebaseProject(projectId, host) {
@@ -5329,6 +5428,7 @@ async function runDoctor(args = {}) {
   }
   const env = checkEnv(projectDir);
   const envVars = readEnvFile(projectDir);
+  const configProfile = await checkConfigProfile(envVars);
   const lakebaseProject = await checkLakebaseProject(
     envVars.LAKEBASE_PROJECT_ID ?? "",
     host
@@ -5342,6 +5442,7 @@ async function runDoctor(args = {}) {
     auth,
     identity,
     env,
+    configProfile,
     lakebaseProject,
     gitRemote,
     language,

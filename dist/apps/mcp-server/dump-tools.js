@@ -3816,7 +3816,7 @@ async function schemaMigrationStatus(args) {
 }
 
 // scripts/tdd/feature-status.ts
-import { existsSync as existsSync25, readFileSync as readFileSync15 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync16 } from "fs";
 import { join as join27 } from "path";
 
 // scripts/tdd/test-list.ts
@@ -3843,15 +3843,15 @@ function findFeatureDir(tddDir, featureId) {
 }
 
 // scripts/tdd/design-spec-gate.ts
-import { appendFileSync, existsSync as existsSync22, readFileSync as readFileSync12, writeFileSync as writeFileSync11, mkdirSync as mkdirSync11 } from "fs";
+import { appendFileSync, existsSync as existsSync23, readFileSync as readFileSync13, writeFileSync as writeFileSync12, mkdirSync as mkdirSync11 } from "fs";
 import { dirname as dirname7, join as join24 } from "path";
 
 // scripts/tdd/experiment.ts
-import { existsSync as existsSync21, mkdirSync as mkdirSync10, readdirSync as readdirSync10, readFileSync as readFileSync11, statSync as statSync5, writeFileSync as writeFileSync10 } from "fs";
+import { existsSync as existsSync22, mkdirSync as mkdirSync10, readdirSync as readdirSync10, readFileSync as readFileSync12, statSync as statSync5, writeFileSync as writeFileSync11 } from "fs";
 import { join as join23 } from "path";
 
 // scripts/lakebase/paired-branch.ts
-import * as fs21 from "fs";
+import * as fs22 from "fs";
 import * as path22 from "path";
 import { execFileSync as execFileSync6 } from "child_process";
 
@@ -3978,6 +3978,63 @@ async function getCredential(args) {
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }
 
+// scripts/lakebase/databricks-profile.ts
+import * as fs21 from "fs";
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs21.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs21.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs21.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return execFileSync6("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -4040,8 +4097,8 @@ function gitDeleteRemoteBranch(cwd, remote, branch) {
   });
 }
 function readEnvVar(envPath, key) {
-  if (!fs21.existsSync(envPath)) return void 0;
-  const content = fs21.readFileSync(envPath, "utf-8");
+  if (!fs22.existsSync(envPath)) return void 0;
+  const content = fs22.readFileSync(envPath, "utf-8");
   const match = content.match(new RegExp(`^${key}=(.*)$`, "m"));
   if (!match) return void 0;
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -4104,14 +4161,16 @@ async function createPairedBranch(args) {
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn4(ep.host, database, email, token);
+        const envPath = path22.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path22.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host
         });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
         envSynced = true;
       }
     } catch (err) {
@@ -4219,6 +4278,7 @@ async function syncEnvToCurrentBranch(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return { branchId: sanitized, endpointHost: ep.host, databaseUrl: dsn };
 }
 async function checkoutPaired(args) {
@@ -4311,6 +4371,7 @@ async function checkoutPaired(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return {
     branchId,
     mode,
@@ -4385,17 +4446,17 @@ async function createPerfBranch(args) {
 // scripts/tdd/experiment.ts
 function listExperiments(tddDir, featureId) {
   const root = join23(tddDir, "experiments", featureId);
-  if (!existsSync21(root)) return [];
+  if (!existsSync22(root)) return [];
   const out = [];
   for (const slug of readdirSync10(root)) {
     const dir = join23(root, slug);
     if (!statSync5(dir).isDirectory()) continue;
     const branchFile = join23(dir, "branch.txt");
-    if (!existsSync21(branchFile)) continue;
+    if (!existsSync22(branchFile)) continue;
     out.push({
       feature_id: featureId,
       experiment_slug: slug,
-      branch_id: readFileSync11(branchFile, "utf8").trim(),
+      branch_id: readFileSync12(branchFile, "utf8").trim(),
       created_at: statSync5(branchFile).birthtime.toISOString(),
       dir
     });
@@ -4404,28 +4465,28 @@ function listExperiments(tddDir, featureId) {
 }
 function readOutcomes(tddDir, featureId, slug) {
   const file = join23(tddDir, "experiments", featureId, slug, "outcomes.json");
-  if (!existsSync21(file)) return null;
-  return JSON.parse(readFileSync11(file, "utf8"));
+  if (!existsSync22(file)) return null;
+  return JSON.parse(readFileSync12(file, "utf8"));
 }
 
 // scripts/tdd/design-spec-gate.ts
 function readPlan(tddDir, featureId) {
   const planPath = join24(tddDir, "features", `${featureId}`, "plan.json");
-  if (!existsSync22(planPath)) return null;
-  return JSON.parse(readFileSync12(planPath, "utf8"));
+  if (!existsSync23(planPath)) return null;
+  return JSON.parse(readFileSync13(planPath, "utf8"));
 }
 
 // scripts/tdd/smells.ts
-import { existsSync as existsSync23, readFileSync as readFileSync13, writeFileSync as writeFileSync12 } from "fs";
+import { existsSync as existsSync24, readFileSync as readFileSync14, writeFileSync as writeFileSync13 } from "fs";
 import { join as join25 } from "path";
 function readSmellsLog(tddDir) {
   const file = join25(tddDir, "smells.json");
-  if (!existsSync23(file)) return { detected: [] };
-  return JSON.parse(readFileSync13(file, "utf8"));
+  if (!existsSync24(file)) return { detected: [] };
+  return JSON.parse(readFileSync14(file, "utf8"));
 }
 
 // scripts/tdd/gates.ts
-import { existsSync as existsSync24, readFileSync as readFileSync14, readdirSync as readdirSync11, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync13 } from "fs";
+import { existsSync as existsSync25, readFileSync as readFileSync15, readdirSync as readdirSync11, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync14 } from "fs";
 import { join as join26 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
@@ -4445,10 +4506,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync24(file)) {
+  if (!existsSync25(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync14(file, "utf8");
+  const raw = readFileSync15(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -4463,7 +4524,7 @@ function gatesFilePath(tddDir, featureId) {
 }
 function findFeatureDir2(tddDir, featureId) {
   const featuresDir = join26(tddDir, "features");
-  if (!existsSync24(featuresDir)) {
+  if (!existsSync25(featuresDir)) {
     throw new Error(`${featuresDir} does not exist`);
   }
   const candidates = readdirSync11(featuresDir).filter((d) => d.startsWith(featureId));
@@ -4527,8 +4588,8 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path25) {
-  if (!existsSync25(path25)) return null;
-  return JSON.parse(readFileSync15(path25, "utf8"));
+  if (!existsSync26(path25)) return null;
+  return JSON.parse(readFileSync16(path25, "utf8"));
 }
 function timelineCycleCount(experimentDir) {
   const timeline = readJsonIfExists(
@@ -4560,8 +4621,8 @@ function summarizeTestList(tddDir, featureId) {
 }
 function readSelectionLogRecent(tddDir, limit) {
   const path25 = join27(tddDir, "selection-log.md");
-  if (!existsSync25(path25)) return [];
-  const text = readFileSync15(path25, "utf8");
+  if (!existsSync26(path25)) return [];
+  const text = readFileSync16(path25, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -4877,7 +4938,7 @@ async function mergePairedPullRequest(args) {
 }
 
 // scripts/lakebase/doctor.ts
-import * as fs23 from "fs";
+import * as fs24 from "fs";
 import * as path24 from "path";
 
 // scripts/lakebase/databricks-host.ts
@@ -4908,7 +4969,7 @@ function escapeShellArg(s) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-import * as fs22 from "fs";
+import * as fs23 from "fs";
 import * as path23 from "path";
 function findKitTemplatesDir(start) {
   let dir = start;
@@ -4921,7 +4982,7 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs22.existsSync(candidate)) return candidate;
+    if (fs23.existsSync(candidate)) return candidate;
     const parent = path23.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -4960,20 +5021,20 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs22.existsSync(kitWorkflowsDir) ? fs22.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs22.existsSync(projectWorkflowsDir) ? fs22.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs23.existsSync(kitWorkflowsDir) ? fs23.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs23.existsSync(projectWorkflowsDir) ? fs23.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path23.join(projectWorkflowsDir, name);
     const templatePath = path23.join(kitWorkflowsDir, name);
-    if (!fs22.existsSync(projectPath2)) {
+    if (!fs23.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs22.readFileSync(projectPath2, "utf8");
-    const templateContent = fs22.readFileSync(templatePath, "utf8");
+    const projectContent = fs23.readFileSync(projectPath2, "utf8");
+    const templateContent = fs23.readFileSync(templatePath, "utf8");
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -5005,9 +5066,9 @@ function detectWorkflowDrift(args) {
 // scripts/lakebase/doctor.ts
 function readEnvFile(projectDir) {
   const envPath = path24.join(projectDir, ".env");
-  if (!fs23.existsSync(envPath)) return {};
+  if (!fs24.existsSync(envPath)) return {};
   const out = {};
-  for (const line of fs23.readFileSync(envPath, "utf8").split("\n")) {
+  for (const line of fs24.readFileSync(envPath, "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!m) continue;
     let val = m[2];
@@ -5134,6 +5195,44 @@ function checkEnv(projectDir) {
     status: "ok",
     message: `.env present with required keys (LAKEBASE_PROJECT_ID=${env.LAKEBASE_PROJECT_ID})`,
     detail: { keys: Object.keys(env).length, projectId: env.LAKEBASE_PROJECT_ID }
+  };
+}
+async function checkConfigProfile(env) {
+  const host = env.DATABRICKS_HOST;
+  if (env.DATABRICKS_CONFIG_PROFILE) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: `CLI profile pinned: ${env.DATABRICKS_CONFIG_PROFILE}`,
+      detail: { profile: env.DATABRICKS_CONFIG_PROFILE }
+    };
+  }
+  if (!host) {
+    return {
+      name: "config-profile",
+      status: "skip",
+      message: "Skipped: no DATABRICKS_HOST in .env"
+    };
+  }
+  let resolved;
+  try {
+    resolved = await resolveProfileForHost(host);
+  } catch {
+  }
+  if (!resolved) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: "No profile pin needed (no unique CLI profile matches this host)",
+      detail: { host }
+    };
+  }
+  return {
+    name: "config-profile",
+    status: "warn",
+    message: `.env has no DATABRICKS_CONFIG_PROFILE; host maps to valid profile "${resolved}"`,
+    detail: { host, resolvedProfile: resolved },
+    hint: `Run \`lakebase-doctor --fix\` (or add DATABRICKS_CONFIG_PROFILE=${resolved} to .env) so the hooks' auth preflight resolves the cached token.`
   };
 }
 async function checkLakebaseProject(projectId, host) {
@@ -5292,6 +5391,7 @@ async function runDoctor(args = {}) {
   }
   const env = checkEnv(projectDir);
   const envVars = readEnvFile(projectDir);
+  const configProfile = await checkConfigProfile(envVars);
   const lakebaseProject = await checkLakebaseProject(
     envVars.LAKEBASE_PROJECT_ID ?? "",
     host
@@ -5305,6 +5405,7 @@ async function runDoctor(args = {}) {
     auth,
     identity,
     env,
+    configProfile,
     lakebaseProject,
     gitRemote,
     language,

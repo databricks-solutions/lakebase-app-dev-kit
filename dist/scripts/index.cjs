@@ -144,6 +144,7 @@ __export(scripts_exports, {
   ensureCachedArchive: () => ensureCachedArchive,
   ensureEndpoint: () => ensureEndpoint,
   ensureLakebaseSecretAuth: () => ensureLakebaseSecretAuth,
+  ensureProfilePinned: () => ensureProfilePinned,
   ensureSchemaAndVolume: () => ensureSchemaAndVolume,
   exec: () => exec2,
   extractPullNumber: () => extractPullNumber,
@@ -235,6 +236,7 @@ __export(scripts_exports, {
   mergePullRequest: () => mergePullRequest,
   minLakebaseTtl: () => minLakebaseTtl,
   mintCredential: () => mintCredential,
+  normalizeHost: () => normalizeHost,
   parseHostFromAuthDescribe: () => parseHostFromAuthDescribe,
   parseLakebaseTtl: () => parseLakebaseTtl,
   parseOwnerRepo: () => parseOwnerRepo,
@@ -277,6 +279,7 @@ __export(scripts_exports, {
   resolveLatestLtsJavaVersion: () => resolveLatestLtsJavaVersion,
   resolveNearestParent: () => resolveNearestParent,
   resolveParentBranch: () => resolveParentBranch,
+  resolveProfileForHost: () => resolveProfileForHost,
   revert: () => revert,
   rollbackDeploy: () => rollbackDeploy,
   rollbackSchemaMigration: () => rollbackSchemaMigration,
@@ -291,6 +294,7 @@ __export(scripts_exports, {
   scaffoldAll: () => scaffoldAll,
   scaffoldStaticAll: () => scaffoldStaticAll,
   schemaMigrationStatus: () => schemaMigrationStatus,
+  selectProfileForHost: () => selectProfileForHost,
   setRepoSecret: () => setRepoSecret,
   setRepoSecrets: () => setRepoSecrets,
   setupRunner: () => setupRunner,
@@ -2777,7 +2781,7 @@ stderr: ${stderr.trim()}` : ""}`
 }
 
 // scripts/lakebase/paired-branch.ts
-var fs13 = __toESM(require("fs"), 1);
+var fs14 = __toESM(require("fs"), 1);
 var path12 = __toESM(require("path"), 1);
 var import_node_child_process8 = require("child_process");
 
@@ -3057,6 +3061,63 @@ ${block}` : block;
   fs12.writeFileSync(args.envPath, content);
 }
 
+// scripts/lakebase/databricks-profile.ts
+var fs13 = __toESM(require("fs"), 1);
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs13.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs13.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs13.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return (0, import_node_child_process8.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -3119,8 +3180,8 @@ function gitDeleteRemoteBranch(cwd, remote, branch) {
   });
 }
 function readEnvVar(envPath, key) {
-  if (!fs13.existsSync(envPath)) return void 0;
-  const content = fs13.readFileSync(envPath, "utf-8");
+  if (!fs14.existsSync(envPath)) return void 0;
+  const content = fs14.readFileSync(envPath, "utf-8");
   const match = content.match(new RegExp(`^${key}=(.*)$`, "m"));
   if (!match) return void 0;
   return match[1].trim().replace(/^["']|["']$/g, "");
@@ -3183,14 +3244,16 @@ async function createPairedBranch(args) {
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn(ep.host, database, email, token);
+        const envPath = path12.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path12.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host
         });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
         envSynced = true;
       }
     } catch (err) {
@@ -3298,6 +3361,7 @@ async function syncEnvToCurrentBranch(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return { branchId: sanitized, endpointHost: ep.host, databaseUrl: dsn };
 }
 async function checkoutPaired(args) {
@@ -3390,6 +3454,7 @@ async function checkoutPaired(args) {
     password: token,
     endpointHost: ep.host
   });
+  await ensureProfilePinned({ envPath }).catch(() => void 0);
   return {
     branchId,
     mode,
@@ -4358,25 +4423,25 @@ async function queryBranchTables(args) {
 }
 
 // scripts/lakebase/create-project.ts
-var fs17 = __toESM(require("fs"), 1);
+var fs18 = __toESM(require("fs"), 1);
 var path16 = __toESM(require("path"), 1);
 
 // scripts/lakebase/project-verify.ts
-var fs14 = __toESM(require("fs"), 1);
+var fs15 = __toESM(require("fs"), 1);
 var path13 = __toESM(require("path"), 1);
 function verifyHooks(projectDir) {
   const hooksDir = path13.join(projectDir, ".git", "hooks");
   return {
-    postCheckout: fs14.existsSync(path13.join(hooksDir, "post-checkout")),
-    prepareCommitMsg: fs14.existsSync(path13.join(hooksDir, "prepare-commit-msg")),
-    prePush: fs14.existsSync(path13.join(hooksDir, "pre-push"))
+    postCheckout: fs15.existsSync(path13.join(hooksDir, "post-checkout")),
+    prepareCommitMsg: fs15.existsSync(path13.join(hooksDir, "prepare-commit-msg")),
+    prePush: fs15.existsSync(path13.join(hooksDir, "pre-push"))
   };
 }
 function verifyWorkflows(projectDir) {
   const wfDir = path13.join(projectDir, ".github", "workflows");
   return {
-    pr: fs14.existsSync(path13.join(wfDir, "pr.yml")),
-    merge: fs14.existsSync(path13.join(wfDir, "merge.yml"))
+    pr: fs15.existsSync(path13.join(wfDir, "pr.yml")),
+    merge: fs15.existsSync(path13.join(wfDir, "merge.yml"))
   };
 }
 function verifyProject(projectDir) {
@@ -4442,7 +4507,7 @@ async function commitAndPush(args) {
 }
 
 // scripts/lakebase/runner-setup.ts
-var fs15 = __toESM(require("fs"), 1);
+var fs16 = __toESM(require("fs"), 1);
 var os = __toESM(require("os"), 1);
 var path14 = __toESM(require("path"), 1);
 var cp5 = __toESM(require("child_process"), 1);
@@ -4468,15 +4533,15 @@ function runnerName(projectName) {
 }
 async function ensureCachedArchive() {
   const dir = cacheDir();
-  fs15.mkdirSync(dir, { recursive: true });
+  fs16.mkdirSync(dir, { recursive: true });
   const cachedPath = path14.join(dir, RUNNER_ARCHIVE);
-  if (fs15.existsSync(cachedPath)) return cachedPath;
+  if (fs16.existsSync(cachedPath)) return cachedPath;
   const response = await fetch(RUNNER_URL);
   if (!response.ok) {
     throw new Error(`Failed to download runner: HTTP ${response.status}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
-  fs15.writeFileSync(cachedPath, buffer);
+  fs16.writeFileSync(cachedPath, buffer);
   return cachedPath;
 }
 async function resolveJavaHome() {
@@ -4487,8 +4552,8 @@ async function resolveJavaHome() {
 }
 function isRunning(projectName) {
   const pidFile = path14.join(runnerDir(projectName), ".pid");
-  if (!fs15.existsSync(pidFile)) return false;
-  const pid = parseInt(fs15.readFileSync(pidFile, "utf-8").trim(), 10);
+  if (!fs16.existsSync(pidFile)) return false;
+  const pid = parseInt(fs16.readFileSync(pidFile, "utf-8").trim(), 10);
   if (!pid) return false;
   try {
     process.kill(pid, 0);
@@ -4499,11 +4564,11 @@ function isRunning(projectName) {
 }
 function getRunnerInfo(projectName) {
   const dir = runnerDir(projectName);
-  if (!fs15.existsSync(dir)) return void 0;
+  if (!fs16.existsSync(dir)) return void 0;
   const pidFile = path14.join(dir, ".pid");
   let pid;
-  if (fs15.existsSync(pidFile)) {
-    pid = parseInt(fs15.readFileSync(pidFile, "utf-8").trim(), 10);
+  if (fs16.existsSync(pidFile)) {
+    pid = parseInt(fs16.readFileSync(pidFile, "utf-8").trim(), 10);
   }
   return { name: runnerName(projectName), dir, pid, online: isRunning(projectName) };
 }
@@ -4512,10 +4577,10 @@ function stopRunner(projectName) {
   const dir = runnerDir(projectName);
   const pidFile = path14.join(dir, ".pid");
   let pid = lastRunnerPid;
-  if (fs15.existsSync(pidFile)) {
-    pid = parseInt(fs15.readFileSync(pidFile, "utf-8").trim(), 10);
+  if (fs16.existsSync(pidFile)) {
+    pid = parseInt(fs16.readFileSync(pidFile, "utf-8").trim(), 10);
     try {
-      fs15.unlinkSync(pidFile);
+      fs16.unlinkSync(pidFile);
     } catch {
     }
   }
@@ -4528,7 +4593,7 @@ function stopRunner(projectName) {
       } catch {
       }
     }
-  } else if (fs15.existsSync(dir)) {
+  } else if (fs16.existsSync(dir)) {
     try {
       cp5.execSync(`pkill -9 -f "${dir.replace(/\//g, "\\/")}.*Runner" 2>/dev/null || true`, {
         timeout: KIT_TIMEOUTS.cmdShort
@@ -4539,15 +4604,15 @@ function stopRunner(projectName) {
   lastRunnerPid = void 0;
   for (const stale of ["_diag/pages", "_work/_temp", "_work/_actions"]) {
     const full = path14.join(dir, stale);
-    if (fs15.existsSync(full)) {
+    if (fs16.existsSync(full)) {
       try {
-        fs15.rmSync(full, { recursive: true, force: true });
+        fs16.rmSync(full, { recursive: true, force: true });
       } catch {
       }
     }
   }
   try {
-    fs15.mkdirSync(path14.join(dir, "_diag", "pages"), { recursive: true });
+    fs16.mkdirSync(path14.join(dir, "_diag", "pages"), { recursive: true });
   } catch {
   }
 }
@@ -4563,7 +4628,7 @@ function resetRunnerConfig(dir, projectName) {
   ];
   for (const f of stateFiles) {
     try {
-      fs15.unlinkSync(path14.join(dir, f));
+      fs16.unlinkSync(path14.join(dir, f));
     } catch {
     }
   }
@@ -4574,13 +4639,13 @@ function resetRunnerConfig(dir, projectName) {
       "LaunchAgents",
       `actions.runner.${projectName}.plist`
     );
-    if (fs15.existsSync(plist)) {
+    if (fs16.existsSync(plist)) {
       try {
         cp5.execFileSync("launchctl", ["unload", plist], { stdio: "ignore" });
       } catch {
       }
       try {
-        fs15.unlinkSync(plist);
+        fs16.unlinkSync(plist);
       } catch {
       }
     }
@@ -4594,24 +4659,24 @@ async function setupRunner(args) {
   stopRunner(args.projectName);
   report("Downloading runner binary...");
   const archive = await ensureCachedArchive();
-  fs15.mkdirSync(dir, { recursive: true });
-  if (!fs15.existsSync(path14.join(dir, "config.sh"))) {
+  fs16.mkdirSync(dir, { recursive: true });
+  if (!fs16.existsSync(path14.join(dir, "config.sh"))) {
     report("Extracting runner...");
     await tar.extract({ file: archive, cwd: dir });
   }
   const diagPages = path14.join(dir, "_diag", "pages");
-  if (fs15.existsSync(diagPages)) {
-    fs15.rmSync(diagPages, { recursive: true, force: true });
-    fs15.mkdirSync(diagPages, { recursive: true });
+  if (fs16.existsSync(diagPages)) {
+    fs16.rmSync(diagPages, { recursive: true, force: true });
+    fs16.mkdirSync(diagPages, { recursive: true });
   }
   const runnerFile = path14.join(dir, ".runner");
-  let needsConfig = !fs15.existsSync(runnerFile);
+  let needsConfig = !fs16.existsSync(runnerFile);
   if (needsConfig) {
     resetRunnerConfig(dir, args.projectName);
   } else {
     let urlMismatch = false;
     try {
-      const runnerJson = JSON.parse(fs15.readFileSync(runnerFile, "utf-8"));
+      const runnerJson = JSON.parse(fs16.readFileSync(runnerFile, "utf-8"));
       const configuredUrl = runnerJson.gitHubUrl || runnerJson.serverUrl || runnerJson.agentUrl || "";
       const expectedUrl = `https://github.com/${args.fullRepoName}`;
       urlMismatch = !!configuredUrl && !configuredUrl.startsWith(expectedUrl);
@@ -4660,7 +4725,7 @@ async function setupRunner(args) {
   child.unref();
   lastRunnerPid = child.pid;
   if (child.pid) {
-    fs15.writeFileSync(path14.join(dir, ".pid"), String(child.pid));
+    fs16.writeFileSync(path14.join(dir, ".pid"), String(child.pid));
   }
   report("Waiting for runner to come online...");
   let online = false;
@@ -4692,7 +4757,7 @@ async function removeRunner(args) {
   } catch {
   }
   try {
-    fs15.rmSync(dir, { recursive: true, force: true });
+    fs16.rmSync(dir, { recursive: true, force: true });
   } catch {
   }
 }
@@ -4771,7 +4836,7 @@ async function syncCiSecrets(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-var fs16 = __toESM(require("fs"), 1);
+var fs17 = __toESM(require("fs"), 1);
 var path15 = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
@@ -4790,8 +4855,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs16.existsSync(p)) return null;
-  const raw = fs16.readFileSync(p, "utf8");
+  if (!fs17.existsSync(p)) return null;
+  const raw = fs17.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -4820,13 +4885,13 @@ function writeWorkflowState(projectDir, state) {
 ${summary}`);
   }
   const dir = path15.join(projectDir, ".lakebase");
-  fs16.mkdirSync(dir, { recursive: true });
+  fs17.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs16.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs17.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs16.renameSync(tmp, target);
+  fs17.renameSync(tmp, target);
 }
 function initWorkflowState(args) {
   return {
@@ -5110,10 +5175,10 @@ Last probe error:
     });
   } else {
     report("Creating local project directory...", projectDir);
-    if (fs17.existsSync(projectDir)) {
+    if (fs18.existsSync(projectDir)) {
       throw new Error(`Directory already exists: ${projectDir}`);
     }
-    fs17.mkdirSync(projectDir, { recursive: true });
+    fs18.mkdirSync(projectDir, { recursive: true });
     await gitInit(projectDir);
   }
   report("Creating Lakebase database...", lakebaseProjectId);
@@ -5283,19 +5348,19 @@ function layDownTddScaffold(targetDir) {
     path16.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
     path16.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd")
   ];
-  const source = candidates.find((c) => fs17.existsSync(c));
+  const source = candidates.find((c) => fs18.existsSync(c));
   if (!source) {
     throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
   const dest = path16.join(targetDir, ".tdd");
-  if (fs17.existsSync(dest)) {
+  if (fs18.existsSync(dest)) {
     return;
   }
-  fs17.cpSync(source, dest, { recursive: true });
+  fs18.cpSync(source, dest, { recursive: true });
 }
 
 // scripts/lakebase/infra-runner.ts
-var fs24 = __toESM(require("fs"), 1);
+var fs25 = __toESM(require("fs"), 1);
 var path24 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-diff.ts
@@ -5493,16 +5558,16 @@ function dbcli6(args) {
 }
 
 // scripts/lakebase/schema-migrate.ts
-var fs23 = __toESM(require("fs"), 1);
+var fs24 = __toESM(require("fs"), 1);
 var path23 = __toESM(require("path"), 1);
 
 // scripts/lakebase/adapters/alembic-adapter.ts
-var fs19 = __toESM(require("fs"), 1);
+var fs20 = __toESM(require("fs"), 1);
 var path18 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
 var import_node_child_process13 = require("child_process");
-var fs18 = __toESM(require("fs"), 1);
+var fs19 = __toESM(require("fs"), 1);
 var path17 = __toESM(require("path"), 1);
 function resolveAlembicBin(projectDir) {
   const candidates = [
@@ -5511,7 +5576,7 @@ function resolveAlembicBin(projectDir) {
   ];
   for (const candidate of candidates) {
     try {
-      if (fs18.existsSync(candidate)) return candidate;
+      if (fs19.existsSync(candidate)) return candidate;
     } catch {
     }
   }
@@ -5664,12 +5729,12 @@ function findVersionsDir(projectDir) {
     path18.join(projectDir, "migrations", "versions"),
     path18.join(projectDir, "alembic", "versions")
   ];
-  return candidates.find((p) => fs19.existsSync(p));
+  return candidates.find((p) => fs20.existsSync(p));
 }
 function listAlembicFiles(projectDir) {
   const dir = findVersionsDir(projectDir);
   if (!dir) return [];
-  const files = fs19.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  const files = fs20.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
   return files.map((filename) => {
     const stem = filename.replace(/\.py$/, "");
     const sep2 = stem.indexOf("_");
@@ -5694,9 +5759,9 @@ var AlembicAdapter = {
    * here. Callers can still force-select via project.yaml#migration_tool.
    */
   detect(projectDir) {
-    if (fs19.existsSync(path18.join(projectDir, "alembic.ini"))) return true;
-    if (fs19.existsSync(path18.join(projectDir, "migrations", "env.py"))) return true;
-    if (fs19.existsSync(path18.join(projectDir, "alembic", "env.py"))) return true;
+    if (fs20.existsSync(path18.join(projectDir, "alembic.ini"))) return true;
+    if (fs20.existsSync(path18.join(projectDir, "migrations", "env.py"))) return true;
+    if (fs20.existsSync(path18.join(projectDir, "alembic", "env.py"))) return true;
     return false;
   },
   async apply(args) {
@@ -5774,7 +5839,7 @@ var AlembicAdapter = {
 registerSchemaMigrationAdapter(AlembicAdapter);
 
 // scripts/lakebase/adapters/flyway-adapter.ts
-var fs20 = __toESM(require("fs"), 1);
+var fs21 = __toESM(require("fs"), 1);
 var path20 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
@@ -5914,8 +5979,8 @@ async function buildDsn3(args) {
 }
 function listFlywayFiles(projectDir) {
   const dir = path20.join(projectDir, "src", "main", "resources", "db", "migration");
-  if (!fs20.existsSync(dir)) return [];
-  const files = fs20.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  if (!fs21.existsSync(dir)) return [];
+  const files = fs21.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
   return files.map((filename) => {
     const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
     const version = m[1];
@@ -5938,7 +6003,7 @@ var FlywayAdapter = {
   id: "flyway",
   languages: ["java", "kotlin"],
   detect(projectDir) {
-    return fs20.existsSync(path20.join(projectDir, "pom.xml"));
+    return fs21.existsSync(path20.join(projectDir, "pom.xml"));
   },
   async apply(args) {
     const dsn = await buildDsn3(args);
@@ -5998,18 +6063,18 @@ var FlywayAdapter = {
 registerSchemaMigrationAdapter(FlywayAdapter);
 
 // scripts/lakebase/adapters/knex-adapter.ts
-var fs22 = __toESM(require("fs"), 1);
+var fs23 = __toESM(require("fs"), 1);
 var path22 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
 var import_node_child_process15 = require("child_process");
-var fs21 = __toESM(require("fs"), 1);
+var fs22 = __toESM(require("fs"), 1);
 var path21 = __toESM(require("path"), 1);
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function findKnexfile(projectDir) {
   for (const name of KNEXFILE_VARIANTS) {
     const p = path21.join(projectDir, name);
-    if (fs21.existsSync(p)) return p;
+    if (fs22.existsSync(p)) return p;
   }
   return void 0;
 }
@@ -6150,8 +6215,8 @@ async function buildDsn4(args) {
 var KNEXFILE_VARIANTS2 = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function listKnexFiles(projectDir) {
   const dir = path22.join(projectDir, "migrations");
-  if (!fs22.existsSync(dir)) return [];
-  const files = fs22.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  if (!fs23.existsSync(dir)) return [];
+  const files = fs23.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
   return files.map((filename) => {
     const stem = filename.replace(/\.(js|ts)$/, "");
     const m = stem.match(/^(\d{14})_(.+)$/);
@@ -6171,7 +6236,7 @@ var KnexAdapter = {
    * project.yaml#migration_tool.
    */
   detect(projectDir) {
-    return KNEXFILE_VARIANTS2.some((name) => fs22.existsSync(path22.join(projectDir, name)));
+    return KNEXFILE_VARIANTS2.some((name) => fs23.existsSync(path22.join(projectDir, name)));
   },
   async apply(args) {
     const dsn = await buildDsn4(args);
@@ -6254,13 +6319,13 @@ var SchemaMigrationError = class extends Error {
   cause;
 };
 function detectLanguage(projectDir) {
-  if (fs23.existsSync(path23.join(projectDir, "pom.xml"))) {
+  if (fs24.existsSync(path23.join(projectDir, "pom.xml"))) {
     return "java";
   }
-  if (fs23.existsSync(path23.join(projectDir, "pyproject.toml")) || fs23.existsSync(path23.join(projectDir, "requirements.txt")) || fs23.existsSync(path23.join(projectDir, "alembic.ini"))) {
+  if (fs24.existsSync(path23.join(projectDir, "pyproject.toml")) || fs24.existsSync(path23.join(projectDir, "requirements.txt")) || fs24.existsSync(path23.join(projectDir, "alembic.ini"))) {
     return "python";
   }
-  if (fs23.existsSync(path23.join(projectDir, "package.json"))) {
+  if (fs24.existsSync(path23.join(projectDir, "package.json"))) {
     return "nodejs";
   }
   throw new SchemaMigrationError(
@@ -6293,8 +6358,8 @@ function listSchemaMigrations(args = {}) {
 }
 function listFlywayMigrations(projectDir) {
   const dir = path23.join(projectDir, "src", "main", "resources", "db", "migration");
-  if (!fs23.existsSync(dir)) return [];
-  const files = fs23.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  if (!fs24.existsSync(dir)) return [];
+  const files = fs24.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
   return files.map((filename) => {
     const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
     const version = m[1];
@@ -6307,9 +6372,9 @@ function listAlembicMigrations(projectDir) {
     path23.join(projectDir, "migrations", "versions"),
     path23.join(projectDir, "alembic", "versions")
   ];
-  const dir = candidates.find((p) => fs23.existsSync(p));
+  const dir = candidates.find((p) => fs24.existsSync(p));
   if (!dir) return [];
-  const files = fs23.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  const files = fs24.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
   return files.map((filename) => {
     const stem = filename.replace(/\.py$/, "");
     const sep2 = stem.indexOf("_");
@@ -6320,8 +6385,8 @@ function listAlembicMigrations(projectDir) {
 }
 function listKnexMigrations(projectDir) {
   const dir = path23.join(projectDir, "migrations");
-  if (!fs23.existsSync(dir)) return [];
-  const files = fs23.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  if (!fs24.existsSync(dir)) return [];
+  const files = fs24.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
   return files.map((filename) => {
     const stem = filename.replace(/\.(js|ts)$/, "");
     const m = stem.match(/^(\d{14})_(.+)$/);
@@ -6452,8 +6517,8 @@ async function runInfraSuite(args) {
     duration_ms: Date.now() - start
   };
   if (args.junitOutput) {
-    fs24.mkdirSync(path24.dirname(args.junitOutput), { recursive: true });
-    fs24.writeFileSync(args.junitOutput, formatJUnit(result), "utf8");
+    fs25.mkdirSync(path24.dirname(args.junitOutput), { recursive: true });
+    fs25.writeFileSync(args.junitOutput, formatJUnit(result), "utf8");
   }
   return result;
 }
@@ -6498,7 +6563,7 @@ function escapeXml(s) {
 }
 
 // scripts/lakebase/scm-claim-feature.ts
-var fs25 = __toESM(require("fs"), 1);
+var fs26 = __toESM(require("fs"), 1);
 var path25 = __toESM(require("path"), 1);
 var ScmClaimError = class extends Error {
   constructor(message, code) {
@@ -6634,7 +6699,7 @@ function alreadyClaimedSentinel(state) {
   };
 }
 function workflowStateFileExists(projectDir) {
-  return fs25.existsSync(
+  return fs26.existsSync(
     path25.join(projectDir, ".lakebase/workflow-state.json")
   );
 }
@@ -7556,15 +7621,15 @@ function parentForTopology(t, defaultLeaf) {
 }
 
 // scripts/lakebase/scm-doctor.ts
-var fs26 = __toESM(require("fs"), 1);
+var fs27 = __toESM(require("fs"), 1);
 var path26 = __toESM(require("path"), 1);
 var FEATURE_PREFIX = "feature/";
 var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
 function readEnv(projectDir) {
   const envPath = path26.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
-  if (!fs26.existsSync(envPath)) return out;
-  const lines = fs26.readFileSync(envPath, "utf8").split("\n");
+  if (!fs27.existsSync(envPath)) return out;
+  const lines = fs27.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
     if (m) out.set(m[1], m[2].replace(/^["']|["']$/g, ""));
@@ -7895,7 +7960,7 @@ function escapeShellArg5(s) {
 }
 
 // scripts/lakebase/update-commands.ts
-var fs27 = __toESM(require("fs"), 1);
+var fs28 = __toESM(require("fs"), 1);
 var path27 = __toESM(require("path"), 1);
 var COMMAND_HOOK_FILE_PATTERN = /\.(pre|post)-hook\.md$/;
 function findKitCommandsDir(start) {
@@ -7909,7 +7974,7 @@ function findKitCommandsDir(start) {
       ".claude",
       "commands"
     );
-    if (fs27.existsSync(candidate)) return candidate;
+    if (fs28.existsSync(candidate)) return candidate;
     const parent = path27.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7924,7 +7989,7 @@ function readKitVersion(kitCommandsDir) {
     dir = path27.dirname(dir);
   }
   try {
-    const raw = fs27.readFileSync(path27.join(dir, "package.json"), "utf-8");
+    const raw = fs28.readFileSync(path27.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7940,19 +8005,19 @@ function updateCommands(args) {
   const kitCommandsDir = args.kitDir ? path27.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir(here);
   const dryRun = args.dryRun === true;
   const force = args.force !== false;
-  const templateFiles = fs27.existsSync(kitCommandsDir) ? fs27.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs27.existsSync(projectCommandsDir)) {
-    fs27.mkdirSync(projectCommandsDir, { recursive: true });
+  const templateFiles = fs28.existsSync(kitCommandsDir) ? fs28.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs28.existsSync(projectCommandsDir)) {
+    fs28.mkdirSync(projectCommandsDir, { recursive: true });
   }
   const version = readKitVersion(kitCommandsDir);
   const files = [];
   for (const name of templateFiles) {
     const projectPath2 = path27.join(projectCommandsDir, name);
     const templatePath = path27.join(kitCommandsDir, name);
-    const templateRaw = fs27.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs28.readFileSync(templatePath, "utf-8");
     const desired = applyCommandPlaceholders(templateRaw, version);
-    const existed = fs27.existsSync(projectPath2);
-    const current = existed ? fs27.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs28.existsSync(projectPath2);
+    const current = existed ? fs28.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -7964,7 +8029,7 @@ function updateCommands(args) {
       outcome = "updated";
     }
     if (!dryRun && (outcome === "added" || outcome === "updated")) {
-      fs27.writeFileSync(projectPath2, desired);
+      fs28.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -7980,7 +8045,7 @@ function updateCommands(args) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-var fs28 = __toESM(require("fs"), 1);
+var fs29 = __toESM(require("fs"), 1);
 var path28 = __toESM(require("path"), 1);
 function findKitTemplatesDir(start) {
   let dir = start;
@@ -7993,7 +8058,7 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs28.existsSync(candidate)) return candidate;
+    if (fs29.existsSync(candidate)) return candidate;
     const parent = path28.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -8032,20 +8097,20 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs28.existsSync(kitWorkflowsDir) ? fs28.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs28.existsSync(projectWorkflowsDir) ? fs28.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path28.join(projectWorkflowsDir, name);
     const templatePath = path28.join(kitWorkflowsDir, name);
-    if (!fs28.existsSync(projectPath2)) {
+    if (!fs29.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs28.readFileSync(projectPath2, "utf8");
-    const templateContent = fs28.readFileSync(templatePath, "utf8");
+    const projectContent = fs29.readFileSync(projectPath2, "utf8");
+    const templateContent = fs29.readFileSync(templatePath, "utf8");
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -8079,7 +8144,7 @@ function readKitVersion2(kitWorkflowsDir) {
     dir = path28.dirname(dir);
   }
   try {
-    const raw = fs28.readFileSync(path28.join(dir, "package.json"), "utf-8");
+    const raw = fs29.readFileSync(path28.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -8104,7 +8169,7 @@ function findKitCommandsDir2(start) {
       ".claude",
       "commands"
     );
-    if (fs28.existsSync(candidate)) return candidate;
+    if (fs29.existsSync(candidate)) return candidate;
     const parent = path28.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -8122,20 +8187,20 @@ function detectCommandDrift(args) {
   const here = path28.dirname(new URL(importMetaUrl).pathname);
   const kitCommandsDir = args.kitDir ? path28.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir2(here);
   const kitVersion2 = readKitVersionFromCommandsDir(kitCommandsDir);
-  const templateFiles = fs28.existsSync(kitCommandsDir) ? fs28.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
-  const projectFiles = fs28.existsSync(projectCommandsDir) ? fs28.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const templateFiles = fs29.existsSync(kitCommandsDir) ? fs29.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const projectFiles = fs29.existsSync(projectCommandsDir) ? fs29.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path28.join(projectCommandsDir, name);
     const templatePath = path28.join(kitCommandsDir, name);
-    const templateRaw = fs28.readFileSync(templatePath, "utf8");
-    if (!fs28.existsSync(projectPath2)) {
+    const templateRaw = fs29.readFileSync(templatePath, "utf8");
+    if (!fs29.existsSync(projectPath2)) {
       files.push({ name, status: "missing", kit_version: kitVersion2 });
       continue;
     }
-    const projectContent = fs28.readFileSync(projectPath2, "utf8");
+    const projectContent = fs29.readFileSync(projectPath2, "utf8");
     const pinned = parsePinnedVersion(projectContent);
     const versionForCompare = pinned ?? kitVersion2;
     const templateContent = applyCommandPlaceholders2(templateRaw, versionForCompare);
@@ -8176,7 +8241,7 @@ function readKitVersionFromCommandsDir(kitCommandsDir) {
     dir = path28.dirname(dir);
   }
   try {
-    const raw = fs28.readFileSync(path28.join(dir, "package.json"), "utf-8");
+    const raw = fs29.readFileSync(path28.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -8210,10 +8275,10 @@ function updateWorkflows(args) {
   const substitute = args.substitute !== false;
   const dryRun = args.dryRun === true;
   const pruneExtras = args.pruneExtras === true;
-  const templateFiles = fs28.existsSync(kitWorkflowsDir) ? fs28.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs28.existsSync(projectWorkflowsDir) ? fs28.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs28.existsSync(projectWorkflowsDir)) {
-    fs28.mkdirSync(projectWorkflowsDir, { recursive: true });
+  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs29.existsSync(projectWorkflowsDir)) {
+    fs29.mkdirSync(projectWorkflowsDir, { recursive: true });
   }
   const version = substitute ? readKitVersion2(kitWorkflowsDir) : "";
   const seen = /* @__PURE__ */ new Set();
@@ -8222,10 +8287,10 @@ function updateWorkflows(args) {
     seen.add(name);
     const projectPath2 = path28.join(projectWorkflowsDir, name);
     const templatePath = path28.join(kitWorkflowsDir, name);
-    const templateRaw = fs28.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs29.readFileSync(templatePath, "utf-8");
     const desired = substitute ? applyPlaceholders(templateRaw, version) : templateRaw;
-    const existed = fs28.existsSync(projectPath2);
-    const current = existed ? fs28.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs29.existsSync(projectPath2);
+    const current = existed ? fs29.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -8235,7 +8300,7 @@ function updateWorkflows(args) {
       outcome = "updated";
     }
     if (!dryRun && outcome !== "unchanged") {
-      fs28.writeFileSync(projectPath2, desired);
+      fs29.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -8244,7 +8309,7 @@ function updateWorkflows(args) {
       if (seen.has(name)) continue;
       const projectPath2 = path28.join(projectWorkflowsDir, name);
       if (!dryRun) {
-        fs28.unlinkSync(projectPath2);
+        fs29.unlinkSync(projectPath2);
       }
       files.push({ name, outcome: "removed" });
     }
@@ -8643,14 +8708,14 @@ async function stashDropAll(args) {
 }
 
 // scripts/git/rebase.ts
-var fs29 = __toESM(require("fs"), 1);
+var fs30 = __toESM(require("fs"), 1);
 var path29 = __toESM(require("path"), 1);
 async function abortRebase(args) {
   await exec2("git rebase --abort", { cwd: args.cwd });
 }
 async function isRebasing(args) {
   try {
-    return fs29.existsSync(path29.join(args.cwd, ".git/rebase-merge")) || fs29.existsSync(path29.join(args.cwd, ".git/rebase-apply"));
+    return fs30.existsSync(path29.join(args.cwd, ".git/rebase-merge")) || fs30.existsSync(path29.join(args.cwd, ".git/rebase-apply"));
   } catch {
     return false;
   }
@@ -8973,6 +9038,7 @@ function withProxyEnv(base = {}) {
   ensureCachedArchive,
   ensureEndpoint,
   ensureLakebaseSecretAuth,
+  ensureProfilePinned,
   ensureSchemaAndVolume,
   exec,
   extractPullNumber,
@@ -9064,6 +9130,7 @@ function withProxyEnv(base = {}) {
   mergePullRequest,
   minLakebaseTtl,
   mintCredential,
+  normalizeHost,
   parseHostFromAuthDescribe,
   parseLakebaseTtl,
   parseOwnerRepo,
@@ -9106,6 +9173,7 @@ function withProxyEnv(base = {}) {
   resolveLatestLtsJavaVersion,
   resolveNearestParent,
   resolveParentBranch,
+  resolveProfileForHost,
   revert,
   rollbackDeploy,
   rollbackSchemaMigration,
@@ -9120,6 +9188,7 @@ function withProxyEnv(base = {}) {
   scaffoldAll,
   scaffoldStaticAll,
   schemaMigrationStatus,
+  selectProfileForHost,
   setRepoSecret,
   setRepoSecrets,
   setupRunner,

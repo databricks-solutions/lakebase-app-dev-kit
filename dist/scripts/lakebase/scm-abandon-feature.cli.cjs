@@ -64,7 +64,7 @@ function isCliEntry(importMetaUrl2) {
 }
 
 // scripts/lakebase/paired-branch.ts
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -300,6 +300,31 @@ var import_pg = require("pg");
 var fs = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 
+// scripts/lakebase/databricks-profile.ts
+var fs2 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
   return (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
@@ -398,28 +423,6 @@ async function deletePairedBranch(args) {
   return { lakebaseDeleted, gitLocalDeleted, gitRemoteDeleted, warnings };
 }
 
-// scripts/util/exec.ts
-var cp = __toESM(require("child_process"), 1);
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
-  });
-}
-
 // scripts/git/inspect.ts
 async function getCurrentBranch(args) {
   try {
@@ -443,7 +446,7 @@ async function isDirty(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-var fs3 = __toESM(require("fs"), 1);
+var fs4 = __toESM(require("fs"), 1);
 var path3 = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
@@ -462,8 +465,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs3.existsSync(p)) return null;
-  const raw = fs3.readFileSync(p, "utf8");
+  if (!fs4.existsSync(p)) return null;
+  const raw = fs4.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -492,13 +495,13 @@ function writeWorkflowState(projectDir, state) {
 ${summary}`);
   }
   const dir = path3.join(projectDir, ".lakebase");
-  fs3.mkdirSync(dir, { recursive: true });
+  fs4.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs3.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs4.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs3.renameSync(tmp, target);
+  fs4.renameSync(tmp, target);
 }
 function validateWorkflowState(value) {
   const errors = [];

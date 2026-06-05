@@ -40,7 +40,7 @@ var getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${_
 var importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
 
 // scripts/lakebase/scm-recover-orphans.cli.ts
-var fs4 = __toESM(require("fs"), 1);
+var fs5 = __toESM(require("fs"), 1);
 var path4 = __toESM(require("path"), 1);
 
 // scripts/util/cli-entry.ts
@@ -548,7 +548,7 @@ stderr: ${stderr.trim()}` : ""}`
 }
 
 // scripts/lakebase/paired-branch.ts
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -676,6 +676,87 @@ ${block}` : block;
   fs.writeFileSync(args.envPath, content);
 }
 
+// scripts/lakebase/databricks-profile.ts
+var fs2 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs2.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
 // scripts/lakebase/paired-branch.ts
 function gitHasLocalBranch(cwd, branch) {
   try {
@@ -761,14 +842,16 @@ async function createPairedBranch(args) {
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn(ep.host, database, email, token);
+        const envPath = path2.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path2.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host
         });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
         envSynced = true;
       }
     } catch (err) {
@@ -804,28 +887,6 @@ async function createFeaturePairedBranch(args) {
     syncEnv: args.syncEnv,
     readyTimeoutMs: args.readyTimeoutMs,
     database: args.database
-  });
-}
-
-// scripts/util/exec.ts
-var cp = __toESM(require("child_process"), 1);
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
   });
 }
 
@@ -872,7 +933,7 @@ async function listLocalBranches(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-var fs3 = __toESM(require("fs"), 1);
+var fs4 = __toESM(require("fs"), 1);
 var path3 = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
@@ -891,8 +952,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs3.existsSync(p)) return null;
-  const raw = fs3.readFileSync(p, "utf8");
+  if (!fs4.existsSync(p)) return null;
+  const raw = fs4.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -921,13 +982,13 @@ function writeWorkflowState(projectDir, state) {
 ${summary}`);
   }
   const dir = path3.join(projectDir, ".lakebase");
-  fs3.mkdirSync(dir, { recursive: true });
+  fs4.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs3.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs4.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs3.renameSync(tmp, target);
+  fs4.renameSync(tmp, target);
 }
 function validateWorkflowState(value) {
   const errors = [];
@@ -1308,8 +1369,8 @@ Exit codes:
 `;
 function readEnvProjectId(projectDir) {
   const envPath = path4.join(projectDir, ".env");
-  if (!fs4.existsSync(envPath)) return void 0;
-  const lines = fs4.readFileSync(envPath, "utf8").split("\n");
+  if (!fs5.existsSync(envPath)) return void 0;
+  const lines = fs5.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*LAKEBASE_PROJECT_ID\s*=\s*(.+?)\s*$/);
     if (m) return m[1].replace(/^["']|["']$/g, "");
