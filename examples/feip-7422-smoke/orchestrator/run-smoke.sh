@@ -111,6 +111,15 @@ fi
 # kit pin. Without this they would default to "main", which has no
 # dist/ committed and yields "command not found" when invoking bins.
 export LAKEBASE_KIT_NPX="$KIT_NPX"
+
+# Headless run: the human reviewer at each HITL gate is performed by
+# ci-mock-approver, which validates the gate's artifacts exist + carry their
+# expected elements (format-conformant) and approves only then. This lets
+# /design run through to test-list.json (and /build) without a human, while
+# conformance still hard-blocks a missing/malformed artifact. See SKILL
+# "Headless / auto-approve mode".
+export LAKEBASE_TDD_AUTO_APPROVE=1
+
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
 # --tiers is required when scaffolding (architectural choice). The

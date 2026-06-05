@@ -66,7 +66,7 @@ When done, surface to the Product Owner with:
 - any risks identified
 - the **NFRs you propose** (from `architecture.json`), for the PO to **accept, modify, or reject**. NFRs are not yours to finalize; you propose, the HIL adjudicates. Record the PO's call as `hil_status` on each NFR.
 
-Do **not** proceed to test-list construction until the PO signs off.
+Do **not** proceed to test-list construction until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your recommended resolution to each Gate-2 decision INSIDE `architecture.md`, set each proposed NFR's `hil_status: "accepted"` in `architecture.json`, so the mock approver can validate the expected elements (the required sections + the NFR schema) and approve. See SKILL "Headless / auto-approve mode".)
 
 ## Logging
 

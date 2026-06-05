@@ -38,6 +38,37 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 Refuse to transition if prior-phase artifacts are missing or invalid.
 
+## Headless / auto-approve mode
+
+By default every gate is HITL: the workflow halts for the Product Owner. When
+`LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI and the FEIP-7422 smoke), the human
+approver role is **performed by** the `ci-mock-approver` identity. This does not
+skip the gate or rubber-stamp it, the mock stands in as a diligent reviewer and
+does exactly what a careful human would:
+
+- **It must be GIVEN the artifacts.** The mock approves a gate only when the
+  gate's expected artifacts EXIST. A missing artifact is refused, just as a
+  human would not sign off on work they were never handed.
+- **It checks the artifacts FOLLOW THE FORMAT RULES.** The mock validates each
+  artifact against its declared format (JSON against its schema; narrative MD
+  against its required sections, see `references/spec-format.md` +
+  `lakebase-tdd-gate-conformance`). A malformed artifact, or one missing a
+  required section, is refused. The mock has expectations about WHAT IS IN the
+  artifact, not just that it exists.
+- **Only when both hold does it approve** the `gates.json` gate
+  (`spec`/`plan`/`test_list`/`promote`) and emit a `gate.approved` log event.
+
+So the producing role's job in this mode is to HAND the approver complete,
+conformant artifacts, recording its recommended resolutions (decisions, NFR
+acceptances, orderings) INSIDE those artifacts rather than leaving them as open
+questions awaiting a human reply. A gate advances because the mock reviewer
+verified and approved real, well-formed work, never because the gate was
+skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
+for a human. Auto-approve is automated diligent approval, not auto-fabrication.
+
+Check the mode with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`. Absent or unset =
+normal HITL (halt for human sign-off).
+
 ## Agent prompts
 
 Load the per-role prompt for the phase you're in:

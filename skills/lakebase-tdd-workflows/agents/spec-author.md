@@ -58,7 +58,7 @@ Surface to the Product Owner:
 - the scope boundaries you restated,
 - the open questions you could not resolve without their decision.
 
-Do not proceed to architectural review until the PO signs off.
+Do not proceed to architectural review until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your recommended answers to the open questions INSIDE `feature.md`/`feature.json` (do not leave them dangling as questions for a human), so the mock approver can validate the expected elements are present + conformant and approve Gate 1. See SKILL "Headless / auto-approve mode".)
 
 ## Logging
 

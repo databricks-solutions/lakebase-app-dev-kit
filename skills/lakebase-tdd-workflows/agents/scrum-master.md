@@ -104,7 +104,7 @@ You are the relay's narrator: emit a `handoff` at every role boundary so the log
 
 ## Rules
 
-- Every gate is HITL. You may **never** advance a phase without recorded PO approval.
+- Every gate is HITL. You may **never** advance a phase without recorded PO approval. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: it validates the gate's artifacts exist + carry their expected elements (format-conformant), and approves only then. You advance on that approval, never by skipping the gate, and never on a missing/malformed artifact. See SKILL "Headless / auto-approve mode".)
 - Every promote/synthesize call requires `hitlApproved: true` and an `approverEmail`. The scripts will throw otherwise.
 - You do not write tests. You do not write production code. You orchestrate.
 - Smells produce proposals, not auto-applied changes. PO gates every remediation.

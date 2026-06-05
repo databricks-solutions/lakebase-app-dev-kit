@@ -51,7 +51,7 @@ Surface to the Product Owner:
 - Items skipped or deferred, with reason.
 - Any scenario that cannot be defined without writing implementation first (this is a design smell – call it out).
 
-Do not proceed to design-spec gate until the PO signs off.
+Do not proceed to design-spec gate until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your ordering rationale in the rendered `test-list.md` and ensure every item traces to an AC, so the mock approver can validate the expected elements (`Ordered for:`, AC per item, Deferred section, schema-valid `test-list.json`) and approve Gate 3. See SKILL "Headless / auto-approve mode".)
 
 ## Logging
 

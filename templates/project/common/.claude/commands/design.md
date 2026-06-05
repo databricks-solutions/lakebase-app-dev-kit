@@ -44,6 +44,8 @@ If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The
 2. **Architect Reviewer** challenges scope and boundaries. Gate 1 stops the pipeline until the human signs off.
 3. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
 
+**Auto-approve (headless) mode:** if `LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI / the smoke; check with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`), the human review at each gate is performed by `ci-mock-approver`, a diligent automated reviewer that validates the gate's artifacts EXIST and carry their EXPECTED ELEMENTS (schema fields / required sections) and approves only then. Each role records its recommended resolutions INSIDE its artifacts (not as open questions), hands them to the gate, and the mock reviewer validates + approves, so the phases run through and `test-list.json` is produced for `/build`. The gate is never skipped, and a missing or malformed artifact hard-blocks exactly as it would for a human. See `@lakebase-tdd-workflows/SKILL.md` "Headless / auto-approve mode".
+
 Each phase is implemented by the substrate agent of the same name:
 - `@lakebase-tdd-workflows/agents/spec-author`
 - `@lakebase-tdd-workflows/agents/architect-reviewer`
