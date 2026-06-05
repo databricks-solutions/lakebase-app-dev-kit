@@ -33,9 +33,14 @@ fail() { echo "verify-workflow-state[$EXPECTED_STATE]: FAIL: $*" >&2; exit 1; }
 ok()   { echo "verify-workflow-state[$EXPECTED_STATE]: ✓ $*"; }
 
 # 1. The state file must exist + parse.
+# Use the kit ref under test (run-smoke.sh exports LAKEBASE_KIT_NPX), not a
+# hardcoded main, so the assertion validates the same build the smoke ran.
+# Capture stdout ONLY: a cold npx install prints npm/prepare logs to stderr,
+# and folding them into STATE_JSON (the old `2>&1`) breaks `jq` parsing and
+# yields a spurious found=false.
 STATE_JSON="$(
-  npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
-    lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>&1
+  npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+    lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>/dev/null
 )"
 
 # `lakebase-scm-state` exits 1 when no state file exists. The

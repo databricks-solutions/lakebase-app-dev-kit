@@ -15,9 +15,9 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 ## Inputs
 
-- `.tdd/features/<F>/feature.json` – feature with `nfrs[]` populated.
-- `.tdd/features/<F>/stories/<S>/acs/<AC>.json` – every AC has `layer`, `architectural_notes`, and `nfrs[]`.
-- `.tdd/features/<F>/architecture.md` – Architect Reviewer's layering summary.
+- `.tdd/features/<F>/feature.json` – the feature.
+- `.tdd/features/<F>/stories/<S>/acs/<AC>.json` – every AC has `layer` + `architectural_notes`.
+- `.tdd/features/<F>/architecture.{md,json}` – Architect Reviewer's layering summary + the HIL-adjudicated `nfrs[]` (NFRs live in `architecture.json`, not on `feature.json`). Cover the accepted NFRs when ordering the list.
 - (Architectural review gate 2 must be signed off.)
 
 ## Outputs

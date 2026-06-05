@@ -16,22 +16,6 @@
       "minLength": 3,
       "description": "Human-readable feature name."
     },
-    "nfrs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["category", "requirement"],
-        "properties": {
-          "category": {
-            "type": "string",
-            "enum": ["performance", "scalability", "security", "observability", "operability", "resilience"]
-          },
-          "requirement": { "type": "string" },
-          "notes": { "type": "string" }
-        }
-      },
-      "description": "Non-functional requirements. Populated by Architect Reviewer in phase 7.1."
-    },
     "success_metrics": {
       "type": "array",
       "items": { "type": "string" },

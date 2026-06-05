@@ -6151,7 +6151,9 @@ async function claimFeatureBranch(args) {
   const branch = featureBranchName(slug);
   const idempotent = args.idempotent !== false;
   if (current.state === "feature-claimed") {
-    if (idempotent && current.branch === branch) {
+    const currentIdentity = current.feature_id ?? current.branch?.replace(/^feature[-/]/, "");
+    const currentSlug = currentIdentity && currentIdentity.length > 0 ? sanitizeFeatureSlug(currentIdentity) : void 0;
+    if (idempotent && currentSlug !== void 0 && currentSlug === slug) {
       return {
         state: current,
         paired: alreadyClaimedSentinel(current),
@@ -6159,7 +6161,7 @@ async function claimFeatureBranch(args) {
       };
     }
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish or abandon it first (phase B does not yet ship an abandon CLI).`,
+      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other"
     );
   }
@@ -6187,7 +6189,10 @@ async function claimFeatureBranch(args) {
   const next = {
     ...current,
     state: "feature-claimed",
-    feature_id: slug,
+    // Record the canonical feature id (case preserved, e.g. "F1-initial-domain")
+    // so it matches the .tdd/features/<F> dir + downstream expectations. The
+    // lowercased branch slug lives on `branch`, derived separately.
+    feature_id: args.featureId.trim(),
     branch: paired.gitBranch,
     parent_branch: parentBranch,
     lakebase_branch_uid: paired.branch.uid,

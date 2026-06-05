@@ -22,7 +22,7 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 ## Outputs
 
 - For each `ac.json`: populate `layer` (`API` / `E2E` / `Infra`) and `architectural_notes` (layer rationale, cross-cutting concerns touched, owner module).
-- For each `feature.json` and `story.json`: populate `nfrs[]` where applicable.
+- A new `.tdd/features/<F>/architecture.json` (validated against `architecture.schema.json`): the **NFRs** you propose (`nfrs[]`, each scoped via `applies_to` to the feature or a story id). NFRs live HERE, not on `feature.json`/`story.json`: those are the Spec Author's and are locked by the spec gate, so writing NFRs onto them drifts the gate (FEIP-7508). You propose; the HIL accepts/modifies at Gate 2 (see below).
 - A new `.tdd/features/<F>/architecture.md`: summary of layering decisions, pattern proposals, and the Architectural Concerns Mapping table from `software-design-principles`.
 
 ## Canon you must import
@@ -47,7 +47,7 @@ For each AC:
 
 For each feature + story:
 
-5. Walk the [NFRs checklist](../../software-design-principles/references/nfrs.md). Populate `nfrs[]` with entries that have a non-trivial answer. "N/A – reason" is allowed; "unconsidered" is not.
+5. Walk the [NFRs checklist](../../software-design-principles/references/nfrs.md). Record the NFRs you propose in `architecture.json` (`nfrs[]`, `applies_to` the feature or a story id, `hil_status: "proposed"`). "N/A – reason" is allowed; "unconsidered" is not. Do **not** write `nfrs` onto `feature.json`/`story.json`, they are spec-gated; your annotation would trip the integrity check. You PROPOSE NFRs; the HIL accepts or modifies them at Gate 2.
 
 For the feature as a whole:
 
@@ -64,6 +64,7 @@ When done, surface to the Product Owner with:
 - a one-paragraph summary of layer assignments
 - the cross-cutting concerns mapping table
 - any risks identified
+- the **NFRs you propose** (from `architecture.json`), for the PO to **accept, modify, or reject**. NFRs are not yours to finalize; you propose, the HIL adjudicates. Record the PO's call as `hil_status` on each NFR.
 
 Do **not** proceed to test-list construction until the PO signs off.
 

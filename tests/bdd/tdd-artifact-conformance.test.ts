@@ -55,6 +55,30 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("test-list.json", bad).ok).toBe(false);
   });
 
+  it("validates architecture.json (NFRs live here, not on feature.json)", () => {
+    const arch = JSON.stringify({
+      feature_id: "F1-initial-domain",
+      nfrs: [{ category: "security", requirement: "all writes authn'd", hil_status: "accepted" }],
+    });
+    expect(checkArtifactConformance("architecture.json", arch).ok).toBe(true);
+    // empty nfrs array is valid (a feature may have none)
+    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1", nfrs: [] })).ok).toBe(true);
+    // missing nfrs / bad category fails
+    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1" })).ok).toBe(false);
+  });
+
+  it("rejects nfrs on the spec-gated feature.json (moved to architecture.json)", () => {
+    const withNfrs = JSON.stringify({
+      id: "F1-initial-domain",
+      name: "Initial Domain",
+      status: "draft",
+      tdd_mode: "N=1",
+      nfrs: [{ category: "security", requirement: "x" }],
+    });
+    // additionalProperties:false now rejects nfrs on feature.json, enforcing the boundary.
+    expect(checkArtifactConformance("feature.json", withNfrs).ok).toBe(false);
+  });
+
   it("validates plan.json against the new plan schema", () => {
     const plan = JSON.stringify({
       feature_id: "F1-initial-domain",

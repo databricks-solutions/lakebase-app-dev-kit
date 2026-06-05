@@ -129,6 +129,7 @@ schema failures and missing required narrative sections both hard-block the gate
 | `feature.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
 | `test-list.json` | Test Strategist | `test-list.schema.json` |
 | `plan.json` | Architect / Orchestrator | `plan.schema.json` |
+| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2). NFRs live here, NOT on the spec-gated `feature.json`/`story.json`. |
 | `workflow-state.json` | Orchestrator | `workflow-state.schema.json` |
 | `spec.md` | Product Owner | H1 + non-empty body (open-ended intent; not gate-locked) |
 | `feature.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |

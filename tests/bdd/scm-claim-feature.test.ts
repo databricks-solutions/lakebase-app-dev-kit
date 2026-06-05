@@ -178,6 +178,30 @@ describe("claimFeatureBranch precondition", () => {
     expect(result.alreadyClaimed).toBe(true);
     expect(mockCreateFeaturePairedBranch).not.toHaveBeenCalled();
   });
+
+  // FEIP-7508 smoke findings: the stored branch is the substrate's sanitized
+  // hyphen form ("feature-f1-initial-domain") and the canonical feature id
+  // carries case ("F1-..."). Idempotency must compare by slug so neither the
+  // slash-vs-hyphen nor the case difference mislabels a same-feature re-claim.
+  it("idempotent re-claim is immune to branch-format + case (real smoke shape)", async () => {
+    seedState({
+      version: 1,
+      state: "feature-claimed",
+      tier_topology: 2,
+      project_id: "p",
+      feature_id: "F1-initial-domain",
+      branch: "feature-f1-initial-domain",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-old",
+      claimed_at: "2026-05-01T00:00:00Z",
+    });
+    const result = await scm.claimFeatureBranch({
+      projectDir: tmpDir,
+      featureId: "F1-initial-domain",
+    });
+    expect(result.alreadyClaimed).toBe(true);
+    expect(mockCreateFeaturePairedBranch).not.toHaveBeenCalled();
+  });
 });
 
 describe("claimFeatureBranch happy path", () => {

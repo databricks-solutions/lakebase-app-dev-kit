@@ -180,7 +180,16 @@ export async function claimFeatureBranch(
   const idempotent = args.idempotent !== false;
 
   if (current.state === "feature-claimed") {
-    if (idempotent && current.branch === branch) {
+    // Same-feature re-claim is an idempotent no-op. Compare by canonical
+    // slug, not the raw branch string: the stored branch is the substrate's
+    // sanitized form ("feature-f1-initial-domain") while featureBranchName
+    // returns "feature/<slug>", and feature_id casing can differ ("F1" vs
+    // "f1"). Slug comparison is immune to both, so a genuine same-feature
+    // re-entry no longer mislabels itself "already-claimed-other".
+    const currentIdentity = current.feature_id ?? current.branch?.replace(/^feature[-/]/, "");
+    const currentSlug =
+      currentIdentity && currentIdentity.length > 0 ? sanitizeFeatureSlug(currentIdentity) : undefined;
+    if (idempotent && currentSlug !== undefined && currentSlug === slug) {
       return {
         state: current,
         paired: alreadyClaimedSentinel(current),
@@ -188,7 +197,7 @@ export async function claimFeatureBranch(
       };
     }
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish or abandon it first (phase B does not yet ship an abandon CLI).`,
+      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other",
     );
   }
@@ -225,7 +234,10 @@ export async function claimFeatureBranch(
   const next: ScmWorkflowState = {
     ...current,
     state: "feature-claimed",
-    feature_id: slug,
+    // Record the canonical feature id (case preserved, e.g. "F1-initial-domain")
+    // so it matches the .tdd/features/<F> dir + downstream expectations. The
+    // lowercased branch slug lives on `branch`, derived separately.
+    feature_id: args.featureId.trim(),
     branch: paired.gitBranch,
     parent_branch: parentBranch,
     lakebase_branch_uid: paired.branch.uid,

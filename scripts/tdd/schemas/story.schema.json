@@ -23,21 +23,6 @@
       "type": "string",
       "description": "Outcome or motivation."
     },
-    "nfrs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["category", "requirement"],
-        "properties": {
-          "category": {
-            "type": "string",
-            "enum": ["performance", "scalability", "security", "observability", "operability", "resilience"]
-          },
-          "requirement": { "type": "string" },
-          "notes": { "type": "string" }
-        }
-      }
-    },
     "acs": {
       "type": "array",
       "items": { "type": "string", "pattern": "^AC[0-9]+(-[a-z0-9-]+)?$" },

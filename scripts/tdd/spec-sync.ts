@@ -14,12 +14,22 @@ type Phase =
   | "shipped"
   | "abandoned";
 
+/**
+ * Non-functional requirement. NFRs are owned by the Architect and live in
+ * architecture.json (HIL-adjudicated at Gate 2), NOT on the spec-author-owned
+ * feature.json/story.json, putting them there drifted the spec gate (FEIP-7508).
+ */
+export interface Nfr {
+  category: string;
+  requirement: string;
+  notes?: string;
+}
+
 export interface Feature {
   id: string;
   name: string;
   status: string;
   tdd_mode: "N=1" | "N>=2";
-  nfrs?: Array<{ category: string; requirement: string; notes?: string }>;
   success_metrics?: string[];
   stories?: string[];
   experiment_count_default?: number;
@@ -34,7 +44,6 @@ export interface Story {
   soThat: string;
   acs?: string[];
   feature_id?: string;
-  nfrs?: Feature["nfrs"];
   external_ref?: Feature["external_ref"];
 }
 
@@ -46,7 +55,7 @@ export interface AC {
   then: string;
   status: string;
   scenarios?: string[];
-  nfrs?: Feature["nfrs"];
+  nfrs?: Nfr[];
   architectural_notes?: string;
   story_id?: string;
   external_ref?: Feature["external_ref"];
