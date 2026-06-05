@@ -50,7 +50,7 @@ function findFeatureDir(tddDir: string, featureId: string): string {
   for (const entry of readdirSync(featuresDir)) {
     const dir = join(featuresDir, entry);
     if (!statSync(dir).isDirectory()) continue;
-    const jsonPath = join(dir, "feature.json");
+    const jsonPath = join(dir, "feature-spec.json");
     if (!existsSync(jsonPath)) continue;
     const json = JSON.parse(readFileSync(jsonPath, "utf8")) as Feature;
     if (json.id === featureId) return dir;
@@ -99,7 +99,7 @@ function scanForLegacyId(tddDir: string, id: string): SpecEntity {
   for (const featureEntry of readdirSync(featuresDir)) {
     const featureDir = join(featuresDir, featureEntry);
     if (!statSync(featureDir).isDirectory()) continue;
-    const featureJson = join(featureDir, "feature.json");
+    const featureJson = join(featureDir, "feature-spec.json");
     if (existsSync(featureJson)) {
       const feature = JSON.parse(readFileSync(featureJson, "utf8")) as Feature;
       if (feature.id === id) return feature;
@@ -162,7 +162,7 @@ export class MarkdownAdapter implements SpecAdapter {
     switch (ref.kind) {
       case "feature": {
         const dir = findFeatureDir(ctx.tddDir, ref.featureId);
-        return JSON.parse(readFileSync(join(dir, "feature.json"), "utf8")) as Feature;
+        return JSON.parse(readFileSync(join(dir, "feature-spec.json"), "utf8")) as Feature;
       }
       case "story": {
         const dir = findStoryDir(ctx.tddDir, ref.featureId, ref.storyId);

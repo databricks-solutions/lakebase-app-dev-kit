@@ -30,7 +30,7 @@ function approveSpec(specMd: string, featureJson: string): void {
     gate: "spec",
     approver: APPROVER,
     hitlApproved: true,
-    artifactInputs: { "spec.md": specMd, "feature.json": featureJson },
+    artifactInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
     tddDir: tdd,
     now: FIXED_NOW,
   });
@@ -51,7 +51,7 @@ describe("verifyGateIntegrity: S5 no-drift after formatter-equivalent reformat",
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# spec\n\nbody\n", "feature.json": '{"id":"F1"}' },
+      currentInputs: { "feature-spec.md": "# spec\n\nbody\n", "feature-spec.json": '{"id":"F1"}' },
       tddDir: tdd,
     });
     expect(result.status).toBe("ok");
@@ -65,8 +65,8 @@ describe("verifyGateIntegrity: S5 no-drift after formatter-equivalent reformat",
       gate: "spec",
       currentInputs: {
         // Same content as approved, but with CRLF + trailing spaces + extra blank lines
-        "spec.md": "# spec   \r\n\r\n\r\nbody  \r\n",
-        "feature.json": '{"id":"F1"}',
+        "feature-spec.md": "# spec   \r\n\r\n\r\nbody  \r\n",
+        "feature-spec.json": '{"id":"F1"}',
       },
       tddDir: tdd,
     });
@@ -81,13 +81,13 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# spec\n\nDIFFERENT body\n", "feature.json": '{"id":"F1"}' },
+      currentInputs: { "feature-spec.md": "# spec\n\nDIFFERENT body\n", "feature-spec.json": '{"id":"F1"}' },
       tddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
     expect(result.drifts).toHaveLength(1);
-    expect(result.drifts[0].artifact).toBe("spec.md");
+    expect(result.drifts[0].artifact).toBe("feature-spec.md");
     expect(result.drifts[0].expected).not.toBe(result.drifts[0].actual);
   });
 
@@ -97,13 +97,13 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# SPEC\n\nbody\n", "feature.json": '{"id":"F2"}' },
+      currentInputs: { "feature-spec.md": "# SPEC\n\nbody\n", "feature-spec.json": '{"id":"F2"}' },
       tddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
     const names = result.drifts.map((d) => d.artifact).sort();
-    expect(names).toEqual(["feature.json", "spec.md"]);
+    expect(names).toEqual(["feature-spec.json", "feature-spec.md"]);
   });
 
   it("returns drift only for the artifact that changed when others are unchanged", () => {
@@ -112,12 +112,12 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# spec\n\nbody\n", "feature.json": '{"id":"DIFFERENT"}' },
+      currentInputs: { "feature-spec.md": "# spec\n\nbody\n", "feature-spec.json": '{"id":"DIFFERENT"}' },
       tddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
-    expect(result.drifts.map((d) => d.artifact)).toEqual(["feature.json"]);
+    expect(result.drifts.map((d) => d.artifact)).toEqual(["feature-spec.json"]);
   });
 });
 
@@ -159,7 +159,7 @@ describe("verifyGateIntegrity: gate-not-approved verdicts", () => {
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "x", "feature.json": "{}" },
+      currentInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
     });
     expect(result.status).toBe("gate-not-approved");
@@ -174,10 +174,10 @@ describe("verifyGateIntegrity: artifact name mismatch refusal", () => {
       verifyGateIntegrity({
         featureId: FEATURE_ID,
         gate: "spec",
-        currentInputs: { "spec.md": "# spec\n" },
+        currentInputs: { "feature-spec.md": "# spec\n" },
         tddDir: tdd,
       })
-    ).toThrow(/missing: feature\.json/);
+    ).toThrow(/missing: feature-spec\.json/);
   });
 
   it("throws when currentInputs contains an artifact that was NOT captured", () => {
@@ -188,8 +188,8 @@ describe("verifyGateIntegrity: artifact name mismatch refusal", () => {
         featureId: FEATURE_ID,
         gate: "spec",
         currentInputs: {
-          "spec.md": "# spec\n",
-          "feature.json": '{"id":"F1"}',
+          "feature-spec.md": "# spec\n",
+          "feature-spec.json": '{"id":"F1"}',
           "extra.txt": "uninvited",
         },
         tddDir: tdd,
@@ -208,7 +208,7 @@ describe("verifyGateIntegrity: pure-read invariant", () => {
     verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# spec\n", "feature.json": '{"id":"F1"}' },
+      currentInputs: { "feature-spec.md": "# spec\n", "feature-spec.json": '{"id":"F1"}' },
       tddDir: tdd,
     });
     const after = readFileSync(gatesPath, "utf8");
@@ -224,7 +224,7 @@ describe("verifyGateIntegrity: pure-read invariant", () => {
     verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": "# CHANGED\n", "feature.json": '{"id":"F1"}' },
+      currentInputs: { "feature-spec.md": "# CHANGED\n", "feature-spec.json": '{"id":"F1"}' },
       tddDir: tdd,
     });
     expect(readFileSync(gatesPath, "utf8")).toBe(before);

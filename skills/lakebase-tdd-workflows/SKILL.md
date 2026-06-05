@@ -30,7 +30,7 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 | Phase | Output | HITL gate |
 |---|---|---|
-| 0 Discovery | Draft `feature.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
+| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
 | 1 Architectural review | `layer` + `architectural_notes` populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
 | 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
 | 3 Design-spec gate | Experiment plan in `selection-log.md` + `features/<F>/plan.json` | **Gate 4 – Experiment plan** |
@@ -73,7 +73,7 @@ normal HITL (halt for human sign-off).
 
 Load the per-role prompt for the phase you're in:
 
-- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the BA: turns the PO's open-ended `spec.md` intent into the structured draft spec (`feature.{md,json}` + stories + ACs).
+- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the Spec Author: reads the Feature Requester's `feature-request.md` (the original ask) plus the Product Owner's project-level `product-overview.md` intent, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
 - [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
 - [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.
@@ -342,7 +342,7 @@ const result = promoteExperiment({
   approverEmail: "kevin@example.com",
 });
 // Winner outcome: status "succeeded". Losers: outcome "abandoned", dirs moved to _archive/.
-// feature.json transitions to "ready-for-review". Appends to selection-log.md.
+// feature-spec.json transitions to "ready-for-review". Appends to selection-log.md.
 ```
 
 ### Synthesize (N≥2, menu-pick)
@@ -419,7 +419,7 @@ approveGate({
   gate: "spec",
   approver: "po@example.com",
   hitlApproved: true,
-  artifactInputs: { "spec.md": specContent, "feature.json": featureJsonContent },
+  artifactInputs: { "feature-spec.md": specContent, "feature-spec.json": featureJsonContent },
   tddDir: ".tdd",
 });
 
@@ -427,7 +427,7 @@ approveGate({
 const v = verifyGateIntegrity({
   featureId: "F1",
   gate: "spec",
-  currentInputs: { "spec.md": currentSpec, "feature.json": currentFeatureJson },
+  currentInputs: { "feature-spec.md": currentSpec, "feature-spec.json": currentFeatureJson },
   tddDir: ".tdd",
 });
 // v.status: "ok" | "drift" | "gate-not-approved"
@@ -448,7 +448,7 @@ withdrawGate({
 
 | Gate | artifactInputs keys |
 |---|---|
-| `spec` | `spec.md`, `feature.json` |
+| `spec` | `feature-spec.md`, `feature-spec.json` |
 | `plan` | `plan.json` |
 | `test_list` | `test-list.json` |
 | `promote` | `promote_ref` (synthesized string: `<winner-slug>:<branch_id>`) |
@@ -468,7 +468,7 @@ migrateGatesFromSelectionLog({
   // Optional: pass current artifact content so the synthesized state has
   // hashes that future verifyGateIntegrity() calls can match against.
   currentInputsByGate: {
-    spec: { "spec.md": readFileSync("...spec.md", "utf8"), "feature.json": readFileSync("...feature.json", "utf8") },
+    spec: { "feature-spec.md": readFileSync("...feature-spec.md", "utf8"), "feature-spec.json": readFileSync("...feature-spec.json", "utf8") },
     plan: { "plan.json": readFileSync("...plan.json", "utf8") },
     test_list: { "test-list.json": readFileSync("...test-list.json", "utf8") },
   },
@@ -498,10 +498,10 @@ const fdir = join(tdd, "features", "F1-checkout");
 const sdir = join(fdir, "stories", "S1-place-order");
 mkdirSync(join(sdir, "acs"), { recursive: true });
 
-writeFileSync(join(fdir, "feature.json"), JSON.stringify({
+writeFileSync(join(fdir, "feature-spec.json"), JSON.stringify({
   id: "F1", name: "Checkout flow", status: "draft", tdd_mode: "N=1", stories: ["S1"],
 }));
-writeFileSync(join(fdir, "feature.md"), "# Checkout flow\n\nDesign intent.\n");
+writeFileSync(join(fdir, "feature-spec.md"), "# Checkout flow\n\nDesign intent.\n");
 
 writeFileSync(join(sdir, "story.json"), JSON.stringify({
   id: "S1", asA: "shopper", iWantTo: "place an order",

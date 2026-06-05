@@ -32,7 +32,7 @@ const FULL_APPROVAL_LOG = `# Selection log
 ## 2026-05-01T10:00:00.000Z – Approve spec for ${FEATURE_ID}
 - **Approved by:** ${APPROVER}
 - **Artifact hashes:**
-  - \`spec.md\`: \`sha256:legacy-spec-hash\`
+  - \`feature-spec.md\`: \`sha256:legacy-spec-hash\`
 
 ## 2026-05-02T10:00:00.000Z – Approve plan for ${FEATURE_ID}
 - **Approved by:** ${APPROVER}
@@ -144,12 +144,12 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
       featureId: FEATURE_ID,
       tddDir: tdd,
       currentInputsByGate: {
-        spec: { "spec.md": specMd, "feature.json": featureJson },
+        spec: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
         plan: { "plan.json": planJson },
         test_list: { "test-list.json": testList },
       },
     });
-    expect(result.state.gates.spec.artifact_hashes?.["spec.md"]).toBe(hashArtifact(specMd));
+    expect(result.state.gates.spec.artifact_hashes?.["feature-spec.md"]).toBe(hashArtifact(specMd));
     expect(result.state.gates.plan.artifact_hashes?.["plan.json"]).toBe(hashArtifact(planJson));
   });
 
@@ -162,13 +162,13 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
       featureId: FEATURE_ID,
       tddDir: tdd,
       currentInputsByGate: {
-        spec: { "spec.md": specMd, "feature.json": featureJson },
+        spec: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
       },
     });
     const v = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
-      currentInputs: { "spec.md": specMd, "feature.json": featureJson },
+      currentInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
       tddDir: tdd,
     });
     expect(v.status).toBe("ok");

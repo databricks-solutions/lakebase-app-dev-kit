@@ -60,8 +60,8 @@ describe("FEIP-7422 smoke: directory structure", () => {
   });
 });
 
-describe("FEIP-7422 smoke: iteration specs are well-formed (feature.md voice)", () => {
-  // Iteration specs are feature.md files: pure feature-requester narrative
+describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md voice)", () => {
+  // Iteration specs are feature-request.md files: pure feature-requester narrative
   // describing WHAT the user wants, in user-behavior language. They do NOT
   // contain implementation details (no SQL, no HTTP verbs, no table names,
   // no file paths), no Acceptance Criteria tables (the kit's
@@ -79,7 +79,7 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature.md voice)", 
 
       it("carries YAML frontmatter declaring author: Feature Requester", () => {
         // Every artifact in the kit's workflow records the ROLE that
-        // authored it (not the person). Iteration specs ARE feature.md
+        // authored it (not the person). Iteration specs ARE feature-request.md
         // files, authored by the feature requester. Spec Author /
         // Architect Reviewer / Test Strategist / driver+navigator
         // outputs each carry their own role in this frontmatter slot

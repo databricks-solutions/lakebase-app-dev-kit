@@ -17,7 +17,7 @@ type Phase =
 /**
  * Non-functional requirement. NFRs are owned by the Architect and live in
  * architecture.json (HIL-adjudicated at Gate 2), NOT on the spec-author-owned
- * feature.json/story.json, putting them there drifted the spec gate (FEIP-7508).
+ * feature-spec.json/story.json, putting them there drifted the spec gate (FEIP-7508).
  */
 export interface Nfr {
   category: string;
@@ -93,13 +93,13 @@ function makeValidator() {
 
 export function readFeature(tddDir: string, featureId: string): Feature {
   const dir = findFeatureDir(tddDir, featureId);
-  const jsonPath = join(dir, "feature.json");
+  const jsonPath = join(dir, "feature-spec.json");
   return JSON.parse(readFileSync(jsonPath, "utf8"));
 }
 
 export function writeFeature(tddDir: string, feature: Feature): void {
   const dir = findFeatureDir(tddDir, feature.id);
-  const jsonPath = join(dir, "feature.json");
+  const jsonPath = join(dir, "feature-spec.json");
   writeFileSync(jsonPath, JSON.stringify(feature, null, 2) + "\n");
 }
 
@@ -189,16 +189,19 @@ function checkPair(
   validator: ReturnType<Ajv["compile"]>,
   reports: DriftReport[]
 ): void {
-  const jsonPath = join(dir, `${kind}.json`);
-  const mdPath = join(dir, `${kind}.md`);
+  // The feature pair is feature-spec.json + feature-spec.md (Spec Author's
+  // structured spec); story stays story.json + story.md.
+  const stem = kind === "feature" ? "feature-spec" : kind;
+  const jsonPath = join(dir, `${stem}.json`);
+  const mdPath = join(dir, `${stem}.md`);
   if (!existsSync(jsonPath)) {
-    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${kind}.json missing` });
+    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${stem}.json missing` });
     return;
   }
   if (!existsSync(mdPath)) {
-    reports.push({ file: mdPath, kind: "pair-missing", detail: `${kind}.md missing` });
+    reports.push({ file: mdPath, kind: "pair-missing", detail: `${stem}.md missing` });
   } else if (statSync(mdPath).size < 20) {
-    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${kind}.md narrative empty` });
+    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${stem}.md narrative empty` });
   }
   const obj = JSON.parse(readFileSync(jsonPath, "utf8"));
   if (!validator(obj)) {

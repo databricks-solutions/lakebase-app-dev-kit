@@ -14,7 +14,8 @@
 #
 # What each iteration does:
 #   1. Abandon prior feature (substrate CLI) if state is mid-flight.
-#   2. Stage .tdd/features/<id>/feature.md from the iteration spec.
+#   2. Stage .tdd/features/<id>/feature-request.md (the Feature
+#      Requester's original ask) from the iteration spec.
 #   3. /design <id>  – gates drained by mock-approver.
 #   4. /build <id>   – gates drained by mock-approver.
 #   5. Local tests (./scripts/run-tests.sh).
@@ -223,10 +224,11 @@ iteration_verify() {
 }
 
 # Feature id used by /design + /build. The kit's TDD workflow expects
-# .tdd/features/<feature-id>/feature.md + feature.json to exist; we
-# stage feature.md from the iteration spec and let /design fill in the
-# JSON + downstream artifacts. F<N>-<slug> matches the kit's example
-# id shape ("F1-partner-submits-assets").
+# .tdd/features/<feature-id>/feature-request.md (the Feature Requester's
+# original ask) to exist as /design's Spec Author input; we stage
+# feature-request.md from the iteration spec and let /design's Spec Author
+# produce feature-spec.{md,json} + downstream artifacts. F<N>-<slug>
+# matches the kit's example id shape ("F1-partner-submits-assets").
 iteration_feature_id() {
   # v1-initial-domain -> F1-initial-domain
   local iter="$1"
@@ -332,14 +334,16 @@ run_iteration() {
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
 
-  # 2. Stage the .tdd/features/<feature-id>/feature.md from the iteration
-  # spec. /design reads this; the kit's TDD workflow contract is
-  # .tdd/features/<id>/{feature.md,feature.json,...}.
-  log "  step 2: stage .tdd/features/${feature_id}/feature.md"
+  # 2. Stage the .tdd/features/<feature-id>/feature-request.md (the
+  # Feature Requester's original ask) from the iteration spec. /design's
+  # Spec Author reads this as input and produces feature-spec.{md,json};
+  # the kit's TDD workflow contract is
+  # .tdd/features/<id>/{feature-request.md,feature-spec.md,feature-spec.json,...}.
+  log "  step 2: stage .tdd/features/${feature_id}/feature-request.md"
   local feature_dir=".tdd/features/${feature_id}"
   mkdir -p "$feature_dir"
-  if [[ ! -f "$feature_dir/feature.md" ]]; then
-    cp "$spec" "$feature_dir/feature.md"
+  if [[ ! -f "$feature_dir/feature-request.md" ]]; then
+    cp "$spec" "$feature_dir/feature-request.md"
   fi
 
   # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired

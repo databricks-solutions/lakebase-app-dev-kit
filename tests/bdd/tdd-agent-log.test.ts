@@ -20,7 +20,7 @@ afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 describe("emitAgentLogEvent", () => {
   it("stamps ts, validates, and appends a JSON line to .tdd/agent-log.jsonl", () => {
     const ev = emitAgentLogEvent(
-      { role: "spec-author", level: "info", event: "artifact.written", message: "wrote feature.json", feature_id: "F1-initial-domain", data: { path: "feature.json" } },
+      { role: "spec-author", level: "info", event: "artifact.written", message: "wrote feature-spec.json", feature_id: "F1-initial-domain", data: { path: "feature-spec.json" } },
       { tddDir: tdd, now: clock },
     );
     expect(ev.ts).toBe("2026-06-05T10:00:00.000Z");
@@ -32,7 +32,7 @@ describe("emitAgentLogEvent", () => {
     const parsed = JSON.parse(lines[0]);
     expect(parsed.role).toBe("spec-author");
     expect(parsed.event).toBe("artifact.written");
-    expect(parsed.data.path).toBe("feature.json");
+    expect(parsed.data.path).toBe("feature-spec.json");
   });
 
   it("appends (does not overwrite) across multiple emits + roles", () => {

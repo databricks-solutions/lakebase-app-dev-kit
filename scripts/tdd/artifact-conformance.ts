@@ -13,14 +13,17 @@
 // invented here:
 //   - JSON artifacts (feature/story/ac/test-list/plan/workflow-state) have
 //     JSON Schemas in scripts/tdd/schemas/ and are validated against them.
-//   - architecture.md: architect-reviewer.md names its sections (Architectural
+//   - architecture.md: the Architect Reviewer names its sections (Architectural
 //     Concerns Mapping, Pattern proposals, Risks); extended with the two the
-//     PO adjudicates at Gate 2 (Decisions, Sign-off).
-//   - feature.md: the PO/Discovery draft-spec narrative (Summary, Stories,
-//     Out of scope, Open boundary questions that seed Gate 1).
+//     Architect Reviewer adjudicates at Gate 2 (Decisions, Sign-off).
+//   - feature-spec.md: the Spec Author's draft-spec narrative (Summary, Stories,
+//     Out of scope, Open questions that seed Gate 1).
+//   - feature-request.md: the Feature Requester's original ask; the Spec Author's
+//     INPUT (free-form narrative, H1 + non-empty body only). Never overwritten.
 //   - test-list.md: a Beck-style ordered list rendered from test-list.json;
-//     every item traces to a PO-authored AC (an orphan item is a smell).
-//   - spec.md: documented as an optional top-level overview; H1 + body only.
+//     every item traces to a Spec Author-authored AC (an orphan item is a smell).
+//   - product-overview.md: the Product Owner's project-level overview (replaces
+//     the old spec.md); H1 + body only.
 //
 // Keying is by artifact FILENAME, not by gate: an artifact's format is
 // intrinsic to the artifact, so this module never needs to know which gate is
@@ -54,7 +57,7 @@ type FormatSpec =
  * (e.g. promote_ref, scratch notes).
  */
 export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
-  "feature.json": { kind: "json-schema", schema: "feature.schema.json" },
+  "feature-spec.json": { kind: "json-schema", schema: "feature.schema.json" },
   "story.json": { kind: "json-schema", schema: "story.schema.json" },
   "ac.json": { kind: "json-schema", schema: "ac.schema.json" },
   "test-list.json": { kind: "json-schema", schema: "test-list.schema.json" },
@@ -64,7 +67,7 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
   // UX Designer (UI projects only): the machine-checkable design tokens.
   "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
 
-  // architect-reviewer.md section 6 + Gate 2 adjudication surface.
+  // Architect Reviewer's section 6 + Gate 2 adjudication surface.
   "architecture.md": {
     kind: "md-sections",
     sections: [
@@ -76,8 +79,8 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
     ],
   },
 
-  // PO/Discovery draft-spec narrative.
-  "feature.md": {
+  // Spec Author's draft-spec narrative.
+  "feature-spec.md": {
     kind: "md-sections",
     sections: [
       { label: "Summary", match: "summary" },
@@ -87,12 +90,17 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
     ],
   },
 
-  // Optional top-level overview narrative.
-  "spec.md": { kind: "md-narrative" },
+  // Feature Requester's original ask: the Spec Author's INPUT. Free-form
+  // narrative; only H1 + non-empty body required. Never overwritten.
+  "feature-request.md": { kind: "md-narrative" },
+
+  // Product Owner's project-level overview (replaces the old spec.md).
+  "product-overview.md": { kind: "md-narrative" },
 
   // HIL design brief (UI projects): the human's reference sites + what to take
-  // from each. The design analogue of spec.md, the source the UX Designer
-  // teases the design out of. A brief with no references is meaningless, so a
+  // from each. The design analogue of product-overview.md, the source the UX
+  // Designer teases the design out of. A brief with no references is
+  // meaningless, so a
   // References section is the one hard requirement.
   "design-brief.md": {
     kind: "md-sections",
@@ -288,14 +296,14 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
     if (existsSync(p)) paths.push(p);
   };
 
-  // Top-level PO intent overview.
-  pushIfExists(join(tddDir, "spec.md"));
+  // Top-level Product Owner project overview.
+  pushIfExists(join(tddDir, "product-overview.md"));
   // Project-level UX Designer artifacts (UI projects; absent otherwise).
   for (const name of ["design-brief.md", "design-guide.md", "design-guide.json", "ia.md"]) {
     pushIfExists(join(tddDir, "design", name));
   }
   // Feature-level artifacts.
-  for (const name of ["feature.json", "feature.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
+  for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
     pushIfExists(join(featureDir, name));
   }
   // Stories + their acceptance criteria.

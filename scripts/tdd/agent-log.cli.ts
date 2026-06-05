@@ -3,8 +3,8 @@
 //
 // Emit (the entry point a headless role agent shells out to):
 //   lakebase-tdd-log --role spec-author --level info \
-//     --event artifact.written --message "wrote feature.json" \
-//     --feature F1-initial-domain --data '{"path":"feature.json"}'
+//     --event artifact.written --message "wrote feature-spec.json" \
+//     --feature F1-initial-domain --data '{"path":"feature-spec.json"}'
 //
 // Read (tail / filter the centralized log):
 //   lakebase-tdd-log --read [--role driver] [--min-level info] [--feature F1] [--json]

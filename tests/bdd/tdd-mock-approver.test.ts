@@ -71,8 +71,8 @@ function assertNoFabricatedHashes(tddDir: string): void {
 
 describe("mockApproveOpenGates: never fabricates (Layer 1, FEIP-7508)", () => {
   it("approves ONLY spec when the structured draft spec exists; skips the rest", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
 
     const result = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
 
@@ -98,19 +98,19 @@ describe("mockApproveOpenGates: never fabricates (Layer 1, FEIP-7508)", () => {
     assertNoFabricatedHashes(tdd);
   });
 
-  it("skips spec when feature.md is absent (structured draft spec incomplete)", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
+  it("skips spec when feature-spec.md is absent (structured draft spec incomplete)", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     const result = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
     expect(result.approved).not.toContain("spec");
-    expect(result.skipped.find((s) => s.gate === "spec")?.reason).toMatch(/feature\.md/);
+    expect(result.skipped.find((s) => s.gate === "spec")?.reason).toMatch(/feature-spec\.md/);
     assertNoFabricatedHashes(tdd);
   });
 });
 
 describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)", () => {
-  it("skips spec when feature.json fails its schema", () => {
-    writeFileSync(join(fdir, "feature.json"), "{}"); // missing required fields
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+  it("skips spec when feature-spec.json fails its schema", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), "{}"); // missing required fields
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
 
     const result = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
 
@@ -121,10 +121,10 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
     assertNoFabricatedHashes(tdd);
   });
 
-  it("skips spec when feature.md is missing a required section", () => {
+  it("skips spec when feature-spec.md is missing a required section", () => {
     const incomplete = FEATURE_MD.replace("## Open questions\nQ1 status graph?\n", "");
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), incomplete);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), incomplete);
 
     const result = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
 
@@ -134,8 +134,8 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
   });
 
   it("approves test_list only with a schema-valid test-list.json", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     // malformed test list (empty items violates minItems) -> skipped
     writeFileSync(join(fdir, "test-list.json"), JSON.stringify({ feature_id: "F1", items: [] }));
     const bad = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
@@ -151,8 +151,8 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
   });
 
   it("records the HITL decision: product-owner gate.approved when it validates + approves", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
 
     const log = readAgentLog({ tddDir: tdd, role: "product-owner" });
@@ -163,8 +163,8 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
   });
 
   it("records the HITL decision: product-owner gate.refused (warn) when an artifact is non-conformant", () => {
-    writeFileSync(join(fdir, "feature.json"), "{}"); // schema-invalid
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), "{}"); // schema-invalid
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
 
     const refused = readAgentLog({ tddDir: tdd, role: "product-owner" }).find(
@@ -175,8 +175,8 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
   });
 
   it("approves promote only when a real promote_ref is supplied", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     const noRef = mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
     expect(noRef.approved).not.toContain("promote");
 

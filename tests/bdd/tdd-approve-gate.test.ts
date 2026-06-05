@@ -40,7 +40,7 @@ describe("approveGate: HITL gate enforcement", () => {
         gate: "spec",
         approver: APPROVER,
         hitlApproved: false,
-        artifactInputs: { "spec.md": "x" },
+        artifactInputs: { "feature-spec.md": "x" },
         tddDir: tdd,
       })
     ).toThrow(/hitlApproved/);
@@ -54,7 +54,7 @@ describe("approveGate: HITL gate enforcement", () => {
         gate: "spec",
         approver: "",
         hitlApproved: true,
-        artifactInputs: { "spec.md": "x" },
+        artifactInputs: { "feature-spec.md": "x" },
         tddDir: tdd,
       })
     ).toThrow(/approver/);
@@ -85,7 +85,7 @@ describe("approveGate: S2 spec gate approval", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": specMd, "feature.json": featureJson },
+      artifactInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
       tddDir: tdd,
       now: FIXED_NOW,
     });
@@ -93,8 +93,8 @@ describe("approveGate: S2 spec gate approval", () => {
     expect(result.state.gates.spec.status).toBe("approved");
     expect(result.state.gates.spec.approver).toBe(APPROVER);
     expect(result.state.gates.spec.approved_at).toBe("2026-05-31T20:00:00.000Z");
-    expect(result.capturedHashes["spec.md"]).toBe(hashArtifact(specMd));
-    expect(result.capturedHashes["feature.json"]).toBe(hashArtifact(featureJson));
+    expect(result.capturedHashes["feature-spec.md"]).toBe(hashArtifact(specMd));
+    expect(result.capturedHashes["feature-spec.json"]).toBe(hashArtifact(featureJson));
     expect(result.state.gates.spec.artifact_hashes).toEqual(result.capturedHashes);
     expect(result.state.gates.spec.history).toHaveLength(1);
     expect(result.state.gates.spec.history[0].action).toBe("approved");
@@ -107,7 +107,7 @@ describe("approveGate: S2 spec gate approval", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: FIXED_NOW,
     });
@@ -182,7 +182,7 @@ describe("approveGate: re-approval rejection", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: FIXED_NOW,
     });
@@ -192,7 +192,7 @@ describe("approveGate: re-approval rejection", () => {
         gate: "spec",
         approver: APPROVER,
         hitlApproved: true,
-        artifactInputs: { "spec.md": "y", "feature.json": "{}" },
+        artifactInputs: { "feature-spec.md": "y", "feature-spec.json": "{}" },
         tddDir: tdd,
         now: FIXED_NOW,
       })
@@ -232,7 +232,7 @@ describe("approveGate: history accumulation", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: FIXED_NOW,
     });
@@ -250,7 +250,7 @@ describe("approveGate: selection-log dual-write", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: FIXED_NOW,
     });
@@ -259,8 +259,8 @@ describe("approveGate: selection-log dual-write", () => {
     const log = readFileSync(logPath, "utf8");
     expect(log).toContain(`## 2026-05-31T20:00:00.000Z – Approve spec for ${FEATURE_ID}`);
     expect(log).toContain(`**Approved by:** ${APPROVER}`);
-    expect(log).toContain("spec.md");
-    expect(log).toContain("feature.json");
+    expect(log).toContain("feature-spec.md");
+    expect(log).toContain("feature-spec.json");
     expect(log).toContain("sha256:");
   });
 
@@ -289,7 +289,7 @@ describe("approveGate: selection-log dual-write", () => {
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,

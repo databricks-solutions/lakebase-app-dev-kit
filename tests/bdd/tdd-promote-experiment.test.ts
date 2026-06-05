@@ -18,10 +18,10 @@ function seedFeature(): void {
   const dir = join(tdd, "features", "F1-test");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    join(dir, "feature.json"),
+    join(dir, "feature-spec.json"),
     JSON.stringify({ id: "F1", name: "Test", status: "in-progress", tdd_mode: "N>=2" })
   );
-  writeFileSync(join(dir, "feature.md"), "# Test feature\n\nNarrative long enough to satisfy length.\n");
+  writeFileSync(join(dir, "feature-spec.md"), "# Test feature\n\nNarrative long enough to satisfy length.\n");
 }
 
 beforeEach(() => {
@@ -69,7 +69,7 @@ describe("promoteExperiment", () => {
     ).toBe(true);
   });
 
-  it("transitions feature status to ready-for-review when feature.json exists", async () => {
+  it("transitions feature status to ready-for-review when feature-spec.json exists", async () => {
     seedFeature();
     seedExperiment("exp-a", { status: "succeeded" });
     const result = await promoteExperiment({
@@ -80,7 +80,7 @@ describe("promoteExperiment", () => {
     });
     expect(result.feature_status).toBe("ready-for-review");
     const feature = JSON.parse(
-      readFileSync(join(tdd, "features", "F1-test", "feature.json"), "utf8")
+      readFileSync(join(tdd, "features", "F1-test", "feature-spec.json"), "utf8")
     );
     expect(feature.status).toBe("ready-for-review");
   });

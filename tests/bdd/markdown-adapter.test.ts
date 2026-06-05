@@ -24,7 +24,7 @@ function rm(dir: string): void {
 function seedFeature(tddDir: string, feature: Feature): void {
   const dir = path.join(tddDir, "features", `${feature.id}-canonical`);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "feature.json"), JSON.stringify(feature, null, 2));
+  fs.writeFileSync(path.join(dir, "feature-spec.json"), JSON.stringify(feature, null, 2));
 }
 
 function seedStory(tddDir: string, featureId: string, story: Story): void {

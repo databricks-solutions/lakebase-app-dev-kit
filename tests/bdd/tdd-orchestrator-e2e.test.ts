@@ -35,7 +35,7 @@ describe("orchestrator e2e (hermetic – stubbed Navigator + Driver, real script
       stories: ["S1"],
     });
     writeFileSync(
-      join(tdd, "features", "F1-test", "feature.md"),
+      join(tdd, "features", "F1-test", "feature-spec.md"),
       "# Test feature\n\nNarrative long enough to satisfy length check.\n"
     );
 

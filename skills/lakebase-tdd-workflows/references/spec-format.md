@@ -6,13 +6,13 @@ The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and w
 
 ```
 .tdd/
-  spec.json                          ← top-level index (optional)
-  spec.md                            ← top-level overview narrative (optional)
+  product-overview.md                ← Product Owner's project-level overview (open-ended; software is a product)
   workflow-state.json                ← current phase + locus (feature/story/ac/cycle/experiment)
   features/
     F1-partner-submits-assets/
-      feature.md                     ← human-narrated description, design intent
-      feature.json                   ← machine contract (see schemas/feature.schema.json)
+      feature-request.md                  ← Feature Requester's original ask (Spec Author's INPUT; never overwritten)
+      feature-spec.md                     ← Spec Author's narrative draft-spec (Summary, Stories, Out of scope, Open questions)
+      feature-spec.json                   ← Spec Author's machine contract (see schemas/feature.schema.json)
       architecture.md                ← Architect Reviewer's layering + concerns summary (phase 1 output)
       test-list.md                   ← Beck-style ordered test list, human view
       test-list.json                 ← Beck-style ordered test list, machine contract
@@ -58,6 +58,23 @@ The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and w
     markdown.json                    ← optional (markdown adapter is the default)
 ```
 
+## Artifact → author
+
+Who owns each artifact. "spec" is reserved for the Spec Author; the Feature
+Requester's original ask is `feature-request.md` and is never overwritten.
+
+| Artifact | Author | Scope |
+|---|---|---|
+| `product-overview.md` | Product Owner | Project-level (`.tdd/` root). Open-ended intent; not part of the per-feature spec gate. |
+| `feature-request.md` | Feature Requester | Per-feature. The original ask; the Spec Author's INPUT, read but never overwritten. |
+| `feature-spec.md` | Spec Author | Per-feature narrative draft-spec (Summary, Stories, Out of scope, Open questions). |
+| `feature-spec.json` | Spec Author | Per-feature machine contract (validated against `feature.schema.json`). |
+| `story.md` / `story.json` | Spec Author | Per-story narrative + machine contract. |
+| `ac.md` / `ac.json` | Spec Author | Per-AC narrative + machine contract. Architect later adds `layer` + `architectural_notes`. |
+| `architecture.md` / `architecture.json` | Architect Reviewer | Layering + concerns. NFRs live in `architecture.json` (HIL-adjudicated at Gate 2). |
+| `test-list.md` / `test-list.json` | Test Strategist | Beck-style ordered test list. |
+| `plan.json` | Architect / Orchestrator | Experiment plan, written at the design-spec gate. |
+
 ## The markdown ↔ JSON contract
 
 **JSON is the source of truth for structured data**: ids, statuses, layer assignments, NFRs, links between features/stories/ACs.
@@ -67,7 +84,7 @@ The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and w
 `scripts/tdd/spec-sync.ts` validates the pair:
 
 - Schema: every `.json` is validated against its schema in `scripts/tdd/schemas/`. A schema failure is a hard error reported as a `DriftReport` of kind `schema`.
-- Pair completeness: each `feature.json`, `story.json`, and `ac.json` must have a sibling `.md`. Missing narrative is reported as `pair-missing`. Empty narrative is reported as `narrative-empty` (size < 20 bytes).
+- Pair completeness: each `feature-spec.json`, `story.json`, and `ac.json` must have a sibling `.md` (`feature-spec.md`, `story.md`, `ac.md`). Missing narrative is reported as `pair-missing`. Empty narrative is reported as `narrative-empty` (size < 20 bytes).
 - ID consistency: the directory name must start with the `id` field from the JSON. Mismatches are reported as `id-mismatch`.
 - Drift is **warn-only**. The CLI exits 0 with reports printed. Auto-correction is intentionally not done – narrative changes are too easy to silently overwrite.
 
@@ -126,23 +143,26 @@ schema failures and missing required narrative sections both hard-block the gate
 
 | Artifact | Producing role | Required format |
 |---|---|---|
-| `feature.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
+| `feature-spec.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
 | `test-list.json` | Test Strategist | `test-list.schema.json` |
 | `plan.json` | Architect / Orchestrator | `plan.schema.json` |
-| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2). NFRs live here, NOT on the spec-gated `feature.json`/`story.json`. |
+| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2). NFRs live here, NOT on the spec-gated `feature-spec.json`/`story.json`. |
 | `workflow-state.json` | Orchestrator | `workflow-state.schema.json` |
-| `spec.md` | Product Owner | H1 + non-empty body (open-ended intent; not gate-locked) |
-| `feature.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |
+| `product-overview.md` | Product Owner | H1 + non-empty body (open-ended intent; project-level; not gate-locked) |
+| `feature-request.md` | Feature Requester | H1 + non-empty body (the original ask; the Spec Author's INPUT, never overwritten) |
+| `feature-spec.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |
 | `architecture.md` | Architect Reviewer | H1 + **Architectural Concerns Mapping**, **Pattern proposals**, **Risks**, **Decisions**, **Sign-off** |
 | `test-list.md` | Test Strategist | Rendered from JSON: H1 + `Ordered for:` + an AC reference on every item + a **Deferred / skipped** section |
-| `design-brief.md` | Product Owner / HIL (UI projects) | H1 + **References** (the reference sites + what to take from each; the design analogue of `spec.md`) |
+| `design-brief.md` | Product Owner / HIL (UI projects) | H1 + **References** (the reference sites + what to take from each; the design analogue of `product-overview.md`) |
 | `design-guide.json` | UX Designer (UI projects) | `design-guide.schema.json` (typography + colors + spacing tokens) |
 | `design-guide.md` | UX Designer (UI projects) | H1 + **Design Philosophy**, **Typography**, **Color Palette**, **Spacing**, **Components**, **User Feedback Principles** |
 | `ia.md` | UX Designer (UI projects) | H1 + **Screens**, **Navigation**, **User flows** |
 
-`spec.md` is intentionally loose: it is the Product Owner's living, plain-English
-statement of intent, refined across sprints. The structured deliverables the
-Spec Author composes from it (feature/story/AC) carry the strong contracts.
+`product-overview.md` is intentionally loose: it is the Product Owner's living,
+project-level, plain-English statement of intent, refined across sprints. The
+per-feature `feature-request.md` (the Feature Requester's original ask) is the
+Spec Author's input; the structured deliverables the Spec Author composes
+(feature-spec, story, AC) carry the strong contracts.
 
 CLI: `lakebase-tdd-gate-conformance --feature <id>` scans a feature's artifacts
 and reports any that do not conform. Exit 1 if any artifact is non-conformant.

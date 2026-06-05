@@ -12,8 +12,8 @@
 // of selection-log.md / gates.json history.
 //
 // Per-gate artifact convention (mirrors ADR-0004):
-//   spec       -> feature.json + feature.md (both required, the Spec Author's
-//                 structured draft spec); spec.md (PO intent) included if present
+//   spec       -> feature-spec.json + feature-spec.md (both required, the Spec
+//                 Author's structured draft spec)
 //   plan       -> plan.json (required)
 //   test_list  -> test-list.json and/or test-list.md (at least one required)
 //   promote    -> a caller-supplied promote_ref string (required)
@@ -161,22 +161,21 @@ function resolveArtifactInputs(
   switch (gate) {
     case "spec": {
       // The spec gate locks the Spec Author's structured draft spec:
-      // feature.json + feature.md (both required). spec.md (PO intent) is the
-      // living, un-gated source, included only when present.
-      const featureJson = readIfPresent("feature.json");
+      // feature-spec.json + feature-spec.md (both required). product-overview.md
+      // (the Product Owner's project-level overview) is NOT part of the
+      // per-feature spec gate and is deliberately not included here.
+      const featureJson = readIfPresent("feature-spec.json");
       if (featureJson === undefined) {
-        return { reason: "feature.json not found (spec phase not complete)" };
+        return { reason: "feature-spec.json not found (spec phase not complete)" };
       }
-      const featureMd = readIfPresent("feature.md");
+      const featureMd = readIfPresent("feature-spec.md");
       if (featureMd === undefined) {
-        return { reason: "feature.md not found (structured draft spec incomplete)" };
+        return { reason: "feature-spec.md not found (structured draft spec incomplete)" };
       }
       const inputs: Record<string, string> = {
-        "feature.json": featureJson,
-        "feature.md": featureMd,
+        "feature-spec.json": featureJson,
+        "feature-spec.md": featureMd,
       };
-      const specMd = readIfPresent("spec.md");
-      if (specMd !== undefined) inputs["spec.md"] = specMd;
       return withConformance(inputs);
     }
     case "plan": {

@@ -180,14 +180,14 @@ describe.skipIf(!RUN_SUITE)(
     }, 300_000);
 
     it("S1: approveGate(spec) writes gates.json + selection-log narrative", () => {
-      fs.writeFileSync(path.join(featureDir, "spec.md"), SPEC_MD);
-      fs.writeFileSync(path.join(featureDir, "feature.json"), FEATURE_JSON);
+      fs.writeFileSync(path.join(featureDir, "feature-spec.md"), SPEC_MD);
+      fs.writeFileSync(path.join(featureDir, "feature-spec.json"), FEATURE_JSON);
       const result = approveGate({
         featureId: FEATURE_ID,
         gate: "spec",
         approver: APPROVER,
         hitlApproved: true,
-        artifactInputs: { "spec.md": SPEC_MD, "feature.json": FEATURE_JSON },
+        artifactInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
         tddDir,
       });
       expect(result.state.gates.spec.status).toBe("approved");
@@ -232,7 +232,7 @@ describe.skipIf(!RUN_SUITE)(
       const ok = verifyGateIntegrity({
         featureId: FEATURE_ID,
         gate: "spec",
-        currentInputs: { "spec.md": SPEC_MD, "feature.json": FEATURE_JSON },
+        currentInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
         tddDir,
       });
       expect(ok.status).toBe("ok");
@@ -240,7 +240,7 @@ describe.skipIf(!RUN_SUITE)(
       const okAfterReformat = verifyGateIntegrity({
         featureId: FEATURE_ID,
         gate: "spec",
-        currentInputs: { "spec.md": SPEC_MD_PRETTIER, "feature.json": FEATURE_JSON },
+        currentInputs: { "feature-spec.md": SPEC_MD_PRETTIER, "feature-spec.json": FEATURE_JSON },
         tddDir,
       });
       expect(okAfterReformat.status).toBe("ok");
@@ -251,8 +251,8 @@ describe.skipIf(!RUN_SUITE)(
         featureId: FEATURE_ID,
         gate: "spec",
         currentInputs: {
-          "spec.md": "# F-AUDIT: per-branch migration audit log\n\nDIFFERENT body\n",
-          "feature.json": FEATURE_JSON,
+          "feature-spec.md": "# F-AUDIT: per-branch migration audit log\n\nDIFFERENT body\n",
+          "feature-spec.json": FEATURE_JSON,
         },
         tddDir,
       });
@@ -290,7 +290,7 @@ describe.skipIf(!RUN_SUITE)(
         gate: "spec",
         approver: APPROVER,
         hitlApproved: true,
-        artifactInputs: { "spec.md": SPEC_MD, "feature.json": FEATURE_JSON },
+        artifactInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
         tddDir,
       });
       approveGate({

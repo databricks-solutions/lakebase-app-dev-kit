@@ -47,9 +47,9 @@ describe("layDownTddScaffold (hermetic)", () => {
     }
   });
 
-  it("spec.md ships the feature catalog table header", () => {
+  it("product-overview.md ships the feature catalog table header", () => {
     layDownTddScaffold(projectDir);
-    const spec = readFileSync(join(projectDir, ".tdd", "spec.md"), "utf8");
+    const spec = readFileSync(join(projectDir, ".tdd", "product-overview.md"), "utf8");
     expect(spec).toMatch(/\| Feature \|/);
   });
 });

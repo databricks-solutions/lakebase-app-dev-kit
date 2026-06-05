@@ -37,17 +37,17 @@ describe("spec-sync", () => {
   it("round-trips a feature: write then read returns the same object", () => {
     const feature = fixture();
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
-    writeFileSync(join(featureDir, "feature.md"), "# Test Feature\n\nNarrative text.\n");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# Test Feature\n\nNarrative text.\n");
     const round = readFeature(tdd, "F1");
     expect(round).toEqual(feature);
   });
 
-  it("writeFeature updates feature.json", () => {
+  it("writeFeature updates feature-spec.json", () => {
     const feature = fixture();
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
-    writeFileSync(join(featureDir, "feature.md"), "# Test Feature\n\nNarrative text.\n");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# Test Feature\n\nNarrative text.\n");
     const updated: Feature = { ...feature, status: "spec-approved" };
     writeFeature(tdd, updated);
     const round = readFeature(tdd, "F1");
@@ -57,8 +57,8 @@ describe("spec-sync", () => {
   it("validateSpec returns no reports for a valid tree", () => {
     const feature = fixture();
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
-    writeFileSync(join(featureDir, "feature.md"), "# Test Feature\n\nNarrative text long enough to pass length check.\n");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# Test Feature\n\nNarrative text long enough to pass length check.\n");
     const storyDir = join(featureDir, "stories", "S1-test-story");
     writeFileSync(
       join(storyDir, "story.json"),
@@ -79,10 +79,10 @@ describe("spec-sync", () => {
     expect(validateSpec(tdd)).toEqual([]);
   });
 
-  it("validateSpec reports schema violation for malformed feature.json", () => {
+  it("validateSpec reports schema violation for malformed feature-spec.json", () => {
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify({ id: "F1", name: "X" }));
-    writeFileSync(join(featureDir, "feature.md"), "# X\n\nLong enough narrative body.\n");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify({ id: "F1", name: "X" }));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# X\n\nLong enough narrative body.\n");
     const reports = validateSpec(tdd);
     expect(reports.find((r) => r.kind === "schema")).toBeTruthy();
   });
@@ -90,7 +90,7 @@ describe("spec-sync", () => {
   it("validateSpec reports pair-missing when .md is absent", () => {
     const feature = fixture();
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
     const reports = validateSpec(tdd);
     expect(reports.find((r) => r.kind === "pair-missing")).toBeTruthy();
   });
@@ -98,8 +98,8 @@ describe("spec-sync", () => {
   it("validateSpec reports narrative-empty when .md is too short", () => {
     const feature = fixture();
     const featureDir = join(tdd, "features", "F1-test-feature");
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
-    writeFileSync(join(featureDir, "feature.md"), "x");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.md"), "x");
     const reports = validateSpec(tdd);
     expect(reports.find((r) => r.kind === "narrative-empty")).toBeTruthy();
   });
@@ -108,8 +108,8 @@ describe("spec-sync", () => {
     const featureDir = join(tdd, "features", "Z9-wrong-dir");
     mkdirSync(featureDir, { recursive: true });
     const feature = { ...fixture(), id: "F1" };
-    writeFileSync(join(featureDir, "feature.json"), JSON.stringify(feature));
-    writeFileSync(join(featureDir, "feature.md"), "# X\n\nLong enough narrative body here.\n");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(feature));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# X\n\nLong enough narrative body here.\n");
     const reports = validateSpec(tdd);
     expect(reports.find((r) => r.kind === "id-mismatch")).toBeTruthy();
   });

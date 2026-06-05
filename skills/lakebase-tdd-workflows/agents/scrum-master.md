@@ -35,9 +35,9 @@ You drive other roles only through artifacts + scopes. Assume each role you spaw
 ### Phase 0 → 1 – Discovery → Architectural review
 
 1. Read `workflow-state.json`. If phase != "discovery", do not regress.
-2. Confirm draft spec artifacts exist for the active feature: `feature.{md,json}` + one or more stories with their ACs.
+2. Confirm draft spec artifacts exist for the active feature: `feature-spec.{md,json}` + one or more stories with their ACs.
 3. Surface to PO: spec gate confirmation.
-4. On approval: call `approveGate({ featureId, gate: "spec", approver, hitlApproved: true, artifactInputs: { "feature.json": <content>, "feature.md": <content> } })`. These are the structured draft spec the Spec Author produced; they are what the gate locks. `spec.md` is the PO's open-ended intent source, not a gated deliverable, so it is not hashed here. Transition phase → "architectural-review". Hand off to Architect Reviewer (`agents/architect-reviewer.md`).
+4. On approval: call `approveGate({ featureId, gate: "spec", approver, hitlApproved: true, artifactInputs: { "feature-spec.json": <content>, "feature-spec.md": <content> } })`. These are the structured draft spec the Spec Author produced; they are what the gate locks. `feature-request.md` (the Feature Requester's original ask) and `product-overview.md` (the Product Owner's open-ended project overview) are open-ended intent sources, not gated deliverables, so they are not hashed here. Transition phase → "architectural-review". Hand off to Architect Reviewer (`agents/architect-reviewer.md`).
 
 ### Phase 1 → 2 – Architectural review → Test-list construction
 

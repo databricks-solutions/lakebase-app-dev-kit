@@ -39,7 +39,7 @@ export interface PromoteResult {
  *  - Updates winner outcomes: status="succeeded".
  *  - Updates loser outcomes: status="abandoned".
  *  - Moves loser dirs under .tdd/experiments/<F>/_archive/.
- *  - Transitions feature.json status to "ready-for-review".
+ *  - Transitions feature-spec.json status to "ready-for-review".
  *  - Appends a record to .tdd/selection-log.md.
  *
  * This is HITL-gated: callers must set hitlApproved=true. The function refuses
@@ -85,7 +85,7 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
     feature.status = "ready-for-review";
     writeFeature(tddDir, feature);
   } catch {
-    // No feature.json – caller's responsibility. Don't block promotion.
+    // No feature-spec.json – caller's responsibility. Don't block promotion.
   }
 
   // Append a single "Promote" entry to selection log on top of the

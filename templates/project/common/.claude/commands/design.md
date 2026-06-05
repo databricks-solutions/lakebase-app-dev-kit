@@ -40,7 +40,7 @@ If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The
 
 ## Phases (HITL-gated)
 
-1. **Spec Author** drafts `spec.md` + `feature.json` from the prompt.
+1. **Spec Author** drafts `spec.md` + `feature-spec.json` from the prompt.
 2. **Architect Reviewer** challenges scope and boundaries. Gate 1 stops the pipeline until the human signs off.
 3. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
 

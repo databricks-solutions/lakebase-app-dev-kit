@@ -33,8 +33,8 @@ Shell out to the kit CLI (works from a headless `claude -p` agent):
 
 ```bash
 lakebase-tdd-log --role spec-author --level info \
-  --event artifact.written --message "wrote feature.json + 3 stories" \
-  --feature F1-initial-domain --data '{"path":"feature.json","conformant":true}'
+  --event artifact.written --message "wrote feature-spec.json + 3 stories" \
+  --feature F1-initial-domain --data '{"path":"feature-spec.json","conformant":true}'
 ```
 
 Read / tail the centralized log:

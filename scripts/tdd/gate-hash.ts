@@ -1,6 +1,6 @@
 // Hash normalization helper for gate artifacts.
 //
-// Captures a stable fingerprint of a gate's protected artifact (spec.md,
+// Captures a stable fingerprint of a gate's protected artifact (feature-spec.md,
 // plan.json, test-list.json, ...) that survives formatter-only edits
 // (prettier, editor whitespace settings, CRLF/LF differences) while still
 // detecting any semantic change.

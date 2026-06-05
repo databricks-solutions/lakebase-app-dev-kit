@@ -35,20 +35,21 @@ The substrate API keeps "experiment" as the noun so the same primitives serve bo
 
 | Role | Responsibility | Agent prompt |
 |---|---|---|
-| **Spec Author** | The BA. Works with the PO to turn open-ended `spec.md` intent into the structured draft spec (features, stories, ACs). | [`agents/spec-author.md`](agents/spec-author.md) (first phase of `/design`). |
+| **Feature Requester** | Writes `feature-request.md`, the original ask. The Spec Author's INPUT; read but never overwritten. | The human (or upstream PM). |
+| **Spec Author** | Reads the Feature Requester's `feature-request.md` and the PO's `product-overview.md`, and turns them into the structured draft spec (`feature-spec.{md,json}`, stories, ACs). | [`agents/spec-author.md`](agents/spec-author.md) (first phase of `/design`). |
 | **UX Designer** | The experience lens (UI projects only). Owns the design guide + information architecture and ensures downstream UI adheres to them. | [`agents/ux-designer.md`](agents/ux-designer.md) |
 | **Architect Reviewer** | Applies layering lens; populates `layer` and `architectural_notes` per AC; imports `software-design-principles`. | [`agents/architect-reviewer.md`](agents/architect-reviewer.md) |
 | **Test Strategist** | Converts annotated ACs into a Beck-style ordered test list; emits per-AC views. | [`agents/test-strategist.md`](agents/test-strategist.md) |
 | **Orchestrator (Scrum-Master)** | Runs design-spec gate; spawns experiments to budget; runs cycles; watches smells; presents outcomes to HITL. | [`agents/scrum-master.md`](agents/scrum-master.md) |
 | **Navigator** | PLAN, RED (writes failing tests), REVIEW. Never weakens an assertion. | [`agents/navigator.md`](agents/navigator.md) |
 | **Driver** | GREEN (minimal honest code), REFACTOR. Never deletes or weakens a test. | [`agents/driver.md`](agents/driver.md) |
-| **Product Owner / HITL** | Owns spec, ACs, test list ordering. Decides promote vs synthesize. Owns every gate. | The human. |
+| **Product Owner / HITL** | Owns the project-level `product-overview.md` (open-ended intent; software is a product), ACs, test list ordering. Decides promote vs synthesize. Owns every gate. | The human. |
 
 ## Phases and gates
 
 | Phase | Output | HITL gate |
 |---|---|---|
-| 0 Discovery | Draft `feature.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
+| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
 | 1 Architectural review | Layer + architectural_notes populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
 | 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
 | 3 Design-spec gate | Experiment plan in `selection-log.md` (N, strategies, budget) | **Gate 4 – Experiment plan** |
@@ -312,7 +313,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `readFeature(tddDir, featureId)` / `writeFeature(tddDir, feature)` | Read/write the feature record (`.tdd/features/<id>/feature.json`). |
+| `readFeature(tddDir, featureId)` / `writeFeature(tddDir, feature)` | Read/write the feature record (`.tdd/features/<id>/feature-spec.json`). |
 | `readWorkflowState(tddDir)` / `writeWorkflowState(tddDir, state)` | Cross-feature workflow pointer (which feature is "current", last gate, etc.). |
 | `validateSpec(tddDir)` | Walk the `.tdd/` tree and return `DriftReport[]`. Backs `spec-sync.cli.js`. |
 | `writeArtifact(args)` / `listArtifacts(tddDir, featureId, kind?)` / `readArtifact(args)` | Generic artifact IO under `.tdd/features/<id>/artifacts/`. |

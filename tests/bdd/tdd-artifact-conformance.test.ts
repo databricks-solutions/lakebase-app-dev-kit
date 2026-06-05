@@ -18,27 +18,27 @@ import {
 import { renderTestListMarkdown } from "../../scripts/tdd/test-list";
 
 describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
-  it("passes a fully-formed feature.json", () => {
+  it("passes a fully-formed feature-spec.json", () => {
     const feature = JSON.stringify({
       id: "F1-initial-domain",
       name: "Initial Domain",
       status: "draft",
       tdd_mode: "N=1",
     });
-    const r = checkArtifactConformance("feature.json", feature);
+    const r = checkArtifactConformance("feature-spec.json", feature);
     expect(r.ok).toBe(true);
   });
 
-  it("fails feature.json missing required fields, naming the violations", () => {
+  it("fails feature-spec.json missing required fields, naming the violations", () => {
     // `{}` was the placeholder content older tests used; it is NOT conformant.
-    const r = checkArtifactConformance("feature.json", "{}");
+    const r = checkArtifactConformance("feature-spec.json", "{}");
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.violations.join(" ")).toMatch(/id|name|status|tdd_mode/);
   });
 
-  it("fails feature.json that is not valid JSON", () => {
-    const r = checkArtifactConformance("feature.json", "{ not json");
+  it("fails feature-spec.json that is not valid JSON", () => {
+    const r = checkArtifactConformance("feature-spec.json", "{ not json");
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.violations.join(" ")).toMatch(/json/i);
@@ -55,7 +55,7 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("test-list.json", bad).ok).toBe(false);
   });
 
-  it("validates architecture.json (NFRs live here, not on feature.json)", () => {
+  it("validates architecture.json (NFRs live here, not on feature-spec.json)", () => {
     const arch = JSON.stringify({
       feature_id: "F1-initial-domain",
       nfrs: [{ category: "security", requirement: "all writes authn'd", hil_status: "accepted" }],
@@ -67,7 +67,7 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1" })).ok).toBe(false);
   });
 
-  it("rejects nfrs on the spec-gated feature.json (moved to architecture.json)", () => {
+  it("rejects nfrs on the spec-gated feature-spec.json (moved to architecture.json)", () => {
     const withNfrs = JSON.stringify({
       id: "F1-initial-domain",
       name: "Initial Domain",
@@ -75,8 +75,8 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
       tdd_mode: "N=1",
       nfrs: [{ category: "security", requirement: "x" }],
     });
-    // additionalProperties:false now rejects nfrs on feature.json, enforcing the boundary.
-    expect(checkArtifactConformance("feature.json", withNfrs).ok).toBe(false);
+    // additionalProperties:false now rejects nfrs on feature-spec.json, enforcing the boundary.
+    expect(checkArtifactConformance("feature-spec.json", withNfrs).ok).toBe(false);
   });
 
   it("validates plan.json against the new plan schema", () => {
@@ -141,7 +141,7 @@ describe("checkArtifactConformance: architecture.md (Architect Reviewer contract
   });
 });
 
-describe("checkArtifactConformance: feature.md (Discovery draft-spec contract)", () => {
+describe("checkArtifactConformance: feature-spec.md (Discovery draft-spec contract)", () => {
   // The PO/Discovery draft-spec narrative. Required: Summary, Stories,
   // Out of scope, Open questions (the boundary questions that seed Gate 1).
   const FULL_FEATURE = [
@@ -157,35 +157,50 @@ describe("checkArtifactConformance: feature.md (Discovery draft-spec contract)",
     "",
   ].join("\n");
 
-  it("passes feature.md carrying all four required sections", () => {
-    expect(checkArtifactConformance("feature.md", FULL_FEATURE).ok).toBe(true);
+  it("passes feature-spec.md carrying all four required sections", () => {
+    expect(checkArtifactConformance("feature-spec.md", FULL_FEATURE).ok).toBe(true);
   });
 
-  it("hard-blocks feature.md missing Open questions", () => {
+  it("hard-blocks feature-spec.md missing Open questions", () => {
     const md = FULL_FEATURE.replace("## Open questions\nQ1 status graph?\n", "");
-    const r = checkArtifactConformance("feature.md", md);
+    const r = checkArtifactConformance("feature-spec.md", md);
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.violations.join(" ")).toMatch(/open|question/i);
   });
 
-  it("hard-blocks feature.md with no H1 title", () => {
-    const r = checkArtifactConformance("feature.md", "just prose, no heading\n");
+  it("hard-blocks feature-spec.md with no H1 title", () => {
+    const r = checkArtifactConformance("feature-spec.md", "just prose, no heading\n");
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.violations.join(" ")).toMatch(/h1|title/i);
   });
 });
 
-describe("checkArtifactConformance: spec.md (optional top-level overview)", () => {
-  // spec-format.md documents spec.md as an optional top-level overview with
-  // no named sections. Honest contract: H1 + non-empty body.
-  it("passes spec.md with an H1 and a body", () => {
-    expect(checkArtifactConformance("spec.md", "# Overview\n\nThe system overall.\n").ok).toBe(true);
+describe("checkArtifactConformance: product-overview.md (Product Owner project-level overview)", () => {
+  // The Product Owner's project-level overview (replaces the old spec.md).
+  // Loose contract: H1 + non-empty body, no named sections.
+  it("passes product-overview.md with an H1 and a body", () => {
+    expect(checkArtifactConformance("product-overview.md", "# Overview\n\nThe system overall.\n").ok).toBe(true);
   });
 
-  it("hard-blocks an empty-bodied spec.md (title only)", () => {
-    const r = checkArtifactConformance("spec.md", "# Title\n");
+  it("hard-blocks an empty-bodied product-overview.md (title only)", () => {
+    const r = checkArtifactConformance("product-overview.md", "# Title\n");
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("unreachable");
+    expect(r.violations.join(" ")).toMatch(/body|empty/i);
+  });
+});
+
+describe("checkArtifactConformance: feature-request.md (Feature Requester original ask)", () => {
+  // The Feature Requester's original ask; the Spec Author's INPUT (never
+  // overwritten). Loose contract: H1 + non-empty body, no named sections.
+  it("passes feature-request.md with an H1 and a body", () => {
+    expect(checkArtifactConformance("feature-request.md", "# Track bugs\n\nUsers need to file bugs.\n").ok).toBe(true);
+  });
+
+  it("hard-blocks an empty-bodied feature-request.md (title only)", () => {
+    const r = checkArtifactConformance("feature-request.md", "# Title\n");
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("unreachable");
     expect(r.violations.join(" ")).toMatch(/body|empty/i);
@@ -335,13 +350,14 @@ describe("checkArtifactConformance: artifacts with no declared format", () => {
   it("exports a format registry covering the gated artifacts", () => {
     expect(Object.keys(ARTIFACT_FORMATS)).toEqual(
       expect.arrayContaining([
-        "feature.json",
+        "feature-spec.json",
         "plan.json",
         "test-list.json",
         "test-list.md",
-        "spec.md",
+        "feature-request.md",
+        "product-overview.md",
         "architecture.md",
-        "feature.md",
+        "feature-spec.md",
         "design-brief.md",
         "design-guide.json",
         "design-guide.md",
@@ -382,21 +398,21 @@ describe("scanFeatureConformance: checks every artifact that exists on disk", ()
   afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
   it("reports ok when the present artifacts all conform; ignores absent ones", () => {
-    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     const report = scanFeatureConformance(tdd, "F1-initial-domain");
     expect(report.ok).toBe(true);
     expect(report.entries.map((e) => e.artifact).sort()).toEqual(
-      ["features/F1-initial-domain/feature.json", "features/F1-initial-domain/feature.md"].sort(),
+      ["features/F1-initial-domain/feature-spec.json", "features/F1-initial-domain/feature-spec.md"].sort(),
     );
   });
 
   it("flags a non-conformant artifact and reports not-ok", () => {
-    writeFileSync(join(fdir, "feature.json"), "{}"); // schema-invalid
-    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "feature-spec.json"), "{}"); // schema-invalid
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     const report = scanFeatureConformance(tdd, "F1-initial-domain");
     expect(report.ok).toBe(false);
-    const bad = report.entries.find((e) => e.artifact.endsWith("feature.json"));
+    const bad = report.entries.find((e) => e.artifact.endsWith("feature-spec.json"));
     expect(bad?.ok).toBe(false);
     expect(bad?.violations.join(" ")).toMatch(/id|name|status|tdd_mode/);
   });
