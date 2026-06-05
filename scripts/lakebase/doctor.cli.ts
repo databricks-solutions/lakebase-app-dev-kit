@@ -8,7 +8,9 @@
 //   1 = at least one WARN
 //   2 = at least one FAIL
 
+import * as path from "node:path";
 import { runDoctor, type CheckResult, type DoctorReport } from "./doctor.js";
+import { ensureProfilePinned } from "./databricks-profile.js";
 
 interface ParsedArgs {
   projectDir?: string;
@@ -16,6 +18,7 @@ interface ParsedArgs {
   host?: string;
   json?: boolean;
   pretty?: boolean;
+  fix?: boolean;
   help?: boolean;
 }
 
@@ -39,6 +42,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--pretty":
         out.pretty = true;
+        break;
+      case "--fix":
+        out.fix = true;
         break;
       case "--help":
       case "-h":
@@ -66,6 +72,9 @@ Flags:
   --host <url>           Workspace host override (skips resolveDatabricksHost)
   --json                 Machine-readable JSON output
   --pretty               Pretty-print JSON (only with --json)
+  --fix                  Apply safe remediations before reporting (currently:
+                         pin DATABRICKS_CONFIG_PROFILE in .env when a unique
+                         valid CLI profile matches the workspace host)
 
 Exit codes:
   0 = all OK
@@ -106,6 +115,17 @@ async function main(): Promise<number> {
   if (args.help) {
     process.stdout.write(HELP);
     return 0;
+  }
+  if (args.fix) {
+    const envPath = path.join(args.projectDir ?? process.cwd(), ".env");
+    const res = await ensureProfilePinned({ envPath });
+    if (!args.json) {
+      if (res.pinned) {
+        process.stdout.write(`[ FIX  ] config-profile        pinned DATABRICKS_CONFIG_PROFILE=${res.pinned}\n`);
+      } else {
+        process.stdout.write(`[ FIX  ] config-profile        no change (${res.reason})\n`);
+      }
+    }
   }
   const report = await runDoctor({
     projectDir: args.projectDir,

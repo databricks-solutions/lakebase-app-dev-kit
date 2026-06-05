@@ -84,6 +84,29 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+# --- Profile self-heal: pin DATABRICKS_CONFIG_PROFILE when absent ---
+# Multi-workspace users whose DEFAULT profile points at a different host
+# would otherwise fail the preflight below: a bare DATABRICKS_HOST env var
+# can't be mapped to the cached OAuth token. If exactly one valid CLI
+# profile matches this host, pin it in .env (idempotent; skipped when
+# already set, or when no/ambiguous match). Runs BEFORE the preflight so
+# the very first checkout on a fresh machine self-heals.
+if [ -z "${DATABRICKS_CONFIG_PROFILE:-}" ] && [ -n "${DATABRICKS_HOST:-}" ]; then
+  RESOLVE_BIN="$WORK_TREE/node_modules/.bin/lakebase-resolve-profile"
+  if [ ! -x "$RESOLVE_BIN" ]; then
+    RESOLVE_ALT="$WORK_TREE/node_modules/@databricks-solutions/lakebase-app-dev-kit/dist/scripts/lakebase/resolve-profile.cli.js"
+    if [ -f "$RESOLVE_ALT" ]; then RESOLVE_BIN="node $RESOLVE_ALT"; else RESOLVE_BIN=""; fi
+  fi
+  if [ -n "$RESOLVE_BIN" ]; then
+    PINNED_PROFILE="$($RESOLVE_BIN --host "$DATABRICKS_HOST" 2>/dev/null || true)"
+    if [ -n "$PINNED_PROFILE" ]; then
+      printf 'DATABRICKS_CONFIG_PROFILE=%s\n' "$PINNED_PROFILE" >> .env
+      export DATABRICKS_CONFIG_PROFILE="$PINNED_PROFILE"
+      echo "Lakebase: pinned DATABRICKS_CONFIG_PROFILE=$PINNED_PROFILE in .env (matched workspace host)."
+    fi
+  fi
+fi
+
 # --- Auth preflight: verify CLI can reach Databricks before doing anything ---
 # .env is already sourced above, so DATABRICKS_CONFIG_PROFILE (if set) is already exported.
 if ! databricks current-user me -o json >/dev/null 2>&1; then

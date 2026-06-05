@@ -12,6 +12,7 @@ export * from "./branch-delete.js";
 export * from "./convention-branches.js";
 export * from "./cut-backup.js";
 export * from "./databricks-host.js";
+export * from "./databricks-profile.js";
 export * from "./deploy-app-endpoint.js";
 export * from "./deploy-app-yaml.js";
 export * from "./deploy-credentials.js";

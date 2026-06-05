@@ -30,6 +30,7 @@ import {
 import { mintCredential } from "./get-connection.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { updateEnvConnection } from "./env-file.js";
+import { ensureProfilePinned } from "./databricks-profile.js";
 import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
@@ -244,14 +245,16 @@ export async function createPairedBranch(
       } else {
         const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
         const dsn = buildDsn(ep.host, database, email, token);
+        const envPath = path.join(args.cwd, ".env");
         updateEnvConnection({
-          envPath: path.join(args.cwd, ".env"),
+          envPath,
           branchId: sanitized,
           databaseUrl: dsn,
           username: email,
           password: token,
           endpointHost: ep.host,
         });
+        await ensureProfilePinned({ envPath }).catch(() => undefined);
         envSynced = true;
       }
     } catch (err) {
@@ -453,6 +456,9 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
     password: token,
     endpointHost: ep.host,
   });
+  // Pin the matching CLI profile so the hooks' post-source preflight works
+  // for multi-workspace users. Best-effort: never let it break the sync.
+  await ensureProfilePinned({ envPath }).catch(() => undefined);
 
   return { branchId: sanitized, endpointHost: ep.host, databaseUrl: dsn };
 }
@@ -661,6 +667,7 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
     password: token,
     endpointHost: ep.host,
   });
+  await ensureProfilePinned({ envPath }).catch(() => undefined);
 
   return {
     branchId,

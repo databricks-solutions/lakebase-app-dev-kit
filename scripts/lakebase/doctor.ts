@@ -7,6 +7,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { exec } from "../util/exec.js";
 import { resolveDatabricksHost } from "./databricks-host.js";
+import { resolveProfileForHost } from "./databricks-profile.js";
 import { listBranches } from "./branch-utils.js";
 import { verifyHooks } from "./project-verify.js";
 import { detectLanguage } from "./schema-migrate.js";
@@ -185,6 +186,53 @@ function checkEnv(projectDir: string): CheckResult {
     status: "ok",
     message: `.env present with required keys (LAKEBASE_PROJECT_ID=${env.LAKEBASE_PROJECT_ID})`,
     detail: { keys: Object.keys(env).length, projectId: env.LAKEBASE_PROJECT_ID },
+  };
+}
+
+/**
+ * Warn when .env carries DATABRICKS_HOST but no DATABRICKS_CONFIG_PROFILE
+ * AND exactly one valid CLI profile matches that host. Multi-workspace
+ * users hit auth failures in this state because the bare host env var
+ * can't be mapped to the cached OAuth token. `lakebase-doctor --fix`
+ * pins it. No-op (ok/skip) when already pinned or no unique match exists.
+ */
+async function checkConfigProfile(env: Record<string, string>): Promise<CheckResult> {
+  const host = env.DATABRICKS_HOST;
+  if (env.DATABRICKS_CONFIG_PROFILE) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: `CLI profile pinned: ${env.DATABRICKS_CONFIG_PROFILE}`,
+      detail: { profile: env.DATABRICKS_CONFIG_PROFILE },
+    };
+  }
+  if (!host) {
+    return {
+      name: "config-profile",
+      status: "skip",
+      message: "Skipped: no DATABRICKS_HOST in .env",
+    };
+  }
+  let resolved: string | undefined;
+  try {
+    resolved = await resolveProfileForHost(host);
+  } catch {
+    // best-effort; treat as no unique match
+  }
+  if (!resolved) {
+    return {
+      name: "config-profile",
+      status: "ok",
+      message: "No profile pin needed (no unique CLI profile matches this host)",
+      detail: { host },
+    };
+  }
+  return {
+    name: "config-profile",
+    status: "warn",
+    message: `.env has no DATABRICKS_CONFIG_PROFILE; host maps to valid profile "${resolved}"`,
+    detail: { host, resolvedProfile: resolved },
+    hint: `Run \`lakebase-doctor --fix\` (or add DATABRICKS_CONFIG_PROFILE=${resolved} to .env) so the hooks' auth preflight resolves the cached token.`,
   };
 }
 
@@ -373,6 +421,7 @@ export async function runDoctor(args: DoctorArgs = {}): Promise<DoctorReport> {
 
   const env = checkEnv(projectDir);
   const envVars = readEnvFile(projectDir);
+  const configProfile = await checkConfigProfile(envVars);
   const lakebaseProject = await checkLakebaseProject(
     envVars.LAKEBASE_PROJECT_ID ?? "",
     host
@@ -387,6 +436,7 @@ export async function runDoctor(args: DoctorArgs = {}): Promise<DoctorReport> {
     auth,
     identity,
     env,
+    configProfile,
     lakebaseProject,
     gitRemote,
     language,
