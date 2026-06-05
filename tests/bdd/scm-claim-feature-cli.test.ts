@@ -59,7 +59,7 @@ beforeEach(() => {
       state: "READY",
       isDefault: false,
     },
-    gitBranch: "feature/initial-domain",
+    gitBranch: "feature-initial-domain",
     gitBranchCreated: true,
     envSynced: true,
     warnings: [],
@@ -122,7 +122,7 @@ describe("lakebase-scm-claim-feature-branch CLI", () => {
     const out = stdout();
     expect(out).toContain("Feature claimed:");
     expect(out).toContain("feature_id    : initial-domain");
-    expect(out).toContain("branch        : feature/initial-domain");
+    expect(out).toContain("branch        : feature-initial-domain");
     expect(out).toContain("parent_branch : staging");
     expect(out).toContain("lakebase_uid  : br-broad-sky-d2k5gewt");
 
@@ -147,7 +147,7 @@ describe("lakebase-scm-claim-feature-branch CLI", () => {
     expect(code).toBe(0);
     const parsed = JSON.parse(stdout());
     expect(parsed.ok).toBe(true);
-    expect(parsed.branch).toBe("feature/initial-domain");
+    expect(parsed.branch).toBe("feature-initial-domain");
     expect(parsed.parent_branch).toBe("staging");
   });
 
@@ -184,7 +184,7 @@ describe("lakebase-scm-claim-feature-branch CLI", () => {
       tier_topology: 2,
       project_id: "p",
       feature_id: "initial-domain",
-      branch: "feature/initial-domain",
+      branch: "feature-initial-domain",
       parent_branch: "staging",
       lakebase_branch_uid: "br-old",
       claimed_at: "2026-05-01T00:00:00Z",

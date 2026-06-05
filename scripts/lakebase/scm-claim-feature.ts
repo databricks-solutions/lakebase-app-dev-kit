@@ -151,13 +151,15 @@ export function sanitizeFeatureSlug(featureId: string): string {
 }
 
 /**
- * Build the feature branch name from a sanitized slug. Branch convention
- * is `feature/<slug>`. Kept as a named helper so callers can stay in
- * sync with the substrate's sanitizer and other code that needs to
- * reconstruct the branch name from a feature-id.
+ * The CANONICAL feature branch name for a slug. A paired branch's git name
+ * must equal its slash-less Lakebase branch id, so the canonical name is the
+ * SANITIZED form ("feature-<slug>"), not a raw "feature/<slug>". Running the
+ * input through `sanitizeBranchName` (the same function the substrate uses to
+ * mint the Lakebase branch) makes this the single source of truth: callers,
+ * the idempotency check, and assertions all reconstruct the identical name.
  */
 export function featureBranchName(slug: string): string {
-  return `feature/${slug}`;
+  return sanitizeBranchName(`feature/${slug}`);
 }
 
 /**
@@ -180,16 +182,10 @@ export async function claimFeatureBranch(
   const idempotent = args.idempotent !== false;
 
   if (current.state === "feature-claimed") {
-    // Same-feature re-claim is an idempotent no-op. Compare by canonical
-    // slug, not the raw branch string: the stored branch is the substrate's
-    // sanitized form ("feature-f1-initial-domain") while featureBranchName
-    // returns "feature/<slug>", and feature_id casing can differ ("F1" vs
-    // "f1"). Slug comparison is immune to both, so a genuine same-feature
-    // re-entry no longer mislabels itself "already-claimed-other".
-    const currentIdentity = current.feature_id ?? current.branch?.replace(/^feature[-/]/, "");
-    const currentSlug =
-      currentIdentity && currentIdentity.length > 0 ? sanitizeFeatureSlug(currentIdentity) : undefined;
-    if (idempotent && currentSlug !== undefined && currentSlug === slug) {
+    // Same-feature re-claim is an idempotent no-op. Both sides are the
+    // canonical (sanitized) branch name now, so equality holds for a genuine
+    // re-entry regardless of the case or slash/hyphen form the caller typed.
+    if (idempotent && current.branch === branch) {
       return {
         state: current,
         paired: alreadyClaimedSentinel(current),

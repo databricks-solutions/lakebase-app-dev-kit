@@ -6610,7 +6610,7 @@ function sanitizeFeatureSlug(featureId) {
   return sanitized;
 }
 function featureBranchName(slug) {
-  return `feature/${slug}`;
+  return sanitizeBranchName(`feature/${slug}`);
 }
 async function claimFeatureBranch(args) {
   const current = readWorkflowState(args.projectDir);
@@ -6624,9 +6624,7 @@ async function claimFeatureBranch(args) {
   const branch = featureBranchName(slug);
   const idempotent = args.idempotent !== false;
   if (current.state === "feature-claimed") {
-    const currentIdentity = current.feature_id ?? current.branch?.replace(/^feature[-/]/, "");
-    const currentSlug = currentIdentity && currentIdentity.length > 0 ? sanitizeFeatureSlug(currentIdentity) : void 0;
-    if (idempotent && currentSlug !== void 0 && currentSlug === slug) {
+    if (idempotent && current.branch === branch) {
       return {
         state: current,
         paired: alreadyClaimedSentinel(current),

@@ -38,6 +38,7 @@ export default defineConfig({
     "scripts/lakebase/scm-merge.cli": "scripts/lakebase/scm-merge.cli.ts",
     "scripts/lakebase/scm-recover-orphans.cli": "scripts/lakebase/scm-recover-orphans.cli.ts",
     "scripts/lakebase/scm-doctor.cli": "scripts/lakebase/scm-doctor.cli.ts",
+    "scripts/lakebase/scm-feature-branch.cli": "scripts/lakebase/scm-feature-branch.cli.ts",
     "scripts/github/pr.cli": "scripts/github/pr.cli.ts",
     "scripts/tdd/feature-status.cli": "scripts/tdd/feature-status.cli.ts",
     "scripts/tdd/test-list.cli": "scripts/tdd/test-list.cli.ts",

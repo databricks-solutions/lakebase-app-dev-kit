@@ -2335,10 +2335,12 @@ declare function resolveParentBranch(tierTopology: 1 | 2 | 3, instance: string):
  */
 declare function sanitizeFeatureSlug(featureId: string): string;
 /**
- * Build the feature branch name from a sanitized slug. Branch convention
- * is `feature/<slug>`. Kept as a named helper so callers can stay in
- * sync with the substrate's sanitizer and other code that needs to
- * reconstruct the branch name from a feature-id.
+ * The CANONICAL feature branch name for a slug. A paired branch's git name
+ * must equal its slash-less Lakebase branch id, so the canonical name is the
+ * SANITIZED form ("feature-<slug>"), not a raw "feature/<slug>". Running the
+ * input through `sanitizeBranchName` (the same function the substrate uses to
+ * mint the Lakebase branch) makes this the single source of truth: callers,
+ * the idempotency check, and assertions all reconstruct the identical name.
  */
 declare function featureBranchName(slug: string): string;
 /**

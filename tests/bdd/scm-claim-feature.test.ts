@@ -39,7 +39,7 @@ beforeEach(() => {
       state: "READY",
       isDefault: false,
     },
-    gitBranch: "feature/initial-domain",
+    gitBranch: "feature-initial-domain",
     gitBranchCreated: true,
     envSynced: true,
     warnings: [],
@@ -74,10 +74,11 @@ describe("sanitizeFeatureSlug", () => {
 });
 
 describe("featureBranchName", () => {
-  it("prepends the feature/ namespace", () => {
-    expect(scm.featureBranchName("initial-domain")).toBe(
-      "feature/initial-domain",
-    );
+  it("returns the canonical sanitized branch name (slash-less, lowercased)", () => {
+    // The canonical name is what the substrate's sanitizer produces, so a
+    // paired git branch matches its Lakebase branch id.
+    expect(scm.featureBranchName("initial-domain")).toBe("feature-initial-domain");
+    expect(scm.featureBranchName("F1-initial-domain")).toBe("feature-f1-initial-domain");
   });
 });
 
@@ -166,7 +167,7 @@ describe("claimFeatureBranch precondition", () => {
       tier_topology: 2,
       project_id: "p",
       feature_id: "initial-domain",
-      branch: "feature/initial-domain",
+      branch: "feature-initial-domain",
       parent_branch: "staging",
       lakebase_branch_uid: "br-old",
       claimed_at: "2026-05-01T00:00:00Z",
@@ -222,14 +223,14 @@ describe("claimFeatureBranch happy path", () => {
     expect(mockCreateFeaturePairedBranch).toHaveBeenCalledTimes(1);
     expect(mockCreateFeaturePairedBranch.mock.calls[0][0]).toMatchObject({
       instance: "demo-app",
-      branch: "feature/initial-domain",
+      branch: "feature-initial-domain",
       parentBranch: "staging",
       cwd: tmpDir,
     });
     expect(result.state).toMatchObject({
       state: "feature-claimed",
       feature_id: "initial-domain",
-      branch: "feature/initial-domain",
+      branch: "feature-initial-domain",
       parent_branch: "staging",
       lakebase_branch_uid: "br-broad-sky-d2k5gewt",
       claimed_at: "2026-06-03T12:00:00.000Z",
@@ -238,7 +239,7 @@ describe("claimFeatureBranch happy path", () => {
     // State file on disk should round-trip back.
     const reread = state.readWorkflowState(tmpDir);
     expect(reread?.state).toBe("feature-claimed");
-    expect(reread?.branch).toBe("feature/initial-domain");
+    expect(reread?.branch).toBe("feature-initial-domain");
     expect(reread?.lakebase_branch_uid).toBe("br-broad-sky-d2k5gewt");
   });
 

@@ -85,11 +85,19 @@ case "$EXPECTED_STATE" in
     if [[ -n "$EXPECTED_FEATURE_ID" && "$fid" != "$EXPECTED_FEATURE_ID" ]]; then
       fail "feature_id=$fid does not match expected=$EXPECTED_FEATURE_ID"
     fi
-    # The substrate names paired branches with a hyphen ("feature-<slug>")
-    # so the git branch matches the slash-less Lakebase branch id; accept
-    # either that or the slash convention.
-    if [[ "$branch" != feature/* && "$branch" != feature-* ]]; then
-      fail "branch=$branch is not a feature branch (expected feature/ or feature- prefix)"
+    # Verify the branch is the CANONICAL name the substrate sanitizer produces
+    # for this feature, derived from the kit (single source of truth) rather
+    # than a hardcoded prefix. Compare against the feature_id we are checking.
+    canon_id="${EXPECTED_FEATURE_ID:-$fid}"
+    EXPECTED_BRANCH="$(
+      npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+        lakebase-scm-feature-branch "$canon_id" 2>/dev/null
+    )"
+    if [[ -z "$EXPECTED_BRANCH" ]]; then
+      fail "could not derive canonical branch for feature_id=$canon_id (lakebase-scm-feature-branch failed)"
+    fi
+    if [[ "$branch" != "$EXPECTED_BRANCH" ]]; then
+      fail "branch=$branch does not match the canonical sanitized name=$EXPECTED_BRANCH for feature_id=$canon_id"
     fi
     ok "feature-claimed invariants satisfied (feature_id=$fid, branch=$branch)"
     ;;
