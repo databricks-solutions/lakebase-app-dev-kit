@@ -115,6 +115,37 @@ The substrate ships these helpers in `scripts/tdd/spec-sync.ts`:
 
 CLI: `node scripts/tdd/spec-sync.ts <tddDir>` walks the tree and prints drift reports.
 
+## Artifact conformance (the format contract per role)
+
+Every artifact a role produces has a declared format, derived from that role's
+contract in `agents/*.md`. A gate approves an artifact only when it both EXISTS
+(Layer 1) and CONFORMS to its format (Layer 2). Conformance is enforced by
+`scripts/tdd/artifact-conformance.ts` (`checkArtifactConformance(name, content)`)
+and re-checked at approval time by the mock approver / orchestrator. JSON
+schema failures and missing required narrative sections both hard-block the gate.
+
+| Artifact | Producing role | Required format |
+|---|---|---|
+| `feature.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
+| `test-list.json` | Test Strategist | `test-list.schema.json` |
+| `plan.json` | Architect / Orchestrator | `plan.schema.json` |
+| `workflow-state.json` | Orchestrator | `workflow-state.schema.json` |
+| `spec.md` | Product Owner | H1 + non-empty body (open-ended intent; not gate-locked) |
+| `feature.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |
+| `architecture.md` | Architect Reviewer | H1 + **Architectural Concerns Mapping**, **Pattern proposals**, **Risks**, **Decisions**, **Sign-off** |
+| `test-list.md` | Test Strategist | Rendered from JSON: H1 + `Ordered for:` + an AC reference on every item + a **Deferred / skipped** section |
+| `design-brief.md` | Product Owner / HIL (UI projects) | H1 + **References** (the reference sites + what to take from each; the design analogue of `spec.md`) |
+| `design-guide.json` | UX Designer (UI projects) | `design-guide.schema.json` (typography + colors + spacing tokens) |
+| `design-guide.md` | UX Designer (UI projects) | H1 + **Design Philosophy**, **Typography**, **Color Palette**, **Spacing**, **Components**, **User Feedback Principles** |
+| `ia.md` | UX Designer (UI projects) | H1 + **Screens**, **Navigation**, **User flows** |
+
+`spec.md` is intentionally loose: it is the Product Owner's living, plain-English
+statement of intent, refined across sprints. The structured deliverables the
+Spec Author composes from it (feature/story/AC) carry the strong contracts.
+
+CLI: `lakebase-tdd-gate-conformance --feature <id>` scans a feature's artifacts
+and reports any that do not conform. Exit 1 if any artifact is non-conformant.
+
 ## Where this format does NOT go
 
 - It does **not** carry execution telemetry. That lives in `cycles/<F>/<S>/<AC>/cycle-NNN.json` (per-cycle artifacts), `experiments/<F>/<exp>/timeline.json` (per-experiment), and `smells.json`.

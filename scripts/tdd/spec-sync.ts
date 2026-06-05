@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "fs";
 import { join, basename } from "path";
-import Ajv from "ajv";
+import type Ajv from "ajv";
+import { getValidator } from "./schema-loader";
 
 type Phase =
   | "discovery"
@@ -69,21 +70,15 @@ export interface DriftReport {
   detail: string;
 }
 
-const SCHEMA_DIR = join(__dirname, "schemas");
-
-function loadSchema(name: string): object {
-  const file = join(SCHEMA_DIR, name);
-  return JSON.parse(readFileSync(file, "utf8"));
-}
-
 function makeValidator() {
-  const ajv = new Ajv({ allErrors: true, strict: false });
+  // Validators come from the shared schema-loader cache so spec-sync and
+  // artifact-conformance validate against the identical compiled schemas.
   return {
-    feature: ajv.compile(loadSchema("feature.schema.json")),
-    story: ajv.compile(loadSchema("story.schema.json")),
-    ac: ajv.compile(loadSchema("ac.schema.json")),
-    testList: ajv.compile(loadSchema("test-list.schema.json")),
-    workflowState: ajv.compile(loadSchema("workflow-state.schema.json")),
+    feature: getValidator("feature.schema.json"),
+    story: getValidator("story.schema.json"),
+    ac: getValidator("ac.schema.json"),
+    testList: getValidator("test-list.schema.json"),
+    workflowState: getValidator("workflow-state.schema.json"),
   };
 }
 

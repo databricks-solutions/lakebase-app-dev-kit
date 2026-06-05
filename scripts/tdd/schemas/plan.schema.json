@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/plan.schema.json",
+  "title": "ExperimentPlan",
+  "description": "The Architect Reviewer's experiment plan for a feature, persisted as features/<F>/plan.json. Produced at the design-spec gate (phase 1.5) and consumed by the orchestrator. Mirrors the ExperimentPlan interface in scripts/tdd/design-spec-gate.ts.",
+  "type": "object",
+  "required": ["feature_id", "N", "mode", "strategies", "budget", "rationale"],
+  "properties": {
+    "feature_id": {
+      "type": "string",
+      "pattern": "^F[0-9]+(-[a-z0-9-]+)?$"
+    },
+    "N": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of parallel experiments. 1 for N=1 iterative refinement."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["N=1", "N>=2"]
+    },
+    "strategies": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "rationale"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["concurrent_branches", "wall_clock_minutes", "agent_pairs"],
+      "properties": {
+        "concurrent_branches": { "type": "integer", "minimum": 1 },
+        "wall_clock_minutes": { "type": "integer", "minimum": 1 },
+        "agent_pairs": { "type": "integer", "minimum": 1 },
+        "per_experiment": {
+          "type": "object",
+          "properties": {
+            "max_cycles": { "type": "integer", "minimum": 1 },
+            "max_wall_clock_minutes": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "rationale": { "type": "string", "minLength": 1 },
+    "spike_inputs": {
+      "type": "array",
+      "description": "Spike notes surfaced by collectSpikeInputs and retained by the PO at the gate.",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": false
+}

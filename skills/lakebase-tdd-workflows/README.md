@@ -35,7 +35,8 @@ The substrate API keeps "experiment" as the noun so the same primitives serve bo
 
 | Role | Responsibility | Agent prompt |
 |---|---|---|
-| **Spec Author** | Composes the initial draft spec – features, stories, ACs. | (Project skill, e.g. `/design`.) |
+| **Spec Author** | The BA. Works with the PO to turn open-ended `spec.md` intent into the structured draft spec (features, stories, ACs). | [`agents/spec-author.md`](agents/spec-author.md) (first phase of `/design`). |
+| **UX Designer** | The experience lens (UI projects only). Owns the design guide + information architecture and ensures downstream UI adheres to them. | [`agents/ux-designer.md`](agents/ux-designer.md) |
 | **Architect Reviewer** | Applies layering lens; populates `layer` and `architectural_notes` per AC; imports `software-design-principles`. | [`agents/architect-reviewer.md`](agents/architect-reviewer.md) |
 | **Test Strategist** | Converts annotated ACs into a Beck-style ordered test list; emits per-AC views. | [`agents/test-strategist.md`](agents/test-strategist.md) |
 | **Orchestrator (Scrum-Master)** | Runs design-spec gate; spawns experiments to budget; runs cycles; watches smells; presents outcomes to HITL. | [`agents/scrum-master.md`](agents/scrum-master.md) |

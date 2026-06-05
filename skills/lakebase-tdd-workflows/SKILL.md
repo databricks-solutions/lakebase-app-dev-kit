@@ -42,6 +42,8 @@ Refuse to transition if prior-phase artifacts are missing or invalid.
 
 Load the per-role prompt for the phase you're in:
 
+- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the BA: turns the PO's open-ended `spec.md` intent into the structured draft spec (`feature.{md,json}` + stories + ACs).
+- [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
 - [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.
 - [`agents/scrum-master.md`](agents/scrum-master.md) – phases 3 → 4, orchestrates the design-spec gate, spawns experiments, runs cycles, watches smells, surfaces to HITL.

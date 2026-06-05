@@ -104,6 +104,7 @@
     "lakebase-pr": "./dist/scripts/github/pr.cli.js",
     "lakebase-feature-status": "./dist/scripts/tdd/feature-status.cli.js",
     "lakebase-tdd-mock-approver": "./dist/scripts/tdd/mock-approver.cli.js",
+    "lakebase-tdd-gate-conformance": "./dist/scripts/tdd/gate-conformance.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
   },
   "scripts": {

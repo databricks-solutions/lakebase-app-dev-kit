@@ -6651,51 +6651,65 @@ init_esm_shims();
 
 // scripts/tdd/spec-sync.ts
 init_esm_shims();
+import { readFileSync as readFileSync2, existsSync, readdirSync, writeFileSync, statSync } from "fs";
+import { join as join2, basename } from "path";
+
+// scripts/tdd/schema-loader.ts
+init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "fs";
-import { join, basename } from "path";
+import { readFileSync } from "fs";
+import { join } from "path";
 var SCHEMA_DIR = join(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  const file = join(SCHEMA_DIR, name);
-  return JSON.parse(readFileSync(file, "utf8"));
+  return JSON.parse(readFileSync(join(SCHEMA_DIR, name), "utf8"));
 }
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+
+// scripts/tdd/spec-sync.ts
 function makeValidator() {
-  const ajv = new import_ajv.default({ allErrors: true, strict: false });
   return {
-    feature: ajv.compile(loadSchema("feature.schema.json")),
-    story: ajv.compile(loadSchema("story.schema.json")),
-    ac: ajv.compile(loadSchema("ac.schema.json")),
-    testList: ajv.compile(loadSchema("test-list.schema.json")),
-    workflowState: ajv.compile(loadSchema("workflow-state.schema.json"))
+    feature: getValidator("feature.schema.json"),
+    story: getValidator("story.schema.json"),
+    ac: getValidator("ac.schema.json"),
+    testList: getValidator("test-list.schema.json"),
+    workflowState: getValidator("workflow-state.schema.json")
   };
 }
 function validateSpec(tddDir) {
   const reports = [];
   const v = makeValidator();
-  const wsPath = join(tddDir, "workflow-state.json");
+  const wsPath = join2(tddDir, "workflow-state.json");
   if (existsSync(wsPath)) {
-    const ws = JSON.parse(readFileSync(wsPath, "utf8"));
+    const ws = JSON.parse(readFileSync2(wsPath, "utf8"));
     if (!v.workflowState(ws)) {
       reports.push({ file: wsPath, kind: "schema", detail: JSON.stringify(v.workflowState.errors) });
     }
   }
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = join2(tddDir, "features");
   if (!existsSync(featuresDir)) return reports;
   for (const featureDirName of readdirSync(featuresDir)) {
-    const featureDir = join(featuresDir, featureDirName);
+    const featureDir = join2(featuresDir, featureDirName);
     if (!statSync(featureDir).isDirectory()) continue;
     checkPair(featureDir, "feature", v.feature, reports);
-    const storiesDir = join(featureDir, "stories");
+    const storiesDir = join2(featureDir, "stories");
     if (!existsSync(storiesDir)) continue;
     for (const storyDirName of readdirSync(storiesDir)) {
-      const storyDir = join(storiesDir, storyDirName);
+      const storyDir = join2(storiesDir, storyDirName);
       if (!statSync(storyDir).isDirectory()) continue;
       checkPair(storyDir, "story", v.story, reports);
-      const acsDir = join(storyDir, "acs");
+      const acsDir = join2(storyDir, "acs");
       if (existsSync(acsDir)) {
         for (const acFile of readdirSync(acsDir).filter((f) => f.endsWith(".json"))) {
-          const acJsonPath = join(acsDir, acFile);
-          const ac = JSON.parse(readFileSync(acJsonPath, "utf8"));
+          const acJsonPath = join2(acsDir, acFile);
+          const ac = JSON.parse(readFileSync2(acJsonPath, "utf8"));
           if (!v.ac(ac)) {
             reports.push({ file: acJsonPath, kind: "schema", detail: JSON.stringify(v.ac.errors) });
           }
@@ -6706,9 +6720,9 @@ function validateSpec(tddDir) {
         }
       }
     }
-    const testListJson = join(featureDir, "test-list.json");
+    const testListJson = join2(featureDir, "test-list.json");
     if (existsSync(testListJson)) {
-      const list = JSON.parse(readFileSync(testListJson, "utf8"));
+      const list = JSON.parse(readFileSync2(testListJson, "utf8"));
       if (!v.testList(list)) {
         reports.push({ file: testListJson, kind: "schema", detail: JSON.stringify(v.testList.errors) });
       }
@@ -6717,8 +6731,8 @@ function validateSpec(tddDir) {
   return reports;
 }
 function checkPair(dir, kind, validator, reports) {
-  const jsonPath = join(dir, `${kind}.json`);
-  const mdPath = join(dir, `${kind}.md`);
+  const jsonPath = join2(dir, `${kind}.json`);
+  const mdPath = join2(dir, `${kind}.md`);
   if (!existsSync(jsonPath)) {
     reports.push({ file: jsonPath, kind: "pair-missing", detail: `${kind}.json missing` });
     return;
@@ -6728,7 +6742,7 @@ function checkPair(dir, kind, validator, reports) {
   } else if (statSync(mdPath).size < 20) {
     reports.push({ file: mdPath, kind: "narrative-empty", detail: `${kind}.md narrative empty` });
   }
-  const obj = JSON.parse(readFileSync(jsonPath, "utf8"));
+  const obj = JSON.parse(readFileSync2(jsonPath, "utf8"));
   if (!validator(obj)) {
     reports.push({ file: jsonPath, kind: "schema", detail: JSON.stringify(validator.errors) });
   }

@@ -74,7 +74,7 @@ Flags:
   --gate <name>           Approve only one gate (spec | plan | test_list | promote)
   --tdd-dir <path>        .tdd/ root (default: ./.tdd)
   --approver <name>       Approver identity (default: ci-mock-approver)
-  --promote-ref <str>     promote gate ref string (default: mock-promote-ref)
+  --promote-ref <str>     promote gate ref string (promote gate is skipped if omitted)
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
