@@ -52,6 +52,10 @@ export default defineConfig({
   target: "node20",
   dts: true,
   clean: true,
+  // tsup compiles TS only; copy *.schema.json runtime assets into dist/ so
+  // consumer installs (which ship pre-built dist/ and never rebuild) can read
+  // them. Without this, schema-loader / scm-workflow-state hit ENOENT.
+  onSuccess: "node scripts/copy-build-assets.mjs",
   sourcemap: true,
   splitting: false,
   // `shims: true` makes esbuild inject pathToFileURL(__filename).href for
