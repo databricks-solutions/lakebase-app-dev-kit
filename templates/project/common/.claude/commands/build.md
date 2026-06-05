@@ -18,6 +18,10 @@ Requires `.tdd/features/<feature-id>/test-list.json` to exist (the artifact `/de
 
 The orchestrator is implemented by the substrate agent at `@lakebase-tdd-workflows/agents/scrum-master`. Per-cycle work fans out to `@lakebase-tdd-workflows/agents/driver` and `@lakebase-tdd-workflows/agents/navigator`.
 
+## Logging
+
+Every agent emits structured events via `lakebase-tdd-log` to `.tdd/agent-log.jsonl` (see `@lakebase-tdd-workflows/references/agent-logging.md`). The orchestrator emits `phase.start` / `phase.end` per cycle and `gate.approved` at gates 3/4; the Navigator emits `cycle.red` + `review.verdict`; the Driver emits `cycle.green` + `cycle.refactored`; smells go to `--level warn --event smell.flagged`. Tail with `lakebase-tdd-log --read --feature <id>`.
+
 ## Project pre/post hooks
 
 If `.claude/commands/build.pre-hook.md` exists in this project, it runs before phase 1. Common uses: confirm CI is green, refresh Lakebase credentials, ping the on-call channel that a build is starting.

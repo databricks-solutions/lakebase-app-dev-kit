@@ -95,6 +95,15 @@ Surface to the Product Owner:
 
 Do not proceed to architectural review until the PO signs off.
 
+## Logging
+
+Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role ux-designer --feature <id>`:
+
+- `--level info --event artifact.written` per `design-guide.md` / `design-guide.json` / `ia.md`.
+- `--level debug --event reasoning` for token + IA choices, citing which reference each came from (provenance).
+- `--level error --event adherence.failed` when the design-guide adherence check (Playwright `:root` tokens vs `design-guide.json`) fails.
+- `--level info --event handoff` when the design system + IA are ready for the Architect.
+
 ## Rules
 
 - **Design is teased from references, never invented.** The look comes from the HIL's design brief (reference sites + per-site intent), an existing project guide, or the shipped default, in that order. If none is supplied, default to the Databricks-brand baseline; do not invent an unanchored visual language.

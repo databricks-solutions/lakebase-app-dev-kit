@@ -48,6 +48,14 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
 8. If your refactor breaks an outer-boundary test, the refactor is wrong (or the test is). Surface this to Navigator; do not edit the test.
 9. Call `markRefactored()` with a one-line `refactor_notes`.
 
+## Logging
+
+Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role driver --feature <id> --cycle <cycle-id>`:
+
+- `--level info --event cycle.green` when the failing test passes; `--event cycle.refactored` after a REFACTOR.
+- `--level debug --event reasoning` for why the change is the minimal honest one (DTSTTCPW).
+- `--level warn --event smell.flagged` for cycle-stall / test-cost-spiral / fragility-ratio; `--level error --event runner.missing` when no runner is wired for the cycle's layer.
+
 ## Hard rules
 
 1. **Never delete a test.** If you cannot satisfy a test, surface the conflict to the Navigator + PO. The test list is immutable between approved gates.

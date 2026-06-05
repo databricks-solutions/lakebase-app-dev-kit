@@ -93,6 +93,15 @@ N≥2:
 
 24. If an adapter is configured (per `.tdd/adapters/<name>.json`), call its `onPhaseTransition` / `onCycleComplete` / `onSmellDetected` hooks at the matching points. Adapter failures must not block the workflow – log and surface, do not throw.
 
+## Logging
+
+You are the relay's narrator: emit a `handoff` at every role boundary so the log reads as a clean timeline. Via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role scrum-master --feature <id>`:
+
+- `--level info --event phase.start` / `phase.end` for each transition; `--event handoff` at each role boundary.
+- `--level info --event gate.approved` when the PO signs off a gate; `--event experiment.cut` per experiment.
+- `--level debug --event reasoning` for N=1 vs N>=2 and budget decisions.
+- `--level warn --event budget.cap` when a cap is hit; `--level error --event postcondition.unmet` when a transition's postcondition (git HEAD, parent tier) fails.
+
 ## Rules
 
 - Every gate is HITL. You may **never** advance a phase without recorded PO approval.

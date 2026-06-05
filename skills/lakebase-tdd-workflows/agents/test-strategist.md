@@ -53,6 +53,15 @@ Surface to the Product Owner:
 
 Do not proceed to design-spec gate until the PO signs off.
 
+## Logging
+
+Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role test-strategist --feature <id>`:
+
+- `--level info --event artifact.written` for `test-list.json` + the rendered `test-list.md` (note item count).
+- `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.
+- `--level debug --event reasoning` for the ordering rationale (`ordered_for`).
+- `--level warn --event smell.flagged` for any test that cannot be defined without writing implementation first.
+
 ## Rules
 
 - One test per behavioral scenario. Do not bundle two assertions into "and." If two assertions are required, that's two items.

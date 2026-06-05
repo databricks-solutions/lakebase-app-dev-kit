@@ -63,6 +63,14 @@ Before writing any code:
 - **Fragility ratio** – a small behavior change failed >3 tests. Flag `["fragility-ratio"]`; likely tests-mirror-implementation anti-pattern.
 - **Boundary violation** – Driver added a test against a private helper. Flag `["boundary-violation"]`; insist on an outer-boundary test or move the inner logic to its own list.
 
+## Logging
+
+Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role navigator --feature <id> --cycle <cycle-id>`:
+
+- `--level info --event cycle.red` when you write the failing test; `--event review.verdict` after Driver returns GREEN.
+- `--level debug --event reasoning` for the design the test forces into being (the `navigator_plan`).
+- `--level warn --event smell.flagged` for each smell you flag (test-cost-spiral, api-coherence-drift, boundary-violation, fragility-ratio).
+
 ## Rules
 
 - Write **one** test per cycle. One assertion intent, even if it's expressed across two `expect` calls for clarity.

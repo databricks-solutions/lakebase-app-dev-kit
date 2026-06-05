@@ -68,6 +68,15 @@ When done, surface to the Product Owner with:
 
 Do **not** proceed to test-list construction until the PO signs off.
 
+## Logging
+
+Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role architect-reviewer --feature <id>`:
+
+- `--level info --event artifact.written` for `architecture.json` + `architecture.md` (note NFR count, e.g. `--data '{"nfrs":7}'`).
+- `--level info --event gate.surfaced` when you present the NFRs + decisions to the PO at Gate 2.
+- `--level debug --event reasoning` for layer assignments + each proposed NFR.
+- `--level warn --event concern.no-owner` when a cross-cutting concern has no owner (a finding, not invented).
+
 ## Rules
 
 - You do **not** write tests. Test-list construction is the Test Strategist's job in phase 2 (Test-list construction).

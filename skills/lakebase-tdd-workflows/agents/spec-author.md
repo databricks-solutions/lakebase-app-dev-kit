@@ -60,6 +60,16 @@ Surface to the Product Owner:
 
 Do not proceed to architectural review until the PO signs off.
 
+## Logging
+
+Emit structured events as you work, via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), so the relay is observable. At minimum, with `--role spec-author --feature <id>`:
+
+- `--level info --event phase.start` / `phase.end` (discovery boundaries).
+- `--level info --event artifact.written` per `feature.json` / each story / each AC, with `--data '{"path":"...","conformant":true}'`.
+- `--level debug --event reasoning` for scope calls + why something became an open question.
+- `--level warn --event open.question` for each boundary question you leave for the PO.
+- `--level info --event handoff` when the structured draft spec is ready for the Architect.
+
 ## Rules
 
 - **Never invent scope or ACs the PO did not intend.** If the intent is silent on something, that is an open question, not an assumption.

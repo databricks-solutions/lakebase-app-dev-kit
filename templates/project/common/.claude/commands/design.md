@@ -51,6 +51,16 @@ Each phase is implemented by the substrate agent of the same name:
 
 References resolve through Claude Code's `@skill-name/agent-name` lookup, so agent renames inside the substrate skill stay safe.
 
+## Logging
+
+Each phase agent emits structured events via `lakebase-tdd-log` (see its agent
+prompt + `@lakebase-tdd-workflows/references/agent-logging.md`) to the
+centralized `.tdd/agent-log.jsonl`. As the orchestrator, emit a `phase.start` /
+`phase.end` (`--role scrum-master`) around each phase and a `handoff` at each
+role boundary, so the run reads as a clean relay timeline. `debug` captures
+reasoning; `info` captures artifacts written + gates surfaced. Tail it with
+`lakebase-tdd-log --read --feature <id> --min-level info`.
+
 ## Project post-hook
 
 If `.claude/commands/design.post-hook.md` exists in this project, it runs after phase 3. Common uses: notify a Slack channel, assign reviewers, link the spec into a tracking doc.
