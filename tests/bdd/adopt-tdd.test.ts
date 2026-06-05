@@ -43,7 +43,7 @@ describe("adoptTdd: fresh adoption", () => {
     expect(result.noChanges).toBe(false);
 
     // Spot-check that representative files actually landed.
-    expect(fs.existsSync(path.join(repo, ".tdd", "spec.md"))).toBe(true);
+    expect(fs.existsSync(path.join(repo, ".tdd", "product-overview.md"))).toBe(true);
     expect(fs.existsSync(path.join(repo, ".tdd", "workflow-state.json"))).toBe(true);
     expect(fs.existsSync(path.join(repo, ".tdd", "features", ".gitkeep"))).toBe(true);
   });
@@ -89,11 +89,11 @@ describe("adoptTdd: --update mode", () => {
 
   it("reports drift on user-edited files without overwriting them", () => {
     adoptTdd({ projectDir: repo });
-    const specPath = path.join(repo, ".tdd", "spec.md");
+    const specPath = path.join(repo, ".tdd", "product-overview.md");
     fs.writeFileSync(specPath, "user-edited content\n", "utf8");
     const result = adoptTdd({ projectDir: repo, update: true });
-    expect(result.drifted).toContain("spec.md");
-    expect(result.updated).not.toContain("spec.md");
+    expect(result.drifted).toContain("product-overview.md");
+    expect(result.updated).not.toContain("product-overview.md");
     expect(fs.readFileSync(specPath, "utf8")).toBe("user-edited content\n");
   });
 
@@ -115,11 +115,11 @@ describe("adoptTdd: --force mode", () => {
 
   it("overwrites drifted files and reports them under `updated`", () => {
     adoptTdd({ projectDir: repo });
-    const specPath = path.join(repo, ".tdd", "spec.md");
+    const specPath = path.join(repo, ".tdd", "product-overview.md");
     fs.writeFileSync(specPath, "user-edited content\n", "utf8");
     const result = adoptTdd({ projectDir: repo, force: true });
-    expect(result.updated).toContain("spec.md");
-    expect(result.drifted).not.toContain("spec.md");
+    expect(result.updated).toContain("product-overview.md");
+    expect(result.drifted).not.toContain("product-overview.md");
     expect(fs.readFileSync(specPath, "utf8")).not.toBe("user-edited content\n");
   });
 
@@ -146,19 +146,19 @@ describe("adoptTdd: --dry-run mode", () => {
 
   it("reports the same buckets in --update --dry-run mode", () => {
     adoptTdd({ projectDir: repo });
-    fs.writeFileSync(path.join(repo, ".tdd", "spec.md"), "user-edit\n", "utf8");
+    fs.writeFileSync(path.join(repo, ".tdd", "product-overview.md"), "user-edit\n", "utf8");
     const result = adoptTdd({ projectDir: repo, update: true, dryRun: true });
-    expect(result.drifted).toContain("spec.md");
+    expect(result.drifted).toContain("product-overview.md");
     // No files modified during dry-run.
-    expect(fs.readFileSync(path.join(repo, ".tdd", "spec.md"), "utf8")).toBe("user-edit\n");
+    expect(fs.readFileSync(path.join(repo, ".tdd", "product-overview.md"), "utf8")).toBe("user-edit\n");
   });
 
   it("dry-run with --force reports drifted files under `updated` without touching them", () => {
     adoptTdd({ projectDir: repo });
-    const specPath = path.join(repo, ".tdd", "spec.md");
+    const specPath = path.join(repo, ".tdd", "product-overview.md");
     fs.writeFileSync(specPath, "user-edit\n", "utf8");
     const result = adoptTdd({ projectDir: repo, force: true, dryRun: true });
-    expect(result.updated).toContain("spec.md");
+    expect(result.updated).toContain("product-overview.md");
     expect(fs.readFileSync(specPath, "utf8")).toBe("user-edit\n");
   });
 });
@@ -199,7 +199,7 @@ describe("adoptTdd: canonical bootstrap inspection", () => {
     // Spot-check the bootstrap-dir auto-located via the real kit. If
     // a future change reorganizes templates/tdd-bootstrap/.tdd the
     // contract here breaks loudly instead of silently shrinking.
-    expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "spec.md"))).toBe(true);
+    expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "product-overview.md"))).toBe(true);
     expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "workflow-state.json"))).toBe(true);
     expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "selection-log.md"))).toBe(true);
     expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "smells.json"))).toBe(true);

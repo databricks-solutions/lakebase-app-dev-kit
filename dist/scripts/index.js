@@ -6272,7 +6272,7 @@ function sanitizeFeatureSlug(featureId) {
   return sanitized;
 }
 function featureBranchName(slug) {
-  return `feature/${slug}`;
+  return sanitizeBranchName(`feature/${slug}`);
 }
 async function claimFeatureBranch(args) {
   const current = readWorkflowState(args.projectDir);
@@ -6294,7 +6294,7 @@ async function claimFeatureBranch(args) {
       };
     }
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish or abandon it first (phase B does not yet ship an abandon CLI).`,
+      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other"
     );
   }
@@ -6322,7 +6322,10 @@ async function claimFeatureBranch(args) {
   const next = {
     ...current,
     state: "feature-claimed",
-    feature_id: slug,
+    // Record the canonical feature id (case preserved, e.g. "F1-initial-domain")
+    // so it matches the .tdd/features/<F> dir + downstream expectations. The
+    // lowercased branch slug lives on `branch`, derived separately.
+    feature_id: args.featureId.trim(),
     branch: paired.gitBranch,
     parent_branch: parentBranch,
     lakebase_branch_uid: paired.branch.uid,

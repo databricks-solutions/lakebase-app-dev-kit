@@ -33,9 +33,14 @@ fail() { echo "verify-workflow-state[$EXPECTED_STATE]: FAIL: $*" >&2; exit 1; }
 ok()   { echo "verify-workflow-state[$EXPECTED_STATE]: ✓ $*"; }
 
 # 1. The state file must exist + parse.
+# Use the kit ref under test (run-smoke.sh exports LAKEBASE_KIT_NPX), not a
+# hardcoded main, so the assertion validates the same build the smoke ran.
+# Capture stdout ONLY: a cold npx install prints npm/prepare logs to stderr,
+# and folding them into STATE_JSON (the old `2>&1`) breaks `jq` parsing and
+# yields a spurious found=false.
 STATE_JSON="$(
-  npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit \
-    lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>&1
+  npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+    lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>/dev/null
 )"
 
 # `lakebase-scm-state` exits 1 when no state file exists. The
@@ -80,8 +85,19 @@ case "$EXPECTED_STATE" in
     if [[ -n "$EXPECTED_FEATURE_ID" && "$fid" != "$EXPECTED_FEATURE_ID" ]]; then
       fail "feature_id=$fid does not match expected=$EXPECTED_FEATURE_ID"
     fi
-    if [[ "$branch" != feature/* ]]; then
-      fail "branch=$branch does not have the feature/ prefix"
+    # Verify the branch is the CANONICAL name the substrate sanitizer produces
+    # for this feature, derived from the kit (single source of truth) rather
+    # than a hardcoded prefix. Compare against the feature_id we are checking.
+    canon_id="${EXPECTED_FEATURE_ID:-$fid}"
+    EXPECTED_BRANCH="$(
+      npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+        lakebase-scm-feature-branch "$canon_id" 2>/dev/null
+    )"
+    if [[ -z "$EXPECTED_BRANCH" ]]; then
+      fail "could not derive canonical branch for feature_id=$canon_id (lakebase-scm-feature-branch failed)"
+    fi
+    if [[ "$branch" != "$EXPECTED_BRANCH" ]]; then
+      fail "branch=$branch does not match the canonical sanitized name=$EXPECTED_BRANCH for feature_id=$canon_id"
     fi
     ok "feature-claimed invariants satisfied (feature_id=$fid, branch=$branch)"
     ;;

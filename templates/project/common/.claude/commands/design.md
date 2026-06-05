@@ -40,9 +40,11 @@ If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The
 
 ## Phases (HITL-gated)
 
-1. **Spec Author** drafts `spec.md` + `feature.json` from the prompt.
+1. **Spec Author** drafts `spec.md` + `feature-spec.json` from the prompt.
 2. **Architect Reviewer** challenges scope and boundaries. Gate 1 stops the pipeline until the human signs off.
 3. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
+
+**Auto-approve (headless) mode:** if `LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI / the smoke; check with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`), the human review at each gate is performed by `ci-mock-approver`, a diligent automated reviewer that validates the gate's artifacts EXIST and carry their EXPECTED ELEMENTS (schema fields / required sections) and approves only then. Each role records its recommended resolutions INSIDE its artifacts (not as open questions), hands them to the gate, and the mock reviewer validates + approves, so the phases run through and `test-list.json` is produced for `/build`. The gate is never skipped, and a missing or malformed artifact hard-blocks exactly as it would for a human. See `@lakebase-tdd-workflows/SKILL.md` "Headless / auto-approve mode".
 
 Each phase is implemented by the substrate agent of the same name:
 - `@lakebase-tdd-workflows/agents/spec-author`
@@ -50,6 +52,16 @@ Each phase is implemented by the substrate agent of the same name:
 - `@lakebase-tdd-workflows/agents/test-strategist`
 
 References resolve through Claude Code's `@skill-name/agent-name` lookup, so agent renames inside the substrate skill stay safe.
+
+## Logging
+
+Each phase agent emits structured events via `lakebase-tdd-log` (see its agent
+prompt + `@lakebase-tdd-workflows/references/agent-logging.md`) to the
+centralized `.tdd/agent-log.jsonl`. As the orchestrator, emit a `phase.start` /
+`phase.end` (`--role scrum-master`) around each phase and a `handoff` at each
+role boundary, so the run reads as a clean relay timeline. `debug` captures
+reasoning; `info` captures artifacts written + gates surfaced. Tail it with
+`lakebase-tdd-log --read --feature <id> --min-level info`.
 
 ## Project post-hook
 

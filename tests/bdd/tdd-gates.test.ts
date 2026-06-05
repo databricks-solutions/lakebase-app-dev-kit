@@ -114,13 +114,13 @@ describe("gates: writeGates (S1.2 round-trip + S1.4 atomicity)", () => {
           status: "approved",
           approver: "kevin.hartman@databricks.com",
           approved_at: "2026-05-31T20:00:00Z",
-          artifact_hashes: { "spec.md": "sha256:abc", "feature.json": "sha256:def" },
+          artifact_hashes: { "feature-spec.md": "sha256:abc", "feature-spec.json": "sha256:def" },
           history: [
             {
               action: "approved",
               at: "2026-05-31T20:00:00Z",
               approver: "kevin.hartman@databricks.com",
-              artifact_hashes: { "spec.md": "sha256:abc", "feature.json": "sha256:def" },
+              artifact_hashes: { "feature-spec.md": "sha256:abc", "feature-spec.json": "sha256:def" },
             },
           ],
         },

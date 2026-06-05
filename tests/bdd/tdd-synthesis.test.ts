@@ -18,10 +18,10 @@ function seedFeature(): void {
   const dir = join(tdd, "features", "F1-test");
   mkdirSync(dir, { recursive: true });
   writeFileSync(
-    join(dir, "feature.json"),
+    join(dir, "feature-spec.json"),
     JSON.stringify({ id: "F1", name: "Test", status: "in-progress", tdd_mode: "N>=2" })
   );
-  writeFileSync(join(dir, "feature.md"), "# Test feature\n");
+  writeFileSync(join(dir, "feature-spec.md"), "# Test feature\n");
 }
 
 beforeEach(() => {
@@ -111,7 +111,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
     const synthesizedSpec = join(synthesisDir, "synthesized-spec");
     expect(existsSync(synthesizedSpec)).toBe(true);
     expect(existsSync(join(synthesizedSpec, "README.md"))).toBe(true);
-    const seededCopy = join(synthesizedSpec, "feature", "feature.json");
+    const seededCopy = join(synthesizedSpec, "feature", "feature-spec.json");
     expect(existsSync(seededCopy)).toBe(true);
     const log = readFileSync(join(tdd, "selection-log.md"), "utf8");
     expect(log).toContain("Synthesize F1");

@@ -31,6 +31,51 @@ export function writeMasterTestList(tddDir: string, list: TestList): void {
   writeFileSync(file, JSON.stringify(list, null, 2) + "\n");
 }
 
+/**
+ * Render test-list.md from the JSON so the human-readable Beck list cannot
+ * drift from the structured source. Output satisfies the test-list.md
+ * conformance contract: H1 + "Ordered for:" rationale + an AC reference on
+ * every active item + a Deferred / skipped section. Skipped items are listed
+ * under Deferred (not as checklist rows) so they are not mistaken for orphans.
+ */
+export function renderTestListMarkdown(list: TestList): string {
+  const orderedFor = list.ordered_for ?? "design-momentum";
+  const active = list.items.filter((it) => it.status !== "skipped");
+  const deferred = list.items.filter((it) => it.status === "skipped");
+
+  const checkbox = (status: TestListItem["status"]): string =>
+    status === "green" || status === "refactored" ? "x" : " ";
+
+  const lines: string[] = [
+    `# Test list: ${list.feature_id}`,
+    `Ordered for: ${orderedFor}`,
+    "",
+  ];
+  for (const item of active) {
+    lines.push(`- [${checkbox(item.status)}] ${item.id}: ${item.description}  (${item.ac_id})`);
+  }
+  lines.push("", "## Deferred / skipped");
+  if (deferred.length === 0) {
+    lines.push("- (none)");
+  } else {
+    for (const item of deferred) {
+      const why = item.notes ? `: ${item.notes}` : "";
+      lines.push(`- ${item.id}: ${item.description} (${item.ac_id})${why}`);
+    }
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+/** Render + write test-list.md next to test-list.json. Returns the path. */
+export function writeTestListMarkdown(tddDir: string, featureId: string): string {
+  const list = readMasterTestList(tddDir, featureId);
+  const dir = findFeatureDir(tddDir, featureId);
+  const file = join(dir, "test-list.md");
+  writeFileSync(file, renderTestListMarkdown(list));
+  return file;
+}
+
 export interface PerAcView {
   ac_id: string;
   items: TestListItem[];

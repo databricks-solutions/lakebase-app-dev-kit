@@ -101,9 +101,12 @@
     "lakebase-scm-merge": "./dist/scripts/lakebase/scm-merge.cli.js",
     "lakebase-scm-recover-orphans": "./dist/scripts/lakebase/scm-recover-orphans.cli.js",
     "lakebase-scm-doctor": "./dist/scripts/lakebase/scm-doctor.cli.js",
+    "lakebase-scm-feature-branch": "./dist/scripts/lakebase/scm-feature-branch.cli.js",
     "lakebase-pr": "./dist/scripts/github/pr.cli.js",
     "lakebase-feature-status": "./dist/scripts/tdd/feature-status.cli.js",
     "lakebase-tdd-mock-approver": "./dist/scripts/tdd/mock-approver.cli.js",
+    "lakebase-tdd-gate-conformance": "./dist/scripts/tdd/gate-conformance.cli.js",
+    "lakebase-tdd-log": "./dist/scripts/tdd/agent-log.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
   },
   "scripts": {

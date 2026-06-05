@@ -13,6 +13,7 @@ import {
   openBranchDsn,
   type CycleScope,
 } from "../../scripts/tdd/run-cycle";
+import { readAgentLog } from "../../scripts/tdd/agent-log";
 
 const LIVE = process.env.LAKEBASE_TEST_E2E === "1" && !!process.env.DATABRICKS_HOST;
 
@@ -59,6 +60,18 @@ describe("run-cycle (hermetic)", () => {
     expect(g.green_at).toBeTruthy();
     expect(g.navigator_verdict).toBe("passed");
     expect(g.driver_changes).toContain("constant");
+  });
+
+  it("emits cycle.red (navigator) on beginCycle and cycle.green (driver) on markGreen, from the substrate", () => {
+    const a = beginCycle({ ...scope, test_id: "T1", test_description: "POST /bugs returns 404" });
+    markGreen(scope, a.cycle_id, "added route handler");
+    const log = readAgentLog({ tddDir: tdd });
+    const red = log.find((e) => e.event === "cycle.red");
+    const green = log.find((e) => e.event === "cycle.green");
+    expect(red?.role).toBe("navigator");
+    expect(red?.message).toContain("T1 RED");
+    expect(green?.role).toBe("driver");
+    expect(green?.message).toContain("T1 GREEN");
   });
 
   it("markRefactored sets refactored_at and notes", () => {

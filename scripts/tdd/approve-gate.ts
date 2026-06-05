@@ -53,7 +53,7 @@ export interface ApproveGateArgs {
   /**
    * Artifact name -> content map. The substrate hashes each value via
    * hashArtifact and stores the result on the gate record. Per ADR-0004
-   * the per-gate scope is a CONVENTION (spec hashes spec.md + feature.json,
+   * the per-gate scope is a CONVENTION (spec hashes feature-spec.md + feature-spec.json,
    * plan hashes plan.json, test_list hashes test-list.json, promote hashes
    * a promote_ref string) enforced at the call site, not here.
    */

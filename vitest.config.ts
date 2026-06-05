@@ -8,12 +8,15 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts", "tests/**/*.test.js"],
     exclude: ["templates/**", "node_modules/**", "dist/**"],
-    // 5s default is too tight for git-fixture tests on a loaded system
-    // (pre-push hook running tests right after typecheck); they spawn
-    // real git subprocesses against tempdir repos. Bump to 10s so a CPU-
-    // contended run doesn't flake the gate. Per-test overrides for the
-    // truly long ones (migrate-live, deploy-end-to-end, etc.) stay in
+    // The git-fixture tests (git-*, github-*) are hermetic but spawn CHAINS
+    // of real git subprocesses against tempdir bare repos (init/clone/push/
+    // fetch). When the pre-push hook runs the FULL suite with parallel
+    // workers, those chains contend for CPU/IO and a single test can cross a
+    // tight timeout, flaking the gate and forcing push retries. 5s then 10s
+    // both still flaked; 30s gives 3x headroom so a contended run is reliable
+    // without meaningfully slowing genuine-hang detection. Per-test overrides
+    // for the truly long ones (migrate-live, deploy-end-to-end, etc.) stay in
     // place via their `it("...", fn, 180_000)` annotations.
-    testTimeout: 10_000,
+    testTimeout: 30_000,
   },
 });

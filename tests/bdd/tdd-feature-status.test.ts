@@ -391,7 +391,7 @@ describe("feature-status gates field (G8 / FEIP-7365)", () => {
       gate: "spec",
       approver: "po@example.com",
       hitlApproved: true,
-      artifactInputs: { "spec.md": "x", "feature.json": "{}" },
+      artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
       tddDir: tdd,
       now: () => new Date("2026-05-31T20:00:00Z"),
       writeSelectionLog: false,

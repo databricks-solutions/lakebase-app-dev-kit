@@ -18,6 +18,14 @@ Requires `.tdd/features/<feature-id>/test-list.json` to exist (the artifact `/de
 
 The orchestrator is implemented by the substrate agent at `@lakebase-tdd-workflows/agents/scrum-master`. Per-cycle work fans out to `@lakebase-tdd-workflows/agents/driver` and `@lakebase-tdd-workflows/agents/navigator`.
 
+## Auto-approve (headless) mode
+
+If `LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI / the smoke), the human review at gate 3 (test-list immutability) and gate 4 (promote vs synthesize) is performed by `ci-mock-approver`: it validates the gate's artifacts exist + carry their expected elements (format-conformant) and approves only then. The orchestrator advances on that validated approval, never by skipping the gate, and never on a missing/malformed artifact. See `@lakebase-tdd-workflows/SKILL.md` "Headless / auto-approve mode".
+
+## Logging
+
+Every agent emits structured events via `lakebase-tdd-log` to `.tdd/agent-log.jsonl` (see `@lakebase-tdd-workflows/references/agent-logging.md`). The orchestrator emits `phase.start` / `phase.end` per cycle and `gate.approved` at gates 3/4; the Navigator emits `cycle.red` + `review.verdict`; the Driver emits `cycle.green` + `cycle.refactored`; smells go to `--level warn --event smell.flagged`. Tail with `lakebase-tdd-log --read --feature <id>`.
+
 ## Project pre/post hooks
 
 If `.claude/commands/build.pre-hook.md` exists in this project, it runs before phase 1. Common uses: confirm CI is green, refresh Lakebase credentials, ping the on-call channel that a build is starting.

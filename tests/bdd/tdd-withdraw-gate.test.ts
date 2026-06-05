@@ -75,7 +75,7 @@ describe("withdrawGate: argument validation", () => {
 describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
   it("withdraws all three when spec, plan, test_list are all approved", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
 
@@ -98,7 +98,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
 
   it("does NOT cascade to a gate that was never approved", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     // plan + test_list left open
 
     const result = withdrawGate({
@@ -118,7 +118,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
 
   it("cascaded gates record withdrawal_reason = 'cascade:<source>'", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
 
@@ -139,7 +139,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
 
   it("history records cascade-withdrawn action on cascaded gates", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
 
     const result = withdrawGate({
@@ -160,7 +160,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
 
   it("preserves the prior approver + approved_at + artifact_hashes on withdrawn gates", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     const beforeApprover = readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.approver;
     const beforeHashes = readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.artifact_hashes;
 
@@ -183,7 +183,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
 describe("withdrawGate: S6b plan withdraw cascades to test_list only", () => {
   it("withdraws plan + test_list, leaves spec approved", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
 
@@ -208,7 +208,7 @@ describe("withdrawGate: S6b plan withdraw cascades to test_list only", () => {
 describe("withdrawGate: leaf gates do not cascade", () => {
   it("test_list withdraw does not affect any other gate", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
 
@@ -229,7 +229,7 @@ describe("withdrawGate: leaf gates do not cascade", () => {
 
   it("promote withdraw is independent of all upstream gates", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
     approve("promote", { promote_ref: "exp-a:br-a" });
@@ -269,7 +269,7 @@ describe("withdrawGate: idempotent no-op semantics", () => {
 
   it("returns noop=true when the source gate is already withdrawn", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     withdrawGate({
       featureId: FEATURE_ID,
       gate: "spec",
@@ -312,7 +312,7 @@ describe("withdrawGate: idempotent no-op semantics", () => {
 describe("withdrawGate: selection-log dual-write", () => {
   it("appends a narrative entry naming the source gate and cascaded targets", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("plan", { "plan.json": "{}" });
 
     withdrawGate({
@@ -335,7 +335,7 @@ describe("withdrawGate: selection-log dual-write", () => {
 
   it("uses 'Cascade: none' wording for a leaf-gate withdraw", () => {
     makeFeatureDir();
-    approve("spec", { "spec.md": "x", "feature.json": "{}" });
+    approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
     approve("test_list", { "test-list.json": "{}" });
 
     withdrawGate({

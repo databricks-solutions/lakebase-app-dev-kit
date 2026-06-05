@@ -30,7 +30,7 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 | Phase | Output | HITL gate |
 |---|---|---|
-| 0 Discovery | Draft `feature.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
+| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
 | 1 Architectural review | `layer` + `architectural_notes` populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
 | 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
 | 3 Design-spec gate | Experiment plan in `selection-log.md` + `features/<F>/plan.json` | **Gate 4 – Experiment plan** |
@@ -38,10 +38,43 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 Refuse to transition if prior-phase artifacts are missing or invalid.
 
+## Headless / auto-approve mode
+
+By default every gate is HITL: the workflow halts for the Product Owner. When
+`LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI and the FEIP-7422 smoke), the human
+approver role is **performed by** the `ci-mock-approver` identity. This does not
+skip the gate or rubber-stamp it, the mock stands in as a diligent reviewer and
+does exactly what a careful human would:
+
+- **It must be GIVEN the artifacts.** The mock approves a gate only when the
+  gate's expected artifacts EXIST. A missing artifact is refused, just as a
+  human would not sign off on work they were never handed.
+- **It checks the artifacts FOLLOW THE FORMAT RULES.** The mock validates each
+  artifact against its declared format (JSON against its schema; narrative MD
+  against its required sections, see `references/spec-format.md` +
+  `lakebase-tdd-gate-conformance`). A malformed artifact, or one missing a
+  required section, is refused. The mock has expectations about WHAT IS IN the
+  artifact, not just that it exists.
+- **Only when both hold does it approve** the `gates.json` gate
+  (`spec`/`plan`/`test_list`/`promote`) and emit a `gate.approved` log event.
+
+So the producing role's job in this mode is to HAND the approver complete,
+conformant artifacts, recording its recommended resolutions (decisions, NFR
+acceptances, orderings) INSIDE those artifacts rather than leaving them as open
+questions awaiting a human reply. A gate advances because the mock reviewer
+verified and approved real, well-formed work, never because the gate was
+skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
+for a human. Auto-approve is automated diligent approval, not auto-fabrication.
+
+Check the mode with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`. Absent or unset =
+normal HITL (halt for human sign-off).
+
 ## Agent prompts
 
 Load the per-role prompt for the phase you're in:
 
+- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the Spec Author: reads the Feature Requester's `feature-request.md` (the original ask) plus the Product Owner's project-level `product-overview.md` intent, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
+- [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
 - [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.
 - [`agents/scrum-master.md`](agents/scrum-master.md) – phases 3 → 4, orchestrates the design-spec gate, spawns experiments, runs cycles, watches smells, surfaces to HITL.
@@ -51,6 +84,7 @@ Load the per-role prompt for the phase you're in:
 ## References
 
 - [`references/spec-format.md`](references/spec-format.md) – full `.tdd/` directory layout + markdown ↔ JSON contract.
+- [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-tdd-log` (debug = reasoning, info = outputs) to the centralized `.tdd/agent-log.jsonl`.
 - `scripts/tdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
 - [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, DTSTTCPW, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
 
@@ -308,7 +342,7 @@ const result = promoteExperiment({
   approverEmail: "kevin@example.com",
 });
 // Winner outcome: status "succeeded". Losers: outcome "abandoned", dirs moved to _archive/.
-// feature.json transitions to "ready-for-review". Appends to selection-log.md.
+// feature-spec.json transitions to "ready-for-review". Appends to selection-log.md.
 ```
 
 ### Synthesize (N≥2, menu-pick)
@@ -385,7 +419,7 @@ approveGate({
   gate: "spec",
   approver: "po@example.com",
   hitlApproved: true,
-  artifactInputs: { "spec.md": specContent, "feature.json": featureJsonContent },
+  artifactInputs: { "feature-spec.md": specContent, "feature-spec.json": featureJsonContent },
   tddDir: ".tdd",
 });
 
@@ -393,7 +427,7 @@ approveGate({
 const v = verifyGateIntegrity({
   featureId: "F1",
   gate: "spec",
-  currentInputs: { "spec.md": currentSpec, "feature.json": currentFeatureJson },
+  currentInputs: { "feature-spec.md": currentSpec, "feature-spec.json": currentFeatureJson },
   tddDir: ".tdd",
 });
 // v.status: "ok" | "drift" | "gate-not-approved"
@@ -414,7 +448,7 @@ withdrawGate({
 
 | Gate | artifactInputs keys |
 |---|---|
-| `spec` | `spec.md`, `feature.json` |
+| `spec` | `feature-spec.md`, `feature-spec.json` |
 | `plan` | `plan.json` |
 | `test_list` | `test-list.json` |
 | `promote` | `promote_ref` (synthesized string: `<winner-slug>:<branch_id>`) |
@@ -434,7 +468,7 @@ migrateGatesFromSelectionLog({
   // Optional: pass current artifact content so the synthesized state has
   // hashes that future verifyGateIntegrity() calls can match against.
   currentInputsByGate: {
-    spec: { "spec.md": readFileSync("...spec.md", "utf8"), "feature.json": readFileSync("...feature.json", "utf8") },
+    spec: { "feature-spec.md": readFileSync("...feature-spec.md", "utf8"), "feature-spec.json": readFileSync("...feature-spec.json", "utf8") },
     plan: { "plan.json": readFileSync("...plan.json", "utf8") },
     test_list: { "test-list.json": readFileSync("...test-list.json", "utf8") },
   },
@@ -464,10 +498,10 @@ const fdir = join(tdd, "features", "F1-checkout");
 const sdir = join(fdir, "stories", "S1-place-order");
 mkdirSync(join(sdir, "acs"), { recursive: true });
 
-writeFileSync(join(fdir, "feature.json"), JSON.stringify({
+writeFileSync(join(fdir, "feature-spec.json"), JSON.stringify({
   id: "F1", name: "Checkout flow", status: "draft", tdd_mode: "N=1", stories: ["S1"],
 }));
-writeFileSync(join(fdir, "feature.md"), "# Checkout flow\n\nDesign intent.\n");
+writeFileSync(join(fdir, "feature-spec.md"), "# Checkout flow\n\nDesign intent.\n");
 
 writeFileSync(join(sdir, "story.json"), JSON.stringify({
   id: "S1", asA: "shopper", iWantTo: "place an order",

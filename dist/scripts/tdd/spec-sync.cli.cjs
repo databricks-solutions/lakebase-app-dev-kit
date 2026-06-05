@@ -6646,64 +6646,78 @@ init_cjs_shims();
 
 // scripts/tdd/spec-sync.ts
 init_cjs_shims();
+var import_fs2 = require("fs");
+var import_path2 = require("path");
+
+// scripts/tdd/schema-loader.ts
+init_cjs_shims();
 var import_fs = require("fs");
 var import_path = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
 var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  const file = (0, import_path.join)(SCHEMA_DIR, name);
-  return JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
+  return JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(SCHEMA_DIR, name), "utf8"));
 }
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+
+// scripts/tdd/spec-sync.ts
 function makeValidator() {
-  const ajv = new import_ajv.default({ allErrors: true, strict: false });
   return {
-    feature: ajv.compile(loadSchema("feature.schema.json")),
-    story: ajv.compile(loadSchema("story.schema.json")),
-    ac: ajv.compile(loadSchema("ac.schema.json")),
-    testList: ajv.compile(loadSchema("test-list.schema.json")),
-    workflowState: ajv.compile(loadSchema("workflow-state.schema.json"))
+    feature: getValidator("feature.schema.json"),
+    story: getValidator("story.schema.json"),
+    ac: getValidator("ac.schema.json"),
+    testList: getValidator("test-list.schema.json"),
+    workflowState: getValidator("workflow-state.schema.json")
   };
 }
 function validateSpec(tddDir) {
   const reports = [];
   const v = makeValidator();
-  const wsPath = (0, import_path.join)(tddDir, "workflow-state.json");
-  if ((0, import_fs.existsSync)(wsPath)) {
-    const ws = JSON.parse((0, import_fs.readFileSync)(wsPath, "utf8"));
+  const wsPath = (0, import_path2.join)(tddDir, "workflow-state.json");
+  if ((0, import_fs2.existsSync)(wsPath)) {
+    const ws = JSON.parse((0, import_fs2.readFileSync)(wsPath, "utf8"));
     if (!v.workflowState(ws)) {
       reports.push({ file: wsPath, kind: "schema", detail: JSON.stringify(v.workflowState.errors) });
     }
   }
-  const featuresDir = (0, import_path.join)(tddDir, "features");
-  if (!(0, import_fs.existsSync)(featuresDir)) return reports;
-  for (const featureDirName of (0, import_fs.readdirSync)(featuresDir)) {
-    const featureDir = (0, import_path.join)(featuresDir, featureDirName);
-    if (!(0, import_fs.statSync)(featureDir).isDirectory()) continue;
+  const featuresDir = (0, import_path2.join)(tddDir, "features");
+  if (!(0, import_fs2.existsSync)(featuresDir)) return reports;
+  for (const featureDirName of (0, import_fs2.readdirSync)(featuresDir)) {
+    const featureDir = (0, import_path2.join)(featuresDir, featureDirName);
+    if (!(0, import_fs2.statSync)(featureDir).isDirectory()) continue;
     checkPair(featureDir, "feature", v.feature, reports);
-    const storiesDir = (0, import_path.join)(featureDir, "stories");
-    if (!(0, import_fs.existsSync)(storiesDir)) continue;
-    for (const storyDirName of (0, import_fs.readdirSync)(storiesDir)) {
-      const storyDir = (0, import_path.join)(storiesDir, storyDirName);
-      if (!(0, import_fs.statSync)(storyDir).isDirectory()) continue;
+    const storiesDir = (0, import_path2.join)(featureDir, "stories");
+    if (!(0, import_fs2.existsSync)(storiesDir)) continue;
+    for (const storyDirName of (0, import_fs2.readdirSync)(storiesDir)) {
+      const storyDir = (0, import_path2.join)(storiesDir, storyDirName);
+      if (!(0, import_fs2.statSync)(storyDir).isDirectory()) continue;
       checkPair(storyDir, "story", v.story, reports);
-      const acsDir = (0, import_path.join)(storyDir, "acs");
-      if ((0, import_fs.existsSync)(acsDir)) {
-        for (const acFile of (0, import_fs.readdirSync)(acsDir).filter((f) => f.endsWith(".json"))) {
-          const acJsonPath = (0, import_path.join)(acsDir, acFile);
-          const ac = JSON.parse((0, import_fs.readFileSync)(acJsonPath, "utf8"));
+      const acsDir = (0, import_path2.join)(storyDir, "acs");
+      if ((0, import_fs2.existsSync)(acsDir)) {
+        for (const acFile of (0, import_fs2.readdirSync)(acsDir).filter((f) => f.endsWith(".json"))) {
+          const acJsonPath = (0, import_path2.join)(acsDir, acFile);
+          const ac = JSON.parse((0, import_fs2.readFileSync)(acJsonPath, "utf8"));
           if (!v.ac(ac)) {
             reports.push({ file: acJsonPath, kind: "schema", detail: JSON.stringify(v.ac.errors) });
           }
           const mdPath = acJsonPath.replace(/\.json$/, ".md");
-          if (!(0, import_fs.existsSync)(mdPath)) {
+          if (!(0, import_fs2.existsSync)(mdPath)) {
             reports.push({ file: mdPath, kind: "pair-missing", detail: "AC .md narrative missing" });
           }
         }
       }
     }
-    const testListJson = (0, import_path.join)(featureDir, "test-list.json");
-    if ((0, import_fs.existsSync)(testListJson)) {
-      const list = JSON.parse((0, import_fs.readFileSync)(testListJson, "utf8"));
+    const testListJson = (0, import_path2.join)(featureDir, "test-list.json");
+    if ((0, import_fs2.existsSync)(testListJson)) {
+      const list = JSON.parse((0, import_fs2.readFileSync)(testListJson, "utf8"));
       if (!v.testList(list)) {
         reports.push({ file: testListJson, kind: "schema", detail: JSON.stringify(v.testList.errors) });
       }
@@ -6712,26 +6726,26 @@ function validateSpec(tddDir) {
   return reports;
 }
 function checkPair(dir, kind, validator, reports) {
-  const jsonPath = (0, import_path.join)(dir, `${kind}.json`);
-  const mdPath = (0, import_path.join)(dir, `${kind}.md`);
-  if (!(0, import_fs.existsSync)(jsonPath)) {
+  const jsonPath = (0, import_path2.join)(dir, `${kind}.json`);
+  const mdPath = (0, import_path2.join)(dir, `${kind}.md`);
+  if (!(0, import_fs2.existsSync)(jsonPath)) {
     reports.push({ file: jsonPath, kind: "pair-missing", detail: `${kind}.json missing` });
     return;
   }
-  if (!(0, import_fs.existsSync)(mdPath)) {
+  if (!(0, import_fs2.existsSync)(mdPath)) {
     reports.push({ file: mdPath, kind: "pair-missing", detail: `${kind}.md missing` });
-  } else if ((0, import_fs.statSync)(mdPath).size < 20) {
+  } else if ((0, import_fs2.statSync)(mdPath).size < 20) {
     reports.push({ file: mdPath, kind: "narrative-empty", detail: `${kind}.md narrative empty` });
   }
-  const obj = JSON.parse((0, import_fs.readFileSync)(jsonPath, "utf8"));
+  const obj = JSON.parse((0, import_fs2.readFileSync)(jsonPath, "utf8"));
   if (!validator(obj)) {
     reports.push({ file: jsonPath, kind: "schema", detail: JSON.stringify(validator.errors) });
   }
-  if (obj.id && !(0, import_path.basename)(dir).startsWith(obj.id)) {
+  if (obj.id && !(0, import_path2.basename)(dir).startsWith(obj.id)) {
     reports.push({
       file: jsonPath,
       kind: "id-mismatch",
-      detail: `dir name ${(0, import_path.basename)(dir)} does not start with id ${obj.id}`
+      detail: `dir name ${(0, import_path2.basename)(dir)} does not start with id ${obj.id}`
     });
   }
 }

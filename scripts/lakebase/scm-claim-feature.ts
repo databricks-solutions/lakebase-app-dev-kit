@@ -151,13 +151,15 @@ export function sanitizeFeatureSlug(featureId: string): string {
 }
 
 /**
- * Build the feature branch name from a sanitized slug. Branch convention
- * is `feature/<slug>`. Kept as a named helper so callers can stay in
- * sync with the substrate's sanitizer and other code that needs to
- * reconstruct the branch name from a feature-id.
+ * The CANONICAL feature branch name for a slug. A paired branch's git name
+ * must equal its slash-less Lakebase branch id, so the canonical name is the
+ * SANITIZED form ("feature-<slug>"), not a raw "feature/<slug>". Running the
+ * input through `sanitizeBranchName` (the same function the substrate uses to
+ * mint the Lakebase branch) makes this the single source of truth: callers,
+ * the idempotency check, and assertions all reconstruct the identical name.
  */
 export function featureBranchName(slug: string): string {
-  return `feature/${slug}`;
+  return sanitizeBranchName(`feature/${slug}`);
 }
 
 /**
@@ -180,6 +182,9 @@ export async function claimFeatureBranch(
   const idempotent = args.idempotent !== false;
 
   if (current.state === "feature-claimed") {
+    // Same-feature re-claim is an idempotent no-op. Both sides are the
+    // canonical (sanitized) branch name now, so equality holds for a genuine
+    // re-entry regardless of the case or slash/hyphen form the caller typed.
     if (idempotent && current.branch === branch) {
       return {
         state: current,
@@ -188,7 +193,7 @@ export async function claimFeatureBranch(
       };
     }
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish or abandon it first (phase B does not yet ship an abandon CLI).`,
+      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other",
     );
   }
@@ -225,7 +230,10 @@ export async function claimFeatureBranch(
   const next: ScmWorkflowState = {
     ...current,
     state: "feature-claimed",
-    feature_id: slug,
+    // Record the canonical feature id (case preserved, e.g. "F1-initial-domain")
+    // so it matches the .tdd/features/<F> dir + downstream expectations. The
+    // lowercased branch slug lives on `branch`, derived separately.
+    feature_id: args.featureId.trim(),
     branch: paired.gitBranch,
     parent_branch: parentBranch,
     lakebase_branch_uid: paired.branch.uid,

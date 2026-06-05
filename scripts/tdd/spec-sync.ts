@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "fs";
 import { join, basename } from "path";
-import Ajv from "ajv";
+import type Ajv from "ajv";
+import { getValidator } from "./schema-loader";
 
 type Phase =
   | "discovery"
@@ -13,12 +14,22 @@ type Phase =
   | "shipped"
   | "abandoned";
 
+/**
+ * Non-functional requirement. NFRs are owned by the Architect and live in
+ * architecture.json (HIL-adjudicated at Gate 2), NOT on the spec-author-owned
+ * feature-spec.json/story.json, putting them there drifted the spec gate (FEIP-7508).
+ */
+export interface Nfr {
+  category: string;
+  requirement: string;
+  notes?: string;
+}
+
 export interface Feature {
   id: string;
   name: string;
   status: string;
   tdd_mode: "N=1" | "N>=2";
-  nfrs?: Array<{ category: string; requirement: string; notes?: string }>;
   success_metrics?: string[];
   stories?: string[];
   experiment_count_default?: number;
@@ -33,7 +44,6 @@ export interface Story {
   soThat: string;
   acs?: string[];
   feature_id?: string;
-  nfrs?: Feature["nfrs"];
   external_ref?: Feature["external_ref"];
 }
 
@@ -45,7 +55,7 @@ export interface AC {
   then: string;
   status: string;
   scenarios?: string[];
-  nfrs?: Feature["nfrs"];
+  nfrs?: Nfr[];
   architectural_notes?: string;
   story_id?: string;
   external_ref?: Feature["external_ref"];
@@ -69,33 +79,27 @@ export interface DriftReport {
   detail: string;
 }
 
-const SCHEMA_DIR = join(__dirname, "schemas");
-
-function loadSchema(name: string): object {
-  const file = join(SCHEMA_DIR, name);
-  return JSON.parse(readFileSync(file, "utf8"));
-}
-
 function makeValidator() {
-  const ajv = new Ajv({ allErrors: true, strict: false });
+  // Validators come from the shared schema-loader cache so spec-sync and
+  // artifact-conformance validate against the identical compiled schemas.
   return {
-    feature: ajv.compile(loadSchema("feature.schema.json")),
-    story: ajv.compile(loadSchema("story.schema.json")),
-    ac: ajv.compile(loadSchema("ac.schema.json")),
-    testList: ajv.compile(loadSchema("test-list.schema.json")),
-    workflowState: ajv.compile(loadSchema("workflow-state.schema.json")),
+    feature: getValidator("feature.schema.json"),
+    story: getValidator("story.schema.json"),
+    ac: getValidator("ac.schema.json"),
+    testList: getValidator("test-list.schema.json"),
+    workflowState: getValidator("workflow-state.schema.json"),
   };
 }
 
 export function readFeature(tddDir: string, featureId: string): Feature {
   const dir = findFeatureDir(tddDir, featureId);
-  const jsonPath = join(dir, "feature.json");
+  const jsonPath = join(dir, "feature-spec.json");
   return JSON.parse(readFileSync(jsonPath, "utf8"));
 }
 
 export function writeFeature(tddDir: string, feature: Feature): void {
   const dir = findFeatureDir(tddDir, feature.id);
-  const jsonPath = join(dir, "feature.json");
+  const jsonPath = join(dir, "feature-spec.json");
   writeFileSync(jsonPath, JSON.stringify(feature, null, 2) + "\n");
 }
 
@@ -185,16 +189,19 @@ function checkPair(
   validator: ReturnType<Ajv["compile"]>,
   reports: DriftReport[]
 ): void {
-  const jsonPath = join(dir, `${kind}.json`);
-  const mdPath = join(dir, `${kind}.md`);
+  // The feature pair is feature-spec.json + feature-spec.md (Spec Author's
+  // structured spec); story stays story.json + story.md.
+  const stem = kind === "feature" ? "feature-spec" : kind;
+  const jsonPath = join(dir, `${stem}.json`);
+  const mdPath = join(dir, `${stem}.md`);
   if (!existsSync(jsonPath)) {
-    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${kind}.json missing` });
+    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${stem}.json missing` });
     return;
   }
   if (!existsSync(mdPath)) {
-    reports.push({ file: mdPath, kind: "pair-missing", detail: `${kind}.md missing` });
+    reports.push({ file: mdPath, kind: "pair-missing", detail: `${stem}.md missing` });
   } else if (statSync(mdPath).size < 20) {
-    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${kind}.md narrative empty` });
+    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${stem}.md narrative empty` });
   }
   const obj = JSON.parse(readFileSync(jsonPath, "utf8"));
   if (!validator(obj)) {

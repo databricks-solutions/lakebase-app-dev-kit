@@ -38,11 +38,14 @@ export default defineConfig({
     "scripts/lakebase/scm-merge.cli": "scripts/lakebase/scm-merge.cli.ts",
     "scripts/lakebase/scm-recover-orphans.cli": "scripts/lakebase/scm-recover-orphans.cli.ts",
     "scripts/lakebase/scm-doctor.cli": "scripts/lakebase/scm-doctor.cli.ts",
+    "scripts/lakebase/scm-feature-branch.cli": "scripts/lakebase/scm-feature-branch.cli.ts",
     "scripts/github/pr.cli": "scripts/github/pr.cli.ts",
     "scripts/tdd/feature-status.cli": "scripts/tdd/feature-status.cli.ts",
     "scripts/tdd/test-list.cli": "scripts/tdd/test-list.cli.ts",
     "scripts/tdd/spec-sync.cli": "scripts/tdd/spec-sync.cli.ts",
     "scripts/tdd/mock-approver.cli": "scripts/tdd/mock-approver.cli.ts",
+    "scripts/tdd/gate-conformance.cli": "scripts/tdd/gate-conformance.cli.ts",
+    "scripts/tdd/agent-log.cli": "scripts/tdd/agent-log.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },
@@ -51,6 +54,10 @@ export default defineConfig({
   target: "node20",
   dts: true,
   clean: true,
+  // tsup compiles TS only; copy *.schema.json runtime assets into dist/ so
+  // consumer installs (which ship pre-built dist/ and never rebuild) can read
+  // them. Without this, schema-loader / scm-workflow-state hit ENOENT.
+  onSuccess: "node scripts/copy-build-assets.mjs",
   sourcemap: true,
   splitting: false,
   // `shims: true` makes esbuild inject pathToFileURL(__filename).href for
