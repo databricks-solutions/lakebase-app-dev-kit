@@ -85,8 +85,11 @@ case "$EXPECTED_STATE" in
     if [[ -n "$EXPECTED_FEATURE_ID" && "$fid" != "$EXPECTED_FEATURE_ID" ]]; then
       fail "feature_id=$fid does not match expected=$EXPECTED_FEATURE_ID"
     fi
-    if [[ "$branch" != feature/* ]]; then
-      fail "branch=$branch does not have the feature/ prefix"
+    # The substrate names paired branches with a hyphen ("feature-<slug>")
+    # so the git branch matches the slash-less Lakebase branch id; accept
+    # either that or the slash convention.
+    if [[ "$branch" != feature/* && "$branch" != feature-* ]]; then
+      fail "branch=$branch is not a feature branch (expected feature/ or feature- prefix)"
     fi
     ok "feature-claimed invariants satisfied (feature_id=$fid, branch=$branch)"
     ;;
