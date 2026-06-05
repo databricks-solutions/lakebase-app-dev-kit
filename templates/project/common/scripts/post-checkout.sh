@@ -98,9 +98,11 @@ if [ -z "${DATABRICKS_CONFIG_PROFILE:-}" ] && [ -n "${DATABRICKS_HOST:-}" ]; the
     if [ -f "$RESOLVE_ALT" ]; then RESOLVE_BIN="node $RESOLVE_ALT"; else RESOLVE_BIN=""; fi
   fi
   if [ -n "$RESOLVE_BIN" ]; then
-    PINNED_PROFILE="$($RESOLVE_BIN --host "$DATABRICKS_HOST" 2>/dev/null || true)"
+    # Delegate the whole heal (read host -> resolve -> insert after host) to
+    # the TS helper via --write-env. Shell owns only the re-export + notice;
+    # the resolve + .env placement logic lives once in ensureProfilePinned.
+    PINNED_PROFILE="$($RESOLVE_BIN --write-env "$WORK_TREE/.env" 2>/dev/null || true)"
     if [ -n "$PINNED_PROFILE" ]; then
-      printf 'DATABRICKS_CONFIG_PROFILE=%s\n' "$PINNED_PROFILE" >> .env
       export DATABRICKS_CONFIG_PROFILE="$PINNED_PROFILE"
       echo "Lakebase: pinned DATABRICKS_CONFIG_PROFILE=$PINNED_PROFILE in .env (matched workspace host)."
     fi
