@@ -69,6 +69,7 @@ Emit structured events as you work, via `lakebase-tdd-log` (see [references/agen
 - `--level debug --event reasoning` for scope calls + why something became an open question.
 - `--level warn --event open.question` for each boundary question you leave for the PO.
 - `--level info --event handoff` when the structured draft spec is ready for the Architect.
+- **HITL (Gate 1):** emit `--event gate.surfaced` when you hand to the human, then record their ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<what they decided/answered>"`) BEFORE proceeding, the proceed is gated by it. In auto-approve mode the `ci-mock-approver` records this instead. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

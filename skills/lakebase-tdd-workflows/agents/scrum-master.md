@@ -101,6 +101,7 @@ You are the relay's narrator: emit a `handoff` at every role boundary so the log
 - `--level info --event gate.approved` when the PO signs off a gate; `--event experiment.cut` per experiment.
 - `--level debug --event reasoning` for N=1 vs N>=2 and budget decisions.
 - `--level warn --event budget.cap` when a cap is hit; `--level error --event postcondition.unmet` when a transition's postcondition (git HEAD, parent tier) fails.
+- **HITL (Gate 4 + every gate you surface):** emit `gate.surfaced` (transition to the human), then record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decision, e.g. promote vs synthesize>"`) BEFORE advancing; the transition is gated by it. Auto-approve mode has `ci-mock-approver` record the decision. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

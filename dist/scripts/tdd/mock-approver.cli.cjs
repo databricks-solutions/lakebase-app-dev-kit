@@ -7186,7 +7186,57 @@ function checkTestListMd(content) {
   return violations;
 }
 
+// scripts/tdd/agent-log.ts
+init_cjs_shims();
+var import_fs5 = require("fs");
+var import_path5 = require("path");
+function logFilePath(tddDir) {
+  return (0, import_path5.join)(tddDir, "agent-log.jsonl");
+}
+function emitAgentLogEvent(input, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  (0, import_fs5.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
+
 // scripts/tdd/mock-approver.ts
+function logHitlDecision(tddDir, featureId, approver, decision) {
+  try {
+    if (decision.kind === "approved") {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "info",
+          event: "gate.approved",
+          message: `${approver} validated ${decision.gate} artifacts (${decision.artifacts.join(", ")}): expected elements present + conformant; approved`,
+          feature_id: featureId,
+          data: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
+        },
+        { tddDir }
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "gate.refused",
+          message: `${approver} refused ${decision.gate}: ${decision.reason}`,
+          feature_id: featureId,
+          data: { gate: decision.gate, reason: decision.reason, approver, validated: false }
+        },
+        { tddDir }
+      );
+    }
+  } catch {
+  }
+}
 var MOCK_APPROVER = "ci-mock-approver";
 function featureDir(tddDir, featureId) {
   return (0, import_node_path.join)(tddDir, "features", featureId);
@@ -7273,6 +7323,11 @@ function mockApproveOpenGates(args) {
     const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
+      logHitlDecision(tddDir, args.featureId, approver, {
+        kind: "refused",
+        gate,
+        reason: resolved.reason
+      });
       continue;
     }
     const result = approveGate({
@@ -7285,6 +7340,11 @@ function mockApproveOpenGates(args) {
     });
     approved.push(gate);
     state = result.state;
+    logHitlDecision(tddDir, args.featureId, approver, {
+      kind: "approved",
+      gate,
+      artifacts: Object.keys(resolved.inputs)
+    });
   }
   return { approved, skipped, finalState: state };
 }

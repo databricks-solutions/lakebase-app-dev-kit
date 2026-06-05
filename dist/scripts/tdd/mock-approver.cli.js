@@ -6673,8 +6673,8 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/mock-approver.ts
 init_esm_shims();
-import { existsSync as existsSync4, readFileSync as readFileSync5 } from "fs";
-import { join as join5 } from "path";
+import { existsSync as existsSync5, readFileSync as readFileSync6 } from "fs";
+import { join as join6 } from "path";
 
 // scripts/tdd/approve-gate.ts
 init_esm_shims();
@@ -7178,10 +7178,60 @@ function checkTestListMd(content) {
   return violations;
 }
 
+// scripts/tdd/agent-log.ts
+init_esm_shims();
+import { appendFileSync, existsSync as existsSync4, readFileSync as readFileSync5 } from "fs";
+import { join as join5 } from "path";
+function logFilePath(tddDir) {
+  return join5(tddDir, "agent-log.jsonl");
+}
+function emitAgentLogEvent(input, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
+
 // scripts/tdd/mock-approver.ts
+function logHitlDecision(tddDir, featureId, approver, decision) {
+  try {
+    if (decision.kind === "approved") {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "info",
+          event: "gate.approved",
+          message: `${approver} validated ${decision.gate} artifacts (${decision.artifacts.join(", ")}): expected elements present + conformant; approved`,
+          feature_id: featureId,
+          data: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
+        },
+        { tddDir }
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "gate.refused",
+          message: `${approver} refused ${decision.gate}: ${decision.reason}`,
+          feature_id: featureId,
+          data: { gate: decision.gate, reason: decision.reason, approver, validated: false }
+        },
+        { tddDir }
+      );
+    }
+  } catch {
+  }
+}
 var MOCK_APPROVER = "ci-mock-approver";
 function featureDir(tddDir, featureId) {
-  return join5(tddDir, "features", featureId);
+  return join6(tddDir, "features", featureId);
 }
 function conformanceReason(inputs) {
   const problems = [];
@@ -7193,9 +7243,9 @@ function conformanceReason(inputs) {
 }
 function resolveArtifactInputs(gate, fdir, promoteRef) {
   const readIfPresent = (name) => {
-    const p = join5(fdir, name);
+    const p = join6(fdir, name);
     try {
-      return existsSync4(p) ? readFileSync5(p, "utf8") : void 0;
+      return existsSync5(p) ? readFileSync6(p, "utf8") : void 0;
     } catch {
       return void 0;
     }
@@ -7265,6 +7315,11 @@ function mockApproveOpenGates(args) {
     const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
+      logHitlDecision(tddDir, args.featureId, approver, {
+        kind: "refused",
+        gate,
+        reason: resolved.reason
+      });
       continue;
     }
     const result = approveGate({
@@ -7277,6 +7332,11 @@ function mockApproveOpenGates(args) {
     });
     approved.push(gate);
     state = result.state;
+    logHitlDecision(tddDir, args.featureId, approver, {
+      kind: "approved",
+      gate,
+      artifacts: Object.keys(resolved.inputs)
+    });
   }
   return { approved, skipped, finalState: state };
 }

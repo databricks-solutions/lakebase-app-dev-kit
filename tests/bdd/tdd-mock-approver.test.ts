@@ -18,6 +18,7 @@ import { join } from "path";
 import { mockApproveOpenGates } from "../../scripts/tdd/mock-approver";
 import { readGates } from "../../scripts/tdd/gates";
 import { hashArtifact } from "../../scripts/tdd/gate-hash";
+import { readAgentLog } from "../../scripts/tdd/agent-log";
 
 const FEATURE_ID = "F1-initial-domain";
 const PLACEHOLDER_HASH = hashArtifact("MOCK_APPROVED");
@@ -147,6 +148,30 @@ describe("mockApproveOpenGates: hard-blocks non-conformant artifacts (Layer 2)",
     const state = readGates(FEATURE_ID, { tddDir: tdd });
     expect(state.gates.test_list.artifact_hashes?.["test-list.json"]).toBe(hashArtifact(TEST_LIST_JSON));
     assertNoFabricatedHashes(tdd);
+  });
+
+  it("records the HITL decision: product-owner gate.approved when it validates + approves", () => {
+    writeFileSync(join(fdir, "feature.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
+
+    const log = readAgentLog({ tddDir: tdd, role: "product-owner" });
+    const approved = log.find((e) => e.event === "gate.approved" && (e.data as { gate?: string })?.gate === "spec");
+    expect(approved).toBeDefined();
+    expect((approved?.data as { validated?: boolean })?.validated).toBe(true);
+    expect((approved?.data as { approver?: string })?.approver).toBe("ci-mock-approver");
+  });
+
+  it("records the HITL decision: product-owner gate.refused (warn) when an artifact is non-conformant", () => {
+    writeFileSync(join(fdir, "feature.json"), "{}"); // schema-invalid
+    writeFileSync(join(fdir, "feature.md"), FEATURE_MD);
+    mockApproveOpenGates({ featureId: FEATURE_ID, tddDir: tdd });
+
+    const refused = readAgentLog({ tddDir: tdd, role: "product-owner" }).find(
+      (e) => e.event === "gate.refused" && (e.data as { gate?: string })?.gate === "spec",
+    );
+    expect(refused).toBeDefined();
+    expect(refused?.level).toBe("warn");
   });
 
   it("approves promote only when a real promote_ref is supplied", () => {

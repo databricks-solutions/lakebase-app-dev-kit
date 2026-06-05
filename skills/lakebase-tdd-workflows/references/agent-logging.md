@@ -64,6 +64,32 @@ handoff. Minimum expected events:
 The orchestrator may also emit `handoff` events at each role boundary so the
 log reads as a clean relay timeline.
 
+## 4.5 HITL interactions (the human is a logged participant)
+
+Every HITL gate is a two-sided, logged interaction: the workflow transitions
+TO the human, and the proceed is GATED BY their response. Both sides are
+recorded, the audit trail must show who was asked and what they decided.
+
+1. **Transition to the human** (the surfacing role, `info`):
+   `--event gate.surfaced --message "Gate N surfaced to PO: <what they must decide>"`.
+   This marks that the workflow handed control to the human and is now waiting.
+
+2. **The human's response** (`--role product-owner`), recorded BEFORE the
+   workflow advances, the transition past the gate is gated by it:
+   - `--event gate.approved --message "<what they approved + any decisions>"`
+   - `--event gate.modified --message "<what they changed>"` (with the change)
+   - `--event gate.rejected --message "<why, what to revise>"`
+   Capture the human's ACTUAL decision verbatim in the message + `data`, not a
+   paraphrase. If the human answered open questions, record their answers.
+
+So a normal (human) run logs: `gate.surfaced` (transition) then the human's
+`gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then
+the next phase's `phase.start`. In **auto-approve mode** the human is performed
+by `ci-mock-approver`, which emits the SAME `product-owner` `gate.approved` /
+`gate.refused` events (it validated the artifact's expected elements first). The
+log shape is identical; only the approver identity in `data.approver` differs,
+so an auditor sees exactly where a human was, or was not, in the loop.
+
 ## 5. Where it does NOT go
 
 This log is execution narrative, not workflow state. Gate state stays in

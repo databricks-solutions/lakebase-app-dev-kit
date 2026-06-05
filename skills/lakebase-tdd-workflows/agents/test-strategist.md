@@ -61,6 +61,7 @@ Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md]
 - `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.
 - `--level debug --event reasoning` for the ordering rationale (`ordered_for`).
 - `--level warn --event smell.flagged` for any test that cannot be defined without writing implementation first.
+- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their call on the ordering>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `ci-mock-approver` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

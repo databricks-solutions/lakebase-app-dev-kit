@@ -46,6 +46,52 @@ import { join } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
+import { emitAgentLogEvent } from "./agent-log.js";
+
+/**
+ * Emit the HITL reviewer's decision to the centralized agent log. The mock
+ * approver stands in for the human reviewer, so its validate-then-approve (or
+ * refuse) is itself a logged HITL interaction (role: product-owner, approver
+ * identity in `data`). Best-effort: logging must never break gate approval.
+ */
+function logHitlDecision(
+  tddDir: string,
+  featureId: string,
+  approver: string,
+  decision:
+    | { kind: "approved"; gate: GateName; artifacts: string[] }
+    | { kind: "refused"; gate: GateName; reason: string },
+): void {
+  try {
+    if (decision.kind === "approved") {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "info",
+          event: "gate.approved",
+          message: `${approver} validated ${decision.gate} artifacts (${decision.artifacts.join(", ")}): expected elements present + conformant; approved`,
+          feature_id: featureId,
+          data: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true },
+        },
+        { tddDir },
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "gate.refused",
+          message: `${approver} refused ${decision.gate}: ${decision.reason}`,
+          feature_id: featureId,
+          data: { gate: decision.gate, reason: decision.reason, approver, validated: false },
+        },
+        { tddDir },
+      );
+    }
+  } catch {
+    // Logging is observability, not a gate. Never let it break approval.
+  }
+}
 
 export const MOCK_APPROVER = "ci-mock-approver";
 
@@ -182,6 +228,13 @@ export function mockApproveOpenGates(args: MockApproveArgs): MockApproveResult {
     const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
+      // The HITL reviewer refused: the artifact was missing or did not carry
+      // its expected elements. Record that interaction.
+      logHitlDecision(tddDir, args.featureId, approver, {
+        kind: "refused",
+        gate,
+        reason: resolved.reason,
+      });
       continue;
     }
     const result = approveGate({
@@ -194,6 +247,12 @@ export function mockApproveOpenGates(args: MockApproveArgs): MockApproveResult {
     });
     approved.push(gate);
     state = result.state;
+    // The HITL reviewer validated the expected elements + approved. Record it.
+    logHitlDecision(tddDir, args.featureId, approver, {
+      kind: "approved",
+      gate,
+      artifacts: Object.keys(resolved.inputs),
+    });
   }
 
   return { approved, skipped, finalState: state };
