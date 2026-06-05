@@ -1,6 +1,6 @@
 {
   "version": "2",
-  "updated_at": "2026-06-05T08:53:35Z",
+  "updated_at": "2026-06-05T15:00:33Z",
   "skills": {
     "databricks-core": {
       "version": "0.1.0",
@@ -54,7 +54,7 @@
       "version": "0.0.0",
       "description": "Test-driven development against paired Lakebase branches. Canonical Beck-style RED-GREEN-REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
       "experimental": false,
-      "updated_at": "2026-06-05T08:29:23Z",
+      "updated_at": "2026-06-05T15:00:23Z",
       "files": [
         "README.md",
         "SKILL.md",
@@ -65,6 +65,7 @@
         "agents/spec-author.md",
         "agents/test-strategist.md",
         "agents/ux-designer.md",
+        "references/agent-logging.md",
         "references/default-design-guide.md",
         "references/feature-status-schema.md",
         "references/spec-format.md"

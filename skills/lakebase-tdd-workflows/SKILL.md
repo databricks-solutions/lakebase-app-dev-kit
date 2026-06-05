@@ -53,6 +53,7 @@ Load the per-role prompt for the phase you're in:
 ## References
 
 - [`references/spec-format.md`](references/spec-format.md) – full `.tdd/` directory layout + markdown ↔ JSON contract.
+- [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-tdd-log` (debug = reasoning, info = outputs) to the centralized `.tdd/agent-log.jsonl`.
 - `scripts/tdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
 - [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, DTSTTCPW, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
 
