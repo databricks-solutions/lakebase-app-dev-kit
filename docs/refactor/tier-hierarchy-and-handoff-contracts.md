@@ -1,7 +1,20 @@
-# FEIP scope: tier hierarchy + enforced TDD-workflow handoff contracts
+# FEIP-7508: tier hierarchy + enforced TDD-workflow handoff contracts
 
-**Status:** scoping only (no code). Suggested labels: LADT, lakebase-for-agile-dev.
-Cross-refs: FEIP-7458 (SCM workflow state machine), FEIP-7422 (TDD smoke).
+**Ticket:** FEIP-7508, a sub-task of FEIP-7461 (umbrella: SCM + TDD workflows as
+executable state machines). Labels: lakebase-app-dev-kit, lakebase-for-agile-dev.
+**Status:** scoping only (no code).
+
+**Lineage (the 2026-06-04 defect family):** this is the structural foundation
+the two sibling sub-tasks now depend on:
+- **FEIP-7494** (thin scaffolded shells onto TS substrate CLIs) , mostly landed;
+  the one holdout is `post-checkout.sh`, which can only thin onto `checkoutPaired`
+  once parent resolution is structural + `strictParent` is enforced (this doc).
+  See `docs/refactor/post-checkout-thinning.md`.
+- **FEIP-7495** (live tests must exercise scaffolded touchpoints, not bypass
+  them) , the `002`-to-`main` leak below is a textbook instance; the smoke-fix
+  section here (git-HEAD guard, entry-tier guard, `verify-vN` binding) is the
+  remaining 7495 work.
+Builds on FEIP-7458 (SCM workflow state machine); surfaced by the FEIP-7422 smoke.
 Source: the `tdd-handoff-contract-audit` workflow (5-agent map + synthesis).
 
 ## Core principle (the reframing)
