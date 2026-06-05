@@ -11,6 +11,23 @@ import {
   type AcLayer,
   type ExperimentTag,
 } from "./experiment";
+import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log";
+
+/**
+ * Emit a cycle event to the centralized agent log from the SUBSTRATE, not
+ * agent prose. The Navigator/Driver call beginCycle/markGreen/markRefactored
+ * as the authoritative RED/GREEN/REFACTOR transitions, so emitting here makes
+ * every cycle logged deterministically (the agent need not remember to). Same
+ * pattern as the mock approver logging its gate decisions. Best-effort:
+ * logging is observability, never a reason to fail a cycle.
+ */
+function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
+  try {
+    emitAgentLogEvent(event, { tddDir });
+  } catch {
+    // swallow: never let logging break a cycle transition
+  }
+}
 
 export type CycleStage = "PLAN" | "RED" | "GREEN" | "REFACTOR";
 export type CycleVerdict = "passed" | "failed" | "skipped";
@@ -167,6 +184,15 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     layer,
   };
   writeCycleArtifact(args, artifact);
+  logCycleEvent(args.tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.red",
+    message: `${args.test_id} RED: ${args.test_description}`,
+    feature_id: args.feature_id,
+    cycle_id,
+    data: { test_id: args.test_id, ac_id: args.ac_id, layer },
+  });
   return artifact;
 }
 
@@ -259,6 +285,15 @@ export function markGreen(
   a.driver_changes = driverChanges;
   a.navigator_verdict = "passed";
   writeCycleArtifact(scope, a);
+  logCycleEvent(scope.tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.green",
+    message: `${a.test_id} GREEN${driverChanges ? ": " + driverChanges : ""}`,
+    feature_id: scope.feature_id,
+    cycle_id: cycleId,
+    data: { test_id: a.test_id },
+  });
   return a;
 }
 
@@ -268,6 +303,15 @@ export function markRefactored(scope: CycleScope, cycleId: string, refactorNotes
   a.refactored_at = new Date().toISOString();
   a.refactor_notes = refactorNotes;
   writeCycleArtifact(scope, a);
+  logCycleEvent(scope.tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    message: `${a.test_id} REFACTOR${refactorNotes ? ": " + refactorNotes : ""}`,
+    feature_id: scope.feature_id,
+    cycle_id: cycleId,
+    data: { test_id: a.test_id },
+  });
   return a;
 }
 
