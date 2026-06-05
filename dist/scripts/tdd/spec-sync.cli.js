@@ -6731,16 +6731,17 @@ function validateSpec(tddDir) {
   return reports;
 }
 function checkPair(dir, kind, validator, reports) {
-  const jsonPath = join2(dir, `${kind}.json`);
-  const mdPath = join2(dir, `${kind}.md`);
+  const stem = kind === "feature" ? "feature-spec" : kind;
+  const jsonPath = join2(dir, `${stem}.json`);
+  const mdPath = join2(dir, `${stem}.md`);
   if (!existsSync(jsonPath)) {
-    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${kind}.json missing` });
+    reports.push({ file: jsonPath, kind: "pair-missing", detail: `${stem}.json missing` });
     return;
   }
   if (!existsSync(mdPath)) {
-    reports.push({ file: mdPath, kind: "pair-missing", detail: `${kind}.md missing` });
+    reports.push({ file: mdPath, kind: "pair-missing", detail: `${stem}.md missing` });
   } else if (statSync(mdPath).size < 20) {
-    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${kind}.md narrative empty` });
+    reports.push({ file: mdPath, kind: "narrative-empty", detail: `${stem}.md narrative empty` });
   }
   const obj = JSON.parse(readFileSync2(jsonPath, "utf8"));
   if (!validator(obj)) {

@@ -7035,7 +7035,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/artifact-conformance.ts
 var ARTIFACT_FORMATS = {
-  "feature.json": { kind: "json-schema", schema: "feature.schema.json" },
+  "feature-spec.json": { kind: "json-schema", schema: "feature.schema.json" },
   "story.json": { kind: "json-schema", schema: "story.schema.json" },
   "ac.json": { kind: "json-schema", schema: "ac.schema.json" },
   "test-list.json": { kind: "json-schema", schema: "test-list.schema.json" },
@@ -7044,7 +7044,7 @@ var ARTIFACT_FORMATS = {
   "workflow-state.json": { kind: "json-schema", schema: "workflow-state.schema.json" },
   // UX Designer (UI projects only): the machine-checkable design tokens.
   "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
-  // architect-reviewer.md section 6 + Gate 2 adjudication surface.
+  // Architect Reviewer's section 6 + Gate 2 adjudication surface.
   "architecture.md": {
     kind: "md-sections",
     sections: [
@@ -7055,8 +7055,8 @@ var ARTIFACT_FORMATS = {
       { label: "Sign-off", match: "sign-off" }
     ]
   },
-  // PO/Discovery draft-spec narrative.
-  "feature.md": {
+  // Spec Author's draft-spec narrative.
+  "feature-spec.md": {
     kind: "md-sections",
     sections: [
       { label: "Summary", match: "summary" },
@@ -7065,11 +7065,15 @@ var ARTIFACT_FORMATS = {
       { label: "Open questions", match: "open question" }
     ]
   },
-  // Optional top-level overview narrative.
-  "spec.md": { kind: "md-narrative" },
+  // Feature Requester's original ask: the Spec Author's INPUT. Free-form
+  // narrative; only H1 + non-empty body required. Never overwritten.
+  "feature-request.md": { kind: "md-narrative" },
+  // Product Owner's project-level overview (replaces the old spec.md).
+  "product-overview.md": { kind: "md-narrative" },
   // HIL design brief (UI projects): the human's reference sites + what to take
-  // from each. The design analogue of spec.md, the source the UX Designer
-  // teases the design out of. A brief with no references is meaningless, so a
+  // from each. The design analogue of product-overview.md, the source the UX
+  // Designer teases the design out of. A brief with no references is
+  // meaningless, so a
   // References section is the one hard requirement.
   "design-brief.md": {
     kind: "md-sections",
@@ -7264,20 +7268,18 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
   };
   switch (gate) {
     case "spec": {
-      const featureJson = readIfPresent("feature.json");
+      const featureJson = readIfPresent("feature-spec.json");
       if (featureJson === void 0) {
-        return { reason: "feature.json not found (spec phase not complete)" };
+        return { reason: "feature-spec.json not found (spec phase not complete)" };
       }
-      const featureMd = readIfPresent("feature.md");
+      const featureMd = readIfPresent("feature-spec.md");
       if (featureMd === void 0) {
-        return { reason: "feature.md not found (structured draft spec incomplete)" };
+        return { reason: "feature-spec.md not found (structured draft spec incomplete)" };
       }
       const inputs = {
-        "feature.json": featureJson,
-        "feature.md": featureMd
+        "feature-spec.json": featureJson,
+        "feature-spec.md": featureMd
       };
-      const specMd = readIfPresent("spec.md");
-      if (specMd !== void 0) inputs["spec.md"] = specMd;
       return withConformance(inputs);
     }
     case "plan": {
