@@ -66,6 +66,7 @@ Requester's original ask is `feature-request.md` and is never overwritten.
 | Artifact | Author | Scope |
 |---|---|---|
 | `product-overview.md` | Product Owner | Project-level (`.tdd/` root). Open-ended intent; not part of the per-feature spec gate. |
+| `nfrs.md` | Product Owner / HIL | Non-functional-requirements brief; the Architect's intake. Project-level (`.tdd/nfrs.md`) + optional per-feature (`.tdd/features/<F>/nfrs.md`). Each Required item has an `R<n>` id the Architect covers via `brief_ref`. |
 | `feature-request.md` | Feature Requester | Per-feature. The original ask; the Spec Author's INPUT, read but never overwritten. |
 | `feature-spec.md` | Spec Author | Per-feature narrative draft-spec (Summary, Stories, Out of scope, Open questions). |
 | `feature-spec.json` | Spec Author | Per-feature machine contract (validated against `feature.schema.json`). |
@@ -146,9 +147,10 @@ schema failures and missing required narrative sections both hard-block the gate
 | `feature-spec.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
 | `test-list.json` | Test Strategist | `test-list.schema.json` |
 | `plan.json` | Architect / Orchestrator | `plan.schema.json` |
-| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2). NFRs live here, NOT on the spec-gated `feature-spec.json`/`story.json`. |
+| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2; each NFR may carry `brief_ref` to the `nfrs.md` Required id it satisfies). NFRs live here, NOT on the spec-gated `feature-spec.json`/`story.json`. |
 | `workflow-state.json` | Orchestrator | `workflow-state.schema.json` |
 | `product-overview.md` | Product Owner | H1 + non-empty body (open-ended intent; project-level; not gate-locked) |
+| `nfrs.md` | Product Owner / HIL | H1 + **Required**, **Preferences**, **Out of bounds**. Every Required item carries an `R<n>` id; the Architect must cover each via `architecture.json` `brief_ref` (`checkNfrCoverage` hard-blocks the architecture gate otherwise). |
 | `feature-request.md` | Feature Requester | H1 + non-empty body (the original ask; the Spec Author's INPUT, never overwritten) |
 | `feature-spec.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |
 | `architecture.md` | Architect Reviewer | H1 + **Architectural Concerns Mapping**, **Pattern proposals**, **Risks**, **Decisions**, **Sign-off** |

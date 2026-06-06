@@ -97,6 +97,20 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
 
+  // HIL non-functional-requirements brief (the Architect's intake). The HIL
+  // states required NFRs (each with a stable R<n> id), preferences, and
+  // out-of-bounds items. The Architect must carry every Required item into
+  // architecture.json via a matching brief_ref (see checkNfrCoverage). Project
+  // -level (.tdd/nfrs.md) or per-feature (.tdd/features/<F>/nfrs.md).
+  "nfrs.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Required", match: "required" },
+      { label: "Preferences", match: "preference" },
+      { label: "Out of bounds", match: "out of bounds" },
+    ],
+  },
+
   // HIL design brief (UI projects): the human's reference sites + what to take
   // from each. The design analogue of product-overview.md, the source the UX
   // Designer teases the design out of. A brief with no references is
@@ -248,6 +262,88 @@ function checkTestListMd(content: string): string[] {
   return violations;
 }
 
+// ─── NFR coverage (cross-artifact: nfrs.md Required ids vs architecture.json) ───
+
+/** One list item under nfrs.md's `## Required` section. */
+export interface RequiredNfr {
+  /** The R<n> id, or null when the item has no parseable id. */
+  id: string | null;
+  /** The requirement text (id stripped). */
+  text: string;
+}
+
+const REQUIRED_NFR_ITEM_RE = /^\s*[-*]\s+\*{0,2}(R\d+)\*{0,2}\s*[:.)\-]?\s*(.*)$/;
+const PLAIN_LIST_ITEM_RE = /^\s*[-*]\s+(.*\S)\s*$/;
+
+/**
+ * Extract the list items under nfrs.md's `## Required` section. Each Required
+ * NFR should carry a stable `R<n>` id so the Architect can reference it from
+ * architecture.json via brief_ref. Items without an id are returned with
+ * id=null so the coverage check can flag them (untrackable).
+ */
+export function parseRequiredNfrs(nfrsMd: string): RequiredNfr[] {
+  const lines = nfrsMd.split("\n");
+  const out: RequiredNfr[] = [];
+  let inRequired = false;
+  for (const line of lines) {
+    const h = HEADING_RE.exec(line);
+    if (h) {
+      // Enter on a heading whose text is exactly/starts-with "required";
+      // any subsequent heading ends the section.
+      inRequired = h[2].trim().toLowerCase().startsWith("required");
+      continue;
+    }
+    if (!inRequired) continue;
+    const withId = REQUIRED_NFR_ITEM_RE.exec(line);
+    if (withId) {
+      out.push({ id: withId[1], text: withId[2].trim() });
+      continue;
+    }
+    const plain = PLAIN_LIST_ITEM_RE.exec(line);
+    if (plain) out.push({ id: null, text: plain[1].trim() });
+  }
+  return out;
+}
+
+/**
+ * Cross-artifact coverage check: every Required NFR in nfrs.md must be carried
+ * into architecture.json via a matching `brief_ref` on one of its nfrs[]. A
+ * Required item with no id (untrackable) or with no matching brief_ref is a
+ * violation, so a non-covered HIL requirement HARD-BLOCKS the architecture gate
+ * (the Human Proxy will not approve it). architecture.json that is absent or
+ * invalid JSON is itself reported (the architect produced nothing to cover with).
+ */
+export function checkNfrCoverage(nfrsMd: string, architectureJson: string): ConformanceResult {
+  const required = parseRequiredNfrs(nfrsMd);
+  if (required.length === 0) return { ok: true }; // no Required NFRs to cover
+
+  let parsed: { nfrs?: Array<{ brief_ref?: string }> };
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${cause}`] };
+  }
+  const briefRefs = new Set(
+    (parsed.nfrs ?? []).map((n) => n.brief_ref).filter((r): r is string => typeof r === "string" && r.length > 0),
+  );
+
+  const violations: string[] = [];
+  for (const item of required) {
+    if (item.id === null) {
+      const preview = item.text.length > 50 ? `${item.text.slice(0, 50)}...` : item.text;
+      violations.push(`nfrs.md Required item has no R<n> id (cannot be coverage-tracked): "${preview}"`);
+      continue;
+    }
+    if (!briefRefs.has(item.id)) {
+      violations.push(
+        `Required NFR ${item.id} from nfrs.md is not covered by any architecture.json nfr (no matching brief_ref)`,
+      );
+    }
+  }
+  return finalize(violations);
+}
+
 /**
  * Map a file path to the canonical artifact name the registry is keyed by.
  * Acceptance-criteria files are named <AC>.json/.md but share the "ac.json"
@@ -298,12 +394,14 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
 
   // Top-level Product Owner project overview.
   pushIfExists(join(tddDir, "product-overview.md"));
+  // HIL NFR brief: project-level + optional per-feature override.
+  pushIfExists(join(tddDir, "nfrs.md"));
   // Project-level UX Designer artifacts (UI projects; absent otherwise).
   for (const name of ["design-brief.md", "design-guide.md", "design-guide.json", "ia.md"]) {
     pushIfExists(join(tddDir, "design", name));
   }
   // Feature-level artifacts.
-  for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
+  for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "nfrs.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
     pushIfExists(join(featureDir, name));
   }
   // Stories + their acceptance criteria.
@@ -331,6 +429,26 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
       violations: result.ok ? [] : result.violations,
     };
   });
+
+  // Cross-artifact NFR coverage: once architecture.json exists, every Required
+  // NFR in the HIL's nfrs.md (project-level + optional per-feature) must be
+  // covered by a brief_ref. Skipped until architecture.json is produced (a
+  // feature mid-design legitimately lacks it). Per-feature nfrs.md extends the
+  // project one, so both are checked against this feature's architecture.json.
+  const archPath = join(featureDir, "architecture.json");
+  if (existsSync(archPath)) {
+    const archContent = readFileSync(archPath, "utf8");
+    for (const nfrsPath of [join(tddDir, "nfrs.md"), join(featureDir, "nfrs.md")]) {
+      if (!existsSync(nfrsPath)) continue;
+      const cov = checkNfrCoverage(readFileSync(nfrsPath, "utf8"), archContent);
+      const rel = nfrsPath.startsWith(tddDir) ? nfrsPath.slice(tddDir.length).replace(/^\//, "") : nfrsPath;
+      entries.push({
+        artifact: `${rel} -> architecture.json (NFR coverage)`,
+        ok: cov.ok,
+        violations: cov.ok ? [] : cov.violations,
+      });
+    }
+  }
 
   return { featureId, ok: entries.every((e) => e.ok), entries };
 }
