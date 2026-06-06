@@ -121,6 +121,12 @@ export LAKEBASE_KIT_NPX="$KIT_NPX"
 # "Headless / Human Proxy mode".
 export LAKEBASE_TDD_HUMAN_PROXY=1
 
+# Where the Human Proxy reads pre-recorded HIL intake answers in headless mode.
+# /design's intake precondition (lakebase-tdd-intake) facilitates from here when
+# an artifact is missing; this smoke also pre-supplies them (stage_project_intake)
+# for determinism. Same directory the recorded product-overview.md / nfrs.md live in.
+export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
+
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
 # --tiers is required when scaffolding (architectural choice). The
@@ -339,11 +345,14 @@ run_iteration() {
   # Spec Author reads this as input and produces feature-spec.{md,json};
   # the kit's TDD workflow contract is
   # .tdd/features/<id>/{feature-request.md,feature-spec.md,feature-spec.json,...}.
-  log "  step 2: stage .tdd/features/${feature_id}/feature-request.md"
-  local feature_dir=".tdd/features/${feature_id}"
+  log "  step 2: human-proxy supplies .tdd/features/${feature_id}/feature-request.md"
+  local feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
   mkdir -p "$feature_dir"
   if [[ ! -f "$feature_dir/feature-request.md" ]]; then
-    cp "$spec" "$feature_dir/feature-request.md"
+    # The Human Proxy supplies the recorded Feature Requester ask (validate +
+    # place), the same intake step a human would author at /design.
+    proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
+      || { echo "smoke: human-proxy refused feature-request.md for ${feature_id}" >&2; exit 2; }
   fi
 
   # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired
@@ -408,10 +417,41 @@ run_iteration() {
   log "✓ $iter complete"
 }
 
+# ─── HIL intake supply (Human Proxy) ──────────────────────────
+#
+# In the orchestrated pipeline the /design intake interviews capture the HIL's
+# intent into product-overview.md / nfrs.md / design-brief.md. Headless, there
+# is no human to interview, so the Human Proxy SUPPLIES the pre-recorded answers
+# (the md files committed next to this script): it validates each against its
+# declared format and places it under .tdd/, refusing a missing/malformed one.
+# This is the identical path a real run takes, with the proxy standing in for
+# the human at the intake step.
+proxy_supply() {
+  local from="$1" to="$2" artifact="$3" feature="${4:-}"
+  local feat_flag=()
+  [[ -n "$feature" ]] && feat_flag=(--feature "$feature")
+  npx --yes --package="${KIT_NPX}" lakebase-tdd-human-proxy supply \
+    --from "$from" --to "$to" --artifact "$artifact" \
+    --tdd-dir "${PROJECT_DIR}/.tdd" "${feat_flag[@]}"
+}
+
+# Project-level intake, staged once before the iteration loop. product-overview.md
+# and nfrs.md are project-scoped (refined across features in a real run; recorded
+# here). design-brief.md is omitted: the bug-tracker smoke is TDD/API-focused, so
+# the UX track is not exercised.
+stage_project_intake() {
+  log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md)"
+  proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
+    || { echo "smoke: human-proxy refused product-overview.md (missing/non-conformant)" >&2; exit 2; }
+  proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${PROJECT_DIR}/.tdd/nfrs.md" "nfrs.md" \
+    || { echo "smoke: human-proxy refused nfrs.md (missing/non-conformant)" >&2; exit 2; }
+}
+
 # ─── main ─────────────────────────────────────────────────────
 
 log "FEIP-7422 smoke starting (project=$PROJECT_DIR)"
 scaffold_project
+stage_project_intake
 
 started=0
 for iter in "${ITERATIONS[@]}"; do

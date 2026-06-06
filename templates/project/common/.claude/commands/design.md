@@ -38,15 +38,30 @@ Concretely, the agent:
 
 If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The substrate is the only path; the SCM workflow is how that path is enforced.
 
-## Step 0.5 (cannot skip): HIL intake interviews
+## Step 0.5 (cannot skip): HIL intake, a hard precondition
 
-Before any design phase runs, the orchestrator captures the human-in-the-loop's intent into the HIL-owned intake artifacts. These are read at intake by the roles below, so the HIL's intent is honored even when no human is at a later gate. Each artifact is drafted from the interview and reviewed by the HIL before the consuming role runs. `product-overview.md` and `nfrs.md` are PROJECT-level (`.tdd/`), refined across features; `design-brief.md` is project-level under `.tdd/design/`.
+The design phases READ the HIL's intent from intake artifacts (`product-overview.md`, `nfrs.md`, the feature's `feature-request.md`, and `design-brief.md` for UI projects). These are not gate deliverables, they are PRECONDITIONS: `/design` MUST NOT enter phase 1 until they exist and conform. `product-overview.md` and `nfrs.md` are PROJECT-level (`.tdd/`), living, and refined across features; `feature-request.md` is per-feature; `design-brief.md` is project-level under `.tdd/design/`.
 
-1. **Product interview -> `.tdd/product-overview.md`** (Product Owner). Ask: what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Draft `product-overview.md` (open-ended product intent, no implementation detail), present for review.
-2. **NFR interview -> `.tdd/nfrs.md`** (the Architect's intake). Walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL states a hard requirement, a preference, "N/A", or "out of bounds". Draft `nfrs.md` with `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`, present for review. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref` (the conformance gate hard-blocks otherwise).
-3. **UX interview -> `.tdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra). Follow the reference-site approach: name 1-3 websites to model from and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Draft `design-brief.md` with the required `## References` section, present for review.
+**The orchestrator owns facilitating intake from the human.** Before phase 1, for each required artifact that is absent or non-conformant, the orchestrator obtains it:
 
-**Human Proxy (headless) mode:** when `LAKEBASE_TDD_HUMAN_PROXY=1`, there is no human to interview. The intake artifacts MUST already exist on disk (the orchestrator / Human Proxy supplies the pre-recorded versions; see `lakebase-tdd-human-proxy supply`). The interview is skipped when its artifact is present; a required artifact that is absent or non-conformant hard-blocks, exactly as a missing gate artifact would. Never invent the HIL's intent.
+- **Interactive (a human is present):** run the intake interview, draft the artifact, and present it for the HIL to review and edit. The interviews:
+  1. **Product -> `.tdd/product-overview.md`** (Product Owner): what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Open-ended product intent, no implementation detail.
+  2. **NFR -> `.tdd/nfrs.md`** (the Architect's intake): walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL gives a hard requirement, a preference, "N/A", or "out of bounds". Write `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref`.
+  3. **UX -> `.tdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra): name 1-3 reference websites and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Write the required `## References` section.
+- **Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_TDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
+
+  ```bash
+  npx --yes --package="$KIT_PKG" lakebase-tdd-human-proxy supply \
+    --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".tdd/nfrs.md" --artifact nfrs.md
+  ```
+
+**Then enforce the precondition (the hard gate):**
+
+```bash
+npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>"   # add --ui for UI projects
+```
+
+`lakebase-tdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.
 
 ## Phases (HITL-gated)
 

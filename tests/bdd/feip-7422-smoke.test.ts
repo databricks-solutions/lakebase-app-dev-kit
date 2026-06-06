@@ -14,6 +14,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkArtifactConformance, parseRequiredNfrs } from "../../scripts/tdd/artifact-conformance";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -34,6 +35,10 @@ describe("FEIP-7422 smoke: directory structure", () => {
 
   it("has the Product Owner requirements doc at product-overview.md", () => {
     expect(fs.existsSync(path.join(SMOKE_DIR, "product-overview.md"))).toBe(true);
+  });
+
+  it("has the recorded HIL NFR brief at nfrs.md", () => {
+    expect(fs.existsSync(path.join(SMOKE_DIR, "nfrs.md"))).toBe(true);
   });
 
   it("has a feature-requests/ subdir with the 5 specs", () => {
@@ -87,6 +92,38 @@ describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voi
     expect(md, "no HTTP endpoint listing (architect's concern)").not.toMatch(/\b(POST|GET|PATCH|PUT|DELETE)\s+\//);
     expect(md, "no --tiers operational flag (harness concern)").not.toMatch(/--tiers\b/);
     expect(md, "no SQL DDL (implementation concern)").not.toMatch(/\b(CREATE TABLE|ALTER TABLE|FOREIGN KEY)\b/i);
+  });
+});
+
+describe("FEIP-7422 smoke: recorded HIL intake artifacts conform (Human Proxy answers)", () => {
+  it("product-overview.md conforms to its declared format", () => {
+    const md = fs.readFileSync(path.join(SMOKE_DIR, "product-overview.md"), "utf8");
+    expect(checkArtifactConformance("product-overview.md", md)).toEqual({ ok: true });
+  });
+
+  it("nfrs.md conforms (Required / Preferences / Out of bounds) and carries R<n> ids", () => {
+    const md = fs.readFileSync(path.join(SMOKE_DIR, "nfrs.md"), "utf8");
+    expect(checkArtifactConformance("nfrs.md", md)).toEqual({ ok: true });
+    const ids = parseRequiredNfrs(md).map((r) => r.id);
+    expect(ids.length).toBeGreaterThanOrEqual(1);
+    expect(ids.every((id) => id !== null)).toBe(true);
+  });
+});
+
+describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", () => {
+  const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+
+  it("stages project intake (product-overview.md + nfrs.md) via human-proxy supply", () => {
+    expect(runSmoke).toMatch(/lakebase-tdd-human-proxy supply/);
+    expect(runSmoke).toMatch(/stage_project_intake/);
+    expect(runSmoke).toMatch(/product-overview\.md/);
+    expect(runSmoke).toMatch(/nfrs\.md/);
+  });
+
+  it("supplies the per-iteration feature-request.md via the proxy (not a bare cp)", () => {
+    expect(runSmoke).toMatch(/proxy_supply "\$spec".*feature-request\.md/);
+    // The old bare `cp "$spec" .../feature-request.md` staging is gone.
+    expect(runSmoke).not.toMatch(/cp "\$spec"/);
   });
 });
 
