@@ -138,7 +138,7 @@ Every artifact a role produces has a declared format, derived from that role's
 contract in `agents/*.md`. A gate approves an artifact only when it both EXISTS
 (Layer 1) and CONFORMS to its format (Layer 2). Conformance is enforced by
 `scripts/tdd/artifact-conformance.ts` (`checkArtifactConformance(name, content)`)
-and re-checked at approval time by the mock approver / orchestrator. JSON
+and re-checked at approval time by the Human Proxy / orchestrator. JSON
 schema failures and missing required narrative sections both hard-block the gate.
 
 | Artifact | Producing role | Required format |

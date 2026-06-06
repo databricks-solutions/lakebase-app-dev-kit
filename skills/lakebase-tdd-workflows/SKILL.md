@@ -38,12 +38,12 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 Refuse to transition if prior-phase artifacts are missing or invalid.
 
-## Headless / auto-approve mode
+## Headless / Human Proxy mode
 
 By default every gate is HITL: the workflow halts for the Product Owner. When
-`LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI and the FEIP-7422 smoke), the human
-approver role is **performed by** the `ci-mock-approver` identity. This does not
-skip the gate or rubber-stamp it, the mock stands in as a diligent reviewer and
+`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the FEIP-7422 smoke), the human
+approver role is **performed by** the `human-proxy` identity. This does not
+skip the gate or rubber-stamp it, the Human Proxy stands in as a diligent reviewer and
 does exactly what a careful human would:
 
 - **It must be GIVEN the artifacts.** The mock approves a gate only when the
@@ -61,12 +61,12 @@ does exactly what a careful human would:
 So the producing role's job in this mode is to HAND the approver complete,
 conformant artifacts, recording its recommended resolutions (decisions, NFR
 acceptances, orderings) INSIDE those artifacts rather than leaving them as open
-questions awaiting a human reply. A gate advances because the mock reviewer
+questions awaiting a human reply. A gate advances because the Human Proxy
 verified and approved real, well-formed work, never because the gate was
 skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
 for a human. Auto-approve is automated diligent approval, not auto-fabrication.
 
-Check the mode with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`. Absent or unset =
+Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent or unset =
 normal HITL (halt for human sign-off).
 
 ## Agent prompts

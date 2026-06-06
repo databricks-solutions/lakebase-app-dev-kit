@@ -1,4 +1,4 @@
-// Mock HITL approver for automated smoke tests.
+// Human Proxy for automated smoke tests.
 //
 // The TDD workflow's gates (spec / plan / test_list / promote) are
 // state-recorded in `.tdd/features/<F>/gates.json` and refuse to advance
@@ -6,9 +6,9 @@
 // need a stand-in human that says "yes" to every open gate, with the
 // right per-gate artifact inputs hashed into the gate record.
 //
-// This is the mock. It is NOT for production use, only for smoke
+// This is the Human Proxy. It is NOT for production use, only for smoke
 // harnesses and similar headless test contexts. The default approver
-// identity is "ci-mock-approver" so a real audit trail can grep it out
+// identity is "human-proxy" so a real audit trail can grep it out
 // of selection-log.md / gates.json history.
 //
 // Per-gate artifact convention (mirrors ADR-0004):
@@ -21,12 +21,12 @@
 // INTEGRITY RULE (FEIP-7508 / the 002 gate-integrity finding): a gate is
 // only approved when its REAL artifact exists on disk. Previously a missing
 // artifact was hashed as a placeholder "MOCK_APPROVED" so the gate could
-// "close" anyway. That let the mock pre-approve plan / test_list / promote
+// "close" anyway. That let the Human Proxy pre-approve plan / test_list / promote
 // before those artifacts were ever produced (all four gates default to
 // "open"), binding nonexistent artifacts to a fabricated hash and nullifying
 // the gate. The mock now SKIPS a gate whose artifacts are absent (recorded in
 // `skipped[]` with a reason) instead of fabricating one. A real human approver
-// can only sign off on what exists; the mock must mirror that.
+// can only sign off on what exists; the Human Proxy must mirror that.
 //
 // CONFORMANCE RULE (FEIP-7508 Layer 2): existence is necessary but not
 // sufficient. Every resolved artifact is checked against its declared format
@@ -34,7 +34,7 @@
 // its role-documented required sections). A non-conformant artifact is treated
 // like a missing one: the gate is SKIPPED with the violations as the reason,
 // never approved. A real approver would not sign off a malformed spec; nor
-// does the mock.
+// does the Human Proxy.
 //
 // Note (flagged, not enforced here): gate ORDERING (spec -> plan -> test_list
 // -> promote) is intentionally NOT imposed by this mock, because the N=1
@@ -93,12 +93,12 @@ function logHitlDecision(
   }
 }
 
-export const MOCK_APPROVER = "ci-mock-approver";
+export const HUMAN_PROXY = "human-proxy";
 
-export interface MockApproveArgs {
+export interface HumanProxyArgs {
   featureId: string;
   tddDir?: string;
-  /** Override the approver identity. Defaults to "ci-mock-approver". */
+  /** Override the approver identity. Defaults to "human-proxy". */
   approver?: string;
   /** Limit to a single gate; default approves every open gate whose artifacts exist. */
   onlyGate?: GateName;
@@ -106,7 +106,7 @@ export interface MockApproveArgs {
   promoteRef?: string;
 }
 
-export interface MockApproveResult {
+export interface HumanProxyResult {
   approved: GateName[];
   skipped: Array<{ gate: GateName; reason: string }>;
   finalState: GatesState;
@@ -206,14 +206,14 @@ function resolveArtifactInputs(
   }
 }
 
-export function mockApproveOpenGates(args: MockApproveArgs): MockApproveResult {
+export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
   const tddDir = args.tddDir ?? "./.tdd";
-  const approver = args.approver ?? MOCK_APPROVER;
+  const approver = args.approver ?? HUMAN_PROXY;
   const fdir = featureDir(tddDir, args.featureId);
 
   let state = readGates(args.featureId, { tddDir });
   const approved: GateName[] = [];
-  const skipped: MockApproveResult["skipped"] = [];
+  const skipped: HumanProxyResult["skipped"] = [];
 
   const gates: GateName[] =
     args.onlyGate !== undefined ? [args.onlyGate] : [...GATE_NAMES];

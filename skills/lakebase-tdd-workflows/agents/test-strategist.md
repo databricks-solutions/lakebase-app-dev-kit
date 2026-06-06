@@ -51,7 +51,7 @@ Surface to the Product Owner:
 - Items skipped or deferred, with reason.
 - Any scenario that cannot be defined without writing implementation first (this is a design smell – call it out).
 
-Do not proceed to design-spec gate until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your ordering rationale in the rendered `test-list.md` and ensure every item traces to an AC, so the mock approver can validate the expected elements (`Ordered for:`, AC per item, Deferred section, schema-valid `test-list.json`) and approve Gate 3. See SKILL "Headless / auto-approve mode".)
+Do not proceed to design-spec gate until the PO signs off. (In Human Proxy mode, `LAKEBASE_TDD_HUMAN_PROXY=1`, the PO review is performed by `human-proxy`: record your ordering rationale in the rendered `test-list.md` and ensure every item traces to an AC, so the Human Proxy can validate the expected elements (`Ordered for:`, AC per item, Deferred section, schema-valid `test-list.json`) and approve Gate 3. See SKILL "Headless / Human Proxy mode".)
 
 ## Logging
 
@@ -61,7 +61,7 @@ Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md]
 - `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.
 - `--level debug --event reasoning` for the ordering rationale (`ordered_for`).
 - `--level warn --event smell.flagged` for any test that cannot be defined without writing implementation first.
-- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their call on the ordering>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `ci-mock-approver` record it. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their call on the ordering>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

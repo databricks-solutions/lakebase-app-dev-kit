@@ -84,8 +84,8 @@ recorded, the audit trail must show who was asked and what they decided.
 
 So a normal (human) run logs: `gate.surfaced` (transition) then the human's
 `gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then
-the next phase's `phase.start`. In **auto-approve mode** the human is performed
-by `ci-mock-approver`, which emits the SAME `product-owner` `gate.approved` /
+the next phase's `phase.start`. In **Human Proxy mode** the human is performed
+by `human-proxy`, which emits the SAME `product-owner` `gate.approved` /
 `gate.refused` events (it validated the artifact's expected elements first). The
 log shape is identical; only the approver identity in `data.approver` differs,
 so an auditor sees exactly where a human was, or was not, in the loop.

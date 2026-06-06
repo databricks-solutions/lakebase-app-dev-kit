@@ -18,9 +18,9 @@ Requires `.tdd/features/<feature-id>/test-list.json` to exist (the artifact `/de
 
 The orchestrator is implemented by the substrate agent at `@lakebase-tdd-workflows/agents/scrum-master`. Per-cycle work fans out to `@lakebase-tdd-workflows/agents/driver` and `@lakebase-tdd-workflows/agents/navigator`.
 
-## Auto-approve (headless) mode
+## Human Proxy (headless) mode
 
-If `LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI / the smoke), the human review at gate 3 (test-list immutability) and gate 4 (promote vs synthesize) is performed by `ci-mock-approver`: it validates the gate's artifacts exist + carry their expected elements (format-conformant) and approves only then. The orchestrator advances on that validated approval, never by skipping the gate, and never on a missing/malformed artifact. See `@lakebase-tdd-workflows/SKILL.md` "Headless / auto-approve mode".
+If `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI / the smoke), the human review at gate 3 (test-list immutability) and gate 4 (promote vs synthesize) is performed by `human-proxy`: it validates the gate's artifacts exist + carry their expected elements (format-conformant) and approves only then. The orchestrator advances on that validated approval, never by skipping the gate, and never on a missing/malformed artifact. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
 ## Logging
 

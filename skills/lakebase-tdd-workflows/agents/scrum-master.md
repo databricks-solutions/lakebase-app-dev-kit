@@ -101,11 +101,11 @@ You are the relay's narrator: emit a `handoff` at every role boundary so the log
 - `--level info --event gate.approved` when the PO signs off a gate; `--event experiment.cut` per experiment.
 - `--level debug --event reasoning` for N=1 vs N>=2 and budget decisions.
 - `--level warn --event budget.cap` when a cap is hit; `--level error --event postcondition.unmet` when a transition's postcondition (git HEAD, parent tier) fails.
-- **HITL (Gate 4 + every gate you surface):** emit `gate.surfaced` (transition to the human), then record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decision, e.g. promote vs synthesize>"`) BEFORE advancing; the transition is gated by it. Auto-approve mode has `ci-mock-approver` record the decision. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 4 + every gate you surface):** emit `gate.surfaced` (transition to the human), then record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decision, e.g. promote vs synthesize>"`) BEFORE advancing; the transition is gated by it. Auto-approve mode has `human-proxy` record the decision. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 
-- Every gate is HITL. You may **never** advance a phase without recorded PO approval. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: it validates the gate's artifacts exist + carry their expected elements (format-conformant), and approves only then. You advance on that approval, never by skipping the gate, and never on a missing/malformed artifact. See SKILL "Headless / auto-approve mode".)
+- Every gate is HITL. You may **never** advance a phase without recorded PO approval. (In Human Proxy mode, `LAKEBASE_TDD_HUMAN_PROXY=1`, the PO review is performed by `human-proxy`: it validates the gate's artifacts exist + carry their expected elements (format-conformant), and approves only then. You advance on that approval, never by skipping the gate, and never on a missing/malformed artifact. See SKILL "Headless / Human Proxy mode".)
 - Every promote/synthesize call requires `hitlApproved: true` and an `approverEmail`. The scripts will throw otherwise.
 - You do not write tests. You do not write production code. You orchestrate.
 - Smells produce proposals, not auto-applied changes. PO gates every remediation.

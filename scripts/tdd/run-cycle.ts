@@ -18,7 +18,7 @@ import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log";
  * agent prose. The Navigator/Driver call beginCycle/markGreen/markRefactored
  * as the authoritative RED/GREEN/REFACTOR transitions, so emitting here makes
  * every cycle logged deterministically (the agent need not remember to). Same
- * pattern as the mock approver logging its gate decisions. Best-effort:
+ * pattern as the Human Proxy logging its gate decisions. Best-effort:
  * logging is observability, never a reason to fail a cycle.
  */
 function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {

@@ -2,7 +2,7 @@
 // expected?"
 //
 // The three layers a gate enforces on an artifact:
-//   Layer 1 existence  - the artifact exists on disk (mock-approver no longer
+//   Layer 1 existence  - the artifact exists on disk (human-proxy no longer
 //                        fabricates a placeholder for a missing file).
 //   Layer 2 conformance- THIS module: the artifact that exists matches the
 //                        format its producing role is documented to emit.
@@ -27,7 +27,7 @@
 //
 // Keying is by artifact FILENAME, not by gate: an artifact's format is
 // intrinsic to the artifact, so this module never needs to know which gate is
-// collecting it. Callers (mock-approver's resolver, the conformance CLI) map
+// collecting it. Callers (human-proxy's resolver, the conformance CLI) map
 // gate -> artifacts; this module maps artifact -> format.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
@@ -279,7 +279,7 @@ export interface FeatureConformanceReport {
  * declared format. Existence (Layer 1) is intentionally not enforced here: a
  * feature mid-design legitimately lacks plan.json / test-list.json. This
  * answers "do the artifacts that exist adhere to their format?". The standalone
- * counterpart to the gate-time check the mock-approver runs.
+ * counterpart to the gate-time check the human-proxy runs.
  */
 export function scanFeatureConformance(tddDir: string, featureId: string): FeatureConformanceReport {
   const featuresDir = join(tddDir, "features");

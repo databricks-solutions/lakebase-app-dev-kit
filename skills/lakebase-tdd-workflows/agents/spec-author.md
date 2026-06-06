@@ -59,7 +59,7 @@ Surface to the Product Owner:
 - the scope boundaries you restated,
 - the open questions you could not resolve without their decision.
 
-Do not proceed to architectural review until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your recommended answers to the open questions INSIDE `feature-spec.md`/`feature-spec.json` (do not leave them dangling as questions for a human), so the mock approver can validate the expected elements are present + conformant and approve Gate 1. See SKILL "Headless / auto-approve mode".)
+Do not proceed to architectural review until the PO signs off. (In Human Proxy mode, `LAKEBASE_TDD_HUMAN_PROXY=1`, the PO review is performed by `human-proxy`: record your recommended answers to the open questions INSIDE `feature-spec.md`/`feature-spec.json` (do not leave them dangling as questions for a human), so the Human Proxy can validate the expected elements are present + conformant and approve Gate 1. See SKILL "Headless / Human Proxy mode".)
 
 ## Logging
 
@@ -70,7 +70,7 @@ Emit structured events as you work, via `lakebase-tdd-log` (see [references/agen
 - `--level debug --event reasoning` for scope calls + why something became an open question.
 - `--level warn --event open.question` for each boundary question you leave for the PO.
 - `--level info --event handoff` when the structured draft spec is ready for the Architect.
-- **HITL (Gate 1):** emit `--event gate.surfaced` when you hand to the human, then record their ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<what they decided/answered>"`) BEFORE proceeding, the proceed is gated by it. In auto-approve mode the `ci-mock-approver` records this instead. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 1):** emit `--event gate.surfaced` when you hand to the human, then record their ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<what they decided/answered>"`) BEFORE proceeding, the proceed is gated by it. In Human Proxy mode the `human-proxy` records this instead. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

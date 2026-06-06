@@ -66,7 +66,7 @@ When done, surface to the Product Owner with:
 - any risks identified
 - the **NFRs you propose** (from `architecture.json`), for the PO to **accept, modify, or reject**. NFRs are not yours to finalize; you propose, the HIL adjudicates. Record the PO's call as `hil_status` on each NFR.
 
-Do **not** proceed to test-list construction until the PO signs off. (In auto-approve mode, `LAKEBASE_TDD_AUTO_APPROVE=1`, the PO review is performed by `ci-mock-approver`: record your recommended resolution to each Gate-2 decision INSIDE `architecture.md`, set each proposed NFR's `hil_status: "accepted"` in `architecture.json`, so the mock approver can validate the expected elements (the required sections + the NFR schema) and approve. See SKILL "Headless / auto-approve mode".)
+Do **not** proceed to test-list construction until the PO signs off. (In Human Proxy mode, `LAKEBASE_TDD_HUMAN_PROXY=1`, the PO review is performed by `human-proxy`: record your recommended resolution to each Gate-2 decision INSIDE `architecture.md`, set each proposed NFR's `hil_status: "accepted"` in `architecture.json`, so the Human Proxy can validate the expected elements (the required sections + the NFR schema) and approve. See SKILL "Headless / Human Proxy mode".)
 
 ## Logging
 
@@ -76,7 +76,7 @@ Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md]
 - `--level info --event gate.surfaced` when you present the NFRs + decisions to the PO at Gate 2.
 - `--level debug --event reasoning` for layer assignments + each proposed NFR.
 - `--level warn --event concern.no-owner` when a cross-cutting concern has no owner (a finding, not invented).
-- **HITL (Gate 2):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decisions + NFR accept/modify>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `ci-mock-approver` record it. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 2):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decisions + NFR accept/modify>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 
