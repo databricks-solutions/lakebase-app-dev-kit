@@ -38,16 +38,28 @@ Concretely, the agent:
 
 If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The substrate is the only path; the SCM workflow is how that path is enforced.
 
+## Step 0.5 (cannot skip): HIL intake interviews
+
+Before any design phase runs, the orchestrator captures the human-in-the-loop's intent into the HIL-owned intake artifacts. These are read at intake by the roles below, so the HIL's intent is honored even when no human is at a later gate. Each artifact is drafted from the interview and reviewed by the HIL before the consuming role runs. `product-overview.md` and `nfrs.md` are PROJECT-level (`.tdd/`), refined across features; `design-brief.md` is project-level under `.tdd/design/`.
+
+1. **Product interview -> `.tdd/product-overview.md`** (Product Owner). Ask: what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Draft `product-overview.md` (open-ended product intent, no implementation detail), present for review.
+2. **NFR interview -> `.tdd/nfrs.md`** (the Architect's intake). Walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL states a hard requirement, a preference, "N/A", or "out of bounds". Draft `nfrs.md` with `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`, present for review. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref` (the conformance gate hard-blocks otherwise).
+3. **UX interview -> `.tdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra). Follow the reference-site approach: name 1-3 websites to model from and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Draft `design-brief.md` with the required `## References` section, present for review.
+
+**Human Proxy (headless) mode:** when `LAKEBASE_TDD_HUMAN_PROXY=1`, there is no human to interview. The intake artifacts MUST already exist on disk (the orchestrator / Human Proxy supplies the pre-recorded versions; see `lakebase-tdd-human-proxy supply`). The interview is skipped when its artifact is present; a required artifact that is absent or non-conformant hard-blocks, exactly as a missing gate artifact would. Never invent the HIL's intent.
+
 ## Phases (HITL-gated)
 
-1. **Spec Author** drafts `spec.md` + `feature-spec.json` from the prompt.
-2. **Architect Reviewer** challenges scope and boundaries. Gate 1 stops the pipeline until the human signs off.
-3. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
+1. **Spec Author** drafts `feature-spec.{md,json}` from the Feature Requester's `feature-request.md` + the PO's `product-overview.md`.
+2. **UX Designer** (UI projects only) extracts `design-guide.{md,json}` + `ia.md` from `design-brief.md`.
+3. **Architect Reviewer** challenges scope and boundaries, and carries every `## Required` NFR from `nfrs.md` into `architecture.json` via `brief_ref`. Gate 1 stops the pipeline until the human signs off.
+4. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
 
 **Human Proxy (headless) mode:** if `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI / the smoke; check with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`), the human review at each gate is performed by `human-proxy`, a diligent automated reviewer that validates the gate's artifacts EXIST and carry their EXPECTED ELEMENTS (schema fields / required sections) and approves only then. Each role records its recommended resolutions INSIDE its artifacts (not as open questions), hands them to the gate, and the Human Proxy validates + approves, so the phases run through and `test-list.json` is produced for `/build`. The gate is never skipped, and a missing or malformed artifact hard-blocks exactly as it would for a human. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
 Each phase is implemented by the substrate agent of the same name:
 - `@lakebase-tdd-workflows/agents/spec-author`
+- `@lakebase-tdd-workflows/agents/ux-designer` (UI projects only)
 - `@lakebase-tdd-workflows/agents/architect-reviewer`
 - `@lakebase-tdd-workflows/agents/test-strategist`
 

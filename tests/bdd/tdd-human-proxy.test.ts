@@ -12,10 +12,10 @@
 // SKIPPED, with the violations as the reason, never approved.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { drainGatesAsHumanProxy } from "../../scripts/tdd/human-proxy";
+import { drainGatesAsHumanProxy, supplyArtifact } from "../../scripts/tdd/human-proxy";
 import { readGates } from "../../scripts/tdd/gates";
 import { hashArtifact } from "../../scripts/tdd/gate-hash";
 import { readAgentLog } from "../../scripts/tdd/agent-log";
@@ -186,5 +186,49 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     const state = readGates(FEATURE_ID, { tddDir: tdd });
     expect(state.gates.promote.artifact_hashes?.promote_ref).toBe(hashArtifact(ref));
     assertNoFabricatedHashes(tdd);
+  });
+});
+
+describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-aware)", () => {
+  const PRODUCT_OVERVIEW = ["# Product", "", "Who it is for and what they need to accomplish.", ""].join("\n");
+
+  it("places a conformant recorded artifact + logs intake.supplied", () => {
+    const from = join(tdd, "recorded-product-overview.md");
+    const to = join(tdd, "product-overview.md");
+    writeFileSync(from, PRODUCT_OVERVIEW);
+
+    const result = supplyArtifact({ from, to, artifact: "product-overview.md", tddDir: tdd });
+
+    expect(result.ok).toBe(true);
+    expect(existsSync(to)).toBe(true);
+    expect(readFileSync(to, "utf8")).toBe(PRODUCT_OVERVIEW);
+    const supplied = readAgentLog({ tddDir: tdd, role: "product-owner" }).find((e) => e.event === "intake.supplied");
+    expect(supplied).toBeDefined();
+    expect((supplied?.data as { validated?: boolean })?.validated).toBe(true);
+  });
+
+  it("refuses (does not place) a non-conformant recording", () => {
+    const from = join(tdd, "bad-nfrs.md");
+    const to = join(tdd, "nfrs.md");
+    writeFileSync(from, "# NFRs\n\njust prose, no Required/Preferences/Out of bounds sections\n");
+
+    const result = supplyArtifact({ from, to, artifact: "nfrs.md", tddDir: tdd });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/conformance/i);
+    expect(existsSync(to)).toBe(false);
+    const refused = readAgentLog({ tddDir: tdd, role: "product-owner" }).find((e) => e.event === "intake.refused");
+    expect(refused?.level).toBe("warn");
+  });
+
+  it("refuses when the recorded source is missing", () => {
+    const result = supplyArtifact({
+      from: join(tdd, "does-not-exist.md"),
+      to: join(tdd, "product-overview.md"),
+      artifact: "product-overview.md",
+      tddDir: tdd,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/not found/i);
   });
 });

@@ -41,8 +41,8 @@
 // /design path produces no plan.json, so a rigid chain would stall. Sequencing
 // belongs in the orchestrator once the phase<->gate<->mode mapping is settled.
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
@@ -255,4 +255,92 @@ export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
   }
 
   return { approved, skipped, finalState: state };
+}
+
+// ─── stage-aware intake supply ──────────────────────────────────────────────
+//
+// The Human Proxy stands in for the human at every orchestrated touchpoint, not
+// only gates. At an INTAKE step (the orchestrator needs an artifact the human
+// would have authored, e.g. product-overview.md / nfrs.md / design-brief.md /
+// feature-request.md), the proxy SUPPLIES the pre-recorded artifact: it
+// validates the recorded content conforms to the artifact's declared format,
+// places it at the target path, and logs the interaction. A missing or
+// non-conformant recording is REFUSED (hard-block), the same as a human who
+// cannot hand over an artifact that does not meet its format.
+
+export interface SupplyArgs {
+  /** Recorded source file the human authored ahead of time. */
+  from: string;
+  /** Target path the orchestrator wants the artifact at (under .tdd/). */
+  to: string;
+  /** Canonical artifact name for conformance keying. Defaults to basename(to). */
+  artifact?: string;
+  /** .tdd/ root, for logging. */
+  tddDir?: string;
+  /** Feature id, for logging (intake artifacts may be project- or feature-level). */
+  featureId?: string;
+  /** Proxy identity. Defaults to "human-proxy". */
+  approver?: string;
+}
+
+export interface SupplyResult {
+  ok: boolean;
+  artifact: string;
+  to: string;
+  /** Present when ok === false. */
+  reason?: string;
+}
+
+export function supplyArtifact(args: SupplyArgs): SupplyResult {
+  const approver = args.approver ?? HUMAN_PROXY;
+  const artifact = args.artifact ?? basename(args.to);
+  const tddDir = args.tddDir ?? "./.tdd";
+
+  const refuse = (reason: string): SupplyResult => {
+    try {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "intake.refused",
+          message: `${approver} could not supply ${artifact}: ${reason}`,
+          feature_id: args.featureId,
+          data: { artifact, to: args.to, reason, approver, validated: false },
+        },
+        { tddDir },
+      );
+    } catch {
+      /* logging is observability, never a gate */
+    }
+    return { ok: false, artifact, to: args.to, reason };
+  };
+
+  if (!existsSync(args.from)) {
+    return refuse(`recorded source not found: ${args.from}`);
+  }
+  const content = readFileSync(args.from, "utf8");
+  const conformance = checkArtifactConformance(artifact, content);
+  if (!conformance.ok) {
+    return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
+  }
+
+  mkdirSync(dirname(args.to), { recursive: true });
+  writeFileSync(args.to, content);
+
+  try {
+    emitAgentLogEvent(
+      {
+        role: "product-owner",
+        level: "info",
+        event: "intake.supplied",
+        message: `${approver} supplied ${artifact} (recorded HIL answer, format-conformant) -> ${args.to}`,
+        feature_id: args.featureId,
+        data: { artifact, from: args.from, to: args.to, approver, validated: true },
+      },
+      { tddDir },
+    );
+  } catch {
+    /* logging is observability, never a gate */
+  }
+  return { ok: true, artifact, to: args.to };
 }

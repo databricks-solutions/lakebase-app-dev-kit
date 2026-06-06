@@ -18,6 +18,7 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 - `.tdd/features/<F>/feature-spec.{md,json}` – draft feature spec (Gate 1 signed off).
 - `.tdd/features/<F>/stories/<S>/story.{md,json}` – one or more stories.
 - `.tdd/features/<F>/stories/<S>/acs/<AC>.{md,json}` – one or more acceptance criteria.
+- `.tdd/nfrs.md` (+ optional `.tdd/features/<F>/nfrs.md`) – the **HIL's NFR brief** from the `/design` intake interview. Its `## Required` items each carry a stable `R<n>` id and are non-negotiable: you MUST carry every one into `architecture.json`. `## Preferences` you follow unless you record a contrary decision in `architecture.md`; `## Out of bounds` items you must not propose. This is how the HIL's NFR intent reaches you even when no human is at Gate 2.
 
 ## Outputs
 
@@ -47,7 +48,7 @@ For each AC:
 
 For each feature + story:
 
-5. Walk the [NFRs checklist](../../software-design-principles/references/nfrs.md). Record the NFRs you propose in `architecture.json` (`nfrs[]`, `applies_to` the feature or a story id, `hil_status: "proposed"`). "N/A – reason" is allowed; "unconsidered" is not. Do **not** write `nfrs` onto `feature-spec.json`/`story.json`, they are spec-gated; your annotation would trip the integrity check. You PROPOSE NFRs; the HIL accepts or modifies them at Gate 2.
+5. **Honor the HIL's `nfrs.md` first**, then walk the [NFRs checklist](../../software-design-principles/references/nfrs.md). Record NFRs in `architecture.json` (`nfrs[]`, `applies_to` the feature or a story id, `hil_status: "proposed"`). For **every `## Required` item in `nfrs.md`**, emit a matching `architecture.json` nfr carrying that item's id in `brief_ref` (e.g. `"brief_ref": "R1"`); an uncovered Required item HARD-BLOCKS the architecture gate (`checkNfrCoverage`). Honor `## Preferences` unless you record a contrary decision in `architecture.md`; never propose an item the HIL marked `## Out of bounds`. Add your own NFRs from the checklist beyond the HIL's (no `brief_ref` needed for those). "N/A – reason" is allowed; "unconsidered" is not. Do **not** write `nfrs` onto `feature-spec.json`/`story.json`, they are spec-gated. You PROPOSE; the HIL accepts or modifies at Gate 2.
 
 For the feature as a whole:
 
