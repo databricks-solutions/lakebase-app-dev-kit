@@ -4,7 +4,7 @@
 # Drives a real bug-tracker project through 5 evolution iterations
 # (v1..v5) to exercise the TDD substrate: /design + /build + HITL
 # gates (spec / plan / test_list / promote) + per-iteration local
-# tests. The mock-approver replaces a human approver so the smoke
+# tests. The human-proxy replaces a human approver so the smoke
 # runs headless.
 #
 # Scope: this smoke validates TDD-workflow behavior. The SCM workflow
@@ -16,8 +16,8 @@
 #   1. Abandon prior feature (substrate CLI) if state is mid-flight.
 #   2. Stage .tdd/features/<id>/feature-request.md (the Feature
 #      Requester's original ask) from the iteration spec.
-#   3. /design <id>  – gates drained by mock-approver.
-#   4. /build <id>   – gates drained by mock-approver.
+#   3. /design <id>  – gates drained by human-proxy.
+#   4. /build <id>   – gates drained by human-proxy.
 #   5. Local tests (./scripts/run-tests.sh).
 #   6. Per-iteration verify (assertions/verify-vN.sh).
 #   7. Commit the iteration's work on the feature branch.
@@ -66,7 +66,7 @@ KIT_REF="${LAKEBASE_KIT_REF:-}"
 ITERATIONS=(v1-initial-domain v2-add-owners v3-status-table v4-split-bug-entity v5-list-view)
 
 ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ITER_DIR="${ORCHESTRATOR_DIR}/iterations"
+FEATURE_REQ_DIR="${ORCHESTRATOR_DIR}/feature-requests"
 ASSERT_DIR="${ORCHESTRATOR_DIR}/assertions"
 
 print_help() {
@@ -114,12 +114,12 @@ fi
 export LAKEBASE_KIT_NPX="$KIT_NPX"
 
 # Headless run: the human reviewer at each HITL gate is performed by
-# ci-mock-approver, which validates the gate's artifacts exist + carry their
+# human-proxy, which validates the gate's artifacts exist + carry their
 # expected elements (format-conformant) and approves only then. This lets
 # /design run through to test-list.json (and /build) without a human, while
 # conformance still hard-blocks a missing/malformed artifact. See SKILL
-# "Headless / auto-approve mode".
-export LAKEBASE_TDD_AUTO_APPROVE=1
+# "Headless / Human Proxy mode".
+export LAKEBASE_TDD_HUMAN_PROXY=1
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
@@ -144,12 +144,12 @@ if [[ "$SKIP_SCAFFOLD" -eq 0 ]]; then
   fi
 fi
 
-# ─── HITL mock-approver loop ──────────────────────────────────
+# ─── HITL human-proxy loop ──────────────────────────────────
 #
 # /design and /build pause at HITL gates (spec / plan / test_list /
 # promote). In an automated smoke we mock the human approver with
-# `lakebase-tdd-mock-approver`, which records every open gate as
-# approved by "ci-mock-approver". `claude -p` runs one phase per
+# `lakebase-tdd-human-proxy`, which records every open gate as
+# approved by "human-proxy". `claude -p` runs one phase per
 # invocation: it drafts an artifact, opens a gate, and exits. So we
 # loop: invoke claude, drain whatever gates just opened, repeat until
 # claude reports no new gate-opens (or we hit the safety bound). The
@@ -169,10 +169,10 @@ run_claude_with_gate_drain() {
     local approved
     approved="$(
       npx --yes --package="${KIT_NPX}" \
-        lakebase-tdd-mock-approver --feature "$feature_id" --json --pretty \
+        lakebase-tdd-human-proxy --feature "$feature_id" --json --pretty \
       | jq -r '.approved | length'
     )"
-    log "    mock-approver: approved ${approved} gate(s) this pass"
+    log "    human-proxy: approved ${approved} gate(s) this pass"
     # No new gates to approve → claude is done with this slash command.
     if [[ "$approved" == "0" ]]; then
       return 0
@@ -214,7 +214,7 @@ iteration_branch() {
 
 iteration_spec() {
   local iter="$1"
-  echo "${ITER_DIR}/${iter}.md"
+  echo "${FEATURE_REQ_DIR}/${iter}.md"
 }
 
 iteration_verify() {
@@ -351,7 +351,7 @@ run_iteration() {
   # orchestrator never touches `git checkout -b`. /design pauses at
   # HITL gates (spec / plan / test_list); the gate-drain loop mocks
   # the human approver so the smoke can run headless.
-  log "  step 3: /design ${feature_id} (pre-hook claims branch via substrate, gates auto-approved)"
+  log "  step 3: /design ${feature_id} (pre-hook claims branch via substrate, gates approved by human-proxy)"
   run_claude_with_gate_drain "/design ${feature_id}" "${feature_id}" || exit 2
 
   # 3.5 (FEIP-7458 phase A+): assert the SCM workflow state advanced
@@ -363,7 +363,7 @@ run_iteration() {
   # 4. /build <feature-id>: reads test-list.json that /design produced.
   # /build pauses at the promote gate (and any earlier gates if it
   # re-opens them); same gate-drain loop applies.
-  log "  step 4: /build ${feature_id} (gates auto-approved)"
+  log "  step 4: /build ${feature_id} (gates approved by human-proxy)"
   run_claude_with_gate_drain "/build ${feature_id}" "${feature_id}" || exit 2
 
   # 5. local tests

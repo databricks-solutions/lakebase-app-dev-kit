@@ -3,10 +3,12 @@
 // The smoke itself (examples/feip-7422-smoke/orchestrator/run-smoke.sh)
 // drives a real scaffolded project through 5 iterations + CI; it's
 // expensive and not appropriate as a vitest. This test only asserts
-// the smoke's SHAPE: the 5 iteration specs exist, contain the right
-// AC structure, v5 carries an `[E2E]` row, the orchestrator references
-// all 5 iterations in order, the 3 mode flags are documented, and each
-// iteration has a matching verify-v*.sh.
+// the smoke's SHAPE and that its authored documents follow the kit's
+// role conventions: the Product Owner's product-overview.md is
+// open-ended product intent, the 5 per-iteration feature-requests/ are
+// in Feature Requester voice (no implementation or operational detail),
+// the orchestrator references all 5 iterations in order, the 3 mode
+// flags are documented, and each iteration has a matching verify-v*.sh.
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -30,15 +32,15 @@ describe("FEIP-7422 smoke: directory structure", () => {
     expect(fs.existsSync(SMOKE_DIR)).toBe(true);
   });
 
-  it("has the canonical domain doc at 00-domain.md", () => {
-    expect(fs.existsSync(path.join(SMOKE_DIR, "00-domain.md"))).toBe(true);
+  it("has the Product Owner requirements doc at product-overview.md", () => {
+    expect(fs.existsSync(path.join(SMOKE_DIR, "product-overview.md"))).toBe(true);
   });
 
-  it("has an iterations/ subdir with the 5 specs", () => {
-    const iterDir = path.join(SMOKE_DIR, "iterations");
-    expect(fs.existsSync(iterDir)).toBe(true);
+  it("has a feature-requests/ subdir with the 5 specs", () => {
+    const reqDir = path.join(SMOKE_DIR, "feature-requests");
+    expect(fs.existsSync(reqDir)).toBe(true);
     for (const iter of ITERATIONS) {
-      expect(fs.existsSync(path.join(iterDir, `${iter}.md`)), `missing iterations/${iter}.md`).toBe(true);
+      expect(fs.existsSync(path.join(reqDir, `${iter}.md`)), `missing feature-requests/${iter}.md`).toBe(true);
     }
   });
 
@@ -60,6 +62,34 @@ describe("FEIP-7422 smoke: directory structure", () => {
   });
 });
 
+describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voice)", () => {
+  // product-overview.md is the Product Owner's standing intent: who the
+  // product is for + what they need to accomplish, open-ended and
+  // refined across iterations. Stack, schema, endpoints, and tier flags
+  // are the Architect's / harness's concern (the smoke README), not here.
+  const md = fs.readFileSync(path.join(SMOKE_DIR, "product-overview.md"), "utf8");
+
+  it("carries YAML frontmatter declaring author: Product Owner", () => {
+    expect(md).toMatch(/^---\n[\s\S]*?\bauthor:\s*Product Owner\b[\s\S]*?\n---\n/);
+  });
+
+  it("has a top-level H1 title", () => {
+    expect(md).toMatch(/^#\s+\S/m);
+  });
+
+  it("contains substantive product-intent prose (>=400 chars beyond the title)", () => {
+    const body = md.replace(/^---\n[\s\S]*?\n---\n/, "").replace(/^#.*$/m, "").trim();
+    expect(body.length, `product-overview should have substantive intent; got ${body.length} chars`).toBeGreaterThanOrEqual(400);
+  });
+
+  it("stays open-ended product intent: no implementation or operational detail", () => {
+    expect(md, "no Schema section (architect's concern)").not.toMatch(/##\s*Schema/im);
+    expect(md, "no HTTP endpoint listing (architect's concern)").not.toMatch(/\b(POST|GET|PATCH|PUT|DELETE)\s+\//);
+    expect(md, "no --tiers operational flag (harness concern)").not.toMatch(/--tiers\b/);
+    expect(md, "no SQL DDL (implementation concern)").not.toMatch(/\b(CREATE TABLE|ALTER TABLE|FOREIGN KEY)\b/i);
+  });
+});
+
 describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md voice)", () => {
   // Iteration specs are feature-request.md files: pure feature-requester narrative
   // describing WHAT the user wants, in user-behavior language. They do NOT
@@ -75,7 +105,7 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md v
 
   for (const iter of ITERATIONS) {
     describe(iter, () => {
-      const md = fs.readFileSync(path.join(SMOKE_DIR, "iterations", `${iter}.md`), "utf8");
+      const md = fs.readFileSync(path.join(SMOKE_DIR, "feature-requests", `${iter}.md`), "utf8");
 
       it("carries YAML frontmatter declaring author: Feature Requester", () => {
         // Every artifact in the kit's workflow records the ROLE that
@@ -161,11 +191,11 @@ describe("FEIP-7422 smoke: orchestrator is TDD-only (SCM workflow tested elsewhe
     expect(runSmoke).not.toMatch(/require_cmd\s+gh\b/);
   });
 
-  it("invokes lakebase-tdd-mock-approver between claude passes (gate-drain loop)", () => {
-    // The mock-approver replaces the human HITL approver so the TDD
+  it("invokes lakebase-tdd-human-proxy between claude passes (gate-drain loop)", () => {
+    // The human-proxy replaces the human HITL approver so the TDD
     // smoke can run headless. Stripping this would let the smoke hang
     // at the first /design gate.
-    expect(runSmoke).toMatch(/lakebase-tdd-mock-approver\b/);
+    expect(runSmoke).toMatch(/lakebase-tdd-human-proxy\b/);
   });
 
   it("abandons the prior feature before claiming the next (substrate CLI)", () => {

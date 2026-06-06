@@ -29,8 +29,35 @@ Playwright) that evolves across 5 PRs:
 | v4 | Extract BugDetails from Bug | Split-entity refactor |
 | v5 | HTML list view + `[E2E]` AC | Frontend + Playwright |
 
-Full domain spec: [`orchestrator/00-domain.md`](orchestrator/00-domain.md).
-Per-iteration AC specs: [`orchestrator/iterations/`](orchestrator/iterations/).
+Product Owner requirements: [`orchestrator/product-overview.md`](orchestrator/product-overview.md).
+Per-iteration feature requests (Feature Requester): [`orchestrator/feature-requests/`](orchestrator/feature-requests/).
+
+### Tier topology: 2-tier (prod + staging)
+
+This smoke is opinionated: the bug-tracker project is **2-tier**. The
+kit counts long-running tiers only, NOT feature branches:
+
+| `--tiers` | Long-running tiers | Where features fork from |
+|-----------|--------------------|--------------------------|
+| 1 | prod | prod |
+| 2 | prod + staging | staging |
+| 3 | prod + staging + dev | dev |
+
+Every iteration forks from `staging`, so the project must be 2-tier.
+`run-smoke.sh` enforces `--tiers 2`; 1 or 3 are rejected. For a different
+topology, fork the feature requests and change where each forks from.
+
+### Final state after v5
+
+Tables on `production`: `users` (id, email, display_name), `statuses`
+(id, name, sort_order), `bugs` (id, title, status_id FK, owner_id FK),
+`bug_details` (bug_id PK+FK, description, repro_steps), `alembic_version`.
+
+Endpoints: `POST /bugs`, `GET /bugs/{id}`, `GET /bugs` (HTML list, v5),
+`PATCH /bugs/{id}`, `POST /users` + `GET /users` (v2+), `GET /statuses` (v3+).
+
+These are the Architect's / implementation's concern, recorded here for
+reference, not in the Product Owner's `product-overview.md`.
 
 ## How to run
 
@@ -98,15 +125,20 @@ Skips v1-v2 and starts at v3.
 The smoke's structure is guarded by `tests/bdd/feip-7422-smoke.test.ts`,
 which asserts:
 
-- The 5 iteration specs exist and each declares Branch + Lakebase parent + Migration headers
-- Each spec has a Acceptance Criteria table with >=3 ACs
-- v5 carries an `[E2E]` tag
+- The Product Owner requirements doc exists at `product-overview.md`
+- A `feature-requests/` subdir holds the 5 per-iteration requests
+- Each feature request is in Feature Requester voice: YAML frontmatter
+  declaring `author: Feature Requester`, requester narrative describing
+  WHAT the user wants, and NO implementation detail (no SQL, HTTP verbs,
+  table names, or file paths), NO Acceptance Criteria tables, and NO
+  operational metadata (branch, Lakebase parent, migration version are
+  all derived by the orchestrator from convention)
 - The orchestrator references all 5 iterations in order
 - All three modes are documented + implemented
 - `claude` + `gh` (outside `--fast`) are required-on-PATH checks
 - Each iteration has a matching `verify-v*.sh`
 
-To add a new iteration: append the spec under `iterations/`, append a
+To add a new iteration: append the feature request under `feature-requests/`, append a
 `verify-v*.sh` under `assertions/`, extend the `ITERATIONS=(...)` line
 in `run-smoke.sh`, and update the BDD test's `ITERATIONS` constant.
 
