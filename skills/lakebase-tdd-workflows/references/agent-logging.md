@@ -63,10 +63,43 @@ lakebase-tdd-log --read --feature F1-initial-domain --min-level info
 In-process callers use `emitAgentLogEvent` / `readAgentLog` from
 `scripts/tdd/agent-log.ts`.
 
+### One common function, two callers
+
+There is exactly ONE logging function, `emitAgentLogEvent` (the `lakebase-tdd-log`
+CLI is its shell face); `role` is a parameter, not a function per agent. It is
+the only thing that may write `.tdd/agent-log.jsonl`: it stamps the canonical
+`ts`, validates against the schema, and atomically appends one line.
+
+**NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into
+`agent-log.jsonl`, and do not invent fields. A model that hand-writes invariably
+mangles the schema (the observed failure: a `timestamp` field with a local
+wall-clock instead of the required `ts` stamped in UTC). Always shell out to
+`lakebase-tdd-log`, which fills the required fields for you. If a field is not
+accepted by the CLI, it is not part of the schema.
+
+### Who emits what
+
+- The **orchestrator owns the lifecycle as CODE**: the deterministic driver
+  (`lakebase-tdd-drive`) emits `handoff` (which role it dispatched), the invoked
+  role's `phase.start`, the gate events (`gate.surfaced` / `gate.approved`),
+  `experiment.cut` / `experiment.accepted`, and `phase.end`. It also runs the
+  artifact **reconcile** after each role, which code-emits `artifact.written`
+  for everything the role left on disk. These are guaranteed every run,
+  regardless of model, with no agent action required.
+- Each **role** adds only its in-flight JUDGMENT events through the same CLI:
+  `progress` sub-steps, `reasoning` (debug), `smell.flagged` (warn), and the
+  human's recorded gate decision. You do not need to emit your own
+  `phase.start` / `phase.end` / `artifact.written`, the orchestrator already
+  does. The shared `.tdd/agent-log.jsonl` is the bus: you append to it as you
+  work; there is no need to return events to the orchestrator (a subagent only
+  returns its completion).
+
 ## 4. Per-role emit points (instrumentation)
 
-Each role emits at its phase boundaries, on each artifact it writes, and on its
-handoff. Minimum expected events:
+The orchestrator code-emits the lifecycle skeleton below (phase boundaries,
+handoffs, gates, `artifact.written` via reconcile). The "info/debug/warn"
+columns are the JUDGMENT events each role adds on top, through the
+`lakebase-tdd-log` CLI:
 
 | Role | info | debug | warn / error |
 |---|---|---|---|

@@ -81,6 +81,7 @@ function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, feat
 const PIPELINE_BIN = "lakebase-tdd-pipeline";
 const EXPERIMENT_BIN = "lakebase-tdd-experiment";
 const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
+const LOG_BIN = "lakebase-tdd-log";
 
 /**
  * The concrete commands that carry out one action. Pure: depends only on the
@@ -101,13 +102,21 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         model: cfg.modelForRole(action.role),
         task: roleTask(action, f),
       };
+      const cmds: DriveCommand[] = [claude];
       // After the Spec Author breaks the feature down, seed the pipeline from
       // the stories/ dirs it produced so the streaming lanes have stories to
       // advance (breakdown writes files, not pipeline.json).
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
-        return [claude, { kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] }];
+        cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
-      return [claude];
+      // Code-emit artifact.written for whatever the role just wrote: reconcile
+      // reads the artifacts on disk and logs any not already in the agent log,
+      // so observability never depends on the role's model emitting it. Skipped
+      // for the sprint-scoped planning roles (propose / author-requests), which
+      // write no feature artifacts to reconcile.
+      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "author-requests");
+      if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
+      return cmds;
     }
 
     case "surface-gate":

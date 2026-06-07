@@ -39,9 +39,13 @@ describe("commandsForAction: invoke-role -> claude", () => {
   it("maps a build role to a claude command with the resolved model", () => {
     const c = cfg({ modelForRole: (r) => (r === "driver" ? "opus" : "sonnet") });
     const cmds = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c);
-    expect(cmds).toHaveLength(1);
+    // [claude, reconcile]: the role runs, then the orchestrator code-emits
+    // artifact.written for whatever it wrote (reconcile reads disk).
+    expect(cmds).toHaveLength(2);
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus" });
     expect((cmds[0] as { task: string }).task).toMatch(/GREEN/);
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
+    expect((cmds[1] as { args: string[] }).args).toContain("--reconcile");
   });
 
   it("planning roles get mode-specific tasks", () => {
@@ -53,10 +57,20 @@ describe("commandsForAction: invoke-role -> claude", () => {
 
   it("spec-author breakdown also seeds the pipeline (claude + sync-breakdown)", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
-    expect(cmds).toHaveLength(2);
+    // [claude, sync-breakdown, reconcile].
+    expect(cmds).toHaveLength(3);
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "spec-author" });
     expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
     expect((cmds[1] as { args: string[] }).args[0]).toBe("sync-breakdown");
+    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
+    expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
+  });
+
+  it("sprint-scoped planning roles (propose/author-requests) do NOT reconcile", () => {
+    // No feature artifacts to reconcile at planning time.
+    const propose = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg());
+    expect(propose).toHaveLength(1);
+    expect(propose.some((c) => (c as { bin?: string }).bin === "lakebase-tdd-log")).toBe(false);
   });
 });
 

@@ -37,6 +37,7 @@ import {
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import type { AgentRole } from "./agent-log.js";
+import { makeOnAction } from "./orchestrator-logging.js";
 
 interface ParsedArgs {
   feature?: string;
@@ -173,9 +174,22 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     approver: args.approver ?? "human-proxy",
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
-    onAction: (action, i) => {
-      process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}\n`);
-    },
+    onAction: composeOnAction(
+      (action, i) => process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}\n`),
+      // Code-emit the orchestrator's lifecycle (handoff / phase.start /
+      // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
+      // so the structured trail is written every run with no LLM in the loop.
+      makeOnAction({ tddDir, featureId }),
+    ),
+  };
+}
+
+/** Run several onAction hooks in order (stderr trace + structured emit). */
+function composeOnAction(
+  ...hooks: Array<(action: WorkflowAction, i: number) => void>
+): (action: WorkflowAction, i: number) => void {
+  return (action, i) => {
+    for (const h of hooks) h(action, i);
   };
 }
 
