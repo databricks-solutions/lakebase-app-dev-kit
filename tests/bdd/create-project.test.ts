@@ -152,6 +152,44 @@ describe.skipIf(!e2eReady)("createProject – live end-to-end (LAKEBASE_TEST_E2E
   }, E2E_TIMEOUT_MS);
 });
 
+// FEIP-7566: the baseline placeholder migration must be APPLIED to the
+// production DB at creation time, after the initial commit (so the migration
+// files exist) and BEFORE cutting staging (so the tier fork inherits the
+// baselined version row). createProject is a live-only orchestrator with no
+// injectable seams, so this guard reads the source and asserts that ordering;
+// the service logic is unit-tested in baseline-migrate.test.ts and the wiring
+// is exercised end-to-end by the FEIP-7422 smoke.
+describe("createProject – production baseline ordering (FEIP-7566)", () => {
+  const SRC = path.resolve(__dirname, "..", "..", "scripts", "lakebase", "create-project.ts");
+  const src = fs.readFileSync(SRC, "utf-8");
+
+  it("applies the baseline migration after the initial commit and before cutting tiers", () => {
+    const commitIdx = src.indexOf("await commitAndPush(");
+    const baselineIdx = src.indexOf("applyBaselineMigration(");
+    const tierIdx = src.indexOf("createLongRunningBranch(");
+
+    expect(commitIdx, "commitAndPush call not found").toBeGreaterThan(-1);
+    expect(baselineIdx, "applyBaselineMigration call not found").toBeGreaterThan(-1);
+    expect(tierIdx, "createLongRunningBranch call not found").toBeGreaterThan(-1);
+
+    // commit -> baseline -> tier cut.
+    expect(baselineIdx).toBeGreaterThan(commitIdx);
+    expect(baselineIdx).toBeLessThan(tierIdx);
+  });
+
+  it("baselines the production (default) branch, scoped to the project language", () => {
+    // The apply targets defaultBranchId (production), not a tier, and threads
+    // the project language so adapter resolution never has to detect.
+    expect(src).toMatch(/branch:\s*defaultBranchId/);
+    expect(src).toMatch(/apply:\s*applySchemaMigrations/);
+  });
+
+  it("surfaces a baseline-apply failure as a warning rather than aborting creation", () => {
+    expect(src).toMatch(/baseline\.status === "error"/);
+    expect(src).toMatch(/warnings\.push\(/);
+  });
+});
+
 describe("createProject – skip-when-e2e-disabled", () => {
   it("documents the skip reason when LAKEBASE_TEST_E2E is unset", () => {
     if (liveE2E) return;
