@@ -143,11 +143,24 @@ have no equivalent failure mode.
    Hermetic dispatcher-no-op + capability-presence tests; the live Alembic
    two-head merge is exercised by the phase 5 smoke (no local `alembic` to test
    it in the hermetic suite).
-3. **`scm-merge` wiring.** Call `collapseMigrationHeads` after the git merge,
-   guarded by the serialized-merge invariant; idempotent re-run.
-4. **scm-doctor detection + --fix.**
-5. **Live validation.** FEIP-7422 smoke extended to a two-sibling-feature
-   scenario proving the tier ends with a single head and all migrations applied.
+3. **CLI (LANDED).** `lakebase-tdd-collapse-heads` ([--dry-run]) wraps
+   `collapseMigrationHeads` so any caller (CI, the driver's merge effect,
+   scm-doctor, a human) can invoke it. Runtime-verified: no-op for Flyway/Knex.
+4. **scm-doctor detection + --fix (LANDED).** Best-effort, non-mutating dry-run
+   check surfaces a `multiple-migration-heads` finding (skips silently if no
+   tool / no alembic binary); `--fix multiple-migration-heads` runs the collapse
+   and asks the user to commit the merge revision. Registered fixable; hermetic
+   membership + dry-run-no-op tests.
+5. **Automatic merge-flow wiring + live validation (GATED).** `mergeFeature`
+   merges via a GitHub PR squash-merge (server-side), and CI applies on the
+   parent, so the two lineages join on the parent branch, NOT in a local git
+   merge. Auto-collapse therefore belongs either as a pre-CI sync+collapse on
+   the feature branch (so the PR carries a single head) or a parent-branch CI
+   pre-apply step; both touch live PR/CI mechanics that need a real workspace to
+   validate. Until then, collapse is invoked explicitly (CLI / scm-doctor
+   `--fix`). The FEIP-7422 smoke's two-sibling-feature scenario (tier ends with
+   one head, all migrations applied) is the live gate for both the auto-wiring
+   and the Alembic `merge heads` path.
 
 ## Tradeoff recorded
 

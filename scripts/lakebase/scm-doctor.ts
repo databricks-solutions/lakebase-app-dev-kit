@@ -26,6 +26,7 @@ import {
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { findStaleBranches } from "../tdd/stale-branches.js";
 import { exec } from "../util/exec.js";
+import { collapseMigrationHeads } from "./schema-migrate.js";
 import { updateEnvConnection } from "./env-file.js";
 
 export type DoctorSeverity = "ok" | "warn" | "fail";
@@ -235,6 +236,24 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
   // 7. Sanity for ci-green that hasn't been merged in a while
   // (No clock-vs-state heuristics in this first cut; deliberate.)
 
+  // 8. Multiple migration heads (a sibling merge that skipped the collapse).
+  // Best-effort + non-mutating (dry-run): only DAG tools (Alembic) can report
+  // >1 head; flat-list tools no-op. Skip silently if the tool can't be
+  // resolved or its CLI isn't installed here, that is not a determinable fault.
+  try {
+    const heads = await collapseMigrationHeads({ projectDir, dryRun: true });
+    if (heads.headsBefore.length > 1) {
+      findings.push({
+        id: "multiple-migration-heads",
+        severity: "fail",
+        message: `Migrations have ${heads.headsBefore.length} heads (${heads.headsBefore.join(", ")}); a sibling-feature merge left them un-collapsed. \`upgrade head\` will refuse until they are unified.`,
+        suggestion: "lakebase-tdd-collapse-heads",
+      });
+    }
+  } catch {
+    // tool unresolved / CLI absent / no project: not a determinable fault.
+  }
+
   return finalize({
     projectDir,
     workflowStatePresent,
@@ -271,6 +290,7 @@ export const FIXABLE_FINDING_IDS = [
   "head-branch-drift",
   "tier-topology-mismatch",
   "orphan-current-branch",
+  "multiple-migration-heads",
 ] as const;
 
 export type FixableFindingId = (typeof FIXABLE_FINDING_IDS)[number];
@@ -412,6 +432,17 @@ export async function fixFinding(
           onlyBranch: headBranch,
         });
         action = `recovered orphan ${headBranch} via createFeaturePairedBranch`;
+        break;
+      }
+      case "multiple-migration-heads": {
+        const r = await collapseMigrationHeads({ projectDir: args.projectDir });
+        if (r.status !== "ok" || !r.mergeRevision) {
+          throw new ScmDoctorFixError(
+            `Expected to create a merge revision but got status="${r.status}".`,
+            "fix-failed",
+          );
+        }
+        action = `collapsed ${r.headsBefore.length} heads into merge revision ${r.mergeRevision} (commit it)`;
         break;
       }
     }

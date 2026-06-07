@@ -440,6 +440,8 @@ export interface CollapseMigrationHeadsArgs {
   language?: SchemaMigrationLanguage;
   /** Message for the generated merge revision (Alembic). */
   message?: string;
+  /** Detect-only: report heads without creating a merge revision. */
+  dryRun?: boolean;
 }
 
 export async function collapseMigrationHeads(
@@ -451,7 +453,7 @@ export async function collapseMigrationHeads(
     // Flat-list tool (Flyway/Knex): no DAG, nothing to collapse.
     return { status: "noop", headsBefore: [] };
   }
-  const r = await adapter.collapseHeads({ projectDir, message: args.message });
+  const r = await adapter.collapseHeads({ projectDir, message: args.message, dryRun: args.dryRun });
   if (r.status === "error") {
     throw new SchemaMigrationError(r.error ?? "collapse heads failed");
   }

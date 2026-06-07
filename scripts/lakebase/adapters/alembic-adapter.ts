@@ -238,6 +238,8 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
     try {
       const heads = await listAlembicHeads(args.projectDir);
       if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      // Detect-only (scm-doctor): report the multi-head state, do not merge.
+      if (args.dryRun) return { status: "ok", headsBefore: heads };
       const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
       const mergeRevision = path.basename(created).replace(/\.py$/, "").split("_")[0];
       return { status: "ok", headsBefore: heads, mergeRevision, path: created };

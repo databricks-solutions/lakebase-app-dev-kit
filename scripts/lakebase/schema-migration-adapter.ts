@@ -153,6 +153,11 @@ export interface CollapseHeadsArgs {
   projectDir: string;
   /** Message for the generated merge revision (Alembic). */
   message?: string;
+  /**
+   * Detect-only: report the heads without creating a merge revision. Used by
+   * scm-doctor to surface a multi-head branch without mutating it.
+   */
+  dryRun?: boolean;
 }
 
 export interface CollapseHeadsResult {

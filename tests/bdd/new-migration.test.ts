@@ -21,6 +21,7 @@ import {
 import { FlywayAdapter } from "../../scripts/lakebase/adapters/flyway-adapter";
 import { AlembicAdapter } from "../../scripts/lakebase/adapters/alembic-adapter";
 import { KnexAdapter } from "../../scripts/lakebase/adapters/knex-adapter";
+import { FIXABLE_FINDING_IDS } from "../../scripts/lakebase/scm-doctor";
 
 let projectDir: string;
 
@@ -129,5 +130,15 @@ describe("collapseMigrationHeads dispatcher (hermetic: flat-list tools no-op)", 
     expect(typeof AlembicAdapter.collapseHeads).toBe("function");
     expect(FlywayAdapter.collapseHeads).toBeUndefined();
     expect(KnexAdapter.collapseHeads).toBeUndefined();
+  });
+
+  it("dry-run is also a no-op for flat-list tools", async () => {
+    makeFlywayProject(projectDir);
+    const r = await collapseMigrationHeads({ projectDir, language: "java", dryRun: true });
+    expect(r.status).toBe("noop");
+  });
+
+  it("scm-doctor registers multiple-migration-heads as fixable", () => {
+    expect([...FIXABLE_FINDING_IDS]).toContain("multiple-migration-heads");
   });
 });
