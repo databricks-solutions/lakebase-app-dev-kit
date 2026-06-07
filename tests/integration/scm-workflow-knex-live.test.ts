@@ -47,12 +47,12 @@ describe.skipIf(!RUN_SUITE)(
           language: "nodejs",
           tool: "knex",
           writeMigration: ({ projectDir, markerTable }) => {
-            // <NNN>_<name>.js under migrations/. The scaffold ships
-            // 001_init_placeholder.js; 100 leaves room for user-added
-            // migrations between the placeholder and ours.
+            // <NNN>_<name>.js under migrations/. The scaffold ships NO
+            // placeholder migration (just a README), so 001 is the first
+            // user slot.
             const migDir = path.join(projectDir, "migrations");
             fs.mkdirSync(migDir, { recursive: true });
-            const file = path.join(migDir, "100_live_e2e_marker.js");
+            const file = path.join(migDir, "001_live_e2e_marker.js");
             fs.writeFileSync(
               file,
               [

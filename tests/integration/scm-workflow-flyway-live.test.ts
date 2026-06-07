@@ -47,8 +47,9 @@ describe.skipIf(!RUN_SUITE)(
           tool: "flyway",
           writeMigration: ({ projectDir, markerTable }) => {
             // V<N>__<name>.sql under src/main/resources/db/migration/.
-            // The scaffold ships V1__init_placeholder.sql; V2 is the
-            // first user-added slot.
+            // The scaffold ships NO placeholder migration (just a README),
+            // so V1 is the first user slot. baselineOnMigrate anchors the
+            // non-empty public schema, so V1 applies as pending.
             const migDir = path.join(
               projectDir,
               "src",
@@ -58,7 +59,7 @@ describe.skipIf(!RUN_SUITE)(
               "migration",
             );
             fs.mkdirSync(migDir, { recursive: true });
-            const file = path.join(migDir, "V2__live_e2e_marker.sql");
+            const file = path.join(migDir, "V1__live_e2e_marker.sql");
             fs.writeFileSync(
               file,
               [

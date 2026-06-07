@@ -19,8 +19,6 @@ import {
 } from "./lakebase-project.js";
 import { scaffoldAll } from "./scaffold.js";
 import { createLongRunningBranch } from "./long-running-branch.js";
-import { applySchemaMigrations } from "./schema-migrate.js";
-import { applyBaselineMigration } from "./baseline-migrate.js";
 import { enableE2eForProject } from "./enable-e2e.js";
 import { enableInfraForProject } from "./enable-infra.js";
 import { setupRunner } from "./runner-setup.js";
@@ -385,35 +383,6 @@ export async function createProject(
     message: `Initial project scaffold (${langLabel} + Lakebase)`,
     push: useGithub,
   });
-
-  // ── Step 8a: Baseline the production database ─────────────────
-  // The scaffold committed a placeholder migration (alembic 001 / flyway V1 /
-  // knex 001) into the branch's files, but the ONLY path that applies
-  // migrations is merge.yml, and it skips the initial branch-creation push
-  // (github.event.before is the all-zero sha). So production's DB never had the
-  // baseline stamped, and a later feature migration that chains off it (e.g.
-  // alembic down_revision "001") fails to apply against prod with a revision
-  // mismatch. Stamp it now, BEFORE cutting any tier: staging/dev fork from
-  // production copy-on-write and inherit the baselined version row, keeping the
-  // whole tier chain consistent. Best-effort: a hiccup here must not abort an
-  // otherwise-created project, so a failure is surfaced as a loud warning.
-  report("Baselining production database (applying placeholder migration)...");
-  const baseline = await applyBaselineMigration(
-    {
-      instance: lakebaseProjectId,
-      branch: defaultBranchId,
-      projectDir,
-      language,
-    },
-    { apply: applySchemaMigrations },
-  );
-  if (baseline.status === "error") {
-    warnings.push(
-      `Baseline migration was NOT applied to the production database (${defaultBranchId}): ${baseline.message}. ` +
-        `The first feature migration that chains off the baseline may fail to apply against prod until you run ` +
-        `\`lakebase-schema-migrate apply --instance ${lakebaseProjectId} --branch ${defaultBranchId}\` manually.`,
-    );
-  }
 
   // ── Step 8b: Long-running tier setup (architectural choice) ───
   // Tier semantics (features are NOT tiers, they are short-lived branches):
