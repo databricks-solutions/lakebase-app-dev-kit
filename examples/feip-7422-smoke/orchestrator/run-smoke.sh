@@ -26,10 +26,12 @@
 # What /plan does per sprint (run_plan_sprint):
 #   a. Enforce the project-intake precondition (lakebase-tdd-intake, no
 #      --feature: product-overview.md + nfrs.md + design-brief.md present).
-#   b. human-proxy supplies each sprint item's feature-request.md.
-#   b2. Run the actual /plan command via claude -p (parity); the command
-#      delegates to product-owner + spec-author and is idempotent over the
-#      staged backlog (sprint membership is the smoke orchestrator's call).
+#   b. Run the actual /plan command via claude -p (parity, the shipped surface):
+#      the command runs the deterministic driver (lakebase-tdd-drive --plan-only),
+#      which has the spec-author propose the breakdown and surfaces the sprint
+#      plan gate (headless: the Human Proxy approves on feature-proposals.md).
+#   b2. human-proxy (the PO) supplies each sprint item's feature-request.md, AFTER
+#      the proposal (sprint membership is the smoke orchestrator's call).
 #   c. Commit the sprint backlog to trunk.
 #
 # What each iteration does (the per-feature loop, after its request exists):
@@ -166,25 +168,19 @@ export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 # the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
 export LAKEBASE_TDD_UI=1
 
-# Headless claude flags shared by every `claude -p` invocation below.
+# Flags for the one place the smoke still boots `claude -p`: the `/plan` command
+# (run for parity, to exercise the SHIPPED command the way a user would). That
+# session is thin: it reads `.claude/commands/plan.md` and runs the deterministic
+# driver (`lakebase-tdd-drive --plan-only`); the driver, not this session, does
+# the orchestration and spawns the role agents (at their per-role models from
+# .lakebase/agent-config.json). There is no LLM orchestrator session to model-pin.
 # --strict-mcp-config makes Claude Code ignore ALL discovered MCP config (the
-# operator's personal ~/.claude servers: jira/slack/google/confluence/...) and
-# load only servers passed via --mcp-config. We pass none, so the session boots
-# with ZERO MCP servers. The TDD workflow drives the kit's bash CLIs, never MCP,
-# so those servers are pure cold-start latency + per-turn token bloat here. Each
-# phase (and each gate-drain re-invocation) is its own `claude -p` boot, so this
-# saving multiplies across the run.
-#
-# --model sonnet pins the ORCHESTRATOR (scrum-master) session model. The
-# scrum-master is `inherit`, so without this it runs on the CLI default (opus)
-# and pays opus latency on every coordination turn. Sonnet (not haiku) is the
-# floor here: the orchestrator's value is its STRUCTURED LOG (phase.start /
-# handoff / phase.end), and haiku reliably drops those prose-instructed emits
-# (profiled: a whole /plan produced one phase.end and nothing else). Unlike the
-# role subagents, the orchestrator's events are not artifact-backed, so the
-# reconcile backstop cannot reconstruct them, the model has to emit them. Sonnet
-# does; it is also far faster than the opus default and the orchestrator is not
-# the bulk of the turns, so the speed cost over haiku is small.
+# operator's personal ~/.claude servers) and load only servers passed via
+# --mcp-config; we pass none, so the session boots with ZERO MCP servers (the
+# workflow drives the kit's bash CLIs, never MCP). --model sonnet keeps that
+# command-reading session off the slow opus default. The per-feature phases
+# (/design /build /deploy) call the driver CLI directly (no claude -p), so this
+# only covers /plan.
 CLAUDE_FLAGS=(--strict-mcp-config --model sonnet)
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
@@ -209,67 +205,6 @@ if [[ "$SKIP_SCAFFOLD" -eq 0 ]]; then
     exit 10
   fi
 fi
-
-# ─── HITL human-proxy loop ──────────────────────────────────
-#
-# /design and /build pause at HITL gates (spec / plan / test_list /
-# promote). In an automated smoke we mock the human approver with
-# `lakebase-tdd-human-proxy`, which records every open gate as
-# approved by "human-proxy". `claude -p` runs one phase per
-# invocation: it drafts an artifact, opens a gate, and exits. So we
-# loop: invoke claude, drain whatever gates just opened, repeat until
-# claude reports no new gate-opens (or we hit the safety bound). The
-# loop bound is 5 (max gate count per slash command is 3-4; 5 leaves
-# headroom).
-GATE_DRAIN_MAX_ITERATIONS=5
-
-run_claude_with_gate_drain() {
-  local slash_cmd="$1"   # e.g. "/design F1-initial-domain" or "/build F1-..."
-  local feature_id="$2"  # e.g. "F1-initial-domain"
-  local tdd_log="${PROJECT_DIR}/.tdd/agent-log.jsonl"
-  local attempt
-  for attempt in $(seq 1 "$GATE_DRAIN_MAX_ITERATIONS"); do
-    log "    claude -p '${slash_cmd}' --agent scrum-master (attempt ${attempt}/${GATE_DRAIN_MAX_ITERATIONS})"
-    # Run the orchestrator AS the scrum-master agent so its Agent(<roles>)
-    # allowlist scopes which role subagents may be spawned (only the
-    # scrum-master invokes the role agents). The role defs are discoverable
-    # because the scaffold wrote them into .claude/agents/.
-    # Live-tail the agent log to the console for this turn. Subagent work never
-    # streams to the parent claude -p stdout, so the structured log is the only
-    # live signal. Background it DIRECTLY (not via $(...)): a command
-    # substitution would block forever waiting for the tail -f to close the
-    # capture pipe, deadlocking the whole gate-drain before claude even starts.
-    touch "$tdd_log" 2>/dev/null || true
-    ( tail -n0 -f "$tdd_log" 2>/dev/null \
-        | jq -rR 'fromjson? | "      · [\(.role)] \(.event): \(.message)"' 2>/dev/null ) &
-    local tail_pid=$!
-    claude -p "$slash_cmd" "${CLAUDE_FLAGS[@]}" --agent scrum-master
-    # Tear the tail down robustly: kill the subshell + the tail -f it spawned
-    # (killing the subshell alone can leave tail -f re-parented and leaked).
-    kill "$tail_pid" 2>/dev/null || true
-    pkill -f "tail -n0 -f ${tdd_log}" 2>/dev/null || true
-    # Structural observability backstop (FEIP-7510): emit artifact.written for
-    # any artifact produced this pass that the role model did not log itself
-    # (e.g. a sonnet/haiku role that skipped its own emits). Idempotent.
-    npx --yes --package="${KIT_NPX}" \
-      lakebase-tdd-log --reconcile --feature "$feature_id" --tdd-dir "${PROJECT_DIR}/.tdd" 2>/dev/null || true
-    # Drain any gates that opened during this pass. Mock-approver is
-    # idempotent: returns 0 even when no gates are open.
-    local approved
-    approved="$(
-      npx --yes --package="${KIT_NPX}" \
-        lakebase-tdd-human-proxy --feature "$feature_id" --json --pretty \
-      | jq -r '.approved | length'
-    )"
-    log "    human-proxy: approved ${approved} gate(s) this pass"
-    # No new gates to approve → claude is done with this slash command.
-    if [[ "$approved" == "0" ]]; then
-      return 0
-    fi
-  done
-  err "${slash_cmd} did not converge after ${GATE_DRAIN_MAX_ITERATIONS} attempts; gates still open."
-  return 2
-}
 
 # ─── prereqs ──────────────────────────────────────────────────
 
@@ -452,7 +387,7 @@ run_iteration() {
   # job, which the driver does not own, so we claim explicitly first), then
   # breaks the feature down + designs + builds + accepts each story + deploys.
   # The per-story pipeline streams (build starts on a story the moment its gate
-  # is approved) and routing is code, not an LLM scrum-master. The driver is the
+  # is approved) and routing is code, not an LLM orchestrator. The driver is the
   # ONLY orchestration path: the same lakebase-tdd-drive runs headless here and
   # under real human interaction; the sole difference is who answers the gates
   # (the Human Proxy here vs the actual human live).
@@ -610,13 +545,16 @@ run_plan_sprint() {
   [ -n "$_intake_ok" ] \
     || { err "/plan ${sprint_name}: project-intake precondition failed after 3 attempts"; exit 2; }
 
-  # b. PROPOSAL FIRST. Run the actual /plan command (parity): the orchestrator
-  # (as scrum-master) has the Spec Author propose the feature breakdown
-  # (feature-proposals.md), then hand to the PO. /plan opens no gates.json gate,
-  # so it is a plain claude -p invocation, not a gate-drain. Feature-requests must
-  # NOT exist before this proposal is written, so the supply (step c) runs AFTER.
-  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' --agent scrum-master"
-  claude -p "/plan --sprint ${sprint_name}" "${CLAUDE_FLAGS[@]}" --agent scrum-master
+  # b. PROPOSAL FIRST. Run the actual /plan command (parity, the shipped surface
+  # a user invokes). The command runs the deterministic driver bounded to
+  # planning (`lakebase-tdd-drive --sprint <name> --plan-only --gates proxy`):
+  # the Spec Author proposes the feature breakdown (feature-proposals.md), the
+  # driver surfaces the sprint plan gate, and headless the Human Proxy approves it
+  # (teeth: feature-proposals.md exists + conforms), then stops at planning-complete.
+  # Feature-requests must NOT exist before this proposal is written, so the
+  # PO-authoring supply (step c) runs AFTER.
+  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' (runs the driver --plan-only)"
+  claude -p "/plan --sprint ${sprint_name}" "${CLAUDE_FLAGS[@]}"
 
   # c. ONLY AFTER the proposal: the PO authors each sprint item's
   # feature-request.md. Headless, the Human Proxy puts them out from the recorded

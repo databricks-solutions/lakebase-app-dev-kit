@@ -4673,7 +4673,6 @@ var RECOMMENDED_MODELS = {
   "architect-reviewer": "opus",
   "test-strategist": "sonnet",
   "ux-designer": "sonnet",
-  "scrum-master": "inherit",
   navigator: "sonnet",
   driver: "sonnet",
   "product-owner": "opus",

@@ -6715,6 +6715,8 @@ var ARTIFACT_FORMATS = {
   "plan.json": { kind: "json-schema", schema: "plan.schema.json" },
   "architecture.json": { kind: "json-schema", schema: "architecture.schema.json" },
   "workflow-state.json": { kind: "json-schema", schema: "workflow-state.schema.json" },
+  // Release Engineer's deploy-gate evidence (reachability + feature-verify).
+  "deploy-evidence.json": { kind: "json-schema", schema: "deploy-evidence.schema.json" },
   // UX Designer (UI projects only): the machine-checkable design tokens.
   "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
   // Architect Reviewer's section 6 + Gate 2 adjudication surface.
@@ -6741,6 +6743,9 @@ var ARTIFACT_FORMATS = {
   // Feature Requester's original ask: the Spec Author's INPUT. Free-form
   // narrative; only H1 + non-empty body required. Never overwritten.
   "feature-request.md": { kind: "md-narrative" },
+  // Spec Author's sprint backlog proposal: the artifact the sprint PLAN gate
+  // locks (FEIP-7461). Free-form narrative; H1 + non-empty body required.
+  "feature-proposals.md": { kind: "md-narrative" },
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
   // HIL non-functional-requirements brief (the Architect's intake). The HIL

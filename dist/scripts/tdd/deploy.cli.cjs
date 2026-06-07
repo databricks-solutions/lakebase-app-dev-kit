@@ -129,6 +129,7 @@ async function pollUntil(args) {
 }
 
 // scripts/tdd/deploy.ts
+var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 function resolveDeployTarget(projectDir, name) {
   const cfg = readTargets(projectDir);
   if (!cfg) return { kind: "missing", reason: "deploy-targets.yaml not found in project root" };
@@ -143,7 +144,8 @@ function resolveDeployTarget(projectDir, name) {
       run: raw.run ?? "",
       baseUrl: (raw.base_url ?? "http://localhost:8000").replace(/\/+$/, ""),
       healthPath: raw.health_path ?? "/",
-      readyTimeoutSeconds: Number(raw.ready_timeout_seconds ?? "60") || 60
+      readyTimeoutSeconds: Number(raw.ready_timeout_seconds ?? "60") || 60,
+      verify: raw.verify || void 0
     }
   };
 }
@@ -157,6 +159,29 @@ async function probeReachable(url) {
 }
 function pidFile(projectDir, target) {
   return (0, import_node_path.join)(projectDir, ".tdd", "deploy", `${target}.pid`);
+}
+function findFeatureDir(tddDir, featureId) {
+  const featuresDir = (0, import_node_path.join)(tddDir, "features");
+  if (!(0, import_node_fs2.existsSync)(featuresDir)) return void 0;
+  const match = (0, import_node_fs2.readdirSync)(featuresDir).find((d) => d.startsWith(featureId));
+  return match ? (0, import_node_path.join)(featuresDir, match) : void 0;
+}
+function defaultRunVerify(cmd, cwd, env) {
+  try {
+    (0, import_node_child_process.execSync)(cmd, { cwd, stdio: "ignore", env: env ?? process.env });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function writeDeployEvidence(tddDir, evidence) {
+  const fdir = findFeatureDir(tddDir, evidence.feature_id);
+  if (!fdir) return void 0;
+  const dir = evidence.story_id ? (0, import_node_path.join)(fdir, "stories", evidence.story_id) : fdir;
+  (0, import_node_fs2.mkdirSync)(dir, { recursive: true });
+  const file = (0, import_node_path.join)(dir, "deploy-evidence.json");
+  (0, import_node_fs2.writeFileSync)(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
+  return file;
 }
 function defaultStart(cmd, cwd, env) {
   const child = (0, import_node_child_process.spawn)("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore", env: env ?? process.env });
@@ -186,10 +211,45 @@ async function deployToTarget(args) {
     sleep: args.sleep,
     now: args.now
   });
-  if (poll.outcome !== "done") {
-    return { ok: false, pid, reason: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s` };
+  const reachableNow = poll.outcome === "done";
+  let verify = { passed: false };
+  if (reachableNow && cfg.verify) {
+    const runVerify = args.runVerify ?? defaultRunVerify;
+    const passed = runVerify(cfg.verify, args.projectDir, env);
+    verify = {
+      passed,
+      command: cfg.verify,
+      summary: passed ? "feature-verify passed against the running app" : "feature-verify FAILED against the running app"
+    };
+  } else if (reachableNow) {
+    verify = { passed: false, summary: "no verify command configured for this target" };
   }
-  return { ok: true, url, pid };
+  let evidencePath;
+  if (args.featureId) {
+    const tddDir = args.tddDir ?? (0, import_node_path.join)(args.projectDir, ".tdd");
+    const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
+    evidencePath = writeDeployEvidence(tddDir, {
+      schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
+      feature_id: args.featureId,
+      ...args.storyId ? { story_id: args.storyId } : {},
+      target: args.targetName,
+      url,
+      reachable: reachableNow,
+      verify,
+      ...args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {},
+      deployed_at: at
+    });
+  }
+  if (!reachableNow) {
+    return {
+      ok: false,
+      pid,
+      reason: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s`,
+      verify,
+      evidencePath
+    };
+  }
+  return { ok: true, url, pid, verify, evidencePath };
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
@@ -216,6 +276,9 @@ async function runDeployCli(argv) {
   let stop = false;
   let json = false;
   let lakebaseBranch;
+  let featureId;
+  let storyId;
+  let tddDir;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--target":
@@ -227,6 +290,15 @@ async function runDeployCli(argv) {
       case "--lakebase-branch":
         lakebaseBranch = argv[++i];
         break;
+      case "--feature":
+        featureId = argv[++i];
+        break;
+      case "--story":
+        storyId = argv[++i];
+        break;
+      case "--tdd-dir":
+        tddDir = argv[++i];
+        break;
       case "--stop":
         stop = true;
         break;
@@ -236,7 +308,7 @@ async function runDeployCli(argv) {
       case "-h":
       case "--help":
         process.stdout.write(
-          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--lakebase-branch <branch>] [--stop] [--json]\nShips a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n--lakebase-branch binds the run command to a story's experiment branch DB (per-story deploy).\n"
+          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--feature <id>] [--story <id>] [--lakebase-branch <branch>] [--stop] [--json]\nShips a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n--feature writes features/<F>/deploy-evidence.json (the deploy gate's artifact);\n--story (with --feature) writes it at story scope + binds the run to the story's experiment branch;\n--lakebase-branch binds the run command to a story's experiment branch DB (per-story deploy).\n"
         );
         return 0;
     }
@@ -251,7 +323,7 @@ async function runDeployCli(argv) {
 `);
     return 0;
   }
-  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch });
+  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch, featureId, storyId, tddDir });
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}
 `);

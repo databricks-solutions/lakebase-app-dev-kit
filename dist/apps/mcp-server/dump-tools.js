@@ -9375,7 +9375,6 @@ var RECOMMENDED_MODELS = {
   "architect-reviewer": "opus",
   "test-strategist": "sonnet",
   "ux-designer": "sonnet",
-  "scrum-master": "inherit",
   navigator: "sonnet",
   driver: "sonnet",
   "product-owner": "opus",
@@ -11446,7 +11445,7 @@ init_esm_shims();
 import { existsSync as existsSync26, readFileSync as readFileSync16, readdirSync as readdirSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync16 } from "fs";
 import { join as join28 } from "path";
 var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
+var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
   return {
@@ -11456,7 +11455,8 @@ function defaultGatesState(featureId) {
       spec: { status: "open", history: [] },
       plan: { status: "open", history: [] },
       test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] }
+      promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] }
     }
   };
 }
@@ -11509,7 +11509,11 @@ function validateGatesState(parsed, file) {
     spec: validateGateRecord(gates.spec, "spec", file),
     plan: validateGateRecord(gates.plan, "plan", file),
     test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file)
+    promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
   };
   return {
     feature_id: obj.feature_id,

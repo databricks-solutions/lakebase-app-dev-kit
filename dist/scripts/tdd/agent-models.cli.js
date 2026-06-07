@@ -8,7 +8,6 @@ var RECOMMENDED_MODELS = {
   "architect-reviewer": "opus",
   "test-strategist": "sonnet",
   "ux-designer": "sonnet",
-  "scrum-master": "inherit",
   navigator: "sonnet",
   driver: "sonnet",
   "product-owner": "opus",
@@ -22,8 +21,9 @@ function readAgentConfig(projectDir) {
   return JSON.parse(readFileSync(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
-  const entry = readAgentConfig(projectDir)?.roles?.[role];
-  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
+  const spawnable = role;
+  const entry = readAgentConfig(projectDir)?.roles?.[spawnable];
+  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
 }
 
 // scripts/tdd/agent-models.cli.ts

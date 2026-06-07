@@ -3254,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path5) {
-      let input = path5;
+    function removeDotSegments(path6) {
+      let input = path6;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path5, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
+        const [path6, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path6 && path6 !== "/" ? path6 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6643,9 +6643,9 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/drive.cli.ts
 init_cjs_shims();
-var import_node_child_process8 = require("child_process");
-var fs5 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
+var import_node_child_process9 = require("child_process");
+var fs6 = __toESM(require("fs"), 1);
+var path5 = __toESM(require("path"), 1);
 
 // scripts/tdd/orchestrator-run.ts
 init_cjs_shims();
@@ -6673,6 +6673,7 @@ function nextBuildAction(story, b) {
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
+  if (!b.deployVerified) return { kind: "await-acceptance", story };
   if (!b.accepted) return { kind: "accept", story };
   return { kind: "complete", story };
 }
@@ -6681,6 +6682,7 @@ function nextTransition(state) {
     const p = state.planning ?? { proposed: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
+    if (!p.gateApproved) return { kind: "approve-plan-gate" };
     return { kind: "planning-complete" };
   }
   if (state.phase === "deploy") {
@@ -6697,7 +6699,12 @@ function nextTransition(state) {
     const v = state.stories[story];
     if (v?.gateApproved && !v.build.accepted) return { kind: "dispatch", story };
   }
-  const designView = {
+  const design = nextDesignAction(toDesignView(state));
+  if (design.kind === "design-complete") return { kind: "feature-complete" };
+  return design;
+}
+function toDesignView(state) {
+  return {
     breakdownDone: state.breakdownDone,
     storyOrder: state.storyOrder,
     stories: Object.fromEntries(
@@ -6707,9 +6714,42 @@ function nextTransition(state) {
       ])
     )
   };
-  const design = nextDesignAction(designView);
-  if (design.kind === "design-complete") return { kind: "feature-complete" };
-  return design;
+}
+function nextDesignOnlyTransition(state) {
+  return nextDesignAction(toDesignView(state));
+}
+function actionLane(action) {
+  switch (action.kind) {
+    case "invoke-role": {
+      if ("mode" in action) {
+        return action.mode === "breakdown" ? "design" : "planning";
+      }
+      return action.role === "navigator" || action.role === "driver" ? "build" : "design";
+    }
+    case "approve-plan-gate":
+    case "planning-complete":
+      return "planning";
+    case "surface-gate":
+    case "approve-gate":
+    case "design-complete":
+      return "design";
+    case "dispatch":
+    case "cut-experiment":
+    case "await-acceptance":
+    case "accept":
+    case "complete":
+      return "build";
+    case "feature-complete":
+      return "coarse";
+    case "deploy":
+    case "approve-deploy-gate":
+      return "deploy";
+    case "done":
+      return "done";
+  }
+}
+function isHitlGateAction(action) {
+  return action.kind === "approve-gate" || action.kind === "approve-plan-gate" || action.kind === "approve-deploy-gate" || action.kind === "accept";
 }
 
 // scripts/tdd/orchestrator-run.ts
@@ -6726,6 +6766,18 @@ var DriverStalledError = class extends Error {
   iteration;
 };
 var MAX_ITERATIONS = 1e4;
+function driverBoundOptions(bound) {
+  switch (bound) {
+    case "plan":
+      return { stopWhen: (a) => a.kind === "planning-complete" };
+    case "design":
+      return { transition: nextDesignOnlyTransition, stopWhen: (a) => a.kind === "design-complete" };
+    case "build":
+      return { stopWhen: (a) => actionLane(a) !== "build" };
+    case "deploy":
+      return { stopWhen: (a) => actionLane(a) !== "deploy" };
+  }
+}
 async function runDriver(effects, options = {}) {
   let previousSignature;
   for (let i = 0; ; i++) {
@@ -6736,11 +6788,15 @@ async function runDriver(effects, options = {}) {
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }
     const state = await effects.readState();
-    const action = nextTransition(state);
+    const transition = options.transition ?? nextTransition;
+    const action = transition(state);
     if (action.kind === "done") {
       effects.onAction?.(action, i);
       await effects.perform(action);
       return { iterations: i + 1 };
+    }
+    if (options.stopWhen?.(action)) {
+      return { iterations: i, stoppedAtBound: true, stoppedAt: action };
     }
     const signature = JSON.stringify(action);
     if (signature === previousSignature) {
@@ -6777,6 +6833,7 @@ function storyView(id, e, probe) {
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
+      deployVerified: probe.storyDeployVerified(id),
       accepted
     }
   };
@@ -6982,6 +7039,144 @@ function readAcLayer(tddDir, featureId, acId) {
   return void 0;
 }
 
+// scripts/tdd/gates.ts
+init_cjs_shims();
+var import_fs2 = require("fs");
+var import_path3 = require("path");
+var GATES_SCHEMA_VERSION = 1;
+var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
+function defaultGatesState(featureId) {
+  return {
+    feature_id: featureId,
+    schema_version: GATES_SCHEMA_VERSION,
+    gates: {
+      spec: { status: "open", history: [] },
+      plan: { status: "open", history: [] },
+      test_list: { status: "open", history: [] },
+      promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] }
+    }
+  };
+}
+function readGates(featureId, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const file = gatesFilePath(tddDir, featureId);
+  if (!(0, import_fs2.existsSync)(file)) {
+    return defaultGatesState(featureId);
+  }
+  const raw = (0, import_fs2.readFileSync)(file, "utf8");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
+  }
+  return validateGatesState(parsed, file);
+}
+function gatesFilePath(tddDir, featureId) {
+  return (0, import_path3.join)(findFeatureDir(tddDir, featureId), "gates.json");
+}
+function findFeatureDir(tddDir, featureId) {
+  const featuresDir = (0, import_path3.join)(tddDir, "features");
+  if (!(0, import_fs2.existsSync)(featuresDir)) {
+    throw new Error(`${featuresDir} does not exist`);
+  }
+  const candidates = (0, import_fs2.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
+  if (candidates.length === 0) {
+    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
+  }
+  return (0, import_path3.join)(featuresDir, candidates[0]);
+}
+function validateGatesState(parsed, file) {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`gates.json at ${file} is not an object`);
+  }
+  const obj = parsed;
+  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
+    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
+  }
+  if (typeof obj.schema_version !== "number") {
+    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
+  }
+  if (typeof obj.gates !== "object" || obj.gates === null) {
+    throw new Error(`gates.json at ${file}: missing or invalid gates`);
+  }
+  const gates = obj.gates;
+  const out = {
+    spec: validateGateRecord(gates.spec, "spec", file),
+    plan: validateGateRecord(gates.plan, "plan", file),
+    test_list: validateGateRecord(gates.test_list, "test_list", file),
+    promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
+  };
+  return {
+    feature_id: obj.feature_id,
+    schema_version: obj.schema_version,
+    gates: out
+  };
+}
+function validateGateRecord(parsed, gateName, file) {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
+  }
+  const obj = parsed;
+  const status = obj.status;
+  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
+    throw new Error(
+      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
+    );
+  }
+  const history = obj.history;
+  if (history !== void 0 && !Array.isArray(history)) {
+    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
+  }
+  return {
+    status,
+    approver: typeof obj.approver === "string" ? obj.approver : void 0,
+    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
+    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
+    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
+    history: history ?? []
+  };
+}
+
+// scripts/tdd/deploy.ts
+init_cjs_shims();
+var import_node_child_process8 = require("child_process");
+var import_node_fs = require("fs");
+var import_node_path = require("path");
+
+// scripts/lakebase/deploy-targets.ts
+init_cjs_shims();
+
+// scripts/tdd/deploy.ts
+function deployEvidencePasses(e) {
+  return e !== void 0 && e.reachable === true && e.verify?.passed === true;
+}
+function readDeployEvidence(file) {
+  if (!(0, import_node_fs.existsSync)(file)) return void 0;
+  try {
+    return JSON.parse((0, import_node_fs.readFileSync)(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function storyDeployVerified(tddDir, featureId, storyId) {
+  const fdir = findFeatureDir2(tddDir, featureId);
+  if (!fdir) return false;
+  return deployEvidencePasses(readDeployEvidence((0, import_node_path.join)(fdir, "stories", storyId, "deploy-evidence.json")));
+}
+function findFeatureDir2(tddDir, featureId) {
+  const featuresDir = (0, import_node_path.join)(tddDir, "features");
+  if (!(0, import_node_fs.existsSync)(featuresDir)) return void 0;
+  const match = (0, import_node_fs.readdirSync)(featuresDir).find((d) => d.startsWith(featureId));
+  return match ? (0, import_node_path.join)(featuresDir, match) : void 0;
+}
+
 // scripts/tdd/orchestrator-probe.ts
 function storyDir(tddDir, featureId, story) {
   return path3.join(tddDir, "features", featureId, "stories", story);
@@ -7036,10 +7231,13 @@ function readDriveContext(tddDir, featureId) {
   const proposed = spec !== void 0;
   const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
   const requestsAuthored = fs4.existsSync(path3.join(featureDir, "feature-request.md"));
-  const gates = readJson(path3.join(featureDir, "gates.json"));
-  const deployGate = gates?.gates?.deploy;
-  const deployed = deployGate !== void 0;
-  const gateApproved = deployGate?.status === "approved";
+  const deployed = fs4.existsSync(path3.join(featureDir, "deploy-evidence.json"));
+  let gateApproved = false;
+  try {
+    gateApproved = readGates(featureId, { tddDir }).gates.deploy.status === "approved";
+  } catch {
+    gateApproved = false;
+  }
   return {
     phase: driverPhaseForTdd(tddPhase),
     breakdownDone,
@@ -7072,24 +7270,27 @@ function diskArtifactProbe(tddDir, featureId) {
     codeWritten(story) {
       const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
       return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+    },
+    storyDeployVerified(story) {
+      return storyDeployVerified(tddDir, featureId, story);
     }
   };
 }
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path3 = require("path");
+var import_fs3 = require("fs");
+var import_path4 = require("path");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return (0, import_path3.join)(tddDir, "features", featureId, "pipeline.json");
+  return (0, import_path4.join)(tddDir, "features", featureId, "pipeline.json");
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs2.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs2.readFileSync)(p, "utf8"));
+  if (!(0, import_fs3.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs3.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7173,7 +7374,7 @@ function commandsForAction(action, cfg) {
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
-          task: `Deploy story ${action.story} from its experiment branch (target ${cfg.deployTarget ?? "local"}) so the Product Owner can review running software, and produce the reachability + feature-verify evidence.`
+          task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
       ];
@@ -7199,6 +7400,14 @@ function commandsForAction(action, cfg) {
       ];
     case "complete":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
+    case "approve-plan-gate":
+      return [
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: ["--sprint", cfg.sprintName ?? "sprint", "--gate", "plan", "--approver", approver, "--tdd-dir", cfg.tddDir]
+        }
+      ];
     case "planning-complete":
       return [{ kind: "set-phase", phase: "discovery" }];
     case "feature-complete":
@@ -7222,9 +7431,9 @@ function commandsForAction(action, cfg) {
       return [];
   }
 }
-async function planNextAction(cfg) {
+async function planNextAction(cfg, transition = nextTransition) {
   const state = await buildDriveEffects(cfg).readState();
-  const action = nextTransition(state);
+  const action = transition(state);
   return { action, commands: commandsForAction(action, cfg) };
 }
 function buildDriveEffects(cfg) {
@@ -7244,31 +7453,141 @@ function buildDriveEffects(cfg) {
   };
 }
 
+// scripts/tdd/orchestrator-sprint.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
+
+// scripts/tdd/sprint-gates.ts
+init_cjs_shims();
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+
+// scripts/tdd/gate-hash.ts
+init_cjs_shims();
+
+// scripts/tdd/artifact-conformance.ts
+init_cjs_shims();
+
+// scripts/tdd/sprint-gates.ts
+var SPRINT_GATES_SCHEMA_VERSION = 1;
+var PLAN_GATE_ARTIFACT = "feature-proposals.md";
+function defaultSprintGatesState(sprint) {
+  return {
+    sprint,
+    schema_version: SPRINT_GATES_SCHEMA_VERSION,
+    gates: { plan: { status: "open", history: [] } }
+  };
+}
+function sprintDir(tddDir, sprint) {
+  return (0, import_node_path2.join)(tddDir, "sprints", sprint);
+}
+function sprintGatesFile(tddDir, sprint) {
+  return (0, import_node_path2.join)(sprintDir(tddDir, sprint), "gates.json");
+}
+function readSprintGates(sprint, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const file = sprintGatesFile(tddDir, sprint);
+  if (!(0, import_node_fs2.existsSync)(file)) return defaultSprintGatesState(sprint);
+  let parsed;
+  try {
+    parsed = JSON.parse((0, import_node_fs2.readFileSync)(file, "utf8"));
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
+  }
+  const plan = parsed.gates?.plan ?? { status: "open", history: [] };
+  return {
+    sprint,
+    schema_version: parsed.schema_version ?? SPRINT_GATES_SCHEMA_VERSION,
+    gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
+  };
+}
+
+// scripts/tdd/orchestrator-sprint.ts
+function backlogFile(tddDir, sprint) {
+  return path4.join(sprintDir(tddDir, sprint), "backlog.json");
+}
+function readSprintBacklog(tddDir, sprint) {
+  const file = backlogFile(tddDir, sprint);
+  if (!fs5.existsSync(file)) return { sprint, features: [] };
+  try {
+    const data = JSON.parse(fs5.readFileSync(file, "utf8"));
+    const features = Array.isArray(data.features) ? data.features.filter((f) => typeof f === "string" && f.length > 0) : [];
+    return { sprint, features };
+  } catch {
+    return { sprint, features: [] };
+  }
+}
+function findFeatureDir3(tddDir, featureId) {
+  const featuresDir = path4.join(tddDir, "features");
+  if (!fs5.existsSync(featuresDir)) return void 0;
+  const match = fs5.readdirSync(featuresDir).find((d) => d.startsWith(featureId));
+  return match ? path4.join(featuresDir, match) : void 0;
+}
+function deriveSprintPlanningState(tddDir, sprint) {
+  const proposed = fs5.existsSync(path4.join(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT));
+  const backlog = readSprintBacklog(tddDir, sprint).features;
+  const requestsAuthored = backlog.length > 0 && backlog.every((f) => {
+    const fdir = findFeatureDir3(tddDir, f);
+    return fdir !== void 0 && fs5.existsSync(path4.join(fdir, "feature-request.md"));
+  });
+  let gateApproved = false;
+  try {
+    gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";
+  } catch {
+    gateApproved = false;
+  }
+  return {
+    phase: "planning",
+    planning: { proposed, requestsAuthored, gateApproved },
+    breakdownDone: false,
+    storyOrder: [],
+    stories: {},
+    buildActive: null
+  };
+}
+async function runSprint(effects) {
+  const planning = await effects.drivePlanning();
+  if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
+  const features = await effects.readBacklog();
+  for (let i = 0; i < features.length; i++) {
+    const featureId = features[i];
+    effects.onFeature?.(featureId, i);
+    await effects.claimFeature(featureId);
+    const driven = await effects.driveFeature(featureId);
+    if (driven.pendingGate) {
+      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+    }
+  }
+  return { features };
+}
+
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path4 = require("path");
+var import_fs4 = require("fs");
+var import_path5 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
   "test-strategist": "sonnet",
   "ux-designer": "sonnet",
-  "scrum-master": "inherit",
   navigator: "sonnet",
   driver: "sonnet",
   "product-owner": "opus",
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path4.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path5.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path4.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs3.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs3.readFileSync)(p, "utf8"));
+  const p = (0, import_path5.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs4.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs4.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
-  const entry = readAgentConfig(projectDir)?.roles?.[role];
-  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
+  const spawnable = role;
+  const entry = readAgentConfig(projectDir)?.roles?.[spawnable];
+  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
 }
 
 // scripts/tdd/drive.cli.ts
@@ -7278,6 +7597,9 @@ function parseArgs(argv) {
     switch (argv[i]) {
       case "--feature":
         out.feature = argv[++i];
+        break;
+      case "--sprint":
+        out.sprint = argv[++i];
         break;
       case "--project-dir":
         out.projectDir = argv[++i];
@@ -7299,6 +7621,15 @@ function parseArgs(argv) {
         break;
       case "--max-steps":
         out.maxSteps = Number(argv[++i]);
+        break;
+      case "--plan-only":
+        out.planOnly = true;
+        break;
+      case "--only":
+        out.only = argv[++i];
+        break;
+      case "--gates":
+        out.gates = argv[++i];
         break;
       case "--help":
       case "-h":
@@ -7325,25 +7656,29 @@ Flags:
   --approver <name>    Headless gate approver (default: human-proxy)
   --dry-run            Print the single next action + its commands, then exit
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
+  --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
+  --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
+  --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
+                       (stop AT each HITL gate so the human answers, then re-run)
 `;
 }
 function writeWorkflowPhase(tddDir, phase) {
-  const file = path4.join(tddDir, "workflow-state.json");
+  const file = path5.join(tddDir, "workflow-state.json");
   let state = {};
-  if (fs5.existsSync(file)) {
+  if (fs6.existsSync(file)) {
     try {
-      state = JSON.parse(fs5.readFileSync(file, "utf8"));
+      state = JSON.parse(fs6.readFileSync(file, "utf8"));
     } catch {
       state = {};
     }
   }
   state.phase = phase;
-  fs5.mkdirSync(tddDir, { recursive: true });
-  fs5.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+  fs6.mkdirSync(tddDir, { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve, reject) => {
-    const child = (0, import_node_child_process8.spawn)(bin, args, { cwd, stdio: "inherit" });
+    const child = (0, import_node_child_process9.spawn)(bin, args, { cwd, stdio: "inherit" });
     child.on("error", (err) => reject(err));
     child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`${bin} exited ${code}`)));
   });
@@ -7371,12 +7706,111 @@ function execRunner(cfg) {
       }
       const sibling = KIT_CLI_JS[cmd.bin];
       if (sibling) {
-        await spawnCmd("node", [path4.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+        await spawnCmd("node", [path5.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
       } else {
         await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
       }
     }
   };
+}
+function buildCfg(args, featureId) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
+  return {
+    projectDir,
+    tddDir,
+    featureId,
+    sprintName: args.sprint,
+    instance: args.instance,
+    deployTarget: args.deployTarget ?? "local",
+    approver: args.approver ?? "human-proxy",
+    modelForRole: (role) => resolveModelForRole(role, projectDir),
+    runner: { async run() {
+    } },
+    onAction: (action, i) => {
+      process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}
+`);
+    }
+  };
+}
+function gatedStopWhen(base, interactive) {
+  if (!interactive) return base;
+  return (a) => (base?.(a) ?? false) || isHitlGateAction(a);
+}
+function pendingGateOf(r) {
+  return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : void 0;
+}
+function reportGate(gate) {
+  process.stderr.write(
+    `[drive] GATE awaiting human approval: ${JSON.stringify(gate)}. Surface it to the human; on approval record their decision (the approver), then re-run to continue.
+`
+  );
+}
+async function runSprintMode(args) {
+  const sprint = args.sprint;
+  const projectDir = args.projectDir ?? process.cwd();
+  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
+  const claimJs = path5.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const interactive = args.gates === "interactive";
+  const effects = {
+    async drivePlanning() {
+      const cfg = buildCfg(args, "");
+      cfg.runner = execRunner(cfg);
+      const planning = {
+        readState: async () => deriveSprintPlanningState(tddDir, sprint),
+        async perform(action) {
+          for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
+        },
+        onAction: cfg.onAction
+      };
+      const base = driverBoundOptions("plan");
+      const r = await runDriver(planning, { ...base, stopWhen: gatedStopWhen(base.stopWhen, interactive) });
+      return { pendingGate: pendingGateOf(r) };
+    },
+    async readBacklog() {
+      return readSprintBacklog(tddDir, sprint).features;
+    },
+    async claimFeature(featureId) {
+      await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
+    },
+    async driveFeature(featureId) {
+      const cfg = buildCfg(args, featureId);
+      cfg.runner = execRunner(cfg);
+      const r = await runDriver(buildDriveEffects(cfg), { stopWhen: gatedStopWhen(void 0, interactive) });
+      return { pendingGate: pendingGateOf(r) };
+    },
+    onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}
+`)
+  };
+  if (args.planOnly) {
+    try {
+      const planning = await effects.drivePlanning();
+      if (planning.pendingGate) reportGate(planning.pendingGate);
+      else process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)
+`);
+      return 0;
+    } catch (err) {
+      process.stderr.write(`${err instanceof Error ? err.message : String(err)}
+`);
+      return 1;
+    }
+  }
+  try {
+    const result = await runSprint(effects);
+    if (result.pendingGate) {
+      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
+`);
+      reportGate(result.pendingGate);
+    } else {
+      process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)
+`);
+    }
+    return 0;
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
+`);
+    return 1;
+  }
 }
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -7384,40 +7818,48 @@ async function main() {
     process.stdout.write(help());
     return 0;
   }
+  if (args.sprint && !args.feature) {
+    return runSprintMode(args);
+  }
   if (!args.feature) {
     process.stderr.write(`lakebase-tdd-drive: --feature is required.
 
 ${help()}`);
     return 2;
   }
-  const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path4.join(projectDir, ".tdd");
-  const cfg = {
-    projectDir,
-    tddDir,
-    featureId: args.feature,
-    instance: args.instance,
-    deployTarget: args.deployTarget ?? "local",
-    approver: args.approver ?? "human-proxy",
-    modelForRole: (role) => resolveModelForRole(role, projectDir),
-    runner: { async run() {
-    } },
-    // replaced below
-    onAction: (action, i) => {
-      process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}
+  let bound;
+  if (args.planOnly) bound = "plan";
+  if (args.only) {
+    if (!["design", "build", "deploy"].includes(args.only)) {
+      process.stderr.write(`lakebase-tdd-drive: --only must be design|build|deploy (got "${args.only}").
 `);
+      return 2;
     }
-  };
+    bound = args.only;
+  }
+  const boundOpts = bound ? driverBoundOptions(bound) : {};
+  const cfg = buildCfg(args, args.feature);
   if (args.dryRun) {
-    const plan = await planNextAction(cfg);
+    const plan = await planNextAction(cfg, boundOpts.transition);
     process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
     return 0;
   }
   cfg.runner = execRunner(cfg);
+  const interactive = args.gates === "interactive";
   try {
-    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps });
+    const result = await runDriver(buildDriveEffects(cfg), {
+      maxSteps: args.maxSteps,
+      transition: boundOpts.transition,
+      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive)
+    });
+    const pendingGate = pendingGateOf(result);
     if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
+`);
+    } else if (pendingGate) {
+      reportGate(pendingGate);
+    } else if (result.stoppedAtBound) {
+      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
 `);
     } else {
       process.stderr.write(`[drive] done in ${result.iterations} actions

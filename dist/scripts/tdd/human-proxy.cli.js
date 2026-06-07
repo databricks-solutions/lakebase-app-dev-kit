@@ -6783,7 +6783,7 @@ init_esm_shims();
 import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync as readdirSync2, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync2 } from "fs";
 import { join as join2 } from "path";
 var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
+var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
   return {
@@ -6793,7 +6793,8 @@ function defaultGatesState(featureId) {
       spec: { status: "open", history: [] },
       plan: { status: "open", history: [] },
       test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] }
+      promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] }
     }
   };
 }
@@ -6865,7 +6866,11 @@ function validateGatesState(parsed, file) {
     spec: validateGateRecord(gates.spec, "spec", file),
     plan: validateGateRecord(gates.plan, "plan", file),
     test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file)
+    promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
   };
   return {
     feature_id: obj.feature_id,
@@ -7034,6 +7039,8 @@ var ARTIFACT_FORMATS = {
   "plan.json": { kind: "json-schema", schema: "plan.schema.json" },
   "architecture.json": { kind: "json-schema", schema: "architecture.schema.json" },
   "workflow-state.json": { kind: "json-schema", schema: "workflow-state.schema.json" },
+  // Release Engineer's deploy-gate evidence (reachability + feature-verify).
+  "deploy-evidence.json": { kind: "json-schema", schema: "deploy-evidence.schema.json" },
   // UX Designer (UI projects only): the machine-checkable design tokens.
   "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
   // Architect Reviewer's section 6 + Gate 2 adjudication surface.
@@ -7060,6 +7067,9 @@ var ARTIFACT_FORMATS = {
   // Feature Requester's original ask: the Spec Author's INPUT. Free-form
   // narrative; only H1 + non-empty body required. Never overwritten.
   "feature-request.md": { kind: "md-narrative" },
+  // Spec Author's sprint backlog proposal: the artifact the sprint PLAN gate
+  // locks (FEIP-7461). Free-form narrative; H1 + non-empty body required.
+  "feature-proposals.md": { kind: "md-narrative" },
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
   // HIL non-functional-requirements brief (the Architect's intake). The HIL
@@ -7311,6 +7321,25 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
       }
       return withConformance({ promote_ref: promoteRef });
     }
+    case "deploy": {
+      const evidence = readIfPresent("deploy-evidence.json");
+      if (evidence === void 0) {
+        return { reason: "deploy-evidence.json not found (feature not deployed + verified)" };
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(evidence);
+      } catch {
+        return { reason: "deploy-evidence.json is not valid JSON" };
+      }
+      if (parsed.reachable !== true) {
+        return { reason: "deploy-evidence records reachable=false (app not reachable on the target)" };
+      }
+      if (parsed.verify?.passed !== true) {
+        return { reason: "deploy-evidence records verify.passed=false (feature-verify did not pass against the running app)" };
+      }
+      return withConformance({ "deploy-evidence.json": evidence });
+    }
   }
 }
 function drainGatesAsHumanProxy(args) {
@@ -7403,6 +7432,98 @@ function supplyArtifact(args) {
   return { ok: true, artifact, to: args.to };
 }
 
+// scripts/tdd/sprint-gates.ts
+init_esm_shims();
+import { existsSync as existsSync6, mkdirSync as mkdirSync3, readFileSync as readFileSync7, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "fs";
+import { join as join7 } from "path";
+var SPRINT_GATES_SCHEMA_VERSION = 1;
+var PLAN_GATE_ARTIFACT = "feature-proposals.md";
+function defaultSprintGatesState(sprint) {
+  return {
+    sprint,
+    schema_version: SPRINT_GATES_SCHEMA_VERSION,
+    gates: { plan: { status: "open", history: [] } }
+  };
+}
+function sprintDir(tddDir, sprint) {
+  return join7(tddDir, "sprints", sprint);
+}
+function sprintGatesFile(tddDir, sprint) {
+  return join7(sprintDir(tddDir, sprint), "gates.json");
+}
+function readSprintGates(sprint, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const file = sprintGatesFile(tddDir, sprint);
+  if (!existsSync6(file)) return defaultSprintGatesState(sprint);
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync7(file, "utf8"));
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
+  }
+  const plan = parsed.gates?.plan ?? { status: "open", history: [] };
+  return {
+    sprint,
+    schema_version: parsed.schema_version ?? SPRINT_GATES_SCHEMA_VERSION,
+    gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
+  };
+}
+function writeSprintGates(state, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const dir = sprintDir(tddDir, state.sprint);
+  mkdirSync3(dir, { recursive: true });
+  const file = join7(dir, "gates.json");
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  writeFileSync5(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  try {
+    renameSync2(tmp, file);
+  } catch (err) {
+    try {
+      unlinkSync3(tmp);
+    } catch {
+    }
+    throw err;
+  }
+}
+function approveSprintPlanGate(args) {
+  if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
+  if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
+  const tddDir = args.tddDir ?? "./.tdd";
+  const file = join7(sprintDir(tddDir, args.sprint), PLAN_GATE_ARTIFACT);
+  if (!existsSync6(file)) {
+    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
+  }
+  const content = readFileSync7(file, "utf8");
+  const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
+  if (!conf.ok) {
+    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };
+  }
+  const state = readSprintGates(args.sprint, { tddDir });
+  if (state.gates.plan.status !== "open") {
+    return { ok: true, state, alreadyApproved: true };
+  }
+  const ts = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
+  const hashes = { [PLAN_GATE_ARTIFACT]: hashArtifact(content) };
+  const updated = {
+    ...state,
+    gates: {
+      plan: {
+        status: "approved",
+        approver: args.approver,
+        approved_at: ts,
+        artifact_hashes: hashes,
+        history: [
+          ...state.gates.plan.history,
+          { action: "approved", at: ts, approver: args.approver, artifact_hashes: hashes }
+        ]
+      }
+    }
+  };
+  writeSprintGates(updated, { tddDir });
+  return { ok: true, state: updated, alreadyApproved: false };
+}
+
 // scripts/tdd/human-proxy.cli.ts
 function runSupplyCli(argv) {
   let from;
@@ -7450,6 +7571,9 @@ function parseArgs(argv) {
     switch (a) {
       case "--feature":
         out.feature = argv[++i];
+        break;
+      case "--sprint":
+        out.sprint = argv[++i];
         break;
       case "--gate":
         out.gate = argv[++i];
@@ -7505,8 +7629,26 @@ function runHumanProxyCli(argv) {
 `);
     return 0;
   }
+  if (args.sprint) {
+    const res = approveSprintPlanGate({
+      sprint: args.sprint,
+      approver: args.approver ?? "human-proxy",
+      hitlApproved: true,
+      tddDir: args.tddDir
+    });
+    if (res.ok) {
+      process.stdout.write(
+        `human-proxy: sprint plan gate for ${args.sprint} ${res.alreadyApproved ? "already approved" : "approved"}
+`
+      );
+    } else {
+      process.stdout.write(`human-proxy: skipped sprint plan gate (${res.reason})
+`);
+    }
+    return 0;
+  }
   if (!args.feature) {
-    process.stderr.write(`Error: --feature is required.
+    process.stderr.write(`Error: --feature or --sprint is required.
 
 ${HELP}
 `);

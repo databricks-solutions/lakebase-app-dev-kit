@@ -92,13 +92,13 @@ describe("FEIP-7422 smoke: directory structure", () => {
 describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("strips MCP + pins the orchestrator model via a shared flag array on every claude -p boot", () => {
+  it("strips MCP + sets the session model via a shared flag array on every claude -p boot", () => {
     // One shared flag array, applied to every claude invocation (DRY).
-    // --strict-mcp-config = zero MCP servers; --model sonnet pins the
-    // orchestrator (scrum-master, otherwise `inherit` = the slow opus default)
-    // to a fast tier that still reliably emits its phase/handoff log events
-    // (haiku drops them, and they are not artifact-backed so the reconcile
-    // backstop cannot recover them).
+    // --strict-mcp-config = zero MCP servers. --model sonnet keeps the one
+    // remaining shell-level claude -p session (the `/plan` command, run for
+    // parity) off the slow opus default. There is no LLM orchestrator to model-
+    // pin: orchestration is the deterministic driver, and per-feature role turns
+    // are spawned INSIDE lakebase-tdd-drive at their per-role models.
     expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model sonnet\)/);
     // Every `claude -p` call threads the shared flags (no bare invocation that
     // would reload the operator's personal MCP servers). In driver-only mode the
@@ -127,16 +127,12 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
     expect(runSmoke).toMatch(/--agent-model release-engineer=haiku/);
   });
 
-  it("makes role observability structural: live-tails the agent log + reconciles after each phase", () => {
-    // The agent log is streamed to the console during each (silent) claude -p
-    // turn, so subagent progress is visible live. Backgrounded directly (not via
-    // $(...)) so the command substitution can't deadlock on the tail -f pipe.
-    expect(runSmoke).toMatch(/\(\s*tail -n0 -f "\$tdd_log"/);
-    expect(runSmoke).toMatch(/local tail_pid=\$!/);
-    // After each pass, a deterministic reconcile emits artifact.written for any
-    // artifact a role model did not log itself.
-    expect(runSmoke).toMatch(/lakebase-tdd-log --reconcile --feature/);
-  });
+  // Role observability is now structural inside the deterministic driver
+  // (lakebase-tdd-drive emits phase/handoff/gate events as code and reconciles
+  // artifacts internally), not a shell-level live-tail + --reconcile wrapped
+  // around claude -p passes. The prior assertion for that shell mechanism was
+  // removed with the gate-drain loop; the driver's logging is covered by its own
+  // tests (orchestrator-drive / orchestrator-run).
 });
 
 describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voice)", () => {
@@ -371,10 +367,11 @@ describe("FEIP-7422 smoke: orchestrator is TDD-only (SCM workflow tested elsewhe
     expect(runSmoke).not.toMatch(/require_cmd\s+gh\b/);
   });
 
-  it("invokes lakebase-tdd-human-proxy between claude passes (gate-drain loop)", () => {
-    // The human-proxy replaces the human HITL approver so the TDD
-    // smoke can run headless. Stripping this would let the smoke hang
-    // at the first /design gate.
+  it("invokes lakebase-tdd-human-proxy for headless intake + gate approval", () => {
+    // The Human Proxy replaces the human at intake (supplies product-overview /
+    // nfrs / design-brief / feature-request) and answers the HITL gates the
+    // deterministic driver surfaces (--gates proxy). Stripping it would let the
+    // smoke hang at the first gate.
     expect(runSmoke).toMatch(/lakebase-tdd-human-proxy\b/);
   });
 
