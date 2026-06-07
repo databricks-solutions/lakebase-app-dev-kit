@@ -217,9 +217,9 @@ export function detectApiCoherenceDrift(input: DetectorInput): SmellHit[] {
 }
 
 /**
- * cross-experiment-divergence: pass-through Navigator/Scrum-Master flag.
+ * cross-experiment-divergence: pass-through Navigator/orchestrator flag.
  * The signal is "two parallel experiments are solving different
- * problems," which requires the synthesis-view that Scrum-Master holds
+ * problems," which requires the synthesis-view that the orchestrator holds
  * across /experiments/N/. Detection lives there; this surfaces.
  */
 export function detectCrossExperimentDivergence(input: DetectorInput): SmellHit[] {

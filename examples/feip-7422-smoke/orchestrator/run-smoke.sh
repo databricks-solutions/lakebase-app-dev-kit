@@ -646,7 +646,7 @@ run_plan_sprint() {
 
   # Record the planning activity (the PO authored the sprint's requests).
   npx --yes --package="${KIT_NPX}" lakebase-tdd-log \
-    --role scrum-master --level info --event phase.end \
+    --role orchestrator --level info --event phase.end \
     --tdd-dir "$PROJECT_DIR/.tdd" \
     --message "/plan ${sprint_name}: ${#iters[@]} feature-request(s) authored for the sprint" \
     --data "{\"phase\":\"plan\",\"sprint\":\"${sprint_name}\"}" >/dev/null 2>&1 || true

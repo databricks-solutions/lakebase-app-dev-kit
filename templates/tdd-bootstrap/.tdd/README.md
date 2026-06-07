@@ -20,6 +20,6 @@ This directory is the canonical home for this project's TDD workflow state. It i
 1. Read [`skills/lakebase-tdd-workflows/SKILL.md`](../../../../skills/lakebase-tdd-workflows/SKILL.md) (or open via your agent's installed copy of the skill).
 2. The Spec Author authors a draft spec (`feature-spec.{md,json}`) under `features/<F>/` from the requester's `feature-request.md`, using the schemas in `scripts/tdd/schemas/`.
 3. Get the Product Owner to sign off (Gate 1) before invoking the Architect Reviewer.
-4. The Scrum-Master agent (`skills/lakebase-tdd-workflows/agents/scrum-master.md`) facilitates the rest of the phases.
+4. The deterministic orchestrator (`lakebase-tdd-drive`) routes the rest of the phases, spawning the role agents under `skills/lakebase-tdd-workflows/agents/`.
 
 JSON files are validated against `scripts/tdd/schemas/` by `scripts/tdd/spec-sync.ts`. Drift is warned, not auto-corrected.

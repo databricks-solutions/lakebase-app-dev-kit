@@ -14,8 +14,8 @@ import {
   ALL_AGENT_ROLES,
   resolveModelForRole,
   readAgentConfig,
+  type SpawnableAgentRole,
 } from "./agent-models";
-import type { AgentRole } from "./agent-log";
 
 interface Args {
   role?: string;
@@ -54,7 +54,7 @@ function main(): number {
     return 0;
   }
 
-  if (!args.role || !ALL_AGENT_ROLES.includes(args.role as AgentRole)) {
+  if (!args.role || !ALL_AGENT_ROLES.includes(args.role as SpawnableAgentRole)) {
     process.stderr.write(
       `Usage: lakebase-tdd-agent-model --role <role> [--project-dir <dir>] [--json]\n` +
         `       lakebase-tdd-agent-model --list [--project-dir <dir>] [--json]\n` +
@@ -63,7 +63,7 @@ function main(): number {
     return 2;
   }
 
-  const role = args.role as AgentRole;
+  const role = args.role as SpawnableAgentRole;
   const resolved = resolveModelForRole(role, args.projectDir);
   if (args.json) {
     const entry = readAgentConfig(args.projectDir)?.roles?.[role];

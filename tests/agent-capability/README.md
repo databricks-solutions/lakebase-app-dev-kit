@@ -40,8 +40,8 @@ Registered for coverage, fixtures/runtime still to build (each marked `live:
 false` with a `note`): architect-reviewer, test-strategist, ux-designer (need a
 conformant prior-artifact fixture), navigator + driver (produce project
 code/tests, need a scaffolded project + runner), product-owner + release-engineer
-(facilitation/deploy, covered today by the smoke), scrum-master (deterministic
-routing, covered by `orchestrator-drive.test.ts`).
+(facilitation/deploy, covered today by the smoke), orchestrator (the deterministic
+driver, not an agent; routing covered by `orchestrator-drive.test.ts`).
 
 ## Adding a role to the live set
 

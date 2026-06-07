@@ -13,7 +13,7 @@ against `scripts/tdd/schemas/agent-log-event.schema.json`. Required fields:
 | Field | Meaning |
 |---|---|
 | `ts` | ISO-8601 UTC timestamp (stamped by the logger) |
-| `role` | the role performing the work (spec-author, ux-designer, architect-reviewer, test-strategist, scrum-master, navigator, driver, product-owner) |
+| `role` | the role performing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
 | `level` | `debug` / `info` / `warn` / `error` (see below) |
 | `event` | dotted machine name (e.g. `phase.start`, `artifact.written`, `gate.surfaced`, `handoff`, `reasoning`, `smell.flagged`) |
 | `message` | human-readable one-liner |
@@ -74,7 +74,7 @@ handoff. Minimum expected events:
 | **UX Designer** | `artifact.written` design-guide/ia; `handoff` | `reasoning` on token/IA choices, reference provenance | `error` adherence check failed |
 | **Architect Reviewer** | `artifact.written` architecture.{md,json}; `gate.surfaced` (NFRs proposed to HIL) | `reasoning` on layer/NFR proposals | `warn` cross-cutting concern with no owner |
 | **Test Strategist** | `artifact.written` test-list; `gate.surfaced` | `reasoning` on ordering rationale | `warn` a test needing impl-first (smell) |
-| **Scrum-Master** | `phase.start`/`phase.end` per transition; `gate.approved`; `experiment.cut` | `reasoning` on N=1 vs N>=2 | `warn` budget cap; `error` postcondition unmet |
+| **Orchestrator** (the deterministic driver) | `phase.start`/`phase.end` per transition; `gate.approved`; `experiment.cut` | the chosen action + the state it was derived from | `warn` budget cap; `error` postcondition unmet |
 | **Navigator** | `cycle.red` (failing test written); `review.verdict` | `reasoning` on the design the test forces | `warn` smell flagged (`smell.flagged`) |
 | **Driver** | `cycle.green`; `cycle.refactored` | `reasoning` on the minimal change | `warn` cycle stall; `error` runner missing |
 

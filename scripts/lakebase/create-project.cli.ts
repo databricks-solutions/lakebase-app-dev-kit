@@ -7,8 +7,7 @@
 // stderr.
 
 import { createProject, CreateProjectArgs } from "./create-project.js";
-import type { AgentRole } from "../tdd/agent-log.js";
-import { ALL_AGENT_ROLES } from "../tdd/agent-models.js";
+import { ALL_AGENT_ROLES, type SpawnableAgentRole } from "../tdd/agent-models.js";
 
 interface ParsedArgs {
   jsonInput?: string;
@@ -24,7 +23,7 @@ interface ParsedArgs {
   enableE2e?: boolean;
   enableInfra?: boolean;
   skipCommands?: boolean;
-  agentModels?: Partial<Record<AgentRole, string>>;
+  agentModels?: Partial<Record<SpawnableAgentRole, string>>;
   help?: boolean;
 }
 
@@ -98,14 +97,14 @@ function parseArgs(argv: string[]): ParsedArgs {
         const eq = pair.indexOf("=");
         const role = eq >= 0 ? pair.slice(0, eq) : "";
         const model = eq >= 0 ? pair.slice(eq + 1) : "";
-        if (!ALL_AGENT_ROLES.includes(role as AgentRole) || !model) {
+        if (!ALL_AGENT_ROLES.includes(role as SpawnableAgentRole) || !model) {
           process.stderr.write(
             `--agent-model: expected <role>=<model> with a known role. Got: ${JSON.stringify(pair)}\n` +
               `  roles: ${ALL_AGENT_ROLES.join(", ")}\n`,
           );
           out.help = true;
         } else {
-          (out.agentModels ??= {})[role as AgentRole] = model;
+          (out.agentModels ??= {})[role as SpawnableAgentRole] = model;
         }
         break;
       }

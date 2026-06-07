@@ -1,7 +1,7 @@
 // Orchestrator-as-deterministic-driver, phase 1: the per-story DESIGN lane as a
 // pure state machine.
 //
-// The scrum-master's routing is deterministic: given the recorded state, the
+// The orchestrator's routing is deterministic: given the recorded state, the
 // next action is a pure function of priors. nextDesignAction computes the single
 // next DESIGN-lane action from a snapshot of the breakdown + each story's design
 // progress + its gate. No I/O, no model: the effectful driver (a later phase)

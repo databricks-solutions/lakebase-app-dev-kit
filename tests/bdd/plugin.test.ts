@@ -61,8 +61,9 @@ describe("/lakebase-app-dev-kit:tdd launcher command (commands/tdd.md)", () => {
     expect(tdd).toMatch(/\/deploy\b/);
   });
 
-  it("delegates to the role agents under the kit namespace, coordinates only", () => {
-    expect(tdd).toMatch(/lakebase-app-dev-kit:scrum-master/);
+  it("drives via the deterministic orchestrator + the role agents under the kit namespace, coordinates only", () => {
+    expect(tdd).toMatch(/lakebase-tdd-drive|deterministic orchestrator/); // the driver, not an LLM scrum-master
+    expect(tdd).not.toMatch(/scrum-master/);
     expect(tdd).toMatch(/lakebase-app-dev-kit:<role>/); // documents the role namespace
     expect(tdd).toMatch(/coordinate only/i);
     for (const role of ["product-owner", "spec-author", "release-engineer"]) {

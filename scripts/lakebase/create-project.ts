@@ -450,7 +450,7 @@ export async function createProject(
   report("Project created successfully!");
   if (enableTdd) {
     // Point the user at the convenient workflow launcher (scaffolded into
-    // scripts/tdd.sh): it opens the scrum-master orchestrator session.
+    // scripts/tdd.sh): it drives the deterministic orchestrator.
     report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
   }
   return {

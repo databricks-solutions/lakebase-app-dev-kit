@@ -97,12 +97,12 @@ export const CAPABILITY_CASES: AgentCapabilityCase[] = [
     note: "needs a deployable scaffolded project + a running target; covered by the smoke /deploy step",
   },
   {
-    role: "scrum-master",
+    role: "orchestrator",
     capability: "route the workflow deterministically (no artifacts of its own)",
-    fixture: "scrum-master",
+    fixture: "orchestrator",
     task: "n/a",
     produces: [],
     live: false,
-    note: "routing is deterministic and covered by the driver's pure tests (orchestrator-drive.test.ts), not a live artifact case",
+    note: "the orchestrator is the deterministic driver (not an agent); routing is covered by its pure tests (orchestrator-drive.test.ts), not a live artifact case",
   },
 ];

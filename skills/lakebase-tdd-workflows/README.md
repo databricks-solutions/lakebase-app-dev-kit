@@ -43,7 +43,7 @@ The substrate API keeps "experiment" as the noun for the rigorous TDD branch; it
 | **UX Designer** | The experience lens (UI projects only). Owns the design guide + information architecture and ensures downstream UI adheres to them. | [`agents/ux-designer.md`](agents/ux-designer.md) |
 | **Architect Reviewer** | Applies layering lens; populates `layer` and `architectural_notes` per AC; imports `software-design-principles`. | [`agents/architect-reviewer.md`](agents/architect-reviewer.md) |
 | **Test Strategist** | Converts annotated ACs into a Beck-style ordered test list; emits per-AC views. | [`agents/test-strategist.md`](agents/test-strategist.md) |
-| **Orchestrator (Scrum-Master)** | Runs design-spec gate; spawns experiments to budget; runs cycles; watches smells; presents outcomes to HITL. | [`agents/scrum-master.md`](agents/scrum-master.md) |
+| **Orchestrator** | The deterministic driver (`lakebase-tdd-drive`), not an agent. Routes over `workflow-state.json`: runs the design-spec gate; spawns experiments to budget; runs cycles; watches smells; presents outcomes to HITL. | `lakebase-tdd-drive` (code, not an agent def). |
 | **Navigator** | PLAN, RED (writes failing tests), REVIEW. Never weakens an assertion. | [`agents/navigator.md`](agents/navigator.md) |
 | **Driver** | GREEN (minimal honest code), REFACTOR. Never deletes or weakens a test. | [`agents/driver.md`](agents/driver.md) |
 | **Product Owner / HITL** | Owns the project-level `product-overview.md` (open-ended intent; software is a product), ACs, test list ordering. Decides promote vs synthesize. Owns every gate. | The human. |
@@ -146,7 +146,7 @@ Every HITL decision is recorded in `.tdd/features/<feature>/gates.json` via `app
 
 ## How to use
 
-Three flows – shown as what you'd prompt your agent to do, using a cart-checkout example throughout. The agent reads [`SKILL.md`](SKILL.md) (plus the Scrum-Master / Navigator / Driver agent prompts) and runs the underlying substrate primitives on your behalf.
+Three flows – shown as what you'd prompt your agent to do, using a cart-checkout example throughout. The deterministic orchestrator (`lakebase-tdd-drive`) routes the work and spawns the role agents (Navigator, Driver, and the rest), which read their prompts and run the underlying substrate primitives on your behalf.
 
 The project-level slash commands `/design` and `/build` are the canonical entry points. They're thin wrappers around this substrate, scaffolded into new projects by `lakebase-create-project` under `.claude/commands/` (opt-out via `--skip-commands`). Projects extend them with their own concerns (JIRA hierarchy, IDE branch suggestions, manual review gates) by dropping sibling `design.{pre,post}-hook.md` or `build.{pre,post}-hook.md` files next to the scaffolded command. If a slash command isn't installed in your project, just describe what you want to your agent directly; the prompts below work either way.
 
@@ -172,7 +172,7 @@ The most common flow. One feature, one branch, iterative refinement. The branch 
 
 > "Build the checkout feature."
 
-Scrum-Master picks up the approved spec, runs the design-spec gate (which proposes N=1 for work without opinion gaps), waits for your sign-off, cuts the feature branch off staging, and alternates Navigator + Driver per test list item. After every cycle it runs the smell detectors and pauses to surface any remediation to you. When the list is exhausted, the feature branch goes straight to PR – no promote/synthesize step.
+The orchestrator picks up the approved spec, runs the design-spec gate (which proposes N=1 for work without opinion gaps), waits for your sign-off, cuts the feature branch off staging, and alternates Navigator + Driver per test list item. After every cycle it runs the smell detectors and pauses to surface any remediation to you. When the list is exhausted, the feature branch goes straight to PR – no promote/synthesize step.
 
 ### 3. Race parallel experiments and either promote or synthesize (N≥2)
 
@@ -180,7 +180,7 @@ When the team has a real opinion gap and wants to resolve it by trying competing
 
 > "Build the checkout feature, but I want to compare two ways of storing the cart – one as a Postgres array column on orders, one as a JSON blob on a separate carts table. Race them and let me pick a winner."
 
-Scrum-Master cuts a branch per strategy, runs the same test list through each, and at convergence presents the comparison report. It asks you to choose:
+The orchestrator cuts a branch per strategy, runs the same test list through each, and at convergence presents the comparison report. It asks you to choose:
 
 - **Promote** – one experiment is the clear winner; take it as-is into the feature PR.
 - **Synthesize** – pick capabilities across the experiments (storage schema from one, API surface from the other), renegotiate the spec, and run a fresh cycle on a synthesized branch.
@@ -211,11 +211,10 @@ The substrate itself ships no installed slash commands; the scaffolder writes th
 
 ## Agents
 
-The role agents under [`agents/`](agents/) are invokable directly with `@lakebase-tdd-workflows/<agent-name>` in Claude Code, or referenced by the Scrum-Master when it delegates a phase. Each agent file is a self-contained prompt; the Scrum-Master coordinates them.
+The role agents under [`agents/`](agents/) are invokable directly with `@lakebase-tdd-workflows/<agent-name>` in Claude Code, or spawned by the deterministic orchestrator (`lakebase-tdd-drive`) when it delegates a phase. Each agent file is a self-contained prompt; the orchestrator (code, not an agent) coordinates them.
 
 | Agent | File | Invoked when |
 |---|---|---|
-| Scrum-Master | [`agents/scrum-master.md`](agents/scrum-master.md) | `/build` or "build the feature." Top-level orchestrator: runs the design-spec gate, spawns experiments to budget, drives cycles, watches smells, surfaces gate decisions. |
 | Architect Reviewer | [`agents/architect-reviewer.md`](agents/architect-reviewer.md) | Phase 1. Applies the layering lens to each AC and populates `layer` + `architectural_notes`. Imports `software-design-principles`. |
 | Test Strategist | [`agents/test-strategist.md`](agents/test-strategist.md) | Phase 2. Converts annotated ACs into the ordered master test list and emits per-AC views. |
 | Navigator | [`agents/navigator.md`](agents/navigator.md) | Each cycle, RED step. Writes the failing test for the current test-list item and reviews the Driver's GREEN code. Never weakens an assertion. |
@@ -311,7 +310,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 |---|---|
 | `snapshotBudget(tddDir, featureId)` | Current usage (open experiment count, wall-clock minutes spent) against the approved plan budget. |
 | `checkBudget(snapshot)` | Compute violations from a snapshot. |
-| `canCutAnotherExperiment(tddDir, featureId)` | Pre-flight check used by the Scrum-Master before `cutExperiment`. |
+| `canCutAnotherExperiment(tddDir, featureId)` | Pre-flight check used by the orchestrator before `cutExperiment`. |
 
 ### Spec IO and validation
 
@@ -333,7 +332,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `runExperimentsInParallel<T>(args)` | Fan out a worker function across N experiments with concurrency + per-task timeout, collecting `ExperimentRunResult<T>` for each. Used by the Scrum-Master when racing strategies under N≥2. |
+| `runExperimentsInParallel<T>(args)` | Fan out a worker function across N experiments with concurrency + per-task timeout, collecting `ExperimentRunResult<T>` for each. Used by the orchestrator when racing strategies under N≥2. |
 
 ### Spec adapters
 

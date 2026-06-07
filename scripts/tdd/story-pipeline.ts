@@ -2,7 +2,7 @@
 // The design lane moves each story designing -> awaiting-gate -> ready; the single
 // build lane consumes the FIFO build_queue (build_active) -> done. Persisted as
 // .tdd/features/<F>/pipeline.json. Exactly one story builds at a time; the
-// Scrum-Master owns these transitions.
+// orchestrator owns these transitions.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { dirname, join } from "path";

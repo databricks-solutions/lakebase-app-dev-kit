@@ -1,6 +1,6 @@
 // FEIP-7510: the role agent definitions are scaffolded into the project's
-// .claude/agents/ so Claude Code can discover + spawn them (the scrum-master
-// orchestrator does so via its Agent(...) allowlist). Hermetic: real kit
+// .claude/agents/ so Claude Code can discover + spawn them (the deterministic
+// driver spawns them; there is no scrum-master agent). Hermetic: real kit
 // skills tree + tmpdir; no shell-outs.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -44,15 +44,13 @@ describe("deployClaudeAgents", () => {
     }
   });
 
-  it("scaffolds the scrum-master with an Agent(...) allowlist of the role agents", async () => {
+  it("does NOT scaffold a scrum-master agent (the orchestrator is the deterministic driver)", async () => {
     await deployClaudeAgents(targetDir, { templatesDir: REPO_TEMPLATES });
-    const sm = fs.readFileSync(path.join(targetDir, ".claude", "agents", "scrum-master.md"), "utf8");
-    expect(sm).toMatch(/tools:\s*Read, Bash, Agent\(/);
-    // Every other role appears in the orchestrator's spawn allowlist.
-    for (const role of ALL_AGENT_ROLES) {
-      if (role === "scrum-master") continue;
-      expect(sm, `scrum-master should be allowed to spawn ${role}`).toContain(role);
-    }
+    expect(fs.existsSync(path.join(targetDir, ".claude", "agents", "scrum-master.md"))).toBe(false);
+    expect(fs.existsSync(path.join(targetDir, ".claude", "agents", "orchestrator.md"))).toBe(false);
+    // Only the spawnable role agents are scaffolded.
+    const entries = fs.readdirSync(path.join(targetDir, ".claude", "agents")).filter((f) => f.endsWith(".md"));
+    expect(entries.sort()).toEqual(ALL_AGENT_ROLES.map((r) => `${r}.md`).sort());
   });
 
   it("skips existing agent files by default and reports them in skipped", async () => {

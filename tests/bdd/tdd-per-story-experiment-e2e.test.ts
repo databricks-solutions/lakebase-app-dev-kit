@@ -47,7 +47,7 @@ function recordingOps(): { ops: ExperimentBranchOps; merged: string[]; tornDown:
 }
 
 // One story's full build-lane turn: cut its experiment, build, surface for the
-// PO. Mirrors what the Scrum-Master + lakebase-tdd-experiment CLI do.
+// PO. Mirrors what the orchestrator + lakebase-tdd-experiment CLI do.
 function dispatchAndCut(p: StoryPipeline, storyId: string, slug: string): string {
   const dispatched = dispatchNext(p);
   expect(dispatched).toBe(storyId); // single lane: this story is the head

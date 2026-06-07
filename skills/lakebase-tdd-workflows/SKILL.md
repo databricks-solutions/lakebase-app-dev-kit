@@ -114,9 +114,9 @@ Each role is a separate agent definition under [`agents/`](agents/) with frontma
 - [`agents/navigator.md`](agents/navigator.md) – phase 4 PLAN + RED + REVIEW.
 - [`agents/driver.md`](agents/driver.md) – phase 4 GREEN + REFACTOR.
 - [`agents/release-engineer.md`](agents/release-engineer.md) – `/deploy`: deploys the built increment to its target, polls reachable, runs the feature verify, hands the evidence to the PO for the deploy gate. Composes on `lakebase-release-workflows` for remote/release-on-merge.
-- [`agents/scrum-master.md`](agents/scrum-master.md) – the **orchestrator**, and the **main session, not a spawnable subagent** (subagents cannot nest). Coordinates only: obeys `workflow-state.json`, hands each phase to the right role agent above, carries artifacts forward, surfaces every gate to the PO. Writes no spec/code/test/deploy.
+The **orchestrator** is the deterministic driver (`lakebase-tdd-drive`), **not an LLM agent**: it routes over `workflow-state.json`, hands each phase to the right role agent above, carries artifacts forward, and surfaces every gate to the PO. It writes no spec/code/test/deploy.
 
-**How the orchestrator runs them.** The role defs are scaffolded into the project's `.claude/agents/` (so Claude Code can discover + spawn them; the skill copy is the source). The orchestrator runs as the Scrum-Master agent (`claude --agent scrum-master`), the top-level session that spawns each role for its phase (it cannot be a subagent itself, subagents can't nest). The Scrum-Master's `tools: Agent(product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer)` allowlist scopes spawning to exactly those role agents, so the role agents are invoked only by the orchestrator. Before spawning a role, the orchestrator resolves the model from the project's `.lakebase/agent-config.json`: `lakebase-tdd-agent-model --role <role>` returns `override ?? recommended ?? inherit` (the HIL sets per-project overrides at `lakebase-create-project`; each role's recommended model lives in its definition's `model:`).
+**How the orchestrator runs them.** The role defs are scaffolded into the project's `.claude/agents/` (so Claude Code can discover + spawn them; the skill copy is the source). The driver computes the next action as a pure function of the recorded state, then spawns the role for that phase via `claude -p --agent <role>`. Routing is code, not a model: there is no LLM orchestrator session. Before spawning a role, the driver resolves the model from the project's `.lakebase/agent-config.json`: `lakebase-tdd-agent-model --role <role>` returns `override ?? recommended ?? inherit` (the HIL sets per-project overrides at `lakebase-create-project`; each role's recommended model lives in its definition's `model:`).
 
 ## References
 
@@ -524,7 +524,7 @@ migrateGatesFromSelectionLog({
 
 ## Flow patterns
 
-End-to-end orchestrator patterns the Scrum-Master agent runs in response to `/design` and `/build`. Each flow is what the agent assembles from the primitives above; the human-facing prompts that trigger each flow live in [`README.md`](README.md).
+End-to-end orchestrator patterns the deterministic driver runs in response to `/design` and `/build`. Each flow is what the driver assembles from the primitives above; the human-facing prompts that trigger each flow live in [`README.md`](README.md).
 
 ### Author + validate spec (response to `/design`)
 

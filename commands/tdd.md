@@ -14,7 +14,7 @@ You are the entry point to the kit's TDD state-machine workflow. First detect wh
 
 ## A. Resume an existing TDD project
 
-Act as the **Scrum-Master orchestrator** in this session. You coordinate only: delegate substantive work to the role agents (each namespaced `lakebase-app-dev-kit:<role>`, where role is `product-owner`, `spec-author`, `ux-designer`, `architect-reviewer`, `test-strategist`, `navigator`, `driver`, or `release-engineer`), obey the state machine, and surface every gate to the human. Follow the `lakebase-app-dev-kit:scrum-master` contract.
+Drive the workflow through the **deterministic orchestrator** (`lakebase-tdd-drive`), invoked by the slash commands below. You coordinate only: run the right command for the project's state, and surface every gate to the human. The driver spawns the role agents (each namespaced `lakebase-app-dev-kit:<role>`, where role is `product-owner`, `spec-author`, `ux-designer`, `architect-reviewer`, `test-strategist`, `navigator`, `driver`, or `release-engineer`) and obeys the state machine; the orchestrator is not an LLM agent. You write no spec, code, test, or deploy yourself.
 
 1. **Take stock** (read, then summarize back): `.tdd/product-overview.md` (what the product is), `.tdd/nfrs.md`, `.tdd/design/design-brief.md` (if UI), `.tdd/workflow-state.json` (current `phase` + locus, your source of truth), `.tdd/planning/feature-proposals.md`, and each `.tdd/features/*/` (feature-request, feature-spec, architecture, test-list, gates.json). Confirm SCM state via `lakebase-scm-state`. Give the human a short situation report: what the project is about, the current phase, and each feature's status.
 2. **Continue the loop.** Offer the human the autonomous path or a single step:
@@ -59,6 +59,6 @@ then re-run **`/lakebase-app-dev-kit:tdd`** there (it will find `.tdd/` and resu
 
 ---
 
-## Note on strict scoping
+## Note on the orchestrator
 
-`/lakebase-app-dev-kit:tdd` orchestrates in your current session (it can spawn the role agents directly). For a strictly-scoped run where ONLY the orchestrator may spawn the role agents, launch instead with the project's `./scripts/tdd.sh` (which runs `claude --agent scrum-master`, applying the Agent(<roles>) allowlist).
+The orchestrator is the deterministic driver (`lakebase-tdd-drive`), not an LLM agent: the slash commands invoke it, and IT spawns the role agents + pauses at gates. `/lakebase-app-dev-kit:tdd` (this command) helps you pick + run the right command from your session; the project's `./scripts/tdd.sh` is the equivalent local launcher.

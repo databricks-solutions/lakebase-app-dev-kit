@@ -14,23 +14,29 @@ import { dirname, join } from "path";
 import type { AgentRole } from "./agent-log";
 
 /**
- * Strongly-recommended default model per role. Mirrors each role def's
- * frontmatter `model:` in skills/lakebase-tdd-workflows/agents/<role>.md.
- * scrum-master is the main session (not spawned), so it inherits.
+ * The SPAWNABLE role agents: the log roles that are real subagents with a
+ * <role>.md def + a model. "orchestrator" is a log role (the deterministic
+ * driver emits orchestration events under it) but NOT a spawnable agent, the
+ * driver is code, has no .md + no model, so it is excluded here.
  */
-export const RECOMMENDED_MODELS: Record<AgentRole, string> = {
+export type SpawnableAgentRole = Exclude<AgentRole, "orchestrator">;
+
+/**
+ * Strongly-recommended default model per spawnable role. Mirrors each role def's
+ * frontmatter `model:` in skills/lakebase-tdd-workflows/agents/<role>.md.
+ */
+export const RECOMMENDED_MODELS: Record<SpawnableAgentRole, string> = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
   "test-strategist": "sonnet",
   "ux-designer": "sonnet",
-  "scrum-master": "inherit",
   navigator: "sonnet",
   driver: "sonnet",
   "product-owner": "opus",
   "release-engineer": "sonnet",
 };
 
-export const ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS) as AgentRole[];
+export const ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS) as SpawnableAgentRole[];
 
 export interface AgentModelEntry {
   /** The role's strongly-recommended model (from its definition). */
@@ -41,7 +47,7 @@ export interface AgentModelEntry {
 
 export interface AgentConfig {
   version: 1;
-  roles: Record<AgentRole, AgentModelEntry>;
+  roles: Record<SpawnableAgentRole, AgentModelEntry>;
 }
 
 /** Project-relative path of the per-role model config. */
@@ -53,9 +59,9 @@ export const AGENT_CONFIG_REL = join(".lakebase", "agent-config.json");
  * override (or one equal to the recommended) is treated as "no override".
  */
 export function buildAgentConfig(
-  overrides?: Partial<Record<AgentRole, string | null | undefined>>,
+  overrides?: Partial<Record<SpawnableAgentRole, string | null | undefined>>,
 ): AgentConfig {
-  const roles = {} as Record<AgentRole, AgentModelEntry>;
+  const roles = {} as Record<SpawnableAgentRole, AgentModelEntry>;
   for (const role of ALL_AGENT_ROLES) {
     const recommended = RECOMMENDED_MODELS[role];
     const ov = overrides?.[role];
@@ -81,10 +87,13 @@ export function writeAgentConfig(projectDir: string, config: AgentConfig): void 
 }
 
 /**
- * Resolve the model the orchestrator should spawn `role` with:
+ * Resolve the model the driver should spawn `role` with:
  * project override -> project recommended -> built-in recommended -> "inherit".
+ * Accepts any AgentRole; a non-spawnable role (orchestrator) has no model and
+ * resolves to "inherit".
  */
 export function resolveModelForRole(role: AgentRole, projectDir: string): string {
-  const entry = readAgentConfig(projectDir)?.roles?.[role];
-  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
+  const spawnable = role as SpawnableAgentRole;
+  const entry = readAgentConfig(projectDir)?.roles?.[spawnable];
+  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
 }

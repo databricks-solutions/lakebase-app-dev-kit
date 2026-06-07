@@ -68,7 +68,7 @@ Emit or read a structured TDD-workflow agent log event (.tdd/agent-log.jsonl).
 Emit:
   lakebase-tdd-log --role <r> --level <l> --event <e> --message <m> [flags]
     --role     spec-author|ux-designer|architect-reviewer|test-strategist|
-               scrum-master|navigator|driver|product-owner
+               orchestrator|navigator|driver|product-owner
     --level    debug|info|warn|error
     --event    dotted event name (e.g. phase.start, artifact.written, gate.surfaced)
     --message  human-readable one-liner

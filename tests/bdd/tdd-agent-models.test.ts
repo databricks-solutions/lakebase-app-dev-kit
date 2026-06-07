@@ -34,8 +34,9 @@ describe("RECOMMENDED_MODELS", () => {
     expect(ALL_AGENT_ROLES.length).toBe(Object.keys(RECOMMENDED_MODELS).length);
   });
 
-  it("recommends inherit for the scrum-master (the main session, never spawned)", () => {
-    expect(RECOMMENDED_MODELS["scrum-master"]).toBe("inherit");
+  it("excludes the orchestrator (the deterministic driver is code, not a spawnable agent with a model)", () => {
+    expect(ALL_AGENT_ROLES).not.toContain("orchestrator");
+    expect(Object.keys(RECOMMENDED_MODELS)).not.toContain("scrum-master");
   });
 });
 
@@ -88,6 +89,7 @@ describe("resolveModelForRole", () => {
   it("falls back to the built-in recommendation when no config is present", () => {
     const dir = mkProject();
     expect(resolveModelForRole("architect-reviewer", dir)).toBe(RECOMMENDED_MODELS["architect-reviewer"]);
-    expect(resolveModelForRole("scrum-master", dir)).toBe("inherit");
+    // A non-spawnable role (the orchestrator) has no model -> inherit.
+    expect(resolveModelForRole("orchestrator", dir)).toBe("inherit");
   });
 });

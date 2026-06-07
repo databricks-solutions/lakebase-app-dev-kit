@@ -1,9 +1,10 @@
 # Operating rules (every role)
 
-Cross-cutting rules for all TDD-workflow role agents (Spec Author, Architect
-Reviewer, Test Strategist, UX Designer, Navigator, Driver, Product Owner,
-Release Engineer, Scrum-Master). Each role's own doc carries its specific job;
-these apply to everyone and exist so no role flails the workflow at runtime.
+Cross-cutting rules for all TDD-workflow role agents (Product Owner, Spec Author,
+Architect Reviewer, Test Strategist, UX Designer, Navigator, Driver, Release
+Engineer). The orchestrator that spawns them is the deterministic driver
+(`lakebase-tdd-drive`), not an agent. Each role's own doc carries its specific
+job; these apply to everyone and exist so no role flails the workflow at runtime.
 
 ## 1. Work within the project, never scan the filesystem
 

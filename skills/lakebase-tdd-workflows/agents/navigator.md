@@ -96,4 +96,4 @@ Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md]
 
 ## Composition with the Orchestrator
 
-The Scrum-Master orchestrator picks the experiment branch and the next test item. You receive `{tddDir, feature_id, story_id, ac_id, experiment_slug, branch_id, test_id, test_description}` as your scope and produce a cycle. The Orchestrator handles bad-smell escalation to the PO; you flag, you don't decide.
+The orchestrator picks the experiment branch and the next test item. You receive `{tddDir, feature_id, story_id, ac_id, experiment_slug, branch_id, test_id, test_description}` as your scope and produce a cycle. The orchestrator handles bad-smell escalation to the PO; you flag, you don't decide.

@@ -151,9 +151,8 @@ export async function deployClaudeCommands(
  * `.claude/agents/` so Claude Code can discover + spawn them (FEIP-7510). The
  * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
  * this copies each `<role>.md` verbatim (the bodies are the system prompts).
- * Discoverability is required for the scrum-master orchestrator to spawn the
- * roles; the scrum-master's own `tools: Agent(...)` allowlist + running the
- * orchestrator as that agent is what scopes invocation to it. Skips files that
+ * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
+ * to spawn the roles via `claude -p --agent <role>`. Skips files that
  * already exist unless `force: true`.
  */
 export async function deployClaudeAgents(

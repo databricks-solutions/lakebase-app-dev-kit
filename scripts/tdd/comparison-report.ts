@@ -1,7 +1,7 @@
 // Markdown renderer for compareExperiments output. The structured
 // payload alone cannot drive the promote / synthesize / continue /
 // abandon-all HITL decision: a human needs to read one document and
-// answer. The Scrum-Master agent calls renderComparisonReport at
+// answer. The orchestrator calls renderComparisonReport at
 // N>=2 convergence, writes it under .tdd/features/<F>/, and surfaces
 // the path back to the PO.
 //
@@ -205,7 +205,7 @@ function renderDecisionBlock(report: ComparisonReport): string {
     ``,
     winnerLine,
     cappedLine,
-    `Choose one path forward (the Scrum-Master orchestrator will route accordingly):`,
+    `Choose one path forward (the orchestrator will route accordingly):`,
     ``,
     `1. **Promote** \`<slug>\` - take a single experiment to the feature PR as-is. Loser branches are archived.`,
     `2. **Synthesize** - cherry-pick capabilities across ${slugs.join(", ") || "the experiments"} into a new synthesis branch and renegotiate the spec.`,
