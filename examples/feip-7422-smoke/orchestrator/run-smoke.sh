@@ -79,7 +79,11 @@ set -o pipefail
 
 SMOKE_ROOT_DEFAULT="${HOME}/code/feip-7422-smoke"
 RESUME_AT=""
-PROJECT_NAME="bug-tracker"
+# Unique per-run project name so every smoke scaffolds a FRESH project and can
+# never silently reuse a stale dir / collide with a prior run's Lakebase project
+# + GitHub repo. Override with --project-name for --resume / --skip-scaffold.
+RUN_ID="$(date +%Y%m%d-%H%M%S)"
+PROJECT_NAME="bug-tracker-${RUN_ID}"
 PROJECT_DIR=""
 SKIP_SCAFFOLD=0
 KEEP_ON_FAILURE=1
@@ -290,8 +294,13 @@ scaffold_project() {
     return 0
   fi
   if [[ -d "$PROJECT_DIR/.git" ]]; then
-    log "project dir already exists with a .git/ subdir at $PROJECT_DIR. Use --skip-scaffold to reuse, or remove and re-run."
-    return 0
+    # Hard stop: never silently reuse a stale scaffold (an older kit's project
+    # dir lacks the current commands/agents and fails mid-run with confusing
+    # "Unknown command: /design"). The default project name is unique per run,
+    # so this only fires on an explicit --project-name collision; the operator
+    # must pass --skip-scaffold to intentionally reuse it.
+    err "project dir already exists with a .git/ subdir at $PROJECT_DIR. Pass --skip-scaffold to reuse it intentionally, or remove it / use a fresh --project-name."
+    exit 1
   fi
 
   : "${DATABRICKS_HOST:?smoke: DATABRICKS_HOST env var required for scaffold (or pass --skip-scaffold)}"

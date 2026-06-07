@@ -77,6 +77,16 @@ describe("FEIP-7422 smoke: directory structure", () => {
     const mode = fs.statSync(entry).mode;
     expect((mode & 0o111) !== 0, "run-smoke.sh must be executable").toBe(true);
   });
+
+  it("scaffolds a FRESH project every run: unique default name + hard-abort on a stale dir", () => {
+    const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+    // Default PROJECT_NAME carries a per-run unique id so the runner can never
+    // silently reuse a stale scaffold or collide with a prior run's resources.
+    expect(runSmoke).toMatch(/RUN_ID="\$\(date /);
+    expect(runSmoke).toMatch(/PROJECT_NAME="bug-tracker-\$\{RUN_ID\}"/);
+    // A pre-existing project dir hard-aborts (exit 1) instead of proceeding.
+    expect(runSmoke).toMatch(/already exists[\s\S]*?exit 1/);
+  });
 });
 
 describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voice)", () => {
