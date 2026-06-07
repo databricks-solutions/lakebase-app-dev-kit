@@ -22,6 +22,40 @@
           "status": {
             "enum": ["designing", "awaiting-gate", "ready", "building", "done"],
             "description": "designing = design lane drafting/annotating/ordering; awaiting-gate = surfaced to the PO for the per-story spec gate; ready = gate-approved, queued for build; building = the single build lane is on it; done = built."
+          },
+          "gate": {
+            "type": "object",
+            "description": "The per-story spec gate (FEIP-7565 phase 2b). Isolated here in pipeline.json, NOT in the per-feature gates.json. Present once the story has been surfaced for review; an approved gate is what authorizes the awaiting-gate -> ready transition.",
+            "required": ["status", "history"],
+            "properties": {
+              "status": {
+                "enum": ["open", "approved", "withdrawn"],
+                "description": "open = surfaced, awaiting the HIL decision; approved = the HIL (or Human Proxy headless) approved the story into the sprint; withdrawn = approval rescinded, story pulled back out of the build flow."
+              },
+              "approver": { "type": "string" },
+              "approved_at": { "type": "string" },
+              "spec_hash": {
+                "type": "string",
+                "description": "Hash of the story's spec artifact at approval, anchoring the decision."
+              },
+              "withdrawal_reason": { "type": "string" },
+              "history": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["action", "at", "approver"],
+                  "properties": {
+                    "action": { "enum": ["approved", "withdrawn"] },
+                    "at": { "type": "string" },
+                    "approver": { "type": "string" },
+                    "spec_hash": { "type": "string" },
+                    "reason": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

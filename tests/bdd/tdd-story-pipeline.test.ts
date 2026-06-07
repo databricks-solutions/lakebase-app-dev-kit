@@ -13,6 +13,10 @@ import {
   completeActive,
   readPipeline,
   writePipeline,
+  surfaceForGate,
+  approveStoryGate,
+  withdrawStoryGate,
+  getStoryGate,
 } from "../../scripts/tdd/story-pipeline";
 import { getValidator } from "../../scripts/tdd/schema-loader";
 
@@ -102,6 +106,117 @@ describe("story-pipeline: ready queue + single build lane", () => {
     expect(p.build_queue).toEqual(["S2"]); // S2 waits
     completeActive(p); // S1 done
     expect(dispatchNext(p)).toBe("S2"); // lane pulls S2
+  });
+});
+
+describe("story-pipeline: per-story spec gate (FEIP-7565 phase 2b)", () => {
+  const AT = "2026-06-07T12:00:00.000Z";
+
+  it("surfaceForGate moves the story to awaiting-gate + opens the gate", () => {
+    const p = initPipeline("F1");
+    setStoryStatus(p, "S1", "designing");
+    surfaceForGate(p, "S1");
+    expect(p.stories.S1.status).toBe("awaiting-gate");
+    expect(p.stories.S1.gate).toEqual({ status: "open", history: [] });
+  });
+
+  it("getStoryGate returns a default-open record for an ungated story", () => {
+    const p = initPipeline("F1");
+    setStoryStatus(p, "S1", "designing");
+    expect(getStoryGate(p, "S1")).toEqual({ status: "open", history: [] });
+  });
+
+  it("approveStoryGate records the approval, then marks ready + queues", () => {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    approveStoryGate(p, "S1", { approver: "po@example", at: AT, spec_hash: "abc123" });
+    expect(p.stories.S1.status).toBe("ready");
+    expect(p.build_queue).toEqual(["S1"]);
+    const gate = getStoryGate(p, "S1");
+    expect(gate.status).toBe("approved");
+    expect(gate.approver).toBe("po@example");
+    expect(gate.approved_at).toBe(AT);
+    expect(gate.spec_hash).toBe("abc123");
+    expect(gate.history).toEqual([
+      { action: "approved", at: AT, approver: "po@example", spec_hash: "abc123" },
+    ]);
+  });
+
+  it("approveStoryGate throws for an unknown story", () => {
+    const p = initPipeline("F1");
+    expect(() => approveStoryGate(p, "S9", { approver: "po", at: AT })).toThrow(/not in the pipeline/);
+  });
+
+  it("the gate survives dispatch + complete (status writes never clobber it)", () => {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    approveStoryGate(p, "S1", { approver: "po", at: AT });
+    dispatchNext(p); // S1 building
+    expect(p.stories.S1.status).toBe("building");
+    expect(getStoryGate(p, "S1").status).toBe("approved");
+    completeActive(p); // S1 done
+    expect(p.stories.S1.status).toBe("done");
+    expect(getStoryGate(p, "S1").status).toBe("approved");
+  });
+
+  it("withdrawStoryGate pulls a queued story back out + resets to awaiting-gate", () => {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    surfaceForGate(p, "S2");
+    approveStoryGate(p, "S1", { approver: "po", at: AT });
+    approveStoryGate(p, "S2", { approver: "po", at: AT });
+    expect(p.build_queue).toEqual(["S1", "S2"]);
+    withdrawStoryGate(p, "S2", { approver: "po", at: AT, reason: "spec gap found" });
+    expect(p.build_queue).toEqual(["S1"]); // S2 removed
+    expect(p.stories.S2.status).toBe("awaiting-gate");
+    const gate = getStoryGate(p, "S2");
+    expect(gate.status).toBe("withdrawn");
+    expect(gate.withdrawal_reason).toBe("spec gap found");
+    expect(gate.history.map((h) => h.action)).toEqual(["approved", "withdrawn"]);
+  });
+
+  it("withdrawStoryGate frees the lane when withdrawing the actively-building story", () => {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    approveStoryGate(p, "S1", { approver: "po", at: AT });
+    dispatchNext(p); // S1 building, lane busy
+    withdrawStoryGate(p, "S1", { approver: "po", at: AT, reason: "regression" });
+    expect(p.build_active).toBeNull();
+    expect(p.stories.S1.status).toBe("awaiting-gate");
+  });
+
+  it("withdrawStoryGate throws when the story has no gate", () => {
+    const p = initPipeline("F1");
+    setStoryStatus(p, "S1", "designing");
+    expect(() => withdrawStoryGate(p, "S1", { approver: "po", at: AT, reason: "x" })).toThrow(/no gate/);
+  });
+
+  it("design-ahead with gates: S2 surfaces + approves while S1 builds", () => {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    approveStoryGate(p, "S1", { approver: "po", at: AT });
+    dispatchNext(p); // S1 building
+    // design lane finishes S2 and the PO approves its gate while S1 builds:
+    surfaceForGate(p, "S2");
+    approveStoryGate(p, "S2", { approver: "po", at: AT });
+    expect(p.build_active).toBe("S1"); // S1 keeps building
+    expect(p.build_queue).toEqual(["S2"]); // S2 gated + queued, waiting
+    expect(getStoryGate(p, "S1").status).toBe("approved"); // S1 gate intact
+    completeActive(p);
+    expect(dispatchNext(p)).toBe("S2");
+  });
+
+  it("a gated pipeline write/read roundtrips + validates against the schema", () => {
+    const tdd = mkTdd();
+    const validate = getValidator("story-pipeline.schema.json");
+    const p = initPipeline("F1-initial-domain");
+    surfaceForGate(p, "S1-submit");
+    approveStoryGate(p, "S1-submit", { approver: "po@example", at: AT, spec_hash: "deadbeef" });
+    dispatchNext(p);
+    surfaceForGate(p, "S2-owner"); // awaiting-gate, open
+    expect(validate(p)).toBe(true);
+    writePipeline(tdd, p);
+    expect(readPipeline(tdd, "F1-initial-domain")).toEqual(p);
   });
 });
 
