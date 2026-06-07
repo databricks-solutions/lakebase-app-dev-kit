@@ -18,7 +18,7 @@ acceptance (headless: the Human Proxy answers):
 
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
-npx --yes --package="$KIT_PKG" \
+./scripts/lk \
   lakebase-tdd-drive --feature "<feature-id>" --only build --gates "$GATES" --project-dir "$PWD"
 ```
 

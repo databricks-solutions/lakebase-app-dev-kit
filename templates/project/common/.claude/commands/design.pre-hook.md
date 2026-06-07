@@ -15,8 +15,7 @@ positional argument to `/design` (e.g. `F1-initial-domain`).
 1. Verify the SCM workflow state file is present:
 
    ```bash
-   KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
-   npx --yes --package="$KIT_PKG" \
+   ./scripts/lk \
      lakebase-scm-state --project-dir "$PWD"
    ```
 
@@ -27,7 +26,7 @@ positional argument to `/design` (e.g. `F1-initial-domain`).
 2. Invoke the claim CLI:
 
    ```bash
-   npx --yes --package="$KIT_PKG" \
+   ./scripts/lk \
      lakebase-scm-claim-feature-branch "<feature-id>" \
        --project-dir "$PWD" \
        --json --pretty

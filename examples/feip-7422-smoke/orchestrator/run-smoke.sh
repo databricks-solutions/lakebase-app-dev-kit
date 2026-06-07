@@ -352,7 +352,7 @@ run_iteration() {
   # design; in this TDD-only smoke iterations are local-only (never merged), so
   # without an abandon step v2 would fail to claim F2.
   current_state_before_iter="$(
-    npx --yes --package="${KIT_NPX}" \
+    "$PROJECT_DIR/scripts/lk" \
       lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>/dev/null \
     | jq -r '.state.state // ""' 2>/dev/null || echo ""
   )"
@@ -360,7 +360,7 @@ run_iteration() {
         && "$current_state_before_iter" != "scaffold-complete" \
         && "$current_state_before_iter" != "merged" ]]; then
     log "  step 0.5: abandon prior feature (state=$current_state_before_iter)"
-    npx --yes --package="${KIT_NPX}" \
+    "$PROJECT_DIR/scripts/lk" \
       lakebase-scm-abandon-feature --project-dir "$PROJECT_DIR" \
       || { err "abandon-feature failed; cannot start $iter on top of $current_state_before_iter"; exit 2; }
   fi
@@ -390,7 +390,7 @@ run_iteration() {
   # under real human interaction; the sole difference is who answers the gates
   # (the Human Proxy here vs the actual human live).
   log "  step 3: claim ${feature_id} + lakebase-tdd-drive (design + build + deploy, gates via Human Proxy)"
-  npx --yes --package="${KIT_NPX}" \
+  "$PROJECT_DIR/scripts/lk" \
     lakebase-scm-claim-feature-branch "${feature_id}" --project-dir "$PROJECT_DIR" --json \
     || { err "claim-feature-branch failed for ${feature_id}"; exit 2; }
 
@@ -401,7 +401,7 @@ run_iteration() {
 
   # 4. Drive the feature to done (design -> build -> accept -> deploy).
   log "  step 4: lakebase-tdd-drive ${feature_id}"
-  npx --yes --package="${KIT_NPX}" \
+  "$PROJECT_DIR/scripts/lk" \
     lakebase-tdd-drive --feature "${feature_id}" --project-dir "$PROJECT_DIR" \
     || { err "lakebase-tdd-drive failed for ${feature_id}"; exit 2; }
 
@@ -437,7 +437,7 @@ run_iteration() {
   # against the running app) and records the PO deploy gate via the Human Proxy.
   # There is no separate /deploy. We only ensure the app is stopped before the
   # next iteration (idempotent teardown).
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
+  "$PROJECT_DIR/scripts/lk" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
 
   # 7. local commit on the feature branch. The FEIP-7422 smoke is a
   # TDD-workflow validation harness; the SCM-workflow CLIs
@@ -455,7 +455,7 @@ run_iteration() {
   # asserts above are the hard gates).
   log "  step 8: lakebase-scm-doctor (advisory cross-check)"
   local doctor_exit=0
-  npx --yes --package=${KIT_NPX} \
+  "$PROJECT_DIR/scripts/lk" \
     lakebase-scm-doctor --project-dir "$PROJECT_DIR" --json --pretty \
     || doctor_exit=$?
   if [[ "$doctor_exit" -ne 0 ]]; then
@@ -482,7 +482,7 @@ proxy_supply() {
   # `set -u`, "${arr[@]}" on an EMPTY array throws "unbound variable". The
   # ${arr[@]+...} guard yields nothing when empty. (stage_project_intake calls
   # this with no feature, so feat_flag is empty for project-level intake.)
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-human-proxy supply \
+  "$PROJECT_DIR/scripts/lk" lakebase-tdd-human-proxy supply \
     --from "$from" --to "$to" --artifact "$artifact" \
     --tdd-dir "${PROJECT_DIR}/.tdd" ${feat_flag[@]+"${feat_flag[@]}"}
 }
@@ -536,7 +536,7 @@ run_plan_sprint() {
   # than a genuine unsatisfied intake. Only fail after the call fails 3x.
   local _intake_ok=""
   for _attempt in 1 2 3; do
-    if npx --yes --package="${KIT_NPX}" lakebase-tdd-intake; then _intake_ok=1; break; fi
+    if "$PROJECT_DIR/scripts/lk" lakebase-tdd-intake; then _intake_ok=1; break; fi
     log "    intake precondition attempt ${_attempt} failed (likely transient npx); retrying..."
     sleep 3
   done
@@ -556,7 +556,7 @@ run_plan_sprint() {
   # then it stops at planning-complete. Feature-requests must NOT exist before
   # this proposal, so the PO-authoring supply (step c) runs AFTER.
   log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-drive \
+  "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
     --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \
     || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
 
@@ -576,7 +576,7 @@ run_plan_sprint() {
     proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
       || { err "human-proxy refused feature-request.md for ${feature_id}"; exit 2; }
     # Confirm the per-feature precondition now passes (request present + conformant).
-    npx --yes --package="${KIT_NPX}" lakebase-tdd-intake --feature "$feature_id" \
+    "$PROJECT_DIR/scripts/lk" lakebase-tdd-intake --feature "$feature_id" \
       || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
   done
 
@@ -587,7 +587,7 @@ run_plan_sprint() {
     || log "  ${sprint_name}: backlog already committed (nothing new)"
 
   # Record the planning activity (the PO authored the sprint's requests).
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-log \
+  "$PROJECT_DIR/scripts/lk" lakebase-tdd-log \
     --role orchestrator --level info --event phase.end \
     --tdd-dir "$PROJECT_DIR/.tdd" \
     --message "/plan ${sprint_name}: ${#iters[@]} feature-request(s) authored for the sprint" \

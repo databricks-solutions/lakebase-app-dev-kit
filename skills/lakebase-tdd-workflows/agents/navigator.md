@@ -80,7 +80,7 @@ Before writing any code:
 
 ## Logging
 
-Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role navigator --feature <id> --cycle <cycle-id>`:
+Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role navigator --feature <id> --cycle <cycle-id>`:
 
 - `--level info --event cycle.red` when you write the failing test; `--event review.verdict` after Driver returns GREEN.
 - `--level debug --event reasoning` for the design the test forces into being (the `navigator_plan`).

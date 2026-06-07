@@ -7,6 +7,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { spawnSync } from "node:child_process";
 import { writeEnvFile } from "./env-file.js";
 import { verifyProject, verifyHooks, verifyWorkflows } from "./project-verify.js";
 import { createRepo, getRepoFullName, getCurrentUser } from "../github/repo.js";
@@ -365,6 +366,33 @@ export async function createProject(
     } catch (err) {
       warnings.push(
         `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
+      );
+    }
+  }
+
+  // ── Step 7e: pin the kit ref + warm the fast-CLI cache (npx-tax kill) ──
+  // The scaffolded scripts/lk runs kit CLIs via `node dist/...` (~0.09s) instead
+  // of npx-from-github (~3.5s/call, re-resolves the ref every time). lk resolves
+  // the kit per ref into a shared cache. Record the ref this project was
+  // scaffolded with WHEN PINNED (LAKEBASE_KIT_REF) so lk resolves it from a file
+  // (a claude -p agent's bash does not inherit env); unset means lk defaults to
+  // "main", matching today's npx default. Then warm the cache once so the first
+  // workflow call is already fast. Best-effort: lk installs lazily on first use.
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path.join(projectDir, ".lakebase");
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "kit-ref"), `${kitRef}\n`, "utf8");
+      }
+      const lk = path.join(projectDir, "scripts", "lk");
+      if (fs.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 180000 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`,
       );
     }
   }

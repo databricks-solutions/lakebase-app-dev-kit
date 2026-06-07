@@ -32,7 +32,7 @@ working-software gate (headless: the Human Proxy):
 
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
-npx --yes --package="$KIT_PKG" \
+./scripts/lk \
   lakebase-tdd-drive --feature "<feature-id>" --only deploy --gates "$GATES" \
     --deploy-target "${DEPLOY_TARGET:-local}" --project-dir "$PWD"
 ```

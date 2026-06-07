@@ -23,16 +23,14 @@ for a free-standing exploration.
 a spike is outside the workflow state machine):
 
 ```bash
-KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
-
 # cut a spike (its own paired branch spike/<slug> + a notes.md)
-npx --yes --package="$KIT_PKG" lakebase-tdd-spike cut \
+./scripts/lk lakebase-tdd-spike cut \
   --slug "<slug>" --instance "<lakebase-project>" \
   ${FEATURE:+--for "$FEATURE"} --project-dir "$PWD" --json
 
 # list spikes / delete one when done (drops the branch unless --keep-branch)
-npx --yes --package="$KIT_PKG" lakebase-tdd-spike list --project-dir "$PWD"
-npx --yes --package="$KIT_PKG" lakebase-tdd-spike delete --slug "<slug>" --instance "<lakebase-project>" --project-dir "$PWD"
+./scripts/lk lakebase-tdd-spike list --project-dir "$PWD"
+./scripts/lk lakebase-tdd-spike delete --slug "<slug>" --instance "<lakebase-project>" --project-dir "$PWD"
 ```
 
 After cutting, explore freely on the spike branch. Capture what you learned in

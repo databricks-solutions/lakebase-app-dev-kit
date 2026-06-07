@@ -4114,6 +4114,7 @@ async function queryBranchTables(args) {
 // scripts/lakebase/create-project.ts
 import * as fs18 from "fs";
 import * as path17 from "path";
+import { spawnSync } from "child_process";
 
 // scripts/lakebase/project-verify.ts
 import * as fs15 from "fs";
@@ -5004,6 +5005,25 @@ Last probe error:
     } catch (err) {
       warnings.push(
         `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path17.join(projectDir, ".lakebase");
+        fs18.mkdirSync(dir, { recursive: true });
+        fs18.writeFileSync(path17.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path17.join(projectDir, "scripts", "lk");
+      if (fs18.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
       );
     }
   }
@@ -7523,7 +7543,7 @@ import { existsSync as existsSync28, readdirSync as readdirSync14, statSync as s
 import { join as join30 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync15, mkdirSync as mkdirSync14, readdirSync as readdirSync12, statSync as statSync6 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, readdirSync as readdirSync12, statSync as statSync6 } from "fs";
 import { dirname as dirname9, join as join28 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -7538,7 +7558,7 @@ function readPipeline(tddDir, featureId) {
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync27, mkdirSync as mkdirSync15, readdirSync as readdirSync13, readFileSync as readFileSync16, statSync as statSync7, writeFileSync as writeFileSync16 } from "fs";
+import { existsSync as existsSync27, mkdirSync as mkdirSync15, readdirSync as readdirSync13, readFileSync as readFileSync16, statSync as statSync7, writeFileSync as writeFileSync17 } from "fs";
 import { join as join29 } from "path";
 function listSpikes(tddDir) {
   const root = join29(tddDir, "spikes");

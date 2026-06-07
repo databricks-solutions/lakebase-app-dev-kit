@@ -27,7 +27,7 @@ ok()   { echo "verify-story-pipeline: ✓ $*"; }
 # lakebase-tdd-pipeline status --json returns an empty pipeline (stories={})
 # when no pipeline.json exists, so absence manifests as a zero-story payload.
 PIPELINE_JSON="$(
-  npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+  "$PROJECT_DIR/scripts/lk" \
     lakebase-tdd-pipeline status --feature "$FEATURE_ID" --tdd-dir "$PROJECT_DIR/.tdd" --json 2>/dev/null
 )"
 

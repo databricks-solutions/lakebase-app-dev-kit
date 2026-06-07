@@ -10,6 +10,7 @@ var __dirname = /* @__PURE__ */ getDirname();
 // scripts/lakebase/create-project.ts
 import * as fs14 from "fs";
 import * as path14 from "path";
+import { spawnSync } from "child_process";
 
 // scripts/lakebase/env-file.ts
 import * as fs from "fs";
@@ -2546,6 +2547,25 @@ Last probe error:
     } catch (err) {
       warnings.push(
         `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path14.join(projectDir, ".lakebase");
+        fs14.mkdirSync(dir, { recursive: true });
+        fs14.writeFileSync(path14.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path14.join(projectDir, "scripts", "lk");
+      if (fs14.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
       );
     }
   }

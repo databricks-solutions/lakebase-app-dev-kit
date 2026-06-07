@@ -74,7 +74,7 @@ Do not proceed to design-spec gate until the PO signs off. (In Human Proxy mode,
 
 ## Logging
 
-Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role test-strategist --feature <id>`:
+Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role test-strategist --feature <id>`:
 
 - `--level info --event artifact.written` for `test-list.json` + the rendered `test-list.md` (note item count).
 - `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.

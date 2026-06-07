@@ -112,7 +112,7 @@ Do not proceed to architectural review until the PO signs off.
 
 ## Logging
 
-Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role ux-designer --feature <id>`:
+Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role ux-designer --feature <id>`:
 
 - `--level info --event artifact.written` per `design-guide.md` / `design-guide.json` / `ia.md`.
 - `--level debug --event reasoning` for token + IA choices, citing which reference each came from (provenance).

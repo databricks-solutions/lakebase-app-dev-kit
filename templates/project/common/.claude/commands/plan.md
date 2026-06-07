@@ -19,9 +19,8 @@ If `.tdd/` does not exist, this command hard-fails with the same setup hint `/de
 Planning reads the HIL's intent from the PROJECT-level intake artifacts (`product-overview.md`, `nfrs.md`, and `design-brief.md` for UI projects). `/plan` is the first place project intake is needed, before any `/design`. These are the same project-level preconditions `/design` enforces; `/plan` enforces them too:
 
 ```bash
-KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
 UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-npx --yes --package="$KIT_PKG" lakebase-tdd-intake $UI_FLAG
+./scripts/lk lakebase-tdd-intake $UI_FLAG
 ```
 
 Note: no `--feature`. `lakebase-tdd-intake` without a feature checks only the project-level artifacts (`product-overview.md` + `nfrs.md`, plus `design-brief.md` when `--ui`). It exits non-zero (5) and names what is missing or non-conformant if intake is incomplete. If it fails, the orchestrator facilitates project intake first (the interviews documented in `/design` Step 0.5: Product, NFR, and UX for UI projects), or, headless, the Human Proxy supplies the pre-recorded answers. Do not plan against missing intent.
@@ -39,7 +38,7 @@ The orchestrator presents the Spec Author's proposals to the Product Owner. The 
 Each `feature-request.md` is the open-ended, plain-English ask in the PO's voice (an H1 title + a non-empty body, no rigid structure by design). It is what `/design`'s Spec Author later reads as input and never overwrites. Confirm each conforms:
 
 ```bash
-npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>"
+./scripts/lk lakebase-tdd-intake --feature "<feature-id>"
 ```
 
 (With `--feature`, the precondition additionally requires that feature's `feature-request.md` to exist and conform, the same check `/design <feature-id>` runs at its Step 0.5.)
@@ -49,7 +48,7 @@ npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>"
 There is no human to interview. The Human Proxy stands in for the PO and SUPPLIES each sprint item's `feature-request.md` from the pre-recorded sprint backlog (`$LAKEBASE_TDD_RECORDED_INTAKE_DIR`): the recorded files ARE the PO's groomed, prioritized sprint. Validate-then-place; it refuses a missing or non-conformant recording.
 
 ```bash
-npx --yes --package="$KIT_PKG" lakebase-tdd-human-proxy supply \
+./scripts/lk lakebase-tdd-human-proxy supply \
   --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/<feature-id>.md" \
   --to ".tdd/features/<feature-id>/feature-request.md" \
   --artifact feature-request.md --feature "<feature-id>"
@@ -73,7 +72,7 @@ gates so YOU answer the sprint plan gate (headless: the Human Proxy):
 
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
-npx --yes --package="$KIT_PKG" \
+./scripts/lk \
   lakebase-tdd-drive --sprint "<sprint-name>" --plan-only --gates "$GATES" --project-dir "$PWD"
 ```
 

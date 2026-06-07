@@ -67,7 +67,7 @@ You ARE the HITL. In Human Proxy mode the `human-proxy` performs your reviews: i
 
 ## Logging
 
-Via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role product-owner`:
+Via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role product-owner`:
 - `--event artifact.written` per intake artifact + each `feature-request.md`, with `--data '{"path":"...","conformant":true}'`.
 - `--event gate.approved|gate.modified|gate.rejected --message "<your decision>"` at every gate (headless: the Human Proxy records it).
 

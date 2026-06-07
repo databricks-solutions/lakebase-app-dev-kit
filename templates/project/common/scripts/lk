@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# lk , run a kit CLI fast, without the npx tax.
+#
+# `npx --package=github:databricks-solutions/lakebase-app-dev-kit#<ref> <bin>`
+# re-resolves the GitHub ref on EVERY call (~3.5s even warm). This shim resolves
+# the kit ONCE per ref into a shared cache and runs the bin via `node dist/...`
+# (~0.09s). Use it everywhere a kit CLI is invoked from a scaffolded project:
+#
+#   ./scripts/lk lakebase-tdd-log --role spec-author --event progress --message "…"
+#   "$(git rev-parse --show-toplevel)/scripts/lk" lakebase-tdd-intake --feature F1
+#
+# Ref resolution (so it works inside a `claude -p` agent's Bash tool, which does
+# NOT reliably inherit env vars): $LAKEBASE_KIT_REF -> .lakebase/kit-ref -> "main".
+# Set LAKEBASE_KIT_DIR to point directly at a kit checkout/install (dev override).
+set -euo pipefail
+
+bin="${1:-}"
+if [ -z "$bin" ]; then
+  echo "usage: lk <kit-bin> [args...]   (e.g. lk lakebase-tdd-log --read)" >&2
+  exit 2
+fi
+shift
+
+PKG="@databricks-solutions/lakebase-app-dev-kit"
+
+# 1. Resolve the kit install dir.
+kit_dir="${LAKEBASE_KIT_DIR:-}"
+if [ -z "$kit_dir" ]; then
+  # ref: env -> .lakebase/kit-ref (from the repo root or cwd) -> main
+  ref="${LAKEBASE_KIT_REF:-}"
+  if [ -z "$ref" ]; then
+    root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+    if [ -f "$root/.lakebase/kit-ref" ]; then
+      ref="$(tr -d '[:space:]' < "$root/.lakebase/kit-ref")"
+    fi
+  fi
+  ref="${ref:-main}"
+
+  cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/lakebase-app-dev-kit"
+  cache="${cache_root}/${ref}"
+  kit_dir="${cache}/node_modules/${PKG}"
+
+  # Install once per ref (idempotent; includes node_modules, which the dist CLIs
+  # require). Build into a temp prefix + atomic rename so parallel role spawns
+  # don't race a half-populated cache.
+  if [ ! -d "${kit_dir}/dist" ]; then
+    mkdir -p "$cache_root"
+    tmp="$(mktemp -d "${cache_root}/.tmp.XXXXXX")"
+    if npm install --no-save --prefix "$tmp" "github:databricks-solutions/lakebase-app-dev-kit#${ref}" >/dev/null 2>&1 \
+       && [ -d "${tmp}/node_modules/${PKG}/dist" ]; then
+      if [ ! -d "${kit_dir}/dist" ]; then
+        mv "$tmp" "$cache" 2>/dev/null || rm -rf "$tmp"
+      else
+        rm -rf "$tmp"
+      fi
+    else
+      rm -rf "$tmp"
+    fi
+  fi
+
+  if [ ! -d "${kit_dir}/dist" ]; then
+    echo "lk: could not resolve the kit for ref '${ref}' (cache: ${cache})" >&2
+    exit 1
+  fi
+fi
+
+# `lk --warm`: resolve/install the kit only (pre-populate the cache), no bin to run.
+# createProject calls this once at scaffold so the first real call is already fast.
+if [ "$bin" = "--warm" ]; then
+  exit 0
+fi
+
+# 2. Map bin -> dist path from the kit's own package.json bin map (authoritative).
+rel="$(node -e 'const m=require(process.argv[1]+"/package.json").bin||{};const b=m[process.argv[2]];if(!b)process.exit(3);process.stdout.write(b)' "$kit_dir" "$bin" 2>/dev/null)" || {
+  echo "lk: unknown kit bin: ${bin}" >&2
+  exit 2
+}
+
+# 3. Run it directly.
+exec node "${kit_dir}/${rel}" "$@"

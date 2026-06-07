@@ -80,7 +80,7 @@ the branch DB and prefill it.
 
 ## Logging
 
-Emit structured events via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role driver --feature <id> --cycle <cycle-id>`:
+Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role driver --feature <id> --cycle <cycle-id>`:
 
 - `--level info --event cycle.green` when the failing test passes; `--event cycle.refactored` after a REFACTOR.
 - `--level debug --event reasoning` for why the change is the minimal honest one (DTSTTCPW).

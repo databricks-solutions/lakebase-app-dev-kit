@@ -99,7 +99,7 @@ Do not proceed to architectural review until the PO signs off. (In Human Proxy m
 
 ## Logging
 
-Emit structured events as you work, via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), so the relay is observable. At minimum, with `--role spec-author --feature <id>`:
+Emit structured events as you work, via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), so the relay is observable. At minimum, with `--role spec-author --feature <id>`:
 
 - `--level info --event phase.start` / `phase.end` (discovery boundaries).
 - `--level info --event artifact.written` per `feature-spec.json` / each story / each AC, with `--data '{"path":"...","conformant":true}'`.

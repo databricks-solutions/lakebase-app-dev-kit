@@ -22,8 +22,7 @@ Concretely, the agent:
 2. Invokes the workflow CLI with the feature id (no path/branch math required: the bin derives `feature/<slug>` and picks the parent from `tier_topology`):
 
    ```bash
-   KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
-   npx --yes --package="$KIT_PKG" \
+   ./scripts/lk \
      lakebase-scm-claim-feature-branch "<feature-id>" \
        --project-dir "$PWD" \
        --json --pretty
@@ -53,7 +52,7 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
 - **Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_TDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
 
   ```bash
-  npx --yes --package="$KIT_PKG" lakebase-tdd-human-proxy supply \
+  ./scripts/lk lakebase-tdd-human-proxy supply \
     --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".tdd/nfrs.md" --artifact nfrs.md
   ```
 
@@ -63,7 +62,7 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
 
 ```bash
 UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>" $UI_FLAG
+./scripts/lk lakebase-tdd-intake --feature "<feature-id>" $UI_FLAG
 ```
 
 `lakebase-tdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.
@@ -77,7 +76,7 @@ gates so YOU answer each per-story spec gate (headless: the Human Proxy answers)
 
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
-npx --yes --package="$KIT_PKG" \
+./scripts/lk \
   lakebase-tdd-drive --feature "<feature-id>" --only design --gates "$GATES" --project-dir "$PWD"
 ```
 

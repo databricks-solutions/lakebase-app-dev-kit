@@ -7157,6 +7157,7 @@ function dbcli3(args) {
 init_cjs_shims();
 var fs14 = __toESM(require("fs"), 1);
 var path13 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
 
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
@@ -9585,6 +9586,25 @@ Last probe error:
       );
     }
   }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path13.join(projectDir, ".lakebase");
+        fs14.mkdirSync(dir, { recursive: true });
+        fs14.writeFileSync(path13.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path13.join(projectDir, "scripts", "lk");
+      if (fs14.existsSync(lk)) {
+        (0, import_node_child_process7.spawnSync)("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -9682,7 +9702,7 @@ var path15 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
 init_cjs_shims();
-var import_node_child_process7 = require("child_process");
+var import_node_child_process8 = require("child_process");
 var fs15 = __toESM(require("fs"), 1);
 var path14 = __toESM(require("path"), 1);
 function resolveAlembicBin(projectDir) {
@@ -9701,7 +9721,7 @@ function resolveAlembicBin(projectDir) {
 function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
     const bin = resolveAlembicBin(projectDir);
-    const child = (0, import_node_child_process7.spawn)(bin, args, {
+    const child = (0, import_node_child_process8.spawn)(bin, args, {
       cwd: projectDir,
       env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
@@ -10046,7 +10066,7 @@ var path17 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
 init_cjs_shims();
-var import_node_child_process8 = require("child_process");
+var import_node_child_process9 = require("child_process");
 var path16 = __toESM(require("path"), 1);
 function dsnToFlywayEnv(dsn) {
   const u = new URL(dsn);
@@ -10062,7 +10082,7 @@ function migrationsLocation(projectDir) {
 function runFlyway(ctx, args) {
   const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
   return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process8.spawn)(
+    const child = (0, import_node_child_process9.spawn)(
       "flyway",
       ["-outputType=json", `-locations=${migrationsLocation(ctx.projectDir)}`, ...args],
       {
@@ -10299,7 +10319,7 @@ var path19 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
 init_cjs_shims();
-var import_node_child_process9 = require("child_process");
+var import_node_child_process10 = require("child_process");
 var fs18 = __toESM(require("fs"), 1);
 var path18 = __toESM(require("path"), 1);
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
@@ -10321,7 +10341,7 @@ function spawnKnex(projectDir, args, dsn) {
       );
       return;
     }
-    const child = (0, import_node_child_process9.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
+    const child = (0, import_node_child_process10.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
       cwd: projectDir,
       env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
@@ -10790,13 +10810,13 @@ init_cjs_shims();
 init_cjs_shims();
 var fs22 = __toESM(require("fs"), 1);
 var path21 = __toESM(require("path"), 1);
-var import_node_child_process12 = require("child_process");
+var import_node_child_process13 = require("child_process");
 
 // scripts/lakebase/branch-delete.ts
 init_cjs_shims();
-var import_node_child_process10 = require("child_process");
+var import_node_child_process11 = require("child_process");
 var import_node_util4 = require("util");
-var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process10.execFile);
+var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process11.execFile);
 async function deleteBranch(args) {
   const fullPath = await resolveBranchPath(args.branch, {
     instance: args.instance,
@@ -10837,7 +10857,7 @@ stderr: ${stderr.trim()}` : ""}`
 
 // scripts/lakebase/branch-endpoint.ts
 init_cjs_shims();
-var import_node_child_process11 = require("child_process");
+var import_node_child_process12 = require("child_process");
 async function getEndpoint(args) {
   const branchPath = await resolveBranchPath(args.branch, { instance: args.instance });
   if (!branchPath) {
@@ -10845,7 +10865,7 @@ async function getEndpoint(args) {
   }
   let raw;
   try {
-    raw = (0, import_node_child_process11.execFileSync)("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
+    raw = (0, import_node_child_process12.execFileSync)("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.cliDefault
@@ -10887,7 +10907,7 @@ async function ensureEndpoint(args) {
     }
   };
   try {
-    (0, import_node_child_process11.execFileSync)(
+    (0, import_node_child_process12.execFileSync)(
       "databricks",
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
       { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
@@ -10977,7 +10997,7 @@ async function ensureProfilePinned(args) {
 
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
-  return (0, import_node_child_process12.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+  return (0, import_node_child_process13.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -10986,7 +11006,7 @@ function gitCurrentBranch(cwd) {
 }
 function gitHasLocalBranch(cwd, branch) {
   try {
-    (0, import_node_child_process12.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
+    (0, import_node_child_process13.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd,
       stdio: "ignore",
       timeout: KIT_TIMEOUTS.gitDefault
@@ -10997,21 +11017,21 @@ function gitHasLocalBranch(cwd, branch) {
   }
 }
 function gitCheckoutNewBranch(cwd, branch) {
-  (0, import_node_child_process12.execFileSync)("git", ["checkout", "-b", branch], {
+  (0, import_node_child_process13.execFileSync)("git", ["checkout", "-b", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
 function gitCheckoutExistingBranch(cwd, branch) {
-  (0, import_node_child_process12.execFileSync)("git", ["checkout", branch], {
+  (0, import_node_child_process13.execFileSync)("git", ["checkout", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
 function gitDeleteLocalBranch(cwd, branch, force = true) {
-  (0, import_node_child_process12.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
+  (0, import_node_child_process13.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitDefault
@@ -11019,7 +11039,7 @@ function gitDeleteLocalBranch(cwd, branch, force = true) {
 }
 function gitHasRemoteBranch(cwd, remote, branch) {
   try {
-    const out = (0, import_node_child_process12.execFileSync)(
+    const out = (0, import_node_child_process13.execFileSync)(
       "git",
       ["ls-remote", "--exit-code", "--heads", remote, branch],
       { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
@@ -11030,7 +11050,7 @@ function gitHasRemoteBranch(cwd, remote, branch) {
   }
 }
 function gitDeleteRemoteBranch(cwd, remote, branch) {
-  (0, import_node_child_process12.execFileSync)("git", ["push", remote, "--delete", branch], {
+  (0, import_node_child_process13.execFileSync)("git", ["push", remote, "--delete", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitPush

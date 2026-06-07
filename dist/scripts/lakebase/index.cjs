@@ -4000,6 +4000,7 @@ async function queryBranchTables(args) {
 // scripts/lakebase/create-project.ts
 var fs18 = __toESM(require("fs"), 1);
 var path16 = __toESM(require("path"), 1);
+var import_node_child_process12 = require("child_process");
 
 // scripts/lakebase/project-verify.ts
 var fs15 = __toESM(require("fs"), 1);
@@ -5089,6 +5090,25 @@ Last probe error:
       );
     }
   }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path16.join(projectDir, ".lakebase");
+        fs18.mkdirSync(dir, { recursive: true });
+        fs18.writeFileSync(path16.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path16.join(projectDir, "scripts", "lk");
+      if (fs18.existsSync(lk)) {
+        (0, import_node_child_process12.spawnSync)("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -5179,7 +5199,7 @@ var fs25 = __toESM(require("fs"), 1);
 var path24 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-diff.ts
-var import_node_child_process12 = require("child_process");
+var import_node_child_process13 = require("child_process");
 var IGNORED_TABLES = /* @__PURE__ */ new Set(["flyway_schema_history"]);
 var SCHEMA_QUERY2 = "SELECT c.table_name, c.column_name, c.data_type FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename WHERE c.table_schema='public' AND t.schemaname='public' ORDER BY c.table_name, c.ordinal_position";
 async function getSchemaDiff(args) {
@@ -5365,7 +5385,7 @@ function findDefaultBranch(instance) {
   }
 }
 function dbcli6(args) {
-  return (0, import_node_child_process12.execFileSync)("databricks", args, {
+  return (0, import_node_child_process13.execFileSync)("databricks", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.cliDefault
@@ -5381,7 +5401,7 @@ var fs20 = __toESM(require("fs"), 1);
 var path18 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
-var import_node_child_process13 = require("child_process");
+var import_node_child_process14 = require("child_process");
 var fs19 = __toESM(require("fs"), 1);
 var path17 = __toESM(require("path"), 1);
 function resolveAlembicBin(projectDir) {
@@ -5400,7 +5420,7 @@ function resolveAlembicBin(projectDir) {
 function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
     const bin = resolveAlembicBin(projectDir);
-    const child = (0, import_node_child_process13.spawn)(bin, args, {
+    const child = (0, import_node_child_process14.spawn)(bin, args, {
       cwd: projectDir,
       env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
@@ -5742,7 +5762,7 @@ var fs21 = __toESM(require("fs"), 1);
 var path20 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
-var import_node_child_process14 = require("child_process");
+var import_node_child_process15 = require("child_process");
 var path19 = __toESM(require("path"), 1);
 function dsnToFlywayEnv(dsn) {
   const u = new URL(dsn);
@@ -5758,7 +5778,7 @@ function migrationsLocation(projectDir) {
 function runFlyway(ctx, args) {
   const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
   return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process14.spawn)(
+    const child = (0, import_node_child_process15.spawn)(
       "flyway",
       ["-outputType=json", `-locations=${migrationsLocation(ctx.projectDir)}`, ...args],
       {
@@ -5993,7 +6013,7 @@ var fs23 = __toESM(require("fs"), 1);
 var path22 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
-var import_node_child_process15 = require("child_process");
+var import_node_child_process16 = require("child_process");
 var fs22 = __toESM(require("fs"), 1);
 var path21 = __toESM(require("path"), 1);
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
@@ -6015,7 +6035,7 @@ function spawnKnex(projectDir, args, dsn) {
       );
       return;
     }
-    const child = (0, import_node_child_process15.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
+    const child = (0, import_node_child_process16.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
       cwd: projectDir,
       env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]

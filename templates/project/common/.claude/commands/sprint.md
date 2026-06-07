@@ -26,8 +26,7 @@ from the recorded backlog).
 
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
-KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
-npx --yes --package="$KIT_PKG" \
+./scripts/lk \
   lakebase-tdd-drive --sprint "<sprint-name>" --gates "$GATES" --project-dir "$PWD"
 ```
 

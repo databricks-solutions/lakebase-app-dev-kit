@@ -56,7 +56,7 @@ Remote types (`databricks-app`, ...) are NOT implemented by `lakebase-tdd-deploy
 
 ## Logging
 
-Via `lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role release-engineer --feature <id>`:
+Via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role release-engineer --feature <id>`:
 - `--event phase.start` / `phase.end` around the deploy.
 - `--event deploy.reachable --data '{"target":"local","base_url":"..."}'` on reachability; `--level error --event deploy.unreachable` when it never answers.
 - `--event verify.passed` / `--level error --event verify.failed` for the running-app verify.

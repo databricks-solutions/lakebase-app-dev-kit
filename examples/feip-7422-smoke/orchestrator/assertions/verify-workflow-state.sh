@@ -39,7 +39,7 @@ ok()   { echo "verify-workflow-state[$EXPECTED_STATE]: ✓ $*"; }
 # and folding them into STATE_JSON (the old `2>&1`) breaks `jq` parsing and
 # yields a spurious found=false.
 STATE_JSON="$(
-  npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+  "$PROJECT_DIR/scripts/lk" \
     lakebase-scm-state --project-dir "$PROJECT_DIR" --json 2>/dev/null
 )"
 
@@ -90,7 +90,7 @@ case "$EXPECTED_STATE" in
     # than a hardcoded prefix. Compare against the feature_id we are checking.
     canon_id="${EXPECTED_FEATURE_ID:-$fid}"
     EXPECTED_BRANCH="$(
-      npx --yes --package="${LAKEBASE_KIT_NPX:-github:databricks-solutions/lakebase-app-dev-kit}" \
+      "$PROJECT_DIR/scripts/lk" \
         lakebase-scm-feature-branch "$canon_id" 2>/dev/null
     )"
     if [[ -z "$EXPECTED_BRANCH" ]]; then

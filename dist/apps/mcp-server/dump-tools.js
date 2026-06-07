@@ -7146,6 +7146,7 @@ function dbcli3(args) {
 init_esm_shims();
 import * as fs14 from "fs";
 import * as path14 from "path";
+import { spawnSync } from "child_process";
 
 // scripts/lakebase/env-file.ts
 init_esm_shims();
@@ -9574,6 +9575,25 @@ Last probe error:
       );
     }
   }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path14.join(projectDir, ".lakebase");
+        fs14.mkdirSync(dir, { recursive: true });
+        fs14.writeFileSync(path14.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path14.join(projectDir, "scripts", "lk");
+      if (fs14.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -10737,7 +10757,7 @@ import { join as join29 } from "path";
 
 // scripts/tdd/test-list.ts
 init_esm_shims();
-import { readFileSync as readFileSync10, writeFileSync as writeFileSync11, existsSync as existsSync20, mkdirSync as mkdirSync11, readdirSync as readdirSync10, statSync as statSync4 } from "fs";
+import { readFileSync as readFileSync10, writeFileSync as writeFileSync12, existsSync as existsSync20, mkdirSync as mkdirSync11, readdirSync as readdirSync10, statSync as statSync4 } from "fs";
 import { join as join22, dirname as dirname7 } from "path";
 function readMasterTestList(tddDir, featureId) {
   const dir = findFeatureDir(tddDir, featureId);
@@ -10761,7 +10781,7 @@ function findFeatureDir(tddDir, featureId) {
 
 // scripts/tdd/design-spec-gate.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync24, readFileSync as readFileSync14, writeFileSync as writeFileSync14, mkdirSync as mkdirSync13 } from "fs";
+import { appendFileSync, existsSync as existsSync24, readFileSync as readFileSync14, writeFileSync as writeFileSync15, mkdirSync as mkdirSync13 } from "fs";
 import { dirname as dirname8, join as join26 } from "path";
 
 // scripts/tdd/run-cycle.ts
@@ -10769,7 +10789,7 @@ init_esm_shims();
 
 // scripts/tdd/experiment.ts
 init_esm_shims();
-import { existsSync as existsSync23, mkdirSync as mkdirSync12, readdirSync as readdirSync11, readFileSync as readFileSync13, statSync as statSync5, writeFileSync as writeFileSync13 } from "fs";
+import { existsSync as existsSync23, mkdirSync as mkdirSync12, readdirSync as readdirSync11, readFileSync as readFileSync13, statSync as statSync5, writeFileSync as writeFileSync14 } from "fs";
 import { join as join24 } from "path";
 
 // scripts/lakebase/convention-branches.ts
@@ -11432,7 +11452,7 @@ function readPlan(tddDir, featureId, storyId) {
 
 // scripts/tdd/smells.ts
 init_esm_shims();
-import { existsSync as existsSync25, readFileSync as readFileSync15, writeFileSync as writeFileSync15 } from "fs";
+import { existsSync as existsSync25, readFileSync as readFileSync15, writeFileSync as writeFileSync16 } from "fs";
 import { join as join27 } from "path";
 function readSmellsLog(tddDir) {
   const file = join27(tddDir, "smells.json");
@@ -11442,7 +11462,7 @@ function readSmellsLog(tddDir) {
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync26, readFileSync as readFileSync16, readdirSync as readdirSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync16 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync16, readdirSync as readdirSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync17 } from "fs";
 import { join as join28 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];

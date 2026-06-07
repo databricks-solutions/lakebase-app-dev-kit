@@ -38,7 +38,7 @@ A role's work between phase boundaries can take many minutes (an LLM drafting a 
 - **Release Engineer:** one per deploy step (deploy / reachable / verify).
 
 ```bash
-lakebase-tdd-log --role spec-author --level debug --event progress \
+./scripts/lk lakebase-tdd-log --role spec-author --level debug --event progress \
   --message "AC 4/11 drafted: bug is reachable by identifier after filing" --feature F1-initial-domain
 ```
 
@@ -46,10 +46,10 @@ Use `debug` for sub-step progress (so `info` stays the outputs/decisions stream)
 
 ## 3. How to emit
 
-Shell out to the kit CLI (works from a headless `claude -p` agent):
+Shell out to the kit CLI (works from a headless `claude -p` agent). Roles invoke it through the project's `./scripts/lk` resolver shim (fast; no npx), which is always present at the project root:
 
 ```bash
-lakebase-tdd-log --role spec-author --level info \
+./scripts/lk lakebase-tdd-log --role spec-author --level info \
   --event artifact.written --message "wrote feature-spec.json + 3 stories" \
   --feature F1-initial-domain --data '{"path":"feature-spec.json","conformant":true}'
 ```
@@ -57,7 +57,7 @@ lakebase-tdd-log --role spec-author --level info \
 Read / tail the centralized log:
 
 ```bash
-lakebase-tdd-log --read --feature F1-initial-domain --min-level info
+./scripts/lk lakebase-tdd-log --read --feature F1-initial-domain --min-level info
 ```
 
 In-process callers use `emitAgentLogEvent` / `readAgentLog` from
