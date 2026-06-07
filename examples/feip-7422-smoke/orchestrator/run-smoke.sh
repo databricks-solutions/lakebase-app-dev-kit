@@ -166,6 +166,14 @@ export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 # the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
 export LAKEBASE_TDD_UI=1
 
+# SMOKE_DRIVER=1 routes the per-feature design+build through the deterministic
+# orchestrator driver (lakebase-tdd-drive) in one process instead of the two
+# `claude -p --agent scrum-master` gate-drain phases, so the per-story pipeline
+# streams and routing/logging are code, not LLM. The driver claims the feature
+# branch first, then breaks down + designs + builds + accepts + deploys; the
+# Human Proxy auto-approves gates. Default (unset/0) keeps the scrum-master flow.
+: "${SMOKE_DRIVER:=0}"
+
 # Headless claude flags shared by every `claude -p` invocation below.
 # --strict-mcp-config makes Claude Code ignore ALL discovered MCP config (the
 # operator's personal ~/.claude servers: jira/slack/google/confluence/...) and
@@ -447,25 +455,45 @@ run_iteration() {
   # (forked from main HEAD) already carries .tdd/features/<id>/feature-request.md.
   # /design's Spec Author reads it as input and produces feature-spec.{md,json}.
 
-  # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired
-  # feature branch via the substrate BEFORE phase 1 runs. The
-  # orchestrator never touches `git checkout -b`. /design pauses at
-  # HITL gates (spec / plan / test_list); the gate-drain loop mocks
-  # the human approver so the smoke can run headless.
-  log "  step 3: /design ${feature_id} (pre-hook claims branch via substrate, gates approved by human-proxy)"
-  run_claude_with_gate_drain "/design ${feature_id}" "${feature_id}" || exit 2
+  if [[ "${SMOKE_DRIVER:-0}" == "1" ]]; then
+    # ── Driver mode (FEIP-7461): the deterministic orchestrator drives the
+    # whole feature lane in ONE process, so design + build STREAM (build starts
+    # on a story the moment its gate is approved). It replaces the two
+    # claude -p --agent scrum-master gate-drain phases. The driver does not
+    # claim the feature branch (that is /design Step 0's job, outside the
+    # per-story state machine), so we claim it explicitly first; the driver
+    # then breaks the feature down, designs + builds + accepts each story
+    # (gates auto-approved by the Human Proxy), and deploys.
+    log "  step 3-4 (driver): claim ${feature_id} + lakebase-tdd-drive"
+    npx --yes --package="${KIT_NPX}" \
+      lakebase-scm-claim-feature-branch "${feature_id}" --project-dir "$PROJECT_DIR" --json \
+      || { err "claim-feature-branch failed for ${feature_id}"; exit 2; }
+    log "  step 3.5: verify-workflow-state feature-claimed ${feature_id}"
+    "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$feature_id"
+    npx --yes --package="${KIT_NPX}" \
+      lakebase-tdd-drive --feature "${feature_id}" --project-dir "$PROJECT_DIR" \
+      || { err "lakebase-tdd-drive failed for ${feature_id}"; exit 2; }
+  else
+    # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired
+    # feature branch via the substrate BEFORE phase 1 runs. The
+    # orchestrator never touches `git checkout -b`. /design pauses at
+    # HITL gates (spec / plan / test_list); the gate-drain loop mocks
+    # the human approver so the smoke can run headless.
+    log "  step 3: /design ${feature_id} (pre-hook claims branch via substrate, gates approved by human-proxy)"
+    run_claude_with_gate_drain "/design ${feature_id}" "${feature_id}" || exit 2
 
-  # 3.5 (FEIP-7458 phase A+): assert the SCM workflow state advanced
-  # to feature-claimed via the claim CLI. This catches the case where
-  # /design ran but Step 0's substrate call silently failed.
-  log "  step 3.5: verify-workflow-state feature-claimed ${feature_id}"
-  "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$feature_id"
+    # 3.5 (FEIP-7458 phase A+): assert the SCM workflow state advanced
+    # to feature-claimed via the claim CLI. This catches the case where
+    # /design ran but Step 0's substrate call silently failed.
+    log "  step 3.5: verify-workflow-state feature-claimed ${feature_id}"
+    "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$feature_id"
 
-  # 4. /build <feature-id>: reads test-list.json that /design produced.
-  # /build pauses at the promote gate (and any earlier gates if it
-  # re-opens them); same gate-drain loop applies.
-  log "  step 4: /build ${feature_id} (gates approved by human-proxy)"
-  run_claude_with_gate_drain "/build ${feature_id}" "${feature_id}" || exit 2
+    # 4. /build <feature-id>: reads test-list.json that /design produced.
+    # /build pauses at the promote gate (and any earlier gates if it
+    # re-opens them); same gate-drain loop applies.
+    log "  step 4: /build ${feature_id} (gates approved by human-proxy)"
+    run_claude_with_gate_drain "/build ${feature_id}" "${feature_id}" || exit 2
+  fi
 
   # 4.5 (FEIP-7565): advisory per-story pipeline check. If the orchestrator
   # drove the streaming per-story pipeline (feature decomposed into >1 story),
@@ -502,14 +530,19 @@ run_iteration() {
   # the prod release path is merge.yml (SCM workflow), tested separately. /deploy
   # opens no gates.json gate, so it is a plain claude -p invocation (not a
   # gate-drain). A safety teardown follows in case the command left the app up.
-  log "  step 6.5: claude -p '/deploy ${feature_id} --target local' --agent scrum-master (working-software check, via release-engineer)"
-  if ! claude -p "/deploy ${feature_id} --target local" "${CLAUDE_FLAGS[@]}" --agent scrum-master; then
+  # In driver mode the driver already ran the deploy phase (deploy + the PO
+  # deploy gate) as part of lakebase-tdd-drive, so this separate /deploy is
+  # skipped to avoid a double deploy.
+  if [[ "${SMOKE_DRIVER:-0}" != "1" ]]; then
+    log "  step 6.5: claude -p '/deploy ${feature_id} --target local' --agent scrum-master (working-software check, via release-engineer)"
+    if ! claude -p "/deploy ${feature_id} --target local" "${CLAUDE_FLAGS[@]}" --agent scrum-master; then
+      npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
+      echo "smoke: /deploy failed for ${feature_id} (app not reachable / verify failed)" >&2
+      exit 2
+    fi
+    # Safety teardown before the next iteration (idempotent if already stopped).
     npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
-    echo "smoke: /deploy failed for ${feature_id} (app not reachable / verify failed)" >&2
-    exit 2
   fi
-  # Safety teardown before the next iteration (idempotent if already stopped).
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
 
   # 7. local commit on the feature branch. The FEIP-7422 smoke is a
   # TDD-workflow validation harness; the SCM-workflow CLIs
