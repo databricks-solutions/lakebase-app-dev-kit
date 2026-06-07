@@ -79,11 +79,11 @@ describe("orchestrator e2e (hermetic – stubbed Navigator + Driver, real script
     });
 
     // --- Phase 3: Design-spec gate ---
-    const analysis = analyzeForGate(tdd, "F1");
+    const analysis = analyzeForGate(tdd, "F1", "S1");
     expect(analysis.proposed_plan.mode).toBe("N=1");
     recordPlan(tdd, analysis.proposed_plan, "kevin@example.com");
     writePlan(tdd, analysis.proposed_plan);
-    expect(existsSync(join(tdd, "features", "F1", "plan.json"))).toBe(true);
+    expect(existsSync(join(tdd, "features", "F1", "stories", "S1", "plan.json"))).toBe(true);
     expect(readFileSync(join(tdd, "selection-log.md"), "utf8")).toContain("Experiment plan for F1");
 
     // HITL Gate 4 approval – transition to implementation

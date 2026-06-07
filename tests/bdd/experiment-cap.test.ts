@@ -267,7 +267,7 @@ describe("analyzeForGate populates a default per-experiment cap", () => {
         feature_id: "F1",
         items: [{ id: "T1", description: "any", ac_id: "AC1", status: "pending" }],
       });
-      const analysis = analyzeForGate(tddDir, "F1");
+      const analysis = analyzeForGate(tddDir, "F1", "S1");
       expect(analysis.proposed_plan.budget.per_experiment).toBeDefined();
       expect(analysis.proposed_plan.budget.per_experiment?.max_cycles).toBeGreaterThan(0);
       expect(analysis.proposed_plan.budget.per_experiment?.max_wall_clock_minutes).toBeGreaterThan(0);

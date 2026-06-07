@@ -82,6 +82,7 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
   it("validates plan.json against the new plan schema", () => {
     const plan = JSON.stringify({
       feature_id: "F1-initial-domain",
+      story_id: "S1-submit",
       N: 1,
       mode: "N=1",
       strategies: [{ name: "single", rationale: "iterate" }],

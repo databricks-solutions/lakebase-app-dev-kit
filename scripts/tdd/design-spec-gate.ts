@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
-import { readMasterTestList } from "./test-list";
+import { readMasterTestList, scopeToStory, acsForStory } from "./test-list";
 import type { TestList, TestListItem } from "./test-list";
 import { readAcLayer } from "./run-cycle";
 import type { AcLayer } from "./experiment";
@@ -47,6 +47,8 @@ export interface BudgetProposal {
 
 export interface ExperimentPlan {
   feature_id: string;
+  /** The story this plan is for (FEIP-7566): experiments are story-scoped. */
+  story_id: string;
   N: number;
   mode: "N=1" | "N>=2";
   strategies: ExperimentStrategy[];
@@ -90,6 +92,7 @@ export interface TransitionBlocker {
 
 export interface GateAnalysis {
   feature_id: string;
+  story_id: string;
   opinion_gaps: OpinionGap[];
   proposed_plan: ExperimentPlan;
   /** Hard-stops the PO must clear. Empty array means "safe to advance." */
@@ -111,15 +114,21 @@ export interface AnalyzeForGateOptions {
 export function analyzeForGate(
   tddDir: string,
   featureId: string,
+  storyId: string,
   opts?: AnalyzeForGateOptions
 ): GateAnalysis {
-  const list = readMasterTestList(tddDir, featureId);
+  // Experiments are story-scoped (FEIP-7566): analyze only this story's slice
+  // of the master test list, so N (one experiment vs a race) is decided per
+  // story, not per whole feature.
+  const master = readMasterTestList(tddDir, featureId);
+  const list = scopeToStory(master, storyId, acsForStory(tddDir, featureId, storyId));
   const gaps = detectOpinionGaps(list);
   const projectDir = opts?.projectDir ?? dirname(tddDir);
   const transition_blockers = checkE2eGate({ tddDir, featureId, list, projectDir });
   const mode: "N=1" | "N>=2" = gaps.length >= 2 ? "N>=2" : "N=1";
   const proposed: ExperimentPlan = {
     feature_id: featureId,
+    story_id: storyId,
     N: mode === "N=1" ? 1 : Math.min(gaps.length, 3),
     mode,
     strategies:
@@ -149,7 +158,7 @@ export function analyzeForGate(
   if (spike_inputs.length > 0) {
     proposed.spike_inputs = spike_inputs;
   }
-  return { feature_id: featureId, opinion_gaps: gaps, proposed_plan: proposed, transition_blockers };
+  return { feature_id: featureId, story_id: storyId, opinion_gaps: gaps, proposed_plan: proposed, transition_blockers };
 }
 
 /**
@@ -211,7 +220,7 @@ export function recordPlan(tddDir: string, plan: ExperimentPlan, deciderEmail?: 
   const ts = new Date().toISOString();
   const lines = [
     "",
-    `## ${ts} – Experiment plan for ${plan.feature_id}`,
+    `## ${ts} – Experiment plan for ${plan.feature_id}/${plan.story_id}`,
     `- **Mode:** ${plan.mode} (N=${plan.N})`,
     `- **Budget:** ${plan.budget.concurrent_branches} concurrent, ${plan.budget.wall_clock_minutes} min wall-clock, ${plan.budget.agent_pairs} agent pair(s)`,
     `- **Strategies:**`,
@@ -223,15 +232,17 @@ export function recordPlan(tddDir: string, plan: ExperimentPlan, deciderEmail?: 
   appendFileSync(logPath, lines.join("\n"));
 }
 
-export function readPlan(tddDir: string, featureId: string): ExperimentPlan | null {
-  const planPath = join(tddDir, "features", `${featureId}`, "plan.json");
+export function readPlan(tddDir: string, featureId: string, storyId: string): ExperimentPlan | null {
+  const planPath = join(tddDir, "features", featureId, "stories", storyId, "plan.json");
   if (!existsSync(planPath)) return null;
   return JSON.parse(readFileSync(planPath, "utf8"));
 }
 
 export function writePlan(tddDir: string, plan: ExperimentPlan): void {
-  // Plan persists as features/<F>/plan.json for downstream readers (orchestrator).
-  const dir = join(tddDir, "features", plan.feature_id);
+  // Plan persists per story (FEIP-7566) as features/<F>/stories/<story>/plan.json
+  // for downstream readers (orchestrator). Conformance keys plan.json by
+  // basename, so the per-story location still validates against plan.schema.json.
+  const dir = join(tddDir, "features", plan.feature_id, "stories", plan.story_id);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "plan.json"), JSON.stringify(plan, null, 2) + "\n");
 }

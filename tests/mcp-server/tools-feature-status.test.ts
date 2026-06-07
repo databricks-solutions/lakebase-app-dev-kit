@@ -21,6 +21,7 @@ const FEATURE_ID = "F1-checkout";
 
 const SAMPLE_PLAN: ExperimentPlan = {
   feature_id: FEATURE_ID,
+  story_id: "S1",
   N: 1,
   mode: "N=1",
   strategies: [{ name: "checkout", rationale: "default" }],
@@ -73,7 +74,7 @@ describe("MCP tool: lakebase_feature_status", () => {
     })) as FeatureStatusSnapshot;
 
     expect(result.feature_id).toBe(FEATURE_ID);
-    expect(result.plan?.mode).toBe("N=1");
+    expect(result.plans[0].plan.mode).toBe("N=1");
     expect(result.test_list?.total).toBe(2);
     expect(result.test_list?.by_status.green).toBe(1);
     expect(result.experiments).toHaveLength(1);
@@ -117,7 +118,7 @@ describe("MCP tool: lakebase_feature_status", () => {
         "feature_id",
         "gates",
         "open_smells",
-        "plan",
+        "plans",
         "selection_log_recent",
         "test_list",
       ].sort()
