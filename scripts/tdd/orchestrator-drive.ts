@@ -82,3 +82,142 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
 
   return { kind: "design-complete" };
 }
+
+// --- Full workflow transition (planning + design + build + deploy) ----------
+//
+// nextTransition composes the lane sub-machines into the whole feature
+// lifecycle. The design lane (above) streams stories through their gates; the
+// single build lane then takes each gate-approved story through its experiment
+// build and acceptance; when every story is accepted the feature deploys. On a
+// single sequential build lane the precedence is: finish/advance the active
+// build, else dispatch a ready story, else advance the design lane, so a story
+// flows design -> gate -> build -> accept before the next is designed.
+
+/** What a story has produced in the build lane (its experiment build). */
+export interface StoryBuild {
+  /** The paired experiment branch was cut (FEIP-7566). */
+  experimentCut: boolean;
+  /** The Navigator wrote the (failing) tests for the story. */
+  testsWritten: boolean;
+  /** The Driver made the tests pass. */
+  codeWritten: boolean;
+  /** The built story was deployed for the PO's acceptance review. */
+  awaitingAcceptance: boolean;
+  /** The PO accepted: experiment merged into the feature branch, story done. */
+  accepted: boolean;
+}
+
+/** A story's full design + gate + build status, as the driver sees it. */
+export interface StoryView extends DriveStoryView {
+  build: StoryBuild;
+}
+
+/** The driver's coarse phase: sprint planning, the per-feature streaming, the
+ *  per-feature deploy, or done. (The fine-grained TDD phases live in the
+ *  pipeline state the lane sub-machines read.) */
+export type DrivePhase = "planning" | "feature" | "deploy" | "done";
+
+export interface PlanningState {
+  /** The Spec Author proposed the sprint's feature breakdown. */
+  proposed: boolean;
+  /** The Product Owner authored the sprint's feature-requests. */
+  requestsAuthored: boolean;
+}
+
+export interface DeployState {
+  /** The Release Engineer deployed the feature to the target. */
+  deployed: boolean;
+  /** The PO signed the deploy (working-software) gate. */
+  gateApproved: boolean;
+}
+
+export interface DriveState {
+  phase: DrivePhase;
+  planning?: PlanningState;
+  breakdownDone: boolean;
+  storyOrder: string[];
+  stories: Record<string, StoryView>;
+  /** The story the single build lane is on, or null when idle. */
+  buildActive: string | null;
+  deploy?: DeployState;
+}
+
+export type WorkflowAction =
+  | DriveAction
+  | { kind: "invoke-role"; role: "spec-author"; mode: "propose" }
+  | { kind: "invoke-role"; role: "product-owner"; mode: "author-requests" }
+  | { kind: "planning-complete" }
+  | { kind: "dispatch"; story: string }
+  | { kind: "cut-experiment"; story: string }
+  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string }
+  | { kind: "await-acceptance"; story: string }
+  | { kind: "accept"; story: string }
+  | { kind: "complete"; story: string }
+  | { kind: "feature-complete" }
+  | { kind: "deploy" }
+  | { kind: "approve-deploy-gate" }
+  | { kind: "done" };
+
+/** The next build-lane action for the story the lane is on. */
+function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
+  if (!b.experimentCut) return { kind: "cut-experiment", story };
+  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
+  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
+  if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
+  if (!b.accepted) return { kind: "accept", story };
+  return { kind: "complete", story }; // built + accepted -> free the lane
+}
+
+/**
+ * The single next action for the whole feature workflow. Pure.
+ *
+ * Precedence:
+ *   planning:  propose -> author-requests -> planning-complete.
+ *   feature:   advance the active build; else dispatch a ready (gate-approved,
+ *              unbuilt) story into the idle lane; else advance the design lane;
+ *              else (all accepted) feature-complete.
+ *   deploy:    deploy -> approve-deploy-gate -> done.
+ */
+export function nextTransition(state: DriveState): WorkflowAction {
+  if (state.phase === "planning") {
+    const p = state.planning ?? { proposed: false, requestsAuthored: false };
+    if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
+    if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
+    return { kind: "planning-complete" };
+  }
+
+  if (state.phase === "deploy") {
+    const d = state.deploy ?? { deployed: false, gateApproved: false };
+    if (!d.deployed) return { kind: "deploy" };
+    if (!d.gateApproved) return { kind: "approve-deploy-gate" };
+    return { kind: "done" };
+  }
+
+  if (state.phase === "done") return { kind: "done" };
+
+  // phase === "feature": stream design + build.
+  // 1. Finish/advance the story the build lane is already on.
+  if (state.buildActive) {
+    return nextBuildAction(state.buildActive, state.stories[state.buildActive].build);
+  }
+  // 2. Lane idle: dispatch the first gate-approved, not-yet-accepted story.
+  for (const story of state.storyOrder) {
+    const v = state.stories[story];
+    if (v?.gateApproved && !v.build.accepted) return { kind: "dispatch", story };
+  }
+  // 3. Otherwise advance the design lane (reusing the design sub-machine).
+  const designView: DesignDriveState = {
+    breakdownDone: state.breakdownDone,
+    storyOrder: state.storyOrder,
+    stories: Object.fromEntries(
+      Object.entries(state.stories).map(([id, v]) => [
+        id,
+        { gateApproved: v.gateApproved, gateSurfaced: v.gateSurfaced, design: v.design },
+      ]),
+    ),
+  };
+  const design = nextDesignAction(designView);
+  // 4. Design lane exhausted + nothing left to build => every story is accepted.
+  if (design.kind === "design-complete") return { kind: "feature-complete" };
+  return design;
+}

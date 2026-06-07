@@ -8,7 +8,13 @@
 // the spec-author is invoked per story, and batching is structurally impossible.
 
 import { describe, it, expect } from "vitest";
-import { nextDesignAction, type DesignDriveState } from "../../scripts/tdd/orchestrator-drive";
+import {
+  nextDesignAction,
+  nextTransition,
+  type DesignDriveState,
+  type DriveState,
+  type StoryView,
+} from "../../scripts/tdd/orchestrator-drive";
 
 /** A story fully through design + gate (so the loop skips it). */
 function gated(): DesignDriveState["stories"][string] {
@@ -88,5 +94,97 @@ describe("nextDesignAction (per-story design lane state machine)", () => {
   it("reports design-complete when every story is gate-approved", () => {
     const s = { S1: gated(), S2: gated(), S3: gated() };
     expect(nextDesignAction(state({ stories: s }))).toEqual({ kind: "design-complete" });
+  });
+});
+
+// --- Full workflow transition (planning + design + build + deploy) ----------
+
+/** A story view fully through design + gate but not yet built. */
+function gatedUnbuilt(): StoryView {
+  return {
+    gateApproved: true, gateSurfaced: true,
+    design: { hasAcs: true, architectAnnotated: true, testListReady: true },
+    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, accepted: false },
+  };
+}
+function freshStory(): StoryView {
+  return {
+    gateApproved: false, gateSurfaced: false,
+    design: { hasAcs: false, architectAnnotated: false, testListReady: false },
+    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, accepted: false },
+  };
+}
+function builtAccepted(): StoryView {
+  return {
+    gateApproved: true, gateSurfaced: true,
+    design: { hasAcs: true, architectAnnotated: true, testListReady: true },
+    build: { experimentCut: true, testsWritten: true, codeWritten: true, awaitingAcceptance: true, accepted: true },
+  };
+}
+function ws(over: Partial<DriveState>): DriveState {
+  return {
+    phase: "feature", breakdownDone: true, storyOrder: ["S1"], stories: {},
+    buildActive: null, ...over,
+  };
+}
+
+describe("nextTransition: planning lane", () => {
+  it("proposes the breakdown, then has the PO author requests, then completes", () => {
+    const base = ws({ phase: "planning", planning: { proposed: false, requestsAuthored: false } });
+    expect(nextTransition(base)).toEqual({ kind: "invoke-role", role: "spec-author", mode: "propose" });
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, requestsAuthored: false } })))
+      .toEqual({ kind: "invoke-role", role: "product-owner", mode: "author-requests" });
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, requestsAuthored: true } })))
+      .toEqual({ kind: "planning-complete" });
+  });
+});
+
+describe("nextTransition: build lane (after a story is gated)", () => {
+  it("dispatches a gate-approved story into the idle build lane", () => {
+    expect(nextTransition(ws({ stories: { S1: gatedUnbuilt() }, buildActive: null })))
+      .toEqual({ kind: "dispatch", story: "S1" });
+  });
+
+  it("drives the active build cut -> navigator -> driver -> await -> accept -> complete", () => {
+    const v = gatedUnbuilt();
+    const st = ws({ stories: { S1: v }, buildActive: "S1" });
+    expect(nextTransition(st)).toEqual({ kind: "cut-experiment", story: "S1" });
+    v.build.experimentCut = true;
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1" });
+    v.build.testsWritten = true;
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "driver", story: "S1" });
+    v.build.codeWritten = true;
+    expect(nextTransition(st)).toEqual({ kind: "await-acceptance", story: "S1" });
+    v.build.awaitingAcceptance = true;
+    expect(nextTransition(st)).toEqual({ kind: "accept", story: "S1" });
+    v.build.accepted = true;
+    expect(nextTransition(st)).toEqual({ kind: "complete", story: "S1" });
+  });
+
+  it("builds a gated story before designing the next (per-story flow on a single lane)", () => {
+    // S1 gated+unbuilt, S2 fresh, lane idle -> dispatch S1 (build precedes designing S2).
+    const st = ws({ storyOrder: ["S1", "S2"], stories: { S1: gatedUnbuilt(), S2: freshStory() }, buildActive: null });
+    expect(nextTransition(st)).toEqual({ kind: "dispatch", story: "S1" });
+  });
+
+  it("advances the design lane when the build lane is idle and nothing is ready to build", () => {
+    // S1 fresh (not gated), nothing ready -> design lane works S1.
+    const st = ws({ storyOrder: ["S1", "S2"], stories: { S1: freshStory(), S2: freshStory() }, buildActive: null });
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "spec-author", story: "S1" });
+  });
+});
+
+describe("nextTransition: deploy + done", () => {
+  it("moves to deploy when every story is built + accepted", () => {
+    expect(nextTransition(ws({ stories: { S1: builtAccepted() } }))).toEqual({ kind: "feature-complete" });
+  });
+
+  it("deploys, surfaces the deploy gate, then is done", () => {
+    expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: false, gateApproved: false } })))
+      .toEqual({ kind: "deploy" });
+    expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: true, gateApproved: false } })))
+      .toEqual({ kind: "approve-deploy-gate" });
+    expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: true, gateApproved: true } })))
+      .toEqual({ kind: "done" });
   });
 });
