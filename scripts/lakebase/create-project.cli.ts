@@ -7,6 +7,8 @@
 // stderr.
 
 import { createProject, CreateProjectArgs } from "./create-project.js";
+import type { AgentRole } from "../tdd/agent-log.js";
+import { ALL_AGENT_ROLES } from "../tdd/agent-models.js";
 
 interface ParsedArgs {
   jsonInput?: string;
@@ -22,6 +24,7 @@ interface ParsedArgs {
   enableE2e?: boolean;
   enableInfra?: boolean;
   skipCommands?: boolean;
+  agentModels?: Partial<Record<AgentRole, string>>;
   help?: boolean;
 }
 
@@ -88,6 +91,24 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--skip-commands":
         out.skipCommands = true;
         break;
+      case "--agent-model": {
+        // --agent-model <role>=<model>, repeatable. The HIL's per-project
+        // override of a role's recommended model (FEIP-7510).
+        const pair = argv[++i] ?? "";
+        const eq = pair.indexOf("=");
+        const role = eq >= 0 ? pair.slice(0, eq) : "";
+        const model = eq >= 0 ? pair.slice(eq + 1) : "";
+        if (!ALL_AGENT_ROLES.includes(role as AgentRole) || !model) {
+          process.stderr.write(
+            `--agent-model: expected <role>=<model> with a known role. Got: ${JSON.stringify(pair)}\n` +
+              `  roles: ${ALL_AGENT_ROLES.join(", ")}\n`,
+          );
+          out.help = true;
+        } else {
+          (out.agentModels ??= {})[role as AgentRole] = model;
+        }
+        break;
+      }
       case "--help":
       case "-h":
         out.help = true;
@@ -129,6 +150,12 @@ Flags:
                       (default: on for --language nodejs, off otherwise)
   --skip-commands     Skip scaffolding .claude/commands/{design,build}.md
                       (default: commands are written)
+  --agent-model       <role>=<model>, repeatable. Override a TDD role agent's
+                      recommended model for this project (asked at setup; the
+                      HIL's call). Roles: spec-author, architect-reviewer,
+                      test-strategist, ux-designer, navigator, driver,
+                      product-owner, release-engineer. Omitted roles use their
+                      recommended model. Persisted to .lakebase/agent-config.json.
   --json-input        Pass all args as a single JSON object (BDD harness)
 
 Output: JSON on stdout (CreateProjectResult). Progress to stderr.
@@ -167,6 +194,7 @@ async function main(): Promise<number> {
       enableE2e: args.enableE2e,
       enableInfra: args.enableInfra,
       skipCommands: args.skipCommands,
+      agentModels: args.agentModels,
     };
   }
 

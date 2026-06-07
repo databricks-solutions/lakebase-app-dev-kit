@@ -28,6 +28,8 @@ import {
   initWorkflowState,
   writeWorkflowState,
 } from "./scm-workflow-state.js";
+import type { AgentRole } from "../tdd/agent-log.js";
+import { buildAgentConfig, writeAgentConfig } from "../tdd/agent-models.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -99,6 +101,15 @@ export interface CreateProjectArgs {
    * consumers that only use the substrate library.
    */
   skipCommands?: boolean;
+  /**
+   * Per-role model overrides for the TDD-workflow agents (FEIP-7510). Each role
+   * carries a strongly-recommended model in its definition; this is where the
+   * HIL overrides it for THIS project, asked at setup. Keyed by role name
+   * (e.g. { "driver": "haiku", "spec-author": "opus" }). Omitted/empty means
+   * every role uses its recommended model. Persisted to
+   * .lakebase/agent-config.json (recommended seeded from the role defs).
+   */
+  agentModels?: Partial<Record<AgentRole, string>>;
 }
 
 export interface CreateProjectResult {
@@ -339,6 +350,23 @@ export async function createProject(
     warnings.push(
       `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`,
     );
+  }
+
+  // ── Step 7d: per-role agent model config (FEIP-7510) ──────────
+  // Seed .lakebase/agent-config.json with each TDD-workflow role's
+  // strongly-recommended model (from its definition) plus any HIL overrides
+  // chosen at setup. Written before the initial commit so it is tracked, like
+  // workflow-state.json. The orchestrator resolves the per-role model from
+  // this file (override -> recommended -> inherit). Best-effort: a failure is
+  // a warning, the recommended models still apply by default.
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
+      );
+    }
   }
 
   // ── Step 8: Initial commit (+ push when GitHub configured) ────

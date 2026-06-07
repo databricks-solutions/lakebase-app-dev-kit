@@ -48,6 +48,7 @@ export default defineConfig({
     "scripts/tdd/deploy.cli": "scripts/tdd/deploy.cli.ts",
     "scripts/tdd/gate-conformance.cli": "scripts/tdd/gate-conformance.cli.ts",
     "scripts/tdd/agent-log.cli": "scripts/tdd/agent-log.cli.ts",
+    "scripts/tdd/agent-models.cli": "scripts/tdd/agent-models.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },
