@@ -194,7 +194,7 @@ For when you want to run something directly without the agent. Most TDD work goe
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). |
 | `lakebase-infra-runner [--instance <id>] [--branch <id>] [--project-dir <path>] [--comparison-branch <id>] [--junit-output <file>]` | Run the `[Infra]`-tag suite against a paired Lakebase branch. Backs the scaffolded `test:infra` script; reads `LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` when flags are absent. Emits JUnit XML when `--junit-output` is set. |
 | `node dist/scripts/tdd/spec-sync.cli.js <tddDir>` | Walk the `.tdd/` tree and print drift reports. Exit 0 even when reports exist (warn-only by design). |
-| `node dist/scripts/tdd/test-list.cli.js <tddDir> <featureId>` | Regenerate per-AC views from the feature-level master test list. |
+| `node dist/scripts/tdd/test-list.cli.js <tddDir> <featureId> [storyId]` | Regenerate per-AC views from the feature-level master test list. With a `storyId`, instead write that story's scoped per-story test list (`stories/<story>/test-list-per-story.json`), the streaming build lane's per-story input. |
 | `bash tests/run_all.sh` (per scaffolded project) | Run every `validate_*.sh` in the project's `tests/` directory (the project's full validation suite). |
 
 ## Project-level entry points

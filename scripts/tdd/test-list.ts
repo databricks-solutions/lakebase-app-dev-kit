@@ -123,6 +123,100 @@ function mergeViews(existing: PerAcView[], next: PerAcView): PerAcView[] {
   return remaining;
 }
 
+// --- Per-story scoping (FEIP-7565 phase 2c) -------------------------------
+//
+// The master test-list.json is feature-level; its items each carry an ac_id.
+// The streaming build lane builds one story at a time, so it needs the subset
+// of the list scoped to the story being built: every item whose AC belongs to
+// that story, in the master's order (so the Test Strategist's chosen ordering
+// carries through). Written as stories/<story>/test-list-per-story.json, the
+// build lane's per-story input. AC->story membership comes from the story's
+// acs/ dir, the same layout run-cycle + writePerAcViews already use.
+
+export interface StoryTestList {
+  feature_id: string;
+  story_id: string;
+  ordered_for?: TestList["ordered_for"];
+  items: TestListItem[];
+}
+
+/** AC ids declared under a story dir's acs/ (filenames minus .json), sorted. */
+function acIdsInStoryDir(storyDir: string): string[] {
+  const acsDir = join(storyDir, "acs");
+  if (!existsSync(acsDir)) return [];
+  return readdirSync(acsDir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => f.slice(0, -".json".length))
+    .sort();
+}
+
+/** Resolve a story's directory under stories/, matching by exact name then prefix. */
+function findStoryDir(featureDir: string, storyId: string): string | null {
+  const storiesDir = join(featureDir, "stories");
+  if (!existsSync(storiesDir)) return null;
+  const dirs = readdirSync(storiesDir).filter((d) =>
+    statSync(join(storiesDir, d)).isDirectory(),
+  );
+  const match = dirs.find((d) => d === storyId) ?? dirs.find((d) => d.startsWith(storyId));
+  return match ? join(storiesDir, match) : null;
+}
+
+/** AC ids declared for a story, read from stories/<story>/acs/*.json. */
+export function acsForStory(tddDir: string, featureId: string, storyId: string): string[] {
+  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  return storyDir ? acIdsInStoryDir(storyDir) : [];
+}
+
+/**
+ * Scope a master test list to the given AC ids, preserving the master's order.
+ * Pure: no filesystem access.
+ */
+export function scopeToStory(list: TestList, storyId: string, acIds: string[]): StoryTestList {
+  const want = new Set(acIds);
+  return {
+    feature_id: list.feature_id,
+    story_id: storyId,
+    ...(list.ordered_for ? { ordered_for: list.ordered_for } : {}),
+    items: list.items.filter((it) => want.has(it.ac_id)),
+  };
+}
+
+/**
+ * Read the master test list, scope it to one story's ACs, and write
+ * stories/<story>/test-list-per-story.json (the build lane's per-story input).
+ * Returns the written path, or null when the story dir cannot be resolved.
+ */
+export function writeStoryTestList(
+  tddDir: string,
+  featureId: string,
+  storyId: string,
+): string | null {
+  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  if (!storyDir) return null;
+  const scoped = scopeToStory(
+    readMasterTestList(tddDir, featureId),
+    storyId,
+    acIdsInStoryDir(storyDir),
+  );
+  const file = join(storyDir, "test-list-per-story.json");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(scoped, null, 2) + "\n");
+  return file;
+}
+
+/** Read stories/<story>/test-list-per-story.json, or null when absent. */
+export function readStoryTestList(
+  tddDir: string,
+  featureId: string,
+  storyId: string,
+): StoryTestList | null {
+  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  if (!storyDir) return null;
+  const file = join(storyDir, "test-list-per-story.json");
+  if (!existsSync(file)) return null;
+  return JSON.parse(readFileSync(file, "utf8"));
+}
+
 function locateStoryDirForAc(featureDir: string, acId: string): string | null {
   const storiesDir = join(featureDir, "stories");
   if (!existsSync(storiesDir)) return null;
