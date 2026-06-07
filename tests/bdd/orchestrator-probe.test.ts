@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { diskArtifactProbe } from "../../scripts/tdd/orchestrator-probe";
+import { diskArtifactProbe, readDriveContext } from "../../scripts/tdd/orchestrator-probe";
 import { writeCycleArtifact, type CycleArtifact } from "../../scripts/tdd/run-cycle";
 
 let tddDir: string;
@@ -108,5 +108,46 @@ describe("diskArtifactProbe: build facts from cycle artifacts", () => {
     cycle("S2", "AC1", "cycle-001", { red_at: "2026-06-07T10:00:00Z" });
     expect(probe.testsWritten("S1")).toBe(false);
     expect(probe.testsWritten("S2")).toBe(true);
+  });
+});
+
+describe("readDriveContext", () => {
+  const featureDir = () => join(tddDir, "features", FEATURE);
+  const writeFeatureFile = (name: string, content: string) => {
+    mkdirSync(featureDir(), { recursive: true });
+    writeFileSync(join(featureDir(), name), content);
+  };
+
+  it("an empty project reads as conservative defaults (phase feature, nothing done)", () => {
+    const ctx = readDriveContext(tddDir, FEATURE);
+    expect(ctx.phase).toBe("feature");
+    expect(ctx.breakdownDone).toBe(false);
+    expect(ctx.planning).toEqual({ proposed: false, requestsAuthored: false });
+    expect(ctx.deploy).toEqual({ deployed: false, gateApproved: false });
+  });
+
+  it("maps workflow-state phase + planning/deploy sub-flags from on-disk artifacts", () => {
+    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "implementation" }));
+    writeFeatureFile("feature-request.md", "# request");
+    writeFeatureFile("feature-spec.json", JSON.stringify({ id: FEATURE, stories: ["S1", "S2"] }));
+    writeFeatureFile(
+      "gates.json",
+      JSON.stringify({ feature_id: FEATURE, gates: { spec: { status: "approved" }, deploy: { status: "open" } } }),
+    );
+
+    const ctx = readDriveContext(tddDir, FEATURE);
+    expect(ctx.phase).toBe("feature"); // implementation -> feature
+    expect(ctx.breakdownDone).toBe(true);
+    expect(ctx.planning).toEqual({ proposed: true, requestsAuthored: true });
+    // deploy gate present but not approved
+    expect(ctx.deploy).toEqual({ deployed: true, gateApproved: false });
+  });
+
+  it("reads deploy phase + approved deploy gate", () => {
+    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    writeFeatureFile("gates.json", JSON.stringify({ gates: { deploy: { status: "approved" } } }));
+    const ctx = readDriveContext(tddDir, FEATURE);
+    expect(ctx.phase).toBe("deploy");
+    expect(ctx.deploy).toEqual({ deployed: true, gateApproved: true });
   });
 });

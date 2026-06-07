@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
-import type { StoryArtifactProbe } from "./orchestrator-derive.js";
+import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 
 function storyDir(tddDir: string, featureId: string, story: string): string {
   return path.join(tddDir, "features", featureId, "stories", story);
@@ -59,6 +59,50 @@ function storyCycles(tddDir: string, featureId: string, story: string): CycleArt
     }
   }
   return out;
+}
+
+function readJson(file: string): Record<string, unknown> | undefined {
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read the coarse driver context (phase + planning/deploy sub-flags +
+ * breakdownDone) from the project's persisted state:
+ *   - phase            <- workflow-state.json `phase`, mapped via driverPhaseForTdd
+ *   - breakdownDone    <- feature-spec.json has a non-empty `stories`
+ *   - planning.proposed         <- feature-spec.json exists (Spec Author proposed)
+ *   - planning.requestsAuthored <- feature-request.md exists (PO authored)
+ *   - deploy.deployed / gateApproved <- gates.json `deploy` gate (present / approved)
+ *
+ * Best-effort + tolerant: a missing/malformed file yields the conservative
+ * (not-yet-done) reading, so the driver re-derives a safe DriveState.
+ */
+export function readDriveContext(tddDir: string, featureId: string): DriveContext {
+  const ws = readJson(path.join(tddDir, "workflow-state.json"));
+  const tddPhase = typeof ws?.phase === "string" ? (ws.phase as string) : "feature";
+
+  const featureDir = path.join(tddDir, "features", featureId);
+  const spec = readJson(path.join(featureDir, "feature-spec.json"));
+  const proposed = spec !== undefined;
+  const breakdownDone = Array.isArray(spec?.stories) && (spec!.stories as unknown[]).length > 0;
+  const requestsAuthored = fs.existsSync(path.join(featureDir, "feature-request.md"));
+
+  const gates = readJson(path.join(featureDir, "gates.json"));
+  const deployGate = (gates?.gates as Record<string, { status?: string }> | undefined)?.deploy;
+  const deployed = deployGate !== undefined;
+  const gateApproved = deployGate?.status === "approved";
+
+  return {
+    phase: driverPhaseForTdd(tddPhase),
+    breakdownDone,
+    planning: { proposed, requestsAuthored },
+    deploy: { deployed, gateApproved },
+  };
 }
 
 /** Construct a probe bound to a project's .tdd dir + feature. */
