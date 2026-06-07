@@ -602,8 +602,18 @@ run_plan_sprint() {
 
   # a. /plan Step 0: project intake must be present + conformant (no --feature
   # means project-level only: product-overview.md + nfrs.md + design-brief.md).
-  npx --yes --package="${KIT_NPX}" lakebase-tdd-intake \
-    || { err "/plan ${sprint_name}: project-intake precondition failed"; exit 2; }
+  # Retry the cold npx call: npx-from-github occasionally flakes on resolution
+  # (it re-resolves the branch ref each call), and the intake docs were just
+  # supplied above, so a non-zero here is far likelier a transient npx hiccup
+  # than a genuine unsatisfied intake. Only fail after the call fails 3x.
+  local _intake_ok=""
+  for _attempt in 1 2 3; do
+    if npx --yes --package="${KIT_NPX}" lakebase-tdd-intake; then _intake_ok=1; break; fi
+    log "    intake precondition attempt ${_attempt} failed (likely transient npx); retrying..."
+    sleep 3
+  done
+  [ -n "$_intake_ok" ] \
+    || { err "/plan ${sprint_name}: project-intake precondition failed after 3 attempts"; exit 2; }
 
   # b. PROPOSAL FIRST. Run the actual /plan command (parity): the orchestrator
   # (as scrum-master) has the Spec Author propose the feature breakdown
