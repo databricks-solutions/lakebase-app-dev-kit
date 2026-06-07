@@ -7520,11 +7520,11 @@ import * as fs27 from "fs";
 import * as path27 from "path";
 
 // scripts/tdd/stale-branches.ts
-import { existsSync as existsSync28, readdirSync as readdirSync14, statSync as statSync7 } from "fs";
+import { existsSync as existsSync28, readdirSync as readdirSync14, statSync as statSync8 } from "fs";
 import { join as join30 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync15, mkdirSync as mkdirSync14, readdirSync as readdirSync12 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync15, mkdirSync as mkdirSync14, readdirSync as readdirSync12, statSync as statSync6 } from "fs";
 import { dirname as dirname9, join as join28 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -7539,7 +7539,7 @@ function readPipeline(tddDir, featureId) {
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync27, mkdirSync as mkdirSync15, readdirSync as readdirSync13, readFileSync as readFileSync16, statSync as statSync6, writeFileSync as writeFileSync16 } from "fs";
+import { existsSync as existsSync27, mkdirSync as mkdirSync15, readdirSync as readdirSync13, readFileSync as readFileSync16, statSync as statSync7, writeFileSync as writeFileSync16 } from "fs";
 import { join as join29 } from "path";
 function listSpikes(tddDir) {
   const root = join29(tddDir, "spikes");
@@ -7547,13 +7547,13 @@ function listSpikes(tddDir) {
   const out = [];
   for (const slug of readdirSync13(root)) {
     const dir = join29(root, slug);
-    if (!statSync6(dir).isDirectory()) continue;
+    if (!statSync7(dir).isDirectory()) continue;
     const branchFile = join29(dir, "branch.txt");
     if (!existsSync27(branchFile)) continue;
     out.push({
       spike_slug: slug,
       branch_id: readFileSync16(branchFile, "utf8").trim(),
-      created_at: statSync6(branchFile).birthtime.toISOString(),
+      created_at: statSync7(branchFile).birthtime.toISOString(),
       dir
     });
   }
@@ -7564,7 +7564,7 @@ function listSpikes(tddDir) {
 function listPipelineFeatures(tddDir) {
   const featuresDir = join30(tddDir, "features");
   if (!existsSync28(featuresDir)) return [];
-  return readdirSync14(featuresDir).filter((d) => statSync7(join30(featuresDir, d)).isDirectory()).filter((d) => existsSync28(join30(featuresDir, d, "pipeline.json"))).sort();
+  return readdirSync14(featuresDir).filter((d) => statSync8(join30(featuresDir, d)).isDirectory()).filter((d) => existsSync28(join30(featuresDir, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];

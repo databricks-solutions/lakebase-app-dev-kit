@@ -4,7 +4,7 @@
 // .tdd/features/<F>/pipeline.json. Exactly one story builds at a time; the
 // Scrum-Master owns these transitions.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { dirname, join } from "path";
 
 export const STORY_STATUSES = [
@@ -160,6 +160,41 @@ export function setStoryStatus(
   const existing = pipeline.stories[storyId];
   pipeline.stories[storyId] = { ...existing, status };
   return pipeline;
+}
+
+/**
+ * Seed the pipeline from the on-disk breakdown: every `stories/<S>/` dir the
+ * Spec Author's breakdown produced that the pipeline does not yet track is
+ * added as `designing`. This is the breakdown -> pipeline bridge the
+ * deterministic driver needs (the LLM orchestrator used to seed the pipeline
+ * implicitly); without it the pipeline stays empty after breakdown and the
+ * driver has no stories to stream. Idempotent: re-running adds nothing new.
+ * Returns the newly-added ids + the full tracked set.
+ */
+export function syncBreakdownToPipeline(
+  tddDir: string,
+  featureId: string,
+): { added: string[]; total: string[] } {
+  const storiesDir = join(tddDir, "features", featureId, "stories");
+  const pipeline = readPipeline(tddDir, featureId);
+  const added: string[] = [];
+  if (existsSync(storiesDir)) {
+    for (const storyId of readdirSync(storiesDir).sort()) {
+      let isDir = false;
+      try {
+        isDir = statSync(join(storiesDir, storyId)).isDirectory();
+      } catch {
+        isDir = false;
+      }
+      if (!isDir) continue;
+      if (pipeline.stories[storyId] === undefined) {
+        setStoryStatus(pipeline, storyId, "designing");
+        added.push(storyId);
+      }
+    }
+  }
+  if (added.length > 0) writePipeline(tddDir, pipeline);
+  return { added, total: Object.keys(pipeline.stories) };
 }
 
 /**

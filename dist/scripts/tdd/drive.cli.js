@@ -6792,11 +6792,12 @@ function deriveDriveState(pipeline, probe, ctx) {
     stories[id] = storyView(id, entry, probe);
   }
   const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
+  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
   return {
     phase: ctx.phase,
     planning: ctx.planning,
     deploy: ctx.deploy,
-    breakdownDone: ctx.breakdownDone,
+    breakdownDone,
     storyOrder,
     stories,
     buildActive: pipeline.build_active
@@ -7082,7 +7083,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3, readdirSync as readdirSync3 } from "fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
 import { dirname as dirname2, join as join6 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -7133,15 +7134,18 @@ function commandsForAction(action, cfg) {
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
   const approver = cfg.approver ?? "human-proxy";
   switch (action.kind) {
-    case "invoke-role":
-      return [
-        {
-          kind: "claude",
-          role: action.role,
-          model: cfg.modelForRole(action.role),
-          task: roleTask(action, f)
-        }
-      ];
+    case "invoke-role": {
+      const claude = {
+        kind: "claude",
+        role: action.role,
+        model: cfg.modelForRole(action.role),
+        task: roleTask(action, f)
+      };
+      if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
+        return [claude, { kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] }];
+      }
+      return [claude];
+    }
     case "surface-gate":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];
     case "approve-gate":
@@ -7341,6 +7345,12 @@ function spawnCmd(bin, args, cwd) {
     child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`${bin} exited ${code}`)));
   });
 }
+var KIT_CLI_JS = {
+  "lakebase-tdd-pipeline": "story-pipeline.cli.js",
+  "lakebase-tdd-experiment": "story-experiment.cli.js",
+  "lakebase-tdd-deploy": "deploy.cli.js",
+  "lakebase-tdd-human-proxy": "human-proxy.cli.js"
+};
 function execRunner(cfg) {
   return {
     async run(cmd) {
@@ -7356,7 +7366,12 @@ function execRunner(cfg) {
         );
         return;
       }
-      await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
+      const sibling = KIT_CLI_JS[cmd.bin];
+      if (sibling) {
+        await spawnCmd("node", [path5.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+      } else {
+        await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
+      }
     }
   };
 }

@@ -34,6 +34,28 @@ function setStoryStatus(pipeline, storyId, status) {
   pipeline.stories[storyId] = { ...existing, status };
   return pipeline;
 }
+function syncBreakdownToPipeline(tddDir, featureId) {
+  const storiesDir = (0, import_path.join)(tddDir, "features", featureId, "stories");
+  const pipeline = readPipeline(tddDir, featureId);
+  const added = [];
+  if ((0, import_fs.existsSync)(storiesDir)) {
+    for (const storyId of (0, import_fs.readdirSync)(storiesDir).sort()) {
+      let isDir = false;
+      try {
+        isDir = (0, import_fs.statSync)((0, import_path.join)(storiesDir, storyId)).isDirectory();
+      } catch {
+        isDir = false;
+      }
+      if (!isDir) continue;
+      if (pipeline.stories[storyId] === void 0) {
+        setStoryStatus(pipeline, storyId, "designing");
+        added.push(storyId);
+      }
+    }
+  }
+  if (added.length > 0) writePipeline(tddDir, pipeline);
+  return { added, total: Object.keys(pipeline.stories) };
+}
 function enqueueReady(pipeline, storyId) {
   setStoryStatus(pipeline, storyId, "ready");
   if (!pipeline.build_queue.includes(storyId)) pipeline.build_queue.push(storyId);
@@ -272,6 +294,14 @@ function main() {
   }
   const pipeline = readPipeline(tddDir, feature);
   switch (args.cmd) {
+    case "sync-breakdown": {
+      const r = syncBreakdownToPipeline(tddDir, feature);
+      process.stdout.write(
+        `sync-breakdown: +${r.added.length} (${r.added.join(", ") || "none"}); ${r.total.length} tracked
+`
+      );
+      return 0;
+    }
     case "set": {
       if (!args.story) return usage("set needs --story");
       if (!args.status || !STORY_STATUSES.includes(args.status)) {

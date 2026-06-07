@@ -93,15 +93,21 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
   const approver = cfg.approver ?? "human-proxy";
 
   switch (action.kind) {
-    case "invoke-role":
-      return [
-        {
-          kind: "claude",
-          role: action.role,
-          model: cfg.modelForRole(action.role),
-          task: roleTask(action, f),
-        },
-      ];
+    case "invoke-role": {
+      const claude: DriveCommand = {
+        kind: "claude",
+        role: action.role,
+        model: cfg.modelForRole(action.role),
+        task: roleTask(action, f),
+      };
+      // After the Spec Author breaks the feature down, seed the pipeline from
+      // the stories/ dirs it produced so the streaming lanes have stories to
+      // advance (breakdown writes files, not pipeline.json).
+      if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
+        return [claude, { kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] }];
+      }
+      return [claude];
+    }
 
     case "surface-gate":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];

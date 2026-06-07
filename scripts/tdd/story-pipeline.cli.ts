@@ -39,6 +39,7 @@ import {
   enqueueReady,
   dispatchNext,
   completeActive,
+  syncBreakdownToPipeline,
   surfaceForGate,
   approveStoryGate,
   withdrawStoryGate,
@@ -167,6 +168,16 @@ function main(): number {
   const pipeline = readPipeline(tddDir, feature);
 
   switch (args.cmd) {
+    case "sync-breakdown": {
+      // Seed the pipeline from the on-disk breakdown (stories/<S>/ dirs). Used
+      // by the driver right after spec-author breakdown so the streaming lanes
+      // have stories to advance. Re-reads + writes the pipeline itself.
+      const r = syncBreakdownToPipeline(tddDir, feature);
+      process.stdout.write(
+        `sync-breakdown: +${r.added.length} (${r.added.join(", ") || "none"}); ${r.total.length} tracked\n`,
+      );
+      return 0;
+    }
     case "set": {
       if (!args.story) return usage("set needs --story");
       if (!args.status || !(STORY_STATUSES as readonly string[]).includes(args.status)) {

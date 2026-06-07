@@ -111,6 +111,18 @@ describe("deriveDriveState + nextTransition: realistic on-disk situations", () =
     expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "driver", story: "S1" });
   });
 
+  it("breakdownDone is derived from the pipeline having stories (post sync-breakdown)", () => {
+    // Stories seeded by sync-breakdown (status designing), ctx.breakdownDone
+    // still false -> deriveDriveState flips it true so the lane advances S1
+    // instead of re-issuing breakdown.
+    const p = pipeline({ S1: { status: "designing" }, S2: { status: "designing" } });
+    const ctxNoBreakdown: DriveContext = { phase: "feature", breakdownDone: false };
+    const state = deriveDriveState(p, fakeProbe({}), ctxNoBreakdown);
+    expect(state.breakdownDone).toBe(true);
+    // first un-designed story advances to ACs, NOT another breakdown
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "spec-author", story: "S1" });
+  });
+
   it("all stories accepted + lane idle -> feature-complete", () => {
     const done: StoryEntry = {
       status: "done",

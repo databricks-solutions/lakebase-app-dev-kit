@@ -23,6 +23,7 @@ import {
   discardStory,
   reviseStory,
   getStoryAcceptance,
+  syncBreakdownToPipeline,
 } from "../../scripts/tdd/story-pipeline";
 import { getValidator } from "../../scripts/tdd/schema-loader";
 
@@ -38,6 +39,43 @@ function mkTdd(): string {
   tmpDirs.push(d);
   return d;
 }
+
+describe("story-pipeline: syncBreakdownToPipeline", () => {
+  function writeStoryDir(tddDir: string, feature: string, story: string): void {
+    const dir = path.join(tddDir, "features", feature, "stories", story);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "story.json"), JSON.stringify({ id: story }));
+  }
+
+  it("seeds the pipeline with every on-disk story dir as designing", () => {
+    const tddDir = mkTdd();
+    writePipeline(tddDir, initPipeline("F1"));
+    writeStoryDir(tddDir, "F1", "S1");
+    writeStoryDir(tddDir, "F1", "S2");
+
+    const r = syncBreakdownToPipeline(tddDir, "F1");
+    expect(r.added.sort()).toEqual(["S1", "S2"]);
+    const p = readPipeline(tddDir, "F1");
+    expect(p.stories.S1.status).toBe("designing");
+    expect(p.stories.S2.status).toBe("designing");
+  });
+
+  it("is idempotent + leaves already-tracked stories untouched", () => {
+    const tddDir = mkTdd();
+    const p0 = initPipeline("F1");
+    setStoryStatus(p0, "S1", "building"); // already past designing
+    writePipeline(tddDir, p0);
+    writeStoryDir(tddDir, "F1", "S1");
+    writeStoryDir(tddDir, "F1", "S2");
+
+    const r1 = syncBreakdownToPipeline(tddDir, "F1");
+    expect(r1.added).toEqual(["S2"]); // S1 already tracked
+    expect(readPipeline(tddDir, "F1").stories.S1.status).toBe("building"); // not reset
+
+    const r2 = syncBreakdownToPipeline(tddDir, "F1");
+    expect(r2.added).toEqual([]); // nothing new on a re-run
+  });
+});
 
 describe("story-pipeline: init + status", () => {
   it("initializes empty (no stories, empty queue, idle lane)", () => {

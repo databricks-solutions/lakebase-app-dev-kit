@@ -50,6 +50,14 @@ describe("commandsForAction: invoke-role -> claude", () => {
     const author = commandsForAction({ kind: "invoke-role", role: "product-owner", mode: "author-requests" }, cfg());
     expect((author[0] as { task: string }).task).toMatch(/feature-request/i);
   });
+
+  it("spec-author breakdown also seeds the pipeline (claude + sync-breakdown)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
+    expect(cmds).toHaveLength(2);
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "spec-author" });
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
+    expect((cmds[1] as { args: string[] }).args[0]).toBe("sync-breakdown");
+  });
 });
 
 describe("commandsForAction: state transitions -> kit CLIs", () => {

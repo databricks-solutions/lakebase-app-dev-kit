@@ -100,11 +100,16 @@ export function deriveDriveState(
     stories[id] = storyView(id, entry, probe);
   }
   const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
+  // The breakdown is done once stories are tracked in the pipeline (the signal
+  // the design lane actually advances on), regardless of feature-spec.json.
+  // This is what stops the driver re-issuing `breakdown` after the pipeline is
+  // seeded (the sync-breakdown step).
+  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
   return {
     phase: ctx.phase,
     planning: ctx.planning,
     deploy: ctx.deploy,
-    breakdownDone: ctx.breakdownDone,
+    breakdownDone,
     storyOrder,
     stories,
     buildActive: pipeline.build_active,

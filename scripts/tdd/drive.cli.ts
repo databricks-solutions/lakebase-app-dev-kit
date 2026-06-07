@@ -98,6 +98,18 @@ function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
   });
 }
 
+// Resolve a kit child-CLI bin name to its compiled JS, a SIBLING of this file
+// in dist/scripts/tdd/. Spawning `node <sibling>.js` makes the driver
+// self-contained: its kit children resolve from its own install location, with
+// no dependency on the bins being on PATH (the smoke runs the kit via npx, not
+// a global install). External tools (claude) stay bare on PATH.
+const KIT_CLI_JS: Record<string, string> = {
+  "lakebase-tdd-pipeline": "story-pipeline.cli.js",
+  "lakebase-tdd-experiment": "story-experiment.cli.js",
+  "lakebase-tdd-deploy": "deploy.cli.js",
+  "lakebase-tdd-human-proxy": "human-proxy.cli.js",
+};
+
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct
  *  workflow-state write for the coarse phase. */
 function execRunner(cfg: DriveEffectsConfig): CommandRunner {
@@ -115,8 +127,14 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         );
         return;
       }
-      // cmd.kind === "cli"
-      await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
+      // cmd.kind === "cli": resolve the kit bin to its sibling JS so it runs
+      // regardless of PATH; fall back to the bare name for anything unmapped.
+      const sibling = KIT_CLI_JS[cmd.bin];
+      if (sibling) {
+        await spawnCmd("node", [path.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+      } else {
+        await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
+      }
     },
   };
 }
