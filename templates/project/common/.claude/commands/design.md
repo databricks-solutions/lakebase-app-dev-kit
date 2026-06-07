@@ -55,10 +55,13 @@ The design phases READ the HIL's intent from intake artifacts (`product-overview
     --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".tdd/nfrs.md" --artifact nfrs.md
   ```
 
+**UI projects:** a project is UI when `LAKEBASE_TDD_UI=1` (set by the orchestrator / smoke) or the feature has a user-facing surface. For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless) and pass `--ui` to the precondition so it requires the brief; the UX Designer phase then runs. For API / CLI / Infra projects, skip the UX track entirely.
+
 **Then enforce the precondition (the hard gate):**
 
 ```bash
-npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>"   # add --ui for UI projects
+UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
+npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>" $UI_FLAG
 ```
 
 `lakebase-tdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.

@@ -41,6 +41,10 @@ describe("FEIP-7422 smoke: directory structure", () => {
     expect(fs.existsSync(path.join(SMOKE_DIR, "nfrs.md"))).toBe(true);
   });
 
+  it("has the recorded HIL design brief at design-brief.md (UI smoke)", () => {
+    expect(fs.existsSync(path.join(SMOKE_DIR, "design-brief.md"))).toBe(true);
+  });
+
   it("has a feature-requests/ subdir with the 5 specs", () => {
     const reqDir = path.join(SMOKE_DIR, "feature-requests");
     expect(fs.existsSync(reqDir)).toBe(true);
@@ -108,16 +112,26 @@ describe("FEIP-7422 smoke: recorded HIL intake artifacts conform (Human Proxy an
     expect(ids.length).toBeGreaterThanOrEqual(1);
     expect(ids.every((id) => id !== null)).toBe(true);
   });
+
+  it("design-brief.md conforms (has a References section)", () => {
+    const md = fs.readFileSync(path.join(SMOKE_DIR, "design-brief.md"), "utf8");
+    expect(checkArtifactConformance("design-brief.md", md)).toEqual({ ok: true });
+  });
 });
 
 describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("stages project intake (product-overview.md + nfrs.md) via human-proxy supply", () => {
+  it("stages project intake (product-overview.md + nfrs.md + design-brief.md) via human-proxy supply", () => {
     expect(runSmoke).toMatch(/lakebase-tdd-human-proxy supply/);
     expect(runSmoke).toMatch(/stage_project_intake/);
     expect(runSmoke).toMatch(/product-overview\.md/);
     expect(runSmoke).toMatch(/nfrs\.md/);
+    expect(runSmoke).toMatch(/design-brief\.md/);
+  });
+
+  it("declares the UI track (LAKEBASE_TDD_UI=1) so the UX Designer + design-brief intake run", () => {
+    expect(runSmoke).toMatch(/export LAKEBASE_TDD_UI=1/);
   });
 
   it("supplies the per-iteration feature-request.md via the proxy (not a bare cp)", () => {

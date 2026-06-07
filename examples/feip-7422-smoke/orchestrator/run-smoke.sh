@@ -127,6 +127,11 @@ export LAKEBASE_TDD_HUMAN_PROXY=1
 # for determinism. Same directory the recorded product-overview.md / nfrs.md live in.
 export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 
+# This smoke is a UI project (v5 ships a bug-list view). LAKEBASE_TDD_UI=1 tells
+# /design to run the UX Designer phase and require design-brief.md at intake, so
+# the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
+export LAKEBASE_TDD_UI=1
+
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
 # --tiers is required when scaffolding (architectural choice). The
@@ -437,14 +442,17 @@ proxy_supply() {
 
 # Project-level intake, staged once before the iteration loop. product-overview.md
 # and nfrs.md are project-scoped (refined across features in a real run; recorded
-# here). design-brief.md is omitted: the bug-tracker smoke is TDD/API-focused, so
-# the UX track is not exercised.
+# here). design-brief.md is also supplied: this smoke is a UI project (v5 ships a
+# bug-list view), so LAKEBASE_TDD_UI=1 turns on the UX track and the intake
+# precondition requires the brief.
 stage_project_intake() {
-  log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md)"
+  log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"
   proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
     || { echo "smoke: human-proxy refused product-overview.md (missing/non-conformant)" >&2; exit 2; }
   proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${PROJECT_DIR}/.tdd/nfrs.md" "nfrs.md" \
     || { echo "smoke: human-proxy refused nfrs.md (missing/non-conformant)" >&2; exit 2; }
+  proxy_supply "${ORCHESTRATOR_DIR}/design-brief.md" "${PROJECT_DIR}/.tdd/design/design-brief.md" "design-brief.md" \
+    || { echo "smoke: human-proxy refused design-brief.md (missing/non-conformant)" >&2; exit 2; }
 }
 
 # ─── main ─────────────────────────────────────────────────────
