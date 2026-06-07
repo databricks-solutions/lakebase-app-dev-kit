@@ -92,9 +92,12 @@ describe("FEIP-7422 smoke: directory structure", () => {
 describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("strips MCP from every claude -p boot via a shared --strict-mcp-config flag", () => {
+  it("strips MCP + pins the orchestrator model via a shared flag array on every claude -p boot", () => {
     // One shared flag array, applied to every claude invocation (DRY).
-    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config\)/);
+    // --strict-mcp-config = zero MCP servers; --model haiku pins the busiest
+    // actor (the scrum-master orchestrator, otherwise `inherit` = the slow CLI
+    // default) to a fast tier on every coordination turn.
+    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model haiku\)/);
     // Every `claude -p` call threads the shared flags (no bare invocation that
     // would reload the operator's personal MCP servers).
     const calls = runSmoke.match(/claude -p "[^"]*"/g) ?? [];
@@ -106,14 +109,16 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
     }
   });
 
-  it("tiers roles for the smoke via --agent-model: reasoning roles on sonnet, light roles on haiku", () => {
-    // The two reasoning-heavy roles stay on sonnet.
-    expect(runSmoke).toMatch(/--agent-model spec-author=sonnet/);
+  it("tiers roles for the smoke via --agent-model: only architect + code-writers on sonnet, rest haiku", () => {
+    // The architect (AC layering / NFR coverage) stays on sonnet as the quality
+    // backstop; navigator/driver keep the kit-default sonnet (their output must
+    // compile + pass tests). Every other role runs haiku for speed.
     expect(runSmoke).toMatch(/--agent-model architect-reviewer=sonnet/);
-    // The lightest, most structured roles drop to haiku for speed.
+    expect(runSmoke).toMatch(/--agent-model spec-author=haiku/);
     expect(runSmoke).toMatch(/--agent-model test-strategist=haiku/);
     expect(runSmoke).toMatch(/--agent-model ux-designer=haiku/);
     expect(runSmoke).toMatch(/--agent-model product-owner=haiku/);
+    expect(runSmoke).toMatch(/--agent-model release-engineer=haiku/);
   });
 
   it("makes role observability structural: live-tails the agent log + reconciles after each phase", () => {

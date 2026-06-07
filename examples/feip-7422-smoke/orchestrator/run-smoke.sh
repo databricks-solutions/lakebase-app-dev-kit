@@ -174,7 +174,15 @@ export LAKEBASE_TDD_UI=1
 # so those servers are pure cold-start latency + per-turn token bloat here. Each
 # phase (and each gate-drain re-invocation) is its own `claude -p` boot, so this
 # saving multiplies across the run.
-CLAUDE_FLAGS=(--strict-mcp-config)
+#
+# --model haiku pins the ORCHESTRATOR (scrum-master) session model. The
+# scrum-master is `inherit`, so without this it runs on the CLI default (opus)
+# and pays opus latency on EVERY orchestrator turn, and it is the busiest actor
+# in the run (it drives every handoff, gate, and log). It only coordinates
+# (route / delegate / record / gate), produces no artifacts, so haiku is the
+# right tier and cuts latency across the whole spine of the run, including the
+# slow first turn.
+CLAUDE_FLAGS=(--strict-mcp-config --model haiku)
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
@@ -364,11 +372,13 @@ scaffold_project() {
       --tiers "$TIERS" \
       `# Per-role model tiering for the smoke (speed): the smoke validates` \
       `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
-      `# models than the kit defaults and cuts per-turn generation latency. The` \
-      `# lightest, most structured roles go to haiku; the two that carry the most` \
-      `# reasoning (spec-author intent->structure, architect layering) stay on` \
-      `# sonnet. This also exercises the per-project --agent-model override path.` \
-      --agent-model spec-author=sonnet \
+      `# models than the kit defaults and cuts per-turn generation latency. Only` \
+      `# the architect (AC layering / NFR coverage) and the code-writers` \
+      `# (navigator/driver, whose output must compile + pass tests) stay on` \
+      `# sonnet; every other role runs haiku. This also exercises the per-project` \
+      `# --agent-model override path. (If haiku spec ACs degrade the build, bump` \
+      `# spec-author back to sonnet, the architect on sonnet is a quality backstop.)` \
+      --agent-model spec-author=haiku \
       --agent-model architect-reviewer=sonnet \
       --agent-model test-strategist=haiku \
       --agent-model ux-designer=haiku \
