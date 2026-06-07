@@ -61,6 +61,20 @@ describe("diskArtifactProbe: design facts", () => {
     expect(probe.hasAcs("S2")).toBe(false);
   });
 
+  it("hasAcs detects acs/<AC>.json files even when story.json acs is not backfilled", () => {
+    // The live failure mode: the Spec Author wrote acs/<AC>.{md,json} but left
+    // story.json `acs` null. Disk is the truth, so the probe must see them;
+    // otherwise the story looks un-drafted forever and the driver stalls
+    // re-issuing the same invoke-role.
+    const probe = diskArtifactProbe(tddDir, FEATURE);
+    mkdirSync(storyDir("S3"), { recursive: true });
+    writeFileSync(join(storyDir("S3"), "story.json"), JSON.stringify({ id: "S3", acs: null }));
+    expect(probe.hasAcs("S3")).toBe(false); // no acs/ files yet
+    writeAcLayer("S3", "AC1-file", "API"); // writes acs/AC1-file.json
+    writeFileSync(join(storyDir("S3"), "acs", "AC2-reject.json"), JSON.stringify({ id: "AC2-reject" }));
+    expect(probe.hasAcs("S3")).toBe(true);
+  });
+
   it("architectAnnotated is true only once EVERY AC has a layer", () => {
     const probe = diskArtifactProbe(tddDir, FEATURE);
     writeStory("S1", ["AC1", "AC2"]);

@@ -92,27 +92,19 @@ describe("FEIP-7422 smoke: directory structure", () => {
 describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("strips MCP + sets the session model via a shared flag array on every claude -p boot", () => {
-    // One shared flag array, applied to every claude invocation (DRY).
-    // --strict-mcp-config = zero MCP servers. --model sonnet keeps the one
-    // remaining shell-level claude -p session (the `/plan` command, run for
-    // parity) off the slow opus default. There is no LLM orchestrator to model-
-    // pin: orchestration is the deterministic driver, and per-feature role turns
-    // are spawned INSIDE lakebase-tdd-drive at their per-role models.
-    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model sonnet\)/);
-    // Every `claude -p` call threads the shared flags (no bare invocation that
-    // would reload the operator's personal MCP servers). In driver-only mode the
-    // per-feature design/build/deploy role turns are spawned INSIDE
-    // lakebase-tdd-drive (the deterministic driver, not shell-visible); the only
-    // shell-level claude -p left is sprint `/plan`. Assert at least one and that
-    // each one present threads the flags.
-    const calls = runSmoke.match(/claude -p "[^"]*"/g) ?? [];
-    expect(calls.length, "expected claude -p invocations").toBeGreaterThanOrEqual(1);
-    for (const line of runSmoke.split("\n")) {
-      if (/^\s*claude -p "/.test(line)) {
-        expect(line, `claude -p call missing CLAUDE_FLAGS: ${line.trim()}`).toContain('"${CLAUDE_FLAGS[@]}"');
-      }
-    }
+  it("drives the orchestrator CLI directly, with no top-level claude -p session", () => {
+    // The smoke drives lakebase-tdd-drive directly for every phase (planning +
+    // per-feature). It does NOT boot a top-level `claude -p` slash-command
+    // session: that path does not reliably inherit LAKEBASE_TDD_HUMAN_PROXY into
+    // its Bash tool, which silently flipped the plan gate to interactive. The
+    // driver owns role-agent invocation internally (claude -p --agent <role>).
+    const topLevelCalls = runSmoke
+      .split("\n")
+      .filter((line) => /^\s*claude -p "/.test(line));
+    expect(topLevelCalls, `no top-level claude -p; found: ${topLevelCalls.join(" | ")}`).toHaveLength(0);
+    // Planning runs the driver bounded to planning, with proxy gates explicit
+    // (deterministic headless, not env-dependent).
+    expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
   it("tiers roles for the smoke via --agent-model: only architect + code-writers on sonnet, rest haiku", () => {
@@ -241,8 +233,15 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
     expect(runSmoke).toMatch(/git commit -m "intake: project/);
   });
 
-  it("exercises the actual /plan command via claude -p (parity)", () => {
-    expect(runSmoke).toMatch(/claude -p "\/plan --sprint \$\{sprint_name\}"/);
+  it("drives planning through the orchestrator CLI (--plan-only --gates proxy), not claude -p", () => {
+    // Planning runs the same driver the scaffolded /plan command runs, called
+    // directly so gate mode + LAKEBASE_TDD_HUMAN_PROXY are deterministic (the
+    // claude -p "/plan" path did not reliably inherit the env, flipping the plan
+    // gate to interactive headless).
+    const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
+    expect(planFn).toMatch(/lakebase-tdd-drive[\s\S]*--sprint "\$\{sprint_name\}"[\s\S]*--plan-only[\s\S]*--gates proxy/);
+    // No EXECUTABLE claude -p "/plan" line (a line-start invocation, not a comment).
+    expect(planFn, "planning must not go through claude -p").not.toMatch(/^\s*claude -p "\/plan/m);
   });
 });
 

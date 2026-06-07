@@ -26,23 +26,26 @@
 # What /plan does per sprint (run_plan_sprint):
 #   a. Enforce the project-intake precondition (lakebase-tdd-intake, no
 #      --feature: product-overview.md + nfrs.md + design-brief.md present).
-#   b. Run the actual /plan command via claude -p (parity, the shipped surface):
-#      the command runs the deterministic driver (lakebase-tdd-drive --plan-only),
-#      which has the spec-author propose the breakdown and surfaces the sprint
-#      plan gate (headless: the Human Proxy approves on feature-proposals.md).
+#   b. Drive planning via lakebase-tdd-drive --plan-only --gates proxy (the same
+#      CLI the scaffolded /plan command runs): the spec-author proposes the
+#      breakdown and the driver surfaces the sprint plan gate, which the Human
+#      Proxy approves on feature-proposals.md. Called directly (not via claude -p)
+#      so gate mode + env are deterministic.
 #   b2. human-proxy (the PO) supplies each sprint item's feature-request.md, AFTER
 #      the proposal (sprint membership is the smoke orchestrator's call).
 #   c. Commit the sprint backlog to trunk.
 #
 # What each iteration does (the per-feature loop, after its request exists):
 #   1. Abandon prior feature (substrate CLI) if state is mid-flight.
-#   3. /design <id>  – gates drained by human-proxy.
-#   4. /build <id>   – gates drained by human-proxy.
+#   3. Claim the feature branch (lakebase-scm-claim-feature-branch).
+#   4. lakebase-tdd-drive --feature <id>: the deterministic orchestrator drives
+#      the WHOLE feature in one process (design -> build -> accept each story ->
+#      deploy), spawning the role agents + surfacing every gate to the Human
+#      Proxy (--gates proxy headless). The release-engineer's deploy phase polls
+#      reachable + runs the feature verify and records the PO deploy gate.
 #   5. Local tests (./scripts/run-tests.sh).
 #   6. Per-iteration verify (assertions/verify-vN.sh).
-#   6.5 /deploy <id> --target local via claude -p: the command delegates to the
-#      release-engineer (deploy + poll reachable + verify) and records the PO
-#      deploy gate (Human Proxy headless), then the smoke tears the app down.
+#   6.5 Stop the local app before the next iteration (idempotent teardown).
 #   7. Commit the iteration's work on the feature branch.
 #   8. SCM doctor (advisory cross-check; warning-only).
 #
@@ -168,20 +171,15 @@ export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 # the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
 export LAKEBASE_TDD_UI=1
 
-# Flags for the one place the smoke still boots `claude -p`: the `/plan` command
-# (run for parity, to exercise the SHIPPED command the way a user would). That
-# session is thin: it reads `.claude/commands/plan.md` and runs the deterministic
-# driver (`lakebase-tdd-drive --plan-only`); the driver, not this session, does
-# the orchestration and spawns the role agents (at their per-role models from
-# .lakebase/agent-config.json). There is no LLM orchestrator session to model-pin.
-# --strict-mcp-config makes Claude Code ignore ALL discovered MCP config (the
-# operator's personal ~/.claude servers) and load only servers passed via
-# --mcp-config; we pass none, so the session boots with ZERO MCP servers (the
-# workflow drives the kit's bash CLIs, never MCP). --model sonnet keeps that
-# command-reading session off the slow opus default. The per-feature phases
-# (/design /build /deploy) call the driver CLI directly (no claude -p), so this
-# only covers /plan.
-CLAUDE_FLAGS=(--strict-mcp-config --model sonnet)
+# The smoke drives the deterministic orchestrator (`lakebase-tdd-drive`) CLI
+# directly for every phase (planning + per-feature design/build/deploy); it does
+# not boot a top-level `claude -p` slash-command session. The driver owns its own
+# role-agent invocation: it spawns each role with `claude -p --agent <role>` at
+# the resolved per-role model (from .lakebase/agent-config.json, set at scaffold
+# via --agent-model) and applies its own MCP-isolation flags. Driving the CLI
+# directly (rather than a claude -p "/plan" session) keeps gate mode + env
+# deterministic: a claude -p Bash tool does not reliably inherit
+# LAKEBASE_TDD_HUMAN_PROXY, which silently flipped the plan gate to interactive.
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
@@ -545,16 +543,22 @@ run_plan_sprint() {
   [ -n "$_intake_ok" ] \
     || { err "/plan ${sprint_name}: project-intake precondition failed after 3 attempts"; exit 2; }
 
-  # b. PROPOSAL FIRST. Run the actual /plan command (parity, the shipped surface
-  # a user invokes). The command runs the deterministic driver bounded to
-  # planning (`lakebase-tdd-drive --sprint <name> --plan-only --gates proxy`):
-  # the Spec Author proposes the feature breakdown (feature-proposals.md), the
-  # driver surfaces the sprint plan gate, and headless the Human Proxy approves it
-  # (teeth: feature-proposals.md exists + conforms), then stops at planning-complete.
-  # Feature-requests must NOT exist before this proposal is written, so the
-  # PO-authoring supply (step c) runs AFTER.
-  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' (runs the driver --plan-only)"
-  claude -p "/plan --sprint ${sprint_name}" "${CLAUDE_FLAGS[@]}"
+  # b. PROPOSAL FIRST. Drive planning through the deterministic orchestrator,
+  # bounded to planning (the same CLI the scaffolded /plan command runs). The
+  # smoke calls the driver DIRECTLY (as it does for the per-feature loop), not
+  # through `claude -p "/plan"`: a claude -p session's Bash tool does not
+  # reliably inherit LAKEBASE_TDD_HUMAN_PROXY, so the command's gate-mode check
+  # fell through to `interactive` headless and the plan gate was never approved.
+  # Calling the driver here (in this shell, where the env is correct) with an
+  # explicit `--gates proxy` is deterministic. The spec-author proposes the
+  # breakdown (feature-proposals.md), the driver surfaces the sprint plan gate,
+  # the Human Proxy approves it (teeth: feature-proposals.md exists + conforms),
+  # then it stops at planning-complete. Feature-requests must NOT exist before
+  # this proposal, so the PO-authoring supply (step c) runs AFTER.
+  log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
+  npx --yes --package="${KIT_NPX}" lakebase-tdd-drive \
+    --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \
+    || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
 
   # c. ONLY AFTER the proposal: the PO authors each sprint item's
   # feature-request.md. Headless, the Human Proxy puts them out from the recorded

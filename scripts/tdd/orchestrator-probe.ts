@@ -21,20 +21,47 @@ function storyDir(tddDir: string, featureId: string, story: string): string {
   return path.join(tddDir, "features", featureId, "stories", story);
 }
 
-/** The AC ids a story declares (story.json `acs`: a string-id list, or objects
- *  with an `id`). Empty when the story file is absent or malformed. */
+/** The AC ids a story has, read from disk (the source of truth): the union of
+ *  story.json `acs` (a string-id list, or objects with an `id`) AND the
+ *  `acs/<AC>.json` files on disk. The Spec Author writes acs/<AC>.{md,json} but
+ *  does not always backfill story.json `acs`; relying on the pointer alone left
+ *  a drafted story looking un-drafted, so the driver stalled re-issuing the same
+ *  invoke-role. Empty when neither source has anything. */
 function storyAcIds(tddDir: string, featureId: string, story: string): string[] {
-  const file = path.join(storyDir(tddDir, featureId, story), "story.json");
-  if (!fs.existsSync(file)) return [];
-  try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8")) as { acs?: unknown };
-    if (!Array.isArray(data.acs)) return [];
-    return data.acs
-      .map((a) => (typeof a === "string" ? a : (a as { id?: string })?.id))
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
-  } catch {
-    return [];
+  const dir = storyDir(tddDir, featureId, story);
+  const ids = new Set<string>();
+
+  // 1. story.json `acs` (id list or {id} objects), when present + well-formed.
+  const file = path.join(dir, "story.json");
+  if (fs.existsSync(file)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8")) as { acs?: unknown };
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : (a as { id?: string })?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
+      }
+    } catch {
+      /* fall through to the on-disk acs/ files */
+    }
   }
+
+  // 2. acs/<AC>.json files actually on disk (authoritative: the Spec Author
+  //    wrote them whether or not story.json was updated).
+  const acsDir = path.join(dir, "acs");
+  if (fs.existsSync(acsDir)) {
+    try {
+      for (const f of fs.readdirSync(acsDir)) {
+        const m = /^(.+)\.json$/.exec(f);
+        if (m) ids.add(m[1]);
+      }
+    } catch {
+      /* ignore an unreadable acs/ dir */
+    }
+  }
+
+  return [...ids];
 }
 
 /** Every recorded cycle artifact for a story, across all of its ACs. */
