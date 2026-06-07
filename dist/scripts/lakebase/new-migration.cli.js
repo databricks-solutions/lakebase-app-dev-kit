@@ -1,70 +1,17 @@
 #!/usr/bin/env node
 
-// scripts/tdd/experiment.ts
-import { existsSync as existsSync4, mkdirSync as mkdirSync2, readdirSync, readFileSync as readFileSync4, statSync, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3 } from "path";
+// scripts/lakebase/schema-migrate.ts
+import * as fs6 from "fs";
+import * as path7 from "path";
 
-// scripts/lakebase/branch-create.ts
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
+// scripts/lakebase/get-connection.ts
+import { execFileSync } from "child_process";
+import { createLakebasePool } from "@databricks/lakebase";
+import { Client } from "pg";
 
-// scripts/util/delay.ts
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// scripts/util/poll-until.ts
-async function pollUntil(args) {
-  const now = args.now ?? (() => /* @__PURE__ */ new Date());
-  const sleep = args.sleep ?? delay;
-  const startedAt = now().getTime();
-  let polls = 0;
-  while (true) {
-    const elapsedMs = now().getTime() - startedAt;
-    if (elapsedMs >= args.timeoutMs && polls > 0) {
-      return { outcome: "timeout", polls, elapsedMs };
-    }
-    polls += 1;
-    const result = await args.probe({ pollIndex: polls, elapsedMs });
-    const afterProbeElapsed = now().getTime() - startedAt;
-    if (args.onPoll) {
-      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
-    } else if (args.label && !result.done) {
-      const seconds = Math.round(afterProbeElapsed / 1e3);
-      console.log(
-        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
-      );
-    }
-    if (result.done) {
-      return {
-        outcome: "done",
-        value: result.value,
-        polls,
-        elapsedMs: afterProbeElapsed
-      };
-    }
-    if (afterProbeElapsed >= args.timeoutMs) {
-      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
-    }
-    await sleep(args.intervalMs);
-  }
-}
-async function pollUntilDefined(probe, opts) {
-  return pollUntil({
-    ...opts,
-    probe: async (ctx) => {
-      const value = await probe(ctx);
-      return value === void 0 ? { done: false } : { done: true, value };
-    }
-  });
-}
-
-// scripts/util/sanitize-branch-name.ts
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
-  while (name.length < 3) name += "-x";
-  return name;
-}
+// scripts/lakebase/branch-utils.ts
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 // scripts/lakebase/branch-id.ts
 var UID_PATTERN = /^br-[a-z0-9-]+$/;
@@ -89,9 +36,9 @@ function asBranchUid(s) {
   }
   return s;
 }
-function branchNameFromResourcePath(path10) {
-  if (!path10.includes("/branches/")) return null;
-  const leaf = path10.split("/branches/").pop();
+function branchNameFromResourcePath(path8) {
+  if (!path8.includes("/branches/")) return null;
+  const leaf = path8.split("/branches/").pop();
   if (!leaf) return null;
   try {
     return asBranchName(leaf);
@@ -99,10 +46,6 @@ function branchNameFromResourcePath(path10) {
     return null;
   }
 }
-
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
-import { promisify } from "util";
 
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
@@ -133,9 +76,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -154,44 +94,6 @@ var LakebaseBranchError = class extends Error {
     this.name = "LakebaseBranchError";
   }
 };
-var LakebaseBranchTtlTooLongError = class extends LakebaseBranchError {
-  /** The TTL that was attempted (the value passed to the API). */
-  attemptedTtl;
-  constructor(attemptedTtl, underlyingMessage) {
-    super(
-      `Branch create rejected: TTL '${attemptedTtl}' exceeds the workspace's maximum expiration policy. Pass a shorter ttl arg (e.g. "604800s" for 7 days) or set noExpiry: true. The workspace cap is not directly exposed by the Lakebase API; the project's history_retention_duration (from \`databricks postgres get-project\`) is a conservative starting point.
-
-Underlying error: ${underlyingMessage}`
-    );
-    this.name = "LakebaseBranchTtlTooLongError";
-    this.attemptedTtl = attemptedTtl;
-  }
-};
-function isTtlTooLongError(stderr) {
-  return /expiration time exceeds the maximum expiration time/i.test(stderr);
-}
-function parseLakebaseTtl(ttl) {
-  if (!ttl) return void 0;
-  const m = ttl.trim().match(/^(\d+)s?$/);
-  if (!m) return void 0;
-  const n = Number.parseInt(m[1], 10);
-  return Number.isFinite(n) && n > 0 ? n : void 0;
-}
-function minLakebaseTtl(a, b) {
-  const sa = parseLakebaseTtl(a);
-  const sb = parseLakebaseTtl(b);
-  if (sa === void 0 && sb === void 0) return void 0;
-  if (sa === void 0) return `${sb}s`;
-  if (sb === void 0) return `${sa}s`;
-  return `${Math.min(sa, sb)}s`;
-}
-var RETENTION_CACHE = /* @__PURE__ */ new Map();
-function getCachedProjectRetention(instance) {
-  return RETENTION_CACHE.get(instance);
-}
-function cacheProjectRetention(instance, ttl) {
-  RETENTION_CACHE.set(instance, ttl);
-}
 function projectPath(instance) {
   return `projects/${instance}`;
 }
@@ -214,17 +116,6 @@ async function getBranchByName(branchNameOrUid, opts) {
   return branches.find(
     (b) => b.uid === branchNameOrUid || b.name === branchNameOrUid || b.name.endsWith(`/${branchNameOrUid}`)
   );
-}
-async function getDefaultBranch(opts) {
-  const branches = await listBranches(opts);
-  return branches.find((b) => b.isDefault);
-}
-async function resolveBranchPath(branchNameOrUid, opts) {
-  if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
-    return branchNameOrUid;
-  }
-  const branch = await getBranchByName(branchNameOrUid, opts);
-  return branch?.name;
 }
 async function resolveBranchId(args) {
   const { branch, ...opts } = args;
@@ -293,278 +184,6 @@ stderr: ${stderr.trim()}` : ""}`
   }
 }
 
-// scripts/lakebase/lakebase-project.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-var execFileP2 = promisify2(execFile2);
-var LakebaseProjectError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "LakebaseProjectError";
-  }
-};
-function findHistoryRetentionDuration(parsed) {
-  const raw = parsed.history_retention_duration ?? parsed.historyRetentionDuration;
-  if (!raw || typeof raw !== "string") return void 0;
-  const m = raw.trim().match(/^(\d+)s?$/);
-  if (!m) return void 0;
-  const seconds = Number.parseInt(m[1], 10);
-  if (!Number.isFinite(seconds) || seconds <= 0) return void 0;
-  return `${seconds}s`;
-}
-async function getProjectRetentionDuration(args) {
-  const name = args.projectId.startsWith("projects/") ? args.projectId : `projects/${args.projectId}`;
-  let raw;
-  try {
-    raw = await dbcli2(["postgres", "get-project", name, "-o", "json"], args.host);
-  } catch {
-    return void 0;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return void 0;
-  }
-  return findHistoryRetentionDuration(parsed);
-}
-async function dbcli2(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP2("databricks", args, {
-      env,
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseProjectError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
-}
-
-// scripts/lakebase/branch-create.ts
-var execFileP3 = promisify3(execFile3);
-async function createBranch(args) {
-  const sanitized = sanitizeBranchName(args.branch);
-  const lookup = { instance: args.instance, host: args.host };
-  let sourceBranchPath;
-  if (args.parentBranch) {
-    if (looksLikeBranchUid(args.parentBranch)) {
-      throw new LakebaseBranchError(
-        `parentBranch '${args.parentBranch}' looks like a BranchUid (br-\u2026 pattern), not a BranchName. Pass the resource-path leaf (e.g. 'production', 'staging', 'feature-add-orders') \u2013 the Lakebase API rejects uids in source_branch fields. If you have a uid and need to resolve it to its name, call resolveBranchId() from branch-utils first.`
-      );
-    }
-    const validated = asBranchName(args.parentBranch);
-    const parent = await getBranchByName(validated, lookup);
-    if (parent) {
-      sourceBranchPath = parent.name;
-    } else if (args.strictParent === true) {
-      throw new LakebaseBranchError(
-        `parentBranch '${validated}' does not exist on project '${args.instance}', and strictParent: true was set. Either create '${validated}' first (e.g. cut it off the project default branch) or drop strictParent: true to fall back to the project default branch.`
-      );
-    } else {
-      const def = await getDefaultBranch(lookup);
-      if (!def) {
-        throw new LakebaseBranchError(
-          `parentBranch '${validated}' does not exist on project '${args.instance}' and the project has no default branch to fall back to.`
-        );
-      }
-      const defaultLeaf = leafOf(def.name) ?? def.name;
-      process.stderr.write(
-        `[lakebase-branch-create] parentBranch '${validated}' not found on project '${args.instance}'; falling back to default branch '${defaultLeaf}'. Pass strictParent: true to throw instead.
-`
-      );
-      sourceBranchPath = def.name;
-    }
-  } else if (args.currentBranch && args.currentBranch !== sanitized) {
-    const current = await getBranchByName(args.currentBranch, lookup);
-    if (current) sourceBranchPath = current.name;
-  }
-  if (!sourceBranchPath) {
-    const def = await getDefaultBranch(lookup);
-    if (!def) {
-      throw new LakebaseBranchError(
-        `Could not find a parent branch for "${sanitized}" \u2013 no parentBranch override, no currentBranch hint, and the project has no default branch.`
-      );
-    }
-    sourceBranchPath = def.name;
-  }
-  const existing = await getBranchByName(sanitized, lookup);
-  if (existing) {
-    const existingLeaf = leafOf(existing.sourceBranchName);
-    const requestedLeaf = leafOf(sourceBranchPath);
-    if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
-      throw new LakebaseBranchError(
-        `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
-      );
-    }
-    return existing;
-  }
-  if (args.ttl && args.noExpiry === true) {
-    throw new LakebaseBranchError(
-      `Cannot set both ttl ("${args.ttl}") and noExpiry: true on the same branch \u2013 they are mutually exclusive. Pass one or the other.`
-    );
-  }
-  const specObj = {
-    source_branch: sourceBranchPath
-  };
-  if (args.ttl) {
-    specObj.ttl = args.ttl;
-  } else if (args.noExpiry ?? true) {
-    specObj.no_expiry = true;
-  }
-  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
-  return waitForBranchReady({
-    instance: args.instance,
-    host: args.host,
-    branch: sanitized,
-    timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
-    pollIntervalMs: args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll
-  });
-}
-async function waitForBranchReady(args) {
-  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
-  const interval = args.pollIntervalMs ?? KIT_TIMEOUTS.readyPoll;
-  const result = await pollUntilDefined(
-    async () => {
-      const branch = await getBranchByName(args.branch, { instance: args.instance, host: args.host });
-      return branch && branch.state === "READY" ? branch : void 0;
-    },
-    { timeoutMs, intervalMs: interval }
-  );
-  if (result.outcome === "timeout") {
-    throw new LakebaseBranchError(
-      `Branch "${args.branch}" did not reach READY within ${timeoutMs}ms`
-    );
-  }
-  return result.value;
-}
-function leafOf(pathOrName) {
-  if (!pathOrName) return void 0;
-  const segments = pathOrName.split("/");
-  return segments[segments.length - 1] || void 0;
-}
-async function createWithTtlRecovery(instance, sanitized, specObj, host) {
-  const originalTtl = specObj.ttl;
-  try {
-    await dbcli3(
-      ["postgres", "create-branch", projectPath(instance), sanitized, "--json", JSON.stringify({ spec: specObj })],
-      host
-    );
-    return;
-  } catch (err) {
-    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
-      throw err;
-    }
-    let retention = getCachedProjectRetention(instance);
-    if (retention === void 0) {
-      retention = await getProjectRetentionDuration({ projectId: instance, host });
-      cacheProjectRetention(instance, retention);
-    }
-    const FALLBACK_TTL = "604800s";
-    const effectiveRetention = retention ?? FALLBACK_TTL;
-    const clamped = minLakebaseTtl(originalTtl, effectiveRetention) ?? effectiveRetention;
-    if (clamped === originalTtl) {
-      throw new LakebaseBranchTtlTooLongError(originalTtl, err.message);
-    }
-    process.stderr.write(
-      `[lakebase-branch-create] workspace TTL cap rejected '${originalTtl}' for project '${instance}'; retrying with ` + (retention ? `retention-clamped '${clamped}'.
-` : `hardcoded fallback '${clamped}' (history_retention_duration not discoverable).
-`)
-    );
-    const retrySpec = { ...specObj, ttl: clamped };
-    try {
-      await dbcli3(
-        ["postgres", "create-branch", projectPath(instance), sanitized, "--json", JSON.stringify({ spec: retrySpec })],
-        host
-      );
-    } catch (retryErr) {
-      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
-        throw new LakebaseBranchTtlTooLongError(
-          clamped,
-          `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`
-        );
-      }
-      throw retryErr;
-    }
-  }
-}
-async function dbcli3(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
-}
-
-// scripts/lakebase/paired-branch.ts
-import * as fs3 from "fs";
-import * as path2 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
-
-// scripts/lakebase/branch-delete.ts
-import { execFile as execFile4 } from "child_process";
-import { promisify as promisify4 } from "util";
-var execFileP4 = promisify4(execFile4);
-async function deleteBranch(args) {
-  const fullPath = await resolveBranchPath(args.branch, {
-    instance: args.instance,
-    host: args.host
-  });
-  if (!fullPath) {
-    throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
-  }
-  if (!args.allowDefault) {
-    const info = await getBranchByName(args.branch, {
-      instance: args.instance,
-      host: args.host
-    });
-    if (info?.isDefault) {
-      const leaf = info.name.split("/branches/").pop() ?? info.uid;
-      throw new LakebaseBranchError(
-        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
-      );
-    }
-  }
-  await dbcli4(["postgres", "delete-branch", fullPath], args.host);
-}
-async function dbcli4(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP4("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
-}
-
-// scripts/lakebase/branch-endpoint.ts
-import { execFileSync as execFileSync2 } from "child_process";
-
-// scripts/lakebase/get-connection.ts
-import { execFileSync } from "child_process";
-import { createLakebasePool } from "@databricks/lakebase";
-import { Client } from "pg";
-
 // scripts/lakebase/constants.ts
 var POSTGRES_PORT = 5432;
 var DEFAULT_DATABASE = "databricks_postgres";
@@ -575,17 +194,17 @@ async function getConnection(args) {
   const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
-  const endpointPath2 = `projects/${args.instance}/branches/${branchId}/endpoints/${endpointName}`;
+  const endpointPath = `projects/${args.instance}/branches/${branchId}/endpoints/${endpointName}`;
   if (args.output === "dsn") {
     const host2 = await resolveEndpointHost(args.instance, branchId);
-    const { token, email: email2 } = await mintCredential(endpointPath2);
+    const { token, email: email2 } = await mintCredential(endpointPath);
     const url = buildPostgresUrl({ host: host2, port: POSTGRES_PORT, database, user: email2, password: token });
-    return { url, host: host2, port: POSTGRES_PORT, database, user: email2, endpointPath: endpointPath2 };
+    return { url, host: host2, port: POSTGRES_PORT, database, user: email2, endpointPath };
   }
   const host = await resolveEndpointHost(args.instance, branchId);
   const email = await resolveCurrentUser();
   return createLakebasePool({
-    endpoint: endpointPath2,
+    endpoint: endpointPath,
     host,
     database,
     user: email,
@@ -597,7 +216,7 @@ async function getConnection(args) {
 async function resolveEndpointHost(instance, branch) {
   const branchId = await resolveBranchId({ instance, branch });
   const branchPath = `projects/${instance}/branches/${branchId}`;
-  const raw = dbcli5(["postgres", "list-endpoints", branchPath, "-o", "json"]);
+  const raw = dbcli2(["postgres", "list-endpoints", branchPath, "-o", "json"]);
   const endpoints = JSON.parse(raw);
   if (!Array.isArray(endpoints) || endpoints.length === 0) {
     throw new Error(`No endpoints found for branch ${branchPath}`);
@@ -608,17 +227,17 @@ async function resolveEndpointHost(instance, branch) {
   }
   return host;
 }
-async function mintCredential(endpointPath2) {
-  const raw = dbcli5(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
+async function mintCredential(endpointPath) {
+  const raw = dbcli2(["postgres", "generate-database-credential", endpointPath, "-o", "json"]);
   const token = JSON.parse(raw)?.token ?? "";
   if (!token) {
-    throw new Error(`generate-database-credential returned no token for ${endpointPath2}`);
+    throw new Error(`generate-database-credential returned no token for ${endpointPath}`);
   }
   const email = await resolveCurrentUser();
   return { token, email };
 }
 async function resolveCurrentUser() {
-  const raw = dbcli5(["current-user", "me", "-o", "json"]);
+  const raw = dbcli2(["current-user", "me", "-o", "json"]);
   const parsed = JSON.parse(raw);
   const email = parsed.userName ?? parsed.emails?.[0]?.value;
   if (!email) {
@@ -633,7 +252,7 @@ function buildPostgresUrl(parts) {
   u.searchParams.set("sslmode", "require");
   return u.toString();
 }
-function dbcli5(args) {
+function dbcli2(args) {
   try {
     return execFileSync("databricks", args, {
       encoding: "utf8",
@@ -650,275 +269,22 @@ stderr: ${stderr.trim()}` : ""}`
   }
 }
 
-// scripts/lakebase/env-file.ts
-import * as fs from "fs";
-import * as path from "path";
-
-// scripts/lakebase/databricks-profile.ts
-import * as fs2 from "fs";
-
-// scripts/util/exec.ts
-import * as cp from "child_process";
-function shq(s) {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-function exec2(command, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve(String(stdout).trim());
-    });
-  });
-}
-
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-
-// scripts/tdd/experiment.ts
-function branchIdOf(info) {
-  const leaf = info.name.split("/").pop();
-  if (!leaf) throw new Error(`could not derive branch_id from ${info.name}`);
-  return leaf;
-}
-function experimentsRoot(tddDir, featureId, storyId) {
-  return join3(tddDir, "experiments", featureId, storyId);
-}
-function experimentDir(tddDir, featureId, storyId, slug) {
-  return join3(experimentsRoot(tddDir, featureId, storyId), slug);
-}
-async function cutExperiment(args) {
-  const { tddDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
-  const branchInfo = await createFeatureBranch({ ...lookup, branch, parentBranch, ttl });
-  const branchId = branchIdOf(branchInfo);
-  const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
-  mkdirSync2(dir, { recursive: true });
-  writeFileSync3(join3(dir, "branch.txt"), branchId);
-  writeFileSync3(
-    join3(dir, "notes.md"),
-    notes ?? `# ${experimentSlug}
-
-Experiment cut from \`${parentBranch ?? "staging"}\`. Strategy + learning notes go here.
-`
-  );
-  const outcomes = { status: "running" };
-  writeFileSync3(join3(dir, "outcomes.json"), JSON.stringify(outcomes, null, 2) + "\n");
-  writeFileSync3(
-    join3(dir, "timeline.json"),
-    JSON.stringify(
-      { entries: [{ ts: (/* @__PURE__ */ new Date()).toISOString(), kind: "cut", branch: branchId }] },
-      null,
-      2
-    ) + "\n"
-  );
-  return {
-    feature_id: featureId,
-    story_id: storyId,
-    experiment_slug: experimentSlug,
-    branch_id: branchId,
-    created_at: (/* @__PURE__ */ new Date()).toISOString(),
-    dir
-  };
-}
-async function deleteExperiment(args) {
-  const { tddDir, featureId, storyId, experimentSlug, deleteBranchToo, ...lookup } = args;
-  const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
-  if (!existsSync4(dir)) {
-    throw new Error(`experiment ${featureId}/${storyId}/${experimentSlug} not found at ${dir}`);
-  }
-  if (deleteBranchToo) {
-    const branchId = readFileSync4(join3(dir, "branch.txt"), "utf8").trim();
-    await deleteBranch({ ...lookup, branch: branchId });
-  }
-}
-
-// scripts/tdd/experiment-lifecycle.ts
-async function mergeExperimentIntoFeature(args, ops) {
-  await ops.gitMerge({ from: args.experimentBranch, into: args.featureBranch, projectDir: args.projectDir });
-  await ops.runMigrations({ instance: args.instance, branch: args.featureBranch, projectDir: args.projectDir });
-  await ops.teardown({
-    tddDir: args.tddDir,
-    featureId: args.featureId,
-    storyId: args.storyId,
-    experimentSlug: args.experimentSlug,
-    instance: args.instance
-  });
-  return { merged: true, feature_branch: args.featureBranch, experiment_slug: args.experimentSlug };
-}
-async function discardExperimentBranch(args, ops) {
-  await ops.teardown({
-    tddDir: args.tddDir,
-    featureId: args.featureId,
-    storyId: args.storyId,
-    experimentSlug: args.experimentSlug,
-    instance: args.instance
-  });
-}
-
-// scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3, readdirSync as readdirSync2 } from "fs";
-import { dirname as dirname2, join as join4 } from "path";
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(tddDir, featureId) {
-  return join4(tddDir, "features", featureId, "pipeline.json");
-}
-function readPipeline(tddDir, featureId) {
-  const p = pipelinePath(tddDir, featureId);
-  if (!existsSync5(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync5(p, "utf8"));
-}
-function writePipeline(tddDir, pipeline) {
-  const p = pipelinePath(tddDir, pipeline.feature_id);
-  mkdirSync3(dirname2(p), { recursive: true });
-  writeFileSync4(p, JSON.stringify(pipeline, null, 2) + "\n");
-}
-function setStoryStatus(pipeline, storyId, status) {
-  const existing = pipeline.stories[storyId];
-  pipeline.stories[storyId] = { ...existing, status };
-  return pipeline;
-}
-function markGateWithdrawn(gate, opts) {
-  gate.status = "withdrawn";
-  gate.withdrawal_reason = opts.reason;
-  gate.history.push({
-    action: "withdrawn",
-    at: opts.at,
-    approver: opts.approver,
-    reason: opts.reason
-  });
-}
-function cutStoryExperiment(pipeline, storyId, args) {
-  const story = pipeline.stories[storyId];
-  if (!story) throw new Error(`cutStoryExperiment: story ${storyId} is not in the pipeline`);
-  story.experiment = {
-    slug: args.slug,
-    branch: args.branch,
-    parent: args.parent,
-    ...args.lakebase_branch_uid !== void 0 ? { lakebase_branch_uid: args.lakebase_branch_uid } : {},
-    ...args.parent_sha !== void 0 ? { parent_sha: args.parent_sha } : {},
-    n: args.n ?? 1,
-    status: "active",
-    ...args.at !== void 0 ? { cut_at: args.at } : {}
-  };
-  return pipeline;
-}
-function recordAcceptance(story, decision, opts) {
-  const acc = story.acceptance ?? { decision: null, history: [] };
-  acc.decision = decision;
-  acc.approver = opts.approver;
-  acc.at = opts.at;
-  if (opts.reason !== void 0) acc.reason = opts.reason;
-  acc.history.push({
-    decision,
-    at: opts.at,
-    approver: opts.approver,
-    ...opts.reason !== void 0 ? { reason: opts.reason } : {}
-  });
-  story.acceptance = acc;
-}
-function freeLaneIfActive(pipeline, storyId) {
-  if (pipeline.build_active === storyId) pipeline.build_active = null;
-}
-function acceptStory(pipeline, storyId, opts) {
-  const story = pipeline.stories[storyId];
-  if (!story) throw new Error(`acceptStory: story ${storyId} is not in the pipeline`);
-  recordAcceptance(story, "accepted", opts);
-  if (story.experiment) {
-    story.experiment.status = "merged";
-    story.experiment.closed_at = opts.at;
-  }
-  setStoryStatus(pipeline, storyId, "done");
-  freeLaneIfActive(pipeline, storyId);
-  return pipeline;
-}
-function discardStory(pipeline, storyId, opts) {
-  const story = pipeline.stories[storyId];
-  if (!story) throw new Error(`discardStory: story ${storyId} is not in the pipeline`);
-  recordAcceptance(story, "discarded", opts);
-  if (story.experiment) {
-    story.experiment.status = "discarded";
-    story.experiment.closed_at = opts.at;
-  }
-  if (story.gate) markGateWithdrawn(story.gate, opts);
-  setStoryStatus(pipeline, storyId, "discarded");
-  freeLaneIfActive(pipeline, storyId);
-  return pipeline;
-}
-function reviseStory(pipeline, storyId, opts) {
-  const story = pipeline.stories[storyId];
-  if (!story) throw new Error(`reviseStory: story ${storyId} is not in the pipeline`);
-  recordAcceptance(story, "revise", opts);
-  if (story.experiment) {
-    story.experiment.status = "discarded";
-    story.experiment.closed_at = opts.at;
-  }
-  if (story.gate) story.gate = { status: "open", history: story.gate.history };
-  setStoryStatus(pipeline, storyId, "designing");
-  freeLaneIfActive(pipeline, storyId);
-  return pipeline;
-}
-
-// scripts/git/mutation.ts
-async function checkoutBranch(args) {
-  const flag = args.create ? "-b " : "";
-  const sp = args.startPoint ? ` ${shq(args.startPoint)}` : "";
-  await exec2(`git checkout ${flag}${shq(args.branch)}${sp}`, {
-    cwd: args.cwd
-  });
-}
-
-// scripts/git/branch-tag.ts
-async function mergeBranch(args) {
-  await exec2(`git merge ${shq(args.branch)}`, { cwd: args.cwd });
-}
-
-// scripts/lakebase/schema-migrate.ts
-import * as fs9 from "fs";
-import * as path9 from "path";
-
 // scripts/lakebase/adapters/alembic-adapter.ts
-import * as fs5 from "fs";
-import * as path4 from "path";
+import * as fs2 from "fs";
+import * as path2 from "path";
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
 import { spawn } from "child_process";
-import * as fs4 from "fs";
-import * as path3 from "path";
+import * as fs from "fs";
+import * as path from "path";
 function resolveAlembicBin(projectDir) {
   const candidates = [
-    path3.join(projectDir, ".venv", "bin", "alembic"),
-    path3.join(projectDir, "venv", "bin", "alembic")
+    path.join(projectDir, ".venv", "bin", "alembic"),
+    path.join(projectDir, "venv", "bin", "alembic")
   ];
   for (const candidate of candidates) {
     try {
-      if (fs4.existsSync(candidate)) return candidate;
+      if (fs.existsSync(candidate)) return candidate;
     } catch {
     }
   }
@@ -973,10 +339,10 @@ async function createAlembicRevision(opts) {
   const m = stdout.match(/Generating\s+(\S+\.py)/);
   if (m) return m[1].trim();
   for (const rel of ["migrations/versions", "alembic/versions"]) {
-    const dir = path3.join(opts.projectDir, rel);
-    if (!fs4.existsSync(dir)) continue;
-    const hit = fs4.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
-    if (hit) return path3.join(dir, hit);
+    const dir = path.join(opts.projectDir, rel);
+    if (!fs.existsSync(dir)) continue;
+    const hit = fs.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path.join(dir, hit);
   }
   throw new SchemaMigrationError(
     `alembic revision succeeded but the created file could not be located.
@@ -1106,15 +472,15 @@ async function buildDsn(args) {
 }
 function findVersionsDir(projectDir) {
   const candidates = [
-    path4.join(projectDir, "migrations", "versions"),
-    path4.join(projectDir, "alembic", "versions")
+    path2.join(projectDir, "migrations", "versions"),
+    path2.join(projectDir, "alembic", "versions")
   ];
-  return candidates.find((p) => fs5.existsSync(p));
+  return candidates.find((p) => fs2.existsSync(p));
 }
 function listAlembicFiles(projectDir) {
   const dir = findVersionsDir(projectDir);
   if (!dir) return [];
-  const files = fs5.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  const files = fs2.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
   return files.map((filename) => {
     const stem = filename.replace(/\.py$/, "");
     const sep = stem.indexOf("_");
@@ -1139,9 +505,9 @@ var AlembicAdapter = {
    * here. Callers can still force-select via project.yaml#migration_tool.
    */
   detect(projectDir) {
-    if (fs5.existsSync(path4.join(projectDir, "alembic.ini"))) return true;
-    if (fs5.existsSync(path4.join(projectDir, "migrations", "env.py"))) return true;
-    if (fs5.existsSync(path4.join(projectDir, "alembic", "env.py"))) return true;
+    if (fs2.existsSync(path2.join(projectDir, "alembic.ini"))) return true;
+    if (fs2.existsSync(path2.join(projectDir, "migrations", "env.py"))) return true;
+    if (fs2.existsSync(path2.join(projectDir, "alembic", "env.py"))) return true;
     return false;
   },
   async apply(args) {
@@ -1234,7 +600,7 @@ var AlembicAdapter = {
         autogenerate: !!args.autogenerate,
         dsn
       });
-      return { status: "ok", version: revId, filename: path4.basename(created), path: created };
+      return { status: "ok", version: revId, filename: path2.basename(created), path: created };
     } catch (err) {
       return {
         status: "error",
@@ -1251,7 +617,7 @@ var AlembicAdapter = {
       if (heads.length <= 1) return { status: "noop", headsBefore: heads };
       if (args.dryRun) return { status: "ok", headsBefore: heads };
       const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
-      const mergeRevision = path4.basename(created).replace(/\.py$/, "").split("_")[0];
+      const mergeRevision = path2.basename(created).replace(/\.py$/, "").split("_")[0];
       return { status: "ok", headsBefore: heads, mergeRevision, path: created };
     } catch (err) {
       return {
@@ -1265,12 +631,12 @@ var AlembicAdapter = {
 registerSchemaMigrationAdapter(AlembicAdapter);
 
 // scripts/lakebase/adapters/flyway-adapter.ts
-import * as fs6 from "fs";
-import * as path6 from "path";
+import * as fs3 from "fs";
+import * as path4 from "path";
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
 import { spawn as spawn2 } from "child_process";
-import * as path5 from "path";
+import * as path3 from "path";
 function dsnToFlywayEnv(dsn) {
   const u = new URL(dsn);
   const user = decodeURIComponent(u.username);
@@ -1280,7 +646,7 @@ function dsnToFlywayEnv(dsn) {
   return { url, user, password };
 }
 function migrationsLocation(projectDir) {
-  return `filesystem:${path5.join(projectDir, "src", "main", "resources", "db", "migration")}`;
+  return `filesystem:${path3.join(projectDir, "src", "main", "resources", "db", "migration")}`;
 }
 function runFlyway(ctx, args) {
   const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
@@ -1381,7 +747,7 @@ async function statusFlyway(ctx) {
     if (state === "SUCCESS" || state === "BASELINE") {
       current = m.version;
     } else if (state === "PENDING") {
-      const filename = m.filepath ? path5.basename(m.filepath) : `V${m.version}__migration.sql`;
+      const filename = m.filepath ? path3.basename(m.filepath) : `V${m.version}__migration.sql`;
       pending.push({
         version: m.version,
         filename,
@@ -1404,9 +770,9 @@ async function buildDsn2(args) {
   return result.url;
 }
 function listFlywayFiles(projectDir) {
-  const dir = path6.join(projectDir, "src", "main", "resources", "db", "migration");
-  if (!fs6.existsSync(dir)) return [];
-  const files = fs6.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  const dir = path4.join(projectDir, "src", "main", "resources", "db", "migration");
+  if (!fs3.existsSync(dir)) return [];
+  const files = fs3.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
   return files.map((filename) => {
     const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
     const version = m[1];
@@ -1429,7 +795,7 @@ var FlywayAdapter = {
   id: "flyway",
   languages: ["java", "kotlin"],
   detect(projectDir) {
-    return fs6.existsSync(path6.join(projectDir, "pom.xml"));
+    return fs3.existsSync(path4.join(projectDir, "pom.xml"));
   },
   async apply(args) {
     const dsn = await buildDsn2(args);
@@ -1487,14 +853,14 @@ var FlywayAdapter = {
   // optional-protocol shape makes this additive.
   async newMigration(args) {
     try {
-      const dir = path6.join(args.projectDir, "src", "main", "resources", "db", "migration");
-      fs6.mkdirSync(dir, { recursive: true });
+      const dir = path4.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs3.mkdirSync(dir, { recursive: true });
       const version = migrationTimestamp();
       const slug = migrationSlug2(args.slug);
       const filename = `V${version}__${slug}.sql`;
-      const full = path6.join(dir, filename);
-      if (fs6.existsSync(full)) throw new Error(`${filename} already exists`);
-      fs6.writeFileSync(
+      const full = path4.join(dir, filename);
+      if (fs3.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs3.writeFileSync(
         full,
         `-- V${version}: ${args.slug}
 -- Flyway migration (write your DDL/DML below).
@@ -1516,18 +882,18 @@ var FlywayAdapter = {
 registerSchemaMigrationAdapter(FlywayAdapter);
 
 // scripts/lakebase/adapters/knex-adapter.ts
-import * as fs8 from "fs";
-import * as path8 from "path";
+import * as fs5 from "fs";
+import * as path6 from "path";
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
 import { spawn as spawn3 } from "child_process";
-import * as fs7 from "fs";
-import * as path7 from "path";
+import * as fs4 from "fs";
+import * as path5 from "path";
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function findKnexfile(projectDir) {
   for (const name of KNEXFILE_VARIANTS) {
-    const p = path7.join(projectDir, name);
-    if (fs7.existsSync(p)) return p;
+    const p = path5.join(projectDir, name);
+    if (fs4.existsSync(p)) return p;
   }
   return void 0;
 }
@@ -1679,9 +1045,9 @@ async function buildDsn3(args) {
 }
 var KNEXFILE_VARIANTS2 = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function listKnexFiles(projectDir) {
-  const dir = path8.join(projectDir, "migrations");
-  if (!fs8.existsSync(dir)) return [];
-  const files = fs8.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  const dir = path6.join(projectDir, "migrations");
+  if (!fs5.existsSync(dir)) return [];
+  const files = fs5.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
   return files.map((filename) => {
     const stem = filename.replace(/\.(js|ts)$/, "");
     const m = stem.match(/^(\d{14})_(.+)$/);
@@ -1701,7 +1067,7 @@ var KnexAdapter = {
    * project.yaml#migration_tool.
    */
   detect(projectDir) {
-    return KNEXFILE_VARIANTS2.some((name) => fs8.existsSync(path8.join(projectDir, name)));
+    return KNEXFILE_VARIANTS2.some((name) => fs5.existsSync(path6.join(projectDir, name)));
   },
   async apply(args) {
     const dsn = await buildDsn3(args);
@@ -1774,9 +1140,9 @@ var KnexAdapter = {
   async newMigration(args) {
     try {
       const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug2(args.slug) });
-      const stem = path8.basename(created).replace(/\.(js|ts)$/, "");
+      const stem = path6.basename(created).replace(/\.(js|ts)$/, "");
       const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
-      return { status: "ok", version, filename: path8.basename(created), path: created };
+      return { status: "ok", version, filename: path6.basename(created), path: created };
     } catch (err) {
       return {
         status: "error",
@@ -1814,25 +1180,6 @@ function adapterFor(projectDir, language) {
   const override = language ? toolForLanguage(language) : void 0;
   return resolveSchemaMigrationAdapter(projectDir, override);
 }
-async function applySchemaMigrations(args) {
-  const projectDir = args.projectDir ?? process.cwd();
-  const adapter = adapterFor(projectDir, args.language);
-  const r = await adapter.apply({
-    instance: args.instance,
-    branch: args.branch,
-    projectDir,
-    database: args.database,
-    endpointName: args.endpointName
-  });
-  if (r.status === "error") {
-    throw new SchemaMigrationError(r.error ?? "apply failed");
-  }
-  return {
-    applied: r.applied_migrations,
-    alreadyAtLatest: r.status === "noop",
-    tool: adapter.id
-  };
-}
 function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
   const p = (n) => String(n).padStart(2, "0");
   return `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
@@ -1840,137 +1187,147 @@ function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
 function migrationSlug2(description) {
   return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
 }
+async function createSchemaMigration(args) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.newMigration) {
+    throw new SchemaMigrationError(
+      `Adapter '${adapter.id}' does not support creating migrations.`
+    );
+  }
+  const r = await adapter.newMigration({
+    projectDir,
+    slug: args.slug,
+    autogenerate: args.autogenerate,
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "create migration failed");
+  }
+  return r;
+}
 
-// scripts/tdd/story-experiment.cli.ts
-import { join as join12 } from "path";
-function parse(argv) {
-  const out = { cmd: argv[0] };
-  for (let i = 1; i < argv.length; i++) {
+// scripts/lakebase/new-migration.cli.ts
+function parseArgs(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--feature") out.feature = argv[++i];
-    else if (a === "--story") out.story = argv[++i];
-    else if (a === "--slug") out.slug = argv[++i];
-    else if (a === "--branch") out.branch = argv[++i];
-    else if (a === "--experiment-branch") out.experimentBranch = argv[++i];
-    else if (a === "--feature-branch") out.featureBranch = argv[++i];
-    else if (a === "--parent") out.parent = argv[++i];
-    else if (a === "--instance") out.instance = argv[++i];
-    else if (a === "--ttl") out.ttl = argv[++i];
-    else if (a === "--approver") out.approver = argv[++i];
-    else if (a === "--reason") out.reason = argv[++i];
-    else if (a === "--at") out.at = argv[++i];
-    else if (a === "--revise") out.revise = true;
-    else if (a === "--project-dir") out.projectDir = argv[++i];
-    else if (a === "--tdd-dir") out.tddDir = argv[++i];
+    switch (a) {
+      case "--name":
+      case "-m":
+        out.name = argv[++i];
+        break;
+      case "--project-dir":
+        out.projectDir = argv[++i];
+        break;
+      case "--language":
+        out.language = argv[++i];
+        break;
+      case "--autogenerate":
+        out.autogenerate = true;
+        break;
+      case "--instance":
+        out.instance = argv[++i];
+        break;
+      case "--branch":
+        out.branch = argv[++i];
+        break;
+      case "--database":
+        out.database = argv[++i];
+        break;
+      case "--endpoint":
+      case "--endpoint-name":
+        out.endpointName = argv[++i];
+        break;
+      case "--pretty":
+        out.pretty = true;
+        break;
+      case "--help":
+      case "-h":
+        out.help = true;
+        break;
+      default:
+        break;
+    }
   }
   return out;
 }
-function usage(msg) {
-  process.stderr.write(
-    `${msg}
-Usage: lakebase-tdd-experiment <cut|merge|discard> --feature <F> --story <S> --slug <X> --instance <I> [--tdd-dir <D>]
-  cut needs --branch <B> --parent <FB> [--ttl <T>] [--project-dir <P>]
-  merge needs --experiment-branch <B> --feature-branch <FB> --approver <A> [--at <ISO>] [--project-dir <P>]
-  discard needs --approver <A> --reason <R> [--revise] [--at <ISO>]
-`
-  );
-  return 2;
+var BIN_NAME = "lakebase-tdd-new-migration";
+function help() {
+  return `${BIN_NAME} (create a tool-native, sequentially-named migration)
+
+Usage:
+  ${BIN_NAME} --name "<description>" [flags]
+
+Flags:
+  --name, -m <text>    Human description; slugified into the filename (required)
+  --project-dir <dir>  Project root (default: cwd)
+  --language <lang>    java | kotlin | python | nodejs (default: auto-detect)
+  --autogenerate       Alembic only: diff models vs the branch DB to populate
+                       the body (requires --instance + --branch)
+  --instance <id>      Lakebase project id (only with --autogenerate)
+  --branch <name>      Branch whose DB to diff against (only with --autogenerate)
+  --database <db>      Database name (only with --autogenerate)
+  --endpoint <name>    Endpoint identifier (only with --autogenerate)
+  --pretty             Pretty-print JSON output
+
+Naming, by tool:
+  python (alembic)  0001_<slug>.py, 0002_<slug>.py, ... (zero-padded, counts up)
+  java   (flyway)   V<n>__<slug>.sql skeleton (the Driver writes the SQL)
+  nodejs (knex)     <timestamp>_<slug>.js via 'knex migrate:make' (native scheme)
+
+Examples:
+  ${BIN_NAME} --name "create bugs table"
+  ${BIN_NAME} --name "add users" --autogenerate --instance proj-x --branch feature/foo
+`;
 }
-var realOps = {
-  gitMerge: async ({ from, into, projectDir }) => {
-    await checkoutBranch({ cwd: projectDir, branch: into });
-    await mergeBranch({ cwd: projectDir, branch: from });
-  },
-  runMigrations: async ({ instance, branch, projectDir }) => {
-    await applySchemaMigrations({ instance, branch, projectDir });
-  },
-  teardown: async ({ tddDir, featureId, storyId, experimentSlug, instance }) => {
-    await deleteExperiment({ instance, tddDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
-  }
-};
 async function main() {
-  const args = parse(process.argv.slice(2));
-  const tddDir = args.tddDir ?? join12(process.cwd(), ".tdd");
-  const projectDir = args.projectDir ?? process.cwd();
-  if (!args.cmd) return usage("missing subcommand");
-  if (!args.feature || !args.story || !args.slug) return usage("missing --feature / --story / --slug");
-  if (!args.instance) return usage("missing --instance");
-  const at = args.at ?? (/* @__PURE__ */ new Date()).toISOString();
-  switch (args.cmd) {
-    case "cut": {
-      if (!args.branch || !args.parent) return usage("cut needs --branch and --parent");
-      const rec = await cutExperiment({
-        instance: args.instance,
-        tddDir,
-        featureId: args.feature,
-        storyId: args.story,
-        experimentSlug: args.slug,
-        branch: args.branch,
-        parentBranch: args.parent,
-        ttl: args.ttl
-      });
-      const p = readPipeline(tddDir, args.feature);
-      cutStoryExperiment(p, args.story, {
-        slug: args.slug,
-        branch: rec.branch_id,
-        parent: args.parent,
-        at
-      });
-      writePipeline(tddDir, p);
-      process.stdout.write(`cut experiment ${args.slug} on ${rec.branch_id} (parent ${args.parent})
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write(help());
+    return 0;
+  }
+  if (!args.name) {
+    process.stderr.write(`${BIN_NAME}: --name is required.
+
+${help()}`);
+    return 2;
+  }
+  if (args.autogenerate && (!args.instance || !args.branch)) {
+    process.stderr.write(`${BIN_NAME}: --autogenerate requires --instance and --branch.
 `);
-      return 0;
-    }
-    case "merge": {
-      if (!args.experimentBranch || !args.featureBranch) return usage("merge needs --experiment-branch and --feature-branch");
-      if (!args.approver) return usage("merge needs --approver");
-      await mergeExperimentIntoFeature(
-        {
-          tddDir,
-          featureId: args.feature,
-          storyId: args.story,
-          experimentSlug: args.slug,
-          featureBranch: args.featureBranch,
-          experimentBranch: args.experimentBranch,
-          instance: args.instance,
-          projectDir
-        },
-        realOps
-      );
-      const p = readPipeline(tddDir, args.feature);
-      acceptStory(p, args.story, { approver: args.approver, at });
-      writePipeline(tddDir, p);
-      process.stdout.write(`merged ${args.slug} into ${args.featureBranch}; story ${args.story} accepted + done
+    return 2;
+  }
+  try {
+    const result = await createSchemaMigration({
+      slug: args.name,
+      projectDir: args.projectDir ?? process.cwd(),
+      language: args.language,
+      autogenerate: args.autogenerate,
+      instance: args.instance,
+      branch: args.branch,
+      database: args.database,
+      endpointName: args.endpointName
+    });
+    process.stderr.write(`created ${result.filename} (version ${result.version})
 `);
-      return 0;
-    }
-    case "discard": {
-      if (!args.approver) return usage("discard needs --approver");
-      if (!args.reason) return usage("discard needs --reason");
-      await discardExperimentBranch(
-        { tddDir, featureId: args.feature, storyId: args.story, experimentSlug: args.slug, instance: args.instance },
-        realOps
-      );
-      const p = readPipeline(tddDir, args.feature);
-      if (args.revise) {
-        reviseStory(p, args.story, { approver: args.approver, at, reason: args.reason });
-      } else {
-        discardStory(p, args.story, { approver: args.approver, at, reason: args.reason });
-      }
-      writePipeline(tddDir, p);
-      process.stdout.write(
-        `${args.revise ? "revised" : "discarded"} ${args.slug}; experiment torn down; story ${args.story} ${args.revise ? "-> designing" : "out of sprint"}
-`
-      );
-      return 0;
-    }
-    default:
-      return usage(`unknown subcommand: ${args.cmd}`);
+    process.stdout.write((args.pretty ? JSON.stringify(result, null, 2) : JSON.stringify(result)) + "\n");
+    return 0;
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
+`);
+    return 1;
   }
 }
-main().then((code) => process.exit(code)).catch((err) => {
-  process.stderr.write(`${err instanceof Error ? err.message : String(err)}
+main().then(
+  (code) => process.exit(code),
+  (err) => {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);
-  process.exit(1);
-});
-//# sourceMappingURL=story-experiment.cli.js.map
+    process.exit(1);
+  }
+);
+//# sourceMappingURL=new-migration.cli.js.map

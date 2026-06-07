@@ -947,12 +947,12 @@ function resolveAlembicBin(projectDir) {
   }
   return "alembic";
 }
-function runAlembic(ctx, args) {
+function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve, reject) => {
-    const bin = resolveAlembicBin(ctx.projectDir);
+    const bin = resolveAlembicBin(projectDir);
     const child = (0, import_node_child_process8.spawn)(bin, args, {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -985,6 +985,44 @@ stderr: ${stderr}`
       }
     });
   });
+}
+function runAlembic(ctx, args) {
+  return spawnAlembic(ctx.projectDir, args, ctx.dsn);
+}
+async function createAlembicRevision(opts) {
+  const args = ["revision", "--rev-id", opts.revId, "-m", opts.message];
+  if (opts.autogenerate) args.push("--autogenerate");
+  const { stdout } = await spawnAlembic(opts.projectDir, args, opts.dsn);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (m) return m[1].trim();
+  for (const rel of ["migrations/versions", "alembic/versions"]) {
+    const dir = path3.join(opts.projectDir, rel);
+    if (!fs4.existsSync(dir)) continue;
+    const hit = fs4.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path3.join(dir, hit);
+  }
+  throw new SchemaMigrationError(
+    `alembic revision succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
+}
+async function listAlembicHeads(projectDir) {
+  const { stdout } = await spawnAlembic(projectDir, ["heads"]);
+  const heads = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^([0-9a-f]+)\b/);
+    if (m) heads.push(m[1]);
+  }
+  return heads;
+}
+async function mergeAlembicHeads(projectDir, message) {
+  const { stdout } = await spawnAlembic(projectDir, ["merge", "-m", message, "heads"]);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (!m) {
+    throw new SchemaMigrationError(`alembic merge heads created no file.
+stdout: ${stdout}`);
+  }
+  return m[1].trim();
 }
 async function getCurrentRevision(ctx) {
   const { stdout } = await runAlembic(ctx, ["current"]);
@@ -1197,9 +1235,55 @@ var AlembicAdapter = {
   },
   async list(args) {
     return { files: listAlembicFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent in slice 3. Alembic exposes `stamp`
   // as the equivalent operation; deferred to a follow-up.
+  async newMigration(args) {
+    try {
+      if (args.autogenerate && (!args.instance || !args.branch)) {
+        throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
+      }
+      const revId = migrationTimestamp();
+      const dsn = args.autogenerate ? await buildDsn({
+        instance: args.instance,
+        branch: args.branch,
+        database: args.database,
+        endpointName: args.endpointName
+      }) : void 0;
+      const created = await createAlembicRevision({
+        projectDir: args.projectDir,
+        revId,
+        message: args.slug,
+        autogenerate: !!args.autogenerate,
+        dsn
+      });
+      return { status: "ok", version: revId, filename: path4.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async collapseHeads(args) {
+    try {
+      const heads = await listAlembicHeads(args.projectDir);
+      if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      if (args.dryRun) return { status: "ok", headsBefore: heads };
+      const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
+      const mergeRevision = path4.basename(created).replace(/\.py$/, "").split("_")[0];
+      return { status: "ok", headsBefore: heads, mergeRevision, path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        headsBefore: [],
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(AlembicAdapter);
 
@@ -1419,11 +1503,38 @@ var FlywayAdapter = {
   },
   async list(args) {
     return { files: listFlywayFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent. Flyway DOES support baseline at the
   // tool level, but exposing it cleanly requires plumbing flags into the
   // existing runner. Deferred to a follow-up slice; the adapter's
   // optional-protocol shape makes this additive.
+  async newMigration(args) {
+    try {
+      const dir = path6.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs6.mkdirSync(dir, { recursive: true });
+      const version = migrationTimestamp();
+      const slug = migrationSlug2(args.slug);
+      const filename = `V${version}__${slug}.sql`;
+      const full = path6.join(dir, filename);
+      if (fs6.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs6.writeFileSync(
+        full,
+        `-- V${version}: ${args.slug}
+-- Flyway migration (write your DDL/DML below).
+`,
+        "utf8"
+      );
+      return { status: "ok", version, filename, path: full };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(FlywayAdapter);
 
@@ -1443,20 +1554,20 @@ function findKnexfile(projectDir) {
   }
   return void 0;
 }
-function runKnex(ctx, args) {
+function spawnKnex(projectDir, args, dsn) {
   return new Promise((resolve, reject) => {
-    const knexfile = findKnexfile(ctx.projectDir);
+    const knexfile = findKnexfile(projectDir);
     if (!knexfile) {
       reject(
         new SchemaMigrationError(
-          `No knexfile found in ${ctx.projectDir}. Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
+          `No knexfile found in ${projectDir}. Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
         )
       );
       return;
     }
     const child = (0, import_node_child_process10.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -1489,6 +1600,18 @@ stderr: ${stderr}`
       }
     });
   });
+}
+function runKnex(ctx, args) {
+  return spawnKnex(ctx.projectDir, args, ctx.dsn);
+}
+async function createKnexMigration(opts) {
+  const { stdout } = await spawnKnex(opts.projectDir, ["migrate:make", opts.slug]);
+  const m = stdout.match(/Created Migration:\s*(\S+)/);
+  if (m) return m[1].trim();
+  throw new SchemaMigrationError(
+    `knex migrate:make succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
 }
 function parseKnexStatus(stdout) {
   const completed = [];
@@ -1667,10 +1790,26 @@ var KnexAdapter = {
   },
   async list(args) {
     return { files: listKnexFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent. Knex has no native baseline concept;
   // omitting it advertises that correctly via the optional-capability
   // protocol so callers won't attempt the operation.
+  async newMigration(args) {
+    try {
+      const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug2(args.slug) });
+      const stem = path8.basename(created).replace(/\.(js|ts)$/, "");
+      const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
+      return { status: "ok", version, filename: path8.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(KnexAdapter);
 
@@ -1716,6 +1855,13 @@ async function applySchemaMigrations(args) {
     alreadyAtLatest: r.status === "noop",
     tool: adapter.id
   };
+}
+function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
+}
+function migrationSlug2(description) {
+  return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
 }
 
 // scripts/tdd/story-experiment.cli.ts

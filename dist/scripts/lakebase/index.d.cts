@@ -2657,7 +2657,7 @@ declare class ScmDoctorFixError extends Error {
     constructor(message: string, code: "finding-not-present" | "unsupported-finding" | "fix-failed");
 }
 /** Findings the doctor can auto-fix. Others require manual intervention. */
-declare const FIXABLE_FINDING_IDS: readonly ["env-branch-drift", "head-branch-drift", "tier-topology-mismatch", "orphan-current-branch"];
+declare const FIXABLE_FINDING_IDS: readonly ["env-branch-drift", "head-branch-drift", "tier-topology-mismatch", "orphan-current-branch", "multiple-migration-heads"];
 type FixableFindingId = (typeof FIXABLE_FINDING_IDS)[number];
 interface FixFindingArgs {
     projectDir: string;
