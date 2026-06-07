@@ -7456,6 +7456,12 @@ function defaultSprintGatesState(sprint) {
 function sprintDir(tddDir, sprint) {
   return (0, import_node_path2.join)(tddDir, "sprints", sprint);
 }
+function sprintProposalPath(tddDir, sprint) {
+  const scoped = (0, import_node_path2.join)(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
+  if ((0, import_node_fs3.existsSync)(scoped)) return scoped;
+  const planning = (0, import_node_path2.join)(tddDir, "planning", PLAN_GATE_ARTIFACT);
+  return (0, import_node_fs3.existsSync)(planning) ? planning : scoped;
+}
 function sprintGatesFile(tddDir, sprint) {
   return (0, import_node_path2.join)(sprintDir(tddDir, sprint), "gates.json");
 }
@@ -7498,7 +7504,7 @@ function approveSprintPlanGate(args) {
   if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const tddDir = args.tddDir ?? "./.tdd";
-  const file = (0, import_node_path2.join)(sprintDir(tddDir, args.sprint), PLAN_GATE_ARTIFACT);
+  const file = sprintProposalPath(tddDir, args.sprint);
   if (!(0, import_node_fs3.existsSync)(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }

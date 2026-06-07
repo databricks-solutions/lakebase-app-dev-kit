@@ -7547,6 +7547,12 @@ function defaultSprintGatesState(sprint) {
 function sprintDir(tddDir, sprint) {
   return join10(tddDir, "sprints", sprint);
 }
+function sprintProposalPath(tddDir, sprint) {
+  const scoped = join10(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
+  if (existsSync10(scoped)) return scoped;
+  const planning = join10(tddDir, "planning", PLAN_GATE_ARTIFACT);
+  return existsSync10(planning) ? planning : scoped;
+}
 function sprintGatesFile(tddDir, sprint) {
   return join10(sprintDir(tddDir, sprint), "gates.json");
 }
@@ -7591,7 +7597,7 @@ function findFeatureDir3(tddDir, featureId) {
   return match ? path5.join(featuresDir, match) : void 0;
 }
 function deriveSprintPlanningState(tddDir, sprint) {
-  const proposed = fs5.existsSync(path5.join(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT));
+  const proposed = fs5.existsSync(sprintProposalPath(tddDir, sprint));
   const backlog = readSprintBacklog(tddDir, sprint).features;
   const requestsAuthored = backlog.length > 0 && backlog.every((f) => {
     const fdir = findFeatureDir3(tddDir, f);

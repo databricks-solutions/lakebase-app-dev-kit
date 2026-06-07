@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { DriveState, WorkflowAction } from "./orchestrator-drive.js";
-import { readSprintGates, sprintDir, PLAN_GATE_ARTIFACT } from "./sprint-gates.js";
+import { readSprintGates, sprintDir, sprintProposalPath } from "./sprint-gates.js";
 
 // --- Sprint backlog manifest -------------------------------------------------
 
@@ -72,7 +72,7 @@ function findFeatureDir(tddDir: string, featureId: string): string | undefined {
  * read never needs to reflect a later phase).
  */
 export function deriveSprintPlanningState(tddDir: string, sprint: string): DriveState {
-  const proposed = fs.existsSync(path.join(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT));
+  const proposed = fs.existsSync(sprintProposalPath(tddDir, sprint));
   const backlog = readSprintBacklog(tddDir, sprint).features;
   const requestsAuthored =
     backlog.length > 0 &&

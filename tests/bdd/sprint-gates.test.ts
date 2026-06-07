@@ -46,6 +46,18 @@ describe("approveSprintPlanGate (teeth)", () => {
     expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("approved");
   });
 
+  it("approves when the proposal is at .tdd/planning/ (where the Spec Author writes it)", () => {
+    // Disk-truth fallback: the role writes .tdd/planning/feature-proposals.md and
+    // does not always create the sprint-scoped copy. The gate must still find it,
+    // otherwise planning stalls on `propose` re-issued forever.
+    const planning = join(tdd, "planning");
+    mkdirSync(planning, { recursive: true });
+    writeFileSync(join(planning, PLAN_GATE_ARTIFACT), PROPOSAL);
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    expect(res.ok).toBe(true);
+    expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("approved");
+  });
+
   it("REFUSES when the proposal is absent (no plan to review)", () => {
     const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
     expect(res.ok).toBe(false);

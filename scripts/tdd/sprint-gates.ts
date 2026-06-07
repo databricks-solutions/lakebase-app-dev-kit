@@ -46,6 +46,20 @@ export function sprintDir(tddDir: string, sprint: string): string {
   return join(tddDir, "sprints", sprint);
 }
 
+/**
+ * Where the Spec Author's sprint proposal (feature-proposals.md) lives. Disk is
+ * the truth: prefer the sprint-scoped path (the design intent), but fall back to
+ * the role's documented `.tdd/planning/feature-proposals.md` when that is where
+ * it actually wrote (relying on the sprint-scoped path alone left planning
+ * unable to see a proposal that existed, stalling the driver on `propose`).
+ */
+export function sprintProposalPath(tddDir: string, sprint: string): string {
+  const scoped = join(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
+  if (existsSync(scoped)) return scoped;
+  const planning = join(tddDir, "planning", PLAN_GATE_ARTIFACT);
+  return existsSync(planning) ? planning : scoped;
+}
+
 function sprintGatesFile(tddDir: string, sprint: string): string {
   return join(sprintDir(tddDir, sprint), "gates.json");
 }
@@ -117,7 +131,7 @@ export function approveSprintPlanGate(args: ApproveSprintPlanArgs): ApproveSprin
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
 
   const tddDir = args.tddDir ?? "./.tdd";
-  const file = join(sprintDir(tddDir, args.sprint), PLAN_GATE_ARTIFACT);
+  const file = sprintProposalPath(tddDir, args.sprint);
   if (!existsSync(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }

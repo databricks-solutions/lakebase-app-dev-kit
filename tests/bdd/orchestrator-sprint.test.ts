@@ -57,6 +57,16 @@ describe("deriveSprintPlanningState", () => {
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.proposed).toBe(true);
   });
 
+  it("proposed when the proposal is at .tdd/planning/ (the Spec Author's path)", () => {
+    // Disk-truth: the role writes .tdd/planning/feature-proposals.md, not the
+    // sprint-scoped copy. Reading only the sprint dir left proposed=false, so
+    // the driver re-issued `propose` forever and stalled.
+    const planning = join(tdd, "planning");
+    mkdirSync(planning, { recursive: true });
+    writeFileSync(join(planning, "feature-proposals.md"), "# Backlog\n\n## Features\n- F1\n");
+    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.proposed).toBe(true);
+  });
+
   it("requestsAuthored only when the backlog is non-empty AND every feature has a request", () => {
     writeProposal();
     writeSprintBacklog(tdd, { sprint: SPRINT, features: ["F1-a", "F2-b"] });
