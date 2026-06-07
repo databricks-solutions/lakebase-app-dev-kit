@@ -19,14 +19,21 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { runDriver, driverBoundOptions, type DriverBound } from "./orchestrator-run.js";
+import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound } from "./orchestrator-run.js";
 import {
   buildDriveEffects,
+  commandsForAction,
   planNextAction,
   type CommandRunner,
   type DriveCommand,
   type DriveEffectsConfig,
 } from "./orchestrator-effects.js";
+import {
+  runSprint,
+  readSprintBacklog,
+  deriveSprintPlanningState,
+  type SprintEffects,
+} from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import type { AgentRole } from "./agent-log.js";
 
@@ -147,11 +154,85 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
   };
 }
 
+/** Build a DriveEffectsConfig for a feature (or planning, featureId ""). */
+function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
+  const projectDir = args.projectDir ?? process.cwd();
+  const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
+  return {
+    projectDir,
+    tddDir,
+    featureId,
+    sprintName: args.sprint,
+    instance: args.instance,
+    deployTarget: args.deployTarget ?? "local",
+    approver: args.approver ?? "human-proxy",
+    modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
+    runner: { async run() {} },
+    onAction: (action, i) => {
+      process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}\n`);
+    },
+  };
+}
+
+/**
+ * Tier-1 sprint mode (`--sprint <name>`, no `--feature`): the `/sprint`
+ * orchestrator. Drives sprint planning to the plan gate, then claims + drives
+ * each backlog feature to done, all in one process.
+ */
+async function runSprintMode(args: ParsedArgs): Promise<number> {
+  const sprint = args.sprint as string;
+  const projectDir = args.projectDir ?? process.cwd();
+  const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
+  // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
+  // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
+  const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+
+  const effects: SprintEffects = {
+    async drivePlanning() {
+      const cfg = buildCfg(args, "");
+      cfg.runner = execRunner(cfg);
+      const planning: DriveEffects = {
+        readState: async () => deriveSprintPlanningState(tddDir, sprint),
+        async perform(action) {
+          for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
+        },
+        onAction: cfg.onAction,
+      };
+      await runDriver(planning, driverBoundOptions("plan"));
+    },
+    async readBacklog() {
+      return readSprintBacklog(tddDir, sprint).features;
+    },
+    async claimFeature(featureId) {
+      await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
+    },
+    async driveFeature(featureId) {
+      const cfg = buildCfg(args, featureId);
+      cfg.runner = execRunner(cfg);
+      await runDriver(buildDriveEffects(cfg));
+    },
+    onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}\n`),
+  };
+
+  try {
+    const result = await runSprint(effects);
+    process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)\n`);
+    return 0;
+  } catch (err) {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
+  }
+}
+
 async function main(): Promise<number> {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
     process.stdout.write(help());
     return 0;
+  }
+  // Tier-1: `--sprint <name>` with no `--feature` runs the whole-sprint orchestrator.
+  if (args.sprint && !args.feature) {
+    return runSprintMode(args);
   }
   if (!args.feature) {
     process.stderr.write(`lakebase-tdd-drive: --feature is required.\n\n${help()}`);
@@ -171,23 +252,7 @@ async function main(): Promise<number> {
   }
   const boundOpts = bound ? driverBoundOptions(bound) : {};
 
-  const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
-
-  const cfg: DriveEffectsConfig = {
-    projectDir,
-    tddDir,
-    featureId: args.feature,
-    sprintName: args.sprint,
-    instance: args.instance,
-    deployTarget: args.deployTarget ?? "local",
-    approver: args.approver ?? "human-proxy",
-    modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
-    runner: { async run() {} }, // replaced below
-    onAction: (action, i) => {
-      process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}\n`);
-    },
-  };
+  const cfg = buildCfg(args, args.feature);
 
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);

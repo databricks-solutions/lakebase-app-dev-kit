@@ -96,7 +96,10 @@ export type DriverBound = "plan" | "design" | "build" | "deploy";
 export function driverBoundOptions(bound: DriverBound): Pick<RunDriverOptions, "transition" | "stopWhen"> {
   switch (bound) {
     case "plan":
-      return { stopWhen: (a) => actionLane(a) !== "planning" };
+      // Stop AT planning-complete: the approved plan gate is the sprint-planning
+      // terminal (there is no sprint-level phase to advance into). The plan is
+      // approved + the backlog ready; /sprint or /design takes it from there.
+      return { stopWhen: (a) => a.kind === "planning-complete" };
     case "design":
       return { transition: nextDesignOnlyTransition, stopWhen: (a) => a.kind === "design-complete" };
     case "build":

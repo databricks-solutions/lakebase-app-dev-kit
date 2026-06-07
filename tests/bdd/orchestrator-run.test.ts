@@ -205,13 +205,15 @@ describe("runDriver: stall detection", () => {
 });
 
 describe("runDriver: Tier-2 phase bounds (driverBoundOptions, FEIP-7461)", () => {
-  it("--plan-only runs planning (incl. the plan gate) then stops before feature work", async () => {
+  it("--plan-only runs planning to the approved plan gate, then stops (gate is the terminal)", async () => {
     const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
     const result = await runDriver(effects, driverBoundOptions("plan"));
     expect(result.stoppedAtBound).toBe(true);
     expect(state.planning).toEqual({ proposed: true, requestsAuthored: true, gateApproved: true });
-    expect(state.phase).toBe("feature"); // planning-complete performed
-    // It did NOT break the feature down or build anything.
+    // Stops AT planning-complete: not performed, so the phase stays planning and
+    // no feature work (breakdown/build) happened.
+    expect(state.phase).toBe("planning");
+    expect(log.some((a) => a.kind === "planning-complete")).toBe(false);
     expect(log.some((a) => a.kind === "invoke-role" && "mode" in a && a.mode === "breakdown")).toBe(false);
     expect(log.some((a) => a.kind === "cut-experiment")).toBe(false);
   });
