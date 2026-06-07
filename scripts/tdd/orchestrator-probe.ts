@@ -14,6 +14,7 @@ import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
+import { readGates } from "./gates.js";
 
 function storyDir(tddDir: string, featureId: string, story: string): string {
   return path.join(tddDir, "features", featureId, "stories", story);
@@ -92,10 +93,16 @@ export function readDriveContext(tddDir: string, featureId: string): DriveContex
   const breakdownDone = Array.isArray(spec?.stories) && (spec!.stories as unknown[]).length > 0;
   const requestsAuthored = fs.existsSync(path.join(featureDir, "feature-request.md"));
 
-  const gates = readJson(path.join(featureDir, "gates.json"));
-  const deployGate = (gates?.gates as Record<string, { status?: string }> | undefined)?.deploy;
-  const deployed = deployGate !== undefined;
-  const gateApproved = deployGate?.status === "approved";
+  // Deploy is "done" once the Release Engineer produced deploy-evidence.json
+  // (the deploy actually ran). The deploy gate's approval is read strictly via
+  // readGates (the authoritative gate model), tolerant of a missing/legacy file.
+  const deployed = fs.existsSync(path.join(featureDir, "deploy-evidence.json"));
+  let gateApproved = false;
+  try {
+    gateApproved = readGates(featureId, { tddDir }).gates.deploy.status === "approved";
+  } catch {
+    gateApproved = false;
+  }
 
   return {
     phase: driverPhaseForTdd(tddPhase),

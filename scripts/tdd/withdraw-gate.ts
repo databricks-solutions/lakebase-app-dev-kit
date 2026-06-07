@@ -41,6 +41,10 @@ const CASCADE_TARGETS: Record<GateName, GateName[]> = {
   plan: ["test_list"],
   test_list: [],
   promote: [],
+  // The deploy (working-software) gate is a downstream leaf: withdrawing it
+  // cascades nothing. Like promote, it is not an automatic cascade target of an
+  // upstream withdrawal (the conservative existing policy).
+  deploy: [],
 };
 
 export interface WithdrawGateArgs {

@@ -171,10 +171,32 @@ function replayEffects(feature: string, stories: string[]) {
           setPhase("deploy");
           return;
         case "deploy":
-          writeJson(join(featureDir(feature), "gates.json"), { gates: { deploy: { status: "open" } } });
+          // The Release Engineer's deploy produces deploy-evidence.json
+          // (reachable + verify passed); the probe keys `deployed` off it.
+          writeJson(join(featureDir(feature), "deploy-evidence.json"), {
+            schema_version: 1,
+            feature_id: feature,
+            target: "local",
+            url: "http://localhost:8000/",
+            reachable: true,
+            verify: { passed: true },
+            deployed_at: AT,
+          });
           return;
         case "approve-deploy-gate":
-          writeJson(join(featureDir(feature), "gates.json"), { gates: { deploy: { status: "approved" } } });
+          // A full, schema-valid gates.json so the probe's strict readGates
+          // sees the deploy gate approved.
+          writeJson(join(featureDir(feature), "gates.json"), {
+            feature_id: feature,
+            schema_version: 1,
+            gates: {
+              spec: { status: "open", history: [] },
+              plan: { status: "open", history: [] },
+              test_list: { status: "open", history: [] },
+              promote: { status: "open", history: [] },
+              deploy: { status: "approved", history: [] },
+            },
+          });
           return;
         case "done":
           setPhase("shipped");

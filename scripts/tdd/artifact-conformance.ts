@@ -64,6 +64,8 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
   "plan.json": { kind: "json-schema", schema: "plan.schema.json" },
   "architecture.json": { kind: "json-schema", schema: "architecture.schema.json" },
   "workflow-state.json": { kind: "json-schema", schema: "workflow-state.schema.json" },
+  // Release Engineer's deploy-gate evidence (reachability + feature-verify).
+  "deploy-evidence.json": { kind: "json-schema", schema: "deploy-evidence.schema.json" },
   // UX Designer (UI projects only): the machine-checkable design tokens.
   "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
 

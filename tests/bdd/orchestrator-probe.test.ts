@@ -126,28 +126,57 @@ describe("readDriveContext", () => {
     expect(ctx.deploy).toEqual({ deployed: false, gateApproved: false });
   });
 
+  // A full, schema-valid gates.json the strict readGates can parse, with the
+  // deploy gate at the given status.
+  function gatesJson(deployStatus: "open" | "approved"): string {
+    return JSON.stringify({
+      feature_id: FEATURE,
+      schema_version: 1,
+      gates: {
+        spec: { status: "approved", history: [] },
+        plan: { status: "open", history: [] },
+        test_list: { status: "open", history: [] },
+        promote: { status: "open", history: [] },
+        deploy: { status: deployStatus, history: [] },
+      },
+    });
+  }
+  // Minimal deploy-evidence.json: its mere presence makes deployed=true.
+  function writeEvidence(): void {
+    writeFeatureFile(
+      "deploy-evidence.json",
+      JSON.stringify({ schema_version: 1, feature_id: FEATURE, target: "local", url: "http://localhost:8000/", reachable: true, verify: { passed: true }, deployed_at: "2026-06-07T00:00:00.000Z" }),
+    );
+  }
+
   it("maps workflow-state phase + planning/deploy sub-flags from on-disk artifacts", () => {
     writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "implementation" }));
     writeFeatureFile("feature-request.md", "# request");
     writeFeatureFile("feature-spec.json", JSON.stringify({ id: FEATURE, stories: ["S1", "S2"] }));
-    writeFeatureFile(
-      "gates.json",
-      JSON.stringify({ feature_id: FEATURE, gates: { spec: { status: "approved" }, deploy: { status: "open" } } }),
-    );
+    writeEvidence(); // deploy ran -> deployed:true
+    writeFeatureFile("gates.json", gatesJson("open")); // gate not yet approved
 
     const ctx = readDriveContext(tddDir, FEATURE);
     expect(ctx.phase).toBe("feature"); // implementation -> feature
     expect(ctx.breakdownDone).toBe(true);
     expect(ctx.planning).toEqual({ proposed: true, requestsAuthored: true });
-    // deploy gate present but not approved
+    // deploy ran (evidence present) but the deploy gate is not approved
     expect(ctx.deploy).toEqual({ deployed: true, gateApproved: false });
   });
 
-  it("reads deploy phase + approved deploy gate", () => {
+  it("reads deploy phase + approved deploy gate (evidence + strict gate read)", () => {
     writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
-    writeFeatureFile("gates.json", JSON.stringify({ gates: { deploy: { status: "approved" } } }));
+    writeEvidence();
+    writeFeatureFile("gates.json", gatesJson("approved"));
     const ctx = readDriveContext(tddDir, FEATURE);
     expect(ctx.phase).toBe("deploy");
     expect(ctx.deploy).toEqual({ deployed: true, gateApproved: true });
+  });
+
+  it("deployed=false when no deploy-evidence.json was written, even with an approved gate", () => {
+    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    writeFeatureFile("gates.json", gatesJson("approved"));
+    const ctx = readDriveContext(tddDir, FEATURE);
+    expect(ctx.deploy).toEqual({ deployed: false, gateApproved: true });
   });
 });

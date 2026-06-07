@@ -96,6 +96,58 @@ the whole run is observable because the human is inside it. The LLM
 scrum-master agent doc is then unnecessary even for interactive use: the
 deterministic core plus the session-as-runtime replaces it.
 
+## Entry-point model (confirmed): `/sprint` + Tier-2 phase commands, no scrum-master agent
+
+The scrum-master is removed entirely, as an agent and as a concept the human
+invokes. There is no `claude --agent scrum-master`, no `agents/scrum-master.md`
+scaffolded into projects, and nothing that spawns it. The orchestrator is the
+deterministic driver binary; the human's control surface is a two-tier set of
+slash commands, each a thin invocation of `lakebase-tdd-drive` scoped to a phase
+range. Role subagents and the Human Proxy are unchanged.
+
+A HITL gate ALWAYS pauses for a human decision (plan gate, per-story spec gate,
+deploy gate). The only variable is who answers: the human live in the session,
+or the Human Proxy from pre-recorded approvals headless (smoke / CI). No mode
+skips a gate. "Flowing" means the run does not require the human to re-invoke a
+command between phases; control still returns to the human at every gate.
+
+### Tier 1, the sprint orchestrator: `/sprint [name]`
+
+The top-level continuous run. It FLOWS forward: propose + author the backlog ->
+[PLAN GATE] -> for each backlog feature: claim -> design -> [SPEC GATE per
+story] -> build -> deploy -> [DEPLOY GATE] -> cycle ends. Re-invoked each cycle
+for story refinement. Pauses at every gate (human live / Proxy headless), never
+between phases. CLI scope: `lakebase-tdd-drive --sprint <name>` owns the
+per-feature loop (claim + drive each feature) in one process.
+
+### Tier 2, single-step control (run one phase, then stop + suggest next)
+
+For when the human deliberately wants one phase, not the whole sprint. Each runs
+the driver bounded to that phase, stops when the phase's gate is answered, and
+PRINTS the suggested next command (no auto-advance, no proceed-prompt: the human
+chose manual control by picking a Tier-2 command).
+
+| Command | Driver scope | Stops at | Suggests |
+|---------|--------------|----------|----------|
+| `/plan [name]` | `--plan-only --sprint <name>` (planning sub-machine only) | plan gate | `/sprint` or `/design <feature>` |
+| `/design <feature>` | `--feature <id> --only design` | design-complete (all spec gates) | `/build <feature>` |
+| `/build <feature>` | `--feature <id> --only build` (requires design done) | feature built + accepted | `/deploy <feature>` |
+| `/deploy <feature>` | `--feature <id> --only deploy` | deploy gate | (shipped) |
+| `/spike <slug> [--for <feature>]` | not a driver phase: `lakebase-tdd-spike cut` | throwaway branch + carry-forward notes | `/design <feature>` |
+
+`/plan` does NOT flow onward: it stops at the plan gate so the human reviews /
+refines the backlog. `/sprint` is the only command that flows plan -> design ->
+build -> deploy. Spikes are throwaway exploration outside the TDD loop; the new
+`/spike` command + `lakebase-tdd-spike` CLI wrap the existing `spike.ts` +
+`spike-carryforward.ts` substrate.
+
+### Driver scopes (one binary)
+
+- `--sprint <name>`: Tier 1, whole sprint (planning + per-feature loop).
+- `--plan-only --sprint <name>`: planning sub-machine only (the `/plan` command).
+- `--feature <id> --only <design|build|deploy>`: one phase of one feature (Tier 2).
+- `--feature <id>` (unbounded): one whole feature design -> build -> deploy.
+
 ## What this subsumes / reconciles
 
 - Subsumes the orchestrator `--model` pin (no orchestrator model at all) and the
@@ -105,8 +157,10 @@ deterministic core plus the session-as-runtime replaces it.
 - Complements the npx-tax fix: the driver's own state/log calls are in-process
   (0s); the ~3.5s `npx --package=github#branch` tax still applies to the role
   subagents' CLI calls and is worth fixing separately.
-- The LLM scrum-master agent doc can remain for interactive use; the driver is
-  the headless/deterministic path (and the default for the smoke).
+- Removes the LLM scrum-master agent entirely (def, scaffold, launcher, smoke,
+  enum/log label, docs). The driver is the only orchestrator for both headless
+  and interactive runs; the human's control surface is `/sprint` + the Tier-2
+  phase commands above.
 
 ## Phases (each a commit, TDD, green suite)
 

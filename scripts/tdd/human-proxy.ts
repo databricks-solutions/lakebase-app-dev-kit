@@ -203,6 +203,29 @@ function resolveArtifactInputs(
       // promote_ref has no declared format; conformance is a no-op for it.
       return withConformance({ promote_ref: promoteRef });
     }
+    case "deploy": {
+      // The deploy (working-software) gate locks the Release Engineer's
+      // deploy-evidence.json. Teeth (FEIP-7461): refuse unless the increment was
+      // actually reachable AND its feature-verify passed against the running
+      // app, not merely that the evidence file exists + conforms.
+      const evidence = readIfPresent("deploy-evidence.json");
+      if (evidence === undefined) {
+        return { reason: "deploy-evidence.json not found (feature not deployed + verified)" };
+      }
+      let parsed: { reachable?: unknown; verify?: { passed?: unknown } };
+      try {
+        parsed = JSON.parse(evidence) as typeof parsed;
+      } catch {
+        return { reason: "deploy-evidence.json is not valid JSON" };
+      }
+      if (parsed.reachable !== true) {
+        return { reason: "deploy-evidence records reachable=false (app not reachable on the target)" };
+      }
+      if (parsed.verify?.passed !== true) {
+        return { reason: "deploy-evidence records verify.passed=false (feature-verify did not pass against the running app)" };
+      }
+      return withConformance({ "deploy-evidence.json": evidence });
+    }
   }
 }
 

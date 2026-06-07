@@ -12,11 +12,34 @@
 // recorded under .tdd/deploy/<target>.pid) so feature verification can hit it;
 // `stopLocal` tears it down.
 
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
+
+export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
+
+/** Feature-verify outcome recorded in the deploy gate evidence. */
+export interface VerifyResult {
+  passed: boolean;
+  command?: string;
+  summary?: string;
+}
+
+/** The deploy-gate evidence the Release Engineer produces (FEIP-7461):
+ *  features/<F>/deploy-evidence.json. The deploy gate approves only when this
+ *  exists, conforms, and records reachable=true AND verify.passed=true. */
+export interface DeployEvidence {
+  schema_version: number;
+  feature_id: string;
+  target: string;
+  url: string;
+  reachable: boolean;
+  verify: VerifyResult;
+  lakebase_branch?: string;
+  deployed_at: string;
+}
 
 export interface LocalTargetConfig {
   type: "local";
@@ -24,6 +47,14 @@ export interface LocalTargetConfig {
   baseUrl: string;
   healthPath: string;
   readyTimeoutSeconds: number;
+  /**
+   * Feature-verify command run against the RUNNING app after it is reachable
+   * (FEIP-7461 deploy gate). Its exit code becomes deploy-evidence.json
+   * verify.passed, which the deploy gate requires to be true. Optional: a target
+   * with no verify produces verify.passed=false, which the (strict) deploy gate
+   * refuses, so a shippable target must declare one.
+   */
+  verify?: string;
 }
 
 export type ResolveResult =
@@ -47,6 +78,7 @@ export function resolveDeployTarget(projectDir: string, name: string): ResolveRe
       baseUrl: (raw.base_url ?? "http://localhost:8000").replace(/\/+$/, ""),
       healthPath: raw.health_path ?? "/",
       readyTimeoutSeconds: Number(raw.ready_timeout_seconds ?? "60") || 60,
+      verify: raw.verify || undefined,
     },
   };
 }
@@ -66,10 +98,45 @@ export interface DeployResult {
   url?: string;
   pid?: number;
   reason?: string;
+  /** The feature-verify outcome (when a verify command was configured + run). */
+  verify?: VerifyResult;
+  /** Path to the deploy-evidence.json written (when featureId + tddDir given). */
+  evidencePath?: string;
 }
 
 function pidFile(projectDir: string, target: string): string {
   return join(projectDir, ".tdd", "deploy", `${target}.pid`);
+}
+
+/** Resolve the feature dir under tddDir/features by id prefix (mirrors gates.ts). */
+function findFeatureDir(tddDir: string, featureId: string): string | undefined {
+  const featuresDir = join(tddDir, "features");
+  if (!existsSync(featuresDir)) return undefined;
+  const match = readdirSync(featuresDir).find((d) => d.startsWith(featureId));
+  return match ? join(featuresDir, match) : undefined;
+}
+
+/** Run the feature-verify command against the running app; exit 0 = passed. */
+function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): boolean {
+  try {
+    execSync(cmd, { cwd, stdio: "ignore", env: env ?? process.env });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Write features/<F>/deploy-evidence.json. Returns the path, or undefined when
+ *  the feature dir cannot be resolved (a bare, feature-less deploy). */
+function writeDeployEvidence(
+  tddDir: string,
+  evidence: DeployEvidence,
+): string | undefined {
+  const fdir = findFeatureDir(tddDir, evidence.feature_id);
+  if (!fdir) return undefined;
+  const file = join(fdir, "deploy-evidence.json");
+  writeFileSync(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
+  return file;
 }
 
 function defaultStart(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): number {
@@ -90,10 +157,19 @@ export interface DeployArgs {
    * Unset = the ambient env (the feature branch), the per-sprint deploy.
    */
   lakebaseBranch?: string;
+  /**
+   * Feature this deploy belongs to. When set together with tddDir, the deploy
+   * writes features/<F>/deploy-evidence.json (the deploy gate's artifact).
+   */
+  featureId?: string;
+  /** .tdd root for the evidence write (default: <projectDir>/.tdd). */
+  tddDir?: string;
   /** Inject for tests: start the run command, return a pid. */
   startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
   /** Inject for tests: reachability probe. */
   reachable?: (url: string) => Promise<boolean>;
+  /** Inject for tests: run the feature-verify command; true = passed (exit 0). */
+  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
 }
@@ -135,11 +211,55 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     sleep: args.sleep,
     now: args.now,
   });
+  const reachableNow = poll.outcome === "done";
 
-  if (poll.outcome !== "done") {
-    return { ok: false, pid, reason: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s` };
+  // Feature-verify against the RUNNING app (the deploy gate's teeth): only
+  // meaningful once reachable. No verify command configured -> passed:false,
+  // which the strict deploy gate refuses (a shippable target must declare one).
+  let verify: VerifyResult = { passed: false };
+  if (reachableNow && cfg.verify) {
+    const runVerify = args.runVerify ?? defaultRunVerify;
+    const passed = runVerify(cfg.verify, args.projectDir, env);
+    verify = {
+      passed,
+      command: cfg.verify,
+      summary: passed
+        ? "feature-verify passed against the running app"
+        : "feature-verify FAILED against the running app",
+    };
+  } else if (reachableNow) {
+    verify = { passed: false, summary: "no verify command configured for this target" };
   }
-  return { ok: true, url, pid };
+
+  // Record the deploy-gate evidence when a feature context is given. Written in
+  // both the reachable and unreachable cases so the evidence reflects reality
+  // (the gate refuses anything but reachable + verify.passed).
+  let evidencePath: string | undefined;
+  if (args.featureId) {
+    const tddDir = args.tddDir ?? join(args.projectDir, ".tdd");
+    const at = (args.now ?? (() => new Date()))().toISOString();
+    evidencePath = writeDeployEvidence(tddDir, {
+      schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
+      feature_id: args.featureId,
+      target: args.targetName,
+      url,
+      reachable: reachableNow,
+      verify,
+      ...(args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {}),
+      deployed_at: at,
+    });
+  }
+
+  if (!reachableNow) {
+    return {
+      ok: false,
+      pid,
+      reason: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s`,
+      verify,
+      evidencePath,
+    };
+  }
+  return { ok: true, url, pid, verify, evidencePath };
 }
 
 /** Tear down a previously-deployed local target (kills its process group). */

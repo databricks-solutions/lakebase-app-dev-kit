@@ -78,23 +78,27 @@ describe("drainGatesAsHumanProxy: never fabricates (Layer 1, FEIP-7508)", () => 
 
     expect(result.approved).toEqual(["spec"]);
     const skippedGates = result.skipped.map((s) => s.gate).sort();
-    expect(skippedGates).toEqual(["plan", "promote", "test_list"]);
+    // deploy joins the skip set: its deploy-evidence.json is absent here too.
+    expect(skippedGates).toEqual(["deploy", "plan", "promote", "test_list"]);
     expect(result.skipped.find((s) => s.gate === "plan")?.reason).toMatch(/plan\.json/);
     expect(result.skipped.find((s) => s.gate === "test_list")?.reason).toMatch(/test-list/);
     expect(result.skipped.find((s) => s.gate === "promote")?.reason).toMatch(/promote_ref/);
+    expect(result.skipped.find((s) => s.gate === "deploy")?.reason).toMatch(/deploy-evidence/);
 
     const state = readGates(FEATURE_ID, { tddDir: tdd });
     expect(state.gates.spec.status).toBe("approved");
     expect(state.gates.plan.status).toBe("open");
     expect(state.gates.test_list.status).toBe("open");
     expect(state.gates.promote.status).toBe("open");
+    expect(state.gates.deploy.status).toBe("open");
     assertNoFabricatedHashes(tdd);
   });
 
   it("does NOT bind any gate to the placeholder hash even when all artifacts are absent", () => {
     const result = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
     expect(result.approved).toEqual([]);
-    expect(result.skipped).toHaveLength(4);
+    // All five gates skip with no artifacts (spec/plan/test_list/promote/deploy).
+    expect(result.skipped).toHaveLength(5);
     assertNoFabricatedHashes(tdd);
   });
 
@@ -230,5 +234,52 @@ describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-
     });
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/not found/i);
+  });
+});
+
+describe("drainGatesAsHumanProxy: deploy gate teeth (FEIP-7461)", () => {
+  // The deploy (working-software) gate approves ONLY when deploy-evidence.json
+  // exists, conforms, AND records reachable=true + verify.passed=true.
+  function writeEvidence(over: Record<string, unknown> = {}): void {
+    const evidence = {
+      schema_version: 1,
+      feature_id: FEATURE_ID,
+      target: "local",
+      url: "http://localhost:8000/",
+      reachable: true,
+      verify: { passed: true, summary: "verify passed" },
+      deployed_at: "2026-06-07T00:00:00.000Z",
+      ...over,
+    };
+    writeFileSync(join(fdir, "deploy-evidence.json"), JSON.stringify(evidence));
+  }
+
+  it("approves deploy when the evidence is reachable AND verify.passed", () => {
+    writeEvidence();
+    const result = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "deploy" });
+    expect(result.approved).toEqual(["deploy"]);
+    expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.deploy.status).toBe("approved");
+  });
+
+  it("skips deploy when the evidence is absent", () => {
+    const result = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "deploy" });
+    expect(result.approved).toEqual([]);
+    expect(result.skipped.find((s) => s.gate === "deploy")?.reason).toMatch(/not found/);
+  });
+
+  it("REFUSES deploy when the app was not reachable", () => {
+    writeEvidence({ reachable: false });
+    const result = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "deploy" });
+    expect(result.approved).toEqual([]);
+    expect(result.skipped.find((s) => s.gate === "deploy")?.reason).toMatch(/reachable=false/);
+    expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.deploy.status).toBe("open");
+  });
+
+  it("REFUSES deploy when the feature-verify did not pass", () => {
+    writeEvidence({ verify: { passed: false, summary: "verify FAILED" } });
+    const result = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "deploy" });
+    expect(result.approved).toEqual([]);
+    expect(result.skipped.find((s) => s.gate === "deploy")?.reason).toMatch(/verify\.passed=false/);
+    expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.deploy.status).toBe("open");
   });
 });

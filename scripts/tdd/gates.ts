@@ -17,7 +17,7 @@ import { join } from "path";
 
 export const GATES_SCHEMA_VERSION = 1;
 
-export const GATE_NAMES = ["spec", "plan", "test_list", "promote"] as const;
+export const GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"] as const;
 export type GateName = (typeof GATE_NAMES)[number];
 
 export const GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"] as const;
@@ -69,6 +69,7 @@ export function defaultGatesState(featureId: string): GatesState {
       plan: { status: "open", history: [] },
       test_list: { status: "open", history: [] },
       promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] },
     },
   };
 }
@@ -165,6 +166,13 @@ function validateGatesState(parsed: unknown, file: string): GatesState {
     plan: validateGateRecord(gates.plan, "plan", file),
     test_list: validateGateRecord(gates.test_list, "test_list", file),
     promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy:
+      gates.deploy !== undefined
+        ? validateGateRecord(gates.deploy, "deploy", file)
+        : { status: "open", history: [] },
   };
   return {
     feature_id: obj.feature_id,

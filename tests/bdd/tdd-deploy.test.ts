@@ -16,6 +16,13 @@ const TARGETS = [
   "    base_url: http://localhost:8000",
   "    health_path: /",
   "    ready_timeout_seconds: 5",
+  "  localv:",
+  "    type: local",
+  "    run: echo started",
+  "    base_url: http://localhost:8000",
+  "    health_path: /",
+  "    ready_timeout_seconds: 5",
+  "    verify: run-feature-verify",
   "  prod:",
   "    type: databricks-app",
   "    workspace_profile: x",
@@ -163,5 +170,79 @@ describe("stopLocal", () => {
 
   it("reports nothing to stop when no pid file exists", () => {
     expect(stopLocal(dir, "local").stopped).toBe(false);
+  });
+});
+
+describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)", () => {
+  const FEATURE = "F1-initial-domain";
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+  function featureDir(root: string): string {
+    return join(root, ".tdd", "features", FEATURE);
+  }
+  function readEvidence(root: string): Record<string, unknown> {
+    return JSON.parse(require("node:fs").readFileSync(join(featureDir(root), "deploy-evidence.json"), "utf8"));
+  }
+
+  beforeEach(() => mkdirSync(featureDir(dir), { recursive: true }));
+
+  it("writes reachable=true + verify.passed=true when the feature-verify exits 0", async () => {
+    const result = await deployToTarget({
+      projectDir: dir, targetName: "localv", featureId: FEATURE,
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => true,
+      sleep: async () => {}, now: fastClock(),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.verify?.passed).toBe(true);
+    expect(result.evidencePath).toBeDefined();
+    const ev = readEvidence(dir);
+    expect(ev.reachable).toBe(true);
+    expect((ev.verify as { passed: boolean }).passed).toBe(true);
+    expect(ev.target).toBe("localv");
+    expect(ev.feature_id).toBe(FEATURE);
+  });
+
+  it("records verify.passed=false when the feature-verify fails", async () => {
+    const result = await deployToTarget({
+      projectDir: dir, targetName: "localv", featureId: FEATURE,
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => false,
+      sleep: async () => {}, now: fastClock(),
+    });
+    expect(result.ok).toBe(true); // reachable, but verify failed
+    expect(result.verify?.passed).toBe(false);
+    expect((readEvidence(dir).verify as { passed: boolean }).passed).toBe(false);
+  });
+
+  it("records reachable=false in the evidence when the app never comes up", async () => {
+    let t = 0;
+    const result = await deployToTarget({
+      projectDir: dir, targetName: "localv", featureId: FEATURE,
+      startProcess: () => 4242,
+      reachable: async () => false,
+      runVerify: () => true,
+      sleep: async () => {}, now: () => new Date((t += 6000)),
+    });
+    expect(result.ok).toBe(false);
+    const ev = readEvidence(dir);
+    expect(ev.reachable).toBe(false);
+    expect((ev.verify as { passed: boolean }).passed).toBe(false); // verify not run when unreachable
+  });
+
+  it("writes NO evidence for a feature-less deploy", async () => {
+    const result = await deployToTarget({
+      projectDir: dir, targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => true,
+      sleep: async () => {}, now: fastClock(),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.evidencePath).toBeUndefined();
   });
 });
