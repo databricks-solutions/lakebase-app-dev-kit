@@ -15,7 +15,13 @@
 // stories. (Under the old split /design-then-/build `claude -p` invocations the
 // streaming could not happen: two processes, no shared loop.)
 
-import { nextTransition, type DriveState, type WorkflowAction } from "./orchestrator-drive.js";
+import {
+  nextTransition,
+  nextDesignOnlyTransition,
+  actionLane,
+  type DriveState,
+  type WorkflowAction,
+} from "./orchestrator-drive.js";
 
 export interface DriveEffects {
   /**
@@ -50,16 +56,55 @@ export interface RunDriverResult {
   iterations: number;
   /** True if the loop stopped at maxSteps rather than reaching `done`. */
   stoppedAtMax?: boolean;
+  /** True if the loop stopped at a phase bound (stopWhen) rather than `done`. */
+  stoppedAtBound?: boolean;
 }
 
 export interface RunDriverOptions {
   /** Stop after this many actions (for incremental/live testing + safety). */
   maxSteps?: number;
+  /**
+   * Transition function (default nextTransition). The `/design` Tier-2 bound
+   * passes nextDesignOnlyTransition so it designs every story without building.
+   */
+  transition?: (state: DriveState) => WorkflowAction;
+  /**
+   * Phase bound for the Tier-2 commands: when the NEXT action satisfies this,
+   * the loop stops BEFORE performing it (a clean bounded completion, not a
+   * stall). `done` is always handled first, so a bounded run that legitimately
+   * reaches `done` completes normally. See actionLane for the lane taxonomy.
+   */
+  stopWhen?: (action: WorkflowAction) => boolean;
 }
 
 // Backstop against a runaway loop (an effect that advances but never converges).
 // Far above any real feature: planning + ~6 steps/story + deploy stays well under.
 const MAX_ITERATIONS = 10_000;
+
+/** The Tier-2 phase the human bounded a driver run to (one of the slash commands). */
+export type DriverBound = "plan" | "design" | "build" | "deploy";
+
+/**
+ * The transition + stopWhen for a Tier-2 bound. `plan` runs the planning
+ * sub-machine; `design` runs the design lane to design-complete (all stories
+ * designed, none built); `build` builds gate-approved stories then stops before
+ * deploy; `deploy` runs only the deploy phase. A bound also GUARDS: a `build`
+ * run whose design is not done, or a `deploy` run whose feature is not built,
+ * stops immediately (its first action is out of lane) rather than doing the
+ * upstream work.
+ */
+export function driverBoundOptions(bound: DriverBound): Pick<RunDriverOptions, "transition" | "stopWhen"> {
+  switch (bound) {
+    case "plan":
+      return { stopWhen: (a) => actionLane(a) !== "planning" };
+    case "design":
+      return { transition: nextDesignOnlyTransition, stopWhen: (a) => a.kind === "design-complete" };
+    case "build":
+      return { stopWhen: (a) => actionLane(a) !== "build" };
+    case "deploy":
+      return { stopWhen: (a) => actionLane(a) !== "deploy" };
+  }
+}
 
 /**
  * Drive a feature to completion: read state, compute the next action, perform
@@ -80,12 +125,19 @@ export async function runDriver(
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }
     const state = await effects.readState();
-    const action = nextTransition(state);
+    const transition = options.transition ?? nextTransition;
+    const action = transition(state);
 
     if (action.kind === "done") {
       effects.onAction?.(action, i);
       await effects.perform(action);
       return { iterations: i + 1 };
+    }
+
+    // A Tier-2 phase bound: stop cleanly before performing the out-of-scope
+    // action (e.g. /design stops before the first build, /build before deploy).
+    if (options.stopWhen?.(action)) {
+      return { iterations: i, stoppedAtBound: true };
     }
 
     const signature = JSON.stringify(action);

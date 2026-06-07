@@ -19,7 +19,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { runDriver } from "./orchestrator-run.js";
+import { runDriver, driverBoundOptions, type DriverBound } from "./orchestrator-run.js";
 import {
   buildDriveEffects,
   planNextAction,
@@ -32,6 +32,7 @@ import type { AgentRole } from "./agent-log.js";
 
 interface ParsedArgs {
   feature?: string;
+  sprint?: string;
   projectDir?: string;
   tddDir?: string;
   instance?: string;
@@ -39,6 +40,8 @@ interface ParsedArgs {
   approver?: string;
   dryRun?: boolean;
   maxSteps?: number;
+  planOnly?: boolean;
+  only?: string;
   help?: boolean;
 }
 
@@ -47,6 +50,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--feature": out.feature = argv[++i]; break;
+      case "--sprint": out.sprint = argv[++i]; break;
       case "--project-dir": out.projectDir = argv[++i]; break;
       case "--tdd-dir": out.tddDir = argv[++i]; break;
       case "--instance": out.instance = argv[++i]; break;
@@ -54,6 +58,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--approver": out.approver = argv[++i]; break;
       case "--dry-run": out.dryRun = true; break;
       case "--max-steps": out.maxSteps = Number(argv[++i]); break;
+      case "--plan-only": out.planOnly = true; break;
+      case "--only": out.only = argv[++i]; break;
       case "--help": case "-h": out.help = true; break;
       default: break;
     }
@@ -76,6 +82,8 @@ Flags:
   --approver <name>    Headless gate approver (default: human-proxy)
   --dry-run            Print the single next action + its commands, then exit
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
+  --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
+  --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
 `;
 }
 
@@ -149,6 +157,20 @@ async function main(): Promise<number> {
     process.stderr.write(`lakebase-tdd-drive: --feature is required.\n\n${help()}`);
     return 2;
   }
+
+  // Resolve the Tier-2 phase bound (at most one). --plan-only is the sprint
+  // planning bound; --only <phase> bounds a feature run to one phase.
+  let bound: DriverBound | undefined;
+  if (args.planOnly) bound = "plan";
+  if (args.only) {
+    if (!["design", "build", "deploy"].includes(args.only)) {
+      process.stderr.write(`lakebase-tdd-drive: --only must be design|build|deploy (got "${args.only}").\n`);
+      return 2;
+    }
+    bound = args.only as DriverBound;
+  }
+  const boundOpts = bound ? driverBoundOptions(bound) : {};
+
   const projectDir = args.projectDir ?? process.cwd();
   const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
 
@@ -156,6 +178,7 @@ async function main(): Promise<number> {
     projectDir,
     tddDir,
     featureId: args.feature,
+    sprintName: args.sprint,
     instance: args.instance,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
@@ -167,16 +190,18 @@ async function main(): Promise<number> {
   };
 
   if (args.dryRun) {
-    const plan = await planNextAction(cfg);
+    const plan = await planNextAction(cfg, boundOpts.transition);
     process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
     return 0;
   }
 
   cfg.runner = execRunner(cfg);
   try {
-    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps });
+    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps, ...boundOpts });
     if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
+    } else if (result.stoppedAtBound) {
+      process.stderr.write(`[drive] ${bound} phase complete in ${result.iterations} actions (bounded)\n`);
     } else {
       process.stderr.write(`[drive] done in ${result.iterations} actions\n`);
     }

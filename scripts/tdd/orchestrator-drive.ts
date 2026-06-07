@@ -223,7 +223,15 @@ export function nextTransition(state: DriveState): WorkflowAction {
     if (v?.gateApproved && !v.build.accepted) return { kind: "dispatch", story };
   }
   // 3. Otherwise advance the design lane (reusing the design sub-machine).
-  const designView: DesignDriveState = {
+  const design = nextDesignAction(toDesignView(state));
+  // 4. Design lane exhausted + nothing left to build => every story is accepted.
+  if (design.kind === "design-complete") return { kind: "feature-complete" };
+  return design;
+}
+
+/** Project a full DriveState down to the design sub-machine's view. */
+function toDesignView(state: DriveState): DesignDriveState {
+  return {
     breakdownDone: state.breakdownDone,
     storyOrder: state.storyOrder,
     stories: Object.fromEntries(
@@ -233,8 +241,51 @@ export function nextTransition(state: DriveState): WorkflowAction {
       ]),
     ),
   };
-  const design = nextDesignAction(designView);
-  // 4. Design lane exhausted + nothing left to build => every story is accepted.
-  if (design.kind === "design-complete") return { kind: "feature-complete" };
-  return design;
+}
+
+/**
+ * The next DESIGN-LANE-ONLY action: design every story through its spec gate,
+ * never dispatch a build. Backs the `/design` Tier-2 bound (`--only design`),
+ * which must design ALL stories without building any, unlike nextTransition
+ * which streams build the moment a story's gate is approved. Reaches
+ * `design-complete` when every story is gate-approved.
+ */
+export function nextDesignOnlyTransition(state: DriveState): WorkflowAction {
+  return nextDesignAction(toDesignView(state));
+}
+
+/** The lane a WorkflowAction belongs to, for the driver's Tier-2 phase bounds.
+ *  "coarse" is the feature->deploy boundary (feature-complete). */
+export type ActionLane = "planning" | "design" | "build" | "deploy" | "coarse" | "done";
+
+export function actionLane(action: WorkflowAction): ActionLane {
+  switch (action.kind) {
+    case "invoke-role": {
+      if ("mode" in action) {
+        // propose / author-requests are sprint planning; breakdown is design.
+        return action.mode === "breakdown" ? "design" : "planning";
+      }
+      return action.role === "navigator" || action.role === "driver" ? "build" : "design";
+    }
+    case "approve-plan-gate":
+    case "planning-complete":
+      return "planning";
+    case "surface-gate":
+    case "approve-gate":
+    case "design-complete":
+      return "design";
+    case "dispatch":
+    case "cut-experiment":
+    case "await-acceptance":
+    case "accept":
+    case "complete":
+      return "build";
+    case "feature-complete":
+      return "coarse";
+    case "deploy":
+    case "approve-deploy-gate":
+      return "deploy";
+    case "done":
+      return "done";
+  }
 }

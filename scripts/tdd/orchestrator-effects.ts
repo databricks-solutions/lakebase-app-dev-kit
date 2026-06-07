@@ -240,9 +240,10 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
  */
 export async function planNextAction(
   cfg: DriveEffectsConfig,
+  transition: (state: import("./orchestrator-drive.js").DriveState) => WorkflowAction = nextTransition,
 ): Promise<{ action: WorkflowAction; commands: DriveCommand[] }> {
   const state = await buildDriveEffects(cfg).readState();
-  const action = nextTransition(state);
+  const action = transition(state);
   return { action, commands: commandsForAction(action, cfg) };
 }
 

@@ -9,6 +9,7 @@
 import { describe, it, expect } from "vitest";
 import {
   runDriver,
+  driverBoundOptions,
   DriverStalledError,
   type DriveEffects,
 } from "../../scripts/tdd/orchestrator-run";
@@ -200,5 +201,66 @@ describe("runDriver: stall detection", () => {
       },
     };
     await expect(runDriver(effects)).rejects.toBeInstanceOf(DriverStalledError);
+  });
+});
+
+describe("runDriver: Tier-2 phase bounds (driverBoundOptions, FEIP-7461)", () => {
+  it("--plan-only runs planning (incl. the plan gate) then stops before feature work", async () => {
+    const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
+    const result = await runDriver(effects, driverBoundOptions("plan"));
+    expect(result.stoppedAtBound).toBe(true);
+    expect(state.planning).toEqual({ proposed: true, requestsAuthored: true, gateApproved: true });
+    expect(state.phase).toBe("feature"); // planning-complete performed
+    // It did NOT break the feature down or build anything.
+    expect(log.some((a) => a.kind === "invoke-role" && "mode" in a && a.mode === "breakdown")).toBe(false);
+    expect(log.some((a) => a.kind === "cut-experiment")).toBe(false);
+  });
+
+  it("--only design designs every story through its gate but builds none", async () => {
+    const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
+    state.phase = "feature"; // design assumes planning done + feature claimed
+    const result = await runDriver(effects, driverBoundOptions("design"));
+    expect(result.stoppedAtBound).toBe(true);
+    for (const id of ["S1", "S2"]) expect(state.stories[id].gateApproved, `${id} gated`).toBe(true);
+    expect(log.some((a) => a.kind === "dispatch")).toBe(false); // never entered the build lane
+    expect(log.some((a) => a.kind === "cut-experiment")).toBe(false);
+  });
+
+  it("--only build builds gate-approved stories then stops before deploy", async () => {
+    const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
+    state.phase = "feature";
+    state.breakdownDone = true;
+    state.storyOrder = ["S1", "S2"];
+    for (const id of ["S1", "S2"]) {
+      const v = freshStory();
+      v.design = { hasAcs: true, architectAnnotated: true, testListReady: true };
+      v.gateApproved = true;
+      v.gateSurfaced = true;
+      state.stories[id] = v;
+    }
+    const result = await runDriver(effects, driverBoundOptions("build"));
+    expect(result.stoppedAtBound).toBe(true);
+    for (const id of ["S1", "S2"]) expect(state.stories[id].build.accepted, `${id} accepted`).toBe(true);
+    expect(log.some((a) => a.kind === "feature-complete")).toBe(false); // stopped before deploy
+    expect(log.some((a) => a.kind === "deploy")).toBe(false);
+  });
+
+  it("--only build refuses (stops at iteration 0) when design is not done", async () => {
+    const { log, effects } = makeFakeWorld(["S1"]);
+    const state = await effects.readState();
+    state.phase = "feature"; // breakdown not done, nothing designed
+    const result = await runDriver(effects, driverBoundOptions("build"));
+    expect(result.stoppedAtBound).toBe(true);
+    expect(result.iterations).toBe(0);
+    expect(log.length).toBe(0);
+  });
+
+  it("--only deploy runs the deploy phase to done", async () => {
+    const { state, log, effects } = makeFakeWorld([]);
+    state.phase = "deploy";
+    const result = await runDriver(effects, driverBoundOptions("deploy"));
+    expect(state.deploy).toEqual({ deployed: true, gateApproved: true });
+    expect(log.some((a) => a.kind === "deploy")).toBe(true);
+    expect(result.stoppedAtBound).toBeUndefined(); // completed at done, not a bound stop
   });
 });
