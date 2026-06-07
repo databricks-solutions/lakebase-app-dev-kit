@@ -6740,6 +6740,19 @@ var ARTIFACT_FORMATS = {
   "feature-request.md": { kind: "md-narrative" },
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
+  // HIL non-functional-requirements brief (the Architect's intake). The HIL
+  // states required NFRs (each with a stable R<n> id), preferences, and
+  // out-of-bounds items. The Architect must carry every Required item into
+  // architecture.json via a matching brief_ref (see checkNfrCoverage). Project
+  // -level (.tdd/nfrs.md) or per-feature (.tdd/features/<F>/nfrs.md).
+  "nfrs.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Required", match: "required" },
+      { label: "Preferences", match: "preference" },
+      { label: "Out of bounds", match: "out of bounds" }
+    ]
+  },
   // HIL design brief (UI projects): the human's reference sites + what to take
   // from each. The design analogue of product-overview.md, the source the UX
   // Designer teases the design out of. A brief with no references is
@@ -6859,6 +6872,57 @@ function checkTestListMd(content) {
   }
   return violations;
 }
+var REQUIRED_NFR_ITEM_RE = /^\s*[-*]\s+\*{0,2}(R\d+)\*{0,2}\s*[:.)\-]?\s*(.*)$/;
+var PLAIN_LIST_ITEM_RE = /^\s*[-*]\s+(.*\S)\s*$/;
+function parseRequiredNfrs(nfrsMd) {
+  const lines = nfrsMd.split("\n");
+  const out = [];
+  let inRequired = false;
+  for (const line of lines) {
+    const h = HEADING_RE.exec(line);
+    if (h) {
+      inRequired = h[2].trim().toLowerCase().startsWith("required");
+      continue;
+    }
+    if (!inRequired) continue;
+    const withId = REQUIRED_NFR_ITEM_RE.exec(line);
+    if (withId) {
+      out.push({ id: withId[1], text: withId[2].trim() });
+      continue;
+    }
+    const plain = PLAIN_LIST_ITEM_RE.exec(line);
+    if (plain) out.push({ id: null, text: plain[1].trim() });
+  }
+  return out;
+}
+function checkNfrCoverage(nfrsMd, architectureJson) {
+  const required = parseRequiredNfrs(nfrsMd);
+  if (required.length === 0) return { ok: true };
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${cause}`] };
+  }
+  const briefRefs = new Set(
+    (parsed.nfrs ?? []).map((n) => n.brief_ref).filter((r) => typeof r === "string" && r.length > 0)
+  );
+  const violations = [];
+  for (const item of required) {
+    if (item.id === null) {
+      const preview = item.text.length > 50 ? `${item.text.slice(0, 50)}...` : item.text;
+      violations.push(`nfrs.md Required item has no R<n> id (cannot be coverage-tracked): "${preview}"`);
+      continue;
+    }
+    if (!briefRefs.has(item.id)) {
+      violations.push(
+        `Required NFR ${item.id} from nfrs.md is not covered by any architecture.json nfr (no matching brief_ref)`
+      );
+    }
+  }
+  return finalize(violations);
+}
 function canonicalArtifactName(path2) {
   const base = basename(path2);
   if (basename(dirname(path2)) === "acs" && base.endsWith(".json")) return "ac.json";
@@ -6876,10 +6940,11 @@ function scanFeatureConformance(tddDir, featureId) {
     if (existsSync(p)) paths.push(p);
   };
   pushIfExists(join2(tddDir, "product-overview.md"));
+  pushIfExists(join2(tddDir, "nfrs.md"));
   for (const name of ["design-brief.md", "design-guide.md", "design-guide.json", "ia.md"]) {
     pushIfExists(join2(tddDir, "design", name));
   }
-  for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
+  for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "nfrs.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
     pushIfExists(join2(featureDir, name));
   }
   const storiesDir = join2(featureDir, "stories");
@@ -6905,6 +6970,20 @@ function scanFeatureConformance(tddDir, featureId) {
       violations: result.ok ? [] : result.violations
     };
   });
+  const archPath = join2(featureDir, "architecture.json");
+  if (existsSync(archPath)) {
+    const archContent = readFileSync2(archPath, "utf8");
+    for (const nfrsPath of [join2(tddDir, "nfrs.md"), join2(featureDir, "nfrs.md")]) {
+      if (!existsSync(nfrsPath)) continue;
+      const cov = checkNfrCoverage(readFileSync2(nfrsPath, "utf8"), archContent);
+      const rel = nfrsPath.startsWith(tddDir) ? nfrsPath.slice(tddDir.length).replace(/^\//, "") : nfrsPath;
+      entries.push({
+        artifact: `${rel} -> architecture.json (NFR coverage)`,
+        ok: cov.ok,
+        violations: cov.ok ? [] : cov.violations
+      });
+    }
+  }
   return { featureId, ok: entries.every((e) => e.ok), entries };
 }
 

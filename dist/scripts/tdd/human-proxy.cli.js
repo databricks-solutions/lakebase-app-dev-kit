@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-"use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -11,10 +10,6 @@ var __esm = (fn, res) => function __init() {
 };
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-};
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -32,33 +27,35 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// node_modules/tsup/assets/cjs_shims.js
-var getImportMetaUrl, importMetaUrl;
-var init_cjs_shims = __esm({
-  "node_modules/tsup/assets/cjs_shims.js"() {
+// node_modules/tsup/assets/esm_shims.js
+import path from "path";
+import { fileURLToPath } from "url";
+var getFilename, getDirname, __dirname;
+var init_esm_shims = __esm({
+  "node_modules/tsup/assets/esm_shims.js"() {
     "use strict";
-    getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${__filename}`).href : document.currentScript && document.currentScript.tagName.toUpperCase() === "SCRIPT" ? document.currentScript.src : new URL("main.js", document.baseURI).href;
-    importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
+    getFilename = () => fileURLToPath(import.meta.url);
+    getDirname = () => path.dirname(getFilename());
+    __dirname = /* @__PURE__ */ getDirname();
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/code.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.regexpCode = exports2.getEsmExportName = exports2.getProperty = exports2.safeStringify = exports2.stringify = exports2.strConcat = exports2.addCodeArg = exports2.str = exports2._ = exports2.nil = exports2._Code = exports2.Name = exports2.IDENTIFIER = exports2._CodeOrName = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
     var _CodeOrName = class {
     };
-    exports2._CodeOrName = _CodeOrName;
-    exports2.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
+    exports._CodeOrName = _CodeOrName;
+    exports.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
     var Name = class extends _CodeOrName {
       constructor(s) {
         super();
-        if (!exports2.IDENTIFIER.test(s))
+        if (!exports.IDENTIFIER.test(s))
           throw new Error("CodeGen: name must be a valid identifier");
         this.str = s;
       }
@@ -72,7 +69,7 @@ var require_code = __commonJS({
         return { [this.str]: 1 };
       }
     };
-    exports2.Name = Name;
+    exports.Name = Name;
     var _Code = class extends _CodeOrName {
       constructor(code) {
         super();
@@ -100,8 +97,8 @@ var require_code = __commonJS({
         }, {});
       }
     };
-    exports2._Code = _Code;
-    exports2.nil = new _Code("");
+    exports._Code = _Code;
+    exports.nil = new _Code("");
     function _(strs, ...args) {
       const code = [strs[0]];
       let i = 0;
@@ -111,7 +108,7 @@ var require_code = __commonJS({
       }
       return new _Code(code);
     }
-    exports2._ = _;
+    exports._ = _;
     var plus = new _Code("+");
     function str(strs, ...args) {
       const expr = [safeStringify(strs[0])];
@@ -124,7 +121,7 @@ var require_code = __commonJS({
       optimize(expr);
       return new _Code(expr);
     }
-    exports2.str = str;
+    exports.str = str;
     function addCodeArg(code, arg) {
       if (arg instanceof _Code)
         code.push(...arg._items);
@@ -133,7 +130,7 @@ var require_code = __commonJS({
       else
         code.push(interpolate(arg));
     }
-    exports2.addCodeArg = addCodeArg;
+    exports.addCodeArg = addCodeArg;
     function optimize(expr) {
       let i = 1;
       while (i < expr.length - 1) {
@@ -169,43 +166,43 @@ var require_code = __commonJS({
     function strConcat(c1, c2) {
       return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
     }
-    exports2.strConcat = strConcat;
+    exports.strConcat = strConcat;
     function interpolate(x) {
       return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
     }
     function stringify(x) {
       return new _Code(safeStringify(x));
     }
-    exports2.stringify = stringify;
+    exports.stringify = stringify;
     function safeStringify(x) {
       return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
-    exports2.safeStringify = safeStringify;
+    exports.safeStringify = safeStringify;
     function getProperty(key) {
-      return typeof key == "string" && exports2.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
+      return typeof key == "string" && exports.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
     }
-    exports2.getProperty = getProperty;
+    exports.getProperty = getProperty;
     function getEsmExportName(key) {
-      if (typeof key == "string" && exports2.IDENTIFIER.test(key)) {
+      if (typeof key == "string" && exports.IDENTIFIER.test(key)) {
         return new _Code(`${key}`);
       }
       throw new Error(`CodeGen: invalid export name: ${key}, use explicit $id name mapping`);
     }
-    exports2.getEsmExportName = getEsmExportName;
+    exports.getEsmExportName = getEsmExportName;
     function regexpCode(rx) {
       return new _Code(rx.toString());
     }
-    exports2.regexpCode = regexpCode;
+    exports.regexpCode = regexpCode;
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.ValueScope = exports2.ValueScopeName = exports2.Scope = exports2.varKinds = exports2.UsedValueState = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
     var code_1 = require_code();
     var ValueError = class extends Error {
       constructor(name) {
@@ -217,8 +214,8 @@ var require_scope = __commonJS({
     (function(UsedValueState2) {
       UsedValueState2[UsedValueState2["Started"] = 0] = "Started";
       UsedValueState2[UsedValueState2["Completed"] = 1] = "Completed";
-    })(UsedValueState || (exports2.UsedValueState = UsedValueState = {}));
-    exports2.varKinds = {
+    })(UsedValueState || (exports.UsedValueState = UsedValueState = {}));
+    exports.varKinds = {
       const: new code_1.Name("const"),
       let: new code_1.Name("let"),
       var: new code_1.Name("var")
@@ -247,7 +244,7 @@ var require_scope = __commonJS({
         return this._names[prefix] = { prefix, index: 0 };
       }
     };
-    exports2.Scope = Scope;
+    exports.Scope = Scope;
     var ValueScopeName = class extends code_1.Name {
       constructor(prefix, nameStr) {
         super(nameStr);
@@ -258,7 +255,7 @@ var require_scope = __commonJS({
         this.scopePath = (0, code_1._)`.${new code_1.Name(property)}[${itemIndex}]`;
       }
     };
-    exports2.ValueScopeName = ValueScopeName;
+    exports.ValueScopeName = ValueScopeName;
     var line = (0, code_1._)`\n`;
     var ValueScope = class extends Scope {
       constructor(opts) {
@@ -328,7 +325,7 @@ var require_scope = __commonJS({
             nameSet.set(name, UsedValueState.Started);
             let c = valueCode(name);
             if (c) {
-              const def = this.opts.es5 ? exports2.varKinds.var : exports2.varKinds.const;
+              const def = this.opts.es5 ? exports.varKinds.var : exports.varKinds.const;
               code = (0, code_1._)`${code}${def} ${name} = ${c};${this.opts._n}`;
             } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name)) {
               code = (0, code_1._)`${code}${c}${this.opts._n}`;
@@ -341,58 +338,58 @@ var require_scope = __commonJS({
         return code;
       }
     };
-    exports2.ValueScope = ValueScope;
+    exports.ValueScope = ValueScope;
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/codegen/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.or = exports2.and = exports2.not = exports2.CodeGen = exports2.operators = exports2.varKinds = exports2.ValueScopeName = exports2.ValueScope = exports2.Scope = exports2.Name = exports2.regexpCode = exports2.stringify = exports2.getProperty = exports2.nil = exports2.strConcat = exports2.str = exports2._ = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
     var code_1 = require_code();
     var scope_1 = require_scope();
     var code_2 = require_code();
-    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
       return code_2._;
     } });
-    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
       return code_2.str;
     } });
-    Object.defineProperty(exports2, "strConcat", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "strConcat", { enumerable: true, get: function() {
       return code_2.strConcat;
     } });
-    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
       return code_2.nil;
     } });
-    Object.defineProperty(exports2, "getProperty", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "getProperty", { enumerable: true, get: function() {
       return code_2.getProperty;
     } });
-    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
       return code_2.stringify;
     } });
-    Object.defineProperty(exports2, "regexpCode", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "regexpCode", { enumerable: true, get: function() {
       return code_2.regexpCode;
     } });
-    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
       return code_2.Name;
     } });
     var scope_2 = require_scope();
-    Object.defineProperty(exports2, "Scope", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "Scope", { enumerable: true, get: function() {
       return scope_2.Scope;
     } });
-    Object.defineProperty(exports2, "ValueScope", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "ValueScope", { enumerable: true, get: function() {
       return scope_2.ValueScope;
     } });
-    Object.defineProperty(exports2, "ValueScopeName", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "ValueScopeName", { enumerable: true, get: function() {
       return scope_2.ValueScopeName;
     } });
-    Object.defineProperty(exports2, "varKinds", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "varKinds", { enumerable: true, get: function() {
       return scope_2.varKinds;
     } });
-    exports2.operators = {
+    exports.operators = {
       GT: new code_1._Code(">"),
       GTE: new code_1._Code(">="),
       LT: new code_1._Code("<"),
@@ -805,7 +802,7 @@ var require_codegen = __commonJS({
       }
       // `+=` code
       add(lhs, rhs) {
-        return this._leafNode(new AssignOp(lhs, exports2.operators.ADD, rhs));
+        return this._leafNode(new AssignOp(lhs, exports.operators.ADD, rhs));
       }
       // appends passed SafeExpr to code or executes Block
       code(c) {
@@ -1005,7 +1002,7 @@ var require_codegen = __commonJS({
         ns[ns.length - 1] = node;
       }
     };
-    exports2.CodeGen = CodeGen;
+    exports.CodeGen = CodeGen;
     function addNames(names, from) {
       for (const n in from)
         names[n] = (names[n] || 0) + (from[n] || 0);
@@ -1046,17 +1043,17 @@ var require_codegen = __commonJS({
     function not(x) {
       return typeof x == "boolean" || typeof x == "number" || x === null ? !x : (0, code_1._)`!${par(x)}`;
     }
-    exports2.not = not;
-    var andCode = mappend(exports2.operators.AND);
+    exports.not = not;
+    var andCode = mappend(exports.operators.AND);
     function and(...args) {
       return args.reduce(andCode);
     }
-    exports2.and = and;
-    var orCode = mappend(exports2.operators.OR);
+    exports.and = and;
+    var orCode = mappend(exports.operators.OR);
     function or(...args) {
       return args.reduce(orCode);
     }
-    exports2.or = or;
+    exports.or = or;
     function mappend(op) {
       return (x, y) => x === code_1.nil ? y : y === code_1.nil ? x : (0, code_1._)`${par(x)} ${op} ${par(y)}`;
     }
@@ -1068,11 +1065,11 @@ var require_codegen = __commonJS({
 
 // node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports2) {
+  "node_modules/ajv/dist/compile/util.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.checkStrictMode = exports2.getErrorPath = exports2.Type = exports2.useFunc = exports2.setEvaluated = exports2.evaluatedPropsToName = exports2.mergeEvaluated = exports2.eachItem = exports2.unescapeJsonPointer = exports2.escapeJsonPointer = exports2.escapeFragment = exports2.unescapeFragment = exports2.schemaRefOrVal = exports2.schemaHasRulesButRef = exports2.schemaHasRules = exports2.checkUnknownRules = exports2.alwaysValidSchema = exports2.toHash = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
@@ -1081,7 +1078,7 @@ var require_util = __commonJS({
         hash[item] = true;
       return hash;
     }
-    exports2.toHash = toHash;
+    exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
       if (typeof schema == "boolean")
         return schema;
@@ -1090,7 +1087,7 @@ var require_util = __commonJS({
       checkUnknownRules(it, schema);
       return !schemaHasRules(schema, it.self.RULES.all);
     }
-    exports2.alwaysValidSchema = alwaysValidSchema;
+    exports.alwaysValidSchema = alwaysValidSchema;
     function checkUnknownRules(it, schema = it.schema) {
       const { opts, self } = it;
       if (!opts.strictSchema)
@@ -1103,7 +1100,7 @@ var require_util = __commonJS({
           checkStrictMode(it, `unknown keyword: "${key}"`);
       }
     }
-    exports2.checkUnknownRules = checkUnknownRules;
+    exports.checkUnknownRules = checkUnknownRules;
     function schemaHasRules(schema, rules) {
       if (typeof schema == "boolean")
         return !schema;
@@ -1112,7 +1109,7 @@ var require_util = __commonJS({
           return true;
       return false;
     }
-    exports2.schemaHasRules = schemaHasRules;
+    exports.schemaHasRules = schemaHasRules;
     function schemaHasRulesButRef(schema, RULES) {
       if (typeof schema == "boolean")
         return !schema;
@@ -1121,7 +1118,7 @@ var require_util = __commonJS({
           return true;
       return false;
     }
-    exports2.schemaHasRulesButRef = schemaHasRulesButRef;
+    exports.schemaHasRulesButRef = schemaHasRulesButRef;
     function schemaRefOrVal({ topSchemaRef, schemaPath }, schema, keyword, $data) {
       if (!$data) {
         if (typeof schema == "number" || typeof schema == "boolean")
@@ -1131,25 +1128,25 @@ var require_util = __commonJS({
       }
       return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
     }
-    exports2.schemaRefOrVal = schemaRefOrVal;
+    exports.schemaRefOrVal = schemaRefOrVal;
     function unescapeFragment(str) {
       return unescapeJsonPointer(decodeURIComponent(str));
     }
-    exports2.unescapeFragment = unescapeFragment;
+    exports.unescapeFragment = unescapeFragment;
     function escapeFragment(str) {
       return encodeURIComponent(escapeJsonPointer(str));
     }
-    exports2.escapeFragment = escapeFragment;
+    exports.escapeFragment = escapeFragment;
     function escapeJsonPointer(str) {
       if (typeof str == "number")
         return `${str}`;
       return str.replace(/~/g, "~0").replace(/\//g, "~1");
     }
-    exports2.escapeJsonPointer = escapeJsonPointer;
+    exports.escapeJsonPointer = escapeJsonPointer;
     function unescapeJsonPointer(str) {
       return str.replace(/~1/g, "/").replace(/~0/g, "~");
     }
-    exports2.unescapeJsonPointer = unescapeJsonPointer;
+    exports.unescapeJsonPointer = unescapeJsonPointer;
     function eachItem(xs, f) {
       if (Array.isArray(xs)) {
         for (const x of xs)
@@ -1158,14 +1155,14 @@ var require_util = __commonJS({
         f(xs);
       }
     }
-    exports2.eachItem = eachItem;
+    exports.eachItem = eachItem;
     function makeMergeEvaluated({ mergeNames, mergeToName, mergeValues, resultToName }) {
       return (gen, from, to, toName) => {
         const res = to === void 0 ? from : to instanceof codegen_1.Name ? (from instanceof codegen_1.Name ? mergeNames(gen, from, to) : mergeToName(gen, from, to), to) : from instanceof codegen_1.Name ? (mergeToName(gen, to, from), from) : mergeValues(from, to);
         return toName === codegen_1.Name && !(res instanceof codegen_1.Name) ? resultToName(gen, res) : res;
       };
     }
-    exports2.mergeEvaluated = {
+    exports.mergeEvaluated = {
       props: makeMergeEvaluated({
         mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => {
           gen.if((0, codegen_1._)`${from} === true`, () => gen.assign(to, true), () => gen.assign(to, (0, codegen_1._)`${to} || {}`).code((0, codegen_1._)`Object.assign(${to}, ${from})`));
@@ -1196,11 +1193,11 @@ var require_util = __commonJS({
         setEvaluated(gen, props, ps);
       return props;
     }
-    exports2.evaluatedPropsToName = evaluatedPropsToName;
+    exports.evaluatedPropsToName = evaluatedPropsToName;
     function setEvaluated(gen, props, ps) {
       Object.keys(ps).forEach((p) => gen.assign((0, codegen_1._)`${props}${(0, codegen_1.getProperty)(p)}`, true));
     }
-    exports2.setEvaluated = setEvaluated;
+    exports.setEvaluated = setEvaluated;
     var snippets = {};
     function useFunc(gen, f) {
       return gen.scopeValue("func", {
@@ -1208,12 +1205,12 @@ var require_util = __commonJS({
         code: snippets[f.code] || (snippets[f.code] = new code_1._Code(f.code))
       });
     }
-    exports2.useFunc = useFunc;
+    exports.useFunc = useFunc;
     var Type;
     (function(Type2) {
       Type2[Type2["Num"] = 0] = "Num";
       Type2[Type2["Str"] = 1] = "Str";
-    })(Type || (exports2.Type = Type = {}));
+    })(Type || (exports.Type = Type = {}));
     function getErrorPath(dataProp, dataPropType, jsPropertySyntax) {
       if (dataProp instanceof codegen_1.Name) {
         const isNumber = dataPropType === Type.Num;
@@ -1221,7 +1218,7 @@ var require_util = __commonJS({
       }
       return jsPropertySyntax ? (0, codegen_1.getProperty)(dataProp).toString() : "/" + escapeJsonPointer(dataProp);
     }
-    exports2.getErrorPath = getErrorPath;
+    exports.getErrorPath = getErrorPath;
     function checkStrictMode(it, msg, mode = it.opts.strictSchema) {
       if (!mode)
         return;
@@ -1230,16 +1227,16 @@ var require_util = __commonJS({
         throw new Error(msg);
       it.self.logger.warn(msg);
     }
-    exports2.checkStrictMode = checkStrictMode;
+    exports.checkStrictMode = checkStrictMode;
   }
 });
 
 // node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports2) {
+  "node_modules/ajv/dist/compile/names.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var names = {
       // validation function arguments
@@ -1270,27 +1267,27 @@ var require_names = __commonJS({
       jsonLen: new codegen_1.Name("jsonLen"),
       jsonPart: new codegen_1.Name("jsonPart")
     };
-    exports2.default = names;
+    exports.default = names;
   }
 });
 
 // node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports2) {
+  "node_modules/ajv/dist/compile/errors.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.extendErrors = exports2.resetErrorsCount = exports2.reportExtraError = exports2.reportError = exports2.keyword$DataError = exports2.keywordError = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var names_1 = require_names();
-    exports2.keywordError = {
+    exports.keywordError = {
       message: ({ keyword }) => (0, codegen_1.str)`must pass "${keyword}" keyword validation`
     };
-    exports2.keyword$DataError = {
+    exports.keyword$DataError = {
       message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
     };
-    function reportError(cxt, error = exports2.keywordError, errorPaths, overrideAllErrors) {
+    function reportError(cxt, error = exports.keywordError, errorPaths, overrideAllErrors) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
       const errObj = errorObjectCode(cxt, error, errorPaths);
@@ -1300,8 +1297,8 @@ var require_errors = __commonJS({
         returnErrors(it, (0, codegen_1._)`[${errObj}]`);
       }
     }
-    exports2.reportError = reportError;
-    function reportExtraError(cxt, error = exports2.keywordError, errorPaths) {
+    exports.reportError = reportError;
+    function reportExtraError(cxt, error = exports.keywordError, errorPaths) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
       const errObj = errorObjectCode(cxt, error, errorPaths);
@@ -1310,12 +1307,12 @@ var require_errors = __commonJS({
         returnErrors(it, names_1.default.vErrors);
       }
     }
-    exports2.reportExtraError = reportExtraError;
+    exports.reportExtraError = reportExtraError;
     function resetErrorsCount(gen, errsCount) {
       gen.assign(names_1.default.errors, errsCount);
       gen.if((0, codegen_1._)`${names_1.default.vErrors} !== null`, () => gen.if(errsCount, () => gen.assign((0, codegen_1._)`${names_1.default.vErrors}.length`, errsCount), () => gen.assign(names_1.default.vErrors, null)));
     }
-    exports2.resetErrorsCount = resetErrorsCount;
+    exports.resetErrorsCount = resetErrorsCount;
     function extendErrors({ gen, keyword, schemaValue, data, errsCount, it }) {
       if (errsCount === void 0)
         throw new Error("ajv implementation error");
@@ -1330,7 +1327,7 @@ var require_errors = __commonJS({
         }
       });
     }
-    exports2.extendErrors = extendErrors;
+    exports.extendErrors = extendErrors;
     function addError(gen, errObj) {
       const err = gen.const("err", errObj);
       gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err})`);
@@ -1399,11 +1396,11 @@ var require_errors = __commonJS({
 
 // node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.boolOrEmptySchema = exports2.topBoolOrEmptySchema = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
     var errors_1 = require_errors();
     var codegen_1 = require_codegen();
     var names_1 = require_names();
@@ -1421,7 +1418,7 @@ var require_boolSchema = __commonJS({
         gen.return(true);
       }
     }
-    exports2.topBoolOrEmptySchema = topBoolOrEmptySchema;
+    exports.topBoolOrEmptySchema = topBoolOrEmptySchema;
     function boolOrEmptySchema(it, valid) {
       const { gen, schema } = it;
       if (schema === false) {
@@ -1431,7 +1428,7 @@ var require_boolSchema = __commonJS({
         gen.var(valid, true);
       }
     }
-    exports2.boolOrEmptySchema = boolOrEmptySchema;
+    exports.boolOrEmptySchema = boolOrEmptySchema;
     function falseSchemaError(it, overrideAllErrors) {
       const { gen, data } = it;
       const cxt = {
@@ -1451,17 +1448,17 @@ var require_boolSchema = __commonJS({
 
 // node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports2) {
+  "node_modules/ajv/dist/compile/rules.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.getRules = exports2.isJSONType = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getRules = exports.isJSONType = void 0;
     var _jsonTypes = ["string", "number", "integer", "boolean", "null", "object", "array"];
     var jsonTypes = new Set(_jsonTypes);
     function isJSONType(x) {
       return typeof x == "string" && jsonTypes.has(x);
     }
-    exports2.isJSONType = isJSONType;
+    exports.isJSONType = isJSONType;
     function getRules() {
       const groups = {
         number: { type: "number", rules: [] },
@@ -1477,41 +1474,41 @@ var require_rules = __commonJS({
         keywords: {}
       };
     }
-    exports2.getRules = getRules;
+    exports.getRules = getRules;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.shouldUseRule = exports2.shouldUseGroup = exports2.schemaHasRulesForType = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
     function schemaHasRulesForType({ schema, self }, type) {
       const group = self.RULES.types[type];
       return group && group !== true && shouldUseGroup(schema, group);
     }
-    exports2.schemaHasRulesForType = schemaHasRulesForType;
+    exports.schemaHasRulesForType = schemaHasRulesForType;
     function shouldUseGroup(schema, group) {
       return group.rules.some((rule) => shouldUseRule(schema, rule));
     }
-    exports2.shouldUseGroup = shouldUseGroup;
+    exports.shouldUseGroup = shouldUseGroup;
     function shouldUseRule(schema, rule) {
       var _a;
       return schema[rule.keyword] !== void 0 || ((_a = rule.definition.implements) === null || _a === void 0 ? void 0 : _a.some((kwd) => schema[kwd] !== void 0));
     }
-    exports2.shouldUseRule = shouldUseRule;
+    exports.shouldUseRule = shouldUseRule;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.reportTypeError = exports2.checkDataTypes = exports2.checkDataType = exports2.coerceAndCheckDataType = exports2.getJSONTypes = exports2.getSchemaTypes = exports2.DataType = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
     var rules_1 = require_rules();
     var applicability_1 = require_applicability();
     var errors_1 = require_errors();
@@ -1521,7 +1518,7 @@ var require_dataType = __commonJS({
     (function(DataType2) {
       DataType2[DataType2["Correct"] = 0] = "Correct";
       DataType2[DataType2["Wrong"] = 1] = "Wrong";
-    })(DataType || (exports2.DataType = DataType = {}));
+    })(DataType || (exports.DataType = DataType = {}));
     function getSchemaTypes(schema) {
       const types = getJSONTypes(schema.type);
       const hasNull = types.includes("null");
@@ -1537,14 +1534,14 @@ var require_dataType = __commonJS({
       }
       return types;
     }
-    exports2.getSchemaTypes = getSchemaTypes;
+    exports.getSchemaTypes = getSchemaTypes;
     function getJSONTypes(ts) {
       const types = Array.isArray(ts) ? ts : ts ? [ts] : [];
       if (types.every(rules_1.isJSONType))
         return types;
       throw new Error("type must be JSONType or JSONType[]: " + types.join(","));
     }
-    exports2.getJSONTypes = getJSONTypes;
+    exports.getJSONTypes = getJSONTypes;
     function coerceAndCheckDataType(it, types) {
       const { gen, data, opts } = it;
       const coerceTo = coerceToTypes(types, opts.coerceTypes);
@@ -1560,7 +1557,7 @@ var require_dataType = __commonJS({
       }
       return checkTypes;
     }
-    exports2.coerceAndCheckDataType = coerceAndCheckDataType;
+    exports.coerceAndCheckDataType = coerceAndCheckDataType;
     var COERCIBLE = /* @__PURE__ */ new Set(["string", "number", "integer", "boolean", "null"]);
     function coerceToTypes(types, coerceTypes) {
       return coerceTypes ? types.filter((t) => COERCIBLE.has(t) || coerceTypes === "array" && t === "array") : [];
@@ -1640,7 +1637,7 @@ var require_dataType = __commonJS({
         return (0, codegen_1.and)((0, codegen_1._)`typeof ${data} == "number"`, _cond, strictNums ? (0, codegen_1._)`isFinite(${data})` : codegen_1.nil);
       }
     }
-    exports2.checkDataType = checkDataType;
+    exports.checkDataType = checkDataType;
     function checkDataTypes(dataTypes, data, strictNums, correct) {
       if (dataTypes.length === 1) {
         return checkDataType(dataTypes[0], data, strictNums, correct);
@@ -1662,7 +1659,7 @@ var require_dataType = __commonJS({
         cond = (0, codegen_1.and)(cond, checkDataType(t, data, strictNums, correct));
       return cond;
     }
-    exports2.checkDataTypes = checkDataTypes;
+    exports.checkDataTypes = checkDataTypes;
     var typeError = {
       message: ({ schema }) => `must be ${schema}`,
       params: ({ schema, schemaValue }) => typeof schema == "string" ? (0, codegen_1._)`{type: ${schema}}` : (0, codegen_1._)`{type: ${schemaValue}}`
@@ -1671,7 +1668,7 @@ var require_dataType = __commonJS({
       const cxt = getTypeErrorContext(it);
       (0, errors_1.reportError)(cxt, typeError);
     }
-    exports2.reportTypeError = reportTypeError;
+    exports.reportTypeError = reportTypeError;
     function getTypeErrorContext(it) {
       const { gen, data, schema } = it;
       const schemaCode = (0, util_1.schemaRefOrVal)(it, schema, "type");
@@ -1692,11 +1689,11 @@ var require_dataType = __commonJS({
 
 // node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.assignDefaults = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.assignDefaults = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     function assignDefaults(it, ty) {
@@ -1709,7 +1706,7 @@ var require_defaults = __commonJS({
         items.forEach((sch, i) => assignDefault(it, i, sch.default));
       }
     }
-    exports2.assignDefaults = assignDefaults;
+    exports.assignDefaults = assignDefaults;
     function assignDefault(it, prop, defaultValue) {
       const { gen, compositeRule, data, opts } = it;
       if (defaultValue === void 0)
@@ -1730,11 +1727,11 @@ var require_defaults = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/code.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.validateUnion = exports2.validateArray = exports2.usePattern = exports2.callValidateCode = exports2.schemaProperties = exports2.allSchemaProperties = exports2.noPropertyInData = exports2.propertyInData = exports2.isOwnProperty = exports2.hasPropFunc = exports2.reportMissingProp = exports2.checkMissingProp = exports2.checkReportMissingProp = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var names_1 = require_names();
@@ -1746,16 +1743,16 @@ var require_code2 = __commonJS({
         cxt.error();
       });
     }
-    exports2.checkReportMissingProp = checkReportMissingProp;
+    exports.checkReportMissingProp = checkReportMissingProp;
     function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
       return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
     }
-    exports2.checkMissingProp = checkMissingProp;
+    exports.checkMissingProp = checkMissingProp;
     function reportMissingProp(cxt, missing) {
       cxt.setParams({ missingProperty: missing }, true);
       cxt.error();
     }
-    exports2.reportMissingProp = reportMissingProp;
+    exports.reportMissingProp = reportMissingProp;
     function hasPropFunc(gen) {
       return gen.scopeValue("func", {
         // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -1763,29 +1760,29 @@ var require_code2 = __commonJS({
         code: (0, codegen_1._)`Object.prototype.hasOwnProperty`
       });
     }
-    exports2.hasPropFunc = hasPropFunc;
+    exports.hasPropFunc = hasPropFunc;
     function isOwnProperty(gen, data, property) {
       return (0, codegen_1._)`${hasPropFunc(gen)}.call(${data}, ${property})`;
     }
-    exports2.isOwnProperty = isOwnProperty;
+    exports.isOwnProperty = isOwnProperty;
     function propertyInData(gen, data, property, ownProperties) {
       const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} !== undefined`;
       return ownProperties ? (0, codegen_1._)`${cond} && ${isOwnProperty(gen, data, property)}` : cond;
     }
-    exports2.propertyInData = propertyInData;
+    exports.propertyInData = propertyInData;
     function noPropertyInData(gen, data, property, ownProperties) {
       const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} === undefined`;
       return ownProperties ? (0, codegen_1.or)(cond, (0, codegen_1.not)(isOwnProperty(gen, data, property))) : cond;
     }
-    exports2.noPropertyInData = noPropertyInData;
+    exports.noPropertyInData = noPropertyInData;
     function allSchemaProperties(schemaMap) {
       return schemaMap ? Object.keys(schemaMap).filter((p) => p !== "__proto__") : [];
     }
-    exports2.allSchemaProperties = allSchemaProperties;
+    exports.allSchemaProperties = allSchemaProperties;
     function schemaProperties(it, schemaMap) {
       return allSchemaProperties(schemaMap).filter((p) => !(0, util_1.alwaysValidSchema)(it, schemaMap[p]));
     }
-    exports2.schemaProperties = schemaProperties;
+    exports.schemaProperties = schemaProperties;
     function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func, context, passSchema) {
       const dataAndSchema = passSchema ? (0, codegen_1._)`${schemaCode}, ${data}, ${topSchemaRef}${schemaPath}` : data;
       const valCxt = [
@@ -1799,7 +1796,7 @@ var require_code2 = __commonJS({
       const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
       return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
     }
-    exports2.callValidateCode = callValidateCode;
+    exports.callValidateCode = callValidateCode;
     var newRegExp = (0, codegen_1._)`new RegExp`;
     function usePattern({ gen, it: { opts } }, pattern) {
       const u = opts.unicodeRegExp ? "u" : "";
@@ -1811,7 +1808,7 @@ var require_code2 = __commonJS({
         code: (0, codegen_1._)`${regExp.code === "new RegExp" ? newRegExp : (0, util_2.useFunc)(gen, regExp)}(${pattern}, ${u})`
       });
     }
-    exports2.usePattern = usePattern;
+    exports.usePattern = usePattern;
     function validateArray(cxt) {
       const { gen, data, keyword, it } = cxt;
       const valid = gen.name("valid");
@@ -1835,7 +1832,7 @@ var require_code2 = __commonJS({
         });
       }
     }
-    exports2.validateArray = validateArray;
+    exports.validateArray = validateArray;
     function validateUnion(cxt) {
       const { gen, schema, keyword, it } = cxt;
       if (!Array.isArray(schema))
@@ -1858,17 +1855,17 @@ var require_code2 = __commonJS({
       }));
       cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
     }
-    exports2.validateUnion = validateUnion;
+    exports.validateUnion = validateUnion;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.validateKeywordUsage = exports2.validSchemaType = exports2.funcKeywordCode = exports2.macroKeywordCode = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
     var codegen_1 = require_codegen();
     var names_1 = require_names();
     var code_1 = require_code2();
@@ -1889,7 +1886,7 @@ var require_keyword = __commonJS({
       }, valid);
       cxt.pass(valid, () => cxt.error(true));
     }
-    exports2.macroKeywordCode = macroKeywordCode;
+    exports.macroKeywordCode = macroKeywordCode;
     function funcKeywordCode(cxt, def) {
       var _a;
       const { gen, keyword, schema, parentSchema, $data, it } = cxt;
@@ -1933,7 +1930,7 @@ var require_keyword = __commonJS({
         gen.if((0, codegen_1.not)((_a2 = def.valid) !== null && _a2 !== void 0 ? _a2 : valid), errors);
       }
     }
-    exports2.funcKeywordCode = funcKeywordCode;
+    exports.funcKeywordCode = funcKeywordCode;
     function modifyData(cxt) {
       const { gen, data, it } = cxt;
       gen.if(it.parentData, () => gen.assign(data, (0, codegen_1._)`${it.parentData}[${it.parentDataProperty}]`));
@@ -1957,7 +1954,7 @@ var require_keyword = __commonJS({
     function validSchemaType(schema, schemaType, allowUndefined = false) {
       return !schemaType.length || schemaType.some((st) => st === "array" ? Array.isArray(schema) : st === "object" ? schema && typeof schema == "object" && !Array.isArray(schema) : typeof schema == st || allowUndefined && typeof schema == "undefined");
     }
-    exports2.validSchemaType = validSchemaType;
+    exports.validSchemaType = validSchemaType;
     function validateKeywordUsage({ schema, opts, self, errSchemaPath }, def, keyword) {
       if (Array.isArray(def.keyword) ? !def.keyword.includes(keyword) : def.keyword !== keyword) {
         throw new Error("ajv implementation error");
@@ -1977,17 +1974,17 @@ var require_keyword = __commonJS({
         }
       }
     }
-    exports2.validateKeywordUsage = validateKeywordUsage;
+    exports.validateKeywordUsage = validateKeywordUsage;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.extendSubschemaMode = exports2.extendSubschemaData = exports2.getSubschema = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     function getSubschema(it, { keyword, schemaProp, schema, schemaPath, errSchemaPath, topSchemaRef }) {
@@ -2019,7 +2016,7 @@ var require_subschema = __commonJS({
       }
       throw new Error('either "keyword" or "schema" must be passed');
     }
-    exports2.getSubschema = getSubschema;
+    exports.getSubschema = getSubschema;
     function extendSubschemaData(subschema, it, { dataProp, dataPropType: dpType, data, dataTypes, propertyName }) {
       if (data !== void 0 && dataProp !== void 0) {
         throw new Error('both "data" and "dataProp" passed, only one allowed');
@@ -2050,7 +2047,7 @@ var require_subschema = __commonJS({
         subschema.dataNames = [...it.dataNames, _nextData];
       }
     }
-    exports2.extendSubschemaData = extendSubschemaData;
+    exports.extendSubschemaData = extendSubschemaData;
     function extendSubschemaMode(subschema, { jtdDiscriminator, jtdMetadata, compositeRule, createErrors, allErrors }) {
       if (compositeRule !== void 0)
         subschema.compositeRule = compositeRule;
@@ -2061,16 +2058,16 @@ var require_subschema = __commonJS({
       subschema.jtdDiscriminator = jtdDiscriminator;
       subschema.jtdMetadata = jtdMetadata;
     }
-    exports2.extendSubschemaMode = extendSubschemaMode;
+    exports.extendSubschemaMode = extendSubschemaMode;
   }
 });
 
 // node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports2, module2) {
+  "node_modules/fast-deep-equal/index.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
-    module2.exports = function equal(a, b) {
+    init_esm_shims();
+    module.exports = function equal(a, b) {
       if (a === b) return true;
       if (a && b && typeof a == "object" && typeof b == "object") {
         if (a.constructor !== b.constructor) return false;
@@ -2103,10 +2100,10 @@ var require_fast_deep_equal = __commonJS({
 
 // node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports2, module2) {
+  "node_modules/json-schema-traverse/index.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
-    var traverse = module2.exports = function(schema, opts, cb) {
+    init_esm_shims();
+    var traverse = module.exports = function(schema, opts, cb) {
       if (typeof opts == "function") {
         cb = opts;
         opts = {};
@@ -2192,11 +2189,11 @@ var require_json_schema_traverse = __commonJS({
 
 // node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports2) {
+  "node_modules/ajv/dist/compile/resolve.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.getSchemaRefs = exports2.resolveUrl = exports2.normalizeId = exports2._getFullPath = exports2.getFullPath = exports2.inlineRef = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
     var util_1 = require_util();
     var equal = require_fast_deep_equal();
     var traverse = require_json_schema_traverse();
@@ -2227,7 +2224,7 @@ var require_resolve = __commonJS({
         return false;
       return countKeys(schema) <= limit;
     }
-    exports2.inlineRef = inlineRef;
+    exports.inlineRef = inlineRef;
     var REF_KEYWORDS = /* @__PURE__ */ new Set([
       "$ref",
       "$recursiveRef",
@@ -2269,22 +2266,22 @@ var require_resolve = __commonJS({
       const p = resolver.parse(id);
       return _getFullPath(resolver, p);
     }
-    exports2.getFullPath = getFullPath;
+    exports.getFullPath = getFullPath;
     function _getFullPath(resolver, p) {
       const serialized = resolver.serialize(p);
       return serialized.split("#")[0] + "#";
     }
-    exports2._getFullPath = _getFullPath;
+    exports._getFullPath = _getFullPath;
     var TRAILING_SLASH_HASH = /#\/?$/;
     function normalizeId(id) {
       return id ? id.replace(TRAILING_SLASH_HASH, "") : "";
     }
-    exports2.normalizeId = normalizeId;
+    exports.normalizeId = normalizeId;
     function resolveUrl(resolver, baseId, id) {
       id = normalizeId(id);
       return resolver.resolve(baseId, id);
     }
-    exports2.resolveUrl = resolveUrl;
+    exports.resolveUrl = resolveUrl;
     var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
     function getSchemaRefs(schema, baseId) {
       if (typeof schema == "boolean")
@@ -2343,17 +2340,17 @@ var require_resolve = __commonJS({
         return new Error(`reference "${ref}" resolves to more than one schema`);
       }
     }
-    exports2.getSchemaRefs = getSchemaRefs;
+    exports.getSchemaRefs = getSchemaRefs;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/validate/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.getData = exports2.KeywordCxt = exports2.validateFunctionCode = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
     var boolSchema_1 = require_boolSchema();
     var dataType_1 = require_dataType();
     var applicability_1 = require_applicability();
@@ -2376,7 +2373,7 @@ var require_validate = __commonJS({
       }
       validateFunction(it, () => (0, boolSchema_1.topBoolOrEmptySchema)(it));
     }
-    exports2.validateFunctionCode = validateFunctionCode;
+    exports.validateFunctionCode = validateFunctionCode;
     function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body) {
       if (opts.code.es5) {
         gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${names_1.default.valCxt}`, schemaEnv.$async, () => {
@@ -2797,7 +2794,7 @@ var require_validate = __commonJS({
         }
       }
     };
-    exports2.KeywordCxt = KeywordCxt;
+    exports.KeywordCxt = KeywordCxt;
     function keywordCode(it, keyword, def, ruleType) {
       const cxt = new KeywordCxt(it, def, keyword);
       if ("code" in def) {
@@ -2852,16 +2849,16 @@ var require_validate = __commonJS({
         return `Cannot access ${pointerType} ${up} levels up, current level is ${dataLevel}`;
       }
     }
-    exports2.getData = getData;
+    exports.getData = getData;
   }
 });
 
 // node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
+  "node_modules/ajv/dist/runtime/validation_error.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var ValidationError = class extends Error {
       constructor(errors) {
         super("validation failed");
@@ -2869,16 +2866,16 @@ var require_validation_error = __commonJS({
         this.ajv = this.validation = true;
       }
     };
-    exports2.default = ValidationError;
+    exports.default = ValidationError;
   }
 });
 
 // node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports2) {
+  "node_modules/ajv/dist/compile/ref_error.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var resolve_1 = require_resolve();
     var MissingRefError = class extends Error {
       constructor(resolver, baseId, ref, msg) {
@@ -2887,17 +2884,17 @@ var require_ref_error = __commonJS({
         this.missingSchema = (0, resolve_1.normalizeId)((0, resolve_1.getFullPath)(resolver, this.missingRef));
       }
     };
-    exports2.default = MissingRefError;
+    exports.default = MissingRefError;
   }
 });
 
 // node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports2) {
+  "node_modules/ajv/dist/compile/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.resolveSchema = exports2.getCompilingSchema = exports2.resolveRef = exports2.compileSchema = exports2.SchemaEnv = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
     var codegen_1 = require_codegen();
     var validation_error_1 = require_validation_error();
     var names_1 = require_names();
@@ -2923,7 +2920,7 @@ var require_compile = __commonJS({
         this.refs = {};
       }
     };
-    exports2.SchemaEnv = SchemaEnv;
+    exports.SchemaEnv = SchemaEnv;
     function compileSchema(sch) {
       const _sch = getCompilingSchema.call(this, sch);
       if (_sch)
@@ -3009,7 +3006,7 @@ var require_compile = __commonJS({
         this._compilations.delete(sch);
       }
     }
-    exports2.compileSchema = compileSchema;
+    exports.compileSchema = compileSchema;
     function resolveRef(root, baseId, ref) {
       var _a;
       ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
@@ -3027,7 +3024,7 @@ var require_compile = __commonJS({
         return;
       return root.refs[ref] = inlineOrCompile.call(this, _sch);
     }
-    exports2.resolveRef = resolveRef;
+    exports.resolveRef = resolveRef;
     function inlineOrCompile(sch) {
       if ((0, resolve_1.inlineRef)(sch.schema, this.opts.inlineRefs))
         return sch.schema;
@@ -3039,7 +3036,7 @@ var require_compile = __commonJS({
           return sch;
       }
     }
-    exports2.getCompilingSchema = getCompilingSchema;
+    exports.getCompilingSchema = getCompilingSchema;
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
@@ -3078,7 +3075,7 @@ var require_compile = __commonJS({
       }
       return getJsonPointer.call(this, p, schOrRef);
     }
-    exports2.resolveSchema = resolveSchema;
+    exports.resolveSchema = resolveSchema;
     var PREVENT_SCOPE_CHANGE = /* @__PURE__ */ new Set([
       "properties",
       "patternProperties",
@@ -3118,8 +3115,8 @@ var require_compile = __commonJS({
 
 // node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports2, module2) {
-    module2.exports = {
+  "node_modules/ajv/dist/refs/data.json"(exports, module) {
+    module.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
       type: "object",
@@ -3137,9 +3134,9 @@ var require_data = __commonJS({
 
 // node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports2, module2) {
+  "node_modules/fast-uri/lib/utils.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
+    init_esm_shims();
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
@@ -3262,8 +3259,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path2) {
+      let input = path2;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3433,7 +3430,7 @@ var require_utils = __commonJS({
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
-    module2.exports = {
+    module.exports = {
       nonSimpleDomain,
       recomposeAuthority,
       reescapeHostDelimiters,
@@ -3451,9 +3448,9 @@ var require_utils = __commonJS({
 
 // node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
+  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
+    init_esm_shims();
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
     var supportedSchemeNames = (
@@ -3516,8 +3513,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const [path2, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3651,7 +3648,7 @@ var require_schemes = __commonJS({
         scheme.toLowerCase()
       ]) || void 0;
     }
-    module2.exports = {
+    module.exports = {
       wsIsSecure,
       SCHEMES,
       isValidSchemeName,
@@ -3662,9 +3659,9 @@ var require_schemes = __commonJS({
 
 // node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports2, module2) {
+  "node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
+    init_esm_shims();
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     function normalize(uri, options) {
@@ -3941,52 +3938,52 @@ var require_fast_uri = __commonJS({
       serialize,
       parse
     };
-    module2.exports = fastUri;
-    module2.exports.default = fastUri;
-    module2.exports.fastUri = fastUri;
+    module.exports = fastUri;
+    module.exports.default = fastUri;
+    module.exports.fastUri = fastUri;
   }
 });
 
 // node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports2) {
+  "node_modules/ajv/dist/runtime/uri.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var uri = require_fast_uri();
     uri.code = 'require("ajv/dist/runtime/uri").default';
-    exports2.default = uri;
+    exports.default = uri;
   }
 });
 
 // node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports2) {
+  "node_modules/ajv/dist/core.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
     var validate_1 = require_validate();
-    Object.defineProperty(exports2, "KeywordCxt", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
       return validate_1.KeywordCxt;
     } });
     var codegen_1 = require_codegen();
-    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
       return codegen_1._;
     } });
-    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
       return codegen_1.str;
     } });
-    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
       return codegen_1.stringify;
     } });
-    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
       return codegen_1.nil;
     } });
-    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
       return codegen_1.Name;
     } });
-    Object.defineProperty(exports2, "CodeGen", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
       return codegen_1.CodeGen;
     } });
     var validation_error_1 = require_validation_error();
@@ -4440,7 +4437,7 @@ var require_core = __commonJS({
     };
     Ajv2.ValidationError = validation_error_1.default;
     Ajv2.MissingRefError = ref_error_1.default;
-    exports2.default = Ajv2;
+    exports.default = Ajv2;
     function checkOptions(checkOpts, options, msg, log = "error") {
       for (const key in checkOpts) {
         const opt = key;
@@ -4573,27 +4570,27 @@ var require_core = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var def = {
       keyword: "id",
       code() {
         throw new Error('NOT SUPPORTED: keyword "id", use "$id" for schema ID');
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.callRef = exports2.getValidate = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.callRef = exports.getValidate = void 0;
     var ref_error_1 = require_ref_error();
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
@@ -4644,7 +4641,7 @@ var require_ref = __commonJS({
       const { gen } = cxt;
       return sch.validate ? gen.scopeValue("validate", { ref: sch.validate }) : (0, codegen_1._)`${gen.scopeValue("wrapper", { ref: sch })}.validate`;
     }
-    exports2.getValidate = getValidate;
+    exports.getValidate = getValidate;
     function callRef(cxt, v, sch, $async) {
       const { gen, it } = cxt;
       const { allErrors, schemaEnv: env, opts } = it;
@@ -4705,17 +4702,17 @@ var require_ref = __commonJS({
         }
       }
     }
-    exports2.callRef = callRef;
-    exports2.default = def;
+    exports.callRef = callRef;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var id_1 = require_id();
     var ref_1 = require_ref();
     var core = [
@@ -4728,16 +4725,16 @@ var require_core2 = __commonJS({
       id_1.default,
       ref_1.default
     ];
-    exports2.default = core;
+    exports.default = core;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var ops = codegen_1.operators;
     var KWDs = {
@@ -4761,16 +4758,16 @@ var require_limitNumber = __commonJS({
         cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
@@ -4790,16 +4787,16 @@ var require_multipleOf = __commonJS({
         cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
+  "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     function ucs2length(str) {
       const len = str.length;
       let length = 0;
@@ -4816,17 +4813,17 @@ var require_ucs2length = __commonJS({
       }
       return length;
     }
-    exports2.default = ucs2length;
+    exports.default = ucs2length;
     ucs2length.code = 'require("ajv/dist/runtime/ucs2length").default';
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var ucs2length_1 = require_ucs2length();
@@ -4850,16 +4847,16 @@ var require_limitLength = __commonJS({
         cxt.fail$data((0, codegen_1._)`${len} ${op} ${schemaCode}`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
     var util_1 = require_util();
     var codegen_1 = require_codegen();
@@ -4888,16 +4885,16 @@ var require_pattern = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message({ keyword, schemaCode }) {
@@ -4918,16 +4915,16 @@ var require_limitProperties = __commonJS({
         cxt.fail$data((0, codegen_1._)`Object.keys(${data}).length ${op} ${schemaCode}`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -5001,16 +4998,16 @@ var require_required = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message({ keyword, schemaCode }) {
@@ -5031,28 +5028,28 @@ var require_limitItems = __commonJS({
         cxt.fail$data((0, codegen_1._)`${data}.length ${op} ${schemaCode}`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports2) {
+  "node_modules/ajv/dist/runtime/equal.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
     equal.code = 'require("ajv/dist/runtime/equal").default';
-    exports2.default = equal;
+    exports.default = equal;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var dataType_1 = require_dataType();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -5111,16 +5108,16 @@ var require_uniqueItems = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
@@ -5141,16 +5138,16 @@ var require_const = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
@@ -5191,16 +5188,16 @@ var require_enum = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
     var multipleOf_1 = require_multipleOf();
     var limitLength_1 = require_limitLength();
@@ -5230,17 +5227,17 @@ var require_validation = __commonJS({
       const_1.default,
       enum_1.default
     ];
-    exports2.default = validation;
+    exports.default = validation;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.validateAdditionalItems = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateAdditionalItems = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5283,18 +5280,18 @@ var require_additionalItems = __commonJS({
         });
       }
     }
-    exports2.validateAdditionalItems = validateAdditionalItems;
-    exports2.default = def;
+    exports.validateAdditionalItems = validateAdditionalItems;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.validateTuple = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateTuple = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
@@ -5341,17 +5338,17 @@ var require_items = __commonJS({
         }
       }
     }
-    exports2.validateTuple = validateTuple;
-    exports2.default = def;
+    exports.validateTuple = validateTuple;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var items_1 = require_items();
     var def = {
       keyword: "prefixItems",
@@ -5360,16 +5357,16 @@ var require_prefixItems = __commonJS({
       before: "uniqueItems",
       code: (cxt) => (0, items_1.validateTuple)(cxt, "items")
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
@@ -5396,16 +5393,16 @@ var require_items2020 = __commonJS({
           cxt.ok((0, code_1.validateArray)(cxt));
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5491,21 +5488,21 @@ var require_contains = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.validateSchemaDeps = exports2.validatePropertyDeps = exports2.error = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
-    exports2.error = {
+    exports.error = {
       message: ({ params: { property, depsCount, deps } }) => {
         const property_ies = depsCount === 1 ? "property" : "properties";
         return (0, codegen_1.str)`must have ${property_ies} ${deps} when property ${property} is present`;
@@ -5520,7 +5517,7 @@ var require_dependencies = __commonJS({
       keyword: "dependencies",
       type: "object",
       schemaType: "object",
-      error: exports2.error,
+      error: exports.error,
       code(cxt) {
         const [propDeps, schDeps] = splitDependencies(cxt);
         validatePropertyDeps(cxt, propDeps);
@@ -5566,7 +5563,7 @@ var require_dependencies = __commonJS({
         }
       }
     }
-    exports2.validatePropertyDeps = validatePropertyDeps;
+    exports.validatePropertyDeps = validatePropertyDeps;
     function validateSchemaDeps(cxt, schemaDeps = cxt.schema) {
       const { gen, data, keyword, it } = cxt;
       const valid = gen.name("valid");
@@ -5585,17 +5582,17 @@ var require_dependencies = __commonJS({
         cxt.ok(valid);
       }
     }
-    exports2.validateSchemaDeps = validateSchemaDeps;
-    exports2.default = def;
+    exports.validateSchemaDeps = validateSchemaDeps;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5630,16 +5627,16 @@ var require_propertyNames = __commonJS({
         cxt.ok(valid);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var names_1 = require_names();
@@ -5737,16 +5734,16 @@ var require_additionalProperties = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var validate_1 = require_validate();
     var code_1 = require_code2();
     var util_1 = require_util();
@@ -5796,16 +5793,16 @@ var require_properties = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -5871,16 +5868,16 @@ var require_patternProperties = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: "not",
@@ -5903,16 +5900,16 @@ var require_not = __commonJS({
       },
       error: { message: "must NOT be valid" }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var code_1 = require_code2();
     var def = {
       keyword: "anyOf",
@@ -5921,16 +5918,16 @@ var require_anyOf = __commonJS({
       code: code_1.validateUnion,
       error: { message: "must match a schema in anyOf" }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5980,16 +5977,16 @@ var require_oneOf = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: "allOf",
@@ -6008,16 +6005,16 @@ var require_allOf = __commonJS({
         });
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -6078,16 +6075,16 @@ var require_if = __commonJS({
       const schema = it.schema[keyword];
       return schema !== void 0 && !(0, util_1.alwaysValidSchema)(it, schema);
     }
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: ["then", "else"],
@@ -6097,16 +6094,16 @@ var require_thenElse = __commonJS({
           (0, util_1.checkStrictMode)(it, `"${keyword}" without "if" is ignored`);
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
     var prefixItems_1 = require_prefixItems();
     var items_1 = require_items();
@@ -6146,16 +6143,16 @@ var require_applicator = __commonJS({
       applicator.push(contains_1.default);
       return applicator;
     }
-    exports2.default = getApplicator;
+    exports.default = getApplicator;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
@@ -6237,30 +6234,30 @@ var require_format = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var format_1 = require_format();
     var format = [format_1.default];
-    exports2.default = format;
+    exports.default = format;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.contentVocabulary = exports2.metadataVocabulary = void 0;
-    exports2.metadataVocabulary = [
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.contentVocabulary = exports.metadataVocabulary = void 0;
+    exports.metadataVocabulary = [
       "title",
       "description",
       "default",
@@ -6269,7 +6266,7 @@ var require_metadata = __commonJS({
       "writeOnly",
       "examples"
     ];
-    exports2.contentVocabulary = [
+    exports.contentVocabulary = [
       "contentMediaType",
       "contentEncoding",
       "contentSchema"
@@ -6279,10 +6276,10 @@ var require_metadata = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var core_1 = require_core2();
     var validation_1 = require_validation();
     var applicator_1 = require_applicator();
@@ -6296,31 +6293,31 @@ var require_draft7 = __commonJS({
       metadata_1.metadataVocabulary,
       metadata_1.contentVocabulary
     ];
-    exports2.default = draft7Vocabularies;
+    exports.default = draft7Vocabularies;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.DiscrError = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DiscrError = void 0;
     var DiscrError;
     (function(DiscrError2) {
       DiscrError2["Tag"] = "tag";
       DiscrError2["Mapping"] = "mapping";
-    })(DiscrError || (exports2.DiscrError = DiscrError = {}));
+    })(DiscrError || (exports.DiscrError = DiscrError = {}));
   }
 });
 
 // node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
+  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var types_1 = require_types();
     var compile_1 = require_compile();
@@ -6417,14 +6414,14 @@ var require_discriminator = __commonJS({
         }
       }
     };
-    exports2.default = def;
+    exports.default = def;
   }
 });
 
 // node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
-    module2.exports = {
+  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
+    module.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
       title: "Core schema meta-schema",
@@ -6580,11 +6577,11 @@ var require_json_schema_draft_07 = __commonJS({
 
 // node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports2, module2) {
+  "node_modules/ajv/dist/ajv.js"(exports, module) {
     "use strict";
-    init_cjs_shims();
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv = void 0;
+    init_esm_shims();
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
     var core_1 = require_core();
     var draft7_1 = require_draft7();
     var discriminator_1 = require_discriminator();
@@ -6610,88 +6607,83 @@ var require_ajv = __commonJS({
         return this.opts.defaultMeta = super.defaultMeta() || (this.getSchema(META_SCHEMA_ID) ? META_SCHEMA_ID : void 0);
       }
     };
-    exports2.Ajv = Ajv2;
-    module2.exports = exports2 = Ajv2;
-    module2.exports.Ajv = Ajv2;
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.default = Ajv2;
+    exports.Ajv = Ajv2;
+    module.exports = exports = Ajv2;
+    module.exports.Ajv = Ajv2;
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = Ajv2;
     var validate_1 = require_validate();
-    Object.defineProperty(exports2, "KeywordCxt", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
       return validate_1.KeywordCxt;
     } });
     var codegen_1 = require_codegen();
-    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
       return codegen_1._;
     } });
-    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
       return codegen_1.str;
     } });
-    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
       return codegen_1.stringify;
     } });
-    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
       return codegen_1.nil;
     } });
-    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
       return codegen_1.Name;
     } });
-    Object.defineProperty(exports2, "CodeGen", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
       return codegen_1.CodeGen;
     } });
     var validation_error_1 = require_validation_error();
-    Object.defineProperty(exports2, "ValidationError", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "ValidationError", { enumerable: true, get: function() {
       return validation_error_1.default;
     } });
     var ref_error_1 = require_ref_error();
-    Object.defineProperty(exports2, "MissingRefError", { enumerable: true, get: function() {
+    Object.defineProperty(exports, "MissingRefError", { enumerable: true, get: function() {
       return ref_error_1.default;
     } });
   }
 });
 
-// scripts/tdd/mock-approver.cli.ts
-var mock_approver_cli_exports = {};
-__export(mock_approver_cli_exports, {
-  runMockApproverCli: () => runMockApproverCli
-});
-module.exports = __toCommonJS(mock_approver_cli_exports);
-init_cjs_shims();
+// scripts/tdd/human-proxy.cli.ts
+init_esm_shims();
 
 // scripts/util/cli-entry.ts
-init_cjs_shims();
-var import_node_fs = require("fs");
-var import_node_url = require("url");
-function isCliEntry(importMetaUrl2) {
+init_esm_shims();
+import { realpathSync } from "fs";
+import { fileURLToPath as fileURLToPath2 } from "url";
+function isCliEntry(importMetaUrl) {
   const invokedRaw = process.argv[1];
   if (!invokedRaw) return false;
   let invokedResolved;
   let moduleResolved;
   try {
-    invokedResolved = (0, import_node_fs.realpathSync)(invokedRaw);
+    invokedResolved = realpathSync(invokedRaw);
   } catch {
     return false;
   }
   try {
-    moduleResolved = (0, import_node_fs.realpathSync)((0, import_node_url.fileURLToPath)(importMetaUrl2));
+    moduleResolved = realpathSync(fileURLToPath2(importMetaUrl));
   } catch {
     return false;
   }
   return invokedResolved === moduleResolved;
 }
 
-// scripts/tdd/mock-approver.ts
-init_cjs_shims();
-var import_node_fs2 = require("fs");
-var import_node_path = require("path");
+// scripts/tdd/human-proxy.ts
+init_esm_shims();
+import { existsSync as existsSync5, readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync2 } from "fs";
+import { join as join6, dirname, basename } from "path";
 
 // scripts/tdd/approve-gate.ts
-init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
+init_esm_shims();
+import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync3 } from "fs";
+import { join as join3 } from "path";
 
 // scripts/tdd/gate-hash.ts
-init_cjs_shims();
-var import_crypto = require("crypto");
+init_esm_shims();
+import { createHash } from "crypto";
 function normalizeForHash(content) {
   let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   normalized = normalized.split("\n").map((line) => line.replace(/[ \t]+$/, "")).join("\n");
@@ -6699,13 +6691,13 @@ function normalizeForHash(content) {
   return normalized;
 }
 function hashArtifact(content) {
-  return (0, import_crypto.createHash)("sha256").update(normalizeForHash(content), "utf8").digest("hex");
+  return createHash("sha256").update(normalizeForHash(content), "utf8").digest("hex");
 }
 
 // scripts/tdd/gates-lock.ts
-init_cjs_shims();
-var import_fs = require("fs");
-var import_path = require("path");
+init_esm_shims();
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { join } from "path";
 var GatesLockBusyError = class extends Error {
   constructor(featureId, heldByPid, retries) {
     super(
@@ -6730,9 +6722,9 @@ function withGatesLock(featureId, fn, opts = {}) {
   let attempts = 0;
   while (!acquired && attempts <= maxRetries) {
     try {
-      const fd = (0, import_fs.openSync)(lockPath, "wx");
-      (0, import_fs.writeFileSync)(fd, String(process.pid));
-      (0, import_fs.closeSync)(fd);
+      const fd = openSync(lockPath, "wx");
+      writeFileSync(fd, String(process.pid));
+      closeSync(fd);
       acquired = true;
     } catch (err) {
       if (!isEexist(err)) throw err;
@@ -6748,7 +6740,7 @@ function withGatesLock(featureId, fn, opts = {}) {
     return fn();
   } finally {
     try {
-      (0, import_fs.unlinkSync)(lockPath);
+      unlinkSync(lockPath);
     } catch {
     }
   }
@@ -6758,7 +6750,7 @@ function isEexist(err) {
 }
 function readHeldByPid(lockPath) {
   try {
-    const text = (0, import_fs.readFileSync)(lockPath, "utf8");
+    const text = readFileSync(lockPath, "utf8");
     const n = Number(text.trim());
     return Number.isFinite(n) && n > 0 ? n : null;
   } catch {
@@ -6767,19 +6759,19 @@ function readHeldByPid(lockPath) {
 }
 function gatesLockFilePath(tddDir, featureId) {
   const dir = findFeatureDir(tddDir, featureId);
-  (0, import_fs.mkdirSync)(dir, { recursive: true });
-  return (0, import_path.join)(dir, ".gates.lock");
+  mkdirSync(dir, { recursive: true });
+  return join(dir, ".gates.lock");
 }
 function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_path.join)(tddDir, "features");
-  if (!(0, import_fs.existsSync)(featuresDir)) {
+  const featuresDir = join(tddDir, "features");
+  if (!existsSync(featuresDir)) {
     throw new Error(`${featuresDir} does not exist`);
   }
-  const candidates = (0, import_fs.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
+  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
   if (candidates.length === 0) {
     throw new Error(`feature ${featureId} not found under ${featuresDir}`);
   }
-  return (0, import_path.join)(featuresDir, candidates[0]);
+  return join(featuresDir, candidates[0]);
 }
 function defaultSleep(ms) {
   const buf = new Int32Array(new SharedArrayBuffer(4));
@@ -6787,9 +6779,9 @@ function defaultSleep(ms) {
 }
 
 // scripts/tdd/gates.ts
-init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
+init_esm_shims();
+import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync as readdirSync2, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync2 } from "fs";
+import { join as join2 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
@@ -6808,10 +6800,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs2.existsSync)(file)) {
+  if (!existsSync2(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs2.readFileSync)(file, "utf8");
+  const raw = readFileSync2(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -6829,30 +6821,30 @@ function writeGates(state, opts = {}) {
   const file = gatesFilePath(tddDir, state.feature_id);
   const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
   const payload = JSON.stringify(state, null, 2) + "\n";
-  (0, import_fs2.writeFileSync)(tempFile, payload, "utf8");
+  writeFileSync2(tempFile, payload, "utf8");
   try {
-    (0, import_fs2.renameSync)(tempFile, file);
+    renameSync(tempFile, file);
   } catch (err) {
     try {
-      (0, import_fs2.unlinkSync)(tempFile);
+      unlinkSync2(tempFile);
     } catch {
     }
     throw err;
   }
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path2.join)(findFeatureDir2(tddDir, featureId), "gates.json");
+  return join2(findFeatureDir2(tddDir, featureId), "gates.json");
 }
 function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = (0, import_path2.join)(tddDir, "features");
-  if (!(0, import_fs2.existsSync)(featuresDir)) {
+  const featuresDir = join2(tddDir, "features");
+  if (!existsSync2(featuresDir)) {
     throw new Error(`${featuresDir} does not exist`);
   }
-  const candidates = (0, import_fs2.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
+  const candidates = readdirSync2(featuresDir).filter((d) => d.startsWith(featureId));
   if (candidates.length === 0) {
     throw new Error(`feature ${featureId} not found under ${featuresDir}`);
   }
-  return (0, import_path2.join)(featuresDir, candidates[0]);
+  return join2(featuresDir, candidates[0]);
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -6985,7 +6977,7 @@ function approveGate(args) {
   );
 }
 function appendSelectionLog(tddDir, entry) {
-  const logPath = (0, import_path3.join)(tddDir, "selection-log.md");
+  const logPath = join3(tddDir, "selection-log.md");
   const hashList = Object.entries(entry.capturedHashes).map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``).join("\n");
   const lines = [
     "",
@@ -6996,26 +6988,26 @@ function appendSelectionLog(tddDir, entry) {
     ""
   ];
   const text = lines.join("\n");
-  if ((0, import_fs3.existsSync)(logPath)) {
-    (0, import_fs3.writeFileSync)(logPath, (0, import_fs3.readFileSync)(logPath, "utf8") + text);
+  if (existsSync3(logPath)) {
+    writeFileSync3(logPath, readFileSync3(logPath, "utf8") + text);
   } else {
-    (0, import_fs3.writeFileSync)(logPath, text);
+    writeFileSync3(logPath, text);
   }
 }
 
 // scripts/tdd/artifact-conformance.ts
-init_cjs_shims();
+init_esm_shims();
 
 // scripts/tdd/schema-loader.ts
-init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path4.join)(__dirname, "schemas");
+import { readFileSync as readFileSync4 } from "fs";
+import { join as join4 } from "path";
+var SCHEMA_DIR = join4(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse((0, import_fs4.readFileSync)((0, import_path4.join)(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse(readFileSync4(join4(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7070,6 +7062,19 @@ var ARTIFACT_FORMATS = {
   "feature-request.md": { kind: "md-narrative" },
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
+  // HIL non-functional-requirements brief (the Architect's intake). The HIL
+  // states required NFRs (each with a stable R<n> id), preferences, and
+  // out-of-bounds items. The Architect must carry every Required item into
+  // architecture.json via a matching brief_ref (see checkNfrCoverage). Project
+  // -level (.tdd/nfrs.md) or per-feature (.tdd/features/<F>/nfrs.md).
+  "nfrs.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Required", match: "required" },
+      { label: "Preferences", match: "preference" },
+      { label: "Out of bounds", match: "out of bounds" }
+    ]
+  },
   // HIL design brief (UI projects): the human's reference sites + what to take
   // from each. The design analogue of product-overview.md, the source the UX
   // Designer teases the design out of. A brief with no references is
@@ -7191,11 +7196,11 @@ function checkTestListMd(content) {
 }
 
 // scripts/tdd/agent-log.ts
-init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
+init_esm_shims();
+import { appendFileSync, existsSync as existsSync4, readFileSync as readFileSync5 } from "fs";
+import { join as join5 } from "path";
 function logFilePath(tddDir) {
-  return (0, import_path5.join)(tddDir, "agent-log.jsonl");
+  return join5(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7205,12 +7210,12 @@ function emitAgentLogEvent(input, opts = {}) {
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
   }
-  (0, import_fs5.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
+  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
 `, "utf8");
   return event;
 }
 
-// scripts/tdd/mock-approver.ts
+// scripts/tdd/human-proxy.ts
 function logHitlDecision(tddDir, featureId, approver, decision) {
   try {
     if (decision.kind === "approved") {
@@ -7241,9 +7246,9 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
   } catch {
   }
 }
-var MOCK_APPROVER = "ci-mock-approver";
+var HUMAN_PROXY = "human-proxy";
 function featureDir(tddDir, featureId) {
-  return (0, import_node_path.join)(tddDir, "features", featureId);
+  return join6(tddDir, "features", featureId);
 }
 function conformanceReason(inputs) {
   const problems = [];
@@ -7255,9 +7260,9 @@ function conformanceReason(inputs) {
 }
 function resolveArtifactInputs(gate, fdir, promoteRef) {
   const readIfPresent = (name) => {
-    const p = (0, import_node_path.join)(fdir, name);
+    const p = join6(fdir, name);
     try {
-      return (0, import_node_fs2.existsSync)(p) ? (0, import_node_fs2.readFileSync)(p, "utf8") : void 0;
+      return existsSync5(p) ? readFileSync6(p, "utf8") : void 0;
     } catch {
       return void 0;
     }
@@ -7308,9 +7313,9 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
     }
   }
 }
-function mockApproveOpenGates(args) {
+function drainGatesAsHumanProxy(args) {
   const tddDir = args.tddDir ?? "./.tdd";
-  const approver = args.approver ?? MOCK_APPROVER;
+  const approver = args.approver ?? HUMAN_PROXY;
   const fdir = featureDir(tddDir, args.featureId);
   let state = readGates(args.featureId, { tddDir });
   const approved = [];
@@ -7350,8 +7355,94 @@ function mockApproveOpenGates(args) {
   }
   return { approved, skipped, finalState: state };
 }
+function supplyArtifact(args) {
+  const approver = args.approver ?? HUMAN_PROXY;
+  const artifact = args.artifact ?? basename(args.to);
+  const tddDir = args.tddDir ?? "./.tdd";
+  const refuse = (reason) => {
+    try {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "intake.refused",
+          message: `${approver} could not supply ${artifact}: ${reason}`,
+          feature_id: args.featureId,
+          data: { artifact, to: args.to, reason, approver, validated: false }
+        },
+        { tddDir }
+      );
+    } catch {
+    }
+    return { ok: false, artifact, to: args.to, reason };
+  };
+  if (!existsSync5(args.from)) {
+    return refuse(`recorded source not found: ${args.from}`);
+  }
+  const content = readFileSync6(args.from, "utf8");
+  const conformance = checkArtifactConformance(artifact, content);
+  if (!conformance.ok) {
+    return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
+  }
+  mkdirSync2(dirname(args.to), { recursive: true });
+  writeFileSync4(args.to, content);
+  try {
+    emitAgentLogEvent(
+      {
+        role: "product-owner",
+        level: "info",
+        event: "intake.supplied",
+        message: `${approver} supplied ${artifact} (recorded HIL answer, format-conformant) -> ${args.to}`,
+        feature_id: args.featureId,
+        data: { artifact, from: args.from, to: args.to, approver, validated: true }
+      },
+      { tddDir }
+    );
+  } catch {
+  }
+  return { ok: true, artifact, to: args.to };
+}
 
-// scripts/tdd/mock-approver.cli.ts
+// scripts/tdd/human-proxy.cli.ts
+function runSupplyCli(argv) {
+  let from;
+  let to;
+  let artifact;
+  let tddDir;
+  let feature;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--from":
+        from = argv[++i];
+        break;
+      case "--to":
+        to = argv[++i];
+        break;
+      case "--artifact":
+        artifact = argv[++i];
+        break;
+      case "--tdd-dir":
+        tddDir = argv[++i];
+        break;
+      case "--feature":
+        feature = argv[++i];
+        break;
+    }
+  }
+  if (!from || !to) {
+    process.stderr.write("Error: supply requires --from <recorded> and --to <path>.\n");
+    return 2;
+  }
+  const result = supplyArtifact({ from, to, artifact, tddDir, featureId: feature });
+  if (result.ok) {
+    process.stdout.write(`human-proxy: supplied ${result.artifact} -> ${result.to}
+`);
+    return 0;
+  }
+  process.stderr.write(`human-proxy: refused to supply ${result.artifact}: ${result.reason}
+`);
+  return 4;
+}
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -7386,26 +7477,28 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-tdd-mock-approver
+var HELP = `lakebase-tdd-human-proxy
 
-Mock HITL approver for automated smoke / headless test runs. Calls
+Human Proxy for automated smoke / headless test runs. Calls
 approveGate on every open gate for a feature with hitlApproved=true,
-default approver "ci-mock-approver". NOT for production use.
+default approver "human-proxy". NOT for production use.
 
 Usage:
-  lakebase-tdd-mock-approver --feature <id> [flags]
+  lakebase-tdd-human-proxy --feature <id> [flags]
 
 Flags:
   --feature <id>          Feature id (required, e.g. F1-initial-domain)
   --gate <name>           Approve only one gate (spec | plan | test_list | promote)
   --tdd-dir <path>        .tdd/ root (default: ./.tdd)
-  --approver <name>       Approver identity (default: ci-mock-approver)
+  --approver <name>       Approver identity (default: human-proxy)
   --promote-ref <str>     promote gate ref string (promote gate is skipped if omitted)
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
 `;
-function runMockApproverCli(argv) {
+function runHumanProxyCli(argv) {
+  if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
+  if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);
   if (args.help) {
     process.stdout.write(`${HELP}
@@ -7420,7 +7513,7 @@ ${HELP}
     return 2;
   }
   try {
-    const result = mockApproveOpenGates({
+    const result = drainGatesAsHumanProxy({
       featureId: args.feature,
       tddDir: args.tddDir,
       approver: args.approver,
@@ -7438,12 +7531,12 @@ ${HELP}
       );
     } else {
       process.stdout.write(
-        `mock-approver: approved ${result.approved.length} gate(s)${result.approved.length ? ": " + result.approved.join(", ") : ""}
+        `human-proxy: approved ${result.approved.length} gate(s)${result.approved.length ? ": " + result.approved.join(", ") : ""}
 `
       );
       if (result.skipped.length > 0) {
         process.stdout.write(
-          `mock-approver: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.gate} (${s.reason})`).join(", ")}
+          `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.gate} (${s.reason})`).join(", ")}
 `
         );
       }
@@ -7451,16 +7544,15 @@ ${HELP}
     return 0;
   } catch (e) {
     const err = e;
-    process.stderr.write(`mock-approver: ${err.message}
+    process.stderr.write(`human-proxy: ${err.message}
 `);
     return 3;
   }
 }
-if (isCliEntry(importMetaUrl)) {
-  process.exit(runMockApproverCli(process.argv.slice(2)));
+if (isCliEntry(import.meta.url)) {
+  process.exit(runHumanProxyCli(process.argv.slice(2)));
 }
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  runMockApproverCli
-});
-//# sourceMappingURL=mock-approver.cli.cjs.map
+export {
+  runHumanProxyCli
+};
+//# sourceMappingURL=human-proxy.cli.js.map

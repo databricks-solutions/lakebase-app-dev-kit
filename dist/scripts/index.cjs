@@ -119,6 +119,7 @@ __export(scripts_exports, {
   deleteRepo: () => deleteRepo,
   deleteRunner: () => deleteRunner,
   deleteTag: () => deleteTag,
+  deployClaudeAgents: () => deployClaudeAgents,
   deployClaudeCommands: () => deployClaudeCommands,
   deployDeployTargets: () => deployDeployTargets,
   deployEnv: () => deployEnv,
@@ -1887,6 +1888,29 @@ async function deployClaudeCommands(targetDir, opts) {
   }
   return { written, skipped };
 }
+async function deployClaudeAgents(targetDir, opts) {
+  const kitRoot = path5.dirname(path5.dirname(templatesRoot(opts)));
+  const src = path5.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs6.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path5.join(targetDir, ".claude", "agents");
+  fs6.mkdirSync(destDir, { recursive: true });
+  const written = [];
+  const skipped = [];
+  for (const entry of fs6.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path5.join(".claude", "agents", entry);
+    const destPath = path5.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.copyFileSync(path5.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path5.join(commonDir(opts), ".github", "workflows"),
@@ -2072,12 +2096,16 @@ async function scaffoldStaticAll(args) {
   report("Installing git hooks");
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
+  let claudeAgents = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -5111,6 +5139,39 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/agent-models.ts
+var import_fs2 = require("fs");
+var import_path2 = require("path");
+var RECOMMENDED_MODELS = {
+  "spec-author": "opus",
+  "architect-reviewer": "opus",
+  "test-strategist": "sonnet",
+  "ux-designer": "sonnet",
+  "scrum-master": "inherit",
+  navigator: "sonnet",
+  driver: "sonnet",
+  "product-owner": "opus",
+  "release-engineer": "sonnet"
+};
+var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
+var AGENT_CONFIG_REL = (0, import_path2.join)(".lakebase", "agent-config.json");
+function buildAgentConfig(overrides) {
+  const roles = {};
+  for (const role of ALL_AGENT_ROLES) {
+    const recommended = RECOMMENDED_MODELS[role];
+    const ov = overrides?.[role];
+    const entry = { recommended };
+    if (ov && ov !== recommended) entry.override = ov;
+    roles[role] = entry;
+  }
+  return { version: 1, roles };
+}
+function writeAgentConfig(projectDir, config) {
+  const p = (0, import_path2.join)(projectDir, AGENT_CONFIG_REL);
+  (0, import_fs2.mkdirSync)((0, import_path2.dirname)(p), { recursive: true });
+  (0, import_fs2.writeFileSync)(p, JSON.stringify(config, null, 2) + "\n");
+}
+
 // scripts/lakebase/create-project.ts
 async function createProject(input, progress) {
   const report = progress ?? (() => {
@@ -5277,6 +5338,15 @@ Last probe error:
       `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
     );
   }
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -5335,6 +5405,9 @@ Last probe error:
     report(`Warning: ${w}`);
   }
   report("Project created successfully!");
+  if (enableTdd) {
+    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+  }
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -9016,6 +9089,7 @@ function withProxyEnv(base = {}) {
   deleteRepo,
   deleteRunner,
   deleteTag,
+  deployClaudeAgents,
   deployClaudeCommands,
   deployDeployTargets,
   deployEnv,

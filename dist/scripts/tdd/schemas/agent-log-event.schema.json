@@ -21,7 +21,8 @@
         "scrum-master",
         "navigator",
         "driver",
-        "product-owner"
+        "product-owner",
+        "release-engineer"
       ],
       "description": "The role performing the work."
     },

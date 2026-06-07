@@ -950,6 +950,29 @@ async function deployClaudeCommands(targetDir, opts) {
   }
   return { written, skipped };
 }
+async function deployClaudeAgents(targetDir, opts) {
+  const kitRoot = path7.dirname(path7.dirname(templatesRoot(opts)));
+  const src = path7.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs8.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path7.join(targetDir, ".claude", "agents");
+  fs8.mkdirSync(destDir, { recursive: true });
+  const written = [];
+  const skipped = [];
+  for (const entry of fs8.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path7.join(".claude", "agents", entry);
+    const destPath = path7.join(targetDir, relDest);
+    if (fs8.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs8.copyFileSync(path7.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path7.join(commonDir(opts), ".github", "workflows"),
@@ -1135,12 +1158,16 @@ async function scaffoldStaticAll(args) {
   report("Installing git hooks");
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
+  let claudeAgents = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -2335,6 +2362,39 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/agent-models.ts
+var import_fs = require("fs");
+var import_path = require("path");
+var RECOMMENDED_MODELS = {
+  "spec-author": "opus",
+  "architect-reviewer": "opus",
+  "test-strategist": "sonnet",
+  "ux-designer": "sonnet",
+  "scrum-master": "inherit",
+  navigator: "sonnet",
+  driver: "sonnet",
+  "product-owner": "opus",
+  "release-engineer": "sonnet"
+};
+var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
+var AGENT_CONFIG_REL = (0, import_path.join)(".lakebase", "agent-config.json");
+function buildAgentConfig(overrides) {
+  const roles = {};
+  for (const role of ALL_AGENT_ROLES) {
+    const recommended = RECOMMENDED_MODELS[role];
+    const ov = overrides?.[role];
+    const entry = { recommended };
+    if (ov && ov !== recommended) entry.override = ov;
+    roles[role] = entry;
+  }
+  return { version: 1, roles };
+}
+function writeAgentConfig(projectDir, config) {
+  const p = (0, import_path.join)(projectDir, AGENT_CONFIG_REL);
+  (0, import_fs.mkdirSync)((0, import_path.dirname)(p), { recursive: true });
+  (0, import_fs.writeFileSync)(p, JSON.stringify(config, null, 2) + "\n");
+}
+
 // scripts/lakebase/create-project.ts
 async function createProject(input, progress) {
   const report = progress ?? (() => {
@@ -2501,6 +2561,15 @@ Last probe error:
       `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
     );
   }
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -2559,6 +2628,9 @@ Last probe error:
     report(`Warning: ${w}`);
   }
   report("Project created successfully!");
+  if (enableTdd) {
+    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+  }
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -2648,6 +2720,23 @@ function parseArgs(argv) {
       case "--skip-commands":
         out.skipCommands = true;
         break;
+      case "--agent-model": {
+        const pair = argv[++i] ?? "";
+        const eq = pair.indexOf("=");
+        const role = eq >= 0 ? pair.slice(0, eq) : "";
+        const model = eq >= 0 ? pair.slice(eq + 1) : "";
+        if (!ALL_AGENT_ROLES.includes(role) || !model) {
+          process.stderr.write(
+            `--agent-model: expected <role>=<model> with a known role. Got: ${JSON.stringify(pair)}
+  roles: ${ALL_AGENT_ROLES.join(", ")}
+`
+          );
+          out.help = true;
+        } else {
+          (out.agentModels ??= {})[role] = model;
+        }
+        break;
+      }
       case "--help":
       case "-h":
         out.help = true;
@@ -2688,6 +2777,12 @@ Flags:
                       (default: on for --language nodejs, off otherwise)
   --skip-commands     Skip scaffolding .claude/commands/{design,build}.md
                       (default: commands are written)
+  --agent-model       <role>=<model>, repeatable. Override a TDD role agent's
+                      recommended model for this project (asked at setup; the
+                      HIL's call). Roles: spec-author, architect-reviewer,
+                      test-strategist, ux-designer, navigator, driver,
+                      product-owner, release-engineer. Omitted roles use their
+                      recommended model. Persisted to .lakebase/agent-config.json.
   --json-input        Pass all args as a single JSON object (BDD harness)
 
 Output: JSON on stdout (CreateProjectResult). Progress to stderr.
@@ -2724,7 +2819,8 @@ async function main() {
       tiers: args.tiers,
       enableE2e: args.enableE2e,
       enableInfra: args.enableInfra,
-      skipCommands: args.skipCommands
+      skipCommands: args.skipCommands,
+      agentModels: args.agentModels
     };
   }
   const result = await createProject(input, (step, detail) => {

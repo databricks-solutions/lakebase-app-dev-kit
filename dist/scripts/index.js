@@ -1549,6 +1549,29 @@ async function deployClaudeCommands(targetDir, opts) {
   }
   return { written, skipped };
 }
+async function deployClaudeAgents(targetDir, opts) {
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+  const src = path6.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs6.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path6.join(targetDir, ".claude", "agents");
+  fs6.mkdirSync(destDir, { recursive: true });
+  const written = [];
+  const skipped = [];
+  for (const entry of fs6.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path6.join(".claude", "agents", entry);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.copyFileSync(path6.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path6.join(commonDir(opts), ".github", "workflows"),
@@ -1734,12 +1757,16 @@ async function scaffoldStaticAll(args) {
   report("Installing git hooks");
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
+  let claudeAgents = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -4773,6 +4800,39 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/agent-models.ts
+import { existsSync as existsSync17, readFileSync as readFileSync14, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10 } from "fs";
+import { dirname as dirname7, join as join18 } from "path";
+var RECOMMENDED_MODELS = {
+  "spec-author": "opus",
+  "architect-reviewer": "opus",
+  "test-strategist": "sonnet",
+  "ux-designer": "sonnet",
+  "scrum-master": "inherit",
+  navigator: "sonnet",
+  driver: "sonnet",
+  "product-owner": "opus",
+  "release-engineer": "sonnet"
+};
+var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
+var AGENT_CONFIG_REL = join18(".lakebase", "agent-config.json");
+function buildAgentConfig(overrides) {
+  const roles = {};
+  for (const role of ALL_AGENT_ROLES) {
+    const recommended = RECOMMENDED_MODELS[role];
+    const ov = overrides?.[role];
+    const entry = { recommended };
+    if (ov && ov !== recommended) entry.override = ov;
+    roles[role] = entry;
+  }
+  return { version: 1, roles };
+}
+function writeAgentConfig(projectDir, config) {
+  const p = join18(projectDir, AGENT_CONFIG_REL);
+  mkdirSync10(dirname7(p), { recursive: true });
+  writeFileSync12(p, JSON.stringify(config, null, 2) + "\n");
+}
+
 // scripts/lakebase/create-project.ts
 async function createProject(input, progress) {
   const report = progress ?? (() => {
@@ -4939,6 +4999,15 @@ Last probe error:
       `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
     );
   }
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -4997,6 +5066,9 @@ Last probe error:
     report(`Warning: ${w}`);
   }
   report("Project created successfully!");
+  if (enableTdd) {
+    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+  }
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -8677,6 +8749,7 @@ export {
   deleteRepo,
   deleteRunner,
   deleteTag,
+  deployClaudeAgents,
   deployClaudeCommands,
   deployDeployTargets,
   deployEnv,
