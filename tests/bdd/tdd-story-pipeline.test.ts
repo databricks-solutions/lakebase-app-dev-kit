@@ -17,6 +17,12 @@ import {
   approveStoryGate,
   withdrawStoryGate,
   getStoryGate,
+  cutStoryExperiment,
+  awaitAcceptance,
+  acceptStory,
+  discardStory,
+  reviseStory,
+  getStoryAcceptance,
 } from "../../scripts/tdd/story-pipeline";
 import { getValidator } from "../../scripts/tdd/schema-loader";
 
@@ -217,6 +223,116 @@ describe("story-pipeline: per-story spec gate (FEIP-7565 phase 2b)", () => {
     expect(validate(p)).toBe(true);
     writePipeline(tdd, p);
     expect(readPipeline(tdd, "F1-initial-domain")).toEqual(p);
+  });
+});
+
+describe("story-pipeline: per-story experiment + PO acceptance (FEIP-7566)", () => {
+  const AT = "2026-06-07T13:00:00.000Z";
+
+  // Set up a story dispatched to the build lane, on its experiment branch.
+  function building(): ReturnType<typeof initPipeline> {
+    const p = initPipeline("F1");
+    surfaceForGate(p, "S1");
+    approveStoryGate(p, "S1", { approver: "po", at: AT });
+    dispatchNext(p); // S1 building, build_active = S1
+    cutStoryExperiment(p, "S1", {
+      slug: "s1-exp",
+      branch: "exp/F1/S1-exp",
+      parent: "feature/F1",
+      parent_sha: "abc1234",
+      at: AT,
+    });
+    return p;
+  }
+
+  it("cutStoryExperiment records the active experiment ref on the dispatched story", () => {
+    const p = building();
+    expect(p.stories.S1.experiment).toEqual({
+      slug: "s1-exp",
+      branch: "exp/F1/S1-exp",
+      parent: "feature/F1",
+      parent_sha: "abc1234",
+      n: 1,
+      status: "active",
+      cut_at: AT,
+    });
+  });
+
+  it("cutStoryExperiment throws for an unknown story", () => {
+    const p = initPipeline("F1");
+    expect(() => cutStoryExperiment(p, "S9", { slug: "x", branch: "b", parent: "feature/F1" })).toThrow(/not in the pipeline/);
+  });
+
+  it("awaitAcceptance moves building -> awaiting-acceptance, keeping the lane occupied", () => {
+    const p = building();
+    awaitAcceptance(p, "S1");
+    expect(p.stories.S1.status).toBe("awaiting-acceptance");
+    expect(p.build_active).toBe("S1"); // lane stays occupied until the PO decides
+    expect(getStoryAcceptance(p, "S1").decision).toBeNull();
+  });
+
+  it("acceptStory: merges the experiment, marks done, frees the lane", () => {
+    const p = building();
+    awaitAcceptance(p, "S1");
+    acceptStory(p, "S1", { approver: "po", at: AT });
+    expect(p.stories.S1.status).toBe("done");
+    expect(p.stories.S1.experiment!.status).toBe("merged");
+    expect(p.stories.S1.experiment!.closed_at).toBe(AT);
+    expect(p.build_active).toBeNull(); // lane freed
+    const acc = getStoryAcceptance(p, "S1");
+    expect(acc.decision).toBe("accepted");
+    expect(acc.history.map((h) => h.decision)).toEqual(["accepted"]);
+  });
+
+  it("discardStory: tears down the experiment, withdraws the spec gate, terminal discarded, frees the lane", () => {
+    const p = building();
+    awaitAcceptance(p, "S1");
+    discardStory(p, "S1", { approver: "po", at: AT, reason: "PO does not want it" });
+    expect(p.stories.S1.status).toBe("discarded");
+    expect(p.stories.S1.experiment!.status).toBe("discarded");
+    expect(getStoryGate(p, "S1").status).toBe("withdrawn");
+    expect(getStoryGate(p, "S1").withdrawal_reason).toBe("PO does not want it");
+    expect(getStoryAcceptance(p, "S1").decision).toBe("discarded");
+    expect(p.build_active).toBeNull();
+  });
+
+  it("reviseStory: tears down the experiment, reopens the spec gate, back to designing, frees the lane", () => {
+    const p = building();
+    awaitAcceptance(p, "S1");
+    reviseStory(p, "S1", { approver: "po", at: AT, reason: "close but needs rework" });
+    expect(p.stories.S1.status).toBe("designing");
+    expect(p.stories.S1.experiment!.status).toBe("discarded");
+    expect(getStoryGate(p, "S1").status).toBe("open"); // reopened for a re-spec
+    expect(getStoryAcceptance(p, "S1").decision).toBe("revise");
+    expect(p.build_active).toBeNull();
+  });
+
+  it("accept/discard/revise throw for an unknown story", () => {
+    const p = initPipeline("F1");
+    expect(() => acceptStory(p, "S9", { approver: "po", at: AT })).toThrow(/not in the pipeline/);
+    expect(() => discardStory(p, "S9", { approver: "po", at: AT, reason: "x" })).toThrow(/not in the pipeline/);
+    expect(() => reviseStory(p, "S9", { approver: "po", at: AT, reason: "x" })).toThrow(/not in the pipeline/);
+  });
+
+  it("freeing the lane on a decision lets the next ready story dispatch", () => {
+    const p = building();
+    enqueueReady(p, "S2"); // S2 gated + queued while S1 builds
+    awaitAcceptance(p, "S1");
+    discardStory(p, "S1", { approver: "po", at: AT, reason: "no" });
+    expect(dispatchNext(p)).toBe("S2"); // lane was freed, S2 dispatches
+  });
+
+  it("experiment + acceptance survive setStoryStatus, write/read roundtrip, and validate against the schema", () => {
+    const tdd = mkTdd();
+    const p = building();
+    awaitAcceptance(p, "S1");
+    acceptStory(p, "S1", { approver: "po@example", at: AT });
+    setStoryStatus(p, "S1", "done"); // re-set status; experiment + acceptance must survive
+    expect(p.stories.S1.experiment!.status).toBe("merged");
+    expect(p.stories.S1.acceptance!.decision).toBe("accepted");
+    expect(getValidator("story-pipeline.schema.json")(p)).toBe(true);
+    writePipeline(tdd, p);
+    expect(readPipeline(tdd, "F1")).toEqual(p);
   });
 });
 

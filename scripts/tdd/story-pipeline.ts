@@ -12,7 +12,9 @@ export const STORY_STATUSES = [
   "awaiting-gate",
   "ready",
   "building",
+  "awaiting-acceptance",
   "done",
+  "discarded",
 ] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 
@@ -45,10 +47,59 @@ export interface StoryGateRecord {
   history: StoryGateHistoryEntry[];
 }
 
+// Per-story experiment (FEIP-7566): build isolation. The story is built on an
+// ephemeral paired Lakebase branch forked from feature HEAD; on accept it is
+// MERGED into the feature branch (code + migrations), on discard/revise it is
+// torn down. N=1 (default) = one experiment = the story's build; N>=2 races
+// competing strategies (a promote/synthesize winner merges). Branch ops live in
+// the experiment-lifecycle CLI; this is just the recorded pipeline state.
+export const STORY_EXPERIMENT_STATUSES = ["active", "merged", "discarded"] as const;
+export type StoryExperimentStatus = (typeof STORY_EXPERIMENT_STATUSES)[number];
+
+export interface StoryExperiment {
+  slug: string;
+  branch: string;
+  lakebase_branch_uid?: string;
+  /** The feature branch this experiment forked from. */
+  parent: string;
+  /** Feature-branch HEAD sha at cut time. */
+  parent_sha?: string;
+  /** 1 (default) or the count of competing experiments in an N>=2 race. */
+  n: number;
+  status: StoryExperimentStatus;
+  cut_at?: string;
+  closed_at?: string;
+}
+
+// PO acceptance of a built story (FEIP-7566), distinct from the pre-build spec
+// gate. A three-way decision recorded after the PO reviews the running story.
+export const STORY_ACCEPTANCE_DECISIONS = ["accepted", "discarded", "revise"] as const;
+export type StoryAcceptanceDecision = (typeof STORY_ACCEPTANCE_DECISIONS)[number];
+
+export interface StoryAcceptanceHistoryEntry {
+  decision: StoryAcceptanceDecision;
+  at: string;
+  approver: string;
+  reason?: string;
+}
+
+export interface StoryAcceptance {
+  /** null while the PO is still reviewing (awaiting-acceptance). */
+  decision: StoryAcceptanceDecision | null;
+  approver?: string;
+  at?: string;
+  reason?: string;
+  history: StoryAcceptanceHistoryEntry[];
+}
+
 export interface StoryEntry {
   status: StoryStatus;
   /** The per-story spec gate; present once the story has been surfaced for review. */
   gate?: StoryGateRecord;
+  /** The experiment branch the story is built on (FEIP-7566). */
+  experiment?: StoryExperiment;
+  /** The PO's post-build accept/discard/revise decision (FEIP-7566). */
+  acceptance?: StoryAcceptance;
 }
 
 export interface StoryPipeline {
@@ -211,17 +262,182 @@ export function withdrawStoryGate(
   if (!story || !story.gate) {
     throw new Error(`withdrawStoryGate: story ${storyId} has no gate to withdraw`);
   }
-  story.gate.status = "withdrawn";
-  story.gate.withdrawal_reason = opts.reason;
-  story.gate.history.push({
+  markGateWithdrawn(story.gate, opts);
+  const queued = pipeline.build_queue.indexOf(storyId);
+  if (queued !== -1) pipeline.build_queue.splice(queued, 1);
+  if (pipeline.build_active === storyId) pipeline.build_active = null;
+  setStoryStatus(pipeline, storyId, "awaiting-gate");
+  return pipeline;
+}
+
+/** Mark a spec gate withdrawn with the given decision metadata (shared by gate withdrawal + story discard). */
+function markGateWithdrawn(
+  gate: StoryGateRecord,
+  opts: { approver: string; at: string; reason: string },
+): void {
+  gate.status = "withdrawn";
+  gate.withdrawal_reason = opts.reason;
+  gate.history.push({
     action: "withdrawn",
     at: opts.at,
     approver: opts.approver,
     reason: opts.reason,
   });
-  const queued = pipeline.build_queue.indexOf(storyId);
-  if (queued !== -1) pipeline.build_queue.splice(queued, 1);
+}
+
+// --- Per-story experiment + PO acceptance (FEIP-7566) ----------------------
+
+export interface CutExperimentArgs {
+  slug: string;
+  branch: string;
+  /** The feature branch the experiment forks from. */
+  parent: string;
+  lakebase_branch_uid?: string;
+  parent_sha?: string;
+  /** 1 (default) or the count of competing experiments for an N>=2 race. */
+  n?: number;
+  at?: string;
+}
+
+/**
+ * Record the experiment branch a dispatched story is being built on. Throws
+ * when the story is unknown. (The actual branch fork is the experiment CLI's
+ * job; this records the pipeline state.)
+ */
+export function cutStoryExperiment(
+  pipeline: StoryPipeline,
+  storyId: string,
+  args: CutExperimentArgs,
+): StoryPipeline {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`cutStoryExperiment: story ${storyId} is not in the pipeline`);
+  story.experiment = {
+    slug: args.slug,
+    branch: args.branch,
+    parent: args.parent,
+    ...(args.lakebase_branch_uid !== undefined ? { lakebase_branch_uid: args.lakebase_branch_uid } : {}),
+    ...(args.parent_sha !== undefined ? { parent_sha: args.parent_sha } : {}),
+    n: args.n ?? 1,
+    status: "active",
+    ...(args.at !== undefined ? { cut_at: args.at } : {}),
+  };
+  return pipeline;
+}
+
+/**
+ * Build + deploy complete: move the active story to `awaiting-acceptance` for
+ * PO review. The lane stays occupied (build_active unchanged) until the PO
+ * decides, keeping the single build lane strictly serial.
+ */
+export function awaitAcceptance(pipeline: StoryPipeline, storyId: string): StoryPipeline {
+  setStoryStatus(pipeline, storyId, "awaiting-acceptance");
+  const story = pipeline.stories[storyId];
+  if (!story.acceptance) story.acceptance = { decision: null, history: [] };
+  return pipeline;
+}
+
+/** The story's PO acceptance record, or a default-pending record when absent. */
+export function getStoryAcceptance(pipeline: StoryPipeline, storyId: string): StoryAcceptance {
+  return pipeline.stories[storyId]?.acceptance ?? { decision: null, history: [] };
+}
+
+interface AcceptanceDecisionOpts {
+  approver: string;
+  at: string;
+  reason?: string;
+}
+
+/** Record a PO acceptance decision on the story (shared by accept/discard/revise). */
+function recordAcceptance(
+  story: StoryEntry,
+  decision: StoryAcceptanceDecision,
+  opts: AcceptanceDecisionOpts,
+): void {
+  const acc: StoryAcceptance = story.acceptance ?? { decision: null, history: [] };
+  acc.decision = decision;
+  acc.approver = opts.approver;
+  acc.at = opts.at;
+  if (opts.reason !== undefined) acc.reason = opts.reason;
+  acc.history.push({
+    decision,
+    at: opts.at,
+    approver: opts.approver,
+    ...(opts.reason !== undefined ? { reason: opts.reason } : {}),
+  });
+  story.acceptance = acc;
+}
+
+/** Free the single build lane if the given story is the active build. */
+function freeLaneIfActive(pipeline: StoryPipeline, storyId: string): void {
   if (pipeline.build_active === storyId) pipeline.build_active = null;
-  setStoryStatus(pipeline, storyId, "awaiting-gate");
+}
+
+/**
+ * PO accepts the built story: record the decision, mark the experiment `merged`
+ * (the experiment CLI does the actual git-merge + migrate), set the story
+ * `done`, and free the lane. Throws when the story is unknown.
+ */
+export function acceptStory(
+  pipeline: StoryPipeline,
+  storyId: string,
+  opts: { approver: string; at: string },
+): StoryPipeline {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`acceptStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "accepted", opts);
+  if (story.experiment) {
+    story.experiment.status = "merged";
+    story.experiment.closed_at = opts.at;
+  }
+  setStoryStatus(pipeline, storyId, "done");
+  freeLaneIfActive(pipeline, storyId);
+  return pipeline;
+}
+
+/**
+ * PO discards the built story: record the decision, mark the experiment
+ * `discarded` (the CLI tears the branch down, code + schema vanish), withdraw
+ * the spec gate (the story leaves the sprint), set the story `discarded`
+ * (terminal), and free the lane. Throws when the story is unknown.
+ */
+export function discardStory(
+  pipeline: StoryPipeline,
+  storyId: string,
+  opts: { approver: string; at: string; reason: string },
+): StoryPipeline {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`discardStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "discarded", opts);
+  if (story.experiment) {
+    story.experiment.status = "discarded";
+    story.experiment.closed_at = opts.at;
+  }
+  if (story.gate) markGateWithdrawn(story.gate, opts);
+  setStoryStatus(pipeline, storyId, "discarded");
+  freeLaneIfActive(pipeline, storyId);
+  return pipeline;
+}
+
+/**
+ * PO sends the built story back for rework: record the decision, mark the
+ * experiment `discarded` (torn down), reopen the spec gate, return the story to
+ * `designing` (the design lane re-specs + re-cuts a fresh experiment), and free
+ * the lane. Throws when the story is unknown.
+ */
+export function reviseStory(
+  pipeline: StoryPipeline,
+  storyId: string,
+  opts: { approver: string; at: string; reason: string },
+): StoryPipeline {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`reviseStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "revise", opts);
+  if (story.experiment) {
+    story.experiment.status = "discarded";
+    story.experiment.closed_at = opts.at;
+  }
+  if (story.gate) story.gate = { status: "open", history: story.gate.history };
+  setStoryStatus(pipeline, storyId, "designing");
+  freeLaneIfActive(pipeline, storyId);
   return pipeline;
 }

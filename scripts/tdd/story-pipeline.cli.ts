@@ -13,10 +13,18 @@
 //   lakebase-tdd-pipeline enqueue        --feature F --story S                 (low-level: mark ready + queue, no gate)
 //   lakebase-tdd-pipeline dispatch       --feature F                          (pull FIFO head into the single lane if idle)
 //   lakebase-tdd-pipeline complete       --feature F                          (active story done, free the lane)
+//   lakebase-tdd-pipeline cut-experiment --feature F --story S --slug X --branch B --parent FB [--lakebase-uid U] [--parent-sha SHA] [--n N]
+//   lakebase-tdd-pipeline await-acceptance --feature F --story S              (built + deployed -> awaiting-acceptance)
+//   lakebase-tdd-pipeline accept         --feature F --story S --approver A    (PO accepts -> experiment merged, story done, lane freed)
+//   lakebase-tdd-pipeline discard        --feature F --story S --approver A --reason R   (PO discards -> torn down, out of sprint)
+//   lakebase-tdd-pipeline revise         --feature F --story S --approver A --reason R   (PO sends back -> designing)
 //
 // The formal per-story spec gate is surface -> approve-gate; approve-gate is
 // what authorizes the ready transition (it enqueues). `enqueue` stays as the
-// low-level re-queue primitive.
+// low-level re-queue primitive. The build lane records its experiment branch
+// with cut-experiment, then await-acceptance -> accept/discard/revise (each
+// frees the single lane). The actual branch fork/merge/teardown is the
+// experiment-lifecycle CLI's job; these record pipeline state.
 //
 // Exit: 0 ok; 2 bad args.
 
@@ -30,6 +38,11 @@ import {
   surfaceForGate,
   approveStoryGate,
   withdrawStoryGate,
+  cutStoryExperiment,
+  awaitAcceptance,
+  acceptStory,
+  discardStory,
+  reviseStory,
   STORY_STATUSES,
   type StoryStatus,
 } from "./story-pipeline";
@@ -44,6 +57,12 @@ interface Args {
   specHash?: string;
   reason?: string;
   at?: string;
+  slug?: string;
+  branch?: string;
+  parent?: string;
+  parentSha?: string;
+  lakebaseUid?: string;
+  n?: string;
   tddDir?: string;
   json?: boolean;
 }
@@ -60,6 +79,12 @@ function parse(argv: string[]): Args {
     else if (a === "--spec-hash") out.specHash = argv[++i];
     else if (a === "--reason") out.reason = argv[++i];
     else if (a === "--at") out.at = argv[++i];
+    else if (a === "--slug") out.slug = argv[++i];
+    else if (a === "--branch") out.branch = argv[++i];
+    else if (a === "--parent") out.parent = argv[++i];
+    else if (a === "--parent-sha") out.parentSha = argv[++i];
+    else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
+    else if (a === "--n") out.n = argv[++i];
     else if (a === "--tdd-dir") out.tddDir = argv[++i];
     else if (a === "--json") out.json = true;
   }
@@ -69,12 +94,16 @@ function parse(argv: string[]): Args {
 function usage(msg: string): number {
   process.stderr.write(
     `${msg}\n` +
-      `Usage: lakebase-tdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete> --feature <F> [--tdd-dir <dir>]\n` +
+      `Usage: lakebase-tdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise> --feature <F> [--tdd-dir <dir>]\n` +
       `  set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>\n` +
       `  surface needs --story <S>\n` +
       `  approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]\n` +
       `  withdraw-gate needs --story <S> --approver <A> --reason <R> [--at <ISO>]\n` +
-      `  enqueue needs --story <S>\n`,
+      `  enqueue needs --story <S>\n` +
+      `  cut-experiment needs --story <S> --slug <X> --branch <B> --parent <FB> [--lakebase-uid <U>] [--parent-sha <SHA>] [--n <N>] [--at <ISO>]\n` +
+      `  await-acceptance needs --story <S>\n` +
+      `  accept needs --story <S> --approver <A> [--at <ISO>]\n` +
+      `  discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]\n`,
   );
   return 2;
 }
@@ -94,7 +123,9 @@ function main(): number {
       process.stdout.write(`feature ${p.feature_id}  active=${p.build_active ?? "(idle)"}  queue=[${p.build_queue.join(", ")}]\n`);
       for (const [s, v] of Object.entries(p.stories)) {
         const gate = v.gate ? `  gate=${v.gate.status}` : "";
-        process.stdout.write(`  ${s}\t${v.status}${gate}\n`);
+        const exp = v.experiment ? `  exp=${v.experiment.slug}(${v.experiment.status})` : "";
+        const acc = v.acceptance?.decision ? `  acceptance=${v.acceptance.decision}` : "";
+        process.stdout.write(`  ${s}\t${v.status}${gate}${exp}${acc}\n`);
       }
     }
     return 0;
@@ -162,6 +193,57 @@ function main(): number {
       const completed = completeActive(pipeline);
       writePipeline(tddDir, pipeline);
       process.stdout.write(completed ? `completed ${completed}; lane idle\n` : `no active story to complete\n`);
+      return 0;
+    }
+    case "cut-experiment": {
+      if (!args.story) return usage("cut-experiment needs --story");
+      if (!args.slug || !args.branch || !args.parent) {
+        return usage("cut-experiment needs --slug, --branch, and --parent");
+      }
+      cutStoryExperiment(pipeline, args.story, {
+        slug: args.slug,
+        branch: args.branch,
+        parent: args.parent,
+        lakebase_branch_uid: args.lakebaseUid,
+        parent_sha: args.parentSha,
+        n: args.n !== undefined ? Number(args.n) : undefined,
+        at: args.at ?? new Date().toISOString(),
+      });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`cut experiment ${args.slug} for ${args.story} on ${args.branch} (parent ${args.parent})\n`);
+      return 0;
+    }
+    case "await-acceptance": {
+      if (!args.story) return usage("await-acceptance needs --story");
+      awaitAcceptance(pipeline, args.story);
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`${args.story} -> awaiting-acceptance (PO reviewing the running story)\n`);
+      return 0;
+    }
+    case "accept": {
+      if (!args.story) return usage("accept needs --story");
+      if (!args.approver) return usage("accept needs --approver");
+      acceptStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString() });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`accepted ${args.story}; experiment merged, story done, lane freed\n`);
+      return 0;
+    }
+    case "discard": {
+      if (!args.story) return usage("discard needs --story");
+      if (!args.approver) return usage("discard needs --approver");
+      if (!args.reason) return usage("discard needs --reason");
+      discardStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed\n`);
+      return 0;
+    }
+    case "revise": {
+      if (!args.story) return usage("revise needs --story");
+      if (!args.approver) return usage("revise needs --approver");
+      if (!args.reason) return usage("revise needs --reason");
+      reviseStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed\n`);
       return 0;
     }
     default:
