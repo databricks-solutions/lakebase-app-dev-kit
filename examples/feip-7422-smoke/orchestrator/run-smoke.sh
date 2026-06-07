@@ -212,9 +212,24 @@ fi
 # headroom).
 GATE_DRAIN_MAX_ITERATIONS=5
 
+# Live-tail the centralized agent log to the console for the duration of a
+# `claude -p` turn. Subagent work NEVER streams to the parent claude -p stdout
+# (each role runs in an isolated, silent context), so the structured log is the
+# only live signal that a role is progressing. We surface each new event as it
+# lands. Echoes the tail pid; the caller kills it when the turn returns (killing
+# the jq head makes tail exit via SIGPIPE on its next write).
+start_agent_log_tail() {
+  local tdd_log="$1"
+  touch "$tdd_log" 2>/dev/null || true
+  ( tail -n0 -f "$tdd_log" 2>/dev/null \
+      | jq -rR 'fromjson? | "      · [\(.role)] \(.event): \(.message)"' 2>/dev/null ) &
+  echo $!
+}
+
 run_claude_with_gate_drain() {
   local slash_cmd="$1"   # e.g. "/design F1-initial-domain" or "/build F1-..."
   local feature_id="$2"  # e.g. "F1-initial-domain"
+  local tdd_log="${PROJECT_DIR}/.tdd/agent-log.jsonl"
   local attempt
   for attempt in $(seq 1 "$GATE_DRAIN_MAX_ITERATIONS"); do
     log "    claude -p '${slash_cmd}' --agent scrum-master (attempt ${attempt}/${GATE_DRAIN_MAX_ITERATIONS})"
@@ -222,7 +237,14 @@ run_claude_with_gate_drain() {
     # allowlist scopes which role subagents may be spawned (only the
     # scrum-master invokes the role agents). The role defs are discoverable
     # because the scaffold wrote them into .claude/agents/.
+    local tail_pid; tail_pid="$(start_agent_log_tail "$tdd_log")"
     claude -p "$slash_cmd" "${CLAUDE_FLAGS[@]}" --agent scrum-master
+    kill "$tail_pid" 2>/dev/null || true
+    # Structural observability backstop (FEIP-7510): emit artifact.written for
+    # any artifact produced this pass that the role model did not log itself
+    # (e.g. a sonnet/haiku role that skipped its own emits). Idempotent.
+    npx --yes --package="${KIT_NPX}" \
+      lakebase-tdd-log --reconcile --feature "$feature_id" --tdd-dir "${PROJECT_DIR}/.tdd" 2>/dev/null || true
     # Drain any gates that opened during this pass. Mock-approver is
     # idempotent: returns 0 even when no gates are open.
     local approved
@@ -340,14 +362,18 @@ scaffold_project() {
       --language python \
       --runner self-hosted \
       --tiers "$TIERS" \
-      `# Per-role model tiering for the smoke: the three opus-recommended roles` \
-      `# (spec-author, architect-reviewer, product-owner) drop to sonnet here.` \
-      `# The smoke validates workflow mechanics + migrations, not prose quality,` \
-      `# so sonnet is plenty and cuts per-turn generation latency substantially.` \
-      `# This also exercises the per-project --agent-model override path itself.` \
+      `# Per-role model tiering for the smoke (speed): the smoke validates` \
+      `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
+      `# models than the kit defaults and cuts per-turn generation latency. The` \
+      `# lightest, most structured roles go to haiku; the two that carry the most` \
+      `# reasoning (spec-author intent->structure, architect layering) stay on` \
+      `# sonnet. This also exercises the per-project --agent-model override path.` \
       --agent-model spec-author=sonnet \
       --agent-model architect-reviewer=sonnet \
-      --agent-model product-owner=sonnet \
+      --agent-model test-strategist=haiku \
+      --agent-model ux-designer=haiku \
+      --agent-model product-owner=haiku \
+      --agent-model release-engineer=haiku \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 

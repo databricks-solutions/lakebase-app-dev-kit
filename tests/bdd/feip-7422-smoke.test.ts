@@ -106,10 +106,23 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
     }
   });
 
-  it("tiers the three opus roles down to sonnet for the smoke via --agent-model overrides", () => {
+  it("tiers roles for the smoke via --agent-model: reasoning roles on sonnet, light roles on haiku", () => {
+    // The two reasoning-heavy roles stay on sonnet.
     expect(runSmoke).toMatch(/--agent-model spec-author=sonnet/);
     expect(runSmoke).toMatch(/--agent-model architect-reviewer=sonnet/);
-    expect(runSmoke).toMatch(/--agent-model product-owner=sonnet/);
+    // The lightest, most structured roles drop to haiku for speed.
+    expect(runSmoke).toMatch(/--agent-model test-strategist=haiku/);
+    expect(runSmoke).toMatch(/--agent-model ux-designer=haiku/);
+    expect(runSmoke).toMatch(/--agent-model product-owner=haiku/);
+  });
+
+  it("makes role observability structural: live-tails the agent log + reconciles after each phase", () => {
+    // The agent log is streamed to the console during each (silent) claude -p
+    // turn, so subagent progress is visible live.
+    expect(runSmoke).toMatch(/tail -n0 -f .*agent-log\.jsonl|start_agent_log_tail/);
+    // After each pass, a deterministic reconcile emits artifact.written for any
+    // artifact a role model did not log itself.
+    expect(runSmoke).toMatch(/lakebase-tdd-log --reconcile --feature/);
   });
 });
 

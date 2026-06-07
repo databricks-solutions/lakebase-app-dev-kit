@@ -19,9 +19,11 @@ import {
   type AgentLogLevel,
   type AgentLogEventInput,
 } from "./agent-log.js";
+import { reconcileArtifactLog } from "./log-reconcile.js";
 
 interface ParsedArgs {
   read?: boolean;
+  reconcile?: boolean;
   role?: string;
   level?: string;
   minLevel?: string;
@@ -41,6 +43,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--read": out.read = true; break;
+      case "--reconcile": out.reconcile = true; break;
       case "--role": out.role = argv[++i]; break;
       case "--level": out.level = argv[++i]; break;
       case "--min-level": out.minLevel = argv[++i]; break;
@@ -74,6 +77,12 @@ Emit:
 Read:
   lakebase-tdd-log --read [--role <r>] [--min-level <l>] [--feature <id>] [--json]
 
+Reconcile (structural observability backstop):
+  lakebase-tdd-log --reconcile --feature <id> [--json]
+    Emit an artifact.written for every on-disk design artifact the log does not
+    already cover, so observability does not depend on a role model emitting its
+    own events. Idempotent. The orchestrator / smoke calls this after each phase.
+
 Common:
   --tdd-dir <path>   .tdd/ root (default ./.tdd)
   -h, --help
@@ -82,6 +91,30 @@ Common:
 export function runAgentLogCli(argv: string[]): number {
   const a = parseArgs(argv);
   if (a.help) { process.stdout.write(`${HELP}\n`); return 0; }
+
+  if (a.reconcile) {
+    // Structural observability backstop: emit an artifact.written for every
+    // on-disk design artifact the log does not already cover, so the log
+    // reflects what was produced even when a role model skipped its own
+    // emits. Idempotent. Requires --feature.
+    if (!a.feature) {
+      process.stderr.write("Error: --reconcile requires --feature.\n");
+      return 2;
+    }
+    try {
+      const emitted = reconcileArtifactLog({ tddDir: a.tddDir, featureId: a.feature });
+      if (a.json) {
+        process.stdout.write(`${JSON.stringify(emitted)}\n`);
+      } else {
+        process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}\n`);
+        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.data?.path}\n`);
+      }
+      return 0;
+    } catch (e) {
+      process.stderr.write(`lakebase-tdd-log --reconcile: ${(e as Error).message}\n`);
+      return 3;
+    }
+  }
 
   if (a.read) {
     const events = readAgentLog({
