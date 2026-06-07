@@ -22,7 +22,8 @@ export type AgentRole =
   | "scrum-master"
   | "navigator"
   | "driver"
-  | "product-owner";
+  | "product-owner"
+  | "release-engineer";
 
 export type AgentLogLevel = "debug" | "info" | "warn" | "error";
 

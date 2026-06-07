@@ -1,0 +1,92 @@
+# Per-role agent runtime + /plan & /deploy parity + state-machine phases
+
+**Status**: Design proposal, 2026-06-06
+**Umbrella FEIP**: FEIP-7461 (workflows as executable state machines)
+**Primary FEIP**: FEIP-7510 (per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check). Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
+**Related**: FEIP-7508 (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).
+
+---
+
+## Why this exists
+
+The TDD workflow has eight conceptual roles, but seven of them live only as markdown prompt docs in `skills/lakebase-tdd-workflows/agents/*.md` that the slash commands `@`-reference inline. They are not separately-invokable actors. There is no per-task selection criteria, no per-role tool scoping, no isolated context, and no per-project model choice. The eighth role (Product Owner) and a shipping role (Release Engineer) do not exist as agents at all.
+
+The user's direction:
+- Each role is a **real, separately-invokable agent** with its **own system prompt**, auto-selected by **predefined criteria based on the task** it performs.
+- The roles **live separately** (the artifact is the inter-agent API).
+- Each agent carries a **strongly-recommended model**; the HIL **overrides per project**, asked at project setup.
+- The **Scrum-Master is a pure coordinator** (no substantive work) and **obeys the workflow state machine**.
+- `/plan` and `/deploy` should run as **real `claude -p` invocations** in the smoke (parity), not be emulated by the orchestrator.
+- The **Release Engineer leverages `lakebase-release-workflows`**; audit the substrate and file tickets for gaps.
+
+## The model
+
+```
+project intake (once)        Product Owner facilitates; Human Proxy headless
+   │
+   ▼
+/plan  (per sprint)          Spec Author proposes -> PO authors the backlog
+   │
+   ▼
+/design -> /build -> /deploy (per feature)
+   │         │         │
+ Spec Author Navigator Release Engineer        each a separate agent,
+ Architect   Driver    (+ PO deploy gate)      auto-selected by its description,
+ Test Strat                                    with a recommended (HIL-overridable) model
+ UX Designer
+   ▲                              │
+   └──────── working software ────┘   (PO folds feedback into the next /plan)
+
+Scrum-Master = the MAIN SESSION. Coordinates only: hands each phase to the
+right role agent, carries the artifact forward, surfaces gates, obeys the
+state machine. Writes no spec / code / test / deploy.
+```
+
+### Mechanism (Claude Code subagents, 2026 conventions)
+
+`.claude/agents/<name>.md` with YAML frontmatter:
+- `name` (required), `description` (required; the auto-delegation criteria, <=1536 chars; also enables explicit `@`-invocation), `tools` (optional, least-privilege; omit = inherit all), `model` (`opus`/`sonnet`/`haiku`/full-id/`inherit`, default `inherit`), `memory: project` (isolated cross-session memory), `color`.
+- Body = the system prompt.
+- **Subagents cannot spawn subagents.** So the orchestrator (Scrum-Master) is the main session, not a spawned subagent. The role agents are spawned from the main session, do their phase, and return their artifact.
+
+### Decisions locked
+- **Release Engineer** is a new role owning `/deploy`, composing on `lakebase-release-workflows` (+ `lakebase-scm-workflows`). `local` is the only target today; remote/release-on-merge is `merge.yml`.
+- **Product Owner** is a facilitation agent (interview the human, draft artifacts, human approves). Already present in the `AgentRole` enum (`scripts/tdd/agent-log.ts`); only the doc is missing.
+- Agent defs live **centrally in the skill** (NOT copied per project). Per-project **model overrides** live in the project (`.lakebase/agent-config.json`), recommended per role (sourced from each def's `model:`), asked at setup, HIL-overridable.
+- The Scrum-Master obeys the TDD state machine, which gains `planning` and `deploy` phases.
+
+## Phases
+
+- **A , Promote the 7 role docs to subagents** (central in the skill): frontmatter (name, description criteria, scoped tools, recommended model, `memory: project`, color); refresh each system prompt for current reality (orchestrator-coordinates-only, `/plan` + `/deploy`, nfrs coverage, Human Proxy, conformance); reframe Scrum-Master as the coordinating main session (not a `.claude/agents` subagent, can't nest), obeys `workflow-state.json`.
+- **B , Two new roles**: `product-owner.md` (facilitation) + `release-engineer.md` (owns `/deploy`, composes the release skill). Add `release-engineer` to the `AgentRole` enum + `agent-log-event.schema.json`.
+- **C , Per-project model overrides**: `scripts/tdd/agent-models.ts` (`readRecommendedModels()` parses def frontmatter = single source; `resolveModelForRole()` = override ?? recommended ?? inherit); `.lakebase/agent-config.json` + schema written by `scaffoldStaticAll`; `lakebase-create-project` asks the HIL (interactive prompt + `--agent-model <role>=<model>` flags + `--json-input`), defaulting to recommended.
+- **D , State machine**: add `planning` (before `discovery`) and `deploy` (after `implementation`/`review`, before `shipped`) to the TDD phase enum (`scripts/tdd/schemas/workflow-state.schema.json`); update helpers/guards/tests. SCM state machine unchanged (`/plan` is pre-claim, `/deploy` is within `feature-claimed`).
+- **E , Commands delegate to named subagents**: `/plan`, `/design`, `/build`, `/deploy` bodies hand each phase to the named role agent, read the resolved per-role model, record the state-machine transition, keep gates HITL. Update `SKILL.md`.
+- **F , Smoke parity**: drive `claude -p "/plan ..."` and `claude -p "/deploy ..."` through `run_claude_with_gate_drain` instead of emulating them; Human Proxy stays the headless supply/approve; update `feip-7422-smoke.test.ts`.
+- **G , Release substrate audit (gated)**: audit `lakebase-release-workflows` + `lakebase-scm-workflows` for Release Engineer gaps (local deploy/verify today; remote/release/rollback next); surface the list; file JIRA only after explicit go.
+- **H , Conformance + docs + suite**: a vitest asserting each role def has required frontmatter (name, description non-empty + <=1536 chars, recommended model), a relay header, a non-empty system prompt, and that the role set matches the `AgentRole` enum; update `spec-format.md` + smoke README; full typecheck + vitest.
+
+## Critical files
+- Role defs: `skills/lakebase-tdd-workflows/agents/*.md` (+ new `product-owner.md`, `release-engineer.md`)
+- Role enum/schema: `scripts/tdd/agent-log.ts`, `scripts/tdd/schemas/agent-log-event.schema.json`
+- State machine: `scripts/tdd/schemas/workflow-state.schema.json` (+ helpers/tests)
+- Model config: new `scripts/tdd/agent-models.ts` + `scripts/tdd/schemas/agent-config.schema.json`; `scripts/lakebase/create-project.ts` + `create-project.cli.ts` + `scripts/lakebase/scaffold.ts`
+- Commands: `templates/project/common/.claude/commands/{plan,design,build,deploy}.md`; `skills/lakebase-tdd-workflows/SKILL.md`
+- Smoke: `examples/feip-7422-smoke/orchestrator/run-smoke.sh`, `tests/bdd/feip-7422-smoke.test.ts`
+- Release skill (compose + audit): `skills/lakebase-release-workflows/`
+
+## Reuse (do not reinvent)
+- `AgentRole` enum already lists `product-owner`; extend, don't re-declare.
+- `run_claude_with_gate_drain` already drives `claude -p` + Human Proxy drain.
+- `lakebase-release-workflows` already encodes the release flow; the Release Engineer composes on it.
+- `scripts/tdd/deploy.ts` + `pollUntil` already exist; the Release Engineer drives them.
+
+## Verification
+- `npm run typecheck` clean; `npx vitest run` full suite green (new: agent-def conformance, model-resolver, state-machine phase, smoke-parity tests).
+- `bash -n run-smoke.sh` clean; smoke BDD asserts `/plan` + `/deploy` go through `claude -p`.
+- Manual: scaffold a throwaway project, confirm `.lakebase/agent-config.json` has recommended models + an applied override; `@`-invoke a role agent by name and confirm it picks up the resolved model.
+
+## Gates
+- No version bump / push / PR unless explicitly asked.
+- JIRA filing (Phase G) gated on explicit go.
+- Landed phase-by-phase: a commit + green suite each.
