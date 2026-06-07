@@ -17,16 +17,25 @@ import * as path from "node:path";
 import { getConnection } from "../get-connection.js";
 import {
   applyAlembic,
+  createAlembicRevision,
   rollbackAlembic,
   statusAlembic,
 } from "../schema-migrate-runners/alembic.js";
-import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
+import {
+  migrationSlug,
+  nextMigrationNumber,
+  type AppliedSchemaMigration,
+  type SchemaMigrationFile,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
+  type NewMigrationArgs,
+  type NewMigrationResult,
   type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
@@ -180,6 +189,40 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
 
   // baseline intentionally absent in slice 3. Alembic exposes `stamp`
   // as the equivalent operation; deferred to a follow-up.
+
+  async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
+    try {
+      if (args.autogenerate && (!args.instance || !args.branch)) {
+        throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
+      }
+      const existing = listAlembicFiles(args.projectDir).map((f) => f.version);
+      const revId = String(nextMigrationNumber(existing)).padStart(4, "0");
+      const dsn = args.autogenerate
+        ? await buildDsn({
+            instance: args.instance!,
+            branch: args.branch!,
+            database: args.database,
+            endpointName: args.endpointName,
+          })
+        : undefined;
+      const created = await createAlembicRevision({
+        projectDir: args.projectDir,
+        revId,
+        message: args.slug,
+        autogenerate: !!args.autogenerate,
+        dsn,
+      });
+      return { status: "ok", version: revId, filename: path.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 };
 
 // Auto-register on import. Consumers that import this module get the

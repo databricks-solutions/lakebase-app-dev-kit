@@ -28,7 +28,12 @@ import { getConnection } from "./get-connection.js";
 import "./adapters/alembic-adapter.js";
 import "./adapters/flyway-adapter.js";
 import "./adapters/knex-adapter.js";
-import { resolveSchemaMigrationAdapter, type SchemaMigrationAdapterId } from "./schema-migration-adapter.js";
+import {
+  resolveSchemaMigrationAdapter,
+  type SchemaMigrationAdapterId,
+  type NewMigrationArgs,
+  type NewMigrationResult,
+} from "./schema-migration-adapter.js";
 
 export type SchemaMigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
 
@@ -355,4 +360,69 @@ export async function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Pr
     pending: r.pending,
     tool: adapter.id as SchemaMigrationToolName,
   };
+}
+
+// ---- createSchemaMigration -----------------------------------------------------
+//
+// The create side of the adapter contract. The build (Driver) calls this
+// tool-agnostically; each adapter names the new migration in its own native
+// sequential scheme (Flyway V<n>, Alembic zero-padded rev-id, Knex timestamp)
+// so the Driver never learns three toolchains.
+
+/**
+ * Next sequential migration number from a set of existing version strings.
+ * Parses the leading integer of each (so "0003", "3", "V3" -> 3) and returns
+ * max+1; 1 when there are none. Non-numeric versions (e.g. Knex timestamps)
+ * are ignored, which is correct: Knex does not use this counter.
+ */
+export function nextMigrationNumber(versions: ReadonlyArray<string>): number {
+  let max = 0;
+  for (const v of versions) {
+    const m = /(\d+)/.exec(v);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
+
+/** Slugify a human description into a snake_case filename component. */
+export function migrationSlug(description: string): string {
+  return (
+    description
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "migration"
+  );
+}
+
+export interface CreateSchemaMigrationArgs extends NewMigrationArgs {
+  /** Override language detection. Defaults to auto-detect from project files. */
+  language?: SchemaMigrationLanguage;
+}
+
+/**
+ * Create a new, correctly-named migration via the project's tool adapter.
+ * Throws SchemaMigrationError if the resolved adapter has no create step.
+ */
+export async function createSchemaMigration(args: CreateSchemaMigrationArgs): Promise<NewMigrationResult> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.newMigration) {
+    throw new SchemaMigrationError(
+      `Adapter '${adapter.id}' does not support creating migrations.`
+    );
+  }
+  const r = await adapter.newMigration({
+    projectDir,
+    slug: args.slug,
+    autogenerate: args.autogenerate,
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "create migration failed");
+  }
+  return r;
 }

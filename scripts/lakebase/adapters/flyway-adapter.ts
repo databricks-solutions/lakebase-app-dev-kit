@@ -18,13 +18,21 @@ import {
   applyFlyway,
   statusFlyway,
 } from "../schema-migrate-runners/flyway.js";
-import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
+import {
+  migrationSlug,
+  nextMigrationNumber,
+  type AppliedSchemaMigration,
+  type SchemaMigrationFile,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
+  type NewMigrationArgs,
+  type NewMigrationResult,
   type SchemaMigrationAdapter,
   type StatusArgs,
   type StatusResult,
@@ -139,6 +147,35 @@ export const FlywayAdapter: SchemaMigrationAdapter = {
   // tool level, but exposing it cleanly requires plumbing flags into the
   // existing runner. Deferred to a follow-up slice; the adapter's
   // optional-protocol shape makes this additive.
+
+  async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
+    // Flyway has no `generate` command: migrations are hand-written SQL whose
+    // V<n> prefix IS the ordering. We create the next-numbered skeleton (the
+    // Driver writes the DDL/DML). autogenerate is ignored (no model diffing).
+    try {
+      const dir = path.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs.mkdirSync(dir, { recursive: true });
+      const n = nextMigrationNumber(listFlywayFiles(args.projectDir).map((f) => f.version));
+      const slug = migrationSlug(args.slug);
+      const filename = `V${n}__${slug}.sql`;
+      const full = path.join(dir, filename);
+      if (fs.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs.writeFileSync(
+        full,
+        `-- V${n}: ${args.slug}\n-- Flyway migration (write your DDL/DML below).\n`,
+        "utf8"
+      );
+      return { status: "ok", version: String(n), filename, path: full };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 };
 
 // Auto-register on import. Consumers that import this module get the

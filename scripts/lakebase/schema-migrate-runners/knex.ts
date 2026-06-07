@@ -43,13 +43,17 @@ export function findKnexfile(projectDir: string): string | undefined {
   return undefined;
 }
 
-function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr: string }> {
+function spawnKnex(
+  projectDir: string,
+  args: string[],
+  dsn?: string
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const knexfile = findKnexfile(ctx.projectDir);
+    const knexfile = findKnexfile(projectDir);
     if (!knexfile) {
       reject(
         new SchemaMigrationError(
-          `No knexfile found in ${ctx.projectDir}. ` +
+          `No knexfile found in ${projectDir}. ` +
             `Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
         )
       );
@@ -59,8 +63,8 @@ function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr
     // auto-installing; failure here means the consumer hasn't installed
     // knex locally, which is a user-fixable error.
     const child = spawn("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -91,6 +95,30 @@ function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr
       }
     });
   });
+}
+
+function runKnex(ctx: KnexCtx, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return spawnKnex(ctx.projectDir, args, ctx.dsn);
+}
+
+/**
+ * Create a new Knex migration via `knex migrate:make <slug>`. Knex's native
+ * scheme is a timestamp prefix (`<ts>_<slug>.js`), which is already
+ * deterministically ordered; we keep it rather than imposing a 4-digit
+ * counter (that would mean abandoning `migrate:make`). Returns the created
+ * file's absolute path. No DB connection is needed to scaffold a migration.
+ */
+export async function createKnexMigration(opts: {
+  projectDir: string;
+  slug: string;
+}): Promise<string> {
+  const { stdout } = await spawnKnex(opts.projectDir, ["migrate:make", opts.slug]);
+  // Knex prints: "Created Migration: /abs/path/<timestamp>_<slug>.js"
+  const m = stdout.match(/Created Migration:\s*(\S+)/);
+  if (m) return m[1].trim();
+  throw new SchemaMigrationError(
+    `knex migrate:make succeeded but the created file could not be located.\nstdout: ${stdout}`
+  );
 }
 
 /**

@@ -54,12 +54,21 @@ export function resolveAlembicBin(projectDir: string): string {
   return "alembic";
 }
 
-function runAlembic(ctx: RunnerCtx, args: string[]): Promise<{ stdout: string; stderr: string }> {
+/**
+ * Spawn `alembic` in the project. DATABASE_URL is exported to the child only
+ * when a DSN is supplied: apply/status/rollback always pass one; creating a
+ * skeleton revision (no --autogenerate) does not need a DB.
+ */
+function spawnAlembic(
+  projectDir: string,
+  args: string[],
+  dsn?: string
+): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const bin = resolveAlembicBin(ctx.projectDir);
+    const bin = resolveAlembicBin(projectDir);
     const child = spawn(bin, args, {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -90,6 +99,45 @@ function runAlembic(ctx: RunnerCtx, args: string[]): Promise<{ stdout: string; s
       }
     });
   });
+}
+
+function runAlembic(ctx: RunnerCtx, args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return spawnAlembic(ctx.projectDir, args, ctx.dsn);
+}
+
+/**
+ * Create a new Alembic revision with an EXPLICIT sequential rev-id, so the
+ * file is `<revId>_<slug>.py` and its internal `revision == revId` (rather
+ * than Alembic's default hash). This is what makes feature migrations count
+ * up `0001`, `0002`, ... deterministically instead of getting unordered
+ * hash names. Returns the created file's absolute path.
+ *
+ * `autogenerate` diffs the models against the branch DB to populate the body
+ * and requires a DSN; without it an empty skeleton is created (DB-free).
+ */
+export async function createAlembicRevision(opts: {
+  projectDir: string;
+  revId: string;
+  message: string;
+  autogenerate?: boolean;
+  dsn?: string;
+}): Promise<string> {
+  const args = ["revision", "--rev-id", opts.revId, "-m", opts.message];
+  if (opts.autogenerate) args.push("--autogenerate");
+  const { stdout } = await spawnAlembic(opts.projectDir, args, opts.dsn);
+  // Alembic prints: "Generating /abs/path/<revId>_<slug>.py ...  done"
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (m) return m[1].trim();
+  // Fallback: scan the conventional versions dirs for the new rev-id prefix.
+  for (const rel of ["migrations/versions", "alembic/versions"]) {
+    const dir = path.join(opts.projectDir, rel);
+    if (!fs.existsSync(dir)) continue;
+    const hit = fs.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path.join(dir, hit);
+  }
+  throw new SchemaMigrationError(
+    `alembic revision succeeded but the created file could not be located.\nstdout: ${stdout}`
+  );
 }
 
 /** Return the currently-applied head revision, or undefined when the DB has no Alembic state. */

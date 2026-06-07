@@ -18,6 +18,7 @@ export default defineConfig({
     "scripts/lakebase/get-connection.cli": "scripts/lakebase/get-connection.cli.ts",
     "scripts/lakebase/schema-diff.cli": "scripts/lakebase/schema-diff.cli.ts",
     "scripts/lakebase/schema-migrate.cli": "scripts/lakebase/schema-migrate.cli.ts",
+    "scripts/lakebase/new-migration.cli": "scripts/lakebase/new-migration.cli.ts",
     "scripts/lakebase/create-project.cli": "scripts/lakebase/create-project.cli.ts",
     "scripts/lakebase/adopt-tdd.cli": "scripts/lakebase/adopt-tdd.cli.ts",
     "scripts/lakebase/infra-runner.cli": "scripts/lakebase/infra-runner.cli.ts",

@@ -57,6 +57,19 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
 5. If the test passes – and only the failing test changed status from `pending` → `green` – call `markGreen()` with a short `driver_changes` summary.
 6. If the test still fails, fix the code. Never weaken the test.
 
+## Schema migrations
+
+When making a test GREEN requires a schema change, create the migration with
+**`lakebase-tdd-new-migration --name "<description>"`** (run it in the project
+root). Never call `alembic` / `flyway` / `knex` directly: the kit detects the
+project's tool and names the migration in that tool's native sequential scheme
+so migrations stay deterministically ordered (Alembic `0001_<slug>.py`,
+`0002_<slug>.py`, ...; Flyway `V<n>__<slug>.sql`; Knex `<timestamp>_<slug>.js`).
+A bare `alembic revision` produces an unordered hash name and is a contract
+violation. Then author the `upgrade()` / `downgrade()` body (the command leaves
+a correctly-named skeleton). For Python you may add `--autogenerate --instance
+<id> --branch <branch>` to diff the models against the branch DB and prefill it.
+
 ## REFACTOR (only when Navigator requests it)
 
 7. Improve names, extract helpers, collapse duplication – without changing any outer-boundary test.

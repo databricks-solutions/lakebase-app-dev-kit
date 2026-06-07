@@ -12,16 +12,24 @@ import * as path from "node:path";
 import { getConnection } from "../get-connection.js";
 import {
   applyKnex,
+  createKnexMigration,
   rollbackKnex,
   statusKnex,
 } from "../schema-migrate-runners/knex.js";
-import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
+import {
+  migrationSlug,
+  type AppliedSchemaMigration,
+  type SchemaMigrationFile,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
   type ListArgs,
   type ListResult,
+  type NewMigrationArgs,
+  type NewMigrationResult,
   type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
@@ -153,6 +161,27 @@ export const KnexAdapter: SchemaMigrationAdapter = {
   // baseline intentionally absent. Knex has no native baseline concept;
   // omitting it advertises that correctly via the optional-capability
   // protocol so callers won't attempt the operation.
+
+  async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
+    // Knex's native scheme is a timestamp prefix (`<ts>_<slug>.js`), already
+    // deterministically ordered, so we keep `knex migrate:make` rather than
+    // imposing a 4-digit counter. autogenerate is ignored (Knex has no model
+    // diffing); the Driver fills in the up/down.
+    try {
+      const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug(args.slug) });
+      const stem = path.basename(created).replace(/\.(js|ts)$/, "");
+      const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
+      return { status: "ok", version, filename: path.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 };
 
 // Auto-register on import.

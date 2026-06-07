@@ -117,6 +117,39 @@ export interface BaselineResult {
   tool_specific?: Record<string, unknown>;
 }
 
+export interface NewMigrationArgs {
+  projectDir: string;
+  /** Human description; adapters slugify it into the filename. */
+  slug: string;
+  /**
+   * Alembic only: diff the SQLAlchemy models against the live branch DB to
+   * pre-populate the migration body. Requires instance+branch. Defaults to
+   * false, which creates an empty skeleton the Driver fills in.
+   */
+  autogenerate?: boolean;
+  /** Connection (only consulted when autogenerate is true). */
+  instance?: string;
+  branch?: string;
+  database?: string;
+  endpointName?: string;
+}
+
+export interface NewMigrationResult {
+  status: "ok" | "error";
+  /**
+   * The sequential version assigned, in the tool's native scheme:
+   * Flyway "2" (V2), Alembic "0002" (zero-padded rev-id), Knex its
+   * timestamp. Empty string on error.
+   */
+  version: string;
+  /** Created file's basename (empty on error). */
+  filename: string;
+  /** Absolute path to the created migration (empty on error). */
+  path: string;
+  error?: string;
+  tool_specific?: Record<string, unknown>;
+}
+
 /**
  * Cross-tool migration adapter contract. Every adapter exposes the same
  * surface; tool-specific fields ride on `tool_specific` so the contract
@@ -151,6 +184,14 @@ export interface SchemaMigrationAdapter {
    * Apply Flyway-style baseline marker to an existing schema. OPTIONAL.
    */
   baseline?(args: BaselineArgs): Promise<BaselineResult>;
+
+  /**
+   * Create a NEW migration named in the tool's native sequential scheme
+   * (Flyway V<n>, Alembic zero-padded rev-id, Knex timestamp), so the build
+   * never has to know the tool. The caller (Driver) authors the body.
+   * OPTIONAL: an adapter omits this when its tool has no create step.
+   */
+  newMigration?(args: NewMigrationArgs): Promise<NewMigrationResult>;
 }
 
 /**

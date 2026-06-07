@@ -1,7 +1,15 @@
 # Flyway migrations
 
-Add your migrations here as `V<n>__<description>.sql`, starting at
-`V1__<description>.sql`. Flyway runs with `-baselineOnMigrate=true
+Create a migration with the kit's tool-agnostic command (run in the project
+root):
+
+```bash
+lakebase-tdd-new-migration --name "<description>"
+```
+
+This writes the next-numbered skeleton (`V<n>__<slug>.sql`); then author the
+DDL/DML. Migrations start at `V1__<description>.sql`. Flyway runs with
+`-baselineOnMigrate=true
 -baselineVersion=0`, so every `V<n>` file (from V1 up) is applied as a pending
 migration, and Flyway's own baseline row anchors the non-empty Lakebase `public`
 schema.
