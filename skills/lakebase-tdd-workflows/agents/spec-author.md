@@ -51,12 +51,16 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 ## Outputs
 
 - `.tdd/features/<F>/feature-spec.{md,json}` – the structured per-feature draft spec.
-  - `feature-spec.json` conforms to `feature.schema.json` (id, name, status, tdd_mode, and the fields the schema declares).
+  - `feature-spec.json` MUST conform to `feature.schema.json` exactly. The conformance gate rejects any deviation, so match these names and shapes precisely:
+    - Required: `id` (the feature id string, e.g. `F1-initial-domain` , NOT `feature_id`), `name` (the human title , NOT `title`), `status` (start at `"draft"`), `tdd_mode` (`"N=1"` or `"N>=2"`).
+    - `stories`: an array of story-id STRINGS (e.g. `["S1-file-bug","S2-..."]`, matching `^S[0-9]+(-[a-z0-9-]+)?$`) , NOT objects. The story bodies live in `stories/<S>/story.json`.
+    - Optional only: `success_metrics`, `experiment_count_default`, `owner`, `external_ref`.
+    - `additionalProperties` is **false**: do NOT add any other key. In particular there is NO `layer`, `architectural_notes`, or `nfrs` on `feature-spec.json` , those are the Architect's and live in `architecture.json`, not here.
   - `feature-spec.md` carries the required sections below.
 - `.tdd/features/<F>/stories/<S>/story.{md,json}` – one or more stories (`asA` / `iWantTo` / `soThat`).
 - `.tdd/features/<F>/stories/<S>/acs/<AC>.{md,json}` – one or more acceptance criteria per story, each a `given` / `when` / `then` behavioral assertion with `status`.
 
-You leave `layer`, `architectural_notes`, and `nfrs[]` empty. Those are the Architect Reviewer's to populate in the next phase.
+Layering, NFR coverage, and architectural notes are NOT yours and are NOT on `feature-spec.json`: the Architect Reviewer writes them to `architecture.json` in the next phase.
 
 ## feature-spec.md required sections
 
