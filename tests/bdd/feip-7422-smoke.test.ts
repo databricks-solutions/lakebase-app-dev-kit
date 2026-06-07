@@ -141,6 +141,24 @@ describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", ()
   });
 });
 
+describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working software)", () => {
+  const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+
+  it("runs /deploy --target local per iteration and records the deploy gate", () => {
+    expect(runSmoke).toMatch(/lakebase-tdd-deploy\b/);
+    expect(runSmoke).toMatch(/--target local/);
+    // The Human Proxy records the working-software deploy-gate approval.
+    expect(runSmoke).toMatch(/"gate":"deploy"/);
+    // The local app is torn down between iterations.
+    expect(runSmoke).toMatch(/lakebase-tdd-deploy.*--stop/);
+  });
+
+  it("v5's feature request is list-view-only: deploy/reachability moved to the per-sprint /deploy", () => {
+    const v5 = fs.readFileSync(path.join(SMOKE_DIR, "feature-requests", "v5-list-view.md"), "utf8");
+    expect(v5, "v5 should not carry per-PR deployment intent (that is the orchestrated /deploy)").not.toMatch(/pull request|deployed to a new environment/i);
+  });
+});
+
 describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md voice)", () => {
   // Iteration specs are feature-request.md files: pure feature-requester narrative
   // describing WHAT the user wants, in user-behavior language. They do NOT

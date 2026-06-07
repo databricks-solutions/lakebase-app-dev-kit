@@ -27,15 +27,6 @@ When the list is empty (no bugs filed yet), the page should
 acknowledge that explicitly. A team member should not see a blank
 page and wonder whether the bug tracker is broken.
 
-A team member should be able to confirm, by visiting the bug list
-in their browser, that the bug tracker is reachable and showing
-real data, not a placeholder or an error page. This includes the
-case where the bug tracker has been deployed to a new environment
-(staging, dev, a CI-built deployment per pull request): the team
-member opens the URL for that environment and sees the same kind of
-bug list, populated with whatever bugs that environment knows
-about.
-
 ## Out of scope
 
 Editing bugs from the list view is out of scope; the list is

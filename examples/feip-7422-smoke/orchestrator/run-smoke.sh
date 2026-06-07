@@ -20,8 +20,15 @@
 #   4. /build <id>   – gates drained by human-proxy.
 #   5. Local tests (./scripts/run-tests.sh).
 #   6. Per-iteration verify (assertions/verify-vN.sh).
+#   6.5 /deploy <id> --target local: run the app + verify reachable, then
+#      tear down (the per-sprint "working software" check; deploy gate
+#      approved by human-proxy).
 #   7. Commit the iteration's work on the feature branch.
 #   8. SCM doctor (advisory cross-check; warning-only).
+#
+# Project intake (product-overview.md + nfrs.md + design-brief.md) is staged
+# once before the loop via human-proxy (stage_project_intake); LAKEBASE_TDD_UI=1
+# turns on the UX track.
 #
 # Other flags:
 #   --resume <iter>      skip earlier iterations + start at <iter>
@@ -395,6 +402,29 @@ run_iteration() {
   else
     log "  step 6: no verify script for $iter (skipping)."
   fi
+
+  # 6.5 /deploy --target local: run the app locally + verify it is reachable.
+  # This is the per-sprint "working software" check (product-overview asks for
+  # "working software I can use after each sprint"). The Human Proxy approves
+  # the deploy gate only AFTER reachability; the app is torn down before the
+  # next iteration claims a new feature. local is the only implemented target;
+  # the prod release path is merge.yml (SCM workflow), tested separately.
+  log "  step 6.5: /deploy ${feature_id} --target local (working-software check)"
+  if npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy \
+        --target local --project-dir "$PROJECT_DIR" --json; then
+    # Human Proxy records the deploy-gate approval (the working-software review).
+    npx --yes --package="${KIT_NPX}" lakebase-tdd-log \
+      --role product-owner --level info --event gate.approved \
+      --feature "$feature_id" --tdd-dir "$PROJECT_DIR/.tdd" \
+      --message "human-proxy: ${feature_id} reachable locally; working-software deploy gate approved" \
+      --data '{"gate":"deploy","target":"local","validated":true}' >/dev/null 2>&1 || true
+  else
+    npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
+    echo "smoke: /deploy --target local failed for ${feature_id} (app not reachable)" >&2
+    exit 2
+  fi
+  # Tear down the local app before the next iteration.
+  npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
 
   # 7. local commit on the feature branch. The FEIP-7422 smoke is a
   # TDD-workflow validation harness; the SCM-workflow CLIs
