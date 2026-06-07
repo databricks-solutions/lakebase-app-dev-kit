@@ -166,6 +166,16 @@ export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 # the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
 export LAKEBASE_TDD_UI=1
 
+# Headless claude flags shared by every `claude -p` invocation below.
+# --strict-mcp-config makes Claude Code ignore ALL discovered MCP config (the
+# operator's personal ~/.claude servers: jira/slack/google/confluence/...) and
+# load only servers passed via --mcp-config. We pass none, so the session boots
+# with ZERO MCP servers. The TDD workflow drives the kit's bash CLIs, never MCP,
+# so those servers are pure cold-start latency + per-turn token bloat here. Each
+# phase (and each gate-drain re-invocation) is its own `claude -p` boot, so this
+# saving multiplies across the run.
+CLAUDE_FLAGS=(--strict-mcp-config)
+
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
 # --tiers is required when scaffolding (architectural choice). The
@@ -212,7 +222,7 @@ run_claude_with_gate_drain() {
     # allowlist scopes which role subagents may be spawned (only the
     # scrum-master invokes the role agents). The role defs are discoverable
     # because the scaffold wrote them into .claude/agents/.
-    claude -p "$slash_cmd" --agent scrum-master
+    claude -p "$slash_cmd" "${CLAUDE_FLAGS[@]}" --agent scrum-master
     # Drain any gates that opened during this pass. Mock-approver is
     # idempotent: returns 0 even when no gates are open.
     local approved
@@ -330,6 +340,14 @@ scaffold_project() {
       --language python \
       --runner self-hosted \
       --tiers "$TIERS" \
+      `# Per-role model tiering for the smoke: the three opus-recommended roles` \
+      `# (spec-author, architect-reviewer, product-owner) drop to sonnet here.` \
+      `# The smoke validates workflow mechanics + migrations, not prose quality,` \
+      `# so sonnet is plenty and cuts per-turn generation latency substantially.` \
+      `# This also exercises the per-project --agent-model override path itself.` \
+      --agent-model spec-author=sonnet \
+      --agent-model architect-reviewer=sonnet \
+      --agent-model product-owner=sonnet \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 
@@ -449,7 +467,7 @@ run_iteration() {
   # opens no gates.json gate, so it is a plain claude -p invocation (not a
   # gate-drain). A safety teardown follows in case the command left the app up.
   log "  step 6.5: claude -p '/deploy ${feature_id} --target local' --agent scrum-master (working-software check, via release-engineer)"
-  if ! claude -p "/deploy ${feature_id} --target local" --agent scrum-master; then
+  if ! claude -p "/deploy ${feature_id} --target local" "${CLAUDE_FLAGS[@]}" --agent scrum-master; then
     npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
     echo "smoke: /deploy failed for ${feature_id} (app not reachable / verify failed)" >&2
     exit 2
@@ -557,7 +575,7 @@ run_plan_sprint() {
   # so it is a plain claude -p invocation, not a gate-drain. Feature-requests must
   # NOT exist before this proposal is written, so the supply (step c) runs AFTER.
   log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' --agent scrum-master"
-  claude -p "/plan --sprint ${sprint_name}" --agent scrum-master
+  claude -p "/plan --sprint ${sprint_name}" "${CLAUDE_FLAGS[@]}" --agent scrum-master
 
   # c. ONLY AFTER the proposal: the PO authors each sprint item's
   # feature-request.md. Headless, the Human Proxy puts them out from the recorded

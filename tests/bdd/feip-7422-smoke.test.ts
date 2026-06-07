@@ -89,6 +89,30 @@ describe("FEIP-7422 smoke: directory structure", () => {
   });
 });
 
+describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)", () => {
+  const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+
+  it("strips MCP from every claude -p boot via a shared --strict-mcp-config flag", () => {
+    // One shared flag array, applied to every claude invocation (DRY).
+    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config\)/);
+    // Every `claude -p` call threads the shared flags (no bare invocation that
+    // would reload the operator's personal MCP servers).
+    const calls = runSmoke.match(/claude -p "[^"]*"/g) ?? [];
+    expect(calls.length, "expected claude -p invocations").toBeGreaterThanOrEqual(3);
+    for (const line of runSmoke.split("\n")) {
+      if (/^\s*claude -p "/.test(line)) {
+        expect(line, `claude -p call missing CLAUDE_FLAGS: ${line.trim()}`).toContain('"${CLAUDE_FLAGS[@]}"');
+      }
+    }
+  });
+
+  it("tiers the three opus roles down to sonnet for the smoke via --agent-model overrides", () => {
+    expect(runSmoke).toMatch(/--agent-model spec-author=sonnet/);
+    expect(runSmoke).toMatch(/--agent-model architect-reviewer=sonnet/);
+    expect(runSmoke).toMatch(/--agent-model product-owner=sonnet/);
+  });
+});
+
 describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voice)", () => {
   // product-overview.md is the Product Owner's standing intent: who the
   // product is for + what they need to accomplish, open-ended and
