@@ -1,6 +1,6 @@
 # /build : feature build pipeline
 
-Drives a designed feature through TDD cycles to ready-for-review. This wraps the lakebase-tdd-workflows Scrum-Master orchestrator as a one-shot you can invoke from Claude Code in a Lakebase-paired project.
+Drives a designed feature through TDD cycles to ready-for-review. This wraps the lakebase-tdd-workflows Scrum-Master orchestrator as a one-shot you can invoke from Claude Code in a Lakebase-paired project. It is the second phase of the orchestrated path: `/design` -> `/build` -> `/deploy`. When the cycles are green, run `/deploy <feature-id>` to ship the increment to a target and verify it is working software (the per-sprint review).
 
 ## Usage
 

@@ -57,10 +57,11 @@ function deployCommand(projectDir: string, name: string, pinnedVersion?: string)
 }
 
 describe("detectCommandDrift", () => {
-  it("reports overall=ok when both design.md and build.md match the kit", () => {
+  it("reports overall=ok when design.md, build.md, and deploy.md match the kit", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
+    deployCommand(dir, "deploy.md");
     const report = detectCommandDrift({ projectDir: dir });
     expect(report.overall).toBe("ok");
     const byName = (n: string) => report.files.find((f) => f.name === n)!;
@@ -91,6 +92,7 @@ describe("detectCommandDrift", () => {
     // Project was scaffolded against an older kit version.
     deployCommand(dir, "design.md", "0.1.0-old");
     deployCommand(dir, "build.md", "0.1.0-old");
+    deployCommand(dir, "deploy.md", "0.1.0-old");
     const report = detectCommandDrift({ projectDir: dir });
     expect(report.overall).toBe("ok");
     const design = report.files.find((f) => f.name === "design.md")!;
@@ -113,6 +115,7 @@ describe("detectCommandDrift", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
+    deployCommand(dir, "deploy.md");
     for (const hook of ["design.pre-hook.md", "design.post-hook.md", "build.pre-hook.md", "build.post-hook.md"]) {
       fs.writeFileSync(path.join(dir, ".claude", "commands", hook), "# project-owned hook\n");
     }
@@ -126,6 +129,7 @@ describe("detectCommandDrift", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
+    deployCommand(dir, "deploy.md");
     fs.writeFileSync(path.join(dir, ".claude", "commands", "custom.md"), "# project-only\n");
     const report = detectCommandDrift({ projectDir: dir });
     expect(report.overall).toBe("ok");
@@ -159,11 +163,11 @@ describe("detectCommandDrift", () => {
   it("sorts files drifted > missing > extra > unchanged for deterministic display", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md"); // unchanged
-    // build.md missing
+    // build.md + deploy.md missing
     fs.writeFileSync(path.join(dir, ".claude", "commands", "custom.md"), "extra\n");
     const report = detectCommandDrift({ projectDir: dir });
     const order = report.files.map((f) => f.status);
-    expect(order).toEqual(["missing", "extra", "unchanged"]);
+    expect(order).toEqual(["missing", "missing", "extra", "unchanged"]);
   });
 });
 
@@ -172,6 +176,7 @@ describe("detectScaffoldedDrift umbrella", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
+    deployCommand(dir, "deploy.md");
     for (const name of ["pr.yml", "merge.yml", "cleanup-orphans.yml"]) {
       const src = path.join(REPO_ROOT, "templates", "project", "common", ".github", "workflows", name);
       const dst = path.join(dir, ".github", "workflows", name);
@@ -202,6 +207,7 @@ describe("detectScaffoldedDrift umbrella", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
+    deployCommand(dir, "deploy.md");
     // pr.yml + merge.yml + cleanup-orphans.yml all missing.
     const report = detectScaffoldedDrift({ projectDir: dir });
     expect(report.overall).toBe("drift");

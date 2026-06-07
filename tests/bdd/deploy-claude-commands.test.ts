@@ -35,11 +35,12 @@ describe("deployClaudeCommands", () => {
   });
   afterEach(() => rmTempProject(targetDir));
 
-  it("writes design.md, design.pre-hook.md, and build.md under .claude/commands/", async () => {
+  it("writes design.md, design.pre-hook.md, build.md, and deploy.md under .claude/commands/", async () => {
     const result = await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     expect(result.written.sort()).toEqual(
       [
         path.join(".claude", "commands", "build.md"),
+        path.join(".claude", "commands", "deploy.md"),
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
       ].sort()
@@ -149,6 +150,7 @@ describe("scaffoldStaticAll integration", () => {
     expect(result.claudeCommands.sort()).toEqual(
       [
         path.join(".claude", "commands", "build.md"),
+        path.join(".claude", "commands", "deploy.md"),
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
       ].sort()
