@@ -106,6 +106,7 @@
     "lakebase-feature-status": "./dist/scripts/tdd/feature-status.cli.js",
     "lakebase-tdd-human-proxy": "./dist/scripts/tdd/human-proxy.cli.js",
     "lakebase-tdd-intake": "./dist/scripts/tdd/intake.cli.js",
+    "lakebase-tdd-deploy": "./dist/scripts/tdd/deploy.cli.js",
     "lakebase-tdd-gate-conformance": "./dist/scripts/tdd/gate-conformance.cli.js",
     "lakebase-tdd-log": "./dist/scripts/tdd/agent-log.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"

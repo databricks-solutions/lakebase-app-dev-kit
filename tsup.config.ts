@@ -45,6 +45,7 @@ export default defineConfig({
     "scripts/tdd/spec-sync.cli": "scripts/tdd/spec-sync.cli.ts",
     "scripts/tdd/human-proxy.cli": "scripts/tdd/human-proxy.cli.ts",
     "scripts/tdd/intake.cli": "scripts/tdd/intake.cli.ts",
+    "scripts/tdd/deploy.cli": "scripts/tdd/deploy.cli.ts",
     "scripts/tdd/gate-conformance.cli": "scripts/tdd/gate-conformance.cli.ts",
     "scripts/tdd/agent-log.cli": "scripts/tdd/agent-log.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",

@@ -1,0 +1,58 @@
+#!/usr/bin/env node
+// CLI: the /deploy phase. Ship a built feature to a target and verify reachable.
+//
+//   lakebase-tdd-deploy --target local --project-dir .          # start + poll-reachable
+//   lakebase-tdd-deploy --target local --project-dir . --stop   # tear down
+//   lakebase-tdd-deploy --target local --json
+//
+// Only `type: local` targets are implemented; remote types are refused with a
+// clear message. Exit codes: 0 ok, 2 bad args, 6 deploy failed.
+
+import { isCliEntry } from "../util/cli-entry.js";
+import { deployToTarget, stopLocal } from "./deploy.js";
+
+export async function runDeployCli(argv: string[]): Promise<number> {
+  let target: string | undefined;
+  let projectDir = ".";
+  let stop = false;
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--target": target = argv[++i]; break;
+      case "--project-dir": projectDir = argv[++i]; break;
+      case "--stop": stop = true; break;
+      case "--json": json = true; break;
+      case "-h":
+      case "--help":
+        process.stdout.write(
+          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--stop] [--json]\n" +
+            "Ships a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n",
+        );
+        return 0;
+    }
+  }
+  if (!target) {
+    process.stderr.write("Error: --target is required.\n");
+    return 2;
+  }
+
+  if (stop) {
+    const r = stopLocal(projectDir, target);
+    process.stdout.write(`lakebase-tdd-deploy: ${r.stopped ? "stopped" : "nothing to stop"} (${target})\n`);
+    return 0;
+  }
+
+  const result = await deployToTarget({ projectDir, targetName: target });
+  if (json) {
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  } else if (result.ok) {
+    process.stdout.write(`lakebase-tdd-deploy: ${target} reachable at ${result.url} (pid ${result.pid})\n`);
+  } else {
+    process.stderr.write(`lakebase-tdd-deploy: ${target} deploy failed: ${result.reason}\n`);
+  }
+  return result.ok ? 0 : 6;
+}
+
+if (isCliEntry(import.meta.url)) {
+  runDeployCli(process.argv.slice(2)).then((code) => process.exit(code));
+}
