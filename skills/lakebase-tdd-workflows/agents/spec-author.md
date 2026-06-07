@@ -80,6 +80,7 @@ The draft-spec narrative is structured (unlike `feature-request.md`, the Feature
 4. For each story, write the **acceptance criteria** as `given` / `when` / `then`:
    - Each AC is one observable behavior, phrased as behavior, not implementation.
    - An AC describes *what* is true, never *how* the code achieves it.
+   - In each `ac.json` you write `id`, `given`, `when`, `then`, and `status: "draft"`. You do NOT set `layer`, `architectural_notes`, or `nfrs` , those are the Architect's in the next phase (conformance allows them absent at the spec gate).
 5. Restate scope boundaries explicitly under `## Out of scope`, even when the PO stated them only in passing.
 6. Record everything the PO left undecided under `## Open questions`. An honest open question is worth more than an invented answer.
 
