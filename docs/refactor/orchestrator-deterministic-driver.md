@@ -148,6 +148,57 @@ build -> deploy. Spikes are throwaway exploration outside the TDD loop; the new
 - `--feature <id> --only <design|build|deploy>`: one phase of one feature (Tier 2).
 - `--feature <id>` (unbounded): one whole feature design -> build -> deploy.
 
+## Implementation plan (phased; TDD, each phase a commit + green suite, pause between)
+
+Decision recorded: fix the ad hoc deploy gate FIRST, then mirror it for the
+sprint plan gate.
+
+- **Phase 1 (DONE, commit ce46c3e, unpushed):** deploy gate reconciled into the
+  gate model with teeth (deploy-evidence.json: reachable + verify.passed).
+
+- **Phase 2, sprint plan gate (mirror the deploy gate).** RECOMMENDED scope:
+  sprint-scoped `.tdd/sprints/<name>/gates.json` reusing the `GateRecord` shape
+  + a thin sprint variant of read/write/drain (smallest generalization, same
+  teeth pattern; avoids a risky full feature|sprint refactor of the gate
+  substrate). Plan gate artifact = the sprint backlog (feature-proposals.md +
+  >=1 authored feature-request); teeth = the gate approves only when the backlog
+  exists + conforms. Human Proxy gains a `--sprint <name> --gate plan` path.
+  Re-apply the (reverted) brain change: `surface-plan-gate` -> `approve-plan-gate`
+  in the planning sub-machine + `PlanningState.gateSurfaced/gateApproved`; the
+  sprint-scoped readState populates them.
+
+- **Phase 3, driver bounds (Tier-2 + plan-only).** `runDriver` stop-bound
+  predicate; CLI `--plan-only` and `--only <design|build|deploy>`; the loop halts
+  at the phase boundary. Hermetic tests per bound.
+
+- **Phase 4, sprint mode (`--sprint`, the `/sprint` orchestrator).** A sprint
+  backlog manifest (`.tdd/sprints/<name>/backlog.json`, the feature ids).
+  `--sprint` runs planning (plan gate) -> reads the backlog -> per feature:
+  claim + drive (design -> build -> deploy) in one process. Sprint-level
+  readState/context. Hermetic full-sprint e2e.
+
+- **Phase 5, `/spike`.** `lakebase-tdd-spike` CLI wrapping `spike.ts`
+  (cut/list/delete) + carry-forward; the `/spike <slug> [--for <feature>]`
+  command. Throwaway, outside the driver phases.
+
+- **Phase 6, commands.** Author/rewrite `/sprint`, `/plan` (`--plan-only`),
+  `/design` (`--only design`), `/build` (`--only build`), `/deploy`
+  (`--only deploy`), `/spike`; Tier-2 commands print the suggested next step.
+  Update SKILL.md.
+
+- **Phase 7, launcher.** Rewrite `tdd.sh` to drop `--agent scrum-master` (open a
+  plain session / invoke the driver per phase). Update `tdd-launcher.test.ts`.
+
+- **Phase 8, purge scrum-master.** Delete the agent def; remove from
+  manifest.json, scaffold.ts, deploy-claude-agents.test.ts, agent-models,
+  agent-log enum + schema; swap the orchestration log label to `orchestrator`
+  (`driver` is taken by the TDD pair); scrub SKILL/README/CLAUDE/docs.
+
+- **Phase 9, smoke rewrite + final.** `run-smoke.sh` -> `/sprint` (driver
+  `--sprint`); remove the dead `run_claude_with_gate_drain`; update
+  `feip-7422-smoke.test.ts`; rebuild + commit dist for the npx smoke; full suite;
+  (gated) live FEIP-7422 re-validate.
+
 ## What this subsumes / reconciles
 
 - Subsumes the orchestrator `--model` pin (no orchestrator model at all) and the
