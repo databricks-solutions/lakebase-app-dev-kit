@@ -78,7 +78,6 @@ function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, feat
 
 const PIPELINE_BIN = "lakebase-tdd-pipeline";
 const EXPERIMENT_BIN = "lakebase-tdd-experiment";
-const DEPLOY_BIN = "lakebase-tdd-deploy";
 const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 
 /**
@@ -142,7 +141,17 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "await-acceptance":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }];
+      // The Release Engineer deploys the story FROM its experiment branch so
+      // the PO reviews RUNNING software, then we mark the pipeline awaiting.
+      return [
+        {
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          task: `Deploy story ${action.story} from its experiment branch (target ${cfg.deployTarget ?? "local"}) so the Product Owner can review running software, and produce the reachability + feature-verify evidence.`,
+        },
+        { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
+      ];
 
     case "accept":
       // Merge the experiment into the feature branch (git + migrations), then
@@ -178,11 +187,16 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       return [{ kind: "set-phase", phase: "deploy" }];
 
     case "deploy":
+      // The Release Engineer ships the merged feature: deploy + poll reachable
+      // + run the feature verify against the running app + produce the deploy-
+      // gate evidence. Invoked as a role (like every other role) so the driver
+      // only routes; the role composes lakebase-tdd-deploy + the verify.
       return [
         {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: ["--project-dir", cfg.projectDir, "--target", cfg.deployTarget ?? "local"],
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`,
         },
       ];
 

@@ -7122,7 +7122,6 @@ function roleTask(action, featureId) {
 }
 var PIPELINE_BIN = "lakebase-tdd-pipeline";
 var EXPERIMENT_BIN = "lakebase-tdd-experiment";
-var DEPLOY_BIN = "lakebase-tdd-deploy";
 var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
@@ -7169,7 +7168,15 @@ function commandsForAction(action, cfg) {
         }
       ];
     case "await-acceptance":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }];
+      return [
+        {
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          task: `Deploy story ${action.story} from its experiment branch (target ${cfg.deployTarget ?? "local"}) so the Product Owner can review running software, and produce the reachability + feature-verify evidence.`
+        },
+        { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
+      ];
     case "accept":
       return [
         {
@@ -7199,9 +7206,10 @@ function commandsForAction(action, cfg) {
     case "deploy":
       return [
         {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: ["--project-dir", cfg.projectDir, "--target", cfg.deployTarget ?? "local"]
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`
         }
       ];
     case "approve-deploy-gate":

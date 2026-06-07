@@ -92,8 +92,20 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect((cmds[1] as { args: string[] }).args[0]).toBe("accept");
   });
 
-  it("deploy + approve-deploy-gate route to deploy + human-proxy", () => {
-    expect((commandsForAction({ kind: "deploy" }, cfg())[0] as { bin: string }).bin).toBe("lakebase-tdd-deploy");
+  it("deploy goes through the release-engineer role (deploy + verify + evidence)", () => {
+    const cmds = commandsForAction({ kind: "deploy" }, cfg());
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "release-engineer" });
+    expect((cmds[0] as { task: string }).task).toMatch(/verify/i);
+  });
+
+  it("await-acceptance deploys the story for review (release-engineer) then marks awaiting", () => {
+    const cmds = commandsForAction({ kind: "await-acceptance", story: "S1" }, cfg());
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "release-engineer" });
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
+    expect((cmds[1] as { args: string[] }).args[0]).toBe("await-acceptance");
+  });
+
+  it("approve-deploy-gate is the PO gate via the Human Proxy", () => {
     const g = commandsForAction({ kind: "approve-deploy-gate" }, cfg())[0] as { bin: string; args: string[] };
     expect(g.bin).toBe("lakebase-tdd-human-proxy");
     expect(g.args).toContain("--gate");

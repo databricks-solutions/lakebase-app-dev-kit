@@ -101,9 +101,13 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
     // backstop cannot recover them).
     expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model sonnet\)/);
     // Every `claude -p` call threads the shared flags (no bare invocation that
-    // would reload the operator's personal MCP servers).
+    // would reload the operator's personal MCP servers). In driver-only mode the
+    // per-feature design/build/deploy role turns are spawned INSIDE
+    // lakebase-tdd-drive (the deterministic driver, not shell-visible); the only
+    // shell-level claude -p left is sprint `/plan`. Assert at least one and that
+    // each one present threads the flags.
     const calls = runSmoke.match(/claude -p "[^"]*"/g) ?? [];
-    expect(calls.length, "expected claude -p invocations").toBeGreaterThanOrEqual(3);
+    expect(calls.length, "expected claude -p invocations").toBeGreaterThanOrEqual(1);
     for (const line of runSmoke.split("\n")) {
       if (/^\s*claude -p "/.test(line)) {
         expect(line, `claude -p call missing CLAUDE_FLAGS: ${line.trim()}`).toContain('"${CLAUDE_FLAGS[@]}"');
@@ -249,11 +253,13 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
 describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working software)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("runs /deploy via the actual command (claude -p), not by emulating the substrate", () => {
-    // Parity: /deploy is driven through the real command, which delegates to the
-    // release-engineer agent + records the PO deploy gate. The smoke no longer
-    // calls lakebase-tdd-deploy to perform the deploy itself.
-    expect(runSmoke).toMatch(/claude -p "\/deploy \$\{feature_id\} --target local"/);
+  it("deploys through the driver's deploy phase (release-engineer), not a separate /deploy or substrate emulation", () => {
+    // Driver-only: there is no separate shell-level /deploy. lakebase-tdd-drive
+    // runs the feature's deploy phase, which routes the deploy to the
+    // release-engineer role (deploy + reachability + feature-verify + the PO
+    // deploy gate). The single driver invocation carries it.
+    expect(runSmoke).toMatch(/lakebase-tdd-drive --feature "\$\{feature_id\}"/);
+    expect(runSmoke, "deploy must not be a separate shell-level claude -p call").not.toMatch(/claude -p "\/deploy/);
     // The smoke still tears the local app down between iterations (safety).
     expect(runSmoke).toMatch(/lakebase-tdd-deploy --target local --project-dir "\$PROJECT_DIR" --stop/);
   });
