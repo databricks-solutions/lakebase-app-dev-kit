@@ -125,8 +125,10 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
 
   it("makes role observability structural: live-tails the agent log + reconciles after each phase", () => {
     // The agent log is streamed to the console during each (silent) claude -p
-    // turn, so subagent progress is visible live.
-    expect(runSmoke).toMatch(/tail -n0 -f .*agent-log\.jsonl|start_agent_log_tail/);
+    // turn, so subagent progress is visible live. Backgrounded directly (not via
+    // $(...)) so the command substitution can't deadlock on the tail -f pipe.
+    expect(runSmoke).toMatch(/\(\s*tail -n0 -f "\$tdd_log"/);
+    expect(runSmoke).toMatch(/local tail_pid=\$!/);
     // After each pass, a deterministic reconcile emits artifact.written for any
     // artifact a role model did not log itself.
     expect(runSmoke).toMatch(/lakebase-tdd-log --reconcile --feature/);

@@ -223,20 +223,6 @@ fi
 # headroom).
 GATE_DRAIN_MAX_ITERATIONS=5
 
-# Live-tail the centralized agent log to the console for the duration of a
-# `claude -p` turn. Subagent work NEVER streams to the parent claude -p stdout
-# (each role runs in an isolated, silent context), so the structured log is the
-# only live signal that a role is progressing. We surface each new event as it
-# lands. Echoes the tail pid; the caller kills it when the turn returns (killing
-# the jq head makes tail exit via SIGPIPE on its next write).
-start_agent_log_tail() {
-  local tdd_log="$1"
-  touch "$tdd_log" 2>/dev/null || true
-  ( tail -n0 -f "$tdd_log" 2>/dev/null \
-      | jq -rR 'fromjson? | "      · [\(.role)] \(.event): \(.message)"' 2>/dev/null ) &
-  echo $!
-}
-
 run_claude_with_gate_drain() {
   local slash_cmd="$1"   # e.g. "/design F1-initial-domain" or "/build F1-..."
   local feature_id="$2"  # e.g. "F1-initial-domain"
@@ -248,9 +234,20 @@ run_claude_with_gate_drain() {
     # allowlist scopes which role subagents may be spawned (only the
     # scrum-master invokes the role agents). The role defs are discoverable
     # because the scaffold wrote them into .claude/agents/.
-    local tail_pid; tail_pid="$(start_agent_log_tail "$tdd_log")"
+    # Live-tail the agent log to the console for this turn. Subagent work never
+    # streams to the parent claude -p stdout, so the structured log is the only
+    # live signal. Background it DIRECTLY (not via $(...)): a command
+    # substitution would block forever waiting for the tail -f to close the
+    # capture pipe, deadlocking the whole gate-drain before claude even starts.
+    touch "$tdd_log" 2>/dev/null || true
+    ( tail -n0 -f "$tdd_log" 2>/dev/null \
+        | jq -rR 'fromjson? | "      · [\(.role)] \(.event): \(.message)"' 2>/dev/null ) &
+    local tail_pid=$!
     claude -p "$slash_cmd" "${CLAUDE_FLAGS[@]}" --agent scrum-master
+    # Tear the tail down robustly: kill the subshell + the tail -f it spawned
+    # (killing the subshell alone can leave tail -f re-parented and leaked).
     kill "$tail_pid" 2>/dev/null || true
+    pkill -f "tail -n0 -f ${tdd_log}" 2>/dev/null || true
     # Structural observability backstop (FEIP-7510): emit artifact.written for
     # any artifact produced this pass that the role model did not log itself
     # (e.g. a sonnet/haiku role that skipped its own emits). Idempotent.
