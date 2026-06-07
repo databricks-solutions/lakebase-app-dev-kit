@@ -51,7 +51,7 @@ function stageN1Fixture() {
   writePlan(tdd, SAMPLE_PLAN);
   recordPlan(tdd, SAMPLE_PLAN, "kevin.hartman@databricks.com");
 
-  const expDir = join(tdd, "experiments", FEATURE_ID, "checkout");
+  const expDir = join(tdd, "experiments", FEATURE_ID, "S1", "checkout");
   mkdirSync(expDir, { recursive: true });
   writeFileSync(join(expDir, "branch.txt"), "br-feat-add-orders");
   writeFileSync(join(expDir, "notes.md"), "# checkout\n");
@@ -184,6 +184,7 @@ const TEST_LIST_KEYS = ["total", "by_status", "completion_pct"] as const;
 const TEST_LIST_STATUS_KEYS = ["pending", "red", "green", "refactored", "skipped"] as const;
 
 const EXPERIMENT_KEYS = [
+  "story_id",
   "slug",
   "branch_id",
   "status",
@@ -291,7 +292,7 @@ function stageExperiment(
   },
   cycleCount: number
 ) {
-  const dir = join(tdd, "experiments", FEATURE_ID, slug);
+  const dir = join(tdd, "experiments", FEATURE_ID, "S1", slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), branchId);
   writeFileSync(join(dir, "notes.md"), `# ${slug}\n`);

@@ -32,38 +32,38 @@ afterEach(() => {
 
 describe("experiment lifecycle (hermetic)", () => {
   it("listExperiments returns empty when no experiments dir exists", () => {
-    expect(listExperiments(tdd, "F1")).toEqual([]);
+    expect(listExperiments(tdd, "F1", "S1")).toEqual([]);
   });
 
   it("listExperiments reads existing experiment dirs", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-1-postgres");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-1-postgres");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "branch.txt"), "feature/test-exp-1");
-    const list = listExperiments(tdd, "F1");
+    const list = listExperiments(tdd, "F1", "S1");
     expect(list.length).toBe(1);
     expect(list[0].branch_id).toBe("feature/test-exp-1");
     expect(list[0].experiment_slug).toBe("exp-1-postgres");
   });
 
   it("readOutcomes returns null when outcomes file is missing", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-1");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-1");
     mkdirSync(dir, { recursive: true });
-    expect(readOutcomes(tdd, "F1", "exp-1")).toBeNull();
+    expect(readOutcomes(tdd, "F1", "S1", "exp-1")).toBeNull();
   });
 
   it("writeOutcomes then readOutcomes round-trip", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-1");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-1");
     mkdirSync(dir, { recursive: true });
-    writeOutcomes(tdd, "F1", "exp-1", { status: "succeeded", tests_passed: 12 });
-    const round = readOutcomes(tdd, "F1", "exp-1");
+    writeOutcomes(tdd, "F1", "S1", "exp-1", { status: "succeeded", tests_passed: 12 });
+    const round = readOutcomes(tdd, "F1", "S1", "exp-1");
     expect(round?.status).toBe("succeeded");
     expect(round?.tests_passed).toBe(12);
   });
 
   it("writeOutcomes round-trips the per-tag breakdown (api/e2e/infra)", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-tags");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-tags");
     mkdirSync(dir, { recursive: true });
-    writeOutcomes(tdd, "F1", "exp-tags", {
+    writeOutcomes(tdd, "F1", "S1", "exp-tags", {
       status: "running",
       tests_passed: 7,
       tests_failed: 2,
@@ -73,7 +73,7 @@ describe("experiment lifecycle (hermetic)", () => {
         infra: { passed: 1, failed: 0 },
       },
     });
-    const round = readOutcomes(tdd, "F1", "exp-tags");
+    const round = readOutcomes(tdd, "F1", "S1", "exp-tags");
     expect(round?.by_tag?.api).toEqual({ passed: 5, failed: 0 });
     expect(round?.by_tag?.e2e).toEqual({ passed: 1, failed: 2 });
     expect(round?.by_tag?.infra).toEqual({ passed: 1, failed: 0 });
@@ -83,34 +83,34 @@ describe("experiment lifecycle (hermetic)", () => {
   });
 
   it("by_tag entries are individually optional (partial reporting is valid)", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-partial");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-partial");
     mkdirSync(dir, { recursive: true });
-    writeOutcomes(tdd, "F1", "exp-partial", {
+    writeOutcomes(tdd, "F1", "S1", "exp-partial", {
       status: "running",
       tests_passed: 3,
       by_tag: { api: { passed: 3, failed: 0 } },
     });
-    const round = readOutcomes(tdd, "F1", "exp-partial");
+    const round = readOutcomes(tdd, "F1", "S1", "exp-partial");
     expect(round?.by_tag?.api).toEqual({ passed: 3, failed: 0 });
     expect(round?.by_tag?.e2e).toBeUndefined();
     expect(round?.by_tag?.infra).toBeUndefined();
   });
 
   it("by_tag is omitted entirely when no tag breakdown is reported (backwards compatible)", () => {
-    const dir = join(tdd, "experiments", "F1", "exp-no-tags");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-no-tags");
     mkdirSync(dir, { recursive: true });
-    writeOutcomes(tdd, "F1", "exp-no-tags", {
+    writeOutcomes(tdd, "F1", "S1", "exp-no-tags", {
       status: "succeeded",
       tests_passed: 4,
       tests_failed: 0,
     });
-    const round = readOutcomes(tdd, "F1", "exp-no-tags");
+    const round = readOutcomes(tdd, "F1", "S1", "exp-no-tags");
     expect(round?.by_tag).toBeUndefined();
     expect(round?.tests_passed).toBe(4);
   });
 
   it("deleteExperiment preserves on-disk record when deleteBranchToo is false", async () => {
-    const dir = join(tdd, "experiments", "F1", "exp-1");
+    const dir = join(tdd, "experiments", "F1", "S1", "exp-1");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "branch.txt"), "feature/test-exp-1");
     await deleteExperiment({
@@ -118,6 +118,7 @@ describe("experiment lifecycle (hermetic)", () => {
       
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-1",
       deleteBranchToo: false,
     });
@@ -133,6 +134,7 @@ describe("experiment lifecycle (hermetic)", () => {
         
         tddDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         experimentSlug: "ghost",
         deleteBranchToo: false,
       })
@@ -153,6 +155,7 @@ liveDescribe("experiment lifecycle (live, LAKEBASE_TEST_E2E=1)", () => {
       instance,
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: slug,
       branch: slug,
       parentBranch,
@@ -166,6 +169,7 @@ liveDescribe("experiment lifecycle (live, LAKEBASE_TEST_E2E=1)", () => {
       instance,
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: slug,
       deleteBranchToo: true,
     });

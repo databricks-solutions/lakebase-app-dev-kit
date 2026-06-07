@@ -35,6 +35,7 @@ function matrixRow(overrides: Partial<TagMatrixRow>): TagMatrixRow {
 function mkReport(overrides: Partial<ComparisonReport>): ComparisonReport {
   return {
     feature_id: overrides.feature_id ?? "F1-checkout",
+    story_id: overrides.story_id ?? "S1-cart",
     generated_at: overrides.generated_at ?? FIXED_TIMESTAMP,
     rows: overrides.rows ?? [],
     matrix: overrides.matrix ?? [],

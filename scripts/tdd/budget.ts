@@ -1,6 +1,6 @@
-import { listExperiments } from "./experiment";
+import { listExperiments, listExperimentStories } from "./experiment";
 import { readPlan } from "./design-spec-gate";
-import type { ExperimentOutcomes } from "./experiment";
+import type { ExperimentOutcomes, ExperimentRecord } from "./experiment";
 import { readOutcomes } from "./experiment";
 
 export interface BudgetSnapshot {
@@ -20,9 +20,13 @@ export interface BudgetViolation {
 export function snapshotBudget(tddDir: string, featureId: string): BudgetSnapshot | null {
   const plan = readPlan(tddDir, featureId);
   if (!plan) return null;
-  const experiments = listExperiments(tddDir, featureId);
+  // Experiments live under stories now (FEIP-7566); the feature-level budget
+  // aggregates across every story's experiments.
+  const experiments: ExperimentRecord[] = listExperimentStories(tddDir, featureId).flatMap((storyId) =>
+    listExperiments(tddDir, featureId, storyId)
+  );
   const inUse = experiments.filter((e) => {
-    const o: ExperimentOutcomes | null = readOutcomes(tddDir, featureId, e.experiment_slug);
+    const o: ExperimentOutcomes | null = readOutcomes(tddDir, featureId, e.story_id, e.experiment_slug);
     return !o || o.status === "running";
   }).length;
   const wallClockMinutes =

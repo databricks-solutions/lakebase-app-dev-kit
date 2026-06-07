@@ -47,7 +47,7 @@ function stageN1Fixture() {
   });
   writePlan(tdd, SAMPLE_PLAN);
   recordPlan(tdd, SAMPLE_PLAN, "kevin.hartman@databricks.com");
-  const expDir = join(tdd, "experiments", FEATURE_ID, "checkout");
+  const expDir = join(tdd, "experiments", FEATURE_ID, "S1", "checkout");
   mkdirSync(expDir, { recursive: true });
   writeFileSync(join(expDir, "branch.txt"), "br-feat-add-orders");
   writeFileSync(join(expDir, "notes.md"), "# checkout\n");

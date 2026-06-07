@@ -18,10 +18,12 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { dirname, join, relative } from "path";
+import { experimentDir } from "./experiment";
 
 export interface WriteArtifactArgs {
   tddDir: string;
   featureId: string;
+  storyId: string;
   experimentSlug: string;
   cycleId: string;
   /**
@@ -41,12 +43,12 @@ export interface ArtifactEntry {
   modified: string;
 }
 
-function artifactsRoot(tddDir: string, featureId: string, experimentSlug: string): string {
-  return join(tddDir, "experiments", featureId, experimentSlug, "artifacts");
+function artifactsRoot(tddDir: string, featureId: string, storyId: string, experimentSlug: string): string {
+  return join(experimentDir(tddDir, featureId, storyId, experimentSlug), "artifacts");
 }
 
-function cycleDir(args: { tddDir: string; featureId: string; experimentSlug: string; cycleId: string }): string {
-  return join(artifactsRoot(args.tddDir, args.featureId, args.experimentSlug), args.cycleId);
+function cycleDir(args: { tddDir: string; featureId: string; storyId: string; experimentSlug: string; cycleId: string }): string {
+  return join(artifactsRoot(args.tddDir, args.featureId, args.storyId, args.experimentSlug), args.cycleId);
 }
 
 export function writeArtifact(args: WriteArtifactArgs): string {
@@ -67,10 +69,11 @@ export function writeArtifact(args: WriteArtifactArgs): string {
 export function listArtifacts(
   tddDir: string,
   featureId: string,
+  storyId: string,
   experimentSlug: string,
   cycleId?: string
 ): ArtifactEntry[] {
-  const root = artifactsRoot(tddDir, featureId, experimentSlug);
+  const root = artifactsRoot(tddDir, featureId, storyId, experimentSlug);
   if (!existsSync(root)) return [];
   const entries: ArtifactEntry[] = [];
   const cycleIds = cycleId
@@ -96,6 +99,7 @@ export function listArtifacts(
 export function readArtifact(args: {
   tddDir: string;
   featureId: string;
+  storyId: string;
   experimentSlug: string;
   cycleId: string;
   name: string;

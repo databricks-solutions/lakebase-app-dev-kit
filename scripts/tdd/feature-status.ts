@@ -4,6 +4,7 @@ import { readMasterTestList, type TestListItem } from "./test-list";
 import { readPlan, type ExperimentPlan } from "./design-spec-gate";
 import {
   listExperiments,
+  listExperimentStories,
   readOutcomes,
   type ExperimentOutcomes,
 } from "./experiment";
@@ -19,6 +20,7 @@ export interface TestListSummary {
 }
 
 export interface ExperimentStatusEntry {
+  story_id: string;
   slug: string;
   branch_id: string;
   status: ExperimentOutcomes["status"] | null;
@@ -175,20 +177,25 @@ export function getFeatureStatus(
   featureId: string
 ): FeatureStatusSnapshot {
   const plan = readPlan(tddDir, featureId);
-  const experimentRecords = listExperiments(tddDir, featureId);
 
-  const experiments: ExperimentStatusEntry[] = experimentRecords.map((rec) => {
-    const outcomes = readOutcomes(tddDir, featureId, rec.experiment_slug);
-    return {
-      slug: rec.experiment_slug,
-      branch_id: rec.branch_id,
-      status: outcomes?.status ?? null,
-      tests_passed: outcomes?.tests_passed ?? null,
-      tests_failed: outcomes?.tests_failed ?? null,
-      schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-      cycle_count: timelineCycleCount(rec.dir),
-    };
-  });
+  // Experiments live under stories now (FEIP-7566): collect across every
+  // story that has an experiments subtree.
+  const experiments: ExperimentStatusEntry[] = [];
+  for (const storyId of listExperimentStories(tddDir, featureId)) {
+    for (const rec of listExperiments(tddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+      experiments.push({
+        story_id: storyId,
+        slug: rec.experiment_slug,
+        branch_id: rec.branch_id,
+        status: outcomes?.status ?? null,
+        tests_passed: outcomes?.tests_passed ?? null,
+        tests_failed: outcomes?.tests_failed ?? null,
+        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
+        cycle_count: timelineCycleCount(rec.dir),
+      });
+    }
+  }
 
   let smells: SmellsLog["detected"] = [];
   try {

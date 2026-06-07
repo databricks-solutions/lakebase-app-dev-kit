@@ -7,6 +7,7 @@ import { archiveExperiment } from "./archive-experiment";
 export interface PromoteArgs {
   tddDir: string;
   featureId: string;
+  storyId: string;
   winnerSlug: string;
   /** Set to true to record the HITL approval. Refuses to run without it. */
   hitlApproved: boolean;
@@ -50,17 +51,17 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
   if (!args.hitlApproved) {
     throw new Error("promoteExperiment requires hitlApproved: true (HITL Gate)");
   }
-  const { tddDir, featureId, winnerSlug, approverEmail } = args;
-  const experiments = listExperiments(tddDir, featureId);
+  const { tddDir, featureId, storyId, winnerSlug, approverEmail } = args;
+  const experiments = listExperiments(tddDir, featureId, storyId);
   const winner = experiments.find((e) => e.experiment_slug === winnerSlug);
   if (!winner) {
-    throw new Error(`winner ${winnerSlug} not found among experiments for ${featureId}`);
+    throw new Error(`winner ${winnerSlug} not found among experiments for ${featureId}/${storyId}`);
   }
   const losers = experiments.filter((e) => e.experiment_slug !== winnerSlug);
 
   // Mark winner succeeded
-  const winnerOutcome = readOutcomes(tddDir, featureId, winnerSlug);
-  writeOutcomes(tddDir, featureId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
+  const winnerOutcome = readOutcomes(tddDir, featureId, storyId, winnerSlug);
+  writeOutcomes(tddDir, featureId, storyId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
 
   // Archive each loser via the lifecycle primitive (FEIP-7214). Each
   // archive is atomic + HITL-gated; promote inherits the HITL approval
@@ -70,6 +71,7 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
     await archiveExperiment({
       tddDir,
       featureId,
+      storyId,
       experimentSlug: loser.experiment_slug,
       hitlApproved: true,
       approverEmail,

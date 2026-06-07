@@ -56,8 +56,8 @@ function seedFeatureAndAc(
   fs.writeFileSync(path.join(acDir, `${opts.acId}.json`), JSON.stringify(ac, null, 2));
 }
 
-function seedExperiment(tddDir: string, featureId: string, slug: string): void {
-  const dir = path.join(tddDir, "experiments", featureId, slug);
+function seedExperiment(tddDir: string, featureId: string, slug: string, storyId = "S1"): void {
+  const dir = path.join(tddDir, "experiments", featureId, storyId, slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "branch.txt"), "test-branch");
   const outcomes: ExperimentOutcomes = { status: "running" };
@@ -200,7 +200,7 @@ describe("recordRunnerOutcome", () => {
     });
     expect(result.tag).toBe("e2e");
     expect(result.runsForTag).toBe(1);
-    const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
     expect(outcomes.by_tag?.e2e).toEqual({ passed: 1, failed: 0 });
   });
 
@@ -355,10 +355,10 @@ describe("writeOutcomes pass-through (regression)", () => {
     const tddDir = mkTempTdd("write");
     try {
       seedExperiment(tddDir, "F1", "exp");
-      const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+      const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
       recordTagRun(outcomes, "infra", false);
-      writeOutcomes(tddDir, "F1", "exp", outcomes);
-      const reread = readOutcomes(tddDir, "F1", "exp")!;
+      writeOutcomes(tddDir, "F1", "S1", "exp", outcomes);
+      const reread = readOutcomes(tddDir, "F1", "S1", "exp")!;
       expect(reread.by_tag?.infra).toEqual({ passed: 0, failed: 1 });
       expect(reread.tests_failed).toBe(1);
     } finally {

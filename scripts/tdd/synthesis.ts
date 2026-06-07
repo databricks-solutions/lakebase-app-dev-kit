@@ -15,6 +15,7 @@ export interface SynthesisPick {
 export interface SynthesizeArgs extends BranchLookupOpts {
   tddDir: string;
   featureId: string;
+  storyId: string;
   picks: SynthesisPick[];
   /** Slug for the new synthesized experiment branch. */
   synthesizedSlug: string;
@@ -44,15 +45,15 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
   if (!args.hitlApproved) {
     throw new Error("synthesizeExperiments requires hitlApproved: true (HITL Gate)");
   }
-  const { tddDir, featureId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
+  const { tddDir, featureId, storyId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
 
   if (picks.length < 2) {
     throw new Error(`synthesis requires picks from at least 2 experiments (got ${picks.length})`);
   }
-  const experiments = listExperiments(tddDir, featureId);
+  const experiments = listExperiments(tddDir, featureId, storyId);
   for (const pick of picks) {
     if (!experiments.find((e) => e.experiment_slug === pick.source_slug)) {
-      throw new Error(`pick source ${pick.source_slug} is not an experiment of ${featureId}`);
+      throw new Error(`pick source ${pick.source_slug} is not an experiment of ${featureId}/${storyId}`);
     }
   }
 
@@ -113,6 +114,7 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
     ...lookup,
     tddDir,
     featureId,
+    storyId,
     experimentSlug: synthesizedSlug,
     branch,
     parentBranch,

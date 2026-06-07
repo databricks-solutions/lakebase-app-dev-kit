@@ -240,11 +240,11 @@ export function recordRunnerOutcome(args: RecordRunnerOutcomeArgs): RecordRunner
   }
   const tag = acLayerToTag(layer);
   const outcomes =
-    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug) ?? {
+    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug) ?? {
       status: "running",
     };
   recordTagRun(outcomes, tag, args.passed);
-  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug, outcomes);
+  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug, outcomes);
   // Stamp the layer back onto the cycle when it was inferred from the
   // argument so subsequent reads see it.
   if (!cycle.layer && args.layer) {
@@ -268,7 +268,7 @@ export function markGreen(
   // always means the runner-dispatch map was wrong (npm test invoked
   // for an [E2E] row, [Infra] row with no runner wired, etc.).
   if (a.layer && a.experiment_slug) {
-    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, a.experiment_slug);
+    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, scope.story_id, a.experiment_slug);
     const tag = acLayerToTag(a.layer);
     const runs = outcomes ? tagRunCount(outcomes, tag) : 0;
     if (runs === 0) {
