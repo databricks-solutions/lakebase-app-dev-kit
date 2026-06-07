@@ -104,21 +104,21 @@ function gatedUnbuilt(): StoryView {
   return {
     gateApproved: true, gateSurfaced: true,
     design: { hasAcs: true, architectAnnotated: true, testListReady: true },
-    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, accepted: false },
+    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, deployVerified: false, accepted: false },
   };
 }
 function freshStory(): StoryView {
   return {
     gateApproved: false, gateSurfaced: false,
     design: { hasAcs: false, architectAnnotated: false, testListReady: false },
-    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, accepted: false },
+    build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, deployVerified: false, accepted: false },
   };
 }
 function builtAccepted(): StoryView {
   return {
     gateApproved: true, gateSurfaced: true,
     design: { hasAcs: true, architectAnnotated: true, testListReady: true },
-    build: { experimentCut: true, testsWritten: true, codeWritten: true, awaitingAcceptance: true, accepted: true },
+    build: { experimentCut: true, testsWritten: true, codeWritten: true, awaitingAcceptance: true, deployVerified: true, accepted: true },
   };
 }
 function ws(over: Partial<DriveState>): DriveState {
@@ -160,6 +160,9 @@ describe("nextTransition: build lane (after a story is gated)", () => {
     v.build.codeWritten = true;
     expect(nextTransition(st)).toEqual({ kind: "await-acceptance", story: "S1" });
     v.build.awaitingAcceptance = true;
+    // Teeth: not yet deploy-verified -> re-deploy (await-acceptance), not accept.
+    expect(nextTransition(st)).toEqual({ kind: "await-acceptance", story: "S1" });
+    v.build.deployVerified = true;
     expect(nextTransition(st)).toEqual({ kind: "accept", story: "S1" });
     v.build.accepted = true;
     expect(nextTransition(st)).toEqual({ kind: "complete", story: "S1" });

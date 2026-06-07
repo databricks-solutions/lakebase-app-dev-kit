@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveDeployTarget, deployToTarget, stopLocal } from "../../scripts/tdd/deploy";
+import { resolveDeployTarget, deployToTarget, stopLocal, storyDeployVerified } from "../../scripts/tdd/deploy";
 
 const TARGETS = [
   "targets:",
@@ -244,5 +244,49 @@ describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)
     });
     expect(result.ok).toBe(true);
     expect(result.evidencePath).toBeUndefined();
+  });
+});
+
+describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified (FEIP-7461)", () => {
+  const FEATURE = "F1-initial-domain";
+  const STORY = "S1-submit";
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+  function featureDir(root: string): string {
+    return join(root, ".tdd", "features", FEATURE);
+  }
+  beforeEach(() => mkdirSync(join(featureDir(dir), "stories", STORY), { recursive: true }));
+
+  it("writes evidence at story scope + storyDeployVerified is true when reachable + verify pass", async () => {
+    const result = await deployToTarget({
+      projectDir: dir, targetName: "localv", featureId: FEATURE, storyId: STORY,
+      lakebaseBranch: "exp/F1/S1",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => true,
+      sleep: async () => {}, now: fastClock(),
+    });
+    expect(result.ok).toBe(true);
+    // Evidence is under the STORY dir, not the feature dir.
+    expect(result.evidencePath).toBe(join(featureDir(dir), "stories", STORY, "deploy-evidence.json"));
+    expect(existsSync(join(featureDir(dir), "deploy-evidence.json"))).toBe(false);
+    expect(storyDeployVerified(join(dir, ".tdd"), FEATURE, STORY)).toBe(true);
+  });
+
+  it("storyDeployVerified is false when the story verify failed", async () => {
+    await deployToTarget({
+      projectDir: dir, targetName: "localv", featureId: FEATURE, storyId: STORY,
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => false,
+      sleep: async () => {}, now: fastClock(),
+    });
+    expect(storyDeployVerified(join(dir, ".tdd"), FEATURE, STORY)).toBe(false);
+  });
+
+  it("storyDeployVerified is false when no story evidence exists", () => {
+    expect(storyDeployVerified(join(dir, ".tdd"), FEATURE, STORY)).toBe(false);
   });
 });

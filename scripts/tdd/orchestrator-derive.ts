@@ -39,6 +39,9 @@ export interface StoryArtifactProbe {
   testsWritten(story: string): boolean;
   /** The Driver made those tests pass. */
   codeWritten(story: string): boolean;
+  /** The story's deploy verified (reachable + verify.passed on its experiment
+   *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
+  storyDeployVerified(story: string): boolean;
 }
 
 /** Coarse driver context that lives outside pipeline.json (in workflow-state). */
@@ -79,6 +82,7 @@ function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryV
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
+      deployVerified: probe.storyDeployVerified(id),
       accepted,
     },
   };

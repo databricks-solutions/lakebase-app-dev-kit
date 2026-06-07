@@ -103,6 +103,10 @@ export interface StoryBuild {
   codeWritten: boolean;
   /** The built story was deployed for the PO's acceptance review. */
   awaitingAcceptance: boolean;
+  /** The story's deploy verified (reachable + verify.passed on its experiment
+   *  branch). The teeth on acceptance: a story cannot be accepted/merged unless
+   *  its deploy proved working software (FEIP-7461). */
+  deployVerified: boolean;
   /** The PO accepted: experiment merged into the feature branch, story done. */
   accepted: boolean;
 }
@@ -169,6 +173,10 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
+  // Teeth: a story cannot be accepted (merged) until its deploy verified
+  // (reachable + verify.passed). Re-deploy until it does; a story that never
+  // verifies surfaces as a stall, not a silent merge of broken software.
+  if (!b.deployVerified) return { kind: "await-acceptance", story };
   if (!b.accepted) return { kind: "accept", story };
   return { kind: "complete", story }; // built + accepted -> free the lane
 }

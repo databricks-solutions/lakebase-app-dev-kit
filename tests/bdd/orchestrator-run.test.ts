@@ -24,6 +24,7 @@ function freshStory(): StoryView {
       testsWritten: false,
       codeWritten: false,
       awaitingAcceptance: false,
+      deployVerified: false,
       accepted: false,
     },
   };
@@ -86,7 +87,10 @@ function makeFakeWorld(storyIds: string[]) {
           state.stories[action.story].build.experimentCut = true;
           break;
         case "await-acceptance":
+          // The story deploy (release-engineer) passed: present for acceptance
+          // AND record the verified evidence (the teeth on accept).
           state.stories[action.story].build.awaitingAcceptance = true;
+          state.stories[action.story].build.deployVerified = true;
           break;
         case "accept":
           state.stories[action.story].build.accepted = true;

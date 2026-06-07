@@ -147,6 +147,19 @@ function replayEffects(feature: string, stories: string[]) {
           return;
         }
         case "await-acceptance": {
+          // The story deploy (release-engineer) wrote passing STORY-scoped
+          // deploy-evidence (reachable + verify), the teeth the driver requires
+          // before accept; then the pipeline marks it awaiting.
+          writeJson(join(storyDir(feature, action.story), "deploy-evidence.json"), {
+            schema_version: 1,
+            feature_id: feature,
+            story_id: action.story,
+            target: "local",
+            url: "http://localhost:8000/",
+            reachable: true,
+            verify: { passed: true },
+            deployed_at: AT,
+          });
           const pl = p();
           awaitAcceptance(pl, action.story);
           save(pl);

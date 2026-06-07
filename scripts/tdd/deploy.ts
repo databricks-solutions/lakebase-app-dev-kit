@@ -33,12 +33,40 @@ export interface VerifyResult {
 export interface DeployEvidence {
   schema_version: number;
   feature_id: string;
+  /** Set for a per-story deploy (the story's experiment branch). Absent for the
+   *  feature-level (merged increment) deploy. */
+  story_id?: string;
   target: string;
   url: string;
   reachable: boolean;
   verify: VerifyResult;
   lakebase_branch?: string;
   deployed_at: string;
+}
+
+/** True when deploy evidence proves working software: reachable AND verify
+ *  passed. The shared teeth predicate for both the feature deploy gate and the
+ *  per-story acceptance (FEIP-7461). */
+export function deployEvidencePasses(e: DeployEvidence | undefined): boolean {
+  return e !== undefined && e.reachable === true && e.verify?.passed === true;
+}
+
+/** Read deploy-evidence.json at a path, or undefined if absent/malformed. */
+export function readDeployEvidence(file: string): DeployEvidence | undefined {
+  if (!existsSync(file)) return undefined;
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as DeployEvidence;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Whether a STORY's deploy verified (reachable + verify.passed), read from
+ *  features/<F>/stories/<S>/deploy-evidence.json. */
+export function storyDeployVerified(tddDir: string, featureId: string, storyId: string): boolean {
+  const fdir = findFeatureDir(tddDir, featureId);
+  if (!fdir) return false;
+  return deployEvidencePasses(readDeployEvidence(join(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
 export interface LocalTargetConfig {
@@ -126,15 +154,19 @@ function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): bo
   }
 }
 
-/** Write features/<F>/deploy-evidence.json. Returns the path, or undefined when
- *  the feature dir cannot be resolved (a bare, feature-less deploy). */
+/** Write the deploy-evidence.json. Feature scope: features/<F>/. Story scope
+ *  (evidence.story_id set): features/<F>/stories/<S>/. Returns the path, or
+ *  undefined when the feature dir cannot be resolved (a bare, feature-less
+ *  deploy). */
 function writeDeployEvidence(
   tddDir: string,
   evidence: DeployEvidence,
 ): string | undefined {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return undefined;
-  const file = join(fdir, "deploy-evidence.json");
+  const dir = evidence.story_id ? join(fdir, "stories", evidence.story_id) : fdir;
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "deploy-evidence.json");
   writeFileSync(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
@@ -162,6 +194,13 @@ export interface DeployArgs {
    * writes features/<F>/deploy-evidence.json (the deploy gate's artifact).
    */
   featureId?: string;
+  /**
+   * Story this deploy belongs to (FEIP-7461). When set (with featureId), the
+   * evidence is written at story scope: features/<F>/stories/<S>/, and gates
+   * the per-story acceptance. Pair with lakebaseBranch = the story's experiment
+   * branch so the PO reviews the story on its own DB.
+   */
+  storyId?: string;
   /** .tdd root for the evidence write (default: <projectDir>/.tdd). */
   tddDir?: string;
   /** Inject for tests: start the run command, return a pid. */
@@ -241,6 +280,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
       feature_id: args.featureId,
+      ...(args.storyId ? { story_id: args.storyId } : {}),
       target: args.targetName,
       url,
       reachable: reachableNow,

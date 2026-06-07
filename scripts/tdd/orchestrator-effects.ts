@@ -143,14 +143,18 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "await-acceptance":
-      // The Release Engineer deploys the story FROM its experiment branch so
-      // the PO reviews RUNNING software, then we mark the pipeline awaiting.
+      // The Release Engineer deploys the story FROM its experiment branch so the
+      // PO reviews RUNNING software, then we mark the pipeline awaiting. The
+      // deploy must write the STORY-scoped deploy-evidence (reachable +
+      // verify.passed) via `lakebase-tdd-deploy --feature ${f} --story
+      // ${action.story}`: that is the teeth the driver requires before the story
+      // can be accepted (a story that does not verify is never merged).
       return [
         {
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
-          task: `Deploy story ${action.story} from its experiment branch (target ${cfg.deployTarget ?? "local"}) so the Product Owner can review running software, and produce the reachability + feature-verify evidence.`,
+          task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`,
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
       ];

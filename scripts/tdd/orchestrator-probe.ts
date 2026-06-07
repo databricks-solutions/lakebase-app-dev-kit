@@ -15,6 +15,7 @@ import * as path from "node:path";
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import { readGates } from "./gates.js";
+import { storyDeployVerified } from "./deploy.js";
 
 function storyDir(tddDir: string, featureId: string, story: string): string {
   return path.join(tddDir, "features", featureId, "stories", story);
@@ -146,6 +147,10 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
       const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
       // Every RED test the Navigator wrote has been turned GREEN by the Driver.
       return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+    },
+
+    storyDeployVerified(story) {
+      return storyDeployVerified(tddDir, featureId, story);
     },
   };
 }
