@@ -24,6 +24,7 @@ import {
   type TierTopology,
 } from "./scm-workflow-state.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+import { findStaleBranches } from "../tdd/stale-branches.js";
 import { exec } from "../util/exec.js";
 import { updateEnvConnection } from "./env-file.js";
 
@@ -84,6 +85,21 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
+
+  // 0. Stale spikes + experiments (FEIP-7566), named distinctly. Hermetic
+  // (reads .tdd records only), so it runs even without a Lakebase instance.
+  for (const stale of findStaleBranches(path.join(projectDir, ".tdd"))) {
+    const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
+    findings.push({
+      id: `stale-${stale.kind}`,
+      severity: "warn",
+      message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
+      suggestion:
+        stale.kind === "experiment"
+          ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"`
+          : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward",
+    });
+  }
 
   // 1. workflow-state present?
   if (!workflowStatePresent) {
