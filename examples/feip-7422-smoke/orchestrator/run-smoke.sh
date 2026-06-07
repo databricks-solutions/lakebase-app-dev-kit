@@ -2,20 +2,35 @@
 # FEIP-7422 TDD-workflow smoke.
 #
 # Drives a real bug-tracker project through 5 evolution iterations
-# (v1..v5) to exercise the TDD substrate: /design + /build + HITL
-# gates (spec / plan / test_list / promote) + per-iteration local
-# tests. The human-proxy replaces a human approver so the smoke
-# runs headless.
+# (v1..v5), grouped into TWO SPRINTS, to exercise the TDD substrate:
+# /plan + /design + /build + /deploy + HITL gates (spec / plan /
+# test_list / promote / deploy) + per-iteration local tests. The
+# human-proxy replaces a human approver so the smoke runs headless.
 #
 # Scope: this smoke validates TDD-workflow behavior. The SCM workflow
 # CLIs (lakebase-scm-prepare-pr / wait-ci / merge --wait-migrate) are
 # tested separately by tests/integration/scm-workflow-e2e-live.test.ts,
 # discovered by scripts/run-all-live-tests.sh.
 #
-# What each iteration does:
+# Sprints (the /plan cadence; features are NOT pre-planned all at once):
+#   sprint-1 = v1..v3   sprint-2 = v4..v5
+# /plan runs once per sprint (run_plan_sprint), ABOVE the per-feature loop:
+# the Spec Author proposes the breakdown and the Product Owner authors the
+# sprint's feature-requests. Headless, the human-proxy SUPPLIES the recorded
+# backlog. sprint-2 is planned only AFTER sprint-1's features have shipped
+# working software (their /deploy gates), modeling the feedback loop: the PO
+# folds what they saw into the next sprint's requests. The sprint backlog is
+# committed to trunk (main) so each feature branch (forked from main HEAD by
+# /design Step 0) inherits its feature-request.md.
+#
+# What /plan does per sprint (run_plan_sprint):
+#   a. Enforce the project-intake precondition (lakebase-tdd-intake, no
+#      --feature: product-overview.md + nfrs.md + design-brief.md present).
+#   b. human-proxy supplies each sprint item's feature-request.md.
+#   c. Commit the sprint backlog to trunk.
+#
+# What each iteration does (the per-feature loop, after its request exists):
 #   1. Abandon prior feature (substrate CLI) if state is mid-flight.
-#   2. Stage .tdd/features/<id>/feature-request.md (the Feature
-#      Requester's original ask) from the iteration spec.
 #   3. /design <id>  – gates drained by human-proxy.
 #   4. /build <id>   – gates drained by human-proxy.
 #   5. Local tests (./scripts/run-tests.sh).
@@ -27,8 +42,8 @@
 #   8. SCM doctor (advisory cross-check; warning-only).
 #
 # Project intake (product-overview.md + nfrs.md + design-brief.md) is staged
-# once before the loop via human-proxy (stage_project_intake); LAKEBASE_TDD_UI=1
-# turns on the UX track.
+# once before the sprints via human-proxy (stage_project_intake) and committed
+# to trunk; LAKEBASE_TDD_UI=1 turns on the UX track.
 #
 # Other flags:
 #   --resume <iter>      skip earlier iterations + start at <iter>
@@ -71,6 +86,11 @@ TIERS=""                      # 2 or 3; required architectural choice, no defaul
 # invoke `npx ... lakebase-scm-claim-feature-branch`) can read the same ref.
 KIT_REF="${LAKEBASE_KIT_REF:-}"
 ITERATIONS=(v1-initial-domain v2-add-owners v3-status-table v4-split-bug-entity v5-list-view)
+# Sprints are slices of ITERATIONS (DRY: the canonical order lives in one place).
+# sprint-1 = v1..v3, sprint-2 = v4..v5. sprint-2 is planned only after sprint-1
+# ships working software, modeling the PO folding feedback into the next sprint.
+SPRINT1_ITERS=("${ITERATIONS[@]:0:3}")
+SPRINT2_ITERS=("${ITERATIONS[@]:3:2}")
 
 ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FEATURE_REQ_DIR="${ORCHESTRATOR_DIR}/feature-requests"
@@ -352,20 +372,10 @@ run_iteration() {
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
 
-  # 2. Stage the .tdd/features/<feature-id>/feature-request.md (the
-  # Feature Requester's original ask) from the iteration spec. /design's
-  # Spec Author reads this as input and produces feature-spec.{md,json};
-  # the kit's TDD workflow contract is
-  # .tdd/features/<id>/{feature-request.md,feature-spec.md,feature-spec.json,...}.
-  log "  step 2: human-proxy supplies .tdd/features/${feature_id}/feature-request.md"
-  local feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
-  mkdir -p "$feature_dir"
-  if [[ ! -f "$feature_dir/feature-request.md" ]]; then
-    # The Human Proxy supplies the recorded Feature Requester ask (validate +
-    # place), the same intake step a human would author at /design.
-    proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
-      || { echo "smoke: human-proxy refused feature-request.md for ${feature_id}" >&2; exit 2; }
-  fi
+  # 2. feature-request.md is NOT staged here: it was authored at /plan
+  # (run_plan_sprint) and committed to trunk, so /design's Step 0 branch
+  # (forked from main HEAD) already carries .tdd/features/<id>/feature-request.md.
+  # /design's Spec Author reads it as input and produces feature-spec.{md,json}.
 
   # 3. /design <feature-id>: the kit-shipped pre-hook claims the paired
   # feature branch via the substrate BEFORE phase 1 runs. The
@@ -477,12 +487,74 @@ proxy_supply() {
 # precondition requires the brief.
 stage_project_intake() {
   log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"
+  cd "$PROJECT_DIR"
+  git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
   proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
     || { echo "smoke: human-proxy refused product-overview.md (missing/non-conformant)" >&2; exit 2; }
   proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${PROJECT_DIR}/.tdd/nfrs.md" "nfrs.md" \
     || { echo "smoke: human-proxy refused nfrs.md (missing/non-conformant)" >&2; exit 2; }
   proxy_supply "${ORCHESTRATOR_DIR}/design-brief.md" "${PROJECT_DIR}/.tdd/design/design-brief.md" "design-brief.md" \
     || { echo "smoke: human-proxy refused design-brief.md (missing/non-conformant)" >&2; exit 2; }
+  # Commit project intake to trunk so every feature branch (forked from main
+  # HEAD by /design Step 0) inherits the HIL's project-level intent. The
+  # .tdd/ planning corpus is version-controlled on trunk; product code +
+  # migrations are what the SCM workflow keeps OFF main, not these artifacts.
+  git add .tdd/product-overview.md .tdd/nfrs.md .tdd/design/design-brief.md 2>/dev/null || true
+  git commit -m "intake: project product-overview + nfrs + design-brief" >/dev/null 2>&1 \
+    || log "  project intake already committed (nothing new)"
+}
+
+# ─── /plan: sprint planning (Human Proxy) ─────────────────────
+#
+# /plan is the precursor to each dev loop, run once per sprint ABOVE the
+# per-feature loop. The Spec Author proposes how to divide the work into
+# features and the Product Owner prioritizes + authors the sprint's
+# feature-requests. Headless, there is no human: the Human Proxy SUPPLIES the
+# recorded backlog (the iteration specs ARE the PO's groomed sprint). The
+# backlog is committed to trunk so each feature branch inherits its request.
+# This is the identical path a real run takes, with the proxy standing in for
+# the PO at the authoring step.
+run_plan_sprint() {
+  local sprint_name="$1"; shift
+  local iters=("$@")
+  log "▸ /plan ${sprint_name}: sprint planning (Spec Author proposes; PO authors requests; human-proxy supplies headless)"
+  cd "$PROJECT_DIR"
+  git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
+
+  # a. /plan Step 0: project intake must be present + conformant (no --feature
+  # means project-level only: product-overview.md + nfrs.md + design-brief.md).
+  npx --yes --package="${KIT_NPX}" lakebase-tdd-intake \
+    || { err "/plan ${sprint_name}: project-intake precondition failed"; exit 2; }
+
+  # b. The PO authors each sprint item's feature-request.md. Headless, the
+  # Human Proxy supplies it from the recorded spec (validate + place).
+  local iter feature_id spec feature_dir
+  for iter in "${iters[@]}"; do
+    feature_id="$(iteration_feature_id "$iter")"
+    spec="$(iteration_spec "$iter")"
+    if [[ ! -f "$spec" ]]; then err "missing iteration spec: $spec"; exit 2; fi
+    feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
+    mkdir -p "$feature_dir"
+    log "  ${sprint_name}: human-proxy supplies feature-request for ${feature_id}"
+    proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
+      || { err "human-proxy refused feature-request.md for ${feature_id}"; exit 2; }
+    # Confirm the per-feature precondition now passes (request present + conformant).
+    npx --yes --package="${KIT_NPX}" lakebase-tdd-intake --feature "$feature_id" \
+      || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
+  done
+
+  # c. Commit the sprint backlog to trunk so each feature branch inherits its
+  # request. Idempotent on resume: nothing to commit when already present.
+  git add .tdd/features 2>/dev/null || true
+  git commit -m "plan ${sprint_name}: author feature-requests (${iters[*]})" >/dev/null 2>&1 \
+    || log "  ${sprint_name}: backlog already committed (nothing new)"
+
+  # Record the planning activity (the PO authored the sprint's requests).
+  npx --yes --package="${KIT_NPX}" lakebase-tdd-log \
+    --role scrum-master --level info --event phase.end \
+    --tdd-dir "$PROJECT_DIR/.tdd" \
+    --message "/plan ${sprint_name}: ${#iters[@]} feature-request(s) authored for the sprint" \
+    --data "{\"phase\":\"plan\",\"sprint\":\"${sprint_name}\"}" >/dev/null 2>&1 || true
 }
 
 # ─── main ─────────────────────────────────────────────────────
@@ -491,18 +563,31 @@ log "FEIP-7422 smoke starting (project=$PROJECT_DIR)"
 scaffold_project
 stage_project_intake
 
+# A sprint = /plan (author the sprint's requests) then the per-feature loop
+# over that sprint's iterations. sprint-2 is planned only after sprint-1's
+# features have shipped working software (their /deploy gates), so the PO's
+# sprint-2 requests can fold in what sprint-1 revealed (the feedback loop).
 started=0
-for iter in "${ITERATIONS[@]}"; do
-  if [[ -n "$RESUME_AT" && "$started" -eq 0 ]]; then
-    if [[ "$iter" == "$RESUME_AT"* ]]; then
-      started=1
-    else
-      log "skipping $iter (--resume $RESUME_AT)"
-      continue
+run_sprint() {
+  local sprint_name="$1"; shift
+  local sprint_iters=("$@")
+  run_plan_sprint "$sprint_name" "${sprint_iters[@]}"
+  local iter
+  for iter in "${sprint_iters[@]}"; do
+    if [[ -n "$RESUME_AT" && "$started" -eq 0 ]]; then
+      if [[ "$iter" == "$RESUME_AT"* ]]; then
+        started=1
+      else
+        log "skipping $iter (--resume $RESUME_AT)"
+        continue
+      fi
     fi
-  fi
-  run_iteration "$iter"
-done
+    run_iteration "$iter"
+  done
+}
+
+run_sprint "sprint-1" "${SPRINT1_ITERS[@]}"
+run_sprint "sprint-2" "${SPRINT2_ITERS[@]}"
 
 log "FEIP-7422 smoke COMPLETED"
 exit 0

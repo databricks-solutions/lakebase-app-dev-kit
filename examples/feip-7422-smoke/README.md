@@ -1,25 +1,58 @@
-# FEIP-7422: End-to-End SCM Workflow Smoke
+# FEIP-7422: End-to-End TDD Workflow Smoke
 
-Drives a real bug-tracker project through 5 evolution iterations against
-the kit's full SCM + (optionally) CI loop. Closes FEIP-7422 ("Kit:
+Drives a real bug-tracker project through 5 evolution iterations (v1..v5),
+grouped into two sprints, to exercise the kit's TDD workflow end to end:
+`/plan` -> `/design` -> `/build` -> `/deploy`, with every HITL gate stood in
+for by the Human Proxy so the smoke runs headless. Closes FEIP-7422 ("Kit:
 end-to-end [E2E] cycle smoke against a scaffolded project").
 
-This directory ships with the kit so the smoke is versioned alongside
-the code it tests. The actual scaffold lives outside the kit repo
-(default: `~/code/feip-7422-smoke/bug-tracker/`).
+This directory ships with the kit so the smoke is versioned alongside the code
+it tests. The actual scaffold lives outside the kit repo (default:
+`~/code/feip-7422-smoke/bug-tracker/`).
+
+**Scope.** This smoke validates the TDD workflow. The SCM workflow CLIs
+(`lakebase-scm-prepare-pr` / `wait-ci` / `merge --wait-migrate`) are tested
+separately by `tests/integration/scm-workflow-e2e-live.test.ts` (discovered by
+`scripts/run-all-live-tests.sh`). Iterations stay local (never merged to main);
+the next iteration abandons the prior feature so the SCM state machine allows a
+fresh claim. The legacy `--fast` / `--standard` / `--full` flags are
+accepted-but-ignored.
 
 ## What this proves
 
-| Mode | Per-iteration depth | Wall-clock | What's verified |
-|------|---------------------|-----------|-----------------|
-| `--fast` | scaffold + `/design` + `/build` + local tests + local commit. No push, no PR, no CI. | ~5 min | Scaffold + skill loop works end-to-end |
-| `--standard` (default) | Iterations v1-v4 are `--fast` semantics. Iteration v5 runs the FULL PR + CI green + merge + Playwright `[E2E]` cycle. | ~15 min | SCM + CI + FEIP-7423 wiring work at least once |
-| `--full` | Every iteration is a real PR + CI green + merge. v5 also asserts Playwright `[E2E]` / `LAKEBASE_APP_ENDPOINT`. | ~45 min | Every iteration's CI passes |
+The orchestrated path runs headless, identical to a real run except the Human
+Proxy stands in for the human:
+
+- **`/plan` per sprint** (run once, above the per-feature loop): the Human Proxy
+  supplies the sprint's `feature-request.md` files from the recorded backlog
+  (the PO's groomed sprint), after the project-intake precondition passes. The
+  backlog is committed to trunk so each feature branch inherits its request.
+- **`/design` per feature**: claims the paired Lakebase + git branch via the
+  substrate (Step 0), enforces the intake precondition (Step 0.5), runs the
+  Spec Author -> Architect -> Test Strategist phases; gates approved by the
+  Human Proxy.
+- **`/build` per feature**: the TDD cycles to green; promote gate approved by
+  the Human Proxy.
+- **`/deploy --target local` per feature**: runs the app locally and polls until
+  reachable, the per-sprint "working software" check; the Human Proxy approves
+  the deploy gate only after reachability, then the app is torn down.
+
+### Two sprints (the `/plan` feedback loop)
+
+| Sprint | Iterations | Planned |
+|--------|------------|---------|
+| sprint-1 | v1, v2, v3 | up front |
+| sprint-2 | v4, v5 | after sprint-1 ships working software |
+
+sprint-2 is planned only after sprint-1's features have passed their `/deploy`
+gates, modeling the Product Owner folding what they saw into the next sprint's
+requests. The sprints are slices of the canonical `ITERATIONS=(...)` list in
+`run-smoke.sh` (DRY: order lives in one place).
 
 ## Domain: bug-tracker
 
 A small bug-tracking app (Python + FastAPI + SQLAlchemy + Alembic +
-Playwright) that evolves across 5 PRs:
+Playwright) that evolves across 5 iterations:
 
 | Iter | Headline | Refactor type |
 |------|----------|---------------|
@@ -27,15 +60,22 @@ Playwright) that evolves across 5 PRs:
 | v2 | Users entity + FK from bugs | FK introduction |
 | v3 | Promote status enum to its own table | Enum -> table + data backfill |
 | v4 | Extract BugDetails from Bug | Split-entity refactor |
-| v5 | HTML list view + `[E2E]` AC | Frontend + Playwright |
+| v5 | HTML list view + `[E2E]` AC | Frontend + Playwright (verified via `/deploy --target local`) |
 
-Product Owner requirements: [`orchestrator/product-overview.md`](orchestrator/product-overview.md).
-Per-iteration feature requests (Feature Requester): [`orchestrator/feature-requests/`](orchestrator/feature-requests/).
+Product Owner overview: [`orchestrator/product-overview.md`](orchestrator/product-overview.md).
+NFR brief (the Architect's intake): [`orchestrator/nfrs.md`](orchestrator/nfrs.md).
+UX design brief (UI track): [`orchestrator/design-brief.md`](orchestrator/design-brief.md).
+The sprint's feature requests (authored by the PO at `/plan`):
+[`orchestrator/feature-requests/`](orchestrator/feature-requests/).
+
+This is a UI project (`LAKEBASE_TDD_UI=1`), so the UX Designer phase runs and
+`design-brief.md` is required at intake; the UX track (design-guide + ia +
+token adherence) is exercised.
 
 ### Tier topology: 2-tier (prod + staging)
 
-This smoke is opinionated: the bug-tracker project is **2-tier**. The
-kit counts long-running tiers only, NOT feature branches:
+This smoke is opinionated: the bug-tracker project is **2-tier**. The kit counts
+long-running tiers only, NOT feature branches:
 
 | `--tiers` | Long-running tiers | Where features fork from |
 |-----------|--------------------|--------------------------|
@@ -43,15 +83,14 @@ kit counts long-running tiers only, NOT feature branches:
 | 2 | prod + staging | staging |
 | 3 | prod + staging + dev | dev |
 
-Every iteration forks from `staging`, so the project must be 2-tier.
-`run-smoke.sh` enforces `--tiers 2`; 1 or 3 are rejected. For a different
-topology, fork the feature requests and change where each forks from.
+Every iteration's Lakebase parent is `staging`, so the project must be 2-tier.
+`run-smoke.sh` enforces `--tiers 2`; 1 or 3 are rejected.
 
 ### Final state after v5
 
-Tables on `production`: `users` (id, email, display_name), `statuses`
-(id, name, sort_order), `bugs` (id, title, status_id FK, owner_id FK),
-`bug_details` (bug_id PK+FK, description, repro_steps), `alembic_version`.
+Tables: `users` (id, email, display_name), `statuses` (id, name, sort_order),
+`bugs` (id, title, status_id FK, owner_id FK), `bug_details` (bug_id PK+FK,
+description, repro_steps), `alembic_version`.
 
 Endpoints: `POST /bugs`, `GET /bugs/{id}`, `GET /bugs` (HTML list, v5),
 `PATCH /bugs/{id}`, `POST /users` + `GET /users` (v2+), `GET /statuses` (v3+).
@@ -65,50 +104,35 @@ reference, not in the Product Owner's `product-overview.md`.
 
 - `git`, `npx`, `jq` on PATH
 - `claude` CLI on PATH (drives the `/design` + `/build` skills)
-- `gh` CLI authenticated (only required outside `--fast` mode)
 - `DATABRICKS_HOST` + `DATABRICKS_TOKEN` env vars OR `~/.databrickscfg`
+- `GITHUB_OWNER` env var (for the scaffold's repo creation)
 - A workspace where you can create Lakebase projects + branches
 
-### Default (standard mode)
+### Run
 
 ```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh
+bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --tiers 2
 ```
 
-Drives all 5 iterations. v1-v4 commit locally; v5 opens a PR, waits for
-CI, merges. ~15 min wall-clock.
-
-### Fast mode
-
-```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --fast
-```
-
-No CI at all. Useful for proving the kit's `/design` + `/build` skill
-loop works end-to-end on a fresh scaffold.
-
-### Full mode
-
-```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --full
-```
-
-Every iteration is a real PR + CI + merge. ~45 min.
+Scaffolds the project, stages project intake, then runs sprint-1 (`/plan` +
+v1..v3) and sprint-2 (`/plan` + v4..v5). Headless throughout
+(`LAKEBASE_TDD_HUMAN_PROXY=1`, set by the script).
 
 ### Resume
 
 If an iteration fails and you've fixed it:
 
 ```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v3
+bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v3 --skip-scaffold
 ```
 
-Skips v1-v2 and starts at v3.
+Re-plans each sprint (idempotent) and starts the per-feature loop at v3.
 
 ### Other useful flags
 
 | Flag | Meaning |
 |------|---------|
+| `--kit-ref <ref>` | Pull the kit from a branch / tag / sha (validate an unreleased build) |
 | `--project-dir <dir>` | Override the scaffold target directory |
 | `--skip-scaffold` | Reuse an existing scaffold instead of running `lakebase-create-project` |
 | `--no-keep-on-failure` | Clean up Lakebase branches + project dir on failure (default: keep) |
@@ -116,34 +140,34 @@ Skips v1-v2 and starts at v3.
 ## What the smoke does NOT prove
 
 - Quality of `/design` + `/build` output (that's the agent-eval pyramid, FEIP-7343).
-- Multi-user / auth flows.
-- Visual regression / DOM correctness past structural assertions.
-- Performance / load characteristics.
+- The SCM workflow PR + CI + merge cycle (tested separately, see Scope above).
+- Remote deploy targets (only `local` is implemented; remote release is `merge.yml`).
+- Multi-user / auth flows; visual regression past structural assertions; performance.
 
 ## Maintaining the smoke
 
-The smoke's structure is guarded by `tests/bdd/feip-7422-smoke.test.ts`,
-which asserts:
+The smoke's structure is guarded by `tests/bdd/feip-7422-smoke.test.ts`, which
+asserts (among others):
 
-- The Product Owner requirements doc exists at `product-overview.md`
-- A `feature-requests/` subdir holds the 5 per-iteration requests
-- Each feature request is in Feature Requester voice: YAML frontmatter
-  declaring `author: Feature Requester`, requester narrative describing
-  WHAT the user wants, and NO implementation detail (no SQL, HTTP verbs,
-  table names, or file paths), NO Acceptance Criteria tables, and NO
-  operational metadata (branch, Lakebase parent, migration version are
-  all derived by the orchestrator from convention)
-- The orchestrator references all 5 iterations in order
-- All three modes are documented + implemented
-- `claude` + `gh` (outside `--fast`) are required-on-PATH checks
-- Each iteration has a matching `verify-v*.sh`
+- `product-overview.md` (Product Owner voice), `nfrs.md`, and `design-brief.md`
+  exist and carry their required sections.
+- A `feature-requests/` subdir holds the 5 per-iteration requests, each in
+  feature-request voice (no SQL / HTTP verbs / table names / file paths, no
+  Acceptance Criteria tables, no operational metadata).
+- The orchestrator runs two sprints sliced from `ITERATIONS=(...)` (sprint-1 =
+  v1..v3, sprint-2 = v4..v5), supplies each sprint's requests via the Human
+  Proxy at `/plan`, enforces the intake precondition, and commits the backlog
+  to trunk.
+- `/deploy --target local` runs per iteration and records the deploy gate.
+- `claude` is a required-on-PATH check; the SCM PR/CI CLIs are NOT invoked.
+- Each iteration has a matching `verify-v*.sh`.
 
-To add a new iteration: append the feature request under `feature-requests/`, append a
-`verify-v*.sh` under `assertions/`, extend the `ITERATIONS=(...)` line
-in `run-smoke.sh`, and update the BDD test's `ITERATIONS` constant.
+To add a new iteration: append the feature request under `feature-requests/`,
+append a `verify-v*.sh` under `assertions/`, extend the `ITERATIONS=(...)` line
+in `run-smoke.sh` (and the `SPRINT*_ITERS` slices), and update the BDD test's
+`ITERATIONS` constant + the sprint-slice assertions.
 
 ## Status
 
-FEIP-7422 closed by the PR that lands this directory. The smoke itself
-is run manually for now; nightly CI invocation can be wired later as a
-separate ticket.
+FEIP-7422 closed by the PR that lands this directory. The smoke is run manually
+for now; nightly CI invocation can be wired later as a separate ticket.

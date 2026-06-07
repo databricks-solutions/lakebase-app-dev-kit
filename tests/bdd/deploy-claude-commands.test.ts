@@ -35,7 +35,7 @@ describe("deployClaudeCommands", () => {
   });
   afterEach(() => rmTempProject(targetDir));
 
-  it("writes design.md, design.pre-hook.md, build.md, and deploy.md under .claude/commands/", async () => {
+  it("writes plan.md, design.md, design.pre-hook.md, build.md, and deploy.md under .claude/commands/", async () => {
     const result = await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     expect(result.written.sort()).toEqual(
       [
@@ -43,6 +43,7 @@ describe("deployClaudeCommands", () => {
         path.join(".claude", "commands", "deploy.md"),
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
+        path.join(".claude", "commands", "plan.md"),
       ].sort()
     );
     expect(result.skipped).toEqual([]);
@@ -153,6 +154,7 @@ describe("scaffoldStaticAll integration", () => {
         path.join(".claude", "commands", "deploy.md"),
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
+        path.join(".claude", "commands", "plan.md"),
       ].sort()
     );
     expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.md"))).toBe(true);

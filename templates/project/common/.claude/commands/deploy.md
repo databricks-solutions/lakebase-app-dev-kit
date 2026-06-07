@@ -1,6 +1,6 @@
 # /deploy : ship a built feature to a target and verify it is usable
 
-Drives a built feature to a deployment target and verifies it is running and reachable, the per-sprint "working software" checkpoint the Product Owner reviews. This is the third phase of the orchestrated path: `/design` -> `/build` -> `/deploy`, the same path for real and headless runs.
+Drives a built feature to a deployment target and verifies it is running and reachable, the per-sprint "working software" checkpoint the Product Owner reviews. This is the third phase of the per-feature loop: `/design` -> `/build` -> `/deploy` (the sprint's features run this loop after `/plan` authored their requests), the same path for real and headless runs.
 
 ## Usage
 

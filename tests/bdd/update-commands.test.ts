@@ -49,12 +49,12 @@ function expectedContent(name: string, pinnedVersion: string): string {
 }
 
 describe("updateCommands: empty project", () => {
-  it("creates .claude/commands/ and writes design.md + build.md + deploy.md with the current kit version", () => {
+  it("creates .claude/commands/ and writes plan.md + design.md + build.md + deploy.md with the current kit version", () => {
     const dir = mkProject();
     const result = updateCommands({ projectDir: dir });
     expect(result.changed).toBe(true);
-    // design + build + deploy are the scaffolded commands.
-    expect(result.files.map((f) => f.outcome).sort()).toEqual(["added", "added", "added"]);
+    // plan + design + build + deploy are the scaffolded commands.
+    expect(result.files.map((f) => f.outcome).sort()).toEqual(["added", "added", "added", "added"]);
     const design = fs.readFileSync(path.join(dir, ".claude", "commands", "design.md"), "utf8");
     expect(design).toBe(expectedContent("design.md", kitVersion()));
   });
@@ -64,6 +64,10 @@ describe("updateCommands: in-sync project", () => {
   it("reports every file as unchanged and changed=false", () => {
     const dir = mkProject();
     fs.mkdirSync(path.join(dir, ".claude", "commands"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "plan.md"),
+      expectedContent("plan.md", kitVersion())
+    );
     fs.writeFileSync(
       path.join(dir, ".claude", "commands", "design.md"),
       expectedContent("design.md", kitVersion())
@@ -108,6 +112,10 @@ describe("updateCommands: drifted project", () => {
     fs.mkdirSync(path.join(dir, ".claude", "commands"), { recursive: true });
     const customized = "# /design (project-customized)\n";
     fs.writeFileSync(path.join(dir, ".claude", "commands", "design.md"), customized);
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "plan.md"),
+      expectedContent("plan.md", kitVersion())
+    );
     fs.writeFileSync(
       path.join(dir, ".claude", "commands", "build.md"),
       expectedContent("build.md", kitVersion())
@@ -198,9 +206,9 @@ describe("updateCommands: sort order", () => {
   it("sorts files added > updated > preserved > unchanged for deterministic output", () => {
     const dir = mkProject();
     fs.mkdirSync(path.join(dir, ".claude", "commands"), { recursive: true });
-    // design.md + deploy.md are missing (will be added); build.md is drifted (will be updated).
+    // plan.md + design.md + deploy.md are missing (will be added); build.md is drifted (will be updated).
     fs.writeFileSync(path.join(dir, ".claude", "commands", "build.md"), "# customized\n");
     const result = updateCommands({ projectDir: dir });
-    expect(result.files.map((f) => f.outcome)).toEqual(["added", "added", "updated"]);
+    expect(result.files.map((f) => f.outcome)).toEqual(["added", "added", "added", "updated"]);
   });
 });

@@ -134,10 +134,45 @@ describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", ()
     expect(runSmoke).toMatch(/export LAKEBASE_TDD_UI=1/);
   });
 
-  it("supplies the per-iteration feature-request.md via the proxy (not a bare cp)", () => {
+  it("supplies each sprint's feature-request.md via the proxy at /plan (not a bare cp)", () => {
     expect(runSmoke).toMatch(/proxy_supply "\$spec".*feature-request\.md/);
     // The old bare `cp "$spec" .../feature-request.md` staging is gone.
     expect(runSmoke).not.toMatch(/cp "\$spec"/);
+    // The supply is hoisted into /plan (run_plan_sprint), not the per-feature loop.
+    expect(runSmoke).toMatch(/run_plan_sprint\s*\(\)/);
+    const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
+    expect(planFn, "feature-request supply lives in run_plan_sprint").toMatch(
+      /proxy_supply "\$spec".*feature-request\.md/
+    );
+  });
+});
+
+describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, feedback loop)", () => {
+  const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+
+  it("runs two sprints sliced from ITERATIONS (sprint-1 = v1..v3, sprint-2 = v4..v5)", () => {
+    expect(runSmoke).toMatch(/SPRINT1_ITERS=\(.*ITERATIONS\[@\]:0:3.*\)/);
+    expect(runSmoke).toMatch(/SPRINT2_ITERS=\(.*ITERATIONS\[@\]:3:2.*\)/);
+    expect(runSmoke).toMatch(/run_sprint "sprint-1" "\$\{SPRINT1_ITERS\[@\]\}"/);
+    expect(runSmoke).toMatch(/run_sprint "sprint-2" "\$\{SPRINT2_ITERS\[@\]\}"/);
+  });
+
+  it("/plan enforces the project-intake precondition (lakebase-tdd-intake without --feature)", () => {
+    // run_plan_sprint is defined after run_iteration; slice from its definition
+    // to the run_sprint driver that follows it in the main block.
+    const planFn = runSmoke.slice(
+      runSmoke.indexOf("run_plan_sprint() {"),
+      runSmoke.indexOf("run_sprint() {")
+    );
+    // The project-level gate is a bare `lakebase-tdd-intake \` (line-continued,
+    // no --feature); the per-feature confirmation passes --feature.
+    expect(planFn).toMatch(/lakebase-tdd-intake \\$/m);
+    expect(planFn).toMatch(/lakebase-tdd-intake --feature/);
+  });
+
+  it("commits the sprint backlog + project intake to trunk so feature branches inherit requests", () => {
+    expect(runSmoke).toMatch(/git commit -m "plan \$\{sprint_name\}/);
+    expect(runSmoke).toMatch(/git commit -m "intake: project/);
   });
 });
 

@@ -42,6 +42,8 @@ If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The
 
 The design phases READ the HIL's intent from intake artifacts (`product-overview.md`, `nfrs.md`, the feature's `feature-request.md`, and `design-brief.md` for UI projects). These are not gate deliverables, they are PRECONDITIONS: `/design` MUST NOT enter phase 1 until they exist and conform. `product-overview.md` and `nfrs.md` are PROJECT-level (`.tdd/`), living, and refined across features; `feature-request.md` is per-feature; `design-brief.md` is project-level under `.tdd/design/`.
 
+The per-feature `feature-request.md` is NOT authored here. It is the Product Owner's prioritized ask, authored upstream by `/plan` (sprint planning, where the Spec Author proposes the feature breakdown and the PO authors the requests for the sprint). `/design <feature-id>` only REQUIRES that feature's request to already exist and conform; if it is missing, run `/plan` first. The project-level intake (`product-overview.md` / `nfrs.md` / `design-brief.md`) is facilitated below by whoever reaches it first, `/plan` or `/design`.
+
 **The orchestrator owns facilitating intake from the human.** Before phase 1, for each required artifact that is absent or non-conformant, the orchestrator obtains it:
 
 - **Interactive (a human is present):** run the intake interview, draft the artifact, and present it for the HIL to review and edit. The interviews:

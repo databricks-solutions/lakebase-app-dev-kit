@@ -38,6 +38,23 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 Refuse to transition if prior-phase artifacts are missing or invalid.
 
+The phases + gates above are the PER-FEATURE pipeline that `/design` (phases 0 to 2 + gates 1 to 4) and `/build` (phase 4) run. They sit inside a larger orchestrated loop:
+
+## Orchestrated commands (the dev loop)
+
+```
+/plan  (per sprint)  ──>  /design  ──>  /build  ──>  /deploy   (per feature)
+   ▲                                                     │
+   └──────────────── working software feeds back ────────┘
+```
+
+- **`/plan`** (sprint planning, run once per sprint, ABOVE the per-feature loop): there is no feature request to begin with. The **Spec Author** proposes how to divide `product-overview.md` + `nfrs.md` into features (`.tdd/planning/feature-proposals.md`); the **Product Owner** prioritizes and authors the sprint's `feature-request.md` files. The PO does not pre-author the whole backlog; they fold each sprint's working software back into the next plan. Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition.
+- **`/design <feature-id>`**: claims the paired branch (Step 0), enforces that the feature's `feature-request.md` + project intake exist and conform (Step 0.5, a precondition, NOT a gate), then runs phases 0 to 2.
+- **`/build <feature-id>`**: phase 4, the TDD cycles, to ready-for-review.
+- **`/deploy <feature-id> [--target local]`**: ships the increment to a target and verifies it is reachable; the **deploy gate** is the per-sprint working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`).
+
+The same orchestrated path runs for real and headless; headless, the Human Proxy stands in for the human at every supply + gate (below).
+
 ## Headless / Human Proxy mode
 
 By default every gate is HITL: the workflow halts for the Product Owner. When
@@ -66,14 +83,24 @@ verified and approved real, well-formed work, never because the gate was
 skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
 for a human. Auto-approve is automated diligent approval, not auto-fabrication.
 
+### The Human Proxy at each point in the orchestrated path
+
+Beyond approving the four design/build gates, the Human Proxy stands in for the human wherever the path needs human input:
+
+- **Project intake (precondition of `/plan` and `/design`):** where a human would be interviewed to author `product-overview.md` / `nfrs.md` / `design-brief.md`, the Human Proxy SUPPLIES each from the pre-recorded answers directory (`$LAKEBASE_TDD_RECORDED_INTAKE_DIR`) via `lakebase-tdd-human-proxy supply` (validate-then-place; refuses a missing or non-conformant recording). The precondition (`lakebase-tdd-intake`) then passes because the artifacts are present + conformant, not because it was skipped.
+- **`/plan` sprint backlog:** where the Product Owner would prioritize and author the sprint's `feature-request.md` files, the Human Proxy supplies them from the recorded backlog. The recorded specs ARE the PO's groomed, prioritized sprint. Same validate-then-place; a missing or non-conformant request refuses, so headless planning never produces an empty or malformed sprint.
+- **`/deploy` deploy gate:** the per-sprint working-software review. The Human Proxy confirms the app came up reachable AND the feature verify passed, then records the `gate.approved`. It never approves a non-reachable or failed-verify deploy, that hard-blocks exactly as a missing gate artifact would.
+
+`supply` (intake + backlog) and `approve` (gates) are the two `lakebase-tdd-human-proxy` subcommands; both are diligent stand-ins, neither fabricates or skips.
+
 Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent or unset =
-normal HITL (halt for human sign-off).
+normal HITL (halt for human sign-off / interview).
 
 ## Agent prompts
 
 Load the per-role prompt for the phase you're in:
 
-- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the Spec Author: reads the Feature Requester's `feature-request.md` (the original ask) plus the Product Owner's project-level `product-overview.md` intent, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
+- [`agents/spec-author.md`](agents/spec-author.md) – the Spec Author (BA). In `/plan` (sprint planning), proposes the feature breakdown from `product-overview.md` + `nfrs.md` (`feature-proposals.md`, the PO's input). In `/design` phase 0, reads one feature's `feature-request.md` (the PO's prioritized ask) plus `product-overview.md`, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
 - [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
 - [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.

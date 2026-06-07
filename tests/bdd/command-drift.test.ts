@@ -57,8 +57,9 @@ function deployCommand(projectDir: string, name: string, pinnedVersion?: string)
 }
 
 describe("detectCommandDrift", () => {
-  it("reports overall=ok when design.md, build.md, and deploy.md match the kit", () => {
+  it("reports overall=ok when plan.md, design.md, build.md, and deploy.md match the kit", () => {
     const dir = mkProject();
+    deployCommand(dir, "plan.md");
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
     deployCommand(dir, "deploy.md");
@@ -90,6 +91,7 @@ describe("detectCommandDrift", () => {
   it("does not flag drift when only the pinned kit version differs (version-pin neutralized)", () => {
     const dir = mkProject();
     // Project was scaffolded against an older kit version.
+    deployCommand(dir, "plan.md", "0.1.0-old");
     deployCommand(dir, "design.md", "0.1.0-old");
     deployCommand(dir, "build.md", "0.1.0-old");
     deployCommand(dir, "deploy.md", "0.1.0-old");
@@ -113,6 +115,7 @@ describe("detectCommandDrift", () => {
 
   it("ignores hook files entirely (project-owned, never in the report)", () => {
     const dir = mkProject();
+    deployCommand(dir, "plan.md");
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
     deployCommand(dir, "deploy.md");
@@ -127,6 +130,7 @@ describe("detectCommandDrift", () => {
 
   it("flags extra non-hook command files without counting them against overall ok", () => {
     const dir = mkProject();
+    deployCommand(dir, "plan.md");
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
     deployCommand(dir, "deploy.md");
@@ -163,17 +167,18 @@ describe("detectCommandDrift", () => {
   it("sorts files drifted > missing > extra > unchanged for deterministic display", () => {
     const dir = mkProject();
     deployCommand(dir, "design.md"); // unchanged
-    // build.md + deploy.md missing
+    // plan.md + build.md + deploy.md missing
     fs.writeFileSync(path.join(dir, ".claude", "commands", "custom.md"), "extra\n");
     const report = detectCommandDrift({ projectDir: dir });
     const order = report.files.map((f) => f.status);
-    expect(order).toEqual(["missing", "missing", "extra", "unchanged"]);
+    expect(order).toEqual(["missing", "missing", "missing", "extra", "unchanged"]);
   });
 });
 
 describe("detectScaffoldedDrift umbrella", () => {
   it("returns overall=ok when both surfaces are in-sync", () => {
     const dir = mkProject();
+    deployCommand(dir, "plan.md");
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
     deployCommand(dir, "deploy.md");
@@ -205,6 +210,7 @@ describe("detectScaffoldedDrift umbrella", () => {
 
   it("returns overall=drift when the workflow surface drifts even if commands are clean", () => {
     const dir = mkProject();
+    deployCommand(dir, "plan.md");
     deployCommand(dir, "design.md");
     deployCommand(dir, "build.md");
     deployCommand(dir, "deploy.md");
