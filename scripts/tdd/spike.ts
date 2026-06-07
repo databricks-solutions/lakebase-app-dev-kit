@@ -10,6 +10,20 @@ function branchIdOf(info: LakebaseBranchInfo): string {
   return leaf;
 }
 
+/**
+ * Default spike notes.md content. When `forFeature` is given, a `for_feature:`
+ * frontmatter marker is added so the note is picked up by collectSpikeInputs at
+ * that feature's design-spec gate (the throwaway code is dropped; only the
+ * learning carries forward).
+ */
+export function spikeNotes(spikeSlug: string, forFeature?: string): string {
+  const frontmatter = forFeature ? `---\nfor_feature: ${forFeature}\n---\n` : "";
+  const intro = forFeature
+    ? `Throwaway spike for ${forFeature}.`
+    : `Throwaway spike.`;
+  return `${frontmatter}# ${spikeSlug}\n\n${intro} Code is **not** promoted as-is. Capture the learning here before deleting the branch.\n`;
+}
+
 export interface CutSpikeArgs extends BranchLookupOpts {
   tddDir: string;
   spikeSlug: string;

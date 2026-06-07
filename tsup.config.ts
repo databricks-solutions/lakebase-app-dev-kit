@@ -54,6 +54,7 @@ export default defineConfig({
     "scripts/tdd/story-pipeline.cli": "scripts/tdd/story-pipeline.cli.ts",
     "scripts/tdd/story-experiment.cli": "scripts/tdd/story-experiment.cli.ts",
     "scripts/tdd/drive.cli": "scripts/tdd/drive.cli.ts",
+    "scripts/tdd/spike.cli": "scripts/tdd/spike.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },

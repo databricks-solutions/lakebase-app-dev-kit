@@ -113,6 +113,7 @@
     "lakebase-tdd-pipeline": "./dist/scripts/tdd/story-pipeline.cli.js",
     "lakebase-tdd-experiment": "./dist/scripts/tdd/story-experiment.cli.js",
     "lakebase-tdd-drive": "./dist/scripts/tdd/drive.cli.js",
+    "lakebase-tdd-spike": "./dist/scripts/tdd/spike.cli.js",
     "lakebase-tdd-new-migration": "./dist/scripts/lakebase/new-migration.cli.js",
     "lakebase-tdd-collapse-heads": "./dist/scripts/lakebase/collapse-heads.cli.js",
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js"
