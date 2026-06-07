@@ -87,6 +87,12 @@ state machine. Writes no spec / code / test / deploy.
 - `bash -n run-smoke.sh` clean; smoke BDD asserts `/plan` + `/deploy` go through `claude -p`.
 - Manual: scaffold a throwaway project, confirm `.lakebase/agent-config.json` has recommended models + an applied override; `@`-invoke a role agent by name and confirm it picks up the resolved model.
 
+## Plugin packaging (Phase K)
+
+The kit is a Claude Code plugin (`.claude-plugin/plugin.json`, name `lakebase-app-dev-kit`, the broad umbrella, NOT rebranded to TDD). It exposes `skills/`, the role `agents` (pointed at `skills/lakebase-tdd-workflows/agents`, so the 9 roles are plugin agents, no per-project copy needed for discoverability), and one launcher command `commands/tdd.md` -> **`/lakebase-app-dev-kit:tdd`**. A `.claude-plugin/marketplace.json` catalogs it so `/plugin marketplace add databricks-solutions/lakebase-app-dev-kit` + `/plugin install lakebase-app-dev-kit@lakebase-app-dev-kit` registers it.
+
+`/lakebase-app-dev-kit:tdd` is one smart command: in a scaffolded `.tdd/` project it acts as the in-session orchestrator (take stock + resume `/plan -> /design -> /build -> /deploy`); elsewhere it guides project creation (`lakebase-create-project`), then resumes. It orchestrates in the user's session (can spawn the role agents); `./scripts/tdd.sh` (`claude --agent scrum-master`) remains the strictly-scoped path. NOT validated live yet (`/plugin marketplace add` + install + cross-reference resolution in plugin agents) , that is a manual smoke.
+
 ## Launching the workflow (Phase J)
 
 `scripts/tdd.sh` (scaffolded into every project) is the convenient entry point: it runs `claude --agent scrum-master` so the orchestrator session has its `Agent(<roles>)` allowlist (only it spawns the roles), optionally seeded with a phase. `./scripts/tdd.sh plan` starts sprint planning; `./scripts/tdd.sh design <id>` / `build <id>` / `deploy <id>` jump straight in; bare opens the orchestrator to type into. `lakebase-create-project` prints `Next: cd <dir> && ./scripts/tdd.sh plan` on completion. The project default agent is intentionally NOT set (a casual `claude` in the project stays generic Claude); the launcher is how you opt into the orchestrator.
