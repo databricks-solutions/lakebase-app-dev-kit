@@ -203,8 +203,12 @@ run_claude_with_gate_drain() {
   local feature_id="$2"  # e.g. "F1-initial-domain"
   local attempt
   for attempt in $(seq 1 "$GATE_DRAIN_MAX_ITERATIONS"); do
-    log "    claude -p '${slash_cmd}' (attempt ${attempt}/${GATE_DRAIN_MAX_ITERATIONS})"
-    claude -p "$slash_cmd"
+    log "    claude -p '${slash_cmd}' --agent scrum-master (attempt ${attempt}/${GATE_DRAIN_MAX_ITERATIONS})"
+    # Run the orchestrator AS the scrum-master agent so its Agent(<roles>)
+    # allowlist scopes which role subagents may be spawned (only the
+    # scrum-master invokes the role agents). The role defs are discoverable
+    # because the scaffold wrote them into .claude/agents/.
+    claude -p "$slash_cmd" --agent scrum-master
     # Drain any gates that opened during this pass. Mock-approver is
     # idempotent: returns 0 even when no gates are open.
     local approved
@@ -425,8 +429,8 @@ run_iteration() {
   # the prod release path is merge.yml (SCM workflow), tested separately. /deploy
   # opens no gates.json gate, so it is a plain claude -p invocation (not a
   # gate-drain). A safety teardown follows in case the command left the app up.
-  log "  step 6.5: claude -p '/deploy ${feature_id} --target local' (working-software check, via release-engineer)"
-  if ! claude -p "/deploy ${feature_id} --target local"; then
+  log "  step 6.5: claude -p '/deploy ${feature_id} --target local' --agent scrum-master (working-software check, via release-engineer)"
+  if ! claude -p "/deploy ${feature_id} --target local" --agent scrum-master; then
     npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
     echo "smoke: /deploy failed for ${feature_id} (app not reachable / verify failed)" >&2
     exit 2
@@ -547,8 +551,8 @@ run_plan_sprint() {
   # feature-requests from the recorded backlog (idempotent over the files staged
   # above; sprint membership is the smoke orchestrator's call). /plan opens no
   # gates.json gate, so it is a plain claude -p invocation, not a gate-drain.
-  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}'"
-  claude -p "/plan --sprint ${sprint_name}"
+  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' --agent scrum-master"
+  claude -p "/plan --sprint ${sprint_name}" --agent scrum-master
 
   # c. Commit the sprint backlog to trunk so each feature branch inherits its
   # request. Idempotent on resume: nothing to commit when already present.

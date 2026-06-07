@@ -7,7 +7,7 @@ description: >-
   Designer, Navigator + Driver, Product Owner, Release Engineer), carries artifacts
   forward, and surfaces every gate to the Product Owner. Writes no spec, code, test,
   or deploy of its own.
-tools: Read, Bash, Agent
+tools: Read, Bash, Agent(product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer)
 model: inherit
 memory: project
 color: yellow

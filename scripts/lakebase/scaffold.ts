@@ -146,6 +146,43 @@ export async function deployClaudeCommands(
   return { written, skipped };
 }
 
+/**
+ * Deploy the TDD-workflow role agent definitions into the project's
+ * `.claude/agents/` so Claude Code can discover + spawn them (FEIP-7510). The
+ * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
+ * this copies each `<role>.md` verbatim (the bodies are the system prompts).
+ * Discoverability is required for the scrum-master orchestrator to spawn the
+ * roles; the scrum-master's own `tools: Agent(...)` allowlist + running the
+ * orchestrator as that agent is what scopes invocation to it. Skips files that
+ * already exist unless `force: true`.
+ */
+export async function deployClaudeAgents(
+  targetDir: string,
+  opts?: DeployClaudeCommandsOptions
+): Promise<DeployClaudeCommandsResult> {
+  const kitRoot = path.dirname(path.dirname(templatesRoot(opts)));
+  const src = path.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path.join(targetDir, ".claude", "agents");
+  fs.mkdirSync(destDir, { recursive: true });
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const entry of fs.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path.join(".claude", "agents", entry);
+    const destPath = path.join(targetDir, relDest);
+    if (fs.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs.copyFileSync(path.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
+
 /** Deploy GitHub Actions workflows from common/.github/workflows/. */
 export async function deployWorkflows(targetDir: string, opts?: ScaffoldOptions): Promise<string[]> {
   const written = copyDir(
@@ -444,6 +481,8 @@ export interface ScaffoldStaticAllResult {
   hooksInstalled: string;
   /** `.claude/commands/*.md` files written this run. Empty when skipped. */
   claudeCommands: string[];
+  /** `.claude/agents/*.md` role definitions written this run. Empty when skipped. */
+  claudeAgents: string[];
 }
 
 /**
@@ -496,13 +535,17 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
   const hooksInstalled = await installHooks(args.targetDir);
 
   let claudeCommands: string[] = [];
+  let claudeAgents: string[] = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
   }
 
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
 }
 
 /**

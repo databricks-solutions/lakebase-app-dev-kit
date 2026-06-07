@@ -52,7 +52,8 @@ state machine. Writes no spec / code / test / deploy.
 ### Decisions locked
 - **Release Engineer** is a new role owning `/deploy`, composing on `lakebase-release-workflows` (+ `lakebase-scm-workflows`). `local` is the only target today; remote/release-on-merge is `merge.yml`.
 - **Product Owner** is a facilitation agent (interview the human, draft artifacts, human approves). Already present in the `AgentRole` enum (`scripts/tdd/agent-log.ts`); only the doc is missing.
-- Agent defs live **centrally in the skill** (NOT copied per project). Per-project **model overrides** live in the project (`.lakebase/agent-config.json`), recommended per role (sourced from each def's `model:`), asked at setup, HIL-overridable.
+- Agent defs are **sourced centrally in the skill**, and **scaffolded into the project's `.claude/agents/`** so Claude Code can discover + spawn them (discoverability is a hard requirement: a skill's own folder is not a subagent location). Per-project **model overrides** live in the project (`.lakebase/agent-config.json`), recommended per role (sourced from each def's `model:`), asked at setup, HIL-overridable.
+- **Discoverable, but only the Scrum-Master invokes the roles** (Phase I): the orchestrator runs as `claude --agent scrum-master`, whose `tools: Agent(<the 8 roles>)` allowlist scopes spawning to exactly those role agents. The role defs are discoverable for spawning; the allowlist + running-as-scrum-master is what restricts invocation to the orchestrator (Claude Code has no frontmatter flag to opt a subagent out of auto-delegation, so the narrow phase-scoped `description`s carry the rest).
 - The Scrum-Master obeys the TDD state machine, which gains `planning` and `deploy` phases.
 
 ## Phases
@@ -100,10 +101,10 @@ What the Release Engineer needs, vs what the substrate ships today:
 3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (FEIP-7059 roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
 4. No rollback command surface wired for the Release Engineer (the module exists; no `/deploy --rollback` or bin).
 
-**Proposed tickets (pending the user's go; JIRA filing is gated)**
-- Under FEIP-7059 (release orchestrator) or a new child: "Route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives + expose a remote-deploy surface for the Release Engineer."
-- "Expose rollback (`deploy-rollback`) as a Release Engineer surface (`/deploy --rollback` / bin)."
-- Confirm whether the `cutRC`/`regressionTest`/`migrate`/`release` primitives stay on FEIP-7059 or get their own tickets now.
+**Filed tickets (children of FEIP-7059):**
+- **FEIP-7560** , route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives (remote-deploy surface for the Release Engineer).
+- **FEIP-7561** , expose `deploy-rollback` as a Release Engineer rollback surface.
+- **FEIP-7562** , ship the release orchestrator primitives (`cutRC` / `regressionTest` / `migrate` / `release`).
 
 ## Gates
 - No version bump / push / PR unless explicitly asked.
