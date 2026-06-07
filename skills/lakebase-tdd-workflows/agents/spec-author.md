@@ -40,7 +40,7 @@ Everything below describes the drafting mode (the per-story draft step) unless i
 
 You communicate with other roles only through the artifacts on disk. Assume the next role has none of your reasoning, only what you wrote down.
 
-**Do not search the filesystem.** Produce conformant artifacts straight from the required sections in this prompt; `lakebase-tdd-gate-conformance` validates them against the bundled schemas, so you never need to read a `*.schema.json` file or hunt for an agent definition. Write under `.tdd/` relative to the project root (your working directory). Never run a filesystem-wide scan (e.g. `find /`): it stalls for many minutes (and can hang on mounts) and is never necessary.
+**Operating rules (every role):** work within the project root using relative paths under `.tdd/`; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, you never read `*.schema.json` or hunt for files); and **never run a filesystem-wide scan** like `find /`, it stalls for minutes, can hang on mounts, and is never necessary. Full detail: [references/agent-operating-rules.md](../references/agent-operating-rules.md).
 
 ## Inputs
 
