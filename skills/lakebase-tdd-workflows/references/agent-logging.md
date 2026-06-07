@@ -27,6 +27,23 @@ Optional: `feature_id`, `phase`, `cycle_id`, `data` (structured payload, e.g. ar
 - **`warn` , things the HIL should see.** A bad smell flagged, ambiguity surfaced to the PO, gate-integrity drift detected.
 - **`error` , hard stops.** A gate refused, conformance failed, a substrate call errored.
 
+## 2.5 Progress cadence (emit during long phases)
+
+A role's work between phase boundaries can take many minutes (an LLM drafting a dozen ACs, assigning layers, ordering tests, running a cycle). If you only emit at `phase.start` / `phase.end`, an observer sees a long silent block and cannot tell "working" from "stuck." So emit a `progress` event at each meaningful **sub-step**:
+
+- **Spec Author:** one per candidate feature proposed (planning); one per story and per AC drafted (drafting).
+- **Architect Reviewer:** one per AC layer assigned; one per `nfrs.md` Required item covered (`brief_ref`).
+- **Test Strategist:** one per test ordered into the list.
+- **Navigator / Driver:** one per cycle step (PLAN / RED / REVIEW; GREEN / REFACTOR).
+- **Release Engineer:** one per deploy step (deploy / reachable / verify).
+
+```bash
+lakebase-tdd-log --role spec-author --level debug --event progress \
+  --message "AC 4/11 drafted: bug is reachable by identifier after filing" --feature F1-initial-domain
+```
+
+Use `debug` for sub-step progress (so `info` stays the outputs/decisions stream). The rule is cadence: roughly one line per sub-step, so a gap in the log reliably means stuck, not working.
+
 ## 3. How to emit
 
 Shell out to the kit CLI (works from a headless `claude -p` agent):

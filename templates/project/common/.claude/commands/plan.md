@@ -28,9 +28,9 @@ Note: no `--feature`. `lakebase-tdd-intake` without a feature checks only the pr
 
 ## Phase 1: Spec Author proposes the feature breakdown (the BA)
 
-The Spec Author reads `product-overview.md` + `nfrs.md` (and `design-brief.md` for UI projects) and proposes how to divide the work into coherent features. This is the same feature-identification skill the Spec Author applies inside `/design`, here applied one level up, to the whole product rather than a single request.
+The Spec Author reads `product-overview.md` + `nfrs.md` (and `design-brief.md` for UI projects) and proposes the candidate features for **the next sprint only**, the next coherent, usable increment, NOT the whole product. Do not decompose or spec features beyond this sprint: the team folds what each sprint's working software reveals into the next `/plan`, so proposing the entire roadmap up front wastes work and pre-commits decisions the PO has not made. Later sprints get their own `/plan`.
 
-Invoke `@lakebase-tdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.tdd/planning/feature-proposals.md`: a list of candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
+Invoke `@lakebase-tdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.tdd/planning/feature-proposals.md`: a short list of **this sprint's** candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
 
 ## Phase 2: the Product Owner prioritizes and authors the requests
 
