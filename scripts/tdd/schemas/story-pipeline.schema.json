@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/story-pipeline.schema.json",
+  "title": "StoryPipeline",
+  "description": "Per-feature per-story pipeline state for the streaming design->build workflow (FEIP-7565). The design lane runs ahead, moving each story designing -> awaiting-gate -> ready; the single build lane consumes the FIFO build_queue one story at a time (build_active), then -> done. The Scrum-Master owns this; persisted as .tdd/features/<F>/pipeline.json. Exactly one story builds at a time.",
+  "type": "object",
+  "required": ["version", "feature_id", "stories", "build_queue", "build_active"],
+  "properties": {
+    "version": { "const": 1 },
+    "feature_id": {
+      "type": "string",
+      "pattern": "^F[0-9]+(-[a-z0-9-]+)?$"
+    },
+    "stories": {
+      "type": "object",
+      "description": "Keyed by story id (S<n>[-slug]). Every story the design lane has touched.",
+      "propertyNames": { "pattern": "^S[0-9]+(-[a-z0-9-]+)?$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["designing", "awaiting-gate", "ready", "building", "done"],
+            "description": "designing = design lane drafting/annotating/ordering; awaiting-gate = surfaced to the PO for the per-story spec gate; ready = gate-approved, queued for build; building = the single build lane is on it; done = built."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "build_queue": {
+      "type": "array",
+      "description": "FIFO of gate-approved (ready) story ids waiting for the single build lane. The head is dispatched next when the lane is free.",
+      "items": { "type": "string", "pattern": "^S[0-9]+(-[a-z0-9-]+)?$" }
+    },
+    "build_active": {
+      "type": ["string", "null"],
+      "description": "The story id the single Navigator+Driver build lane is currently building, or null when idle. At most one."
+    }
+  },
+  "additionalProperties": false
+}
