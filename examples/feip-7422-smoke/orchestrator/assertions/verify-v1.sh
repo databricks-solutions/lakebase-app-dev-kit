@@ -9,36 +9,45 @@ set -e
 set -u
 set -o pipefail
 
+# Resolve the assertions dir BEFORE cd-ing into the project, so the shared lib
+# is sourced from here regardless of invocation cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${1:-$PWD}"
 cd "$PROJECT_DIR"
 
 fail() { echo "verify-v1: $*" >&2; exit 1; }
 ok()   { echo "verify-v1: ✓ $*"; }
 
-# 1. Alembic migration exists with the expected version + creates bugs.
-shopt -s nullglob
-migrations=(alembic/versions/0001_*.py)
-[[ ${#migrations[@]} -ge 1 ]] || fail "no alembic/versions/0001_*.py migration"
-grep -q "create_table" "${migrations[0]}" || fail "0001 migration does not call create_table"
-grep -q "\"bugs\"\|'bugs'" "${migrations[0]}" || fail "0001 migration does not create 'bugs'"
-ok "alembic 0001 migration creates bugs"
+# shellcheck source=_assert-lib.sh
+source "$SCRIPT_DIR/_assert-lib.sh"
 
-# 2. SQLAlchemy Bug model exists.
-[[ -f app/models.py ]] || fail "app/models.py missing"
-grep -qE "class Bug\b" app/models.py || fail "app/models.py has no 'Bug' class"
-ok "app/models.py defines Bug"
+# 1. A migration creates the bugs table. The revision is timestamp-named (so
+#    its filename is not predictable) and the change may sit in any revision
+#    file, so assert by content.
+have_migration                  || fail "no alembic revision files under alembic/versions/"
+migration_has "create_table"    || fail "no migration calls create_table"
+migration_has "\"bugs\"|'bugs'" || fail "no migration creates the 'bugs' table"
+ok "a migration creates the bugs table"
 
-# 3. FastAPI app exists with the 4 routes.
-[[ -f app/main.py ]] || fail "app/main.py missing"
-for route_pattern in 'POST.*/bugs' 'GET.*/bugs/' 'PATCH.*/bugs/'; do
-  grep -qE "$route_pattern" app/main.py || fail "app/main.py missing route matching: $route_pattern"
-done
-ok "app/main.py declares POST/GET/PATCH /bugs routes"
+# 2. SQLAlchemy Bug model exists (flat app/models.py or a models package).
+app_has "class Bug\b" || fail "no 'Bug' model class anywhere under app/"
+ok "app/ defines a Bug model"
 
-# 4. Tests file exists with at least one of each AC.
-[[ -f tests/test_bugs.py ]] || fail "tests/test_bugs.py missing"
-test_count="$(grep -cE '^def test_' tests/test_bugs.py || true)"
-[[ "$test_count" -ge 4 ]] || fail "tests/test_bugs.py only has $test_count test functions; expected >=4 (one per AC1-AC4)"
-ok "tests/test_bugs.py has $test_count test functions"
+# 3. The app exposes create/read/update on the bugs resource. The build may use
+#    a flat app/main.py or an app/routers/*.py APIRouter (prefix="/bugs"), and
+#    FastAPI decorators are lowercase, so match methods + the /bugs resource
+#    across the whole app tree rather than uppercase verbs in main.py.
+app_has "@(app|router)\.post"  || fail "no POST handler under app/"
+app_has "@(app|router)\.get"   || fail "no GET handler under app/"
+app_has "@(app|router)\.patch" || fail "no PATCH handler under app/"
+app_has "/bugs"                || fail "no '/bugs' route or APIRouter prefix under app/"
+ok "app/ exposes POST/GET/PATCH on the bugs resource"
+
+# 4. Per-story tests cover the ACs. The per-story pipeline names them
+#    test_bugs_s<N>.py; a flat test_bugs.py is also accepted.
+have_glob "tests/test_bugs*.py" || fail "no tests/test_bugs*.py"
+test_count="$(count_tests 'tests/test_bugs*.py')"
+[[ "$test_count" -ge 4 ]] || fail "tests/test_bugs*.py have $test_count test functions; expected >=4 (AC1-AC4)"
+ok "tests/test_bugs*.py have $test_count test functions"
 
 echo "verify-v1: PASS"

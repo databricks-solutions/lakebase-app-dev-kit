@@ -5,42 +5,45 @@ set -e
 set -u
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${1:-$PWD}"
 cd "$PROJECT_DIR"
 
 fail() { echo "verify-v4: $*" >&2; exit 1; }
 ok()   { echo "verify-v4: ✓ $*"; }
 
-shopt -s nullglob
+# shellcheck source=_assert-lib.sh
+source "$SCRIPT_DIR/_assert-lib.sh"
 
-# 1. Migration 0004: creates bug_details, backfills from bugs.description, drops bugs.description.
-migrations=(alembic/versions/0004_*.py)
-[[ ${#migrations[@]} -ge 1 ]] || fail "no alembic/versions/0004_*.py migration"
-m="${migrations[0]}"
+# 1. bug_details table (FK to bugs) + dropped bugs.description + a backfill,
+#    across revisions (the change may be spread over several revision files).
+have_migration                  || fail "no alembic revision files under alembic/versions/"
+migration_has "create_table"    || fail "no migration calls create_table"
+migration_has "\"bug_details\"|'bug_details'" || fail "no migration creates the 'bug_details' table"
+migration_has "ForeignKey\(.bugs\.id"          || fail "bug_details lacks a bugs.id ForeignKey"
+migration_has "drop_column"     || fail "no migration calls drop_column"
+migration_has "execute\(.*INSERT.*bug_details|bulk_insert.*bug_details" \
+  || fail "no INSERT INTO bug_details data-migration step"
+ok "migrations create bug_details + backfill from bugs.description + drop bugs.description"
 
-grep -qE "create_table" "$m" || fail "0004 migration does not create_table"
-grep -qE "\"bug_details\"|'bug_details'" "$m" || fail "0004 migration does not create 'bug_details'"
-grep -qE "ForeignKey\(.bugs\.id" "$m" || fail "0004 migration's bug_details lacks bugs.id ForeignKey"
-grep -qE "drop_column" "$m" || fail "0004 migration does not drop_column"
-grep -qE "execute\(.*INSERT.*bug_details" "$m" || \
-  grep -qE "bulk_insert.*bug_details" "$m" || \
-  fail "0004 migration has no INSERT INTO bug_details data-migration step"
-ok "alembic 0004 creates bug_details + backfills from bugs.description + drops bugs.description"
+# 2. SQLAlchemy BugDetails model exists.
+app_has "class BugDetails\b" || fail "no 'BugDetails' model class under app/"
+ok "app/ defines BugDetails"
 
-# 2. SQLAlchemy BugDetails model + relation.
-grep -qE "class BugDetails\b" app/models.py || fail "app/models.py has no 'BugDetails' class"
-ok "app/models.py defines BugDetails"
-
-# Bug.description was REMOVED from the model (now lives on BugDetails).
-# Allow "description" as a relation-loaded attribute in the API layer,
-# but as a Column declaration on Bug it should be absent.
-if awk '/class Bug\b/,/^class /' app/models.py | grep -qE "description\s*=\s*(sa\.|sqlalchemy\.|)Column"; then
-  fail "app/models.py: Bug still declares a 'description' Column. v4 moved it to BugDetails."
+# Bug.description was REMOVED from the Bug model (it now lives on BugDetails).
+# `description` as a relation-loaded attribute is fine; as a Column on Bug it
+# should be absent. Scope to the file that declares `class Bug` (not BugDetails)
+# so this holds whether models are flat (app/models.py) or packaged.
+bug_file="$(grep -rlE "class Bug\b" app --include='*.py' 2>/dev/null | head -1)"
+[[ -n "$bug_file" ]] || fail "no file under app/ declares 'class Bug'"
+if awk '/class Bug\b/,/^class [A-Za-z]/' "$bug_file" \
+     | grep -qE "description[[:space:]]*=[[:space:]]*(sa\.|sqlalchemy\.|)Column"; then
+  fail "app/: Bug still declares a 'description' Column; v4 moved it to BugDetails"
 fi
-ok "app/models.py: Bug no longer declares its own description Column"
+ok "app/: Bug no longer declares its own description Column"
 
-# 3. Tests.
-[[ -f tests/test_bug_details.py ]] || fail "tests/test_bug_details.py missing"
-ok "tests/test_bug_details.py exists"
+# 3. Tests (test_bug_details_s<N>.py or a flat test_bug_details.py).
+have_glob "tests/test_bug_details*.py" || fail "no tests/test_bug_details*.py"
+ok "tests/test_bug_details*.py present"
 
 echo "verify-v4: PASS"

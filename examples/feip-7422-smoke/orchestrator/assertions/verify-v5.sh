@@ -10,36 +10,45 @@ set -e
 set -u
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${1:-$PWD}"
 cd "$PROJECT_DIR"
 
 fail() { echo "verify-v5: $*" >&2; exit 1; }
 ok()   { echo "verify-v5: ✓ $*"; }
 
-shopt -s nullglob
+# shellcheck source=_assert-lib.sh
+source "$SCRIPT_DIR/_assert-lib.sh"
 
-# 1. No new migration (v5 is no-schema-change by spec).
-unexpected=(alembic/versions/0005_*.py)
-[[ ${#unexpected[@]} -eq 0 ]] || fail "v5 spec is no-schema-change but found ${unexpected[*]}"
-ok "no new migration (as specified)"
+# 1. v5 adds no schema. Revisions are timestamp-named, so a "no new migration"
+#    check by filename is meaningless; instead assert no migration creates a
+#    table outside the v1-v4 domain set. Content-based, catches a v5 that
+#    sneaks in a table.
+unexpected_tables="$(grep -rhoE "create_table\([\"'][a-z_]+[\"']" alembic/versions --include='*.py' 2>/dev/null \
+  | sed -E "s/create_table\(['\"]([a-z_]+)['\"]/\1/" \
+  | grep -vxE "bugs|users|statuses|bug_details|alembic_version" || true)"
+[[ -z "$unexpected_tables" ]] || fail "v5 is no-schema-change but a migration creates: ${unexpected_tables//$'\n'/, }"
+ok "no migration creates a table outside the v1-v4 domain (v5 adds no schema)"
 
-# 2. HTML GET /bugs route + Jinja2 template.
-grep -qE 'GET.*/bugs(\b|"|\047)' app/main.py || fail "app/main.py missing GET /bugs HTML route"
-grep -qE 'TemplateResponse|HTMLResponse' app/main.py || \
-  fail "app/main.py has no TemplateResponse / HTMLResponse import; can it render HTML?"
-ok "app/main.py renders HTML for GET /bugs"
+# 2. An HTML bugs list view: a GET route on /bugs that renders a template,
+#    wherever the build routed it (flat app/main.py or an APIRouter).
+app_has "@(app|router)\.get" || fail "no GET handler under app/"
+app_has "/bugs"              || fail "no '/bugs' route under app/"
+app_has "TemplateResponse|HTMLResponse|Jinja2Templates" \
+  || fail "app/ renders no HTML (no TemplateResponse / HTMLResponse / Jinja2Templates)"
+ok "app/ renders an HTML bugs list view"
 
-[[ -f app/templates/bugs.html ]] || fail "app/templates/bugs.html (Jinja2 template) missing"
-ok "app/templates/bugs.html exists"
+have_glob "app/templates/*.html" || fail "no Jinja2 template under app/templates/"
+ok "app/templates/ has an HTML template"
 
-# 3. Playwright [E2E] test.
-[[ -f tests/e2e/bugs_list.spec.ts ]] || fail "tests/e2e/bugs_list.spec.ts missing"
-grep -qE "page\.goto\(['\"]/bugs" tests/e2e/bugs_list.spec.ts || \
-  fail "tests/e2e/bugs_list.spec.ts has no page.goto('/bugs') call"
-ok "tests/e2e/bugs_list.spec.ts has the [E2E] AC5 fixture"
+# 3. Playwright [E2E] test that navigates to /bugs (name is the build's choice).
+have_glob "tests/e2e/*.spec.ts" || fail "no Playwright spec under tests/e2e/"
+grep -rqE "page\.goto\((['\"]).*/bugs" tests/e2e 2>/dev/null \
+  || fail "no e2e spec navigates to /bugs (page.goto('/bugs'))"
+ok "tests/e2e has the [E2E] AC5 fixture navigating to /bugs"
 
-# 4. playwright.config.ts at project root (kit's template, used by pr.yml).
-[[ -f playwright.config.ts ]] || fail "playwright.config.ts (project root) missing"
-ok "playwright.config.ts present at project root"
+# 4. Playwright config at project root (kit's template, used by pr.yml).
+have_glob "playwright.config.*" || fail "playwright.config.* missing at project root"
+ok "playwright config present at project root"
 
 echo "verify-v5: PASS (local artifacts)"

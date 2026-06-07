@@ -5,45 +5,43 @@ set -e
 set -u
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${1:-$PWD}"
 cd "$PROJECT_DIR"
 
 fail() { echo "verify-v3: $*" >&2; exit 1; }
 ok()   { echo "verify-v3: ✓ $*"; }
 
-shopt -s nullglob
+# shellcheck source=_assert-lib.sh
+source "$SCRIPT_DIR/_assert-lib.sh"
 
-# 1. Migration 0003: creates statuses, adds status_id, backfills, drops status.
-migrations=(alembic/versions/0003_*.py)
-[[ ${#migrations[@]} -ge 1 ]] || fail "no alembic/versions/0003_*.py migration"
-m="${migrations[0]}"
+# 1. statuses table + bugs.status_id + dropped status + a data migration, across
+#    revisions (a story split may spread these across several revision files).
+have_migration                         || fail "no alembic revision files under alembic/versions/"
+migration_has "create_table"           || fail "no migration calls create_table"
+migration_has "\"statuses\"|'statuses'" || fail "no migration creates the 'statuses' table"
+migration_has "add_column"             || fail "no migration calls add_column"
+migration_has "status_id"              || fail "no migration references status_id"
+migration_has "drop_column"            || fail "no migration calls drop_column"
+migration_has "execute\(|bulk_insert\(" || fail "no data-migration step (execute() or bulk_insert())"
+ok "migrations create statuses + add bugs.status_id + drop bugs.status + carry a data migration"
 
-grep -qE "create_table" "$m" || fail "0003 migration does not create_table"
-grep -qE "\"statuses\"|'statuses'" "$m" || fail "0003 migration does not create 'statuses'"
-grep -qE "add_column" "$m" || fail "0003 migration does not add_column"
-grep -qE "status_id" "$m" || fail "0003 migration does not reference status_id"
-grep -qE "drop_column" "$m" || fail "0003 migration does not drop_column"
-grep -qE "execute\(|bulk_insert\(" "$m" || fail "0003 migration has no data-migration step (execute() or bulk_insert())"
-ok "alembic 0003 creates statuses + adds bugs.status_id + drops bugs.status + carries data migration"
+# 2. Status model present; Bug.status replaced by status_id.
+app_has "class Status\b" || fail "no 'Status' model class under app/"
+app_has "status_id"      || fail "no 'status_id' field under app/"
+# The old enum-ish bare `status` Column should be gone (status_id/status_name OK).
+residual="$(grep -rhE "^[[:space:]]+status[[:space:]]*[:=]" app --include='*.py' 2>/dev/null \
+              | grep -vE "status_id|status_name|#" || true)"
+[[ -z "$residual" ]] || fail "app/ still declares a bare 'status' field; v3 should replace it with status_id"
+ok "app/: Status model present, Bug.status replaced by status_id"
 
-# 2. SQLAlchemy Status model exists; Bug.status_id replaced Bug.status.
-grep -qE "class Status\b" app/models.py || fail "app/models.py has no 'Status' class"
-grep -qE "status_id" app/models.py || fail "app/models.py Bug has no status_id field"
-if grep -qE "^\s+status\s*[:=]" app/models.py; then
-  # The literal string "status" might appear in column names / docstrings,
-  # but as a SQLAlchemy field declaration (status : Type or status = Column)
-  # it shouldn't be there post-v3.
-  grep -E "^\s+status\s*[:=]" app/models.py | grep -qvE "status_id|status_name|^.*#" && \
-    fail "app/models.py still declares a 'status' field; v3 should have removed it"
-fi
-ok "app/models.py: Status model present, Bug.status replaced by status_id"
+# 3. The app exposes GET /statuses, wherever it is routed.
+app_has "@(app|router)\.get" || fail "no GET handler under app/"
+app_has "/statuses"          || fail "no '/statuses' route or APIRouter prefix under app/"
+ok "app/ exposes GET /statuses"
 
-# 3. /statuses GET route.
-grep -qE 'GET.*/statuses\b' app/main.py || fail "app/main.py missing GET /statuses route"
-ok "app/main.py declares GET /statuses"
-
-# 4. Tests.
-[[ -f tests/test_statuses.py ]] || fail "tests/test_statuses.py missing"
-ok "tests/test_statuses.py exists"
+# 4. Tests (test_statuses_s<N>.py or a flat test_statuses.py).
+have_glob "tests/test_statuses*.py" || fail "no tests/test_statuses*.py"
+ok "tests/test_statuses*.py present"
 
 echo "verify-v3: PASS"
