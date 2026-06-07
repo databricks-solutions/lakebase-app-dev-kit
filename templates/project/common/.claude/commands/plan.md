@@ -65,6 +65,22 @@ The Spec Author's proposal step may still run headless (it is deterministic from
 
 Headless, the Human Proxy plays the PO at this activity: it supplies the sprint's `feature-request.md` files from the recorded backlog and refuses anything missing or non-conformant, so planning never silently produces an empty or malformed sprint. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
+## Agents + state machine
+
+You (the orchestrator, the Scrum-Master) coordinate `/plan` and author nothing yourself. This is the `planning` phase in `.tdd/workflow-state.json`. Delegate to the role agents:
+
+- **product-owner** , facilitates intake when missing, then prioritizes + authors the sprint's `feature-request.md` files.
+- **spec-author** , proposes the feature breakdown (`.tdd/planning/feature-proposals.md`).
+
+Before spawning each role, resolve the model the project wants it to run with:
+
+```bash
+KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
+MODEL="$(npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role spec-author --project-dir "$PWD")"
+```
+
+(`override ?? recommended ?? inherit`, the HIL set overrides at project setup; each role's recommended model lives in its definition.) Each feature then enters `/design`, which transitions the phase to `discovery`.
+
 ## Logging
 
 Emit `phase.start` / `phase.end` (`--role scrum-master`) around the planning activity. Record the Spec Author's proposal as `--role spec-author --event artifact.written --data '{"path":".tdd/planning/feature-proposals.md"}'`. Record each authored request as `--role product-owner --event artifact.written --feature <id> --data '{"path":".tdd/features/<id>/feature-request.md","conformant":true}'` (headless: the Human Proxy records it). Tail with `lakebase-tdd-log --read`.

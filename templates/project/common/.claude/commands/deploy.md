@@ -37,6 +37,10 @@ Targets are declared in the project's `deploy-targets.yaml`, each carrying a `ty
 
 The deploy gate is the per-sprint working-software approval. Headless, `human-proxy` stands in: it validates the expected elements (app reachable + feature verify green) and approves only then; it never skips the gate and never approves a deploy that did not come up. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
+## Agents + state machine
+
+You (the orchestrator, the Scrum-Master) coordinate the `deploy` phase and do not run the deploy yourself. Delegate to the **release-engineer** agent: it deploys to the target, polls reachable, and runs the feature verify against the running app, then hands the evidence to the **product-owner** for the deploy gate. Resolve its model first: `npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role release-engineer --project-dir "$PWD"` (`override ?? recommended ?? inherit`). On the PO's approval (headless: the Human Proxy, only after reachable + verify green), record the gate and transition the phase to `shipped`.
+
 ## Logging
 
 Emit `phase.start` / `phase.end` (`--role scrum-master`) around the deploy. Record the deploy gate as a HITL decision: `--role product-owner --event gate.approved --data '{"gate":"deploy","target":"local","validated":true}'` on approval (headless: the Human Proxy records it), or `--event gate.refused` when the app was not reachable / verify failed. Tail with `lakebase-tdd-log --read --feature <id>`.

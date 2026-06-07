@@ -85,6 +85,17 @@ Each phase is implemented by the substrate agent of the same name:
 
 References resolve through Claude Code's `@skill-name/agent-name` lookup, so agent renames inside the substrate skill stay safe.
 
+## Agents + state machine
+
+You (the orchestrator, the Scrum-Master, the main session) coordinate `/design` and do none of the roles' work yourself. Delegate each phase to its named role agent, and record the phase in `.tdd/workflow-state.json` as you go:
+
+- **spec-author** , phase `discovery` (draft spec).
+- **ux-designer** , between discovery and architectural-review, **UI projects only**.
+- **architect-reviewer** , phase `architectural-review`.
+- **test-strategist** , phase `test-list-construction`.
+
+Before spawning each role, resolve its model: `npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role <role> --project-dir "$PWD"` (`override ?? recommended ?? inherit`). The **product-owner** approves every gate (headless: the Human Proxy). You never author an artifact a role owns.
+
 ## Logging
 
 Each phase agent emits structured events via `lakebase-tdd-log` (see its agent

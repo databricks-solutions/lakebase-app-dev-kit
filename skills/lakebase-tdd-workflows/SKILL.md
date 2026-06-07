@@ -96,17 +96,21 @@ Beyond approving the four design/build gates, the Human Proxy stands in for the 
 Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent or unset =
 normal HITL (halt for human sign-off / interview).
 
-## Agent prompts
+## Agent roles (the per-role agent runtime)
 
-Load the per-role prompt for the phase you're in:
+Each role is a separate agent definition under [`agents/`](agents/) with frontmatter (`name`, a `description` that is the auto-selection criteria, least-privilege `tools`, a strongly-recommended `model`, `memory: project`, `color`) and a body that is its system prompt. The roles communicate only through the artifacts on disk, the artifact is the inter-agent API.
 
-- [`agents/spec-author.md`](agents/spec-author.md) – the Spec Author (BA). In `/plan` (sprint planning), proposes the feature breakdown from `product-overview.md` + `nfrs.md` (`feature-proposals.md`, the PO's input). In `/design` phase 0, reads one feature's `feature-request.md` (the PO's prioritized ask) plus `product-overview.md`, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
+- [`agents/product-owner.md`](agents/product-owner.md) – the PO's facilitator: runs the intake interviews + drafts `product-overview.md` / `nfrs.md` / `design-brief.md`, authors the sprint's `feature-request.md` files at `/plan`, and is the approver at every HITL gate. Headless, the Human Proxy plays the PO.
+- [`agents/spec-author.md`](agents/spec-author.md) – the Spec Author (BA). At `/plan`, proposes the feature breakdown from `product-overview.md` + `nfrs.md` (`feature-proposals.md`, the PO's input). At `/design` phase 0, turns one feature's `feature-request.md` into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
 - [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
-- [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
+- [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, covers every `nfrs.md` Required item via `architecture.json` `brief_ref`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.
-- [`agents/scrum-master.md`](agents/scrum-master.md) – phases 3 → 4, orchestrates the design-spec gate, spawns experiments, runs cycles, watches smells, surfaces to HITL.
 - [`agents/navigator.md`](agents/navigator.md) – phase 4 PLAN + RED + REVIEW.
 - [`agents/driver.md`](agents/driver.md) – phase 4 GREEN + REFACTOR.
+- [`agents/release-engineer.md`](agents/release-engineer.md) – `/deploy`: deploys the built increment to its target, polls reachable, runs the feature verify, hands the evidence to the PO for the deploy gate. Composes on `lakebase-release-workflows` for remote/release-on-merge.
+- [`agents/scrum-master.md`](agents/scrum-master.md) – the **orchestrator**, and the **main session, not a spawnable subagent** (subagents cannot nest). Coordinates only: obeys `workflow-state.json`, hands each phase to the right role agent above, carries artifacts forward, surfaces every gate to the PO. Writes no spec/code/test/deploy.
+
+**How the orchestrator runs them.** The Scrum-Master is the top-level session that spawns each role agent for its phase (it cannot be a subagent itself). Roles are auto-selected by their `description`, or invoked explicitly by name. Before spawning a role, the orchestrator resolves the model to use from the project's `.lakebase/agent-config.json`: `lakebase-tdd-agent-model --role <role>` returns `override ?? recommended ?? inherit` (the HIL sets per-project overrides at `lakebase-create-project`; each role's recommended model lives in its definition's `model:`).
 
 ## References
 

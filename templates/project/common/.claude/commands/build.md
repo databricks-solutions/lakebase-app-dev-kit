@@ -22,6 +22,15 @@ The orchestrator is implemented by the substrate agent at `@lakebase-tdd-workflo
 
 If `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI / the smoke), the human review at gate 3 (test-list immutability) and gate 4 (promote vs synthesize) is performed by `human-proxy`: it validates the gate's artifacts exist + carry their expected elements (format-conformant) and approves only then. The orchestrator advances on that validated approval, never by skipping the gate, and never on a missing/malformed artifact. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
+## Agents + state machine
+
+You (the orchestrator, the Scrum-Master) coordinate the `implementation` phase and write no code or tests yourself. Pair the role agents per cycle:
+
+- **navigator** , PLAN + RED + REVIEW.
+- **driver** , GREEN + REFACTOR.
+
+Before spawning each, resolve its model: `npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role <role> --project-dir "$PWD"` (`override ?? recommended ?? inherit`). The promote/synthesize choice and every smell remediation are HITL (the **product-owner**; headless, the Human Proxy). When the increment is green, `/deploy` takes over (the Release Engineer), it is not your job to deploy.
+
 ## Logging
 
 Every agent emits structured events via `lakebase-tdd-log` to `.tdd/agent-log.jsonl` (see `@lakebase-tdd-workflows/references/agent-logging.md`). The orchestrator emits `phase.start` / `phase.end` per cycle and `gate.approved` at gates 3/4; the Navigator emits `cycle.red` + `review.verdict`; the Driver emits `cycle.green` + `cycle.refactored`; smells go to `--level warn --event smell.flagged`. Tail with `lakebase-tdd-log --read --feature <id>`.
