@@ -44,6 +44,42 @@ function mergeViews(existing, next) {
   remaining.push(next);
   return remaining;
 }
+function acIdsInStoryDir(storyDir) {
+  const acsDir = (0, import_path.join)(storyDir, "acs");
+  if (!(0, import_fs.existsSync)(acsDir)) return [];
+  return (0, import_fs.readdirSync)(acsDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length)).sort();
+}
+function findStoryDir(featureDir, storyId) {
+  const storiesDir = (0, import_path.join)(featureDir, "stories");
+  if (!(0, import_fs.existsSync)(storiesDir)) return null;
+  const dirs = (0, import_fs.readdirSync)(storiesDir).filter(
+    (d) => (0, import_fs.statSync)((0, import_path.join)(storiesDir, d)).isDirectory()
+  );
+  const match = dirs.find((d) => d === storyId) ?? dirs.find((d) => d.startsWith(storyId));
+  return match ? (0, import_path.join)(storiesDir, match) : null;
+}
+function scopeToStory(list, storyId, acIds) {
+  const want = new Set(acIds);
+  return {
+    feature_id: list.feature_id,
+    story_id: storyId,
+    ...list.ordered_for ? { ordered_for: list.ordered_for } : {},
+    items: list.items.filter((it) => want.has(it.ac_id))
+  };
+}
+function writeStoryTestList(tddDir, featureId, storyId) {
+  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  if (!storyDir) return null;
+  const scoped = scopeToStory(
+    readMasterTestList(tddDir, featureId),
+    storyId,
+    acIdsInStoryDir(storyDir)
+  );
+  const file = (0, import_path.join)(storyDir, "test-list-per-story.json");
+  (0, import_fs.mkdirSync)((0, import_path.dirname)(file), { recursive: true });
+  (0, import_fs.writeFileSync)(file, JSON.stringify(scoped, null, 2) + "\n");
+  return file;
+}
 function locateStoryDirForAc(featureDir, acId) {
   const storiesDir = (0, import_path.join)(featureDir, "stories");
   if (!(0, import_fs.existsSync)(storiesDir)) return null;
@@ -71,10 +107,21 @@ function findFeatureDir(tddDir, featureId) {
 
 // scripts/tdd/test-list.cli.ts
 function main() {
-  const [tddDir = ".tdd", featureId] = process.argv.slice(2);
+  const [tddDir = ".tdd", featureId, storyId] = process.argv.slice(2);
   if (!featureId) {
-    process.stderr.write("usage: test-list <tddDir> <featureId>\n");
+    process.stderr.write("usage: test-list <tddDir> <featureId> [storyId]\n");
     return 1;
+  }
+  if (storyId) {
+    const file = writeStoryTestList(tddDir, featureId, storyId);
+    if (!file) {
+      process.stderr.write(`story ${storyId} not found under ${featureId}
+`);
+      return 1;
+    }
+    process.stdout.write(`wrote ${file}
+`);
+    return 0;
   }
   const list = readMasterTestList(tddDir, featureId);
   const written = writePerAcViews(tddDir, featureId, list);

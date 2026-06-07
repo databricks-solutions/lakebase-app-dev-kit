@@ -49,9 +49,13 @@ deploy:                    per the working-software gate once the feature's stor
 
 ## Phased plan
 
-1. **Orchestration layer (docs).** Scrum-Master pipelines per story + manages the ready queue + single build lane; Spec Author / Architect / Test Strategist operate at story scope and hand off per story; per-story HIL gate (Human Proxy headless) as a logged decision; concurrent design-ahead. This delivers the behavior. (skills/.../agents/*.md + design.md/build.md.)
-2. **Substrate.** Per-story gate in `gates.json` (or a formal per-story gate record), per-story state-machine status + ready queue in `workflow-state.json`, per-story test-list scoping, each with tests.
-3. **Smoke + live re-validate.** Drive a feature with >1 story and watch design run ahead while a single build lane drains the queue, gates per story.
+1. **[done] Orchestration layer (docs).** Scrum-Master pipelines per story + manages the ready queue + single build lane; Spec Author / Architect / Test Strategist operate at story scope and hand off per story; per-story HIL gate (Human Proxy headless); concurrent design-ahead. (skills/.../agents/*.md + design.md/build.md.)
+2. **[done] Substrate.** Landed isolated in `.tdd/features/<F>/pipeline.json` (NOT overloading the per-feature `gates.json`):
+   - 2a pipeline state + single-lane FIFO ready queue (`story-pipeline.ts`, `lakebase-tdd-pipeline` CLI, schema).
+   - 2b formal per-story spec gate (surface -> approve-gate -> ready; withdraw-gate rescinds), recorded per story alongside its status.
+   - 2c per-story test-list scoping (`scopeToStory` / `writeStoryTestList` -> `stories/<story>/test-list-per-story.json`, the build lane's per-story input).
+   Each with unit tests.
+3. **[done, hermetic; live run pending] Smoke + re-validate.** A hermetic end-to-end vitest (`tdd-per-story-pipeline-e2e`) drives a 3-story feature through all three layers together, proving design runs ahead and gates later stories while the single build lane drains the FIFO queue one story at a time. An advisory `verify-story-pipeline.sh` is wired into the smoke (step 4.5) to confirm a clean terminal pipeline state on a live run. The live FEIP-7422 smoke run against a real workspace is the final confirmation.
 
 ## Open questions (resolve during phase 1)
 

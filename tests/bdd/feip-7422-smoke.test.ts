@@ -62,6 +62,14 @@ describe("FEIP-7422 smoke: directory structure", () => {
     expect(fs.existsSync(path.join(assertDir, "verify-v5-e2e.sh"))).toBe(true);
   });
 
+  it("has an advisory verify-story-pipeline.sh assert (FEIP-7565) wired into run-smoke.sh", () => {
+    const assertScript = path.join(SMOKE_DIR, "assertions", "verify-story-pipeline.sh");
+    expect(fs.existsSync(assertScript), "missing assertions/verify-story-pipeline.sh").toBe(true);
+    expect((fs.statSync(assertScript).mode & 0o111) !== 0, "verify-story-pipeline.sh must be executable").toBe(true);
+    const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+    expect(runSmoke).toMatch(/verify-story-pipeline\.sh/);
+  });
+
   it("has run-smoke.sh as the entrypoint", () => {
     const entry = path.join(SMOKE_DIR, "run-smoke.sh");
     expect(fs.existsSync(entry)).toBe(true);

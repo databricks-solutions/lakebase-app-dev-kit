@@ -404,6 +404,16 @@ run_iteration() {
   log "  step 4: /build ${feature_id} (gates approved by human-proxy)"
   run_claude_with_gate_drain "/build ${feature_id}" "${feature_id}" || exit 2
 
+  # 4.5 (FEIP-7565): advisory per-story pipeline check. If the orchestrator
+  # drove the streaming per-story pipeline (feature decomposed into >1 story),
+  # confirm it ended clean: single build lane idle, ready queue drained, every
+  # story done with an approved spec gate. Advisory (WARNINGs, never aborts):
+  # the hard per-story guarantees are unit-tested (tdd-per-story-pipeline-e2e);
+  # a single-story feature is a no-op.
+  log "  step 4.5: verify-story-pipeline ${feature_id} (advisory)"
+  "${ASSERT_DIR}/verify-story-pipeline.sh" "$PROJECT_DIR" "$feature_id" || \
+    log "  WARNING: verify-story-pipeline reported anomalies (advisory; smoke continues)."
+
   # 5. local tests
   log "  step 5: ./scripts/run-tests.sh"
   if [[ -x "./scripts/run-tests.sh" ]]; then
