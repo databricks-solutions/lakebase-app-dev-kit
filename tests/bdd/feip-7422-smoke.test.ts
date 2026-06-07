@@ -228,9 +228,11 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
       runSmoke.indexOf("run_plan_sprint() {"),
       runSmoke.indexOf("run_sprint() {")
     );
-    // The project-level gate is a bare `lakebase-tdd-intake \` (line-continued,
-    // no --feature); the per-feature confirmation passes --feature.
-    expect(planFn).toMatch(/lakebase-tdd-intake \\$/m);
+    // The project-level gate calls `lakebase-tdd-intake` (no --feature), wrapped
+    // in a retry loop (transient npx flakes must not be fatal) that still exits
+    // 2 after repeated failure. The per-feature confirmation passes --feature.
+    expect(planFn).toMatch(/lakebase-tdd-intake; then _intake_ok=1/);
+    expect(planFn).toMatch(/project-intake precondition failed after 3 attempts/);
     expect(planFn).toMatch(/lakebase-tdd-intake --feature/);
   });
 

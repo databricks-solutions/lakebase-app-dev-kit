@@ -22,3 +22,4 @@ coverage/
 # FEIP-7143: devhub-vendored skills are install-time products; pinned in devhub.lock.
 skills/databricks-core/
 skills/databricks-lakebase/
+tests/agent-capability/timings.jsonl
