@@ -15,7 +15,7 @@ import { join } from "path";
 import {
   createSchemaMigration,
   migrationSlug,
-  nextMigrationNumber,
+  migrationTimestamp,
 } from "../../scripts/lakebase/schema-migrate";
 import { FlywayAdapter } from "../../scripts/lakebase/adapters/flyway-adapter";
 import { AlembicAdapter } from "../../scripts/lakebase/adapters/alembic-adapter";
@@ -30,23 +30,21 @@ afterEach(() => {
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-describe("nextMigrationNumber", () => {
-  it("starts at 1 when there are no existing versions", () => {
-    expect(nextMigrationNumber([])).toBe(1);
+describe("migrationTimestamp", () => {
+  it("formats a 14-digit UTC YYYYMMDDHHMMSS stamp", () => {
+    const d = new Date(Date.UTC(2026, 5, 7, 11, 50, 3)); // 2026-06-07 11:50:03 UTC
+    expect(migrationTimestamp(d)).toBe("20260607115003");
   });
 
-  it("returns max+1 for zero-padded Alembic rev-ids", () => {
-    expect(nextMigrationNumber(["0001", "0002", "0003"])).toBe(4);
+  it("zero-pads single-digit fields", () => {
+    const d = new Date(Date.UTC(2026, 0, 2, 3, 4, 5)); // 2026-01-02 03:04:05 UTC
+    expect(migrationTimestamp(d)).toBe("20260102030405");
   });
 
-  it("returns max+1 for Flyway V<n> versions (numeric core, any gaps)", () => {
-    expect(nextMigrationNumber(["1", "2", "10"])).toBe(11);
-  });
-
-  it("ignores non-numeric versions (e.g. a stray hash)", () => {
-    // A hash like "ae10" yields its leading digits; the point is it never throws
-    // and a clean 000N set still counts up.
-    expect(nextMigrationNumber(["0007"])).toBe(8);
+  it("is lexicographically == chronologically ordered (so versions sort)", () => {
+    const earlier = migrationTimestamp(new Date(Date.UTC(2026, 5, 7, 11, 0, 0)));
+    const later = migrationTimestamp(new Date(Date.UTC(2026, 5, 7, 11, 0, 1)));
+    expect(earlier < later).toBe(true);
   });
 });
 
@@ -70,43 +68,27 @@ function makeFlywayProject(dir: string): void {
 }
 
 describe("FlywayAdapter.newMigration (hermetic: pure file write)", () => {
-  it("creates V1 then V2 skeletons that count up", async () => {
+  it("creates a timestamp-versioned V<ts>__<slug>.sql skeleton", async () => {
     makeFlywayProject(projectDir);
 
-    const first = await FlywayAdapter.newMigration!({ projectDir, slug: "create bugs" });
-    expect(first.status).toBe("ok");
-    expect(first.version).toBe("1");
-    expect(first.filename).toBe("V1__create_bugs.sql");
-
-    const second = await FlywayAdapter.newMigration!({ projectDir, slug: "add users" });
-    expect(second.status).toBe("ok");
-    expect(second.version).toBe("2");
-    expect(second.filename).toBe("V2__add_users.sql");
+    const r = await FlywayAdapter.newMigration!({ projectDir, slug: "create bugs" });
+    expect(r.status).toBe("ok");
+    // Version is a 14-digit timestamp; filename embeds it + the slug.
+    expect(r.version).toMatch(/^\d{14}$/);
+    expect(r.filename).toMatch(/^V\d{14}__create_bugs\.sql$/);
 
     // The skeleton exists and carries a header for the Driver to fill in.
-    const body = readFileSync(second.path, "utf8");
-    expect(body).toContain("V2: add users");
-  });
-
-  it("refuses to clobber an existing migration of the same name", async () => {
-    makeFlywayProject(projectDir);
-    const dir = join(projectDir, "src", "main", "resources", "db", "migration");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "V1__create_bugs.sql"), "-- existing\n", "utf8");
-
-    // Next number is 2, so a fresh slug is fine...
-    const ok = await FlywayAdapter.newMigration!({ projectDir, slug: "create bugs" });
-    expect(ok.status).toBe("ok");
-    expect(ok.filename).toBe("V2__create_bugs.sql");
+    const body = readFileSync(r.path, "utf8");
+    expect(body).toContain("create bugs");
   });
 });
 
 describe("createSchemaMigration dispatcher", () => {
-  it("routes a Java project to Flyway and names V<n>", async () => {
+  it("routes a Java project to Flyway and names V<timestamp>", async () => {
     makeFlywayProject(projectDir);
     const r = await createSchemaMigration({ projectDir, slug: "create bugs", language: "java" });
     expect(r.status).toBe("ok");
-    expect(r.filename).toBe("V1__create_bugs.sql");
+    expect(r.filename).toMatch(/^V\d{14}__create_bugs\.sql$/);
   });
 
   it("throws a helpful error when the tool cannot be resolved", async () => {

@@ -7,9 +7,10 @@ root):
 lakebase-tdd-new-migration --name "<description>"
 ```
 
-This writes the next-numbered skeleton (`V<n>__<slug>.sql`); then author the
-DDL/DML. Migrations start at `V1__<description>.sql`. Flyway runs with
-`-baselineOnMigrate=true
+This writes a timestamp-versioned skeleton (`V<timestamp>__<slug>.sql`, a UTC
+`YYYYMMDDHHMMSS` version); then author the DDL/DML. Timestamps are globally
+unique and sort chronologically, so sibling feature branches never collide on a
+version. Flyway runs with `-baselineOnMigrate=true
 -baselineVersion=0`, so every `V<n>` file (from V1 up) is applied as a pending
 migration, and Flyway's own baseline row anchors the non-empty Lakebase `public`
 schema.

@@ -62,13 +62,15 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
 When making a test GREEN requires a schema change, create the migration with
 **`lakebase-tdd-new-migration --name "<description>"`** (run it in the project
 root). Never call `alembic` / `flyway` / `knex` directly: the kit detects the
-project's tool and names the migration in that tool's native sequential scheme
-so migrations stay deterministically ordered (Alembic `0001_<slug>.py`,
-`0002_<slug>.py`, ...; Flyway `V<n>__<slug>.sql`; Knex `<timestamp>_<slug>.js`).
-A bare `alembic revision` produces an unordered hash name and is a contract
-violation. Then author the `upgrade()` / `downgrade()` body (the command leaves
-a correctly-named skeleton). For Python you may add `--autogenerate --instance
-<id> --branch <branch>` to diff the models against the branch DB and prefill it.
+project's tool and names the migration with a UTC timestamp version
+(`YYYYMMDDHHMMSS`) so migrations are globally unique and sort chronologically,
+which is what keeps them collision-free when sibling features merge into the
+same tier (Alembic rev-id `<ts>_<slug>.py`; Flyway `V<ts>__<slug>.sql`; Knex
+`<ts>_<slug>.js`). A bare `alembic revision` produces an unordered hash name and
+is a contract violation. Then author the `upgrade()` / `downgrade()` body (the
+command leaves a correctly-named skeleton). For Python you may add
+`--autogenerate --instance <id> --branch <branch>` to diff the models against
+the branch DB and prefill it.
 
 ## REFACTOR (only when Navigator requests it)
 

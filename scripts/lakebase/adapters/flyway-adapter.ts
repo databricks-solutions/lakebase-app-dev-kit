@@ -20,7 +20,7 @@ import {
 } from "../schema-migrate-runners/flyway.js";
 import {
   migrationSlug,
-  nextMigrationNumber,
+  migrationTimestamp,
   type AppliedSchemaMigration,
   type SchemaMigrationFile,
   type PendingSchemaMigration,
@@ -150,22 +150,24 @@ export const FlywayAdapter: SchemaMigrationAdapter = {
 
   async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
     // Flyway has no `generate` command: migrations are hand-written SQL whose
-    // V<n> prefix IS the ordering. We create the next-numbered skeleton (the
-    // Driver writes the DDL/DML). autogenerate is ignored (no model diffing).
+    // V<version> prefix IS the ordering. We create the skeleton (the Driver
+    // writes the DDL/DML) with a timestamp version: globally unique + sortable,
+    // so a flat Flyway list never collides across sibling branches. Flyway has
+    // no DAG, so no merge-time head collapse is needed. autogenerate is ignored.
     try {
       const dir = path.join(args.projectDir, "src", "main", "resources", "db", "migration");
       fs.mkdirSync(dir, { recursive: true });
-      const n = nextMigrationNumber(listFlywayFiles(args.projectDir).map((f) => f.version));
+      const version = migrationTimestamp();
       const slug = migrationSlug(args.slug);
-      const filename = `V${n}__${slug}.sql`;
+      const filename = `V${version}__${slug}.sql`;
       const full = path.join(dir, filename);
       if (fs.existsSync(full)) throw new Error(`${filename} already exists`);
       fs.writeFileSync(
         full,
-        `-- V${n}: ${args.slug}\n-- Flyway migration (write your DDL/DML below).\n`,
+        `-- V${version}: ${args.slug}\n-- Flyway migration (write your DDL/DML below).\n`,
         "utf8"
       );
-      return { status: "ok", version: String(n), filename, path: full };
+      return { status: "ok", version, filename, path: full };
     } catch (err) {
       return {
         status: "error",

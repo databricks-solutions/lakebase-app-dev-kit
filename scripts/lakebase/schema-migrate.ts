@@ -370,18 +370,18 @@ export async function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Pr
 // so the Driver never learns three toolchains.
 
 /**
- * Next sequential migration number from a set of existing version strings.
- * Parses the leading integer of each (so "0003", "3", "V3" -> 3) and returns
- * max+1; 1 when there are none. Non-numeric versions (e.g. Knex timestamps)
- * are ignored, which is correct: Knex does not use this counter.
+ * A migration version stamp: 14-digit UTC `YYYYMMDDHHMMSS`, matching Knex's
+ * default migration prefix. All three tools share this one scheme so versions
+ * are globally unique (no cross-branch collision when sibling features fork
+ * from the same tier head) and lexicographically == chronologically sortable.
+ * The clock is injectable so tests are deterministic.
  */
-export function nextMigrationNumber(versions: ReadonlyArray<string>): number {
-  let max = 0;
-  for (const v of versions) {
-    const m = /(\d+)/.exec(v);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  return max + 1;
+export function migrationTimestamp(now: Date = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}` +
+    `${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`
+  );
 }
 
 /** Slugify a human description into a snake_case filename component. */

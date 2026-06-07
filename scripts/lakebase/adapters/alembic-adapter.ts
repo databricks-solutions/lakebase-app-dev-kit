@@ -23,7 +23,7 @@ import {
 } from "../schema-migrate-runners/alembic.js";
 import {
   migrationSlug,
-  nextMigrationNumber,
+  migrationTimestamp,
   type AppliedSchemaMigration,
   type SchemaMigrationFile,
   type PendingSchemaMigration,
@@ -195,8 +195,11 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
       if (args.autogenerate && (!args.instance || !args.branch)) {
         throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
       }
-      const existing = listAlembicFiles(args.projectDir).map((f) => f.version);
-      const revId = String(nextMigrationNumber(existing)).padStart(4, "0");
+      // Timestamp rev-id: globally unique + chronologically sortable, so sibling
+      // features forking from the same head never pick the same id. Alembic
+      // still chains via down_revision; collapsing the resulting heads at merge
+      // is handled by the merge step, not here.
+      const revId = migrationTimestamp();
       const dsn = args.autogenerate
         ? await buildDsn({
             instance: args.instance!,
