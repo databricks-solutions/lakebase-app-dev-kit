@@ -477,9 +477,13 @@ proxy_supply() {
   local from="$1" to="$2" artifact="$3" feature="${4:-}"
   local feat_flag=()
   [[ -n "$feature" ]] && feat_flag=(--feature "$feature")
+  # Expand the optional array bash-3.2-safe: on macOS /bin/bash (3.2) with
+  # `set -u`, "${arr[@]}" on an EMPTY array throws "unbound variable". The
+  # ${arr[@]+...} guard yields nothing when empty. (stage_project_intake calls
+  # this with no feature, so feat_flag is empty for project-level intake.)
   npx --yes --package="${KIT_NPX}" lakebase-tdd-human-proxy supply \
     --from "$from" --to "$to" --artifact "$artifact" \
-    --tdd-dir "${PROJECT_DIR}/.tdd" "${feat_flag[@]}"
+    --tdd-dir "${PROJECT_DIR}/.tdd" ${feat_flag[@]+"${feat_flag[@]}"}
 }
 
 # Project-level intake, staged once before the iteration loop. product-overview.md
