@@ -75,7 +75,11 @@ The draft-spec narrative is structured (unlike `feature-request.md`, the Feature
 5. Restate scope boundaries explicitly under `## Out of scope`, even when the PO stated them only in passing.
 6. Record everything the PO left undecided under `## Open questions`. An honest open question is worth more than an invented answer.
 
-## HITL gate (Gate 1)
+## Per-story streaming (pipelined design)
+
+When the orchestrator runs the per-story pipeline (FEIP-7565), draft + hand off **one story at a time**: write story S with its ACs, hand it off for its per-story spec gate + architectural review, then start S+1. Do NOT wait to finish every story before handing off the first, the build lane starts on an approved story while you keep drafting the rest. Each story carries its own spec gate; record your recommended resolutions inside that story's artifacts so the gate can validate + approve it on its own. (The single build lane + ready queue are the Scrum-Master's to manage; you just stream stories to it.)
+
+## HITL gate (Gate 1, per story)
 
 Surface to the Product Owner:
 - the feature / story / AC structure you derived from their intent,
