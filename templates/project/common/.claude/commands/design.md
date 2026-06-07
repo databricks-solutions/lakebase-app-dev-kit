@@ -68,47 +68,46 @@ npx --yes --package="$KIT_PKG" lakebase-tdd-intake --feature "<feature-id>" $UI_
 
 `lakebase-tdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.
 
-## Phases (HITL-gated)
+## How it runs: the deterministic driver
 
-1. **Spec Author** drafts `feature-spec.{md,json}` from the Feature Requester's `feature-request.md` + the PO's `product-overview.md`.
-2. **UX Designer** (UI projects only) extracts `design-guide.{md,json}` + `ia.md` from `design-brief.md`.
-3. **Architect Reviewer** challenges scope and boundaries, and carries every `## Required` NFR from `nfrs.md` into `architecture.json` via `brief_ref`. Gate 1 stops the pipeline until the human signs off.
-4. **Test Strategist** writes `test-list.json`. Gate 2 stops the pipeline until the human signs off.
+After Step 0 + Step 0.5, `/design` delegates the design lane to the deterministic
+orchestrator driver. The driver sequences the per-story design pipeline and
+spawns each role agent itself, run it bounded to `design`, with interactive
+gates so YOU answer each per-story spec gate (headless: the Human Proxy answers):
 
-**Per-story pipeline (FEIP-7565), Scrum-Master-orchestrated:** the four phases above run **per story**, streamed, not as one per-feature batch. The Scrum-Master drives it, not a single "/design the feature" delegation:
-1. **Breakdown first:** the Spec Author enumerates the feature's stories (ids + one-line scope) from `feature-request.md`, writing story stubs, NO ACs yet.
-2. **Then loop, one story per Spec Author call:** for each story the Scrum-Master invokes the Spec Author scoped to that story ONLY (its ACs), the Architect annotates that story's ACs, the Test Strategist orders its tests, and the story passes its **own per-story spec gate**. The Scrum-Master enqueues that story on the single build lane's ready queue (and `/build` starts it when the lane is free) while the Spec Author drafts the next story. Never draft every story's ACs in one pass, that batches the feature and defeats the streaming pipeline. This is enforced: `lakebase-tdd-pipeline surface` / `approve-gate` hard-fail (exit 3) when a story is gated while other un-gated stories already have ACs on disk, so a batched draft blocks the pipeline until it is redone one story at a time. Build never waits for the whole feature-spec.
+```bash
+GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+npx --yes --package="$KIT_PKG" \
+  lakebase-tdd-drive --feature "<feature-id>" --only design --gates "$GATES" --project-dir "$PWD"
+```
 
-**Human Proxy (headless) mode:** if `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI / the smoke; check with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`), the human review at each gate is performed by `human-proxy`, a diligent automated reviewer that validates the gate's artifacts EXIST and carry their EXPECTED ELEMENTS (schema fields / required sections) and approves only then. Each role records its recommended resolutions INSIDE its artifacts (not as open questions), hands them to the gate, and the Human Proxy validates + approves, so the phases run through and `test-list.json` is produced for `/build`. The gate is never skipped, and a missing or malformed artifact hard-blocks exactly as it would for a human. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
+The driver:
+- **Breaks the feature into stories** (Spec Author), then STREAMS each story
+  through its design lane one at a time, never batching: Spec Author (ACs) ->
+  Architect Reviewer (AC layers + every `## Required` NFR from `nfrs.md` carried
+  into `architecture.json` via `brief_ref`) -> Test Strategist (ordered test
+  list) -> that story's **per-story spec gate**. UX Designer runs between Spec
+  Author and Architect for UI projects.
+- **Routes deterministically** (routing is code, not an LLM orchestrator): it spawns each role as a
+  subagent (`claude -p --agent <role>`, at the resolved per-role model via
+  `lakebase-tdd-agent-model`) and emits the phase/handoff log to
+  `.tdd/agent-log.jsonl` as code. Tail it: `lakebase-tdd-log --read --feature <id> --min-level info`.
+- `--only design` STOPS when every story's spec gate is approved, without
+  building. The roles are `@lakebase-tdd-workflows/agents/{spec-author,ux-designer,architect-reviewer,test-strategist}`.
 
-Each phase is implemented by the substrate agent of the same name:
-- `@lakebase-tdd-workflows/agents/spec-author`
-- `@lakebase-tdd-workflows/agents/ux-designer` (UI projects only)
-- `@lakebase-tdd-workflows/agents/architect-reviewer`
-- `@lakebase-tdd-workflows/agents/test-strategist`
+**Gates.** Interactive: at each per-story spec gate the driver stops and prints a
+`GATE` marker with the pending action. Surface that story's spec to the human; on
+their approval record it (`lakebase-tdd-pipeline approve-gate --story <s>
+--approver <human>`), then re-run the command to resume past it. Headless
+(`--gates proxy`, `LAKEBASE_TDD_HUMAN_PROXY=1`): the Human Proxy validates each
+gate's artifacts EXIST + carry their EXPECTED ELEMENTS and approves only then. A
+gate is never skipped; a missing/non-conformant artifact hard-blocks either way.
 
-References resolve through Claude Code's `@skill-name/agent-name` lookup, so agent renames inside the substrate skill stay safe.
+## Next
 
-## Agents + state machine
-
-You (the orchestrator, the Scrum-Master, the main session) coordinate `/design` and do none of the roles' work yourself. Delegate each phase to its named role agent, and record the phase in `.tdd/workflow-state.json` as you go:
-
-- **spec-author** , phase `discovery` (draft spec).
-- **ux-designer** , between discovery and architectural-review, **UI projects only**.
-- **architect-reviewer** , phase `architectural-review`.
-- **test-strategist** , phase `test-list-construction`.
-
-Before spawning each role, resolve its model: `npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role <role> --project-dir "$PWD"` (`override ?? recommended ?? inherit`). The **product-owner** approves every gate (headless: the Human Proxy). You never author an artifact a role owns.
-
-## Logging
-
-Each phase agent emits structured events via `lakebase-tdd-log` (see its agent
-prompt + `@lakebase-tdd-workflows/references/agent-logging.md`) to the
-centralized `.tdd/agent-log.jsonl`. As the orchestrator, emit a `phase.start` /
-`phase.end` (`--role scrum-master`) around each phase and a `handoff` at each
-role boundary, so the run reads as a clean relay timeline. `debug` captures
-reasoning; `info` captures artifacts written + gates surfaced. Tail it with
-`lakebase-tdd-log --read --feature <id> --min-level info`.
+When design completes (every story's spec gate approved), the driver reports the
+bounded completion. Suggest the next step to the human: **`/build <feature-id>`**
+to build the designed stories. `/design` does not build, that is `/build`.
 
 ## Project post-hook
 

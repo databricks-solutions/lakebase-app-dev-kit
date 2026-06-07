@@ -42,16 +42,22 @@ The phases + gates above are the PER-FEATURE pipeline that `/design` (phases 0 t
 
 ## Orchestrated commands (the dev loop)
 
+Every command is a thin invocation of the deterministic orchestrator driver (`lakebase-tdd-drive`), scoped to a phase range. The driver sequences the work and spawns each role as a subagent (`claude -p --agent <role>`); routing is code, not an LLM. Gates always pause for a human decision: `--gates interactive` (the default for the live slash commands) stops at each gate so the human answers; `--gates proxy` (headless / CI) has the Human Proxy answer.
+
 ```
-/plan  (per sprint)  ──>  /design  ──>  /build  ──>  /deploy   (per feature)
-   ▲                                                     │
-   └──────────────── working software feeds back ────────┘
+Tier 1:  /sprint  = plan ─> [PLAN GATE] ─> per feature: /design ─> /build ─> /deploy
+            ▲                                                                   │
+            └──────────────────── working software feeds back ─────────────────┘
+Tier 2:  /plan  /design  /build  /deploy   (run ONE phase, then stop + suggest next)
+         /spike                            (throwaway exploration, outside the loop)
 ```
 
-- **`/plan`** (sprint planning, run once per sprint, ABOVE the per-feature loop): there is no feature request to begin with. The **Spec Author** proposes how to divide `product-overview.md` + `nfrs.md` into features (`.tdd/planning/feature-proposals.md`); the **Product Owner** prioritizes and authors the sprint's `feature-request.md` files. The PO does not pre-author the whole backlog; they fold each sprint's working software back into the next plan. Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition.
-- **`/design <feature-id>`**: claims the paired branch (Step 0), enforces that the feature's `feature-request.md` + project intake exist and conform (Step 0.5, a precondition, NOT a gate), then runs phases 0 to 2.
-- **`/build <feature-id>`**: phase 4, the TDD cycles, to ready-for-review.
-- **`/deploy <feature-id> [--target local]`**: ships the increment to a target and verifies it is reachable; the **deploy gate** is the per-sprint working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`).
+- **`/sprint [name]`** (Tier 1, the top-level orchestrator): runs the whole sprint as one continuous flow, plan to the plan gate, then claim + drive each backlog feature `design` -> `build` -> `deploy`. Re-invoked per cycle; resumable (halts at the next HITL gate for the human, continues on re-run). `lakebase-tdd-drive --sprint <name>`.
+- **`/plan [name]`** (Tier 2, sprint planning, ABOVE the per-feature loop): the **Spec Author** proposes the feature breakdown (`.tdd/sprints/<name>/feature-proposals.md`); the **Product Owner** authors the sprint's `feature-request.md` files; the **sprint plan gate** is the HITL checkpoint. Stops there (does not flow into design). Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition. `--sprint <name> --plan-only`.
+- **`/design <feature-id>`**: claims the paired branch (Step 0), enforces the feature's `feature-request.md` + project intake (Step 0.5, a precondition, NOT a gate), then drives the per-story design lane to the spec gates. `--only design`.
+- **`/build <feature-id>`**: the TDD cycles + per-story acceptance, to ready-for-review (requires design done). `--only build`.
+- **`/deploy <feature-id> [--target local] [--story <s>]`**: deploys the merged feature (or one story's branch) + verifies reachable + feature-verify; the **deploy gate** is the working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`). `--only deploy`.
+- **`/spike <slug> [--for <feature>]`**: throwaway exploration on its own paired branch, OUTSIDE the workflow (no gates). Notes carry forward into a feature's design-spec gate; code is never promoted. `lakebase-tdd-spike`.
 
 The same orchestrated path runs for real and headless; headless, the Human Proxy stands in for the human at every supply + gate (below).
 

@@ -49,12 +49,15 @@ function expectedContent(name: string, pinnedVersion: string): string {
 }
 
 describe("updateCommands: empty project", () => {
-  it("creates .claude/commands/ and writes plan.md + design.md + build.md + deploy.md with the current kit version", () => {
+  it("creates .claude/commands/ and writes sprint + plan + design + build + deploy + spike with the current kit version", () => {
     const dir = mkProject();
     const result = updateCommands({ projectDir: dir });
     expect(result.changed).toBe(true);
-    // plan + design + build + deploy are the scaffolded commands.
-    expect(result.files.map((f) => f.outcome).sort()).toEqual(["added", "added", "added", "added"]);
+    // sprint + plan + design + build + deploy + spike are the scaffolded
+    // commands (design.pre-hook is a hook, excluded by updateCommands).
+    expect(result.files.map((f) => f.outcome).sort()).toEqual(
+      ["added", "added", "added", "added", "added", "added"],
+    );
     const design = fs.readFileSync(path.join(dir, ".claude", "commands", "design.md"), "utf8");
     expect(design).toBe(expectedContent("design.md", kitVersion()));
   });
@@ -79,6 +82,14 @@ describe("updateCommands: in-sync project", () => {
     fs.writeFileSync(
       path.join(dir, ".claude", "commands", "deploy.md"),
       expectedContent("deploy.md", kitVersion())
+    );
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "sprint.md"),
+      expectedContent("sprint.md", kitVersion())
+    );
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "spike.md"),
+      expectedContent("spike.md", kitVersion())
     );
     const result = updateCommands({ projectDir: dir });
     expect(result.changed).toBe(false);
@@ -123,6 +134,14 @@ describe("updateCommands: drifted project", () => {
     fs.writeFileSync(
       path.join(dir, ".claude", "commands", "deploy.md"),
       expectedContent("deploy.md", kitVersion())
+    );
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "sprint.md"),
+      expectedContent("sprint.md", kitVersion())
+    );
+    fs.writeFileSync(
+      path.join(dir, ".claude", "commands", "spike.md"),
+      expectedContent("spike.md", kitVersion())
     );
     const result = updateCommands({ projectDir: dir, force: false });
     expect(result.changed).toBe(false);
@@ -206,9 +225,12 @@ describe("updateCommands: sort order", () => {
   it("sorts files added > updated > preserved > unchanged for deterministic output", () => {
     const dir = mkProject();
     fs.mkdirSync(path.join(dir, ".claude", "commands"), { recursive: true });
-    // plan.md + design.md + deploy.md are missing (will be added); build.md is drifted (will be updated).
+    // The other 5 commands (sprint/plan/design/deploy/spike) are missing (added);
+    // build.md is drifted (updated). Sorted added > updated.
     fs.writeFileSync(path.join(dir, ".claude", "commands", "build.md"), "# customized\n");
     const result = updateCommands({ projectDir: dir });
-    expect(result.files.map((f) => f.outcome)).toEqual(["added", "added", "added", "updated"]);
+    expect(result.files.map((f) => f.outcome)).toEqual(
+      ["added", "added", "added", "added", "added", "updated"],
+    );
   });
 });

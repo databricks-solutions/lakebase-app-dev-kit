@@ -65,25 +65,38 @@ The Spec Author's proposal step may still run headless (it is deterministic from
 
 Headless, the Human Proxy plays the PO at this activity: it supplies the sprint's `feature-request.md` files from the recorded backlog and refuses anything missing or non-conformant, so planning never silently produces an empty or malformed sprint. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
-## Agents + state machine
+## How it runs: the deterministic driver
 
-You (the orchestrator, the Scrum-Master) coordinate `/plan` and author nothing yourself. This is the `planning` phase in `.tdd/workflow-state.json`. Delegate to the role agents:
-
-- **product-owner** , facilitates intake when missing, then prioritizes + authors the sprint's `feature-request.md` files.
-- **spec-author** , proposes the feature breakdown (`.tdd/planning/feature-proposals.md`).
-
-Before spawning each role, resolve the model the project wants it to run with:
+After Step 0 (project intake), `/plan` delegates planning to the deterministic
+orchestrator driver, bounded to planning only (`--plan-only`), with interactive
+gates so YOU answer the sprint plan gate (headless: the Human Proxy):
 
 ```bash
-KIT_PKG="github:databricks-solutions/lakebase-app-dev-kit${LAKEBASE_KIT_REF:+#${LAKEBASE_KIT_REF}}"
-MODEL="$(npx --yes --package="$KIT_PKG" lakebase-tdd-agent-model --role spec-author --project-dir "$PWD")"
+GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+npx --yes --package="$KIT_PKG" \
+  lakebase-tdd-drive --sprint "<sprint-name>" --plan-only --gates "$GATES" --project-dir "$PWD"
 ```
 
-(`override ?? recommended ?? inherit`, the HIL set overrides at project setup; each role's recommended model lives in its definition.) Each feature then enters `/design`, which transitions the phase to `discovery`.
+The driver routes planning to the role agents, at their resolved per-role models:
+- **spec-author** proposes the feature breakdown (`.tdd/sprints/<name>/feature-proposals.md`).
+- **product-owner** prioritizes + authors the sprint's `feature-request.md` files
+  (headless: the Human Proxy supplies them from the recorded backlog, above).
 
-## Logging
+Then it surfaces the **sprint plan gate** (the HITL checkpoint between planning
+and execution). `--plan-only` STOPS there, it does not enter design/build/deploy.
 
-Emit `phase.start` / `phase.end` (`--role scrum-master`) around the planning activity. Record the Spec Author's proposal as `--role spec-author --event artifact.written --data '{"path":".tdd/planning/feature-proposals.md"}'`. Record each authored request as `--role product-owner --event artifact.written --feature <id> --data '{"path":".tdd/features/<id>/feature-request.md","conformant":true}'` (headless: the Human Proxy records it). Tail with `lakebase-tdd-log --read`.
+**Gate.** Interactive: the driver stops at the plan gate + prints a `GATE` marker.
+Surface the proposed backlog to the human; on approval record it
+(`lakebase-tdd-human-proxy --sprint <name> --gate plan --approver <human>`), then
+re-run to confirm planning complete. Headless (`--gates proxy`): the Human Proxy
+approves once `feature-proposals.md` exists + conforms. "Passing" on a re-plan =
+approving the standing backlog as-is. The driver emits the planning log as code.
+
+## Next
+
+When the plan gate is approved, suggest the next step: **`/sprint <name>`** to
+drive the whole backlog (plan -> per feature design/build/deploy, all gates
+HITL), or **`/design <feature-id>`** to take one feature through manually.
 
 ## Project pre/post hooks
 

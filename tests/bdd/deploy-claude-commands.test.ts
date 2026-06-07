@@ -35,7 +35,7 @@ describe("deployClaudeCommands", () => {
   });
   afterEach(() => rmTempProject(targetDir));
 
-  it("writes plan.md, design.md, design.pre-hook.md, build.md, and deploy.md under .claude/commands/", async () => {
+  it("writes sprint.md, plan.md, design.md, design.pre-hook.md, build.md, deploy.md, and spike.md under .claude/commands/", async () => {
     const result = await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     expect(result.written.sort()).toEqual(
       [
@@ -44,6 +44,8 @@ describe("deployClaudeCommands", () => {
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
         path.join(".claude", "commands", "plan.md"),
+        path.join(".claude", "commands", "spike.md"),
+        path.join(".claude", "commands", "sprint.md"),
       ].sort()
     );
     expect(result.skipped).toEqual([]);
@@ -111,24 +113,36 @@ describe("deployClaudeCommands", () => {
     }
   });
 
-  it("design.md references @lakebase-tdd-workflows agents and the pre/post-hook convention", async () => {
+  it("design.md drives via lakebase-tdd-drive --only design + names the design roles + the pre/post-hook convention", async () => {
     await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     const design = fs.readFileSync(path.join(targetDir, ".claude", "commands", "design.md"), "utf8");
-    expect(design).toMatch(/@lakebase-tdd-workflows\/agents\/spec-author/);
-    expect(design).toMatch(/@lakebase-tdd-workflows\/agents\/architect-reviewer/);
-    expect(design).toMatch(/@lakebase-tdd-workflows\/agents\/test-strategist/);
+    expect(design).toMatch(/lakebase-tdd-drive.*--only design/);
+    expect(design).toMatch(/spec-author/);
+    expect(design).toMatch(/architect-reviewer/);
+    expect(design).toMatch(/test-strategist/);
     expect(design).toMatch(/design\.pre-hook\.md/);
     expect(design).toMatch(/design\.post-hook\.md/);
+    expect(design).not.toMatch(/scrum-master/); // orchestration is the deterministic driver now
   });
 
-  it("build.md references the Scrum-Master orchestrator + Driver + Navigator", async () => {
+  it("build.md drives via lakebase-tdd-drive --only build + names navigator/driver (no scrum-master)", async () => {
     await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     const build = fs.readFileSync(path.join(targetDir, ".claude", "commands", "build.md"), "utf8");
-    expect(build).toMatch(/@lakebase-tdd-workflows\/agents\/scrum-master/);
-    expect(build).toMatch(/@lakebase-tdd-workflows\/agents\/driver/);
-    expect(build).toMatch(/@lakebase-tdd-workflows\/agents\/navigator/);
+    expect(build).toMatch(/lakebase-tdd-drive.*--only build/);
+    expect(build).toMatch(/navigator/);
+    expect(build).toMatch(/\bdriver\b/);
     expect(build).toMatch(/build\.pre-hook\.md/);
     expect(build).toMatch(/build\.post-hook\.md/);
+    expect(build).not.toMatch(/scrum-master/);
+  });
+
+  it("sprint.md + spike.md are the Tier-1 orchestrator + the spike entry", async () => {
+    await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
+    const sprint = fs.readFileSync(path.join(targetDir, ".claude", "commands", "sprint.md"), "utf8");
+    const spike = fs.readFileSync(path.join(targetDir, ".claude", "commands", "spike.md"), "utf8");
+    expect(sprint).toMatch(/lakebase-tdd-drive --sprint/);
+    expect(sprint).not.toMatch(/scrum-master/);
+    expect(spike).toMatch(/lakebase-tdd-spike/);
   });
 });
 
@@ -155,6 +169,8 @@ describe("scaffoldStaticAll integration", () => {
         path.join(".claude", "commands", "design.md"),
         path.join(".claude", "commands", "design.pre-hook.md"),
         path.join(".claude", "commands", "plan.md"),
+        path.join(".claude", "commands", "spike.md"),
+        path.join(".claude", "commands", "sprint.md"),
       ].sort()
     );
     expect(fs.existsSync(path.join(targetDir, ".claude", "commands", "design.md"))).toBe(true);
