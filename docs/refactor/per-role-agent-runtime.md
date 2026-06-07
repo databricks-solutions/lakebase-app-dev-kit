@@ -70,7 +70,7 @@ state machine. Writes no spec / code / test / deploy.
 - Role defs: `skills/lakebase-tdd-workflows/agents/*.md` (+ new `product-owner.md`, `release-engineer.md`)
 - Role enum/schema: `scripts/tdd/agent-log.ts`, `scripts/tdd/schemas/agent-log-event.schema.json`
 - State machine: `scripts/tdd/schemas/workflow-state.schema.json` (+ helpers/tests)
-- Model config: new `scripts/tdd/agent-models.ts` + `scripts/tdd/schemas/agent-config.schema.json`; `scripts/lakebase/create-project.ts` + `create-project.cli.ts` + `scripts/lakebase/scaffold.ts`
+- Model config: new `scripts/tdd/agent-models.ts` + `scripts/tdd/schemas/agent-models.schema.json`; `scripts/lakebase/create-project.ts` + `create-project.cli.ts` + `scripts/lakebase/scaffold.ts`
 - Commands: `templates/project/common/.claude/commands/{plan,design,build,deploy}.md`; `skills/lakebase-tdd-workflows/SKILL.md`
 - Smoke: `examples/feip-7422-smoke/orchestrator/run-smoke.sh`, `tests/bdd/feip-7422-smoke.test.ts`
 - Release skill (compose + audit): `skills/lakebase-release-workflows/`
@@ -86,7 +86,26 @@ state machine. Writes no spec / code / test / deploy.
 - `bash -n run-smoke.sh` clean; smoke BDD asserts `/plan` + `/deploy` go through `claude -p`.
 - Manual: scaffold a throwaway project, confirm `.lakebase/agent-config.json` has recommended models + an applied override; `@`-invoke a role agent by name and confirm it picks up the resolved model.
 
+## Release Engineer substrate audit (Phase G)
+
+What the Release Engineer needs, vs what the substrate ships today:
+
+**Present**
+- Local target: `lakebase-tdd-deploy` (run + poll reachable + stop) + the deploy gate. Covers the `local` working-software check end to end.
+- Remote building blocks exist as TS modules: `scripts/lakebase/deploy-app-endpoint.ts`, `deploy-app-yaml.ts`, `deploy-workspace-upload.ts`, `deploy-validate.ts`, `deploy-rollback.ts`; plus the `lakebase-cut-backup` bin and the release-on-merge `merge.yml` (snapshot -> migrate target -> verify) and the SCM CLIs (`prepare-pr` / `wait-ci` / `merge`).
+
+**Gaps (the Release Engineer cannot yet ship to a remote target end to end)**
+1. `lakebase-tdd-deploy` implements only `type: local`; `databricks-app` is recognized but refused. No routing from a `databricks-app` deploy-target to the existing `deploy-app-*` primitives.
+2. The `deploy-app-*` + `deploy-rollback` modules are not exposed as bins / not composed into a single "deploy this feature to its remote target" surface the Release Engineer can call.
+3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (FEIP-7059 roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
+4. No rollback command surface wired for the Release Engineer (the module exists; no `/deploy --rollback` or bin).
+
+**Proposed tickets (pending the user's go; JIRA filing is gated)**
+- Under FEIP-7059 (release orchestrator) or a new child: "Route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives + expose a remote-deploy surface for the Release Engineer."
+- "Expose rollback (`deploy-rollback`) as a Release Engineer surface (`/deploy --rollback` / bin)."
+- Confirm whether the `cutRC`/`regressionTest`/`migrate`/`release` primitives stay on FEIP-7059 or get their own tickets now.
+
 ## Gates
 - No version bump / push / PR unless explicitly asked.
-- JIRA filing (Phase G) gated on explicit go.
+- JIRA filing (Phase G) gated on explicit go: the gap list above is surfaced for the user to approve before any ticket is created.
 - Landed phase-by-phase: a commit + green suite each.
