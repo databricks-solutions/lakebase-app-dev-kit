@@ -1419,6 +1419,84 @@ function parentForTopology(t, defaultLeaf) {
   return defaultLeaf || "main";
 }
 
+// scripts/tdd/stale-branches.ts
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+
+// scripts/tdd/story-pipeline.ts
+var import_fs = require("fs");
+var import_path = require("path");
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(tddDir, featureId) {
+  return (0, import_path.join)(tddDir, "features", featureId, "pipeline.json");
+}
+function readPipeline(tddDir, featureId) {
+  const p = pipelinePath(tddDir, featureId);
+  if (!(0, import_fs.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs.readFileSync)(p, "utf8"));
+}
+
+// scripts/tdd/spike.ts
+var import_fs2 = require("fs");
+var import_path2 = require("path");
+function listSpikes(tddDir) {
+  const root = (0, import_path2.join)(tddDir, "spikes");
+  if (!(0, import_fs2.existsSync)(root)) return [];
+  const out = [];
+  for (const slug of (0, import_fs2.readdirSync)(root)) {
+    const dir = (0, import_path2.join)(root, slug);
+    if (!(0, import_fs2.statSync)(dir).isDirectory()) continue;
+    const branchFile = (0, import_path2.join)(dir, "branch.txt");
+    if (!(0, import_fs2.existsSync)(branchFile)) continue;
+    out.push({
+      spike_slug: slug,
+      branch_id: (0, import_fs2.readFileSync)(branchFile, "utf8").trim(),
+      created_at: (0, import_fs2.statSync)(branchFile).birthtime.toISOString(),
+      dir
+    });
+  }
+  return out;
+}
+
+// scripts/tdd/stale-branches.ts
+function listPipelineFeatures(tddDir) {
+  const featuresDir = (0, import_path3.join)(tddDir, "features");
+  if (!(0, import_fs3.existsSync)(featuresDir)) return [];
+  return (0, import_fs3.readdirSync)(featuresDir).filter((d) => (0, import_fs3.statSync)((0, import_path3.join)(featuresDir, d)).isDirectory()).filter((d) => (0, import_fs3.existsSync)((0, import_path3.join)(featuresDir, d, "pipeline.json"))).sort();
+}
+function findStaleBranches(tddDir) {
+  const findings = [];
+  for (const featureId of listPipelineFeatures(tddDir)) {
+    const pipeline = readPipeline(tddDir, featureId);
+    for (const [storyId, story] of Object.entries(pipeline.stories)) {
+      const exp = story.experiment;
+      if (!exp) continue;
+      const storyTerminal = story.status === "done" || story.status === "discarded";
+      if (exp.status === "active" && storyTerminal) {
+        findings.push({
+          kind: "experiment",
+          slug: exp.slug,
+          feature_id: pipeline.feature_id,
+          story_id: storyId,
+          branch: exp.branch,
+          reason: `story is ${story.status} but its experiment branch is still active (merge/discard teardown likely failed); a paired Lakebase branch may be lingering`
+        });
+      }
+    }
+  }
+  for (const spike of listSpikes(tddDir)) {
+    findings.push({
+      kind: "spike",
+      slug: spike.spike_slug,
+      branch: spike.branch_id,
+      reason: "spike has a paired branch; spikes are throwaway (only their learning carries forward), tear it down to reclaim the branch"
+    });
+  }
+  return findings;
+}
+
 // scripts/lakebase/scm-doctor.ts
 var FEATURE_PREFIX = "feature/";
 var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
@@ -1447,6 +1525,15 @@ async function runDoctor(args) {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
+  for (const stale of findStaleBranches(path4.join(projectDir, ".tdd"))) {
+    const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
+    findings.push({
+      id: `stale-${stale.kind}`,
+      severity: "warn",
+      message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
+      suggestion: stale.kind === "experiment" ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
+    });
+  }
   if (!workflowStatePresent) {
     findings.push({
       id: "no-state-file",

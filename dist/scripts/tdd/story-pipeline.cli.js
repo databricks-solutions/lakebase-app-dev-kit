@@ -8,7 +8,9 @@ var STORY_STATUSES = [
   "awaiting-gate",
   "ready",
   "building",
-  "done"
+  "awaiting-acceptance",
+  "done",
+  "discarded"
 ];
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -80,18 +82,97 @@ function withdrawStoryGate(pipeline, storyId, opts) {
   if (!story || !story.gate) {
     throw new Error(`withdrawStoryGate: story ${storyId} has no gate to withdraw`);
   }
-  story.gate.status = "withdrawn";
-  story.gate.withdrawal_reason = opts.reason;
-  story.gate.history.push({
+  markGateWithdrawn(story.gate, opts);
+  const queued = pipeline.build_queue.indexOf(storyId);
+  if (queued !== -1) pipeline.build_queue.splice(queued, 1);
+  if (pipeline.build_active === storyId) pipeline.build_active = null;
+  setStoryStatus(pipeline, storyId, "awaiting-gate");
+  return pipeline;
+}
+function markGateWithdrawn(gate, opts) {
+  gate.status = "withdrawn";
+  gate.withdrawal_reason = opts.reason;
+  gate.history.push({
     action: "withdrawn",
     at: opts.at,
     approver: opts.approver,
     reason: opts.reason
   });
-  const queued = pipeline.build_queue.indexOf(storyId);
-  if (queued !== -1) pipeline.build_queue.splice(queued, 1);
+}
+function cutStoryExperiment(pipeline, storyId, args) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`cutStoryExperiment: story ${storyId} is not in the pipeline`);
+  story.experiment = {
+    slug: args.slug,
+    branch: args.branch,
+    parent: args.parent,
+    ...args.lakebase_branch_uid !== void 0 ? { lakebase_branch_uid: args.lakebase_branch_uid } : {},
+    ...args.parent_sha !== void 0 ? { parent_sha: args.parent_sha } : {},
+    n: args.n ?? 1,
+    status: "active",
+    ...args.at !== void 0 ? { cut_at: args.at } : {}
+  };
+  return pipeline;
+}
+function awaitAcceptance(pipeline, storyId) {
+  setStoryStatus(pipeline, storyId, "awaiting-acceptance");
+  const story = pipeline.stories[storyId];
+  if (!story.acceptance) story.acceptance = { decision: null, history: [] };
+  return pipeline;
+}
+function recordAcceptance(story, decision, opts) {
+  const acc = story.acceptance ?? { decision: null, history: [] };
+  acc.decision = decision;
+  acc.approver = opts.approver;
+  acc.at = opts.at;
+  if (opts.reason !== void 0) acc.reason = opts.reason;
+  acc.history.push({
+    decision,
+    at: opts.at,
+    approver: opts.approver,
+    ...opts.reason !== void 0 ? { reason: opts.reason } : {}
+  });
+  story.acceptance = acc;
+}
+function freeLaneIfActive(pipeline, storyId) {
   if (pipeline.build_active === storyId) pipeline.build_active = null;
-  setStoryStatus(pipeline, storyId, "awaiting-gate");
+}
+function acceptStory(pipeline, storyId, opts) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`acceptStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "accepted", opts);
+  if (story.experiment) {
+    story.experiment.status = "merged";
+    story.experiment.closed_at = opts.at;
+  }
+  setStoryStatus(pipeline, storyId, "done");
+  freeLaneIfActive(pipeline, storyId);
+  return pipeline;
+}
+function discardStory(pipeline, storyId, opts) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`discardStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "discarded", opts);
+  if (story.experiment) {
+    story.experiment.status = "discarded";
+    story.experiment.closed_at = opts.at;
+  }
+  if (story.gate) markGateWithdrawn(story.gate, opts);
+  setStoryStatus(pipeline, storyId, "discarded");
+  freeLaneIfActive(pipeline, storyId);
+  return pipeline;
+}
+function reviseStory(pipeline, storyId, opts) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`reviseStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "revise", opts);
+  if (story.experiment) {
+    story.experiment.status = "discarded";
+    story.experiment.closed_at = opts.at;
+  }
+  if (story.gate) story.gate = { status: "open", history: story.gate.history };
+  setStoryStatus(pipeline, storyId, "designing");
+  freeLaneIfActive(pipeline, storyId);
   return pipeline;
 }
 
@@ -109,6 +190,12 @@ function parse(argv) {
     else if (a === "--spec-hash") out.specHash = argv[++i];
     else if (a === "--reason") out.reason = argv[++i];
     else if (a === "--at") out.at = argv[++i];
+    else if (a === "--slug") out.slug = argv[++i];
+    else if (a === "--branch") out.branch = argv[++i];
+    else if (a === "--parent") out.parent = argv[++i];
+    else if (a === "--parent-sha") out.parentSha = argv[++i];
+    else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
+    else if (a === "--n") out.n = argv[++i];
     else if (a === "--tdd-dir") out.tddDir = argv[++i];
     else if (a === "--json") out.json = true;
   }
@@ -117,12 +204,16 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-tdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete> --feature <F> [--tdd-dir <dir>]
+Usage: lakebase-tdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise> --feature <F> [--tdd-dir <dir>]
   set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>
   surface needs --story <S>
   approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]
   withdraw-gate needs --story <S> --approver <A> --reason <R> [--at <ISO>]
   enqueue needs --story <S>
+  cut-experiment needs --story <S> --slug <X> --branch <B> --parent <FB> [--lakebase-uid <U>] [--parent-sha <SHA>] [--n <N>] [--at <ISO>]
+  await-acceptance needs --story <S>
+  accept needs --story <S> --approver <A> [--at <ISO>]
+  discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]
 `
   );
   return 2;
@@ -142,7 +233,9 @@ function main() {
 `);
       for (const [s, v] of Object.entries(p.stories)) {
         const gate = v.gate ? `  gate=${v.gate.status}` : "";
-        process.stdout.write(`  ${s}	${v.status}${gate}
+        const exp = v.experiment ? `  exp=${v.experiment.slug}(${v.experiment.status})` : "";
+        const acc = v.acceptance?.decision ? `  acceptance=${v.acceptance.decision}` : "";
+        process.stdout.write(`  ${s}	${v.status}${gate}${exp}${acc}
 `);
       }
     }
@@ -215,6 +308,62 @@ function main() {
       writePipeline(tddDir, pipeline);
       process.stdout.write(completed ? `completed ${completed}; lane idle
 ` : `no active story to complete
+`);
+      return 0;
+    }
+    case "cut-experiment": {
+      if (!args.story) return usage("cut-experiment needs --story");
+      if (!args.slug || !args.branch || !args.parent) {
+        return usage("cut-experiment needs --slug, --branch, and --parent");
+      }
+      cutStoryExperiment(pipeline, args.story, {
+        slug: args.slug,
+        branch: args.branch,
+        parent: args.parent,
+        lakebase_branch_uid: args.lakebaseUid,
+        parent_sha: args.parentSha,
+        n: args.n !== void 0 ? Number(args.n) : void 0,
+        at: args.at ?? (/* @__PURE__ */ new Date()).toISOString()
+      });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`cut experiment ${args.slug} for ${args.story} on ${args.branch} (parent ${args.parent})
+`);
+      return 0;
+    }
+    case "await-acceptance": {
+      if (!args.story) return usage("await-acceptance needs --story");
+      awaitAcceptance(pipeline, args.story);
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`${args.story} -> awaiting-acceptance (PO reviewing the running story)
+`);
+      return 0;
+    }
+    case "accept": {
+      if (!args.story) return usage("accept needs --story");
+      if (!args.approver) return usage("accept needs --approver");
+      acceptStory(pipeline, args.story, { approver: args.approver, at: args.at ?? (/* @__PURE__ */ new Date()).toISOString() });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`accepted ${args.story}; experiment merged, story done, lane freed
+`);
+      return 0;
+    }
+    case "discard": {
+      if (!args.story) return usage("discard needs --story");
+      if (!args.approver) return usage("discard needs --approver");
+      if (!args.reason) return usage("discard needs --reason");
+      discardStory(pipeline, args.story, { approver: args.approver, at: args.at ?? (/* @__PURE__ */ new Date()).toISOString(), reason: args.reason });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed
+`);
+      return 0;
+    }
+    case "revise": {
+      if (!args.story) return usage("revise needs --story");
+      if (!args.approver) return usage("revise needs --approver");
+      if (!args.reason) return usage("revise needs --reason");
+      reviseStory(pipeline, args.story, { approver: args.approver, at: args.at ?? (/* @__PURE__ */ new Date()).toISOString(), reason: args.reason });
+      writePipeline(tddDir, pipeline);
+      process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed
 `);
       return 0;
     }

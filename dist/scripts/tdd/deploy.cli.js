@@ -129,8 +129,8 @@ async function probeReachable(url) {
 function pidFile(projectDir, target) {
   return join2(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
-function defaultStart(cmd, cwd) {
-  const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore" });
+function defaultStart(cmd, cwd, env) {
+  const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore", env: env ?? process.env });
   child.unref();
   return child.pid ?? -1;
 }
@@ -145,7 +145,8 @@ async function deployToTarget(args) {
   const start = args.startProcess ?? defaultStart;
   const reachable = args.reachable ?? probeReachable;
   const url = cfg.baseUrl + cfg.healthPath;
-  const pid = start(cfg.run, args.projectDir);
+  const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
+  const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
   mkdirSync(dirname(pf), { recursive: true });
   writeFileSync2(pf, String(pid));
@@ -185,6 +186,7 @@ async function runDeployCli(argv) {
   let projectDir = ".";
   let stop = false;
   let json = false;
+  let lakebaseBranch;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--target":
@@ -192,6 +194,9 @@ async function runDeployCli(argv) {
         break;
       case "--project-dir":
         projectDir = argv[++i];
+        break;
+      case "--lakebase-branch":
+        lakebaseBranch = argv[++i];
         break;
       case "--stop":
         stop = true;
@@ -202,7 +207,7 @@ async function runDeployCli(argv) {
       case "-h":
       case "--help":
         process.stdout.write(
-          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--stop] [--json]\nShips a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n"
+          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--lakebase-branch <branch>] [--stop] [--json]\nShips a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n--lakebase-branch binds the run command to a story's experiment branch DB (per-story deploy).\n"
         );
         return 0;
     }
@@ -217,7 +222,7 @@ async function runDeployCli(argv) {
 `);
     return 0;
   }
-  const result = await deployToTarget({ projectDir, targetName: target });
+  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch });
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}
 `);

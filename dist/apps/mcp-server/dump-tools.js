@@ -10587,7 +10587,7 @@ async function schemaMigrationStatus(args) {
 
 // scripts/tdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync27, readFileSync as readFileSync17 } from "fs";
+import { existsSync as existsSync27, readFileSync as readFileSync17, readdirSync as readdirSync12, statSync as statSync6 } from "fs";
 import { join as join29 } from "path";
 
 // scripts/tdd/test-list.ts
@@ -11228,8 +11228,19 @@ async function createPerfBranch(args) {
 }
 
 // scripts/tdd/experiment.ts
-function listExperiments(tddDir, featureId) {
+function experimentsRoot(tddDir, featureId, storyId) {
+  return join24(tddDir, "experiments", featureId, storyId);
+}
+function experimentDir(tddDir, featureId, storyId, slug) {
+  return join24(experimentsRoot(tddDir, featureId, storyId), slug);
+}
+function listExperimentStories(tddDir, featureId) {
   const root = join24(tddDir, "experiments", featureId);
+  if (!existsSync23(root)) return [];
+  return readdirSync10(root).filter((d) => statSync5(join24(root, d)).isDirectory()).sort();
+}
+function listExperiments(tddDir, featureId, storyId) {
+  const root = experimentsRoot(tddDir, featureId, storyId);
   if (!existsSync23(root)) return [];
   const out = [];
   for (const slug of readdirSync10(root)) {
@@ -11239,6 +11250,7 @@ function listExperiments(tddDir, featureId) {
     if (!existsSync23(branchFile)) continue;
     out.push({
       feature_id: featureId,
+      story_id: storyId,
       experiment_slug: slug,
       branch_id: readFileSync13(branchFile, "utf8").trim(),
       created_at: statSync5(branchFile).birthtime.toISOString(),
@@ -11247,8 +11259,8 @@ function listExperiments(tddDir, featureId) {
   }
   return out;
 }
-function readOutcomes(tddDir, featureId, slug) {
-  const file = join24(tddDir, "experiments", featureId, slug, "outcomes.json");
+function readOutcomes(tddDir, featureId, storyId, slug) {
+  const file = join24(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
   if (!existsSync23(file)) return null;
   return JSON.parse(readFileSync13(file, "utf8"));
 }
@@ -11267,8 +11279,8 @@ var ajv = new import_ajv.default({ allErrors: true, strict: false });
 init_esm_shims();
 
 // scripts/tdd/design-spec-gate.ts
-function readPlan(tddDir, featureId) {
-  const planPath = join26(tddDir, "features", `${featureId}`, "plan.json");
+function readPlan(tddDir, featureId, storyId) {
+  const planPath = join26(tddDir, "features", featureId, "stories", storyId, "plan.json");
   if (!existsSync24(planPath)) return null;
   return JSON.parse(readFileSync14(planPath, "utf8"));
 }
@@ -11390,9 +11402,14 @@ function readJsonIfExists(path25) {
   if (!existsSync27(path25)) return null;
   return JSON.parse(readFileSync17(path25, "utf8"));
 }
-function timelineCycleCount(experimentDir) {
+function listFeatureStories(tddDir, featureId) {
+  const storiesDir = join29(tddDir, "features", featureId, "stories");
+  if (!existsSync27(storiesDir)) return [];
+  return readdirSync12(storiesDir).filter((d) => statSync6(join29(storiesDir, d)).isDirectory()).sort();
+}
+function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    join29(experimentDir, "timeline.json")
+    join29(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -11462,20 +11479,27 @@ function readWorkflowState(tddDir) {
   };
 }
 function getFeatureStatus(tddDir, featureId) {
-  const plan = readPlan(tddDir, featureId);
-  const experimentRecords = listExperiments(tddDir, featureId);
-  const experiments = experimentRecords.map((rec) => {
-    const outcomes = readOutcomes(tddDir, featureId, rec.experiment_slug);
-    return {
-      slug: rec.experiment_slug,
-      branch_id: rec.branch_id,
-      status: outcomes?.status ?? null,
-      tests_passed: outcomes?.tests_passed ?? null,
-      tests_failed: outcomes?.tests_failed ?? null,
-      schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-      cycle_count: timelineCycleCount(rec.dir)
-    };
-  });
+  const plans = [];
+  for (const storyId of listFeatureStories(tddDir, featureId)) {
+    const p = readPlan(tddDir, featureId, storyId);
+    if (p) plans.push({ story_id: storyId, plan: p });
+  }
+  const experiments = [];
+  for (const storyId of listExperimentStories(tddDir, featureId)) {
+    for (const rec of listExperiments(tddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+      experiments.push({
+        story_id: storyId,
+        slug: rec.experiment_slug,
+        branch_id: rec.branch_id,
+        status: outcomes?.status ?? null,
+        tests_passed: outcomes?.tests_passed ?? null,
+        tests_failed: outcomes?.tests_failed ?? null,
+        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
+        cycle_count: timelineCycleCount(rec.dir)
+      });
+    }
+  }
   let smells = [];
   try {
     smells = readSmellsLog(tddDir).detected.filter((d) => !d.resolution);
@@ -11487,7 +11511,7 @@ function getFeatureStatus(tddDir, featureId) {
     feature_id: featureId,
     current_workflow_phase: phase,
     current_workflow_pointer: pointer,
-    plan,
+    plans,
     test_list: summarizeTestList(tddDir, featureId),
     experiments,
     selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),

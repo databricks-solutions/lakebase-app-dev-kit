@@ -6813,8 +6813,19 @@ var CONVENTION_TIER_DEFAULTS = {
 };
 
 // scripts/tdd/experiment.ts
-function listExperiments(tddDir, featureId) {
+function experimentsRoot(tddDir, featureId, storyId) {
+  return (0, import_path2.join)(tddDir, "experiments", featureId, storyId);
+}
+function experimentDir(tddDir, featureId, storyId, slug) {
+  return (0, import_path2.join)(experimentsRoot(tddDir, featureId, storyId), slug);
+}
+function listExperimentStories(tddDir, featureId) {
   const root = (0, import_path2.join)(tddDir, "experiments", featureId);
+  if (!(0, import_fs2.existsSync)(root)) return [];
+  return (0, import_fs2.readdirSync)(root).filter((d) => (0, import_fs2.statSync)((0, import_path2.join)(root, d)).isDirectory()).sort();
+}
+function listExperiments(tddDir, featureId, storyId) {
+  const root = experimentsRoot(tddDir, featureId, storyId);
   if (!(0, import_fs2.existsSync)(root)) return [];
   const out = [];
   for (const slug of (0, import_fs2.readdirSync)(root)) {
@@ -6824,6 +6835,7 @@ function listExperiments(tddDir, featureId) {
     if (!(0, import_fs2.existsSync)(branchFile)) continue;
     out.push({
       feature_id: featureId,
+      story_id: storyId,
       experiment_slug: slug,
       branch_id: (0, import_fs2.readFileSync)(branchFile, "utf8").trim(),
       created_at: (0, import_fs2.statSync)(branchFile).birthtime.toISOString(),
@@ -6832,8 +6844,8 @@ function listExperiments(tddDir, featureId) {
   }
   return out;
 }
-function readOutcomes(tddDir, featureId, slug) {
-  const file = (0, import_path2.join)(tddDir, "experiments", featureId, slug, "outcomes.json");
+function readOutcomes(tddDir, featureId, storyId, slug) {
+  const file = (0, import_path2.join)(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
   if (!(0, import_fs2.existsSync)(file)) return null;
   return JSON.parse((0, import_fs2.readFileSync)(file, "utf8"));
 }
@@ -6852,8 +6864,8 @@ var ajv = new import_ajv.default({ allErrors: true, strict: false });
 init_cjs_shims();
 
 // scripts/tdd/design-spec-gate.ts
-function readPlan(tddDir, featureId) {
-  const planPath = (0, import_path4.join)(tddDir, "features", `${featureId}`, "plan.json");
+function readPlan(tddDir, featureId, storyId) {
+  const planPath = (0, import_path4.join)(tddDir, "features", featureId, "stories", storyId, "plan.json");
   if (!(0, import_fs3.existsSync)(planPath)) return null;
   return JSON.parse((0, import_fs3.readFileSync)(planPath, "utf8"));
 }
@@ -6975,9 +6987,14 @@ function readJsonIfExists(path3) {
   if (!(0, import_fs6.existsSync)(path3)) return null;
   return JSON.parse((0, import_fs6.readFileSync)(path3, "utf8"));
 }
-function timelineCycleCount(experimentDir) {
+function listFeatureStories(tddDir, featureId) {
+  const storiesDir = (0, import_path7.join)(tddDir, "features", featureId, "stories");
+  if (!(0, import_fs6.existsSync)(storiesDir)) return [];
+  return (0, import_fs6.readdirSync)(storiesDir).filter((d) => (0, import_fs6.statSync)((0, import_path7.join)(storiesDir, d)).isDirectory()).sort();
+}
+function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    (0, import_path7.join)(experimentDir, "timeline.json")
+    (0, import_path7.join)(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -7047,20 +7064,27 @@ function readWorkflowState(tddDir) {
   };
 }
 function getFeatureStatus(tddDir, featureId) {
-  const plan = readPlan(tddDir, featureId);
-  const experimentRecords = listExperiments(tddDir, featureId);
-  const experiments = experimentRecords.map((rec) => {
-    const outcomes = readOutcomes(tddDir, featureId, rec.experiment_slug);
-    return {
-      slug: rec.experiment_slug,
-      branch_id: rec.branch_id,
-      status: outcomes?.status ?? null,
-      tests_passed: outcomes?.tests_passed ?? null,
-      tests_failed: outcomes?.tests_failed ?? null,
-      schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-      cycle_count: timelineCycleCount(rec.dir)
-    };
-  });
+  const plans = [];
+  for (const storyId of listFeatureStories(tddDir, featureId)) {
+    const p = readPlan(tddDir, featureId, storyId);
+    if (p) plans.push({ story_id: storyId, plan: p });
+  }
+  const experiments = [];
+  for (const storyId of listExperimentStories(tddDir, featureId)) {
+    for (const rec of listExperiments(tddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+      experiments.push({
+        story_id: storyId,
+        slug: rec.experiment_slug,
+        branch_id: rec.branch_id,
+        status: outcomes?.status ?? null,
+        tests_passed: outcomes?.tests_passed ?? null,
+        tests_failed: outcomes?.tests_failed ?? null,
+        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
+        cycle_count: timelineCycleCount(rec.dir)
+      });
+    }
+  }
   let smells = [];
   try {
     smells = readSmellsLog(tddDir).detected.filter((d) => !d.resolution);
@@ -7072,7 +7096,7 @@ function getFeatureStatus(tddDir, featureId) {
     feature_id: featureId,
     current_workflow_phase: phase,
     current_workflow_pointer: pointer,
-    plan,
+    plans,
     test_list: summarizeTestList(tddDir, featureId),
     experiments,
     selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
@@ -7098,11 +7122,13 @@ function renderFeatureStatus(snapshot) {
   } else {
     lines.push(`  Phase: unknown (no workflow-state.json)`);
   }
-  if (snapshot.plan) {
-    const plural = snapshot.plan.strategies.length === 1 ? "y" : "ies";
-    lines.push(
-      `  Plan: ${snapshot.plan.mode} (N=${snapshot.plan.N}, ${snapshot.plan.strategies.length} strateg${plural})`
-    );
+  if (snapshot.plans.length > 0) {
+    for (const { story_id, plan } of snapshot.plans) {
+      const plural = plan.strategies.length === 1 ? "y" : "ies";
+      lines.push(
+        `  Plan [${story_id}]: ${plan.mode} (N=${plan.N}, ${plan.strategies.length} strateg${plural})`
+      );
+    }
   } else {
     lines.push(`  Plan: not yet approved (design-spec gate pending)`);
   }
