@@ -122,6 +122,10 @@ export interface PlanningState {
   proposed: boolean;
   /** The Product Owner authored the sprint's feature-requests. */
   requestsAuthored: boolean;
+  /** The sprint PLAN gate has been approved (human live, or Human Proxy
+   *  headless). The HITL checkpoint between planning and execution; a re-plan
+   *  the human "passes on" simply re-approves the standing backlog. */
+  gateApproved?: boolean;
 }
 
 export interface DeployState {
@@ -146,6 +150,7 @@ export type WorkflowAction =
   | DriveAction
   | { kind: "invoke-role"; role: "spec-author"; mode: "propose" }
   | { kind: "invoke-role"; role: "product-owner"; mode: "author-requests" }
+  | { kind: "approve-plan-gate" }
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
   | { kind: "cut-experiment"; story: string }
@@ -183,6 +188,10 @@ export function nextTransition(state: DriveState): WorkflowAction {
     const p = state.planning ?? { proposed: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
+    // The sprint plan gate is the HITL checkpoint between planning + execution.
+    // It locks the backlog (human live / Human Proxy headless) before any
+    // feature is driven; "pass on a re-plan" = re-approve the standing backlog.
+    if (!p.gateApproved) return { kind: "approve-plan-gate" };
     return { kind: "planning-complete" };
   }
 

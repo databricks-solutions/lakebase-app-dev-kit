@@ -12,6 +12,7 @@
 
 import { isCliEntry } from "../util/cli-entry.js";
 import { drainGatesAsHumanProxy, supplyArtifact } from "./human-proxy.js";
+import { approveSprintPlanGate } from "./sprint-gates.js";
 import type { GateName } from "./gates.js";
 
 /**
@@ -53,6 +54,7 @@ function runSupplyCli(argv: string[]): number {
 
 interface ParsedArgs {
   feature?: string;
+  sprint?: string;
   gate?: GateName;
   tddDir?: string;
   approver?: string;
@@ -69,6 +71,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     switch (a) {
       case "--feature":
         out.feature = argv[++i];
+        break;
+      case "--sprint":
+        out.sprint = argv[++i];
         break;
       case "--gate":
         out.gate = argv[++i] as GateName;
@@ -127,8 +132,28 @@ export function runHumanProxyCli(argv: string[]): number {
     process.stdout.write(`${HELP}\n`);
     return 0;
   }
+  // Sprint-scoped plan gate (FEIP-7461): `--sprint <name> [--gate plan]`. The
+  // Human Proxy approves the sprint plan gate, the HITL checkpoint between
+  // planning and execution. Teeth: refuses unless feature-proposals.md exists +
+  // conforms. A refusal is a skip (exit 0), mirroring the per-feature drain.
+  if (args.sprint) {
+    const res = approveSprintPlanGate({
+      sprint: args.sprint,
+      approver: args.approver ?? "human-proxy",
+      hitlApproved: true,
+      tddDir: args.tddDir,
+    });
+    if (res.ok) {
+      process.stdout.write(
+        `human-proxy: sprint plan gate for ${args.sprint} ${res.alreadyApproved ? "already approved" : "approved"}\n`,
+      );
+    } else {
+      process.stdout.write(`human-proxy: skipped sprint plan gate (${res.reason})\n`);
+    }
+    return 0;
+  }
   if (!args.feature) {
-    process.stderr.write(`Error: --feature is required.\n\n${HELP}\n`);
+    process.stderr.write(`Error: --feature or --sprint is required.\n\n${HELP}\n`);
     return 2;
   }
   try {

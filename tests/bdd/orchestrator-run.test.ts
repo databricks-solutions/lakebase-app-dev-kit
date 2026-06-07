@@ -94,6 +94,9 @@ function makeFakeWorld(storyIds: string[]) {
         case "complete":
           state.buildActive = null;
           break;
+        case "approve-plan-gate":
+          state.planning!.gateApproved = true;
+          break;
         case "planning-complete":
           state.phase = "feature";
           break;
@@ -126,7 +129,7 @@ describe("runDriver: drives a whole feature to done", () => {
     const result = await runDriver(effects);
 
     expect(state.phase).toBe("done");
-    expect(state.planning).toEqual({ proposed: true, requestsAuthored: true });
+    expect(state.planning).toEqual({ proposed: true, requestsAuthored: true, gateApproved: true });
     expect(state.deploy).toEqual({ deployed: true, gateApproved: true });
     for (const id of ["S1", "S2", "S3"]) {
       expect(state.stories[id].gateApproved, `${id} gate`).toBe(true);

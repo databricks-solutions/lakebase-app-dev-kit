@@ -111,6 +111,15 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(g.args).toContain("--gate");
     expect(g.args).toContain("deploy");
   });
+
+  it("approve-plan-gate is the sprint plan gate via the Human Proxy (sprint-scoped)", () => {
+    const g = commandsForAction({ kind: "approve-plan-gate" }, cfg({ sprintName: "sprint-1" }))[0] as { bin: string; args: string[] };
+    expect(g.bin).toBe("lakebase-tdd-human-proxy");
+    expect(g.args).toContain("--sprint");
+    expect(g.args).toContain("sprint-1");
+    expect(g.args).toContain("--gate");
+    expect(g.args).toContain("plan");
+  });
 });
 
 describe("commandsForAction: coarse phase transitions -> set-phase", () => {

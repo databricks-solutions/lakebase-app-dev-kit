@@ -40,6 +40,8 @@ export interface DriveEffectsConfig {
   modelForRole(role: string): string;
   /** Approver name for headless gate approvals (the Human Proxy). */
   approver?: string;
+  /** Sprint name, threaded to the sprint plan gate in the planning phase. */
+  sprintName?: string;
   /** Deploy target for the deploy action (e.g. "local"). */
   deployTarget?: string;
   /** Lakebase instance id, threaded to the experiment branch ops. */
@@ -179,6 +181,18 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
 
     case "complete":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
+
+    case "approve-plan-gate":
+      // HITL sprint plan gate: the Human Proxy approves it headless (teeth:
+      // feature-proposals.md must exist + conform). Sprint-scoped, mirroring the
+      // per-story spec gate's approve verb.
+      return [
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: ["--sprint", cfg.sprintName ?? "sprint", "--gate", "plan", "--approver", approver, "--tdd-dir", cfg.tddDir],
+        },
+      ];
 
     case "planning-complete":
       return [{ kind: "set-phase", phase: "discovery" }];

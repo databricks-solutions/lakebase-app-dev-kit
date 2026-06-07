@@ -129,12 +129,16 @@ function ws(over: Partial<DriveState>): DriveState {
 }
 
 describe("nextTransition: planning lane", () => {
-  it("proposes the breakdown, then has the PO author requests, then completes", () => {
+  it("proposes, authors requests, approves the PLAN GATE, then completes", () => {
     const base = ws({ phase: "planning", planning: { proposed: false, requestsAuthored: false } });
     expect(nextTransition(base)).toEqual({ kind: "invoke-role", role: "spec-author", mode: "propose" });
     expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, requestsAuthored: false } })))
       .toEqual({ kind: "invoke-role", role: "product-owner", mode: "author-requests" });
+    // Backlog authored -> the sprint plan gate (HITL) before execution.
     expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, requestsAuthored: true } })))
+      .toEqual({ kind: "approve-plan-gate" });
+    // Gate approved -> planning complete (the human "passing" = approve as-is).
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, requestsAuthored: true, gateApproved: true } })))
       .toEqual({ kind: "planning-complete" });
   });
 });

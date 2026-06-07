@@ -153,8 +153,19 @@ build -> deploy. Spikes are throwaway exploration outside the TDD loop; the new
 Decision recorded: fix the ad hoc deploy gate FIRST, then mirror it for the
 sprint plan gate.
 
-- **Phase 1 (DONE, commit ce46c3e, unpushed):** deploy gate reconciled into the
-  gate model with teeth (deploy-evidence.json: reachable + verify.passed).
+- **Phase 1 (DONE, ce46c3e, pushed):** FEATURE deploy gate reconciled into the
+  gate model with teeth (features/<F>/deploy-evidence.json: reachable +
+  verify.passed). `/deploy <feature>` = the merged increment.
+
+- **Phase 1c, per-story deploy teeth + `/deploy --story`.** Deploy scope is a
+  flag: `/deploy <feature>` (the feature, default) vs `/deploy <feature> --story
+  <S>` (that story's experiment branch). Extend deploy-evidence to a STORY scope
+  (features/<F>/stories/<S>/deploy-evidence.json) with the same reachable +
+  verify.passed teeth; the build lane's await-acceptance deploy writes it, and
+  the per-story ACCEPT requires it to pass (a story cannot be presented for the
+  PO's acceptance unless it is reachable + verify-green). Stories deploy
+  implicitly during /build; a sprint is never deployed as a unit (its features
+  are). User-confirmed 2026-06-07.
 
 - **Phase 2, sprint plan gate (mirror the deploy gate).** RECOMMENDED scope:
   sprint-scoped `.tdd/sprints/<name>/gates.json` reusing the `GateRecord` shape
