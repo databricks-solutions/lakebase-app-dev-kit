@@ -26,7 +26,11 @@
 // frees the single lane). The actual branch fork/merge/teardown is the
 // experiment-lifecycle CLI's job; these record pipeline state.
 //
-// Exit: 0 ok; 2 bad args.
+// surface + approve-gate enforce the per-story draft invariant: they hard-fail
+// (exit 3) if any other un-gated story already has ACs on disk, i.e. the Spec
+// Author batched the feature instead of streaming one story at a time.
+//
+// Exit: 0 ok; 2 bad args; 3 per-story draft invariant violated (batched ACs).
 
 import {
   readPipeline,
@@ -38,6 +42,7 @@ import {
   surfaceForGate,
   approveStoryGate,
   withdrawStoryGate,
+  findBatchedDraftStories,
   cutStoryExperiment,
   awaitAcceptance,
   acceptStory,
@@ -45,6 +50,7 @@ import {
   reviseStory,
   STORY_STATUSES,
   type StoryStatus,
+  type StoryPipeline,
 } from "./story-pipeline";
 import { join } from "path";
 
@@ -108,6 +114,33 @@ function usage(msg: string): number {
   return 2;
 }
 
+/**
+ * Hard-fail (exit 3) when the Spec Author batched acceptance criteria across
+ * stories instead of drafting one at a time. The per-story spec gate (surface /
+ * approve-gate) is the choke point: a story cannot be gated while sibling
+ * un-gated stories already have ACs on disk. Returns 3 + prints actionable
+ * guidance when batched; null when the draft is correctly one-story-scoped.
+ */
+function rejectBatchedDraft(
+  tddDir: string,
+  feature: string,
+  pipeline: StoryPipeline,
+  story: string,
+): number | null {
+  const batched = findBatchedDraftStories(tddDir, feature, pipeline, story);
+  if (batched.length === 0) return null;
+  process.stderr.write(
+    `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, ` +
+      `but ${story} is the story being gated.\n` +
+      `The design lane drafts ONE story's acceptance criteria at a time ` +
+      `(draft -> surface -> approve), then moves to the next story. Drafting every ` +
+      `story's ACs in one pass defeats the streaming pipeline.\n` +
+      `Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author ` +
+      `once per story, and retry.\n`,
+  );
+  return 3;
+}
+
 function main(): number {
   const args = parse(process.argv.slice(2));
   const tddDir = args.tddDir ?? join(process.cwd(), ".tdd");
@@ -146,6 +179,8 @@ function main(): number {
     }
     case "surface": {
       if (!args.story) return usage("surface needs --story");
+      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      if (batched !== null) return batched;
       surfaceForGate(pipeline, args.story);
       writePipeline(tddDir, pipeline);
       process.stdout.write(`surfaced ${args.story} for the per-story spec gate (awaiting-gate)\n`);
@@ -154,6 +189,8 @@ function main(): number {
     case "approve-gate": {
       if (!args.story) return usage("approve-gate needs --story");
       if (!args.approver) return usage("approve-gate needs --approver");
+      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      if (batched !== null) return batched;
       const at = args.at ?? new Date().toISOString();
       approveStoryGate(pipeline, args.story, { approver: args.approver, at, spec_hash: args.specHash });
       writePipeline(tddDir, pipeline);

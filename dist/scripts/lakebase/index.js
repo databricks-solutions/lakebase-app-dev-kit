@@ -7159,11 +7159,11 @@ import * as fs27 from "fs";
 import * as path27 from "path";
 
 // scripts/tdd/stale-branches.ts
-import { existsSync as existsSync28, readdirSync as readdirSync12, statSync as statSync7 } from "fs";
+import { existsSync as existsSync28, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
 import { join as join30 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync14, mkdirSync as mkdirSync13 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync14, mkdirSync as mkdirSync13, readdirSync as readdirSync11 } from "fs";
 import { dirname as dirname9, join as join28 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -7178,13 +7178,13 @@ function readPipeline(tddDir, featureId) {
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync27, mkdirSync as mkdirSync14, readdirSync as readdirSync11, readFileSync as readFileSync16, statSync as statSync6, writeFileSync as writeFileSync15 } from "fs";
+import { existsSync as existsSync27, mkdirSync as mkdirSync14, readdirSync as readdirSync12, readFileSync as readFileSync16, statSync as statSync6, writeFileSync as writeFileSync15 } from "fs";
 import { join as join29 } from "path";
 function listSpikes(tddDir) {
   const root = join29(tddDir, "spikes");
   if (!existsSync27(root)) return [];
   const out = [];
-  for (const slug of readdirSync11(root)) {
+  for (const slug of readdirSync12(root)) {
     const dir = join29(root, slug);
     if (!statSync6(dir).isDirectory()) continue;
     const branchFile = join29(dir, "branch.txt");
@@ -7203,7 +7203,7 @@ function listSpikes(tddDir) {
 function listPipelineFeatures(tddDir) {
   const featuresDir = join30(tddDir, "features");
   if (!existsSync28(featuresDir)) return [];
-  return readdirSync12(featuresDir).filter((d) => statSync7(join30(featuresDir, d)).isDirectory()).filter((d) => existsSync28(join30(featuresDir, d, "pipeline.json"))).sort();
+  return readdirSync13(featuresDir).filter((d) => statSync7(join30(featuresDir, d)).isDirectory()).filter((d) => existsSync28(join30(featuresDir, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];

@@ -4,7 +4,7 @@
 // .tdd/features/<F>/pipeline.json. Exactly one story builds at a time; the
 // Scrum-Master owns these transitions.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import { dirname, join } from "path";
 
 export const STORY_STATUSES = [
@@ -197,6 +197,55 @@ export function completeActive(pipeline: StoryPipeline): string | null {
   setStoryStatus(pipeline, done, "done");
   pipeline.build_active = null;
   return done;
+}
+
+// --- Per-story draft guard (FEIP-7565/7566) -------------------------------
+//
+// The design lane streams ONE story's acceptance criteria at a time: draft S's
+// ACs, surface S's gate, get it approved, THEN draft S+1. Nothing structural
+// used to enforce that, so the Spec Author could batch every story's ACs in a
+// single pass (observed repeatedly in live runs), which defeats the pipeline.
+// findBatchedDraftStories is the forcing function the gate CLI calls before
+// surfacing/approving a story: it returns every OTHER story that already has
+// ACs on disk while still un-gated (status `designing`, or not in the pipeline
+// at all). A non-empty result means the draft was batched; the CLI turns that
+// into a hard error so the run can't proceed until the draft is one-story-scoped.
+
+/** True when stories/<S>/acs/ holds at least one `*.json` AC artifact. */
+function storyHasAcceptanceCriteria(tddDir: string, featureId: string, storyId: string): boolean {
+  const acsDir = join(tddDir, "features", featureId, "stories", storyId, "acs");
+  if (!existsSync(acsDir)) return false;
+  return readdirSync(acsDir).some((f) => f.endsWith(".json"));
+}
+
+/**
+ * Stories (other than `gatingStoryId`) that already have ACs on disk while
+ * still un-gated, i.e. the Spec Author drafted more than the one story being
+ * gated. A story legitimately has ACs once it is past `designing` (surfaced,
+ * approved, building, ...); a story that has ACs while still `designing`, or
+ * that has ACs without even being tracked in the pipeline, was drafted out of
+ * turn. Scans the on-disk story dirs (not just pipeline.stories) so a batch
+ * that never entered the pipeline is still caught. Returns the offending story
+ * ids, sorted; empty when the draft is correctly scoped to one story.
+ */
+export function findBatchedDraftStories(
+  tddDir: string,
+  featureId: string,
+  pipeline: StoryPipeline,
+  gatingStoryId: string,
+): string[] {
+  const storiesDir = join(tddDir, "features", featureId, "stories");
+  if (!existsSync(storiesDir)) return [];
+  const offenders: string[] = [];
+  for (const storyId of readdirSync(storiesDir)) {
+    if (storyId === gatingStoryId) continue;
+    if (!storyHasAcceptanceCriteria(tddDir, featureId, storyId)) continue;
+    const status = pipeline.stories[storyId]?.status;
+    // `designing` = not yet surfaced for its gate; undefined = not even tracked.
+    // Either way ACs for it now means the draft ran ahead of the gate.
+    if (status === undefined || status === "designing") offenders.push(storyId);
+  }
+  return offenders.sort();
 }
 
 // --- Per-story spec gate (FEIP-7565 phase 2b) -----------------------------

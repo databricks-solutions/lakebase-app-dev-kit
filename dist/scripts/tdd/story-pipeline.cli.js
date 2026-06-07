@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "fs";
 import { dirname, join } from "path";
 var STORY_STATUSES = [
   "designing",
@@ -52,6 +52,23 @@ function completeActive(pipeline) {
   setStoryStatus(pipeline, done, "done");
   pipeline.build_active = null;
   return done;
+}
+function storyHasAcceptanceCriteria(tddDir, featureId, storyId) {
+  const acsDir = join(tddDir, "features", featureId, "stories", storyId, "acs");
+  if (!existsSync(acsDir)) return false;
+  return readdirSync(acsDir).some((f) => f.endsWith(".json"));
+}
+function findBatchedDraftStories(tddDir, featureId, pipeline, gatingStoryId) {
+  const storiesDir = join(tddDir, "features", featureId, "stories");
+  if (!existsSync(storiesDir)) return [];
+  const offenders = [];
+  for (const storyId of readdirSync(storiesDir)) {
+    if (storyId === gatingStoryId) continue;
+    if (!storyHasAcceptanceCriteria(tddDir, featureId, storyId)) continue;
+    const status = pipeline.stories[storyId]?.status;
+    if (status === void 0 || status === "designing") offenders.push(storyId);
+  }
+  return offenders.sort();
 }
 function surfaceForGate(pipeline, storyId) {
   setStoryStatus(pipeline, storyId, "awaiting-gate");
@@ -218,6 +235,17 @@ Usage: lakebase-tdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqu
   );
   return 2;
 }
+function rejectBatchedDraft(tddDir, feature, pipeline, story) {
+  const batched = findBatchedDraftStories(tddDir, feature, pipeline, story);
+  if (batched.length === 0) return null;
+  process.stderr.write(
+    `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, but ${story} is the story being gated.
+The design lane drafts ONE story's acceptance criteria at a time (draft -> surface -> approve), then moves to the next story. Drafting every story's ACs in one pass defeats the streaming pipeline.
+Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author once per story, and retry.
+`
+  );
+  return 3;
+}
 function main() {
   const args = parse(process.argv.slice(2));
   const tddDir = args.tddDir ?? join2(process.cwd(), ".tdd");
@@ -256,6 +284,8 @@ function main() {
     }
     case "surface": {
       if (!args.story) return usage("surface needs --story");
+      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      if (batched !== null) return batched;
       surfaceForGate(pipeline, args.story);
       writePipeline(tddDir, pipeline);
       process.stdout.write(`surfaced ${args.story} for the per-story spec gate (awaiting-gate)
@@ -265,6 +295,8 @@ function main() {
     case "approve-gate": {
       if (!args.story) return usage("approve-gate needs --story");
       if (!args.approver) return usage("approve-gate needs --approver");
+      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      if (batched !== null) return batched;
       const at = args.at ?? (/* @__PURE__ */ new Date()).toISOString();
       approveStoryGate(pipeline, args.story, { approver: args.approver, at, spec_hash: args.specHash });
       writePipeline(tddDir, pipeline);

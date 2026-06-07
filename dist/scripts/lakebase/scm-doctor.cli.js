@@ -1381,11 +1381,11 @@ function parentForTopology(t, defaultLeaf) {
 }
 
 // scripts/tdd/stale-branches.ts
-import { existsSync as existsSync7, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { existsSync as existsSync7, readdirSync as readdirSync3, statSync as statSync2 } from "fs";
 import { join as join6 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3 } from "fs";
+import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3, readdirSync } from "fs";
 import { dirname as dirname2, join as join4 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -1400,13 +1400,13 @@ function readPipeline(tddDir, featureId) {
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync6, mkdirSync as mkdirSync4, readdirSync, readFileSync as readFileSync6, statSync, writeFileSync as writeFileSync5 } from "fs";
+import { existsSync as existsSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync2, readFileSync as readFileSync6, statSync, writeFileSync as writeFileSync5 } from "fs";
 import { join as join5 } from "path";
 function listSpikes(tddDir) {
   const root = join5(tddDir, "spikes");
   if (!existsSync6(root)) return [];
   const out = [];
-  for (const slug of readdirSync(root)) {
+  for (const slug of readdirSync2(root)) {
     const dir = join5(root, slug);
     if (!statSync(dir).isDirectory()) continue;
     const branchFile = join5(dir, "branch.txt");
@@ -1425,7 +1425,7 @@ function listSpikes(tddDir) {
 function listPipelineFeatures(tddDir) {
   const featuresDir = join6(tddDir, "features");
   if (!existsSync7(featuresDir)) return [];
-  return readdirSync2(featuresDir).filter((d) => statSync2(join6(featuresDir, d)).isDirectory()).filter((d) => existsSync7(join6(featuresDir, d, "pipeline.json"))).sort();
+  return readdirSync3(featuresDir).filter((d) => statSync2(join6(featuresDir, d)).isDirectory()).filter((d) => existsSync7(join6(featuresDir, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];
