@@ -50,6 +50,7 @@ export default defineConfig({
     "scripts/tdd/agent-log.cli": "scripts/tdd/agent-log.cli.ts",
     "scripts/tdd/agent-models.cli": "scripts/tdd/agent-models.cli.ts",
     "scripts/tdd/story-pipeline.cli": "scripts/tdd/story-pipeline.cli.ts",
+    "scripts/tdd/story-experiment.cli": "scripts/tdd/story-experiment.cli.ts",
     "apps/mcp-server/index": "apps/mcp-server/index.ts",
     "apps/mcp-server/dump-tools": "apps/mcp-server/dump-tools.ts",
   },
