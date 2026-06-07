@@ -1,5 +1,6 @@
-// FEIP-7510: scripts/tdd.sh is the convenient launcher that opens the
-// scrum-master orchestrator session. Hermetic: real templates + tmpdir.
+// FEIP-7510: scripts/tdd.sh is the convenient launcher that opens a Claude Code
+// session; the slash commands invoke the deterministic driver (no scrum-master
+// agent). Hermetic: real templates + tmpdir.
 
 import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
@@ -34,15 +35,17 @@ describe("scripts/tdd.sh launcher", () => {
     expect(stat.mode & 0o111, "tdd.sh must be executable").not.toBe(0);
   });
 
-  it("launches the scrum-master orchestrator and seeds an optional phase", () => {
+  it("opens a plain claude session (no scrum-master agent) and seeds an optional command", () => {
     const sh = fs.readFileSync(
       path.join(REPO_TEMPLATES, "common", "scripts", "tdd.sh"),
       "utf8"
     );
-    // Bare: open the orchestrator interactively.
-    expect(sh).toMatch(/exec claude --agent scrum-master$/m);
+    // Bare: open an interactive session; the slash commands drive the workflow.
+    expect(sh).toMatch(/exec claude$/m);
     // Seeded: first turn is the chosen slash command.
-    expect(sh).toMatch(/exec claude --agent scrum-master "\/\$phase \$\*"/);
+    expect(sh).toMatch(/exec claude "\/\$phase \$\*"/);
+    // The orchestrator is the driver now, NOT an LLM scrum-master agent.
+    expect(sh).not.toMatch(/scrum-master/);
     // Guards: needs the claude CLI + a scaffolded .claude/agents/.
     expect(sh).toMatch(/command -v claude/);
     expect(sh).toMatch(/\.claude\/agents/);

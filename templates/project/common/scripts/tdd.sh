@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Convenient launcher for the TDD workflow.
 #
-# Opens a Claude Code session AS the scrum-master orchestrator, so its
-# Agent(<roles>) allowlist applies and only the orchestrator spawns the role
-# agents (product-owner, spec-author, architect-reviewer, test-strategist,
-# ux-designer, navigator, driver, release-engineer). Optionally seeds the first
-# turn with a workflow phase so you land straight in it.
+# Opens a Claude Code session in the project. The orchestrator is the
+# deterministic driver (lakebase-tdd-drive), invoked by the slash commands, not
+# an LLM agent; the session just runs those commands, which spawn the role
+# agents and pause at gates. Optionally seeds the first turn with a command so
+# you land straight in it.
 #
 # Run from the project root:
-#   ./scripts/tdd.sh                  open the orchestrator (then type /plan, etc.)
-#   ./scripts/tdd.sh plan             start sprint planning
+#   ./scripts/tdd.sh                  open a session (then type /sprint, /plan, etc.)
+#   ./scripts/tdd.sh sprint [name]    run the whole sprint (plan -> per feature design/build/deploy)
+#   ./scripts/tdd.sh plan             sprint planning only (to the plan gate)
 #   ./scripts/tdd.sh design <id>      design a feature
 #   ./scripts/tdd.sh build  <id>      build it through the TDD cycles
-#   ./scripts/tdd.sh deploy <id>      deploy + the per-sprint working-software gate
+#   ./scripts/tdd.sh deploy <id>      deploy + the working-software gate
+#   ./scripts/tdd.sh spike  <slug>    throwaway exploration (outside the loop)
 #
 # The role agents must be discoverable under .claude/agents/ (lakebase-create-project
-# scaffolds them). Requires the `claude` CLI on PATH.
+# scaffolds them; the driver spawns them). Requires the `claude` CLI on PATH.
 set -euo pipefail
 
 if ! command -v claude >/dev/null 2>&1; then
@@ -29,10 +31,10 @@ fi
 
 phase="${1:-}"
 if [[ -z "$phase" ]]; then
-  # Open the orchestrator interactively; type /plan, /design <id>, etc.
-  exec claude --agent scrum-master
+  # Open an interactive session; type /sprint, /plan, /design <id>, etc.
+  exec claude
 fi
 shift
-# Seed the first turn with the chosen phase, then drop into the interactive
-# orchestrator session for the HITL gates.
-exec claude --agent scrum-master "/$phase $*"
+# Seed the first turn with the chosen slash command, then drop into the
+# interactive session for the HITL gates.
+exec claude "/$phase $*"
