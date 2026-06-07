@@ -87,6 +87,10 @@ state machine. Writes no spec / code / test / deploy.
 - `bash -n run-smoke.sh` clean; smoke BDD asserts `/plan` + `/deploy` go through `claude -p`.
 - Manual: scaffold a throwaway project, confirm `.lakebase/agent-config.json` has recommended models + an applied override; `@`-invoke a role agent by name and confirm it picks up the resolved model.
 
+## Launching the workflow (Phase J)
+
+`scripts/tdd.sh` (scaffolded into every project) is the convenient entry point: it runs `claude --agent scrum-master` so the orchestrator session has its `Agent(<roles>)` allowlist (only it spawns the roles), optionally seeded with a phase. `./scripts/tdd.sh plan` starts sprint planning; `./scripts/tdd.sh design <id>` / `build <id>` / `deploy <id>` jump straight in; bare opens the orchestrator to type into. `lakebase-create-project` prints `Next: cd <dir> && ./scripts/tdd.sh plan` on completion. The project default agent is intentionally NOT set (a casual `claude` in the project stays generic Claude); the launcher is how you opt into the orchestrator.
+
 ## Release Engineer substrate audit (Phase G)
 
 What the Release Engineer needs, vs what the substrate ships today:
