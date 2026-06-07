@@ -80,6 +80,40 @@ describe("deployToTarget (local)", () => {
     expect(existsSync(join(dir, ".tdd", "deploy", "local.pid"))).toBe(true);
   });
 
+  it("binds LAKEBASE_BRANCH_ID to the experiment branch for a per-story deploy", async () => {
+    let seenEnv: NodeJS.ProcessEnv | undefined;
+    const result = await deployToTarget({
+      projectDir: dir,
+      targetName: "local",
+      lakebaseBranch: "exp/F1/S1-submit",
+      startProcess: (_cmd, _cwd, env) => {
+        seenEnv = env;
+        return 4242;
+      },
+      reachable: async () => true,
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(result.ok).toBe(true);
+    expect(seenEnv?.LAKEBASE_BRANCH_ID).toBe("exp/F1/S1-submit");
+  });
+
+  it("leaves the ambient env (no LAKEBASE_BRANCH_ID override) for a feature deploy", async () => {
+    let envPassed: NodeJS.ProcessEnv | undefined | "unset" = "unset";
+    await deployToTarget({
+      projectDir: dir,
+      targetName: "local",
+      startProcess: (_cmd, _cwd, env) => {
+        envPassed = env;
+        return 4242;
+      },
+      reachable: async () => true,
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(envPassed).toBeUndefined(); // ambient env: defaultStart falls back to process.env
+  });
+
   it("fails when the app never becomes reachable (timeout)", async () => {
     // Clock jumps past the 5s budget so the poll times out quickly.
     let t = 0;

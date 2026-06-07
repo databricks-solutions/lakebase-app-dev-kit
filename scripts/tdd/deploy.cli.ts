@@ -16,17 +16,20 @@ export async function runDeployCli(argv: string[]): Promise<number> {
   let projectDir = ".";
   let stop = false;
   let json = false;
+  let lakebaseBranch: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--target": target = argv[++i]; break;
       case "--project-dir": projectDir = argv[++i]; break;
+      case "--lakebase-branch": lakebaseBranch = argv[++i]; break;
       case "--stop": stop = true; break;
       case "--json": json = true; break;
       case "-h":
       case "--help":
         process.stdout.write(
-          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--stop] [--json]\n" +
-            "Ships a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n",
+          "lakebase-tdd-deploy --target <name> [--project-dir <dir>] [--lakebase-branch <branch>] [--stop] [--json]\n" +
+            "Ships a built feature to a target and verifies it is reachable. Only 'local' is implemented.\n" +
+            "--lakebase-branch binds the run command to a story's experiment branch DB (per-story deploy).\n",
         );
         return 0;
     }
@@ -42,7 +45,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  const result = await deployToTarget({ projectDir, targetName: target });
+  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch });
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } else if (result.ok) {

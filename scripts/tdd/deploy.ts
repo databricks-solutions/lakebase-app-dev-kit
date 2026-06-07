@@ -72,10 +72,10 @@ function pidFile(projectDir: string, target: string): string {
   return join(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 
-function defaultStart(cmd: string, cwd: string): number {
+function defaultStart(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): number {
   // Detached process group so stopLocal can kill the whole tree (uvicorn +
   // reloader children). stdio ignored so the smoke is not blocked on output.
-  const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore" });
+  const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore", env: env ?? process.env });
   child.unref();
   return child.pid ?? -1;
 }
@@ -83,8 +83,15 @@ function defaultStart(cmd: string, cwd: string): number {
 export interface DeployArgs {
   projectDir: string;
   targetName: string;
+  /**
+   * When set, the run command is started with LAKEBASE_BRANCH_ID bound to this
+   * branch (FEIP-7566), so a per-story deploy runs the app against the story's
+   * EXPERIMENT branch DB, the working software the PO reviews before accept.
+   * Unset = the ambient env (the feature branch), the per-sprint deploy.
+   */
+  lakebaseBranch?: string;
   /** Inject for tests: start the run command, return a pid. */
-  startProcess?: (cmd: string, cwd: string) => number;
+  startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
   /** Inject for tests: reachability probe. */
   reachable?: (url: string) => Promise<boolean>;
   sleep?: (ms: number) => Promise<void>;
@@ -109,7 +116,14 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
   const reachable = args.reachable ?? probeReachable;
   const url = cfg.baseUrl + cfg.healthPath;
 
-  const pid = start(cfg.run, args.projectDir);
+  // Per-story deploy (FEIP-7566): bind the run command to the experiment
+  // branch's Lakebase DB so the PO reviews the story on its own branch. Unset
+  // = the ambient env (the feature branch's per-sprint deploy).
+  const env = args.lakebaseBranch
+    ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch }
+    : undefined;
+
+  const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
   mkdirSync(dirname(pf), { recursive: true });
   writeFileSync(pf, String(pid));
