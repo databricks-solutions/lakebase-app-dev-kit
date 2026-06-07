@@ -18,6 +18,8 @@ import { getConnection } from "../get-connection.js";
 import {
   applyAlembic,
   createAlembicRevision,
+  listAlembicHeads,
+  mergeAlembicHeads,
   rollbackAlembic,
   statusAlembic,
 } from "../schema-migrate-runners/alembic.js";
@@ -32,6 +34,8 @@ import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
+  type CollapseHeadsArgs,
+  type CollapseHeadsResult,
   type ListArgs,
   type ListResult,
   type NewMigrationArgs,
@@ -222,6 +226,25 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
         version: "",
         filename: "",
         path: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+
+  async collapseHeads(args: CollapseHeadsArgs): Promise<CollapseHeadsResult> {
+    // Sibling features forked from the same head leave two heads after merge.
+    // Unify them with a native merge revision (no file rewriting). Idempotent:
+    // a single head is a no-op.
+    try {
+      const heads = await listAlembicHeads(args.projectDir);
+      if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
+      const mergeRevision = path.basename(created).replace(/\.py$/, "").split("_")[0];
+      return { status: "ok", headsBefore: heads, mergeRevision, path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        headsBefore: [],
         error: err instanceof Error ? err.message : String(err),
       };
     }

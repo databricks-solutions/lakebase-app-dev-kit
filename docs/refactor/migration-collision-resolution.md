@@ -137,9 +137,12 @@ have no equivalent failure mode.
    create-adapters emit `<ts>`; Knex unchanged. Hermetic tests (format,
    ordering). Smoke `verify-v*` assertions move from `000N_` to the timestamp
    pattern (bundled with the gated re-run).
-2. **`collapseHeads` adapter method.** Alembic implements via `alembic merge
-   heads`; Flyway/Knex omit. Hermetic dispatcher-no-op test; live test for the
-   Alembic two-head case.
+2. **`collapseHeads` adapter method (LANDED).** Alembic implements via `alembic
+   merge heads` (DB-free: `listAlembicHeads` + `mergeAlembicHeads`); Flyway/Knex
+   omit. `collapseMigrationHeads` dispatcher no-ops for flat-list tools.
+   Hermetic dispatcher-no-op + capability-presence tests; the live Alembic
+   two-head merge is exercised by the phase 5 smoke (no local `alembic` to test
+   it in the hermetic suite).
 3. **`scm-merge` wiring.** Call `collapseMigrationHeads` after the git merge,
    guarded by the serialized-merge invariant; idempotent re-run.
 4. **scm-doctor detection + --fix.**

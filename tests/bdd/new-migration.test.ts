@@ -13,12 +13,14 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import {
+  collapseMigrationHeads,
   createSchemaMigration,
   migrationSlug,
   migrationTimestamp,
 } from "../../scripts/lakebase/schema-migrate";
 import { FlywayAdapter } from "../../scripts/lakebase/adapters/flyway-adapter";
 import { AlembicAdapter } from "../../scripts/lakebase/adapters/alembic-adapter";
+import { KnexAdapter } from "../../scripts/lakebase/adapters/knex-adapter";
 
 let projectDir: string;
 
@@ -107,5 +109,25 @@ describe("AlembicAdapter.newMigration: autogenerate guard (hermetic)", () => {
     const r = await AlembicAdapter.newMigration!({ projectDir, slug: "add users", autogenerate: true });
     expect(r.status).toBe("error");
     expect(r.error).toMatch(/autogenerate requires.*instance.*branch/i);
+  });
+});
+
+describe("collapseMigrationHeads dispatcher (hermetic: flat-list tools no-op)", () => {
+  it("is a no-op for a Flyway project (flat list, no DAG -> no collapseHeads)", async () => {
+    makeFlywayProject(projectDir);
+    const r = await collapseMigrationHeads({ projectDir, language: "java" });
+    expect(r.status).toBe("noop");
+  });
+
+  it("is a no-op for a Knex project (flat list, no DAG)", async () => {
+    writeFileSync(join(projectDir, "knexfile.js"), "module.exports = {};\n", "utf8");
+    const r = await collapseMigrationHeads({ projectDir, language: "nodejs" });
+    expect(r.status).toBe("noop");
+  });
+
+  it("only the Alembic adapter (a DAG tool) implements collapseHeads", () => {
+    expect(typeof AlembicAdapter.collapseHeads).toBe("function");
+    expect(FlywayAdapter.collapseHeads).toBeUndefined();
+    expect(KnexAdapter.collapseHeads).toBeUndefined();
   });
 });

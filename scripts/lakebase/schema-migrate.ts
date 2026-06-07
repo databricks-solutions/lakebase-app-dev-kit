@@ -33,6 +33,7 @@ import {
   type SchemaMigrationAdapterId,
   type NewMigrationArgs,
   type NewMigrationResult,
+  type CollapseHeadsResult,
 } from "./schema-migration-adapter.js";
 
 export type SchemaMigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
@@ -423,6 +424,36 @@ export async function createSchemaMigration(args: CreateSchemaMigrationArgs): Pr
   });
   if (r.status === "error") {
     throw new SchemaMigrationError(r.error ?? "create migration failed");
+  }
+  return r;
+}
+
+// ---- collapseMigrationHeads ----------------------------------------------------
+//
+// Unify multiple migration heads at a sibling-merge boundary. DAG tools
+// (Alembic) implement it; flat-list tools (Flyway, Knex) omit it, so this is a
+// no-op for them. Idempotent: a single head is a no-op too.
+
+export interface CollapseMigrationHeadsArgs {
+  projectDir?: string;
+  /** Override language detection. Defaults to auto-detect from project files. */
+  language?: SchemaMigrationLanguage;
+  /** Message for the generated merge revision (Alembic). */
+  message?: string;
+}
+
+export async function collapseMigrationHeads(
+  args: CollapseMigrationHeadsArgs
+): Promise<CollapseHeadsResult> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.collapseHeads) {
+    // Flat-list tool (Flyway/Knex): no DAG, nothing to collapse.
+    return { status: "noop", headsBefore: [] };
+  }
+  const r = await adapter.collapseHeads({ projectDir, message: args.message });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "collapse heads failed");
   }
   return r;
 }

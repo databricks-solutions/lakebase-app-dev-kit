@@ -140,6 +140,35 @@ export async function createAlembicRevision(opts: {
   );
 }
 
+/**
+ * List ALL local head revisions (the leaves of the down_revision DAG). More
+ * than one means sibling lineages were merged and need collapsing. DB-free:
+ * `alembic heads` reads the local versions/ dir only.
+ */
+export async function listAlembicHeads(projectDir: string): Promise<string[]> {
+  const { stdout } = await spawnAlembic(projectDir, ["heads"]);
+  const heads: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^([0-9a-f]+)\b/);
+    if (m) heads.push(m[1]);
+  }
+  return heads;
+}
+
+/**
+ * Create a merge revision unifying all current heads (`alembic merge heads`).
+ * DB-free (writes a file from the script template). Returns the created file's
+ * absolute path.
+ */
+export async function mergeAlembicHeads(projectDir: string, message: string): Promise<string> {
+  const { stdout } = await spawnAlembic(projectDir, ["merge", "-m", message, "heads"]);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (!m) {
+    throw new SchemaMigrationError(`alembic merge heads created no file.\nstdout: ${stdout}`);
+  }
+  return m[1].trim();
+}
+
 /** Return the currently-applied head revision, or undefined when the DB has no Alembic state. */
 async function getCurrentRevision(ctx: RunnerCtx): Promise<string | undefined> {
   const { stdout } = await runAlembic(ctx, ["current"]);

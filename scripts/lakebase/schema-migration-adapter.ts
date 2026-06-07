@@ -137,9 +137,8 @@ export interface NewMigrationArgs {
 export interface NewMigrationResult {
   status: "ok" | "error";
   /**
-   * The sequential version assigned, in the tool's native scheme:
-   * Flyway "2" (V2), Alembic "0002" (zero-padded rev-id), Knex its
-   * timestamp. Empty string on error.
+   * The version assigned, in the tool's native scheme: a UTC timestamp
+   * (`YYYYMMDDHHMMSS`) for all three tools. Empty string on error.
    */
   version: string;
   /** Created file's basename (empty on error). */
@@ -148,6 +147,24 @@ export interface NewMigrationResult {
   path: string;
   error?: string;
   tool_specific?: Record<string, unknown>;
+}
+
+export interface CollapseHeadsArgs {
+  projectDir: string;
+  /** Message for the generated merge revision (Alembic). */
+  message?: string;
+}
+
+export interface CollapseHeadsResult {
+  /** "noop" when there was nothing to collapse (<=1 head, or a flat-list tool). */
+  status: "ok" | "noop" | "error";
+  /** Heads present before the collapse; length > 1 means a merge was created. */
+  headsBefore: string[];
+  /** The merge revision id created to unify the heads, when applicable. */
+  mergeRevision?: string;
+  /** Absolute path to the created merge revision file, when applicable. */
+  path?: string;
+  error?: string;
 }
 
 /**
@@ -186,12 +203,20 @@ export interface SchemaMigrationAdapter {
   baseline?(args: BaselineArgs): Promise<BaselineResult>;
 
   /**
-   * Create a NEW migration named in the tool's native sequential scheme
-   * (Flyway V<n>, Alembic zero-padded rev-id, Knex timestamp), so the build
-   * never has to know the tool. The caller (Driver) authors the body.
-   * OPTIONAL: an adapter omits this when its tool has no create step.
+   * Create a NEW migration named in the tool's native scheme (a UTC timestamp
+   * version for all three tools), so the build never has to know the tool. The
+   * caller (Driver) authors the body. OPTIONAL: an adapter omits this when its
+   * tool has no create step.
    */
   newMigration?(args: NewMigrationArgs): Promise<NewMigrationResult>;
+
+  /**
+   * Collapse multiple migration heads into one at a sibling-merge boundary.
+   * Only DAG tools (Alembic, via `alembic merge heads`) need this; flat-list
+   * tools (Flyway, Knex) omit it, so the dispatcher treats them as a no-op.
+   * Idempotent: a single head (or none) is a no-op.
+   */
+  collapseHeads?(args: CollapseHeadsArgs): Promise<CollapseHeadsResult>;
 }
 
 /**
