@@ -27,6 +27,9 @@
 #   a. Enforce the project-intake precondition (lakebase-tdd-intake, no
 #      --feature: product-overview.md + nfrs.md + design-brief.md present).
 #   b. human-proxy supplies each sprint item's feature-request.md.
+#   b2. Run the actual /plan command via claude -p (parity); the command
+#      delegates to product-owner + spec-author and is idempotent over the
+#      staged backlog (sprint membership is the smoke orchestrator's call).
 #   c. Commit the sprint backlog to trunk.
 #
 # What each iteration does (the per-feature loop, after its request exists):
@@ -35,9 +38,9 @@
 #   4. /build <id>   – gates drained by human-proxy.
 #   5. Local tests (./scripts/run-tests.sh).
 #   6. Per-iteration verify (assertions/verify-vN.sh).
-#   6.5 /deploy <id> --target local: run the app + verify reachable, then
-#      tear down (the per-sprint "working software" check; deploy gate
-#      approved by human-proxy).
+#   6.5 /deploy <id> --target local via claude -p: the command delegates to the
+#      release-engineer (deploy + poll reachable + verify) and records the PO
+#      deploy gate (Human Proxy headless), then the smoke tears the app down.
 #   7. Commit the iteration's work on the feature branch.
 #   8. SCM doctor (advisory cross-check; warning-only).
 #
@@ -413,27 +416,22 @@ run_iteration() {
     log "  step 6: no verify script for $iter (skipping)."
   fi
 
-  # 6.5 /deploy --target local: run the app locally + verify it is reachable.
-  # This is the per-sprint "working software" check (product-overview asks for
-  # "working software I can use after each sprint"). The Human Proxy approves
-  # the deploy gate only AFTER reachability; the app is torn down before the
-  # next iteration claims a new feature. local is the only implemented target;
-  # the prod release path is merge.yml (SCM workflow), tested separately.
-  log "  step 6.5: /deploy ${feature_id} --target local (working-software check)"
-  if npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy \
-        --target local --project-dir "$PROJECT_DIR" --json; then
-    # Human Proxy records the deploy-gate approval (the working-software review).
-    npx --yes --package="${KIT_NPX}" lakebase-tdd-log \
-      --role product-owner --level info --event gate.approved \
-      --feature "$feature_id" --tdd-dir "$PROJECT_DIR/.tdd" \
-      --message "human-proxy: ${feature_id} reachable locally; working-software deploy gate approved" \
-      --data '{"gate":"deploy","target":"local","validated":true}' >/dev/null 2>&1 || true
-  else
+  # 6.5 /deploy --target local via the ACTUAL command (parity with a real run):
+  # the orchestrator runs /deploy, which delegates to the release-engineer agent
+  # (deploy to target + poll reachable + run the feature verify against the
+  # running app) and records the PO deploy gate via the Human Proxy. This is the
+  # per-sprint "working software" check (product-overview asks for "working
+  # software I can use after each sprint"). local is the only implemented target;
+  # the prod release path is merge.yml (SCM workflow), tested separately. /deploy
+  # opens no gates.json gate, so it is a plain claude -p invocation (not a
+  # gate-drain). A safety teardown follows in case the command left the app up.
+  log "  step 6.5: claude -p '/deploy ${feature_id} --target local' (working-software check, via release-engineer)"
+  if ! claude -p "/deploy ${feature_id} --target local"; then
     npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
-    echo "smoke: /deploy --target local failed for ${feature_id} (app not reachable)" >&2
+    echo "smoke: /deploy failed for ${feature_id} (app not reachable / verify failed)" >&2
     exit 2
   fi
-  # Tear down the local app before the next iteration.
+  # Safety teardown before the next iteration (idempotent if already stopped).
   npx --yes --package="${KIT_NPX}" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
 
   # 7. local commit on the feature branch. The FEIP-7422 smoke is a
@@ -542,6 +540,15 @@ run_plan_sprint() {
     npx --yes --package="${KIT_NPX}" lakebase-tdd-intake --feature "$feature_id" \
       || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
   done
+
+  # b2. Exercise the actual /plan command (parity with a real run): the
+  # orchestrator runs /plan, which delegates to the product-owner + spec-author
+  # role agents and, headless, has the Human Proxy supply the sprint's
+  # feature-requests from the recorded backlog (idempotent over the files staged
+  # above; sprint membership is the smoke orchestrator's call). /plan opens no
+  # gates.json gate, so it is a plain claude -p invocation, not a gate-drain.
+  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}'"
+  claude -p "/plan --sprint ${sprint_name}"
 
   # c. Commit the sprint backlog to trunk so each feature branch inherits its
   # request. Idempotent on resume: nothing to commit when already present.

@@ -174,18 +174,22 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
     expect(runSmoke).toMatch(/git commit -m "plan \$\{sprint_name\}/);
     expect(runSmoke).toMatch(/git commit -m "intake: project/);
   });
+
+  it("exercises the actual /plan command via claude -p (parity)", () => {
+    expect(runSmoke).toMatch(/claude -p "\/plan --sprint \$\{sprint_name\}"/);
+  });
 });
 
 describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working software)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("runs /deploy --target local per iteration and records the deploy gate", () => {
-    expect(runSmoke).toMatch(/lakebase-tdd-deploy\b/);
-    expect(runSmoke).toMatch(/--target local/);
-    // The Human Proxy records the working-software deploy-gate approval.
-    expect(runSmoke).toMatch(/"gate":"deploy"/);
-    // The local app is torn down between iterations.
-    expect(runSmoke).toMatch(/lakebase-tdd-deploy.*--stop/);
+  it("runs /deploy via the actual command (claude -p), not by emulating the substrate", () => {
+    // Parity: /deploy is driven through the real command, which delegates to the
+    // release-engineer agent + records the PO deploy gate. The smoke no longer
+    // calls lakebase-tdd-deploy to perform the deploy itself.
+    expect(runSmoke).toMatch(/claude -p "\/deploy \$\{feature_id\} --target local"/);
+    // The smoke still tears the local app down between iterations (safety).
+    expect(runSmoke).toMatch(/lakebase-tdd-deploy --target local --project-dir "\$PROJECT_DIR" --stop/);
   });
 
   it("v5's feature request is list-view-only: deploy/reachability moved to the per-sprint /deploy", () => {
