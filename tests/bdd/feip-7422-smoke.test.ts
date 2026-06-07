@@ -94,10 +94,12 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
 
   it("strips MCP + pins the orchestrator model via a shared flag array on every claude -p boot", () => {
     // One shared flag array, applied to every claude invocation (DRY).
-    // --strict-mcp-config = zero MCP servers; --model haiku pins the busiest
-    // actor (the scrum-master orchestrator, otherwise `inherit` = the slow CLI
-    // default) to a fast tier on every coordination turn.
-    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model haiku\)/);
+    // --strict-mcp-config = zero MCP servers; --model sonnet pins the
+    // orchestrator (scrum-master, otherwise `inherit` = the slow opus default)
+    // to a fast tier that still reliably emits its phase/handoff log events
+    // (haiku drops them, and they are not artifact-backed so the reconcile
+    // backstop cannot recover them).
+    expect(runSmoke).toMatch(/CLAUDE_FLAGS=\(--strict-mcp-config --model sonnet\)/);
     // Every `claude -p` call threads the shared flags (no bare invocation that
     // would reload the operator's personal MCP servers).
     const calls = runSmoke.match(/claude -p "[^"]*"/g) ?? [];

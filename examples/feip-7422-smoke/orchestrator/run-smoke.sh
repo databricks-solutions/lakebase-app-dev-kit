@@ -175,14 +175,17 @@ export LAKEBASE_TDD_UI=1
 # phase (and each gate-drain re-invocation) is its own `claude -p` boot, so this
 # saving multiplies across the run.
 #
-# --model haiku pins the ORCHESTRATOR (scrum-master) session model. The
+# --model sonnet pins the ORCHESTRATOR (scrum-master) session model. The
 # scrum-master is `inherit`, so without this it runs on the CLI default (opus)
-# and pays opus latency on EVERY orchestrator turn, and it is the busiest actor
-# in the run (it drives every handoff, gate, and log). It only coordinates
-# (route / delegate / record / gate), produces no artifacts, so haiku is the
-# right tier and cuts latency across the whole spine of the run, including the
-# slow first turn.
-CLAUDE_FLAGS=(--strict-mcp-config --model haiku)
+# and pays opus latency on every coordination turn. Sonnet (not haiku) is the
+# floor here: the orchestrator's value is its STRUCTURED LOG (phase.start /
+# handoff / phase.end), and haiku reliably drops those prose-instructed emits
+# (profiled: a whole /plan produced one phase.end and nothing else). Unlike the
+# role subagents, the orchestrator's events are not artifact-backed, so the
+# reconcile backstop cannot reconstruct them, the model has to emit them. Sonnet
+# does; it is also far faster than the opus default and the orchestrator is not
+# the bulk of the turns, so the speed cost over haiku is small.
+CLAUDE_FLAGS=(--strict-mcp-config --model sonnet)
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
