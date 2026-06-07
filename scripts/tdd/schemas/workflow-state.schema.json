@@ -9,6 +9,7 @@
     "phase": {
       "type": "string",
       "enum": [
+        "planning",
         "discovery",
         "architectural-review",
         "test-list-construction",
@@ -16,10 +17,11 @@
         "implementation",
         "synthesis",
         "review",
+        "deploy",
         "shipped",
         "abandoned"
       ],
-      "description": "Current phase per design-spec section 7."
+      "description": "Current TDD phase the orchestrator obeys. planning = /plan (sprint planning: the Spec Author proposes + the PO authors the backlog, before any feature's discovery). discovery -> architectural-review -> test-list-construction -> design-spec-gate -> implementation are the /design + /build phases. deploy = /deploy (the per-sprint working-software check: the Release Engineer deploys + verifies, the PO signs the deploy gate), entered after implementation/review and before shipped. synthesis + abandoned are side outcomes."
     },
     "feature_id": {
       "type": ["string", "null"],
