@@ -163,6 +163,15 @@ describe("runDriver: the per-story pipeline streams", () => {
   });
 });
 
+describe("runDriver: maxSteps", () => {
+  it("stops after maxSteps actions without reaching done", async () => {
+    const { effects } = makeFakeWorld(["S1", "S2", "S3"]);
+    const result = await runDriver(effects, { maxSteps: 3 });
+    expect(result.stoppedAtMax).toBe(true);
+    expect(result.iterations).toBe(3);
+  });
+});
+
 describe("runDriver: stall detection", () => {
   it("throws DriverStalledError when an effect does not advance state", async () => {
     const state: DriveState = {

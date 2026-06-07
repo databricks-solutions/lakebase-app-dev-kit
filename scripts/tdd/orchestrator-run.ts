@@ -48,6 +48,13 @@ export class DriverStalledError extends Error {
 export interface RunDriverResult {
   /** Number of actions performed (including the terminal `done`). */
   iterations: number;
+  /** True if the loop stopped at maxSteps rather than reaching `done`. */
+  stoppedAtMax?: boolean;
+}
+
+export interface RunDriverOptions {
+  /** Stop after this many actions (for incremental/live testing + safety). */
+  maxSteps?: number;
 }
 
 // Backstop against a runaway loop (an effect that advances but never converges).
@@ -60,9 +67,15 @@ const MAX_ITERATIONS = 10_000;
  * without the state advancing (an effect that did not record its result), and a
  * plain Error if the iteration backstop is hit.
  */
-export async function runDriver(effects: DriveEffects): Promise<RunDriverResult> {
+export async function runDriver(
+  effects: DriveEffects,
+  options: RunDriverOptions = {},
+): Promise<RunDriverResult> {
   let previousSignature: string | undefined;
   for (let i = 0; ; i++) {
+    if (options.maxSteps !== undefined && i >= options.maxSteps) {
+      return { iterations: i, stoppedAtMax: true };
+    }
     if (i >= MAX_ITERATIONS) {
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }

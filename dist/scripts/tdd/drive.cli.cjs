@@ -6726,9 +6726,12 @@ var DriverStalledError = class extends Error {
   iteration;
 };
 var MAX_ITERATIONS = 1e4;
-async function runDriver(effects) {
+async function runDriver(effects, options = {}) {
   let previousSignature;
   for (let i = 0; ; i++) {
+    if (options.maxSteps !== void 0 && i >= options.maxSteps) {
+      return { iterations: i, stoppedAtMax: true };
+    }
     if (i >= MAX_ITERATIONS) {
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }
@@ -7282,6 +7285,9 @@ function parseArgs(argv) {
       case "--dry-run":
         out.dryRun = true;
         break;
+      case "--max-steps":
+        out.maxSteps = Number(argv[++i]);
+        break;
       case "--help":
       case "-h":
         out.help = true;
@@ -7306,6 +7312,7 @@ Flags:
   --deploy-target <t>  Deploy target for the deploy phase (default: local)
   --approver <name>    Headless gate approver (default: human-proxy)
   --dry-run            Print the single next action + its commands, then exit
+  --max-steps <n>      Stop after n actions (incremental/live testing + safety)
 `;
 }
 function writeWorkflowPhase(tddDir, phase) {
@@ -7385,9 +7392,14 @@ ${help()}`);
   }
   cfg.runner = execRunner(cfg);
   try {
-    const result = await runDriver(buildDriveEffects(cfg));
-    process.stderr.write(`[drive] done in ${result.iterations} actions
+    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps });
+    if (result.stoppedAtMax) {
+      process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
 `);
+    } else {
+      process.stderr.write(`[drive] done in ${result.iterations} actions
+`);
+    }
     return 0;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}

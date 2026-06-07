@@ -38,6 +38,7 @@ interface ParsedArgs {
   deployTarget?: string;
   approver?: string;
   dryRun?: boolean;
+  maxSteps?: number;
   help?: boolean;
 }
 
@@ -52,6 +53,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--deploy-target": out.deployTarget = argv[++i]; break;
       case "--approver": out.approver = argv[++i]; break;
       case "--dry-run": out.dryRun = true; break;
+      case "--max-steps": out.maxSteps = Number(argv[++i]); break;
       case "--help": case "-h": out.help = true; break;
       default: break;
     }
@@ -73,6 +75,7 @@ Flags:
   --deploy-target <t>  Deploy target for the deploy phase (default: local)
   --approver <name>    Headless gate approver (default: human-proxy)
   --dry-run            Print the single next action + its commands, then exit
+  --max-steps <n>      Stop after n actions (incremental/live testing + safety)
 `;
 }
 
@@ -153,8 +156,12 @@ async function main(): Promise<number> {
 
   cfg.runner = execRunner(cfg);
   try {
-    const result = await runDriver(buildDriveEffects(cfg));
-    process.stderr.write(`[drive] done in ${result.iterations} actions\n`);
+    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps });
+    if (result.stoppedAtMax) {
+      process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
+    } else {
+      process.stderr.write(`[drive] done in ${result.iterations} actions\n`);
+    }
     return 0;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
