@@ -73,11 +73,12 @@ describe("deriveSprintPlanningState", () => {
 });
 
 describe("runSprint (pure over SprintEffects)", () => {
-  it("plans first, then claims + drives each backlog feature in order", async () => {
+  it("plans first, then claims + drives each backlog feature in order (proxy: no gate halts)", async () => {
     const calls: string[] = [];
     const effects: SprintEffects = {
       async drivePlanning() {
         calls.push("plan");
+        return {};
       },
       async readBacklog() {
         return ["F1-a", "F2-b"];
@@ -87,29 +88,55 @@ describe("runSprint (pure over SprintEffects)", () => {
       },
       async driveFeature(f) {
         calls.push(`drive:${f}`);
+        return {};
       },
     };
     const result = await runSprint(effects);
     expect(result.features).toEqual(["F1-a", "F2-b"]);
-    // Planning precedes everything; each feature is claimed then driven, in order.
-    expect(calls).toEqual([
-      "plan",
-      "claim:F1-a",
-      "drive:F1-a",
-      "claim:F2-b",
-      "drive:F2-b",
-    ]);
+    expect(result.pendingGate).toBeUndefined();
+    expect(calls).toEqual(["plan", "claim:F1-a", "drive:F1-a", "claim:F2-b", "drive:F2-b"]);
   });
 
   it("an empty backlog plans then does nothing", async () => {
     const calls: string[] = [];
     const result = await runSprint({
-      async drivePlanning() { calls.push("plan"); },
+      async drivePlanning() { calls.push("plan"); return {}; },
       async readBacklog() { return []; },
       async claimFeature() { calls.push("claim"); },
-      async driveFeature() { calls.push("drive"); },
+      async driveFeature() { calls.push("drive"); return {}; },
     });
     expect(result.features).toEqual([]);
     expect(calls).toEqual(["plan"]);
+  });
+
+  it("interactive: halts at the plan gate before any feature work", async () => {
+    const calls: string[] = [];
+    const planGate = { kind: "approve-plan-gate" as const };
+    const result = await runSprint({
+      async drivePlanning() { calls.push("plan"); return { pendingGate: planGate }; },
+      async readBacklog() { calls.push("backlog"); return ["F1-a"]; },
+      async claimFeature() { calls.push("claim"); },
+      async driveFeature() { calls.push("drive"); return {}; },
+    });
+    expect(result.pendingGate).toEqual(planGate);
+    expect(calls).toEqual(["plan"]); // never read the backlog or touched a feature
+  });
+
+  it("interactive: halts on the feature whose gate is pending (resumable)", async () => {
+    const calls: string[] = [];
+    const gate = { kind: "accept" as const, story: "S1" };
+    const result = await runSprint({
+      async drivePlanning() { return {}; },
+      async readBacklog() { return ["F1-a", "F2-b"]; },
+      async claimFeature(f) { calls.push(`claim:${f}`); },
+      async driveFeature(f) {
+        calls.push(`drive:${f}`);
+        return f === "F1-a" ? { pendingGate: gate } : {};
+      },
+    });
+    expect(result.pendingGate).toEqual(gate);
+    expect(result.pendingFeature).toBe("F1-a");
+    // Stops on F1-a's gate; never advances to F2-b.
+    expect(calls).toEqual(["claim:F1-a", "drive:F1-a"]);
   });
 });

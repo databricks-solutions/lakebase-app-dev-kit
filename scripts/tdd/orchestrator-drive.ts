@@ -289,3 +289,20 @@ export function actionLane(action: WorkflowAction): ActionLane {
       return "done";
   }
 }
+
+/**
+ * The HITL gate-approval actions: the decisions a HUMAN owns (live), or the
+ * Human Proxy stands in for (headless). In interactive gate mode the driver
+ * STOPS before these so the session can surface the gate and the human answers;
+ * in proxy mode the driver performs them (the Proxy approves). The spec gate
+ * (approve-gate), the sprint plan gate (approve-plan-gate), the deploy gate
+ * (approve-deploy-gate), and the per-story PO acceptance (accept).
+ */
+export function isHitlGateAction(action: WorkflowAction): boolean {
+  return (
+    action.kind === "approve-gate" ||
+    action.kind === "approve-plan-gate" ||
+    action.kind === "approve-deploy-gate" ||
+    action.kind === "accept"
+  );
+}

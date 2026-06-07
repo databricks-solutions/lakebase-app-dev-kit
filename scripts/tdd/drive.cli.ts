@@ -19,7 +19,8 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound } from "./orchestrator-run.js";
+import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
+import { isHitlGateAction, type WorkflowAction } from "./orchestrator-drive.js";
 import {
   buildDriveEffects,
   commandsForAction,
@@ -49,6 +50,7 @@ interface ParsedArgs {
   maxSteps?: number;
   planOnly?: boolean;
   only?: string;
+  gates?: string;
   help?: boolean;
 }
 
@@ -67,6 +69,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--max-steps": out.maxSteps = Number(argv[++i]); break;
       case "--plan-only": out.planOnly = true; break;
       case "--only": out.only = argv[++i]; break;
+      case "--gates": out.gates = argv[++i]; break;
       case "--help": case "-h": out.help = true; break;
       default: break;
     }
@@ -91,6 +94,8 @@ Flags:
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
   --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
+  --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
+                       (stop AT each HITL gate so the human answers, then re-run)
 `;
 }
 
@@ -174,10 +179,33 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   };
 }
 
+/** Compose a phase bound's stopWhen with the interactive gate stop: in
+ *  interactive mode the driver also halts at each HITL gate for the human. */
+function gatedStopWhen(
+  base: RunDriverOptions["stopWhen"],
+  interactive: boolean,
+): RunDriverOptions["stopWhen"] {
+  if (!interactive) return base;
+  return (a) => (base?.(a) ?? false) || isHitlGateAction(a);
+}
+
+/** The HITL gate a bounded run halted at (interactive mode), or undefined. */
+function pendingGateOf(r: RunDriverResult): WorkflowAction | undefined {
+  return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : undefined;
+}
+
+function reportGate(gate: WorkflowAction): void {
+  process.stderr.write(
+    `[drive] GATE awaiting human approval: ${JSON.stringify(gate)}. ` +
+      `Surface it to the human; on approval record their decision (the approver), then re-run to continue.\n`,
+  );
+}
+
 /**
  * Tier-1 sprint mode (`--sprint <name>`, no `--feature`): the `/sprint`
  * orchestrator. Drives sprint planning to the plan gate, then claims + drives
- * each backlog feature to done, all in one process.
+ * each backlog feature. `--plan-only` runs planning only (the `/plan` command).
+ * `--gates interactive` halts at each HITL gate for the human + re-runs to resume.
  */
 async function runSprintMode(args: ParsedArgs): Promise<number> {
   const sprint = args.sprint as string;
@@ -186,6 +214,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const interactive = args.gates === "interactive";
 
   const effects: SprintEffects = {
     async drivePlanning() {
@@ -198,7 +227,9 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
         },
         onAction: cfg.onAction,
       };
-      await runDriver(planning, driverBoundOptions("plan"));
+      const base = driverBoundOptions("plan");
+      const r = await runDriver(planning, { ...base, stopWhen: gatedStopWhen(base.stopWhen, interactive) });
+      return { pendingGate: pendingGateOf(r) };
     },
     async readBacklog() {
       return readSprintBacklog(tddDir, sprint).features;
@@ -209,14 +240,33 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
       cfg.runner = execRunner(cfg);
-      await runDriver(buildDriveEffects(cfg));
+      const r = await runDriver(buildDriveEffects(cfg), { stopWhen: gatedStopWhen(undefined, interactive) });
+      return { pendingGate: pendingGateOf(r) };
     },
     onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}\n`),
   };
 
+  // /plan: planning only (do not enter the per-feature loop).
+  if (args.planOnly) {
+    try {
+      const planning = await effects.drivePlanning();
+      if (planning.pendingGate) reportGate(planning.pendingGate);
+      else process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)\n`);
+      return 0;
+    } catch (err) {
+      process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+      return 1;
+    }
+  }
+
   try {
     const result = await runSprint(effects);
-    process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)\n`);
+    if (result.pendingGate) {
+      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}\n`);
+      reportGate(result.pendingGate);
+    } else {
+      process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)\n`);
+    }
     return 0;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
@@ -261,12 +311,20 @@ async function main(): Promise<number> {
   }
 
   cfg.runner = execRunner(cfg);
+  const interactive = args.gates === "interactive";
   try {
-    const result = await runDriver(buildDriveEffects(cfg), { maxSteps: args.maxSteps, ...boundOpts });
+    const result = await runDriver(buildDriveEffects(cfg), {
+      maxSteps: args.maxSteps,
+      transition: boundOpts.transition,
+      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
+    });
+    const pendingGate = pendingGateOf(result);
     if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
+    } else if (pendingGate) {
+      reportGate(pendingGate);
     } else if (result.stoppedAtBound) {
-      process.stderr.write(`[drive] ${bound} phase complete in ${result.iterations} actions (bounded)\n`);
+      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)\n`);
     } else {
       process.stderr.write(`[drive] done in ${result.iterations} actions\n`);
     }

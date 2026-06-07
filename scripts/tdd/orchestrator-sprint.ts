@@ -15,7 +15,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { DriveState } from "./orchestrator-drive.js";
+import type { DriveState, WorkflowAction } from "./orchestrator-drive.js";
 import { readSprintGates, sprintDir, PLAN_GATE_ARTIFACT } from "./sprint-gates.js";
 
 // --- Sprint backlog manifest -------------------------------------------------
@@ -98,37 +98,58 @@ export function deriveSprintPlanningState(tddDir: string, sprint: string): Drive
 
 // --- The sprint orchestrator (pure over the effect seam) ---------------------
 
+/** A drive step's outcome: ran to its scope, or halted at a HITL gate awaiting
+ *  the human (interactive mode). `pendingGate` set => the step did not finish. */
+export interface DriveStepResult {
+  pendingGate?: WorkflowAction;
+}
+
 export interface SprintEffects {
-  /** Drive sprint planning to the approved plan gate (the plan bound). */
-  drivePlanning(): Promise<void>;
+  /** Drive sprint planning to the approved plan gate (the plan bound). In
+   *  interactive mode it halts at the plan gate (pendingGate set). */
+  drivePlanning(): Promise<DriveStepResult>;
   /** The sprint's feature ids, in execution order. */
   readBacklog(): Promise<string[]>;
-  /** Claim a feature's branch (the SCM /design Step 0 job the driver does not own). */
+  /** Claim a feature's branch (idempotent; the SCM /design Step 0 the driver
+   *  does not own). Re-claim on a resume is a no-op. */
   claimFeature(featureId: string): Promise<void>;
-  /** Drive one feature design -> build -> deploy to done. */
-  driveFeature(featureId: string): Promise<void>;
+  /** Drive one feature design -> build -> deploy. In interactive mode it halts
+   *  at the next HITL gate (pendingGate set); proxy mode drives it to done. */
+  driveFeature(featureId: string): Promise<DriveStepResult>;
   /** Optional progress hook fired before each feature is claimed. */
   onFeature?(featureId: string, index: number): void;
 }
 
 export interface RunSprintResult {
-  /** Feature ids driven, in order. */
+  /** Feature ids the sprint covers (the backlog). */
   features: string[];
+  /** The HITL gate the run halted at (interactive mode), awaiting the human. */
+  pendingGate?: WorkflowAction;
+  /** The feature whose gate the run halted at, if any. */
+  pendingFeature?: string;
 }
 
 /**
- * Run a whole sprint: plan (to the gate) -> for each backlog feature: claim +
- * drive to done. Pure over SprintEffects so it is hermetically testable; the
- * real effects compose runDriver + the claim CLI.
+ * Run a sprint: plan (to the gate) -> for each backlog feature: claim + drive.
+ * RESUMABLE: in interactive mode a step halts at a HITL gate (pendingGate); the
+ * whole run returns so the session can surface it. The human approves and
+ * re-invokes; planning + the already-done features are idempotent no-ops, and
+ * the in-progress feature resumes past the now-approved gate. In proxy mode
+ * (headless) no step yields a pendingGate, so the sprint runs end to end.
  */
 export async function runSprint(effects: SprintEffects): Promise<RunSprintResult> {
-  await effects.drivePlanning();
+  const planning = await effects.drivePlanning();
+  if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
+
   const features = await effects.readBacklog();
   for (let i = 0; i < features.length; i++) {
     const featureId = features[i];
     effects.onFeature?.(featureId, i);
     await effects.claimFeature(featureId);
-    await effects.driveFeature(featureId);
+    const driven = await effects.driveFeature(featureId);
+    if (driven.pendingGate) {
+      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+    }
   }
   return { features };
 }

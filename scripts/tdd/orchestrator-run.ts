@@ -58,6 +58,9 @@ export interface RunDriverResult {
   stoppedAtMax?: boolean;
   /** True if the loop stopped at a phase bound (stopWhen) rather than `done`. */
   stoppedAtBound?: boolean;
+  /** The action the bound stopped BEFORE performing (e.g. the HITL gate awaiting
+   *  the human in interactive mode, or the first out-of-scope action). */
+  stoppedAt?: WorkflowAction;
 }
 
 export interface RunDriverOptions {
@@ -140,7 +143,7 @@ export async function runDriver(
     // A Tier-2 phase bound: stop cleanly before performing the out-of-scope
     // action (e.g. /design stops before the first build, /build before deploy).
     if (options.stopWhen?.(action)) {
-      return { iterations: i, stoppedAtBound: true };
+      return { iterations: i, stoppedAtBound: true, stoppedAt: action };
     }
 
     const signature = JSON.stringify(action);
