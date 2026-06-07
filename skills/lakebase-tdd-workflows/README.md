@@ -16,20 +16,23 @@ This README is the human-facing overview. The agent's operating contract – har
 
 | Term | Definition |
 |---|---|
-| **Feature** | A user-facing capability. Has stories with ACs. Lives on one feature branch. The default and most common mode of work. |
+| **Feature** | A user-facing capability. Decomposes into stories with ACs. The durable unit: one feature branch is claimed / PR'd / merged-to-trunk / tier-promoted / deployed-per-sprint. |
+| **Story** | A slice of a feature with its own ACs. The unit of the streaming design->build pipeline, and the scope an experiment is built at. |
 | **AC** | Acceptance Criterion. One observable behavior. Tagged `[API]` / `[E2E]` / `[Infra]`. |
-| **Test list** | Beck's planning artifact. Ordered list of behavioral scenarios that define done. Lives at feature level. |
+| **Test list** | Beck's planning artifact. Ordered list of behavioral scenarios that define done. Feature-level master, scoped per story for the build lane. |
 | **Cycle** | One RED → GREEN → REFACTOR pass for a single test list item. |
-| **Spike** | Throwaway exploration on a Lakebase branch. No test list, no rigor. Goal: learn. Code is never promoted as-is. |
-| **Experiment** | A rigorous TDD branch – has a test list, runs cycles, ends with working code + tests. When N=1, the experiment IS the feature. The substrate uses "experiment" as the internal noun so the same primitives generalize to N≥2. |
-| **N=1 (the default – just a feature)** | One branch, iterative refinement. The branch IS the feature. No promote/synthesize ceremony, no compare report. This is what most work looks like. |
-| **N≥2 (parallel experiments)** | Deliberate race between competing strategies. Used when the design-spec gate finds opinion gaps the team genuinely wants to resolve by trying them. HITL chooses promote vs synthesize at the end. |
-| **Promote** | (N≥2 only) Take one experiment as-is into the feature PR. The losers are archived. |
-| **Synthesize** | (N≥2 only) PO menu-picks capabilities across experiments; spec is renegotiated; a fresh TDD cycle on a new branch produces the final code. |
+| **Spike** | Throwaway exploration on a Lakebase branch. No test list, no rigor. Goal: learn. Code is never merged, only the learning carries forward. Attaches to a feature OR a story. |
+| **Experiment** | A rigorous, isolated TDD branch (test list, cycles, working code + tests) forked from feature-branch HEAD, scoped to a **story**. N=1 (default) = the story's one isolated build; N>=2 = competing strategies for that story. The PO reviews it as working software, then accepts (merge), discards, or sends back to revise. |
+| **N=1 (the default)** | One experiment per story, iterative refinement. No promote/synthesize ceremony, no compare report. What most stories look like. |
+| **N≥2 (parallel experiments)** | Deliberate race between competing strategies for a story. Used when the design-spec gate finds opinion gaps the team wants to resolve by trying them. HITL chooses promote vs synthesize among that story's experiments. |
+| **merge** | (PO accept) Take a story's experiment into the feature branch: a real git-merge of its code PLUS running its migrations against the feature branch's Lakebase DB. Then the experiment branch is torn down. Distinct from the SCM feature->trunk merge. |
+| **discard / revise** | (PO reject) Tear down the experiment with no trace: `discard` drops the story from the sprint; `revise` sends it back to designing for a re-spec. |
+| **Promote** | (N≥2 only) Take one of a story's competing experiments as-is; the losers are archived. The winner then merges into the feature. |
+| **Synthesize** | (N≥2 only) PO menu-picks capabilities across a story's experiments; spec is renegotiated; a fresh experiment produces the final code. |
 | **Bad smell** | A pattern the orchestrator detects that signals the workflow is sliding. Surfaces a proposed remediation to the HITL. |
 | **Adapter** | Pluggable component that syncs the spec format to/from an external tracker (JIRA, Linear, GitHub Issues, plain markdown). |
 
-The substrate API keeps "experiment" as the noun so the same primitives serve both N=1 and N≥2. When you're racing strategies you have experiments. Otherwise you have a feature.
+The substrate API keeps "experiment" as the noun for the rigorous TDD branch; it is scoped to a story (N=1 is one experiment per story, N>=2 races several). The feature branch is the durable integration unit each accepted experiment merges into.
 
 ## Roles
 
@@ -77,23 +80,24 @@ The proposal is conservative by design: the analyzer's job is to surface the cho
 
 ### 2. Experiment
 
-With the plan approved, the agent cuts branches per the plan – one for N=1, multiple for N≥2 – and runs cycles against them in phase 4 (Implementation). Each experiment gets its own subdirectory:
+With a story's plan approved, the agent cuts branches per the plan – one for N=1, multiple for N≥2 – forked from feature HEAD, and runs cycles against them in phase 4 (Implementation). Experiments are scoped to the story (FEIP-7566): `experiments/<feature>/<story>/<slug>/`.
 
 ```
 .tdd/
   experiments/
     F1-checkout/
-      checkout/                  ← single experiment (N=1) – slug matches the feature
-        branch.txt               ← Lakebase branch id
-        notes.md                 ← strategy + learning notes
-        outcomes.json            ← { status, tests_passed, tests_failed, schema_diff_summary, ... }
-        timeline.json            ← per-cycle + smell history
-      exp-postgres-arrays/       ← parallel experiment (N≥2)
-        ...
-      exp-json-blob/
-        ...
-      _archive/                  ← losers from a promote decision land here
+      S1-submit/                 ← the story
+        s1-submit/               ← single experiment (N=1) – the story's build
+          branch.txt             ← Lakebase branch id (forked from the feature branch)
+          notes.md               ← strategy + learning notes
+          outcomes.json          ← { status, tests_passed, tests_failed, schema_diff_summary, ... }
+          timeline.json          ← per-cycle + smell history
+        exp-postgres-arrays/     ← parallel experiment (N≥2) for this story
+          ...
         exp-json-blob/
+          ...
+        _archive/                ← losers from a promote decision land here
+          exp-json-blob/
 ```
 
 Teardown is HITL-gated: the experiment record is preserved on disk by default even when the Lakebase branch is removed, so the learning survives. The orchestrator proposes deletions to the Product Owner; it never tears down unilaterally.

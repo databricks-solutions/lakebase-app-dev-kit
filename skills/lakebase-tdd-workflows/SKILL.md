@@ -22,7 +22,7 @@ The contract every agent (Navigator, Driver, Orchestrator) and every human colla
 6. Never make a private method public to test it.
 7. Test count is a lagging indicator. The leading indicator is "how cheap is the next test?" Rising cost = design problem.
 8. Spike code is throwaway. Promote nothing from a spike branch into a TDD branch except notes.
-9. N=1 mode is iterative refinement. There is no promote/synthesize ceremony – the branch IS the feature.
+9. Experiments are scoped to a story (the branch forks from feature HEAD). N=1 is one experiment per story (iterative refinement, no promote/synthesize ceremony); N>=2 races competing strategies for that story. The PO accepts a story's experiment by **merge** (git-merge + run its migrations against the feature branch DB), or discards/revises it.
 
 See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents/driver.md) for per-role specializations.
 
@@ -179,26 +179,29 @@ if (!ok.ok) throw new Error(`budget: ${ok.reason}`);
 import { cutExperiment, listExperiments, readOutcomes, writeOutcomes, deleteExperiment }
   from "@databricks-solutions/lakebase-app-dev-kit/tdd/experiment";
 
-// N=1 – slug matches the feature.
-const feature = await cutExperiment({
+// N=1 – one experiment for story S1, forked from the feature branch.
+const exp = await cutExperiment({
   instance: "proj-checkout",
   tddDir: ".tdd",
   featureId: "F1",
-  experimentSlug: "checkout",       // N=1: slug = feature name
-  branch: "checkout",
-  parentBranch: "staging",
+  storyId: "S1-submit",
+  experimentSlug: "s1-submit",
+  branch: "exp/F1/S1-submit",
+  parentBranch: "feature/F1",       // forks from feature HEAD, not staging
 });
-// feature.dir === ".tdd/experiments/F1/checkout"
+// exp.dir === ".tdd/experiments/F1/S1-submit/s1-submit"
 // Writes branch.txt, notes.md, outcomes.json (status: "running"), timeline.json.
 
-writeOutcomes(".tdd", "F1", "checkout", { status: "succeeded", tests_passed: 2 });
+writeOutcomes(".tdd", "F1", "S1-submit", "s1-submit", { status: "succeeded", tests_passed: 2 });
 
 // Teardown is HITL-gated. deleteBranchToo defaults to false – record survives.
+// (The lakebase-tdd-experiment CLI's merge/discard drive this for the PO.)
 await deleteExperiment({
   instance: "proj-checkout",
   tddDir: ".tdd",
   featureId: "F1",
-  experimentSlug: "checkout",
+  storyId: "S1-submit",
+  experimentSlug: "s1-submit",
   deleteBranchToo: false,
 });
 ```
@@ -559,24 +562,24 @@ import { cutExperiment, writeOutcomes } from "@databricks-solutions/lakebase-app
 import { beginCycle, markGreen } from "@databricks-solutions/lakebase-app-dev-kit/tdd/run-cycle";
 import { runDetectorsForScope, writeSmellsLog } from "@databricks-solutions/lakebase-app-dev-kit/tdd/smells";
 
-const tdd = ".tdd"; const featureId = "F1";
+const tdd = ".tdd"; const featureId = "F1"; const storyId = "S1-submit";
 
 writeMasterTestList(tdd, { feature_id: featureId, ordered_for: "design-momentum", items: [
   { id: "T1", description: "POST /orders returns 201 on valid cart", ac_id: "AC1", status: "pending" },
   { id: "T2", description: "POST /orders rejects empty cart with 400", ac_id: "AC1", status: "pending" },
 ]});
 
-const analysis = analyzeForGate(tdd, featureId);   // -> { mode: "N=1", N: 1, ... }
+const analysis = analyzeForGate(tdd, featureId, storyId);   // scoped to the story -> { mode: "N=1", N: 1, ... }
 recordPlan(tdd, analysis.proposed_plan, "kevin@example.com");
 writePlan(tdd, analysis.proposed_plan);
 
-const feature = await cutExperiment({
+const exp = await cutExperiment({
   instance: "proj-checkout", tddDir: tdd,
-  featureId, experimentSlug: "checkout", branch: "checkout", parentBranch: "staging",
+  featureId, storyId, experimentSlug: "s1-submit", branch: "exp/F1/S1-submit", parentBranch: "feature/F1",
 });
 
-const scope = { tddDir: tdd, feature_id: featureId, story_id: "S1", ac_id: "AC1",
-                experiment_slug: feature.experiment_slug, branch_id: feature.branch_id };
+const scope = { tddDir: tdd, feature_id: featureId, story_id: storyId, ac_id: "AC1",
+                experiment_slug: exp.experiment_slug, branch_id: exp.branch_id };
 
 const c1 = beginCycle({ ...scope, test_id: "T1",
   test_description: "POST /orders returns 201 on valid cart",
@@ -586,7 +589,7 @@ markGreen(scope, c1.cycle_id, "added POST handler + repository write");
 const hits = runDetectorsForScope(tdd, scope);
 if (hits.length) writeSmellsLog(tdd, hits);
 
-writeOutcomes(tdd, featureId, feature.experiment_slug, { status: "succeeded", tests_passed: 2 });
+writeOutcomes(tdd, featureId, storyId, exp.experiment_slug, { status: "succeeded", tests_passed: 2 });
 ```
 
 ### N≥2 race + promote/synthesize

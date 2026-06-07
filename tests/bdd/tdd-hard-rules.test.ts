@@ -39,9 +39,9 @@ describe("lakebase-tdd-workflows hard rules", () => {
     expect(readme).toMatch(/Race parallel experiments/i);
   });
 
-  it("README.md lexicon makes feature-vs-experiment terminology explicit for N=1", () => {
-    // When N=1 the experiment IS the feature; README.md lexicon must say so.
-    expect(readme).toMatch(/experiment IS the feature/i);
+  it("README.md lexicon makes the experiment story-scoped explicit for N=1 (FEIP-7566)", () => {
+    // Experiments are scoped to a story now: N=1 is the story's one isolated build.
+    expect(readme).toMatch(/the story's one isolated build/i);
   });
 
   it("SKILL.md points readers to README.md for the human-facing overview", () => {
