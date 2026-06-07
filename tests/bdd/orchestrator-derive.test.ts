@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   deriveDriveState,
+  driverPhaseForTdd,
   assertStoryOrderCoversPipeline,
   type StoryArtifactProbe,
   type DriveContext,
@@ -119,6 +120,18 @@ describe("deriveDriveState + nextTransition: realistic on-disk situations", () =
     const p = pipeline({ S1: done, S2: done }, { build_active: null });
     const state = deriveDriveState(p, fakeProbe({}), FEATURE);
     expect(nextTransition(state)).toEqual({ kind: "feature-complete" });
+  });
+});
+
+describe("driverPhaseForTdd", () => {
+  it("maps the TDD workflow phase to the driver's coarse phase", () => {
+    expect(driverPhaseForTdd("planning")).toBe("planning");
+    expect(driverPhaseForTdd("deploy")).toBe("deploy");
+    expect(driverPhaseForTdd("shipped")).toBe("done");
+    // the per-feature streaming phases all collapse to "feature"
+    for (const p of ["discovery", "design", "implementation", "review", "anything"]) {
+      expect(driverPhaseForTdd(p)).toBe("feature");
+    }
   });
 });
 

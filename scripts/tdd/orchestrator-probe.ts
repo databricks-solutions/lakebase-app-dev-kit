@@ -1,0 +1,100 @@
+// The real StoryArtifactProbe (deterministic-driver phase 3b): read the
+// per-story design + build facts that live as on-disk artifacts, not in
+// pipeline.json, so deriveDriveState can build an accurate DriveState.
+//
+// Aligned to the substrate's OWN readers/writers so it is self-consistent with
+// what the driver's role effects produce:
+//   - ACs:        stories/<S>/story.json `acs` (id list, or acs/<AC>.json files)
+//   - layers:     stories/<S>/acs/<AC>.json `layer` (via run-cycle's readAcLayer)
+//   - test list:  stories/<S>/test-list.json
+//   - RED/GREEN:  cycles/<feature>/<S>/<AC>/cycle-NNN.json `red_at`/`green_at`
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
+import type { StoryArtifactProbe } from "./orchestrator-derive.js";
+
+function storyDir(tddDir: string, featureId: string, story: string): string {
+  return path.join(tddDir, "features", featureId, "stories", story);
+}
+
+/** The AC ids a story declares (story.json `acs`: a string-id list, or objects
+ *  with an `id`). Empty when the story file is absent or malformed. */
+function storyAcIds(tddDir: string, featureId: string, story: string): string[] {
+  const file = path.join(storyDir(tddDir, featureId, story), "story.json");
+  if (!fs.existsSync(file)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8")) as { acs?: unknown };
+    if (!Array.isArray(data.acs)) return [];
+    return data.acs
+      .map((a) => (typeof a === "string" ? a : (a as { id?: string })?.id))
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** Every recorded cycle artifact for a story, across all of its ACs. */
+function storyCycles(tddDir: string, featureId: string, story: string): CycleArtifact[] {
+  const base = path.join(tddDir, "cycles", featureId, story);
+  if (!fs.existsSync(base)) return [];
+  const out: CycleArtifact[] = [];
+  for (const acDir of fs.readdirSync(base)) {
+    const dir = path.join(base, acDir);
+    let isDir = false;
+    try {
+      isDir = fs.statSync(dir).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (!isDir) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8")) as CycleArtifact);
+      } catch {
+        /* skip a malformed cycle */
+      }
+    }
+  }
+  return out;
+}
+
+/** Construct a probe bound to a project's .tdd dir + feature. */
+export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtifactProbe {
+  return {
+    hasAcs(story) {
+      return storyAcIds(tddDir, featureId, story).length > 0;
+    },
+
+    architectAnnotated(story) {
+      const acs = storyAcIds(tddDir, featureId, story);
+      // Annotated only once EVERY AC has a layer (API|E2E|Infra). No ACs yet
+      // means the Architect has nothing to annotate -> not annotated.
+      return acs.length > 0 && acs.every((ac) => readAcLayer(tddDir, featureId, ac) !== undefined);
+    },
+
+    testListReady(story) {
+      const file = path.join(storyDir(tddDir, featureId, story), "test-list.json");
+      if (!fs.existsSync(file)) return false;
+      try {
+        const data = JSON.parse(fs.readFileSync(file, "utf8")) as { tests?: unknown };
+        // Present + at least one test entry. A bare {} is not "ready".
+        return Array.isArray(data.tests) ? data.tests.length > 0 : true;
+      } catch {
+        return false;
+      }
+    },
+
+    testsWritten(story) {
+      return storyCycles(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+    },
+
+    codeWritten(story) {
+      const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+      // Every RED test the Navigator wrote has been turned GREEN by the Driver.
+      return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+    },
+  };
+}

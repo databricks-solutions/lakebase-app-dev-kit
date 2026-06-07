@@ -111,6 +111,28 @@ export function deriveDriveState(
   };
 }
 
+/**
+ * Map the persisted TDD workflow phase (workflow-state.json `phase`) to the
+ * driver's coarse phase. The fine-grained TDD phases (discovery / design /
+ * implementation / review) all belong to the per-feature streaming the lane
+ * sub-machines drive, so they collapse to "feature"; planning and deploy are
+ * their own driver phases; shipped is terminal.
+ */
+export function driverPhaseForTdd(tddPhase: string): DrivePhase {
+  switch (tddPhase) {
+    case "planning":
+      return "planning";
+    case "deploy":
+      return "deploy";
+    case "shipped":
+    case "done":
+      return "done";
+    default:
+      // discovery | design | implementation | review | anything else
+      return "feature";
+  }
+}
+
 /** Sanity helper: assert ctx.storyOrder (if given) covers exactly the pipeline's
  *  stories, so the design lane never references a story the snapshot lacks. */
 export function assertStoryOrderCoversPipeline(
