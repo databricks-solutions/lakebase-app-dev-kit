@@ -532,8 +532,19 @@ run_plan_sprint() {
   npx --yes --package="${KIT_NPX}" lakebase-tdd-intake \
     || { err "/plan ${sprint_name}: project-intake precondition failed"; exit 2; }
 
-  # b. The PO authors each sprint item's feature-request.md. Headless, the
-  # Human Proxy supplies it from the recorded spec (validate + place).
+  # b. PROPOSAL FIRST. Run the actual /plan command (parity): the orchestrator
+  # (as scrum-master) has the Spec Author propose the feature breakdown
+  # (feature-proposals.md), then hand to the PO. /plan opens no gates.json gate,
+  # so it is a plain claude -p invocation, not a gate-drain. Feature-requests must
+  # NOT exist before this proposal is written, so the supply (step c) runs AFTER.
+  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' --agent scrum-master"
+  claude -p "/plan --sprint ${sprint_name}" --agent scrum-master
+
+  # c. ONLY AFTER the proposal: the PO authors each sprint item's
+  # feature-request.md. Headless, the Human Proxy puts them out from the recorded
+  # backlog (validate + place), the PO authoring step downstream of the Spec
+  # Author proposal. Sprint membership is the smoke orchestrator's call;
+  # idempotent if /plan already had the Proxy supply them.
   local iter feature_id spec feature_dir
   for iter in "${iters[@]}"; do
     feature_id="$(iteration_feature_id "$iter")"
@@ -541,22 +552,13 @@ run_plan_sprint() {
     if [[ ! -f "$spec" ]]; then err "missing iteration spec: $spec"; exit 2; fi
     feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
     mkdir -p "$feature_dir"
-    log "  ${sprint_name}: human-proxy supplies feature-request for ${feature_id}"
+    log "  ${sprint_name}: human-proxy (PO) authors feature-request for ${feature_id} (after the proposal)"
     proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
       || { err "human-proxy refused feature-request.md for ${feature_id}"; exit 2; }
     # Confirm the per-feature precondition now passes (request present + conformant).
     npx --yes --package="${KIT_NPX}" lakebase-tdd-intake --feature "$feature_id" \
       || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
   done
-
-  # b2. Exercise the actual /plan command (parity with a real run): the
-  # orchestrator runs /plan, which delegates to the product-owner + spec-author
-  # role agents and, headless, has the Human Proxy supply the sprint's
-  # feature-requests from the recorded backlog (idempotent over the files staged
-  # above; sprint membership is the smoke orchestrator's call). /plan opens no
-  # gates.json gate, so it is a plain claude -p invocation, not a gate-drain.
-  log "  ${sprint_name}: claude -p '/plan --sprint ${sprint_name}' --agent scrum-master"
-  claude -p "/plan --sprint ${sprint_name}" --agent scrum-master
 
   # c. Commit the sprint backlog to trunk so each feature branch inherits its
   # request. Idempotent on resume: nothing to commit when already present.
