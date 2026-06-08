@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { beginNextPendingCycle, greenOpenCycle } from "../../scripts/tdd/cycle-record.js";
+import { beginNextPendingCycle, greenOpenCycle, storyTestProgress } from "../../scripts/tdd/cycle-record.js";
 
 let tdd: string;
 const F = "F1";
@@ -96,5 +96,19 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
 
   it("greenOpenCycle throws when there is no open RED cycle (driver dispatched with nothing to green)", () => {
     expect(() => greenOpenCycle({ tddDir: tdd, featureId: F, story: S })).toThrow(/no open RED cycle/);
+  });
+
+  it("storyTestProgress: after only T1 is green, the loop must CONTINUE (T2 pending, not allGreen)", () => {
+    // The exact regression that stalled the live smoke: the build advanced to
+    // await-acceptance after one test because "all RED cycles are green" was
+    // true. With test-list-driven progress, T2 is still pending and allGreen is
+    // false, so the Navigator is dispatched for T2 instead of awaiting acceptance.
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); // RED T1
+    greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // GREEN T1
+    const p = storyTestProgress(tdd, F, S);
+    expect(p.total).toBe(2);
+    expect(p.openRed.length).toBe(0);
+    expect(p.allGreen).toBe(false); // NOT done , T2 unbuilt
+    expect(p.pending.map((i) => i.id)).toEqual(["T2"]);
   });
 });

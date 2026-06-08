@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
+import { storyTestProgress } from "./cycle-record.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
@@ -133,14 +134,31 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
       }
     },
 
+    // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test
+    // at a time (write RED -> make GREEN) until EVERY test-list item is green.
+    // `testsWritten` = "the Navigator has nothing to write right now" (a RED
+    // already awaits the Driver, OR all tests are green); `codeWritten` = "every
+    // test-list item has a GREEN cycle". With nextBuildAction's order
+    // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
+    // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
+    // it the loop advanced after a single test and stalled at await-acceptance
+    // with the rest of the list unbuilt (the live FEIP-7422 stall).
     testsWritten(story) {
-      return storyCycles(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        // Legacy / pre-test-list fallback: any RED counts as "tests written".
+        return storyCycles(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      }
+      return p.openRed.length > 0 || p.allGreen;
     },
 
     codeWritten(story) {
-      const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
-      // Every RED test the Navigator wrote has been turned GREEN by the Driver.
-      return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+        return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      }
+      return p.allGreen;
     },
 
     storyDeployVerified(story) {

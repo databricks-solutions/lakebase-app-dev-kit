@@ -7215,10 +7215,59 @@ function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
 
-// scripts/tdd/gates.ts
+// scripts/tdd/cycle-record.ts
 init_cjs_shims();
 var import_fs3 = require("fs");
 var import_path3 = require("path");
+function readStoryItems(tddDir, featureId, story) {
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!(0, import_fs3.existsSync)(file)) {
+    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
+  }
+  const data = JSON.parse((0, import_fs3.readFileSync)(file, "utf8"));
+  return Array.isArray(data.items) ? data.items : [];
+}
+function storyCycles(tddDir, featureId, story) {
+  const base = (0, import_path3.join)(cyclesRootDir(tddDir), featureId, story);
+  if (!(0, import_fs3.existsSync)(base)) return [];
+  const out = [];
+  for (const acDir of (0, import_fs3.readdirSync)(base)) {
+    const dir = (0, import_path3.join)(base, acDir);
+    try {
+      if (!(0, import_fs3.statSync)(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const f of (0, import_fs3.readdirSync)(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse((0, import_fs3.readFileSync)((0, import_path3.join)(dir, f), "utf8")));
+      } catch {
+      }
+    }
+  }
+  return out;
+}
+function storyTestProgress(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const cycles = storyCycles(tddDir, featureId, story);
+  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const pending = items.filter((i) => !cycledTestIds.has(i.id));
+  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
+  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
+  return { total: items.length, pending, openRed, allGreen };
+}
+
+// scripts/tdd/gates.ts
+init_cjs_shims();
+var import_fs4 = require("fs");
+var import_path4 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7237,10 +7286,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs3.existsSync)(file)) {
+  if (!(0, import_fs4.existsSync)(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs3.readFileSync)(file, "utf8");
+  const raw = (0, import_fs4.readFileSync)(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7251,7 +7300,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path3.join)(requireFeatureDir(tddDir, featureId), "gates.json");
+  return (0, import_path4.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7337,7 +7386,7 @@ function storyDeployVerified(tddDir, featureId, storyId) {
 }
 
 // scripts/tdd/orchestrator-probe.ts
-function storyCycles(tddDir, featureId, story) {
+function storyCycles2(tddDir, featureId, story) {
   const base = path3.join(cyclesRootDir(tddDir), featureId, story);
   if (!fs5.existsSync(base)) return [];
   const out = [];
@@ -7408,12 +7457,29 @@ function diskArtifactProbe(tddDir, featureId) {
         return false;
       }
     },
+    // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test
+    // at a time (write RED -> make GREEN) until EVERY test-list item is green.
+    // `testsWritten` = "the Navigator has nothing to write right now" (a RED
+    // already awaits the Driver, OR all tests are green); `codeWritten` = "every
+    // test-list item has a GREEN cycle". With nextBuildAction's order
+    // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
+    // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
+    // it the loop advanced after a single test and stalled at await-acceptance
+    // with the rest of the list unbuilt (the live FEIP-7422 stall).
     testsWritten(story) {
-      return storyCycles(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        return storyCycles2(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      }
+      return p.openRed.length > 0 || p.allGreen;
     },
     codeWritten(story) {
-      const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
-      return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        const reds = storyCycles2(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+        return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      }
+      return p.allGreen;
     },
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
@@ -7423,7 +7489,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
+var import_fs5 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7432,8 +7498,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs4.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs4.readFileSync)(p, "utf8"));
+  if (!(0, import_fs5.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs5.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7747,8 +7813,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path4 = require("path");
+var import_fs6 = require("fs");
+var import_path5 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -7760,11 +7826,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path4.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path5.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path4.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs5.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs5.readFileSync)(p, "utf8"));
+  const p = (0, import_path5.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs6.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs6.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;

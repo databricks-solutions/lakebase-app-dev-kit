@@ -6648,17 +6648,19 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/cycle.cli.ts
 init_esm_shims();
-import { join as join8 } from "path";
+import { join as join9 } from "path";
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync8, readFileSync as readFileSync9 } from "fs";
+import { existsSync as existsSync8, readFileSync as readFileSync9, readdirSync as readdirSync4, statSync as statSync4 } from "fs";
+import { join as join8 } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
 import * as fs from "fs";
 import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
+var cyclesRootDir = (tdd) => join(tdd, "cycles");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
@@ -6964,11 +6966,6 @@ function readCycleArtifact(scope, cycleId) {
   if (!existsSync7(file)) return null;
   return JSON.parse(readFileSync8(file, "utf8"));
 }
-function listCycles(scope) {
-  const dir = cyclesDir(scope);
-  if (!existsSync7(dir)) return [];
-  return readdirSync3(dir).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(readFileSync8(join7(dir, f), "utf8")));
-}
 function beginCycle(args) {
   const cycle_id = nextCycleId(args);
   const layer = args.layer ?? readAcLayer2(args.tddDir, args.feature_id, args.ac_id);
@@ -7061,19 +7058,45 @@ function storyExperiment(tddDir, featureId, story) {
   const e = exps[0];
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
-function storyCycles(tddDir, featureId, story, acIds) {
+function storyCycles(tddDir, featureId, story) {
+  const base = join8(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync8(base)) return [];
   const out = [];
-  for (const ac of new Set(acIds)) {
-    out.push(...listCycles({ tddDir, feature_id: featureId, story_id: story, ac_id: ac }));
+  for (const acDir of readdirSync4(base)) {
+    const dir = join8(base, acDir);
+    try {
+      if (!statSync4(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const f of readdirSync4(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync9(join8(dir, f), "utf8")));
+      } catch {
+      }
+    }
   }
   return out;
 }
+function storyTestProgress(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const cycles = storyCycles(tddDir, featureId, story);
+  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const pending = items.filter((i) => !cycledTestIds.has(i.id));
+  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
+  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
+  return { total: items.length, pending, openRed, allGreen };
+}
 function beginNextPendingCycle(args) {
   const { tddDir, featureId, story } = args;
-  const items = readStoryItems(tddDir, featureId, story);
-  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
-  const cycled = new Set(cycles.map((c) => c.test_id));
-  const pending = items.find((i) => !cycled.has(i.id));
+  const pending = storyTestProgress(tddDir, featureId, story).pending[0];
   if (!pending) return { recorded: false };
   const exp = storyExperiment(tddDir, featureId, story);
   const art = beginCycle({
@@ -7090,9 +7113,7 @@ function beginNextPendingCycle(args) {
 }
 function greenOpenCycle(args) {
   const { tddDir, featureId, story } = args;
-  const items = readStoryItems(tddDir, featureId, story);
-  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
-  const open = cycles.filter((c) => c.red_at && !c.green_at).sort((a, b) => a.red_at < b.red_at ? 1 : -1)[0];
+  const open = storyTestProgress(tddDir, featureId, story).openRed.sort((a, b) => a.red_at < b.red_at ? 1 : -1)[0];
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
   }
@@ -7140,7 +7161,7 @@ Usage: lakebase-tdd-cycle <begin|green> --feature <F> --story <S> [--tdd-dir <D>
 function main() {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? join8(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? join9(process.cwd(), ".tdd");
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {

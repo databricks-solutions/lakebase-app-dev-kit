@@ -7220,10 +7220,59 @@ function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
 
+// scripts/tdd/cycle-record.ts
+init_esm_shims();
+import { existsSync as existsSync6, readFileSync as readFileSync7, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { join as join6 } from "path";
+function readStoryItems(tddDir, featureId, story) {
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!existsSync6(file)) {
+    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
+  }
+  const data = JSON.parse(readFileSync7(file, "utf8"));
+  return Array.isArray(data.items) ? data.items : [];
+}
+function storyCycles(tddDir, featureId, story) {
+  const base = join6(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync6(base)) return [];
+  const out = [];
+  for (const acDir of readdirSync2(base)) {
+    const dir = join6(base, acDir);
+    try {
+      if (!statSync2(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const f of readdirSync2(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync7(join6(dir, f), "utf8")));
+      } catch {
+      }
+    }
+  }
+  return out;
+}
+function storyTestProgress(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const cycles = storyCycles(tddDir, featureId, story);
+  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const pending = items.filter((i) => !cycledTestIds.has(i.id));
+  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
+  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
+  return { total: items.length, pending, openRed, allGreen };
+}
+
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync7, renameSync, unlinkSync, writeFileSync as writeFileSync4 } from "fs";
-import { join as join6 } from "path";
+import { existsSync as existsSync7, readFileSync as readFileSync8, renameSync, unlinkSync, writeFileSync as writeFileSync4 } from "fs";
+import { join as join7 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7242,10 +7291,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync6(file)) {
+  if (!existsSync7(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync7(file, "utf8");
+  const raw = readFileSync8(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7256,7 +7305,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return join6(requireFeatureDir(tddDir, featureId), "gates.json");
+  return join7(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7317,8 +7366,8 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync7, mkdirSync as mkdirSync3, readFileSync as readFileSync8, rmSync, writeFileSync as writeFileSync5 } from "fs";
-import { dirname as dirname2, join as join7 } from "path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync3, readFileSync as readFileSync9, rmSync, writeFileSync as writeFileSync5 } from "fs";
+import { dirname as dirname2, join as join8 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7328,9 +7377,9 @@ function deployEvidencePasses(e) {
   return e !== void 0 && e.reachable === true && e.verify?.passed === true;
 }
 function readDeployEvidence(file) {
-  if (!existsSync7(file)) return void 0;
+  if (!existsSync8(file)) return void 0;
   try {
-    return JSON.parse(readFileSync8(file, "utf8"));
+    return JSON.parse(readFileSync9(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -7338,11 +7387,11 @@ function readDeployEvidence(file) {
 function storyDeployVerified(tddDir, featureId, storyId) {
   const fdir = findFeatureDir(tddDir, featureId);
   if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence(join7(fdir, "stories", storyId, "deploy-evidence.json")));
+  return deployEvidencePasses(readDeployEvidence(join8(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
 // scripts/tdd/orchestrator-probe.ts
-function storyCycles(tddDir, featureId, story) {
+function storyCycles2(tddDir, featureId, story) {
   const base = path4.join(cyclesRootDir(tddDir), featureId, story);
   if (!fs5.existsSync(base)) return [];
   const out = [];
@@ -7413,12 +7462,29 @@ function diskArtifactProbe(tddDir, featureId) {
         return false;
       }
     },
+    // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test
+    // at a time (write RED -> make GREEN) until EVERY test-list item is green.
+    // `testsWritten` = "the Navigator has nothing to write right now" (a RED
+    // already awaits the Driver, OR all tests are green); `codeWritten` = "every
+    // test-list item has a GREEN cycle". With nextBuildAction's order
+    // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
+    // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
+    // it the loop advanced after a single test and stalled at await-acceptance
+    // with the rest of the list unbuilt (the live FEIP-7422 stall).
     testsWritten(story) {
-      return storyCycles(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        return storyCycles2(tddDir, featureId, story).some((c) => Boolean(c.red_at));
+      }
+      return p.openRed.length > 0 || p.allGreen;
     },
     codeWritten(story) {
-      const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
-      return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      const p = storyTestProgress(tddDir, featureId, story);
+      if (p.total === 0) {
+        const reds = storyCycles2(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+        return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+      }
+      return p.allGreen;
     },
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
@@ -7428,7 +7494,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync10, writeFileSync as writeFileSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync5, statSync as statSync3 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync6, statSync as statSync4 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7437,8 +7503,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync9(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync10(p, "utf8"));
+  if (!existsSync10(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync11(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7673,7 +7739,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync7 } from "fs";
+import { existsSync as existsSync12, mkdirSync as mkdirSync5, readFileSync as readFileSync13, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync7 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -7696,10 +7762,10 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync11(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync12(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync12(file, "utf8"));
+    parsed = JSON.parse(readFileSync13(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -7752,8 +7818,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6 } from "fs";
-import { dirname as dirname3, join as join9 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6 } from "fs";
+import { dirname as dirname3, join as join10 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -7765,11 +7831,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join9(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join10(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = join9(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync13(p)) return void 0;
-  return JSON.parse(readFileSync13(p, "utf8"));
+  const p = join10(projectDir, AGENT_CONFIG_REL);
+  if (!existsSync14(p)) return void 0;
+  return JSON.parse(readFileSync14(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;

@@ -18,14 +18,14 @@
 // drift , the bug that stalled the live smoke (the Navigator hand-wrote a
 // cycle with `status:"red"` instead of the `red_at` the probe reads).
 
-import { existsSync, readFileSync } from "fs";
-import { storyTestListJson } from "./tdd-paths.js";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
+import { join } from "path";
+import { storyTestListJson, cyclesRootDir } from "./tdd-paths.js";
 import { listExperiments } from "./experiment.js";
 import {
   beginCycle,
   recordRunnerOutcome,
   markGreen,
-  listCycles,
   type CycleArtifact,
   type CycleScope,
 } from "./run-cycle.js";
@@ -53,13 +53,67 @@ function storyExperiment(tddDir: string, featureId: string, story: string): { sl
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
 
-/** Every cycle artifact for the story, across all of its ACs. */
-function storyCycles(tddDir: string, featureId: string, story: string, acIds: string[]): CycleArtifact[] {
+/**
+ * Every cycle artifact for the story, scanned straight off disk
+ * (cycles/<F>/<S>/<AC>/cycle-NNN.json across ALL ACs). Scanning the dir, not
+ * iterating a test-list's ac_ids, means progress is correct even before / apart
+ * from the test-list (and matches the probe's own scan).
+ */
+export function storyCycles(tddDir: string, featureId: string, story: string): CycleArtifact[] {
+  const base = join(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync(base)) return [];
   const out: CycleArtifact[] = [];
-  for (const ac of new Set(acIds)) {
-    out.push(...listCycles({ tddDir, feature_id: featureId, story_id: story, ac_id: ac }));
+  for (const acDir of readdirSync(base)) {
+    const dir = join(base, acDir);
+    try {
+      if (!statSync(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const f of readdirSync(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync(join(dir, f), "utf8")) as CycleArtifact);
+      } catch {
+        /* skip a malformed cycle */
+      }
+    }
   }
   return out;
+}
+
+export interface StoryTestProgress {
+  /** Test-list item count (0 if no per-story list yet). */
+  total: number;
+  /** Test-list items with NO cycle yet (the Navigator's queue). */
+  pending: StoryTestItem[];
+  /** Cycles that are RED (red_at) but not yet GREEN (green_at) , the Driver's queue. */
+  openRed: CycleArtifact[];
+  /** Every test-list item has a GREEN cycle (and there is at least one item). */
+  allGreen: boolean;
+}
+
+/**
+ * The story's build progress against its test-list: what the Navigator still
+ * owes (pending), what the Driver still owes (openRed), and whether the whole
+ * list is green. The SINGLE source the build loop reads, so the orchestration's
+ * "navigator vs driver vs done" decision and the cycle CLI's "which test next"
+ * can never drift. Tolerant of a missing test-list (returns total:0).
+ */
+export function storyTestProgress(tddDir: string, featureId: string, story: string): StoryTestProgress {
+  let items: StoryTestItem[] = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const cycles = storyCycles(tddDir, featureId, story);
+  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const pending = items.filter((i) => !cycledTestIds.has(i.id));
+  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
+  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
+  return { total: items.length, pending, openRed, allGreen };
 }
 
 export interface CycleRecordArgs {
@@ -83,10 +137,7 @@ export interface BeginResult {
  */
 export function beginNextPendingCycle(args: CycleRecordArgs): BeginResult {
   const { tddDir, featureId, story } = args;
-  const items = readStoryItems(tddDir, featureId, story);
-  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
-  const cycled = new Set(cycles.map((c) => c.test_id));
-  const pending = items.find((i) => !cycled.has(i.id));
+  const pending = storyTestProgress(tddDir, featureId, story).pending[0];
   if (!pending) return { recorded: false };
 
   const exp = storyExperiment(tddDir, featureId, story);
@@ -119,10 +170,7 @@ export interface GreenResult {
  */
 export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string }): GreenResult {
   const { tddDir, featureId, story } = args;
-  const items = readStoryItems(tddDir, featureId, story);
-  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
-  const open = cycles
-    .filter((c) => c.red_at && !c.green_at)
+  const open = storyTestProgress(tddDir, featureId, story).openRed
     .sort((a, b) => (a.red_at! < b.red_at! ? 1 : -1))[0];
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
