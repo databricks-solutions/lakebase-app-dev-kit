@@ -69,6 +69,35 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect(onBreakdown).toMatch(/E2E/);
   });
 
+  it("scopes the spec-author per-story draft to ONE story (directive + inlined stub)", () => {
+    // Level-1 input scoping (FEIP-7461): the draft invocation is handed only the
+    // target story's stub + a single-story directive, so the agent can't batch
+    // every story's ACs (which would delay the first story's gate + build).
+    const tmp = mkdtempSync(join(tmpdir(), "effects-specauthor-"));
+    const tddDir = join(tmp, ".tdd");
+    mkdirSync(join(tddDir, "features", "F1", "stories", "S1"), { recursive: true });
+    writeFileSync(
+      join(tddDir, "features", "F1", "stories", "S1", "story.json"),
+      JSON.stringify({ id: "S1", asA: "team member", iWantTo: "file a bug", soThat: "it is tracked" }),
+    );
+    const task = (commandsForAction({ kind: "invoke-role", role: "spec-author", story: "S1" }, cfg({ tddDir }))[0] as { task: string }).task;
+    expect(task).toMatch(/story S1 and NOTHING else/);
+    expect(task).toMatch(/Do not create, draft, or modify acceptance criteria for any other story/);
+    expect(task).toMatch(/once per story/);
+    // The target story's stub is inlined so the prompt is self-contained.
+    expect(task).toMatch(/As a team member/);
+    expect(task).toMatch(/I want to file a bug/);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("spec-author draft falls back to the directive alone when the story stub is unreadable", () => {
+    // No story.json on disk (cfg's tddDir does not exist): still one-story-scoped,
+    // just without the inlined stub sentence.
+    const task = (commandsForAction({ kind: "invoke-role", role: "spec-author", story: "S2" }, cfg())[0] as { task: string }).task;
+    expect(task).toMatch(/story S2 and NOTHING else/);
+    expect(task).not.toMatch(/The story:/);
+  });
+
   it("author-requests supplies the PO's requests via the Human Proxy + sync-backlog (no LLM spawned)", () => {
     // author-requests is a human-input step: the state machine asks, and headless
     // the Human Proxy supplies the recorded feature-requests (logging each), then

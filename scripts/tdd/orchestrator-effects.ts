@@ -16,11 +16,13 @@
 // create + head-collapse + per-story experiment effects all surface here, in
 // code, plus deterministic per-action logging via the loop's onAction hook.
 
+import * as fs from "node:fs";
 import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
 import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
+import { storyJson } from "./tdd-paths.js";
 
 export type DriveCommand =
   // resumeKey: when set, the runner resumes this role's Claude session across
@@ -67,11 +69,36 @@ export interface DriveEffectsConfig {
 const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
 
+/**
+ * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
+ * the Spec Author's per-story draft prompt to exactly that story (FEIP-7461: an
+ * agent can only batch stories it is handed; we hand it just this one). Returns
+ * "" when the stub is absent/unreadable, the directive alone still scopes it.
+ */
+function storyStubScope(tddDir: string, featureId: string, storyId: string): string {
+  try {
+    const stub = JSON.parse(fs.readFileSync(storyJson(tddDir, featureId, storyId), "utf8")) as {
+      asA?: string;
+      iWantTo?: string;
+      soThat?: string;
+    };
+    const parts = [
+      stub.asA ? `As a ${stub.asA}` : "",
+      stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
+      stub.soThat ? `so that ${stub.soThat}` : "",
+    ].filter(Boolean);
+    return parts.length ? ` The story: ${parts.join(", ")}.` : "";
+  } catch {
+    return "";
+  }
+}
+
 /** Short task directive handed to a role subagent for an invoke-role action. */
 function roleTask(
   action: Extract<WorkflowAction, { kind: "invoke-role" }>,
   featureId: string,
   uiTrack: boolean,
+  tddDir: string,
 ): string {
   if ("mode" in action) {
     switch (action.mode) {
@@ -90,7 +117,18 @@ function roleTask(
   const s = action.story;
   switch (action.role) {
     case "spec-author":
-      return `Draft the acceptance criteria for story ${s}.`;
+      // Scope the draft to ONE story, by handing it only this story's stub +
+      // an explicit single-story directive. The design lane streams one story
+      // at a time so the first story reaches its gate + build fast (the build
+      // lane starts on it without waiting for the rest to be authored); drafting
+      // siblings here delays that and is rejected at the per-story spec gate.
+      return (
+        `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)}` +
+        ` Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any` +
+        ` other story in this feature, each other story is drafted in its own separate step that you are not` +
+        ` performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here` +
+        ` delays ${s} reaching its spec gate and build, and is rejected at the gate.`
+      );
     case "architect-reviewer":
       return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
     case "test-strategist":
@@ -111,8 +149,10 @@ const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
 
 /**
- * The concrete commands that carry out one action. Pure: depends only on the
- * action + config. Returns [] for the terminal `done` (after a final set-phase).
+ * The concrete commands that carry out one action. Depends on the action +
+ * config (and, for the Spec Author's per-story draft, reads that story's stub
+ * from disk to scope the prompt; absent stub falls back to the directive alone).
+ * Returns [] for the terminal `done` (after a final set-phase).
  * State transitions that no CLI owns (the coarse planning/feature/deploy phase)
  * are "set-phase" commands the runner applies to workflow-state.json.
  */
@@ -141,7 +181,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false),
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir),
       };
       const cmds: DriveCommand[] = [claude];
       // After the Spec Author breaks the feature down, seed the pipeline from
