@@ -207,6 +207,16 @@ export interface DeployArgs {
   runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
+  /**
+   * Refuse to deploy when the target port is ALREADY serving before we start
+   * (a foreign or stale process). A gate deploy must run + verify OUR app; if
+   * something else holds the port, `make run` cannot bind and the reachability
+   * probe would falsely pass against the foreign app, recording bogus evidence.
+   * With this set, that case fails honestly (reachable=false, verify failed) and
+   * raises an escalation, instead of false-positiving. Off by default so the
+   * per-cycle reuse path (ensureDeployedAndVerify) is unaffected.
+   */
+  rejectForeignPort?: boolean;
 }
 
 /**
@@ -226,6 +236,37 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
   const start = args.startProcess ?? defaultStart;
   const reachable = args.reachable ?? probeReachable;
   const url = cfg.baseUrl + cfg.healthPath;
+
+  // Foreign-port guard (gate deploys): if something is ALREADY serving the port
+  // before we deploy, our app cannot bind there and verifying against the
+  // squatter would record bogus evidence. Fail honestly + escalate.
+  if (args.rejectForeignPort && (await reachable(url))) {
+    const reason = `target port already serving a process at ${url} before deploy; refusing to verify against a foreign/stale app. Stop it first (lakebase-tdd-deploy --target ${args.targetName} --stop, or free the port).`;
+    const verify: VerifyResult = { passed: false, summary: reason };
+    let evidencePath: string | undefined;
+    if (args.featureId) {
+      const tddDir = args.tddDir ?? join(args.projectDir, ".tdd");
+      const at = (args.now ?? (() => new Date()))().toISOString();
+      evidencePath = writeDeployEvidence(tddDir, {
+        schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
+        feature_id: args.featureId,
+        ...(args.storyId ? { story_id: args.storyId } : {}),
+        target: args.targetName,
+        url,
+        reachable: false,
+        verify,
+        ...(args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {}),
+        deployed_at: at,
+      });
+      writeEscalation(tddDir, {
+        source: "deploy-verify",
+        reason: `deploy of ${args.featureId}${args.storyId ? `/${args.storyId}` : ""} blocked: ${reason}`,
+        feature_id: args.featureId,
+        ...(args.storyId ? { story_id: args.storyId } : {}),
+      });
+    }
+    return { ok: false, reason, verify, evidencePath };
+  }
 
   // Per-story deploy (FEIP-7566): bind the run command to the experiment
   // branch's Lakebase DB so the PO reviews the story on its own branch. Unset

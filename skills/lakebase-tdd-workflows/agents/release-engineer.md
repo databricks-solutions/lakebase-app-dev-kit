@@ -45,6 +45,8 @@ You do not reinvent deploy or release. You **compose** on the substrate: `lakeba
 
 ## Method
 
+> **The local deploy is run by the orchestration, not by you.** At `await-acceptance` and `/deploy` the deterministic driver runs `lakebase-tdd-deploy --gate` itself (deploy + poll-reachable + verify + write the deploy-evidence the gate reads), exactly as it records the GREEN runner outcome , so a deploy that does not prove working software becomes honest evidence + a raise-to-hil halt, never a prose claim. Do NOT "report a deploy" you did not run: the substrate, not your summary, is what the gate reads. You are invoked for **remote-target composition** (release-on-merge via `@lakebase-release-workflows`), where the judgment is yours; the steps below describe what the substrate does for local and what you compose for remote.
+
 ### Local target (the only one implemented today)
 1. **Precondition**: confirm the feature is built (`test-list.json` cycles green). Else stop and point back to `/build <feature-id>`.
 2. **Deploy**: `lakebase-tdd-deploy --target <name> --project-dir "$PWD"` , starts the app (the target's `run`) and polls `base_url` + `health_path` until it answers (exit 6 if it never does). A non-reachable app is NOT working software.

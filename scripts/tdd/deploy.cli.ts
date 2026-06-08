@@ -20,6 +20,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
   let featureId: string | undefined;
   let storyId: string | undefined;
   let tddDir: string | undefined;
+  let gate = false;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--target": target = argv[++i]; break;
@@ -28,6 +29,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
       case "--feature": featureId = argv[++i]; break;
       case "--story": storyId = argv[++i]; break;
       case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--gate": gate = true; break;
       case "--stop": stop = true; break;
       case "--json": json = true; break;
       case "-h":
@@ -53,7 +55,17 @@ export async function runDeployCli(argv: string[]): Promise<number> {
     return 0;
   }
 
-  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch, featureId, storyId, tddDir });
+  const result = await deployToTarget({
+    projectDir,
+    targetName: target,
+    lakebaseBranch,
+    featureId,
+    storyId,
+    tddDir,
+    // Gate mode (orchestration-run deploy): reject a foreign occupant of the
+    // port so we never verify against the wrong app, and record honest evidence.
+    rejectForeignPort: gate,
+  });
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } else if (result.ok) {
@@ -61,6 +73,12 @@ export async function runDeployCli(argv: string[]): Promise<number> {
   } else {
     process.stderr.write(`lakebase-tdd-deploy: ${target} deploy failed: ${result.reason}\n`);
   }
+  // Gate deploys are run by the orchestration: a failure is recorded as honest
+  // deploy-evidence + an escalation, and the deterministic driver routes that to
+  // a raise-to-hil halt. Exit 0 so the failure does not crash the drive mid-loop
+  // (the recorded evidence/escalation is the signal, not the exit code). The
+  // interactive /deploy CLI (no --gate) keeps exit 6 on failure.
+  if (gate) return 0;
   return result.ok ? 0 : 6;
 }
 

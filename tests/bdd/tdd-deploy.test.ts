@@ -3,10 +3,11 @@
 // Hermetic: process start, reachability, and clock are all injected.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveDeployTarget, deployToTarget, stopLocal, storyDeployVerified } from "../../scripts/tdd/deploy";
+import { readEscalations } from "../../scripts/tdd/escalation";
 
 const TARGETS = [
   "targets:",
@@ -61,6 +62,54 @@ describe("resolveDeployTarget", () => {
     const empty = mkdtempSync(join(tmpdir(), "deploy-empty-"));
     expect(resolveDeployTarget(empty, "local").kind).toBe("missing");
     rmSync(empty, { recursive: true, force: true });
+  });
+});
+
+describe("deployToTarget: foreign-port guard (gate deploys)", () => {
+  it("refuses + escalates when the port is already serving before deploy (rejectForeignPort)", async () => {
+    const tddDir = join(dir, ".tdd");
+    mkdirSync(join(tddDir, "features", "F1"), { recursive: true });
+    let started = false;
+    const result = await deployToTarget({
+      projectDir: dir,
+      targetName: "localv",
+      featureId: "F1",
+      storyId: "S1",
+      lakebaseBranch: "experiment-s1",
+      tddDir,
+      rejectForeignPort: true,
+      reachable: async () => true, // a foreign/stale app is already on the port
+      startProcess: () => {
+        started = true;
+        return 1;
+      },
+      runVerify: () => true,
+      sleep: async () => {},
+    });
+    expect(result.ok).toBe(false);
+    expect(started).toBe(false); // never started our app onto a busy port
+    expect(result.reason).toMatch(/already serving|foreign|stale/i);
+    // honest evidence: reachable=false, verify failed (we did NOT verify the foreign app).
+    const ev = JSON.parse(
+      readFileSync(join(tddDir, "features", "F1", "stories", "S1", "deploy-evidence.json"), "utf8"),
+    );
+    expect(ev.reachable).toBe(false);
+    expect(ev.verify.passed).toBe(false);
+    // and it raised an escalation for the HIL (deploy-verify source).
+    const escs = readEscalations(tddDir).filter((e) => !e.resolved_at);
+    expect(escs.some((e) => e.source === "deploy-verify" && e.story_id === "S1")).toBe(true);
+  });
+
+  it("does NOT guard when rejectForeignPort is unset (per-cycle reuse path is unaffected)", async () => {
+    const result = await deployToTarget({
+      projectDir: dir,
+      targetName: "local",
+      startProcess: () => 4242,
+      reachable: async () => true, // already reachable, but no guard -> proceeds + ok
+      sleep: async () => {},
+      now: () => new Date(),
+    });
+    expect(result.ok).toBe(true);
   });
 });
 

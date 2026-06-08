@@ -204,17 +204,30 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect((cmds[1] as { args: string[] }).args[0]).toBe("accept");
   });
 
-  it("deploy goes through the release-engineer role (deploy + verify + evidence)", () => {
+  it("deploy is run by the orchestration (deterministic lakebase-tdd-deploy --gate), not the LLM", () => {
     const cmds = commandsForAction({ kind: "deploy" }, cfg());
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "release-engineer" });
-    expect((cmds[0] as { task: string }).task).toMatch(/verify/i);
+    // teardown first (free the port), then the gated feature deploy.
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
+    expect((cmds[0] as { args: string[] }).args).toContain("--stop");
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
+    const g = (cmds[1] as { args: string[] }).args;
+    expect(g).toContain("--gate"); // gate deploy: records evidence + escalates, never an LLM claim
+    expect(g).toContain("--feature");
+    expect(g).not.toContain("--story"); // feature-level deploy (ambient feature branch)
+    // No release-engineer LLM turn in the deploy path.
+    expect(cmds.some((c) => "role" in c && (c as { role?: string }).role === "release-engineer")).toBe(false);
   });
 
-  it("await-acceptance deploys the story for review (release-engineer) then marks awaiting", () => {
+  it("await-acceptance: orchestration deploys the STORY (gated) then marks awaiting , no LLM", () => {
     const cmds = commandsForAction({ kind: "await-acceptance", story: "S1" }, cfg());
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "release-engineer" });
-    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
-    expect((cmds[1] as { args: string[] }).args[0]).toBe("await-acceptance");
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
+    expect((cmds[0] as { args: string[] }).args).toContain("--stop");
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
+    const g = (cmds[1] as { args: string[] }).args;
+    expect(g).toEqual(expect.arrayContaining(["--gate", "--story", "S1", "--lakebase-branch"]));
+    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
+    expect((cmds[2] as { args: string[] }).args[0]).toBe("await-acceptance");
+    expect(cmds.some((c) => "role" in c && (c as { role?: string }).role === "release-engineer")).toBe(false);
   });
 
   it("approve-deploy-gate is the PO gate via the Human Proxy", () => {

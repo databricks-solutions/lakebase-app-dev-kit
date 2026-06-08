@@ -196,6 +196,7 @@ const CYCLE_BIN = "lakebase-tdd-cycle";
 const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
+const DEPLOY_BIN = "lakebase-tdd-deploy";
 
 // A story runs ONE experiment by default (N=1); these derive its slug + branch
 // name. `cut` and `accept` (merge) BOTH compute them from here, so the branch
@@ -216,6 +217,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
   const approver = cfg.approver ?? "human-proxy";
+  const deployTarget = cfg.deployTarget ?? "local";
 
   switch (action.kind) {
     case "invoke-role": {
@@ -331,19 +333,33 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "await-acceptance":
-      // The Release Engineer deploys the story FROM its experiment branch so the
-      // PO reviews RUNNING software, then we mark the pipeline awaiting. The
-      // deploy must write the STORY-scoped deploy-evidence (reachable +
-      // verify.passed) via `lakebase-tdd-deploy --feature ${f} --story
-      // ${action.story}`: that is the teeth the driver requires before the story
-      // can be accepted (a story that does not verify is never merged).
+      // The ORCHESTRATION deploys the story + runs the verify, deterministically,
+      // exactly like honest GREEN records the runner outcome itself. It does NOT
+      // dispatch the Release Engineer LLM to "go deploy": that trusted the model
+      // to run the substrate, and when it narrated success instead of running
+      // `lakebase-tdd-deploy`, no deploy-evidence.json was written, deployVerified
+      // stayed false, and the driver stalled at await-acceptance forever. Now the
+      // driver runs the substrate: `lakebase-tdd-deploy --gate` starts the app on
+      // the story's experiment branch, polls reachable, runs the project verify,
+      // and writes the STORY-scoped deploy-evidence (the teeth before accept). A
+      // stale/foreign app on the port or a failed verify is recorded as honest
+      // evidence + an escalation (--gate soft-fails, exit 0), which the next
+      // readState routes to a raise-to-hil halt , never a false-green or a stall.
+      // (Teardown first so a prior story's app frees the port.)
       return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`,
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: [
+            "--target", deployTarget,
+            "--feature", f,
+            "--story", action.story,
+            "--lakebase-branch", experimentBranchName(action.story),
+            "--project-dir", cfg.projectDir,
+            "--tdd-dir", cfg.tddDir,
+            "--gate",
+          ],
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
       ];
@@ -405,17 +421,20 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       return [{ kind: "set-phase", phase: "deploy" }];
 
     case "deploy":
-      // The Release Engineer ships the merged feature: deploy + poll reachable
-      // + run the feature verify against the running app + produce the deploy-
-      // gate evidence. Invoked as a role (like every other role) so the driver
-      // only routes; the role composes lakebase-tdd-deploy + the verify.
+      // Ship the merged feature, deterministically (same contract as the per-story
+      // gate deploy above): the orchestration runs `lakebase-tdd-deploy --gate`
+      // for the feature (ambient feature-branch DB; no --story/--lakebase-branch),
+      // which polls reachable, runs the feature verify, and writes the FEATURE-
+      // scoped deploy-evidence the deploy gate reads. A failed/foreign deploy is
+      // recorded as evidence + an escalation -> raise-to-hil, not an LLM claiming
+      // success. (For remote targets, `lakebase-tdd-deploy` refuses cleanly until
+      // they land; that refusal surfaces as the escalation.) Teardown first.
       return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`,
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: ["--target", deployTarget, "--feature", f, "--project-dir", cfg.projectDir, "--tdd-dir", cfg.tddDir, "--gate"],
         },
       ];
 
