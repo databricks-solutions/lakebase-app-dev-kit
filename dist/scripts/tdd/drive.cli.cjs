@@ -6645,7 +6645,7 @@ var require_ajv = __commonJS({
 init_cjs_shims();
 var import_node_child_process9 = require("child_process");
 var import_node_crypto = require("crypto");
-var fs7 = __toESM(require("fs"), 1);
+var fs8 = __toESM(require("fs"), 1);
 var path4 = __toESM(require("path"), 1);
 
 // scripts/tdd/orchestrator-run.ts
@@ -6682,7 +6682,7 @@ function nextTransition(state) {
   if (state.phase === "planning") {
     const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
-    if (!p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
+    if (!p.skipSizing && !p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
     if (!p.gateApproved) return { kind: "approve-plan-gate" };
     return { kind: "planning-complete" };
@@ -6815,6 +6815,7 @@ async function runDriver(effects, options = {}) {
 
 // scripts/tdd/orchestrator-effects.ts
 init_cjs_shims();
+var fs6 = __toESM(require("fs"), 1);
 
 // scripts/tdd/orchestrator-derive.ts
 init_cjs_shims();
@@ -7440,7 +7441,20 @@ function readPipeline(tddDir, featureId) {
 // scripts/tdd/orchestrator-effects.ts
 var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-function roleTask(action, featureId, uiTrack) {
+function storyStubScope(tddDir, featureId, storyId) {
+  try {
+    const stub = JSON.parse(fs6.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
+    const parts = [
+      stub.asA ? `As a ${stub.asA}` : "",
+      stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
+      stub.soThat ? `so that ${stub.soThat}` : ""
+    ].filter(Boolean);
+    return parts.length ? ` The story: ${parts.join(", ")}.` : "";
+  } catch {
+    return "";
+  }
+}
+function roleTask(action, featureId, uiTrack, tddDir) {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -7456,7 +7470,7 @@ function roleTask(action, featureId, uiTrack) {
   const s = action.story;
   switch (action.role) {
     case "spec-author":
-      return `Draft the acceptance criteria for story ${s}.`;
+      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
     case "architect-reviewer":
       return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
     case "test-strategist":
@@ -7491,7 +7505,7 @@ function commandsForAction(action, cfg) {
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false)
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir)
       };
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
@@ -7663,9 +7677,9 @@ function readSprintGates(sprint, opts = {}) {
 }
 
 // scripts/tdd/orchestrator-sprint.ts
-var fs6 = __toESM(require("fs"), 1);
-function deriveSprintPlanningState(tddDir, sprint) {
-  const proposed = fs6.existsSync(featureProposalsMd(tddDir));
+var fs7 = __toESM(require("fs"), 1);
+function deriveSprintPlanningState(tddDir, sprint, opts = {}) {
+  const proposed = fs7.existsSync(featureProposalsMd(tddDir));
   const estimated = hasEstimates(tddDir);
   const backlog = readBacklog(tddDir, sprint).features;
   const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
@@ -7677,7 +7691,7 @@ function deriveSprintPlanningState(tddDir, sprint) {
   }
   return {
     phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved },
+    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? true },
     breakdownDone: false,
     storyOrder: [],
     stories: {},
@@ -7847,6 +7861,20 @@ function parseArgs(argv) {
       case "--gates":
         out.gates = argv[++i];
         break;
+      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is OFF by
+      // default. Opt back IN with --sizing when the candidate set is large enough
+      // that the PO needs sizes to commit against capacity. --no-sizing is still
+      // accepted (it is the default) so existing invocations keep working.
+      case "--sizing":
+      case "--planning-poker":
+      case "--t-shirt-sizing":
+        out.sizing = true;
+        break;
+      case "--no-sizing":
+      case "--no-planning-poker":
+      case "--no-t-shirt-sizing":
+        out.noSizing = true;
+        break;
       case "--help":
       case "-h":
         out.help = true;
@@ -7876,21 +7904,26 @@ Flags:
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
+  --sizing             Opt IN to the Architect's t-shirt-sizing (planning-poker)
+                       step (estimate the candidates before the PO commits).
+                       Sizing is OFF by default; planning goes propose ->
+                       author-requests. Aliases: --planning-poker, --t-shirt-sizing.
+                       (--no-sizing is accepted too, it is the default.)
 `;
 }
 function writeWorkflowPhase(tddDir, phase) {
   const file = path4.join(tddDir, "workflow-state.json");
   let state = {};
-  if (fs7.existsSync(file)) {
+  if (fs8.existsSync(file)) {
     try {
-      state = JSON.parse(fs7.readFileSync(file, "utf8"));
+      state = JSON.parse(fs8.readFileSync(file, "utf8"));
     } catch {
       state = {};
     }
   }
   state.phase = phase;
-  fs7.mkdirSync(tddDir, { recursive: true });
-  fs7.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+  fs8.mkdirSync(tddDir, { recursive: true });
+  fs8.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve2, reject) => {
@@ -7904,7 +7937,7 @@ var kitBinMap = null;
 function resolveKitBinJs(bin) {
   if (kitBinMap === null) {
     try {
-      const pkg = JSON.parse(fs7.readFileSync(path4.join(KIT_ROOT, "package.json"), "utf8"));
+      const pkg = JSON.parse(fs8.readFileSync(path4.join(KIT_ROOT, "package.json"), "utf8"));
       kitBinMap = pkg.bin ?? {};
     } catch {
       kitBinMap = {};
@@ -8006,7 +8039,9 @@ async function runSprintMode(args) {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
       const planning = {
-        readState: async () => deriveSprintPlanningState(tddDir, sprint),
+        // Sizing is off by default; --sizing opts back in. (--no-sizing is the
+        // default and remains accepted.)
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: !args.sizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },
