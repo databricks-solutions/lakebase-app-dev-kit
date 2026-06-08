@@ -162,10 +162,18 @@ export interface CreateConventionPairedBranchArgs extends CreateConventionBranch
 }
 
 /**
- * Cut a feature-tier paired branch (Lakebase + git + .env sync) with the
- * 30-day convention TTL. Forks from `staging` by default. Atomic via
- * createPairedBranch: if the Lakebase side fails, no git branch is left
- * dangling.
+ * Cut a feature-tier paired branch (Lakebase + git + .env sync). Forks from
+ * `staging` by default. Atomic via createPairedBranch: if the Lakebase side
+ * fails, no git branch is left dangling.
+ *
+ * Feature branches are created NON-EXPIRING (noExpiry, no TTL). A feature branch
+ * is the PARENT of the per-story experiment branches (FEIP-7566), and Lakebase
+ * forbids an expiring branch from having child branches ("Branches with an
+ * expiration date cannot have child branches", surfaced by the live FEIP-7422
+ * smoke). Feature branches are reaped by the SCM workflow (abandon / merge /
+ * doctor -> deleteBranch), not by TTL; deleting a no-expiry branch through the
+ * substrate is confirmed. An explicit `ttl` still wins (mutually exclusive with
+ * noExpiry) for a finite-lifetime feature branch with no experiments.
  */
 export async function createFeaturePairedBranch(
   args: CreateConventionPairedBranchArgs,
@@ -174,7 +182,7 @@ export async function createFeaturePairedBranch(
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
+    ...(args.ttl ? { ttl: args.ttl } : { noExpiry: true }),
     cwd: args.cwd,
     createGitBranch: args.createGitBranch,
     syncEnv: args.syncEnv,
