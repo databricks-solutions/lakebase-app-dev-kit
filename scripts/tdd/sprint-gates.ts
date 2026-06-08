@@ -12,11 +12,15 @@
 // same teeth pattern, no blast radius on the per-feature gate substrate.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 import type { GateRecord } from "./gates.js";
 import { hashArtifact } from "./gate-hash.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
+import { sprintDir, sprintGatesJson, featureProposalsMd } from "./tdd-paths.js";
+
+// sprintDir lives in tdd-paths now (single source of truth); re-exported for
+// the existing public API.
+export { sprintDir } from "./tdd-paths.js";
 
 export const SPRINT_GATES_SCHEMA_VERSION = 1;
 
@@ -42,26 +46,8 @@ export function defaultSprintGatesState(sprint: string): SprintGatesState {
   };
 }
 
-export function sprintDir(tddDir: string, sprint: string): string {
-  return join(tddDir, "sprints", sprint);
-}
-
-/**
- * Where the Spec Author's sprint proposal (feature-proposals.md) lives. Disk is
- * the truth: prefer the sprint-scoped path (the design intent), but fall back to
- * the role's documented `.tdd/planning/feature-proposals.md` when that is where
- * it actually wrote (relying on the sprint-scoped path alone left planning
- * unable to see a proposal that existed, stalling the driver on `propose`).
- */
-export function sprintProposalPath(tddDir: string, sprint: string): string {
-  const scoped = join(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
-  if (existsSync(scoped)) return scoped;
-  const planning = join(tddDir, "planning", PLAN_GATE_ARTIFACT);
-  return existsSync(planning) ? planning : scoped;
-}
-
 function sprintGatesFile(tddDir: string, sprint: string): string {
-  return join(sprintDir(tddDir, sprint), "gates.json");
+  return sprintGatesJson(tddDir, sprint);
 }
 
 /**
@@ -90,9 +76,8 @@ export function readSprintGates(sprint: string, opts: SprintGatesIoOpts = {}): S
 /** Write a sprint's gate state, atomic via temp-file + rename. */
 export function writeSprintGates(state: SprintGatesState, opts: SprintGatesIoOpts = {}): void {
   const tddDir = opts.tddDir ?? "./.tdd";
-  const dir = sprintDir(tddDir, state.sprint);
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, "gates.json");
+  mkdirSync(sprintDir(tddDir, state.sprint), { recursive: true });
+  const file = sprintGatesJson(tddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
   writeFileSync(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
@@ -131,7 +116,7 @@ export function approveSprintPlanGate(args: ApproveSprintPlanArgs): ApproveSprin
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
 
   const tddDir = args.tddDir ?? "./.tdd";
-  const file = sprintProposalPath(tddDir, args.sprint);
+  const file = featureProposalsMd(tddDir);
   if (!existsSync(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }

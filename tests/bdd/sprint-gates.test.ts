@@ -25,9 +25,10 @@ beforeEach(() => {
 afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
 function writeProposal(content = PROPOSAL): void {
-  const dir = sprintDir(tdd, SPRINT);
+  // The proposal's ONE canonical location (project-level planning/), per tdd-paths.
+  const dir = join(tdd, "planning");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, PLAN_GATE_ARTIFACT), content);
+  writeFileSync(join(dir, "feature-proposals.md"), content);
 }
 
 describe("readSprintGates", () => {

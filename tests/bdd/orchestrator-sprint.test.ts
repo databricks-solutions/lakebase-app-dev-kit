@@ -37,8 +37,10 @@ describe("deriveSprintPlanningState", () => {
     return join(tdd, "sprints", SPRINT);
   }
   function writeProposal(): void {
-    mkdirSync(sprintDir(), { recursive: true });
-    writeFileSync(join(sprintDir(), "feature-proposals.md"), "# Backlog\n\n## Features\n- F1\n");
+    // Canonical proposal location (project-level planning/), per tdd-paths.
+    const dir = join(tdd, "planning");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "feature-proposals.md"), "# Backlog\n\n## Features\n- F1\n");
   }
   function writeRequest(feature: string): void {
     const fdir = join(tdd, "features", feature);

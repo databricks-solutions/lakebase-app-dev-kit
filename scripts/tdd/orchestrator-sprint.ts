@@ -12,54 +12,23 @@
 // in the lakebase-tdd-drive CLI. The sprint-level reads (backlog manifest,
 // planning state) are the I/O helpers below, used to build those effects.
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-
 import type { DriveState, WorkflowAction } from "./orchestrator-drive.js";
-import { readSprintGates, sprintDir, sprintProposalPath } from "./sprint-gates.js";
+import { readSprintGates } from "./sprint-gates.js";
+import {
+  featureProposalsMd,
+  hasFeatureRequest,
+  readBacklog,
+  type SprintBacklog,
+} from "./tdd-paths.js";
+import * as fs from "node:fs";
 
-// --- Sprint backlog manifest -------------------------------------------------
-
-export interface SprintBacklog {
-  sprint: string;
-  /** Feature ids in the sprint, in execution order. */
-  features: string[];
-}
-
-function backlogFile(tddDir: string, sprint: string): string {
-  return path.join(sprintDir(tddDir, sprint), "backlog.json");
-}
-
-/** Read the sprint backlog (feature ids). Returns an empty backlog when none
- *  exists yet. */
-export function readSprintBacklog(tddDir: string, sprint: string): SprintBacklog {
-  const file = backlogFile(tddDir, sprint);
-  if (!fs.existsSync(file)) return { sprint, features: [] };
-  try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8")) as { features?: unknown };
-    const features = Array.isArray(data.features)
-      ? data.features.filter((f): f is string => typeof f === "string" && f.length > 0)
-      : [];
-    return { sprint, features };
-  } catch {
-    return { sprint, features: [] };
-  }
-}
-
-/** Write the sprint backlog manifest. */
-export function writeSprintBacklog(tddDir: string, backlog: SprintBacklog): void {
-  const dir = sprintDir(tddDir, backlog.sprint);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(backlogFile(tddDir, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
-}
-
-/** Resolve a feature dir by id prefix under tddDir/features (mirrors gates.ts). */
-function findFeatureDir(tddDir: string, featureId: string): string | undefined {
-  const featuresDir = path.join(tddDir, "features");
-  if (!fs.existsSync(featuresDir)) return undefined;
-  const match = fs.readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? path.join(featuresDir, match) : undefined;
-}
+// Sprint-backlog read/write + SprintBacklog live in tdd-paths (single source of
+// truth). Re-exported here for the existing public API (drive.cli, runSprint).
+export {
+  readBacklog as readSprintBacklog,
+  writeBacklog as writeSprintBacklog,
+  type SprintBacklog,
+} from "./tdd-paths.js";
 
 // --- Sprint planning readState -----------------------------------------------
 
@@ -69,17 +38,13 @@ function findFeatureDir(tddDir: string, featureId: string): string | undefined {
  * requestsAuthored <- the backlog is non-empty AND every backlog feature has a
  * feature-request.md; gateApproved <- the sprint plan gate is approved. Phase is
  * always "planning" (the plan bound stops at planning-complete, so this static
- * read never needs to reflect a later phase).
+ * read never needs to reflect a later phase). All paths/accessors come from
+ * tdd-paths so a producer cannot write where this consumer does not look.
  */
 export function deriveSprintPlanningState(tddDir: string, sprint: string): DriveState {
-  const proposed = fs.existsSync(sprintProposalPath(tddDir, sprint));
-  const backlog = readSprintBacklog(tddDir, sprint).features;
-  const requestsAuthored =
-    backlog.length > 0 &&
-    backlog.every((f) => {
-      const fdir = findFeatureDir(tddDir, f);
-      return fdir !== undefined && fs.existsSync(path.join(fdir, "feature-request.md"));
-    });
+  const proposed = fs.existsSync(featureProposalsMd(tddDir));
+  const backlog: SprintBacklog["features"] = readBacklog(tddDir, sprint).features;
+  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f));
   let gateApproved = false;
   try {
     gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";

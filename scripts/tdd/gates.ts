@@ -14,6 +14,7 @@
 
 import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
+import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
 
 export const GATES_SCHEMA_VERSION = 1;
 
@@ -134,17 +135,6 @@ function gatesFilePath(tddDir: string, featureId: string): string {
   return join(findFeatureDir(tddDir, featureId), "gates.json");
 }
 
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join(featuresDir, candidates[0]);
-}
 
 function validateGatesState(parsed: unknown, file: string): GatesState {
   if (typeof parsed !== "object" || parsed === null) {

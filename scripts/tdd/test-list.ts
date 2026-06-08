@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
+import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
 
 export interface TestListItem {
   id: string;
@@ -229,16 +230,4 @@ function locateStoryDirForAc(featureDir: string, acId: string): string | null {
     if (match) return storyDir;
   }
   return null;
-}
-
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join(featuresDir, candidates[0]);
 }

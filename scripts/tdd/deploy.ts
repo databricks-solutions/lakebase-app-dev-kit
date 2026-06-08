@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
+import { findFeatureDir } from "./tdd-paths.js";
 
 export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -137,12 +138,6 @@ function pidFile(projectDir: string, target: string): string {
 }
 
 /** Resolve the feature dir under tddDir/features by id prefix (mirrors gates.ts). */
-function findFeatureDir(tddDir: string, featureId: string): string | undefined {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) return undefined;
-  const match = readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? join(featuresDir, match) : undefined;
-}
 
 /** Run the feature-verify command against the running app; exit 0 = passed. */
 function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): boolean {

@@ -34,6 +34,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { GatesIoOpts } from "./gates";
+import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
 
 export interface WithGatesLockOpts extends GatesIoOpts {
   /** Max retry attempts before giving up. Default 5. */
@@ -138,18 +139,6 @@ function gatesLockFilePath(tddDir: string, featureId: string): string {
   // so the lock can be acquired even on a fresh feature.
   mkdirSync(dir, { recursive: true });
   return join(dir, ".gates.lock");
-}
-
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join(featuresDir, candidates[0]);
 }
 
 function defaultSleep(ms: number): void {

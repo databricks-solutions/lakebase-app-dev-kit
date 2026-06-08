@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "
 import { join, basename } from "path";
 import type Ajv from "ajv";
 import { getValidator } from "./schema-loader";
+import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
 
 type Phase =
   | "discovery"
@@ -112,20 +113,6 @@ export function readWorkflowState(tddDir: string): WorkflowState | null {
 export function writeWorkflowState(tddDir: string, state: WorkflowState): void {
   const file = join(tddDir, "workflow-state.json");
   writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
-
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
-  const candidates = existsSync(featuresDir)
-    ? readdirSync(featuresDir).filter((d) => d.startsWith(featureId))
-    : [];
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  if (candidates.length > 1) {
-    throw new Error(`feature ${featureId} resolves to multiple dirs: ${candidates.join(", ")}`);
-  }
-  return join(featuresDir, candidates[0]);
 }
 
 export function validateSpec(tddDir: string): DriftReport[] {
