@@ -6661,6 +6661,7 @@ var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
 var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
 var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var experimentsRootDir = (tdd) => (0, import_node_path.join)(tdd, "experiments");
 var escalationsDir = (tdd) => (0, import_node_path.join)(tdd, "escalations");
 var acReviewJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review.json");
 var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
@@ -6897,6 +6898,33 @@ function replayDesignTurn(args) {
     default:
       return false;
   }
+}
+
+// scripts/tdd/replay-build.ts
+init_cjs_shims();
+var import_fs2 = require("fs");
+var import_path2 = require("path");
+var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([".git", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules"]);
+function restoreBuildTurn(args) {
+  const { replayBuildDir, projectDir, tddDir, featureId, story } = args;
+  const storyCorpus = (0, import_path2.join)(featuresDir(replayBuildDir), featureId, "stories", story);
+  const codeSrc = (0, import_path2.join)(storyCorpus, "code");
+  if (!(0, import_fs2.existsSync)(codeSrc)) return false;
+  (0, import_fs2.cpSync)(codeSrc, projectDir, {
+    recursive: true,
+    force: true,
+    filter: (src) => {
+      const rel = src.slice(codeSrc.length).replace(/^[/\\]+/, "");
+      if (rel === "") return true;
+      const top = rel.split(/[/\\]/)[0];
+      return !SCAFFOLD_OWNED.has(top);
+    }
+  });
+  const cyclesSrc = (0, import_path2.join)(storyCorpus, "tdd", "cycles");
+  if ((0, import_fs2.existsSync)(cyclesSrc)) (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
+  const expSrc = (0, import_path2.join)(storyCorpus, "tdd", "experiments");
+  if ((0, import_fs2.existsSync)(expSrc)) (0, import_fs2.cpSync)(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
+  return true;
 }
 
 // scripts/tdd/orchestrator-run.ts
@@ -7278,19 +7306,19 @@ var cp2 = __toESM(require("child_process"), 1);
 
 // scripts/tdd/agent-log.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
+var import_fs4 = require("fs");
+var import_path4 = require("path");
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
+var import_fs3 = require("fs");
+var import_path3 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path3.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse((0, import_fs2.readFileSync)((0, import_path2.join)(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse((0, import_fs3.readFileSync)((0, import_path3.join)(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7310,7 +7338,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return (0, import_path3.join)(tddDir, "agent-log.jsonl");
+  return (0, import_path4.join)(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7320,7 +7348,7 @@ function emitAgentLogEvent(input, opts = {}) {
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
   }
-  (0, import_fs3.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
+  (0, import_fs4.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
 `, "utf8");
   return event;
 }
@@ -7332,8 +7360,8 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
+var import_fs6 = require("fs");
+var import_path6 = require("path");
 
 // scripts/tdd/test-list.ts
 init_cjs_shims();
@@ -7353,12 +7381,12 @@ var fs5 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_fs5 = require("fs");
+var import_path5 = require("path");
 function readSmellsLog(tddDir) {
-  const file = (0, import_path4.join)(tddDir, "smells.json");
-  if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
-  return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
+  const file = (0, import_path5.join)(tddDir, "smells.json");
+  if (!(0, import_fs5.existsSync)(file)) return { detected: [] };
+  return JSON.parse((0, import_fs5.readFileSync)(file, "utf8"));
 }
 
 // scripts/tdd/escalation.ts
@@ -7431,27 +7459,27 @@ function storyDeployVerified(tddDir, featureId, storyId) {
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!(0, import_fs5.existsSync)(file)) {
+  if (!(0, import_fs6.existsSync)(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse((0, import_fs5.readFileSync)(file, "utf8"));
+  const data = JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = (0, import_path5.join)(cyclesRootDir(tddDir), featureId, story);
-  if (!(0, import_fs5.existsSync)(base)) return [];
+  const base = (0, import_path6.join)(cyclesRootDir(tddDir), featureId, story);
+  if (!(0, import_fs6.existsSync)(base)) return [];
   const out = [];
-  for (const acDir of (0, import_fs5.readdirSync)(base)) {
-    const dir = (0, import_path5.join)(base, acDir);
+  for (const acDir of (0, import_fs6.readdirSync)(base)) {
+    const dir = (0, import_path6.join)(base, acDir);
     try {
-      if (!(0, import_fs5.statSync)(dir).isDirectory()) continue;
+      if (!(0, import_fs6.statSync)(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of (0, import_fs5.readdirSync)(dir)) {
+    for (const f of (0, import_fs6.readdirSync)(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse((0, import_fs5.readFileSync)((0, import_path5.join)(dir, f), "utf8")));
+        out.push(JSON.parse((0, import_fs6.readFileSync)((0, import_path6.join)(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7475,9 +7503,9 @@ function storyTestProgress(tddDir, featureId, story) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!(0, import_fs5.existsSync)(f)) return {};
+  if (!(0, import_fs6.existsSync)(f)) return {};
   try {
-    return JSON.parse((0, import_fs5.readFileSync)(f, "utf8"));
+    return JSON.parse((0, import_fs6.readFileSync)(f, "utf8"));
   } catch {
     return {};
   }
@@ -7520,8 +7548,8 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 
 // scripts/tdd/gates.ts
 init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path6 = require("path");
+var import_fs7 = require("fs");
+var import_path7 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7540,10 +7568,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs6.existsSync)(file)) {
+  if (!(0, import_fs7.existsSync)(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs6.readFileSync)(file, "utf8");
+  const raw = (0, import_fs7.readFileSync)(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7554,7 +7582,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path6.join)(requireFeatureDir(tddDir, featureId), "gates.json");
+  return (0, import_path7.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7727,7 +7755,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs7 = require("fs");
+var import_fs8 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7736,8 +7764,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs7.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs7.readFileSync)(p, "utf8"));
+  if (!(0, import_fs8.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs8.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7802,12 +7830,14 @@ var CYCLE_BIN = "lakebase-tdd-cycle";
 var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 var LOG_BIN = "lakebase-tdd-log";
 var TEST_LIST_BIN = "lakebase-tdd-test-list";
+var DEPLOY_BIN = "lakebase-tdd-deploy";
 var EXPERIMENT_SLUG = "exp1";
 var experimentBranchName = (storyId) => `experiment/${storyId}-${EXPERIMENT_SLUG}`;
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
   const approver = cfg.approver ?? "human-proxy";
+  const deployTarget = cfg.deployTarget ?? "local";
   switch (action.kind) {
     case "invoke-role": {
       if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
@@ -7880,16 +7910,34 @@ function commandsForAction(action, cfg) {
             "--tdd-dir",
             cfg.tddDir
           ]
-        }
+        },
+        // Fast-forward-to-release: with a build corpus configured, restore the
+        // recorded build onto the just-cut experiment branch so the driver skips
+        // the live Navigator/Driver loop and lands on the deterministic Release
+        // Engineer deploy. A no-op (corpus miss) falls through to the live build.
+        ...cfg.replayBuildDir ? [{ kind: "replay-build", story: action.story }] : []
       ];
     case "await-acceptance":
       return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: [
+            "--target",
+            deployTarget,
+            "--feature",
+            f,
+            "--story",
+            action.story,
+            "--lakebase-branch",
+            experimentBranchName(action.story),
+            "--project-dir",
+            cfg.projectDir,
+            "--tdd-dir",
+            cfg.tddDir,
+            "--gate"
+          ]
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
       ];
@@ -7938,12 +7986,11 @@ function commandsForAction(action, cfg) {
       return [{ kind: "set-phase", phase: "deploy" }];
     case "deploy":
       return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: ["--target", deployTarget, "--feature", f, "--project-dir", cfg.projectDir, "--tdd-dir", cfg.tddDir, "--gate"]
         }
       ];
     case "approve-deploy-gate":
@@ -8067,8 +8114,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs8 = require("fs");
-var import_path7 = require("path");
+var import_fs9 = require("fs");
+var import_path8 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -8080,11 +8127,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path7.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path8.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path7.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs8.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs8.readFileSync)(p, "utf8"));
+  const p = (0, import_path8.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs9.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -8493,6 +8540,24 @@ function execRunner(cfg) {
         syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
+      if (cmd.kind === "replay-build") {
+        const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
+        if (replayBuildDir) {
+          const restored = restoreBuildTurn({
+            replayBuildDir,
+            projectDir: cfg.projectDir,
+            tddDir: cfg.tddDir,
+            featureId: cfg.featureId,
+            story: cmd.story
+          });
+          process.stderr.write(
+            restored ? `[drive] restored build for ${cmd.story} from corpus (skip to release engineer)
+` : `[drive] build replay miss for ${cmd.story} (no corpus); running the real build
+`
+          );
+        }
+        return;
+      }
       if (cmd.kind === "claude") {
         const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
         if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
@@ -8548,6 +8613,10 @@ function buildCfg(args, featureId) {
     featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
+    // Build corpus (fast-forward-to-release): when set, cut-experiment is
+    // followed by a replay-build that restores the recorded build so the drive
+    // skips Navigator/Driver and lands on the Release Engineer deploy.
+    replayBuildDir: process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR,
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.

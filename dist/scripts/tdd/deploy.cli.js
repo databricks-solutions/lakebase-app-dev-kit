@@ -6996,6 +6996,33 @@ async function deployToTarget(args) {
   const start = args.startProcess ?? defaultStart;
   const reachable = args.reachable ?? probeReachable;
   const url = cfg.baseUrl + cfg.healthPath;
+  if (args.rejectForeignPort && await reachable(url)) {
+    const reason = `target port already serving a process at ${url} before deploy; refusing to verify against a foreign/stale app. Stop it first (lakebase-tdd-deploy --target ${args.targetName} --stop, or free the port).`;
+    const verify2 = { passed: false, summary: reason };
+    let evidencePath2;
+    if (args.featureId) {
+      const tddDir = args.tddDir ?? join6(args.projectDir, ".tdd");
+      const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
+      evidencePath2 = writeDeployEvidence(tddDir, {
+        schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
+        feature_id: args.featureId,
+        ...args.storyId ? { story_id: args.storyId } : {},
+        target: args.targetName,
+        url,
+        reachable: false,
+        verify: verify2,
+        ...args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {},
+        deployed_at: at
+      });
+      writeEscalation(tddDir, {
+        source: "deploy-verify",
+        reason: `deploy of ${args.featureId}${args.storyId ? `/${args.storyId}` : ""} blocked: ${reason}`,
+        feature_id: args.featureId,
+        ...args.storyId ? { story_id: args.storyId } : {}
+      });
+    }
+    return { ok: false, reason, verify: verify2, evidencePath: evidencePath2 };
+  }
   const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
@@ -7084,6 +7111,7 @@ async function runDeployCli(argv) {
   let featureId;
   let storyId;
   let tddDir;
+  let gate = false;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--target":
@@ -7103,6 +7131,9 @@ async function runDeployCli(argv) {
         break;
       case "--tdd-dir":
         tddDir = argv[++i];
+        break;
+      case "--gate":
+        gate = true;
         break;
       case "--stop":
         stop = true;
@@ -7128,7 +7159,17 @@ async function runDeployCli(argv) {
 `);
     return 0;
   }
-  const result = await deployToTarget({ projectDir, targetName: target, lakebaseBranch, featureId, storyId, tddDir });
+  const result = await deployToTarget({
+    projectDir,
+    targetName: target,
+    lakebaseBranch,
+    featureId,
+    storyId,
+    tddDir,
+    // Gate mode (orchestration-run deploy): reject a foreign occupant of the
+    // port so we never verify against the wrong app, and record honest evidence.
+    rejectForeignPort: gate
+  });
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}
 `);
@@ -7139,6 +7180,7 @@ async function runDeployCli(argv) {
     process.stderr.write(`lakebase-tdd-deploy: ${target} deploy failed: ${result.reason}
 `);
   }
+  if (gate) return 0;
   return result.ok ? 0 : 6;
 }
 if (isCliEntry(import.meta.url)) {
