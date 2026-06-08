@@ -3254,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path5) {
-      let input = path5;
+    function removeDotSegments(path6) {
+      let input = path6;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path5, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
+        const [path6, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path6 && path6 !== "/" ? path6 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6645,8 +6645,8 @@ var require_ajv = __commonJS({
 init_cjs_shims();
 var import_node_child_process9 = require("child_process");
 var import_node_crypto = require("crypto");
-var fs8 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
+var fs9 = __toESM(require("fs"), 1);
+var path5 = __toESM(require("path"), 1);
 
 // scripts/tdd/orchestrator-run.ts
 init_cjs_shims();
@@ -7488,6 +7488,8 @@ var EXPERIMENT_BIN = "lakebase-tdd-experiment";
 var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 var LOG_BIN = "lakebase-tdd-log";
 var TEST_LIST_BIN = "lakebase-tdd-test-list";
+var EXPERIMENT_SLUG = "exp1";
+var experimentBranchName = (storyId) => `experiment/${storyId}-${EXPERIMENT_SLUG}`;
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
@@ -7533,15 +7535,22 @@ function commandsForAction(action, cfg) {
           bin: EXPERIMENT_BIN,
           args: [
             "cut",
-            "--story",
-            action.story,
             "--feature",
             f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--branch",
+            experimentBranchName(action.story),
+            "--parent",
+            cfg.featureBranch ?? "",
+            "--instance",
+            cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
             "--tdd-dir",
-            cfg.tddDir,
-            ...cfg.instance ? ["--instance", cfg.instance] : []
+            cfg.tddDir
           ]
         }
       ];
@@ -7563,15 +7572,24 @@ function commandsForAction(action, cfg) {
           bin: EXPERIMENT_BIN,
           args: [
             "merge",
-            "--story",
-            action.story,
             "--feature",
             f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--experiment-branch",
+            experimentBranchName(action.story),
+            "--feature-branch",
+            cfg.featureBranch ?? "",
+            "--approver",
+            approver,
+            "--instance",
+            cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
             "--tdd-dir",
-            cfg.tddDir,
-            ...cfg.instance ? ["--instance", cfg.instance] : []
+            cfg.tddDir
           ]
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] }
@@ -7691,7 +7709,7 @@ function deriveSprintPlanningState(tddDir, sprint, opts = {}) {
   }
   return {
     phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? true },
+    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? false },
     breakdownDone: false,
     storyOrder: [],
     stories: {},
@@ -7820,6 +7838,183 @@ function makeOnAction(opts) {
   };
 }
 
+// scripts/lakebase/scm-workflow-state.ts
+init_cjs_shims();
+var fs8 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
+var SCM_STATES = [
+  "scaffold-complete",
+  "feature-claimed",
+  "pr-ready",
+  "ci-green",
+  "merged"
+];
+var STATE_INDEX = SCM_STATES.reduce(
+  (acc, s, i) => ({ ...acc, [s]: i }),
+  {}
+);
+var STATE_FILE_REL = ".lakebase/workflow-state.json";
+function stateFilePath(projectDir) {
+  return path4.join(projectDir, STATE_FILE_REL);
+}
+function readWorkflowState(projectDir) {
+  const p = stateFilePath(projectDir);
+  if (!fs8.existsSync(p)) return null;
+  const raw = fs8.readFileSync(p, "utf8");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `Failed to parse ${STATE_FILE_REL}: ${e.message}`
+    );
+  }
+  const result = validateWorkflowState(parsed);
+  if (!result.ok) {
+    const summary = result.errors.map((e) => `  - ${e.path}: ${e.message}`).join("\n");
+    throw new Error(
+      `Invalid ${STATE_FILE_REL}:
+${summary}
+
+Fix the file or delete it to re-init.`
+    );
+  }
+  return result.value;
+}
+function validateWorkflowState(value) {
+  const errors = [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {
+      ok: false,
+      errors: [{ path: "$", message: "must be an object" }]
+    };
+  }
+  const v = value;
+  if (v.version !== 1) {
+    errors.push({ path: "version", message: `must be 1, got ${String(v.version)}` });
+  }
+  if (typeof v.state !== "string" || !SCM_STATES.includes(v.state)) {
+    errors.push({
+      path: "state",
+      message: `must be one of ${SCM_STATES.join(" | ")}`
+    });
+  }
+  if (v.tier_topology !== 1 && v.tier_topology !== 2 && v.tier_topology !== 3) {
+    errors.push({
+      path: "tier_topology",
+      message: "must be 1, 2, or 3"
+    });
+  }
+  if (typeof v.project_id !== "string" || v.project_id.length === 0) {
+    errors.push({
+      path: "project_id",
+      message: "must be a non-empty string"
+    });
+  }
+  const stringFields = [
+    "feature_id",
+    "branch",
+    "parent_branch",
+    "lakebase_branch_uid",
+    "claimed_at",
+    "pr_url",
+    "pushed_at",
+    "ci_run_url",
+    "ci_green_at",
+    "merged_at",
+    "migrate_run_url",
+    "migrate_completed_at",
+    "$schema"
+  ];
+  for (const key of stringFields) {
+    if (v[key] === void 0) continue;
+    if (typeof v[key] !== "string" || v[key].length === 0) {
+      errors.push({
+        path: key,
+        message: "must be a non-empty string when present"
+      });
+    }
+  }
+  const requiredForState = {
+    "scaffold-complete": [],
+    "feature-claimed": [
+      "feature_id",
+      "branch",
+      "parent_branch",
+      "lakebase_branch_uid",
+      "claimed_at"
+    ],
+    "pr-ready": [
+      "feature_id",
+      "branch",
+      "parent_branch",
+      "lakebase_branch_uid",
+      "claimed_at",
+      "pr_url",
+      "pushed_at"
+    ],
+    "ci-green": [
+      "feature_id",
+      "branch",
+      "parent_branch",
+      "lakebase_branch_uid",
+      "claimed_at",
+      "pr_url",
+      "pushed_at",
+      "ci_run_url",
+      "ci_green_at"
+    ],
+    merged: [
+      "feature_id",
+      "branch",
+      "parent_branch",
+      "lakebase_branch_uid",
+      "claimed_at",
+      "pr_url",
+      "pushed_at",
+      "ci_run_url",
+      "ci_green_at",
+      "merged_at"
+    ]
+  };
+  if (typeof v.state === "string" && SCM_STATES.includes(v.state)) {
+    for (const key of requiredForState[v.state]) {
+      if (v[key] === void 0) {
+        errors.push({
+          path: key,
+          message: `required when state is "${v.state}"`
+        });
+      }
+    }
+  }
+  const allowedKeys = /* @__PURE__ */ new Set([
+    "$schema",
+    "version",
+    "state",
+    "tier_topology",
+    "project_id",
+    "feature_id",
+    "branch",
+    "parent_branch",
+    "lakebase_branch_uid",
+    "claimed_at",
+    "pr_url",
+    "pushed_at",
+    "ci_run_url",
+    "ci_green_at",
+    "merged_at",
+    "migrate_run_url",
+    "migrate_completed_at"
+  ]);
+  for (const key of Object.keys(v)) {
+    if (!allowedKeys.has(key)) {
+      errors.push({ path: key, message: "unknown property" });
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, value: v };
+}
+
 // scripts/tdd/drive.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -7861,15 +8056,9 @@ function parseArgs(argv) {
       case "--gates":
         out.gates = argv[++i];
         break;
-      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is OFF by
-      // default. Opt back IN with --sizing when the candidate set is large enough
-      // that the PO needs sizes to commit against capacity. --no-sizing is still
-      // accepted (it is the default) so existing invocations keep working.
-      case "--sizing":
-      case "--planning-poker":
-      case "--t-shirt-sizing":
-        out.sizing = true;
-        break;
+      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
+      // default. --no-sizing opts OUT: planning goes propose -> author-requests
+      // with no estimate, for a backlog small enough not to need capacity sizing.
       case "--no-sizing":
       case "--no-planning-poker":
       case "--no-t-shirt-sizing":
@@ -7904,26 +8093,25 @@ Flags:
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
-  --sizing             Opt IN to the Architect's t-shirt-sizing (planning-poker)
-                       step (estimate the candidates before the PO commits).
-                       Sizing is OFF by default; planning goes propose ->
-                       author-requests. Aliases: --planning-poker, --t-shirt-sizing.
-                       (--no-sizing is accepted too, it is the default.)
+  --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
+                       planning goes propose -> author-requests, no estimate.
+                       Sizing is ON by default. Aliases: --no-planning-poker,
+                       --no-t-shirt-sizing.
 `;
 }
 function writeWorkflowPhase(tddDir, phase) {
-  const file = path4.join(tddDir, "workflow-state.json");
+  const file = path5.join(tddDir, "workflow-state.json");
   let state = {};
-  if (fs8.existsSync(file)) {
+  if (fs9.existsSync(file)) {
     try {
-      state = JSON.parse(fs8.readFileSync(file, "utf8"));
+      state = JSON.parse(fs9.readFileSync(file, "utf8"));
     } catch {
       state = {};
     }
   }
   state.phase = phase;
-  fs8.mkdirSync(tddDir, { recursive: true });
-  fs8.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+  fs9.mkdirSync(tddDir, { recursive: true });
+  fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve2, reject) => {
@@ -7932,19 +8120,19 @@ function spawnCmd(bin, args, cwd) {
     child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
   });
 }
-var KIT_ROOT = path4.resolve(__dirname, "..", "..", "..");
+var KIT_ROOT = path5.resolve(__dirname, "..", "..", "..");
 var kitBinMap = null;
 function resolveKitBinJs(bin) {
   if (kitBinMap === null) {
     try {
-      const pkg = JSON.parse(fs8.readFileSync(path4.join(KIT_ROOT, "package.json"), "utf8"));
+      const pkg = JSON.parse(fs9.readFileSync(path5.join(KIT_ROOT, "package.json"), "utf8"));
       kitBinMap = pkg.bin ?? {};
     } catch {
       kitBinMap = {};
     }
   }
   const rel = kitBinMap[bin];
-  return rel ? path4.join(KIT_ROOT, rel) : null;
+  return rel ? path5.join(KIT_ROOT, rel) : null;
 }
 function execRunner(cfg) {
   const sessions = /* @__PURE__ */ new Map();
@@ -7984,13 +8172,15 @@ function execRunner(cfg) {
 }
 function buildCfg(args, featureId) {
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path4.join(projectDir, ".tdd");
+  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
+  const scm = readWorkflowState(projectDir);
   return {
     projectDir,
     tddDir,
     featureId,
     sprintName: args.sprint,
-    instance: args.instance,
+    instance: args.instance ?? scm?.project_id,
+    featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
@@ -8031,17 +8221,16 @@ function reportGate(gate) {
 async function runSprintMode(args) {
   const sprint = args.sprint;
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path4.join(projectDir, ".tdd");
-  const claimJs = path4.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
+  const claimJs = path5.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
   const interactive = args.gates === "interactive";
   const effects = {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
       const planning = {
-        // Sizing is off by default; --sizing opts back in. (--no-sizing is the
-        // default and remains accepted.)
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: !args.sizing }),
+        // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },
