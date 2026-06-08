@@ -121,19 +121,34 @@ function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
   });
 }
 
-// Resolve a kit child-CLI bin name to its compiled JS, a SIBLING of this file
-// in dist/scripts/tdd/. Spawning `node <sibling>.js` makes the driver
-// self-contained: its kit children resolve from its own install location, with
-// no dependency on the bins being on PATH (the smoke runs the kit via npx, not
-// a global install). External tools (claude) stay bare on PATH.
-const KIT_CLI_JS: Record<string, string> = {
-  "lakebase-tdd-pipeline": "story-pipeline.cli.js",
-  "lakebase-tdd-experiment": "story-experiment.cli.js",
-  "lakebase-tdd-deploy": "deploy.cli.js",
-  "lakebase-tdd-human-proxy": "human-proxy.cli.js",
-  "lakebase-tdd-test-list": "test-list.cli.js",
-  "lakebase-tdd-log": "agent-log.cli.js",
-};
+// Resolve a kit child-CLI bin name to its compiled JS via the kit's OWN
+// package.json `bin` map (the single authoritative source). Spawning
+// `node <dist/...>` makes the driver self-contained: its kit children resolve
+// from its own install location, with no dependency on the bins being on PATH
+// (the smoke runs the kit via lk/npx, not a global install). Deriving from the
+// bin map , instead of a hand-maintained list , means a new kit bin the driver
+// emits can never silently drift out of sync (a missing entry once caused a
+// `spawn <bin> ENOENT` the moment the feature drive emitted lakebase-tdd-log).
+// External tools (claude) are not in the bin map, so they stay bare on PATH.
+//
+// This running file is <kitRoot>/dist/scripts/tdd/drive.cli.js, so the kit root
+// (which holds package.json) is three directories up.
+const KIT_ROOT = path.resolve(__dirname, "..", "..", "..");
+let kitBinMap: Record<string, string> | null = null;
+function resolveKitBinJs(bin: string): string | null {
+  if (kitBinMap === null) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(KIT_ROOT, "package.json"), "utf8")) as {
+        bin?: Record<string, string>;
+      };
+      kitBinMap = pkg.bin ?? {};
+    } catch {
+      kitBinMap = {};
+    }
+  }
+  const rel = kitBinMap[bin];
+  return rel ? path.join(KIT_ROOT, rel) : null;
+}
 
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct
  *  workflow-state write for the coarse phase. */
@@ -158,11 +173,12 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         );
         return;
       }
-      // cmd.kind === "cli": resolve the kit bin to its sibling JS so it runs
-      // regardless of PATH; fall back to the bare name for anything unmapped.
-      const sibling = KIT_CLI_JS[cmd.bin];
-      if (sibling) {
-        await spawnCmd("node", [path.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+      // cmd.kind === "cli": resolve the kit bin to its dist JS via the kit's
+      // package.json bin map so it runs regardless of PATH; fall back to the
+      // bare name for anything not a kit bin (external tools on PATH).
+      const js = resolveKitBinJs(cmd.bin);
+      if (js) {
+        await spawnCmd("node", [js, ...cmd.args], cfg.projectDir);
       } else {
         await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
       }

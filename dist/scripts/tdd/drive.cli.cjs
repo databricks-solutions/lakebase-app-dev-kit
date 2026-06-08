@@ -3008,7 +3008,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve.call(this, root, ref);
+      let _sch = resolve2.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3035,7 +3035,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve(root, ref) {
+    function resolve2(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3669,7 +3669,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve(baseURI, relativeURI, options) {
+    function resolve2(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3927,7 +3927,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve,
+      resolve: resolve2,
       resolveComponent,
       equal,
       serialize,
@@ -7887,20 +7887,26 @@ function writeWorkflowPhase(tddDir, phase) {
   fs7.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 function spawnCmd(bin, args, cwd) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     const child = (0, import_node_child_process9.spawn)(bin, args, { cwd, stdio: "inherit" });
     child.on("error", (err) => reject(err));
-    child.on("close", (code) => code === 0 ? resolve() : reject(new Error(`${bin} exited ${code}`)));
+    child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
   });
 }
-var KIT_CLI_JS = {
-  "lakebase-tdd-pipeline": "story-pipeline.cli.js",
-  "lakebase-tdd-experiment": "story-experiment.cli.js",
-  "lakebase-tdd-deploy": "deploy.cli.js",
-  "lakebase-tdd-human-proxy": "human-proxy.cli.js",
-  "lakebase-tdd-test-list": "test-list.cli.js",
-  "lakebase-tdd-log": "agent-log.cli.js"
-};
+var KIT_ROOT = path4.resolve(__dirname, "..", "..", "..");
+var kitBinMap = null;
+function resolveKitBinJs(bin) {
+  if (kitBinMap === null) {
+    try {
+      const pkg = JSON.parse(fs7.readFileSync(path4.join(KIT_ROOT, "package.json"), "utf8"));
+      kitBinMap = pkg.bin ?? {};
+    } catch {
+      kitBinMap = {};
+    }
+  }
+  const rel = kitBinMap[bin];
+  return rel ? path4.join(KIT_ROOT, rel) : null;
+}
 function execRunner(cfg) {
   return {
     async run(cmd) {
@@ -7920,9 +7926,9 @@ function execRunner(cfg) {
         );
         return;
       }
-      const sibling = KIT_CLI_JS[cmd.bin];
-      if (sibling) {
-        await spawnCmd("node", [path4.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+      const js = resolveKitBinJs(cmd.bin);
+      if (js) {
+        await spawnCmd("node", [js, ...cmd.args], cfg.projectDir);
       } else {
         await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
       }
