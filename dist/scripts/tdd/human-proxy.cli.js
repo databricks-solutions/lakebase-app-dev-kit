@@ -6709,6 +6709,7 @@ var sprintsDir = (tdd) => join(tdd, "sprints");
 var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
 var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
 function findFeatureDir(tdd, featureId) {
@@ -7437,6 +7438,33 @@ function supplyArtifact(args) {
   }
   return { ok: true, artifact, to: args.to };
 }
+function recordedRequestPairs() {
+  const raw = process.env.LAKEBASE_TDD_SPRINT_REQUESTS ?? "";
+  return raw.split("\n").map((line) => line.trim()).filter(Boolean).flatMap((line) => {
+    const [featureId, ...rest] = line.split("	");
+    const from = rest.join("	").trim();
+    return featureId && from ? [{ featureId: featureId.trim(), from }] : [];
+  });
+}
+function supplyRequests(args = {}) {
+  const tddDir = args.tddDir ?? "./.tdd";
+  const pairs = args.pairs ?? recordedRequestPairs();
+  const supplied = [];
+  const skipped = [];
+  for (const { featureId, from } of pairs) {
+    const res = supplyArtifact({
+      from,
+      to: featureRequestMd(tddDir, featureId),
+      artifact: "feature-request.md",
+      tddDir,
+      featureId,
+      approver: args.approver
+    });
+    if (res.ok) supplied.push(featureId);
+    else skipped.push({ featureId, reason: res.reason ?? "unknown" });
+  }
+  return { supplied, skipped };
+}
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
@@ -7565,6 +7593,35 @@ function runSupplyCli(argv) {
 `);
   return 4;
 }
+function runSupplyRequestsCli(argv) {
+  let tddDir;
+  let approver;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--tdd-dir":
+        tddDir = argv[++i];
+        break;
+      case "--approver":
+        approver = argv[++i];
+        break;
+    }
+  }
+  const result = supplyRequests({ tddDir, approver });
+  if (result.supplied.length > 0) {
+    process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}
+`);
+  } else {
+    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_TDD_SPRINT_REQUESTS unset/empty)
+`);
+  }
+  if (result.skipped.length > 0) {
+    process.stderr.write(
+      `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.featureId} (${s.reason})`).join(", ")}
+`
+    );
+  }
+  return 0;
+}
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -7623,6 +7680,7 @@ Flags:
 `;
 function runHumanProxyCli(argv) {
   if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
+  if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
   if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);
   if (args.help) {

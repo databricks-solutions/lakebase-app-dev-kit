@@ -6757,6 +6757,9 @@ function actionLane(action) {
 function isHitlGateAction(action) {
   return action.kind === "approve-gate" || action.kind === "approve-plan-gate" || action.kind === "approve-deploy-gate" || action.kind === "accept";
 }
+function isHumanInputAction(action) {
+  return action.kind === "invoke-role" && "mode" in action && action.mode === "author-requests";
+}
 
 // scripts/tdd/orchestrator-run.ts
 var DriverStalledError = class extends Error {
@@ -7447,7 +7450,7 @@ function roleTask(action, featureId) {
       case "estimate":
         return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
-        return `Commit the sprint backlog: author a feature-request.md for each feature you are pulling into the sprint (informed by the Architect's t-shirt sizes), on the human's behalf.`;
+        return `Provide the sprint's feature-requests.`;
       case "breakdown":
         return `Break feature ${featureId} down into its stories.`;
     }
@@ -7479,6 +7482,12 @@ function commandsForAction(action, cfg) {
   const approver = cfg.approver ?? "human-proxy";
   switch (action.kind) {
     case "invoke-role": {
+      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
+        return [
+          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.tddDir, "--approver", approver] },
+          { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" }
+        ];
+      }
       const claude = {
         kind: "claude",
         role: action.role,
@@ -7489,13 +7498,10 @@ function commandsForAction(action, cfg) {
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
-      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
-        cmds.push({ kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" });
-      }
       if (!("mode" in action) && action.role === "test-strategist") {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
-      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "author-requests");
+      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
       return cmds;
     }
@@ -7958,7 +7964,7 @@ function composeOnAction(...hooks) {
 }
 function gatedStopWhen(base, interactive) {
   if (!interactive) return base;
-  return (a) => (base?.(a) ?? false) || isHitlGateAction(a);
+  return (a) => (base?.(a) ?? false) || isHitlGateAction(a) || isHumanInputAction(a);
 }
 function pendingGateOf(r) {
   return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : void 0;
