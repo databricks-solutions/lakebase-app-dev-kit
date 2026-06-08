@@ -1,6 +1,11 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
-import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
+import {
+  requireFeatureDir as findFeatureDir,
+  featureTestListJson,
+  featureTestListMd,
+  storyTestListJson,
+} from "./tdd-paths.js";
 
 export interface TestListItem {
   id: string;
@@ -18,8 +23,8 @@ export interface TestList {
 }
 
 export function readMasterTestList(tddDir: string, featureId: string): TestList {
-  const dir = findFeatureDir(tddDir, featureId);
-  const file = join(dir, "test-list.json");
+  findFeatureDir(tddDir, featureId); // assert the feature exists (throws if not)
+  const file = featureTestListJson(tddDir, featureId);
   if (!existsSync(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
@@ -27,8 +32,8 @@ export function readMasterTestList(tddDir: string, featureId: string): TestList 
 }
 
 export function writeMasterTestList(tddDir: string, list: TestList): void {
-  const dir = findFeatureDir(tddDir, list.feature_id);
-  const file = join(dir, "test-list.json");
+  findFeatureDir(tddDir, list.feature_id); // assert the feature exists (throws if not)
+  const file = featureTestListJson(tddDir, list.feature_id);
   writeFileSync(file, JSON.stringify(list, null, 2) + "\n");
 }
 
@@ -71,8 +76,7 @@ export function renderTestListMarkdown(list: TestList): string {
 /** Render + write test-list.md next to test-list.json. Returns the path. */
 export function writeTestListMarkdown(tddDir: string, featureId: string): string {
   const list = readMasterTestList(tddDir, featureId);
-  const dir = findFeatureDir(tddDir, featureId);
-  const file = join(dir, "test-list.md");
+  const file = featureTestListMd(tddDir, featureId);
   writeFileSync(file, renderTestListMarkdown(list));
   return file;
 }
@@ -183,9 +187,11 @@ export function scopeToStory(list: TestList, storyId: string, acIds: string[]): 
 }
 
 /**
- * Read the master test list, scope it to one story's ACs, and write
- * stories/<story>/test-list-per-story.json (the build lane's per-story input).
- * Returns the written path, or null when the story dir cannot be resolved.
+ * Read the master test list, scope it to one story's ACs, and write the
+ * canonical per-story list (storyTestListJson, the build lane's per-story input
+ * AND the driver's testListReady probe target , one path, defined once). Returns
+ * the written path, or null when the story cannot be resolved or the master is
+ * not yet written (so a missing master surfaces as a stall, not a crash).
  */
 export function writeStoryTestList(
   tddDir: string,
@@ -194,26 +200,26 @@ export function writeStoryTestList(
 ): string | null {
   const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
   if (!storyDir) return null;
-  const scoped = scopeToStory(
-    readMasterTestList(tddDir, featureId),
-    storyId,
-    acIdsInStoryDir(storyDir),
-  );
-  const file = join(storyDir, "test-list-per-story.json");
+  let master: TestList;
+  try {
+    master = readMasterTestList(tddDir, featureId);
+  } catch {
+    return null; // master not authored yet; nothing to scope
+  }
+  const scoped = scopeToStory(master, storyId, acIdsInStoryDir(storyDir));
+  const file = storyTestListJson(tddDir, featureId, storyId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(scoped, null, 2) + "\n");
   return file;
 }
 
-/** Read stories/<story>/test-list-per-story.json, or null when absent. */
+/** Read the canonical per-story list (storyTestListJson), or null when absent. */
 export function readStoryTestList(
   tddDir: string,
   featureId: string,
   storyId: string,
 ): StoryTestList | null {
-  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
-  if (!storyDir) return null;
-  const file = join(storyDir, "test-list-per-story.json");
+  const file = storyTestListJson(tddDir, featureId, storyId);
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, "utf8"));
 }

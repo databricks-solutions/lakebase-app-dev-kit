@@ -32,9 +32,12 @@ function writeAcLayer(story: string, ac: string, layer: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${ac}.json`), JSON.stringify({ id: ac, layer }));
 }
-function writeTestList(story: string, tests: unknown[]): void {
+function writeTestList(story: string, items: unknown[]): void {
+  // The canonical per-story list (storyTestListJson): a StoryTestList with an
+  // `items[]` field, written as test-list-per-story.json , the exact file +
+  // field the probe's testListReady reads.
   mkdirSync(storyDir(story), { recursive: true });
-  writeFileSync(join(storyDir(story), "test-list.json"), JSON.stringify({ tests }));
+  writeFileSync(join(storyDir(story), "test-list-per-story.json"), JSON.stringify({ items }));
 }
 function cycle(story: string, ac: string, id: string, extra: Partial<CycleArtifact>): void {
   writeCycleArtifact(
@@ -136,7 +139,7 @@ describe("readDriveContext", () => {
     const ctx = readDriveContext(tddDir, FEATURE);
     expect(ctx.phase).toBe("feature");
     expect(ctx.breakdownDone).toBe(false);
-    expect(ctx.planning).toEqual({ proposed: false, requestsAuthored: false });
+    expect(ctx.planning).toEqual({ proposed: false, estimated: false, requestsAuthored: false });
     expect(ctx.deploy).toEqual({ deployed: false, gateApproved: false });
   });
 
@@ -173,7 +176,7 @@ describe("readDriveContext", () => {
     const ctx = readDriveContext(tddDir, FEATURE);
     expect(ctx.phase).toBe("feature"); // implementation -> feature
     expect(ctx.breakdownDone).toBe(true);
-    expect(ctx.planning).toEqual({ proposed: true, requestsAuthored: true });
+    expect(ctx.planning).toEqual({ proposed: true, estimated: false, requestsAuthored: true });
     // deploy ran (evidence present) but the deploy gate is not approved
     expect(ctx.deploy).toEqual({ deployed: true, gateApproved: false });
   });

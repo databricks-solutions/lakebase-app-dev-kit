@@ -104,7 +104,15 @@ function replayEffects(feature: string, stories: string[]) {
           } else if (action.role === "architect-reviewer") {
             writeJson(join(storyDir(feature, s), "acs", `${ac(s)}.json`), { id: ac(s), layer: "API" });
           } else if (action.role === "test-strategist") {
-            writeJson(join(storyDir(feature, s), "test-list.json"), { tests: [{ id: "T1" }] });
+            // The real flow: the role writes the feature master, then the
+            // driver's deterministic scope step produces the canonical per-story
+            // list (storyTestListJson = test-list-per-story.json, field `items`)
+            // the testListReady probe reads. Replay the net artifact directly.
+            writeJson(join(storyDir(feature, s), "test-list-per-story.json"), {
+              feature_id: feature,
+              story_id: s,
+              items: [{ id: "T1", description: "t", ac_id: ac(s), status: "pending" }],
+            });
           } else if (action.role === "navigator") {
             writeCycleArtifact(
               { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },

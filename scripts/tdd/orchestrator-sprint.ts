@@ -17,8 +17,8 @@ import { readSprintGates } from "./sprint-gates.js";
 import {
   featureProposalsMd,
   hasFeatureRequest,
+  hasEstimates,
   readBacklog,
-  type SprintBacklog,
 } from "./tdd-paths.js";
 import * as fs from "node:fs";
 
@@ -27,7 +27,10 @@ import * as fs from "node:fs";
 export {
   readBacklog as readSprintBacklog,
   writeBacklog as writeSprintBacklog,
+  backlogFeatureIds,
+  syncBacklog,
   type SprintBacklog,
+  type BacklogFeature,
 } from "./tdd-paths.js";
 
 // --- Sprint planning readState -----------------------------------------------
@@ -35,16 +38,20 @@ export {
 /**
  * Build the DriveState for the sprint PLANNING sub-machine from sprint-level
  * artifacts. proposed <- the Spec Author's feature-proposals.md exists;
- * requestsAuthored <- the backlog is non-empty AND every backlog feature has a
- * feature-request.md; gateApproved <- the sprint plan gate is approved. Phase is
- * always "planning" (the plan bound stops at planning-complete, so this static
- * read never needs to reflect a later phase). All paths/accessors come from
- * tdd-paths so a producer cannot write where this consumer does not look.
+ * estimated <- the Architect's planning/estimates.json has at least one
+ * t-shirt size; requestsAuthored <- the backlog is non-empty AND every backlog
+ * feature has a feature-request.md (the backlog is the deterministic sync-backlog
+ * projection of the PO's committed requests); gateApproved <- the sprint plan
+ * gate is approved. Phase is always "planning" (the plan bound stops at
+ * planning-complete, so this static read never needs to reflect a later phase).
+ * All paths/accessors come from tdd-paths so a producer cannot write where this
+ * consumer does not look.
  */
 export function deriveSprintPlanningState(tddDir: string, sprint: string): DriveState {
   const proposed = fs.existsSync(featureProposalsMd(tddDir));
-  const backlog: SprintBacklog["features"] = readBacklog(tddDir, sprint).features;
-  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f));
+  const estimated = hasEstimates(tddDir);
+  const backlog = readBacklog(tddDir, sprint).features;
+  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
   let gateApproved = false;
   try {
     gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";
@@ -53,7 +60,7 @@ export function deriveSprintPlanningState(tddDir: string, sprint: string): Drive
   }
   return {
     phase: "planning",
-    planning: { proposed, requestsAuthored, gateApproved },
+    planning: { proposed, estimated, requestsAuthored, gateApproved },
     breakdownDone: false,
     storyOrder: [],
     stories: {},

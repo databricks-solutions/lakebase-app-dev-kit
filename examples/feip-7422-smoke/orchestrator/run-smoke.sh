@@ -15,25 +15,29 @@
 # Sprints (the /plan cadence; features are NOT pre-planned all at once):
 #   sprint-1 = v1..v3   sprint-2 = v4..v5
 # /plan runs once per sprint (run_plan_sprint), ABOVE the per-feature loop:
-# the Spec Author proposes the breakdown and the Product Owner authors the
-# sprint's feature-requests. Headless, the human-proxy SUPPLIES the recorded
-# backlog. sprint-2 is planned only AFTER sprint-1's features have shipped
-# working software (their /deploy gates), modeling the feedback loop: the PO
-# folds what they saw into the next sprint's requests. The sprint backlog is
-# committed to trunk (main) so each feature branch (forked from main HEAD by
-# /design Step 0) inherits its feature-request.md.
+# the Spec Author proposes the candidate breakdown, the Architect t-shirt-sizes
+# the candidates, and the Product Owner commits the backlog. Headless, the
+# human-proxy SUPPLIES the recorded backlog (the PO's commitment). sprint-2 is
+# planned only AFTER sprint-1's features have shipped working software (their
+# /deploy gates), modeling the feedback loop: the PO folds what they saw into
+# the next sprint's requests. The sprint backlog is committed to trunk (main) so
+# each feature branch (forked from main HEAD by /design Step 0) inherits its
+# feature-request.md.
 #
 # What /plan does per sprint (run_plan_sprint):
 #   a. Enforce the project-intake precondition (lakebase-tdd-intake, no
 #      --feature: product-overview.md + nfrs.md + design-brief.md present).
-#   b. Drive planning via lakebase-tdd-drive --plan-only --gates proxy (the same
-#      CLI the scaffolded /plan command runs): the spec-author proposes the
-#      breakdown and the driver surfaces the sprint plan gate, which the Human
-#      Proxy approves on feature-proposals.md. Called directly (not via claude -p)
-#      so gate mode + env are deterministic.
-#   b2. human-proxy (the PO) supplies each sprint item's feature-request.md, AFTER
-#      the proposal (sprint membership is the smoke orchestrator's call).
-#   c. Commit the sprint backlog to trunk.
+#   b. Stage the PO's committed backlog: the human-proxy places each sprint
+#      item's recorded feature-request.md. Sprint membership is the orchestrator's
+#      call, so the requests are present before the drive; the driver's PO
+#      author-requests step affirms them and sync-backlog projects backlog.json.
+#   c. Drive planning via lakebase-tdd-drive --plan-only --gates proxy (the same
+#      CLI the scaffolded /plan command runs): propose (Spec Author ->
+#      feature-proposals.md), estimate (Architect -> planning/estimates.json
+#      t-shirt sizes), author-requests (PO affirms), sync-backlog (-> backlog.json),
+#      then the Human Proxy approves the sprint plan gate. Called directly (not via
+#      claude -p) so gate mode + env are deterministic.
+#   d. Commit the sprint backlog + planning artifacts to trunk.
 #
 # What each iteration does (the per-feature loop, after its request exists):
 #   1. Abandon prior feature (substrate CLI) if state is mid-flight.
@@ -543,28 +547,15 @@ run_plan_sprint() {
   [ -n "$_intake_ok" ] \
     || { err "/plan ${sprint_name}: project-intake precondition failed after 3 attempts"; exit 2; }
 
-  # b. PROPOSAL FIRST. Drive planning through the deterministic orchestrator,
-  # bounded to planning (the same CLI the scaffolded /plan command runs). The
-  # smoke calls the driver DIRECTLY (as it does for the per-feature loop), not
-  # through `claude -p "/plan"`: a claude -p session's Bash tool does not
-  # reliably inherit LAKEBASE_TDD_HUMAN_PROXY, so the command's gate-mode check
-  # fell through to `interactive` headless and the plan gate was never approved.
-  # Calling the driver here (in this shell, where the env is correct) with an
-  # explicit `--gates proxy` is deterministic. The spec-author proposes the
-  # breakdown (feature-proposals.md), the driver surfaces the sprint plan gate,
-  # the Human Proxy approves it (teeth: feature-proposals.md exists + conforms),
-  # then it stops at planning-complete. Feature-requests must NOT exist before
-  # this proposal, so the PO-authoring supply (step c) runs AFTER.
-  log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
-  "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
-    --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \
-    || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
-
-  # c. ONLY AFTER the proposal: the PO authors each sprint item's
-  # feature-request.md. Headless, the Human Proxy puts them out from the recorded
-  # backlog (validate + place), the PO authoring step downstream of the Spec
-  # Author proposal. Sprint membership is the smoke orchestrator's call;
-  # idempotent if /plan already had the Proxy supply them.
+  # b. STAGE THE PO'S COMMITTED BACKLOG. Sprint membership is the orchestrator's
+  # call (the iteration specs ARE the PO's groomed sprint), so the Human Proxy
+  # places the recorded feature-request.md per sprint item HERE, before driving
+  # planning. This is the recorded human intent the Product Owner commits at the
+  # author-requests step: with the requests present, the driver's PO step affirms
+  # them and the deterministic sync-backlog projects backlog.json from them. The
+  # Spec Author's propose + the Architect's estimate run live in the drive and do
+  # not read the requests, so proposal-first integrity is preserved; feature-
+  # request.md is never overwritten by a downstream role.
   local iter feature_id spec feature_dir
   for iter in "${iters[@]}"; do
     feature_id="$(iteration_feature_id "$iter")"
@@ -572,7 +563,7 @@ run_plan_sprint() {
     if [[ ! -f "$spec" ]]; then err "missing iteration spec: $spec"; exit 2; fi
     feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
     mkdir -p "$feature_dir"
-    log "  ${sprint_name}: human-proxy (PO) authors feature-request for ${feature_id} (after the proposal)"
+    log "  ${sprint_name}: human-proxy (PO) commits feature-request for ${feature_id}"
     proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
       || { err "human-proxy refused feature-request.md for ${feature_id}"; exit 2; }
     # Confirm the per-feature precondition now passes (request present + conformant).
@@ -580,10 +571,27 @@ run_plan_sprint() {
       || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
   done
 
-  # c. Commit the sprint backlog to trunk so each feature branch inherits its
-  # request. Idempotent on resume: nothing to commit when already present.
-  git add .tdd/features 2>/dev/null || true
-  git commit -m "plan ${sprint_name}: author feature-requests (${iters[*]})" >/dev/null 2>&1 \
+  # c. Drive planning through the deterministic orchestrator (the same CLI the
+  # scaffolded /plan command runs). The smoke calls the driver DIRECTLY (as it
+  # does for the per-feature loop), not through `claude -p "/plan"`: a claude -p
+  # session's Bash tool does not reliably inherit LAKEBASE_TDD_HUMAN_PROXY, so the
+  # command's gate-mode check fell through to `interactive` headless and the plan
+  # gate was never approved. Calling the driver here (in this shell, where the env
+  # is correct) with an explicit `--gates proxy` is deterministic. The driver runs
+  # propose (Spec Author -> feature-proposals.md), estimate (Architect -> planning/
+  # estimates.json t-shirt sizes), author-requests (PO affirms the staged
+  # requests), sync-backlog (projects backlog.json from them), then the Human
+  # Proxy approves the sprint plan gate (teeth: feature-proposals.md exists +
+  # conforms) and it stops at planning-complete.
+  log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
+  "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
+    --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \
+    || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
+
+  # d. Commit the sprint backlog + planning artifacts to trunk so each feature
+  # branch inherits its request. Idempotent on resume: nothing new to commit.
+  git add .tdd/features .tdd/planning .tdd/sprints 2>/dev/null || true
+  git commit -m "plan ${sprint_name}: commit backlog (${iters[*]})" >/dev/null 2>&1 \
     || log "  ${sprint_name}: backlog already committed (nothing new)"
 
   # Record the planning activity (the PO authored the sprint's requests).

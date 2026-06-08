@@ -36,7 +36,7 @@ function freshStory(): StoryView {
 function makeFakeWorld(storyIds: string[]) {
   const state: DriveState = {
     phase: "planning",
-    planning: { proposed: false, requestsAuthored: false },
+    planning: { proposed: false, estimated: false, requestsAuthored: false },
     breakdownDone: false,
     storyOrder: [],
     stories: {},
@@ -58,6 +58,8 @@ function makeFakeWorld(storyIds: string[]) {
           if ("mode" in action) {
             if (action.role === "spec-author" && action.mode === "propose") {
               state.planning!.proposed = true;
+            } else if (action.role === "architect-reviewer" && action.mode === "estimate") {
+              state.planning!.estimated = true;
             } else if (action.role === "product-owner" && action.mode === "author-requests") {
               state.planning!.requestsAuthored = true;
             } else if (action.role === "spec-author" && action.mode === "breakdown") {
@@ -134,7 +136,7 @@ describe("runDriver: drives a whole feature to done", () => {
     const result = await runDriver(effects);
 
     expect(state.phase).toBe("done");
-    expect(state.planning).toEqual({ proposed: true, requestsAuthored: true, gateApproved: true });
+    expect(state.planning).toEqual({ proposed: true, estimated: true, requestsAuthored: true, gateApproved: true });
     expect(state.deploy).toEqual({ deployed: true, gateApproved: true });
     for (const id of ["S1", "S2", "S3"]) {
       expect(state.stories[id].gateApproved, `${id} gate`).toBe(true);
@@ -184,7 +186,7 @@ describe("runDriver: stall detection", () => {
   it("throws DriverStalledError when an effect does not advance state", async () => {
     const state: DriveState = {
       phase: "planning",
-      planning: { proposed: false, requestsAuthored: false },
+      planning: { proposed: false, estimated: false, requestsAuthored: false },
       breakdownDone: false,
       storyOrder: [],
       stories: {},
@@ -209,7 +211,7 @@ describe("runDriver: Tier-2 phase bounds (driverBoundOptions, FEIP-7461)", () =>
     const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
     const result = await runDriver(effects, driverBoundOptions("plan"));
     expect(result.stoppedAtBound).toBe(true);
-    expect(state.planning).toEqual({ proposed: true, requestsAuthored: true, gateApproved: true });
+    expect(state.planning).toEqual({ proposed: true, estimated: true, requestsAuthored: true, gateApproved: true });
     // Stops AT planning-complete: not performed, so the phase stays planning and
     // no feature work (breakdown/build) happened.
     expect(state.phase).toBe("planning");

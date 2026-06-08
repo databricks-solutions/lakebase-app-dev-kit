@@ -183,12 +183,18 @@ describe("buildDriveEffects", () => {
   });
 
   it("planNextAction (the --dry-run core) reports the next action + its commands", async () => {
-    // Planning, breakdown proposed (feature-spec exists) but PO has not authored
-    // -> next action is invoke product-owner author-requests.
+    // Planning, proposed (feature-spec exists) + estimated (Architect sized the
+    // candidates) but the PO has not authored requests -> next is product-owner
+    // author-requests.
     const featureDir = join(tddDir, "features", "F1");
     mkdirSync(featureDir, { recursive: true });
     writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "planning" }));
     writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify({ id: "F1", stories: [] }));
+    mkdirSync(join(tddDir, "planning"), { recursive: true });
+    writeFileSync(
+      join(tddDir, "planning", "estimates.json"),
+      JSON.stringify({ estimates: [{ feature_id: "F1", size: "M" }] }),
+    );
     writeFileSync(
       join(featureDir, "pipeline.json"),
       JSON.stringify({ version: 1, feature_id: "F1", build_queue: [], build_active: null, stories: {} }),

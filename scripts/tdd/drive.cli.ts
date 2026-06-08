@@ -32,6 +32,8 @@ import {
 import {
   runSprint,
   readSprintBacklog,
+  backlogFeatureIds,
+  syncBacklog,
   deriveSprintPlanningState,
   type SprintEffects,
 } from "./orchestrator-sprint.js";
@@ -129,6 +131,7 @@ const KIT_CLI_JS: Record<string, string> = {
   "lakebase-tdd-experiment": "story-experiment.cli.js",
   "lakebase-tdd-deploy": "deploy.cli.js",
   "lakebase-tdd-human-proxy": "human-proxy.cli.js",
+  "lakebase-tdd-test-list": "test-list.cli.js",
 };
 
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct
@@ -138,6 +141,12 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
     async run(cmd: DriveCommand) {
       if (cmd.kind === "set-phase") {
         writeWorkflowPhase(cfg.tddDir, cmd.phase);
+        return;
+      }
+      if (cmd.kind === "sync-backlog") {
+        // Deterministic, in-process (no CLI): project backlog.json from the
+        // PO's committed feature-requests + the Architect's estimates.
+        syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
       if (cmd.kind === "claude") {
@@ -246,7 +255,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       return { pendingGate: pendingGateOf(r) };
     },
     async readBacklog() {
-      return readSprintBacklog(tddDir, sprint).features;
+      return backlogFeatureIds(readSprintBacklog(tddDir, sprint));
     },
     async claimFeature(featureId) {
       await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);

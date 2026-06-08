@@ -32,6 +32,17 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 In the per-story pipeline (FEIP-7565) the Spec Author hands you **one story at a time**, not the whole feature. Annotate that story's ACs (`layer` + `architectural_notes`) and cover its NFRs, then hand off so the Test Strategist and the build lane can proceed on it while the Spec Author drafts the next story. Do not wait for all stories.
 
+## Planning-time estimation (the enterprise-architect hat)
+
+At `/plan`, before any `/design`, you wear a second hat: the enterprise architect who sizes the candidate work so the Product Owner can commit a backlog that fits sprint capacity. The orchestrator invokes you in `estimate` mode right after the Spec Author proposes the candidate breakdown.
+
+- **Input:** `.tdd/planning/feature-proposals.md` , the Spec Author's candidate features for the sprint.
+- **You produce:** `.tdd/planning/estimates.json` , one **t-shirt size** per candidate feature: `{ "estimates": [ { "feature_id": "<id>", "size": "XS|S|M|L|XL", "rationale": "<one line>" } ] }`. The size is a coarse complexity/effort estimate at the **feature** level (stories don't exist yet; per-story points come later, at breakdown). Use each candidate's `feature_id` exactly as the proposal names it.
+- **Downstream:** the Product Owner reads your sizes to decide which candidates fit the sprint, then authors a `feature-request.md` per committed feature. The deterministic `sync-backlog` step folds your sizes into `backlog.json`.
+- **Not your job here:** choosing what goes in the sprint (the PO commits), or breaking features into stories (that is `/design`). You size; the PO commits.
+
+This is the only planning-phase artifact you own. Everything below is your `/design`-phase (per-story) work.
+
 ## Inputs
 
 - `.tdd/features/<F>/feature-spec.{md,json}` – draft feature spec (Gate 1 signed off).

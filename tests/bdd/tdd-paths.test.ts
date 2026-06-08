@@ -22,7 +22,7 @@ describe("path builders compose consistently", () => {
     expect(P.featureDir(tdd, "F1")).toBe(join(tdd, "features", "F1"));
     expect(P.storyDir(tdd, "F1", "S1")).toBe(join(tdd, "features", "F1", "stories", "S1"));
     expect(P.acJson(tdd, "F1", "S1", "AC1")).toBe(join(tdd, "features", "F1", "stories", "S1", "acs", "AC1.json"));
-    expect(P.storyTestListJson(tdd, "F1", "S1")).toBe(join(P.storyDir(tdd, "F1", "S1"), "test-list.json"));
+    expect(P.storyTestListJson(tdd, "F1", "S1")).toBe(join(P.storyDir(tdd, "F1", "S1"), "test-list-per-story.json"));
     expect(P.featureProposalsMd(tdd)).toBe(join(tdd, "planning", "feature-proposals.md"));
     expect(P.backlogJson(tdd, "sprint-1")).toBe(join(tdd, "sprints", "sprint-1", "backlog.json"));
   });
@@ -81,8 +81,8 @@ describe("readAcLayer", () => {
 describe("backlog read/write roundtrip", () => {
   it("writes then reads the feature list", () => {
     expect(P.readBacklog(tdd, "sprint-1").features).toEqual([]);
-    P.writeBacklog(tdd, { sprint: "sprint-1", features: ["F1", "F2"] });
-    expect(P.readBacklog(tdd, "sprint-1").features).toEqual(["F1", "F2"]);
+    P.writeBacklog(tdd, { sprint: "sprint-1", features: [{ id: "F1", size: "M" }, { id: "F2" }] });
+    expect(P.readBacklog(tdd, "sprint-1").features).toEqual([{ id: "F1", size: "M" }, { id: "F2" }]);
   });
 });
 

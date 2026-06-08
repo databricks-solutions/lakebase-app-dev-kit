@@ -77,7 +77,7 @@ describe("deriveDriveState: gate + acceptance mapping", () => {
 
 describe("deriveDriveState + nextTransition: realistic on-disk situations", () => {
   it("planning: proposes the breakdown when nothing is recorded", () => {
-    const ctx: DriveContext = { phase: "planning", breakdownDone: false, planning: { proposed: false, requestsAuthored: false } };
+    const ctx: DriveContext = { phase: "planning", breakdownDone: false, planning: { proposed: false, estimated: false, requestsAuthored: false } };
     const state = deriveDriveState(pipeline({}), fakeProbe({}), ctx);
     expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "spec-author", mode: "propose" });
   });

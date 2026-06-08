@@ -25,7 +25,12 @@ import { readPipeline } from "./story-pipeline.js";
 export type DriveCommand =
   | { kind: "claude"; role: string; model: string; task: string }
   | { kind: "cli"; bin: string; args: string[] }
-  | { kind: "set-phase"; phase: string };
+  | { kind: "set-phase"; phase: string }
+  // Deterministic sprint-backlog projection (the ONE writer): after the PO
+  // commits its requests, project backlog.json from the on-disk feature-request
+  // set + the Architect's estimates. Handled in-process by the runner (no CLI),
+  // mirroring set-phase. See syncBacklog in tdd-paths.
+  | { kind: "sync-backlog"; sprint: string };
 
 export interface CommandRunner {
   run(cmd: DriveCommand): Promise<void>;
@@ -54,9 +59,11 @@ function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, feat
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
-        return `Propose the sprint's feature breakdown for planning.`;
+        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).`;
+      case "estimate":
+        return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
-        return `Author the sprint's feature-requests on the human's behalf.`;
+        return `Commit the sprint backlog: author a feature-request.md for each feature you are pulling into the sprint (informed by the Architect's t-shirt sizes), on the human's behalf.`;
       case "breakdown":
         return `Break feature ${featureId} down into its stories.`;
     }
@@ -82,6 +89,7 @@ const PIPELINE_BIN = "lakebase-tdd-pipeline";
 const EXPERIMENT_BIN = "lakebase-tdd-experiment";
 const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
+const TEST_LIST_BIN = "lakebase-tdd-test-list";
 
 /**
  * The concrete commands that carry out one action. Pure: depends only on the
@@ -108,6 +116,23 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // advance (breakdown writes files, not pipeline.json).
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
+      }
+      // After the PO commits the sprint's feature-requests, deterministically
+      // project the backlog (the ONE writer): backlog.json = the features that
+      // now have a feature-request.md, each carrying the Architect's t-shirt
+      // size. requestsAuthored then reads that same projection, so the planning
+      // machine advances on what the PO actually committed (no orphan backlog).
+      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
+        cmds.push({ kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" });
+      }
+      // After the Test Strategist orders a story's tests, deterministically
+      // scope the feature master to that story and write the canonical per-story
+      // list (storyTestListJson) , the exact file + field the testListReady probe
+      // reads. Code-emitting it (not relying on the role) is what keeps producer
+      // + probe on the single source of truth, so the design lane cannot stall
+      // waiting on a per-story list the role wrote under a different name/shape.
+      if (!("mode" in action) && action.role === "test-strategist") {
+        cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,

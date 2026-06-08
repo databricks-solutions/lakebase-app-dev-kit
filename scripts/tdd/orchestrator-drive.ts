@@ -122,9 +122,13 @@ export interface StoryView extends DriveStoryView {
 export type DrivePhase = "planning" | "feature" | "deploy" | "done";
 
 export interface PlanningState {
-  /** The Spec Author proposed the sprint's feature breakdown. */
+  /** The Spec Author proposed the sprint's candidate feature breakdown. */
   proposed: boolean;
-  /** The Product Owner authored the sprint's feature-requests. */
+  /** The Architect t-shirt-sized the candidates (planning/estimates.json), so
+   *  the Product Owner can commit against sprint capacity. */
+  estimated: boolean;
+  /** The Product Owner committed the sprint backlog (authored a feature-request
+   *  per committed feature; sync-backlog projected backlog.json). */
   requestsAuthored: boolean;
   /** The sprint PLAN gate has been approved (human live, or Human Proxy
    *  headless). The HITL checkpoint between planning and execution; a re-plan
@@ -153,6 +157,7 @@ export interface DriveState {
 export type WorkflowAction =
   | DriveAction
   | { kind: "invoke-role"; role: "spec-author"; mode: "propose" }
+  | { kind: "invoke-role"; role: "architect-reviewer"; mode: "estimate" }
   | { kind: "invoke-role"; role: "product-owner"; mode: "author-requests" }
   | { kind: "approve-plan-gate" }
   | { kind: "planning-complete" }
@@ -193,8 +198,11 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
  */
 export function nextTransition(state: DriveState): WorkflowAction {
   if (state.phase === "planning") {
-    const p = state.planning ?? { proposed: false, requestsAuthored: false };
+    const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
+    // The Architect t-shirt-sizes the candidates before the PO commits, so the
+    // PO can pick a backlog that fits sprint capacity (the team's estimation).
+    if (!p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
     // The sprint plan gate is the HITL checkpoint between planning + execution.
     // It locks the backlog (human live / Human Proxy headless) before any

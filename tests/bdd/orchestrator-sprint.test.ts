@@ -11,9 +11,11 @@ import {
   runSprint,
   readSprintBacklog,
   writeSprintBacklog,
+  syncBacklog,
   deriveSprintPlanningState,
   type SprintEffects,
 } from "../../scripts/tdd/orchestrator-sprint";
+import { writeEstimates } from "../../scripts/tdd/tdd-paths";
 import { writeSprintGates } from "../../scripts/tdd/sprint-gates";
 
 const SPRINT = "sprint-1";
@@ -27,8 +29,18 @@ afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 describe("sprint backlog manifest", () => {
   it("round-trips features; empty when absent", () => {
     expect(readSprintBacklog(tdd, SPRINT)).toEqual({ sprint: SPRINT, features: [] });
-    writeSprintBacklog(tdd, { sprint: SPRINT, features: ["F1-a", "F2-b"] });
-    expect(readSprintBacklog(tdd, SPRINT).features).toEqual(["F1-a", "F2-b"]);
+    writeSprintBacklog(tdd, { sprint: SPRINT, features: [{ id: "F1-a", size: "M" }, { id: "F2-b" }] });
+    expect(readSprintBacklog(tdd, SPRINT).features).toEqual([{ id: "F1-a", size: "M" }, { id: "F2-b" }]);
+  });
+
+  it("tolerates the legacy bare-string-id backlog form", () => {
+    // Old artifacts wrote features: ["F1", ...]; readBacklog normalizes to {id}.
+    mkdirSync(join(tdd, "sprints", SPRINT), { recursive: true });
+    writeFileSync(
+      join(tdd, "sprints", SPRINT, "backlog.json"),
+      JSON.stringify({ sprint: SPRINT, features: ["F1-a", "F2-b"] }),
+    );
+    expect(readSprintBacklog(tdd, SPRINT).features).toEqual([{ id: "F1-a" }, { id: "F2-b" }]);
   });
 });
 
@@ -51,7 +63,13 @@ describe("deriveSprintPlanningState", () => {
   it("nothing on disk => all planning flags false", () => {
     const s = deriveSprintPlanningState(tdd, SPRINT);
     expect(s.phase).toBe("planning");
-    expect(s.planning).toEqual({ proposed: false, requestsAuthored: false, gateApproved: false });
+    expect(s.planning).toEqual({ proposed: false, estimated: false, requestsAuthored: false, gateApproved: false });
+  });
+
+  it("estimated when the Architect wrote planning/estimates.json", () => {
+    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.estimated).toBe(false);
+    writeEstimates(tdd, [{ feature_id: "F1-a", size: "M" }]);
+    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.estimated).toBe(true);
   });
 
   it("proposed when feature-proposals.md exists", () => {
@@ -71,10 +89,27 @@ describe("deriveSprintPlanningState", () => {
 
   it("requestsAuthored only when the backlog is non-empty AND every feature has a request", () => {
     writeProposal();
-    writeSprintBacklog(tdd, { sprint: SPRINT, features: ["F1-a", "F2-b"] });
+    writeSprintBacklog(tdd, { sprint: SPRINT, features: [{ id: "F1-a" }, { id: "F2-b" }] });
     writeRequest("F1-a"); // only one of two
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.requestsAuthored).toBe(false);
     writeRequest("F2-b");
+    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.requestsAuthored).toBe(true);
+  });
+
+  it("syncBacklog projects the backlog from committed requests + Architect sizes", () => {
+    // The deterministic sync-backlog step: backlog = features that have a
+    // feature-request.md (the PO's commitment), enriched with t-shirt sizes.
+    writeRequest("F1-a");
+    writeRequest("F2-b");
+    writeEstimates(tdd, [
+      { feature_id: "F1-a", size: "M" },
+      { feature_id: "F2-b", size: "S" },
+      { feature_id: "F3-uncommitted", size: "L" }, // estimated but no request -> not in backlog
+    ]);
+    const backlog = syncBacklog(tdd, SPRINT);
+    expect(backlog.features).toEqual([{ id: "F1-a", size: "M" }, { id: "F2-b", size: "S" }]);
+    // Persisted + read back identically; requestsAuthored now true.
+    expect(readSprintBacklog(tdd, SPRINT).features).toEqual([{ id: "F1-a", size: "M" }, { id: "F2-b", size: "S" }]);
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.requestsAuthored).toBe(true);
   });
 
