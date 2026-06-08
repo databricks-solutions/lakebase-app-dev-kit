@@ -97,6 +97,14 @@ if ! grep -rq "$MARKER" "${KIT_INSTALL}/dist" 2>/dev/null; then
 fi
 log "GUARD ok , cache @ ${HEAD_SHA} contains '${MARKER}' (fresh dist confirmed)"
 
+# Pin the ENTIRE run to this one guarded, content-addressed install. lk honors
+# LAKEBASE_KIT_DIR first (no ref resolution, no npm, no network, no `npx pack`
+# bug), so the bootstrap scaffold, the scaffolded project's scripts/lk, and every
+# drive turn all execute these EXACT bits. Determinism is in code: nothing here
+# depends on remembering to set an env var at the prompt.
+export LAKEBASE_KIT_DIR="$KIT_INSTALL"
+log "pinned LAKEBASE_KIT_DIR=${KIT_INSTALL}"
+
 # ── 4. run the fast-forward smoke pinned to the SHA ───────────────────────────
 [ -f "$ENV_CONFIG" ] || die "env config not found: $ENV_CONFIG (pass --env)"
 set -a; # shellcheck source=/dev/null
@@ -105,4 +113,4 @@ source "$ENV_CONFIG"; set +a
 : "${GITHUB_OWNER:?env config must set GITHUB_OWNER}"
 log "HOST=$DATABRICKS_HOST OWNER=$GITHUB_OWNER PROFILE=${DATABRICKS_CONFIG_PROFILE:-<unset>}"
 log "running fast-forward smoke pinned to ${HEAD_SHA}"
-exec bash "${ORCH_DIR}/run-fastforward-smoke.sh" --tiers 2 --kit-ref "$HEAD_SHA" "${EXTRA[@]}"
+exec bash "${ORCH_DIR}/run-fastforward-smoke.sh" --tiers 2 --kit-ref "$HEAD_SHA" ${EXTRA[@]+"${EXTRA[@]}"}

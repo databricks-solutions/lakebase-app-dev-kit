@@ -1,9 +1,17 @@
 // Guard against the npx tax creeping back in. Kit CLIs invoked from a scaffolded
 // project must go through the fast `./scripts/lk` resolver (node dist, ~0.09s),
 // NOT `npx --package=github#ref <bin>` (~3.5s, re-resolves the ref every call).
+//
+// The smoke's create-project bootstrap also runs through the kit's OWN committed
+// lk (templates/project/common/scripts/lk) so a run is DETERMINISTIC: lk resolves
+// via `npm install <committish>` (content-addressed for a SHA, honors a pre-built
+// $LAKEBASE_KIT_DIR), never the `npx pack` path that throws "GitFetcher requires
+// an Arborist constructor" on a SHA committish, and never a moving ref's stale
+// _cacache. One resolution path => identical bits on every step of every run.
+//
 // Two intentional exceptions keep npx: the kit's own create path (commands/tdd.md,
-// runs before a project/shim exists) and the project CI workflows (pinned to an
-// immutable published version tag, which npx caches; lk would break that pin).
+// a real user with no kit checkout, pinned to a published tag npx caches fine) and
+// the project CI workflows (pinned to an immutable published version tag).
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -43,12 +51,24 @@ describe("npx-tax guard: the canonical logging doc + smoke use lk", () => {
     expect(body).not.toMatch(/^\s*lakebase-tdd-log /m);
   });
 
-  it("the smoke drives per-CLI calls through scripts/lk (create-project stays npx)", () => {
-    const smoke = read("examples/feip-7422-smoke/orchestrator/run-smoke.sh");
-    expect(smoke).toMatch(/scripts\/lk/);
-    // The per-CLI quoted-KIT_NPX form is fully converted; only the split-line
-    // create-project bootstrap may still use npx.
-    expect(smoke).not.toMatch(/npx --yes --package="\$\{KIT_NPX\}"/);
-    expect(smoke, "create-project bootstrap intentionally stays npx").toMatch(/lakebase-create-project/);
+  it("both smokes bootstrap create-project through the kit's lk (no npx --package), for determinism", () => {
+    for (const rel of [
+      "examples/feip-7422-smoke/orchestrator/run-smoke.sh",
+      "examples/feip-7422-smoke/orchestrator/run-fastforward-smoke.sh",
+    ]) {
+      const smoke = read(rel);
+      // Bootstrap routes through the committed lk resolver, pinned via KIT_LK.
+      expect(smoke, `${rel}: defines KIT_LK from the kit's committed lk`).toMatch(
+        /KIT_LK=.*templates\/project\/common\/scripts\/lk/,
+      );
+      expect(smoke, `${rel}: runs create-project via lk`).toMatch(
+        /bash "\$KIT_LK" \\?\s*\n?\s*lakebase-create-project|bash "\$KIT_LK" lakebase-create-project/,
+      );
+      // No npx --package bootstrap remains (the SHA-pack-bug / stale-ref source):
+      // catches both the inline and split-line `npx --yes [\] --package=${KIT_NPX}`
+      // forms used previously.
+      expect(smoke, `${rel}: no npx --package= bootstrap`).not.toMatch(/--package="?\$\{KIT_NPX\}/);
+      expect(smoke, `${rel}: no bare npx --yes --package`).not.toMatch(/npx\s+--yes[\s\S]{0,8}--package=/);
+    }
   });
 });

@@ -64,6 +64,16 @@ PROJECT_DIR="${PROJECT_DIR:-$HOME/code/feip-7422-smoke/${PROJECT_NAME}}"
 KIT_NPX="github:databricks-solutions/lakebase-app-dev-kit${KIT_REF:+#${KIT_REF}}"
 # Exported so the scaffolded scripts/lk + /design pre-hook resolve the same ref.
 [[ -n "$KIT_REF" ]] && export LAKEBASE_KIT_REF="$KIT_REF"
+
+# Deterministic bootstrap (no npx pack bug, no moving-ref staleness): the
+# create-project scaffold runs through the kit's OWN committed lk resolver, the
+# same one the scaffolded project + every drive turn use. lk resolves the kit via
+# `npm install <committish>` (content-addressed for a SHA, never the `npx pack`
+# path that throws "GitFetcher requires an Arborist constructor" on a SHA) and
+# honors $LAKEBASE_KIT_DIR (a pre-built, guarded install) when set. One
+# resolution path => the exact same bits run on every step of every run.
+KIT_ROOT="$(cd "${ORCHESTRATOR_DIR}/../../.." && pwd)"
+KIT_LK="${KIT_ROOT}/templates/project/common/scripts/lk"
 # UI track on (this feature is browser-facing): exercises the UX design-guide
 # replay + the Navigator/Driver building against it.
 export LAKEBASE_TDD_UI=1
@@ -82,8 +92,11 @@ fi
 : "${DATABRICKS_HOST:?ff-smoke: DATABRICKS_HOST required}"
 : "${GITHUB_OWNER:?ff-smoke: GITHUB_OWNER required}"
 log "scaffolding ${PROJECT_NAME} via lakebase-create-project (tiers=${TIERS})..."
+# Warm the resolver once so the bootstrap (and a moving-branch ref) resolve the
+# ref's CURRENT commit before scaffolding; a no-op under $LAKEBASE_KIT_DIR.
+bash "$KIT_LK" --warm || { err "could not resolve the kit via lk (ref=${KIT_REF:-main})"; exit 1; }
 (
-  npx --yes --package="${KIT_NPX}" lakebase-create-project \
+  bash "$KIT_LK" lakebase-create-project \
     --project-name "$PROJECT_NAME" --parent-dir "$(dirname "$PROJECT_DIR")" \
     --databricks-host "$DATABRICKS_HOST" --github-owner "$GITHUB_OWNER" \
     --language python --runner self-hosted --tiers "$TIERS" \

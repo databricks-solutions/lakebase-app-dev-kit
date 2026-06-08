@@ -156,6 +156,16 @@ fi
 # dist/ committed and yields "command not found" when invoking bins.
 export LAKEBASE_KIT_NPX="$KIT_NPX"
 
+# Deterministic bootstrap: the create-project scaffold runs through the kit's OWN
+# committed lk resolver (the same one the scaffolded project + every drive turn
+# use), NOT `npx --package=github#ref`. lk resolves via `npm install <committish>`
+# (content-addressed for a SHA; never the `npx pack` path that throws "GitFetcher
+# requires an Arborist constructor" on a SHA committish) and honors a pre-built
+# $LAKEBASE_KIT_DIR install when set. One resolution path => identical bits on
+# every step of every run.
+KIT_ROOT="$(cd "${ORCHESTRATOR_DIR}/../../.." && pwd)"
+KIT_LK="${KIT_ROOT}/templates/project/common/scripts/lk"
+
 # Headless run: the human reviewer at each HITL gate is performed by
 # human-proxy, which validates the gate's artifacts exist + carry their
 # expected elements (format-conformant) and approves only then. This lets
@@ -299,9 +309,11 @@ scaffold_project() {
   # against the same name during that window. If a smoke run fails after
   # the Lakebase project is created, re-run with --project-name <other>
   # rather than waiting for the purge.
+  # Warm the resolver once so the bootstrap (and a moving-branch ref) resolve the
+  # ref's CURRENT commit before scaffolding; a no-op under $LAKEBASE_KIT_DIR.
+  bash "$KIT_LK" --warm || { err "could not resolve the kit via lk (ref=${KIT_REF:-main})"; exit 1; }
   (
-    npx --yes \
-      --package=${KIT_NPX} \
+    bash "$KIT_LK" \
       lakebase-create-project \
       --project-name "$PROJECT_NAME" \
       --parent-dir "$(dirname "$PROJECT_DIR")" \
