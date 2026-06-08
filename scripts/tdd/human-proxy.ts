@@ -47,6 +47,7 @@ import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
+import { featureResolved } from "./tdd-paths.js";
 
 /**
  * Emit the HITL reviewer's decision to the centralized agent log. The mock
@@ -113,7 +114,7 @@ export interface HumanProxyResult {
 }
 
 function featureDir(tddDir: string, featureId: string): string {
-  return join(tddDir, "features", featureId);
+  return featureResolved(tddDir, featureId);
 }
 
 /**

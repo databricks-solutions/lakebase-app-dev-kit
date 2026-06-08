@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync } from "fs";
 import { join } from "path";
 import { listExperiments } from "./experiment";
 import { cutExperiment } from "./experiment";
+import { findFeatureDir } from "./tdd-paths.js";
 import type { ExperimentRecord } from "./experiment";
 import type { BranchLookupOpts } from "./../lakebase/branch-utils";
 
@@ -129,11 +130,6 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
 }
 
 function locateFeatureDir(tddDir: string, featureId: string): string | null {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) return null;
-  const { readdirSync, statSync } = require("fs") as typeof import("fs");
-  const candidate = readdirSync(featuresDir).find((d: string) => d.startsWith(featureId));
-  if (!candidate) return null;
-  const full = join(featuresDir, candidate);
-  return statSync(full).isDirectory() ? full : null;
+  // One feature-dir resolution rule (tdd-paths), not a local copy.
+  return findFeatureDir(tddDir, featureId) ?? null;
 }

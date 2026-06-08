@@ -97,7 +97,9 @@ describe("design-spec-gate", () => {
     seedAcs("AC1");
     const analysis = analyzeForGate(tdd, "F1", STORY);
     writePlan(tdd, analysis.proposed_plan);
-    expect(existsSync(join(tdd, "features", "F1", "stories", STORY, "plan.json"))).toBe(true);
+    // plan.json lands in the feature's resolved dir (the <id>-<slug> dir where
+    // its ACs live), co-located with what readPlan reads back , not a bare F1 dir.
+    expect(existsSync(join(tdd, FEATURE_DIR, "stories", STORY, "plan.json"))).toBe(true);
     const round = readPlan(tdd, "F1", STORY);
     expect(round).toEqual(analysis.proposed_plan);
   });

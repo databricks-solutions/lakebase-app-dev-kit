@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkArtifactConformance } from "./artifact-conformance.js";
+import { featureRequestMd } from "./tdd-paths.js";
 
 export interface IntakeCheckArgs {
   /** .tdd/ root. Default ./.tdd */
@@ -40,13 +41,6 @@ export interface IntakeCheckResult {
   nonConformant: string[];
 }
 
-function resolveFeatureDir(tddDir: string, featureId: string): string | undefined {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) return undefined;
-  const match = readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? join(featuresDir, match) : undefined;
-}
-
 /**
  * Verify the intake artifacts that /design requires before phase 1. Project
  * -level product-overview.md + nfrs.md are always required; feature-request.md
@@ -64,10 +58,9 @@ export function checkIntakePreconditions(args: IntakeCheckArgs = {}): IntakeChec
     required.push({ artifact: "design-brief.md", path: join(tddDir, "design", "design-brief.md") });
   }
   if (args.featureId) {
-    const fdir = resolveFeatureDir(tddDir, args.featureId);
-    // When the feature dir does not exist yet, the path still reports as absent.
-    const fpath = fdir ? join(fdir, "feature-request.md") : join(tddDir, "features", args.featureId, "feature-request.md");
-    required.push({ artifact: "feature-request.md", path: fpath });
+    // featureRequestMd resolves the on-disk feature dir (exact or <id>-<slug>),
+    // falling back to the exact path when it does not exist yet (reports absent).
+    required.push({ artifact: "feature-request.md", path: featureRequestMd(tddDir, args.featureId) });
   }
 
   const statuses: IntakeArtifactStatus[] = required.map(({ artifact, path }) => {

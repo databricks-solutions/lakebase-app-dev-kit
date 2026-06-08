@@ -6,6 +6,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { dirname, join } from "path";
+import { pipelineJson, storiesDir as storiesDirOf, acsDir as acsDirOf } from "./tdd-paths.js";
 
 export const STORY_STATUSES = [
   "designing",
@@ -130,7 +131,7 @@ export function initPipeline(featureId: string): StoryPipeline {
 }
 
 function pipelinePath(tddDir: string, featureId: string): string {
-  return join(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 
 /** Read .tdd/features/<F>/pipeline.json, or an empty pipeline when absent. */
@@ -175,7 +176,7 @@ export function syncBreakdownToPipeline(
   tddDir: string,
   featureId: string,
 ): { added: string[]; total: string[] } {
-  const storiesDir = join(tddDir, "features", featureId, "stories");
+  const storiesDir = storiesDirOf(tddDir, featureId);
   const pipeline = readPipeline(tddDir, featureId);
   const added: string[] = [];
   if (existsSync(storiesDir)) {
@@ -248,7 +249,7 @@ export function completeActive(pipeline: StoryPipeline): string | null {
 
 /** True when stories/<S>/acs/ holds at least one `*.json` AC artifact. */
 function storyHasAcceptanceCriteria(tddDir: string, featureId: string, storyId: string): boolean {
-  const acsDir = join(tddDir, "features", featureId, "stories", storyId, "acs");
+  const acsDir = acsDirOf(tddDir, featureId, storyId);
   if (!existsSync(acsDir)) return false;
   return readdirSync(acsDir).some((f) => f.endsWith(".json"));
 }
@@ -269,7 +270,7 @@ export function findBatchedDraftStories(
   pipeline: StoryPipeline,
   gatingStoryId: string,
 ): string[] {
-  const storiesDir = join(tddDir, "features", featureId, "stories");
+  const storiesDir = storiesDirOf(tddDir, featureId);
   if (!existsSync(storiesDir)) return [];
   const offenders: string[] = [];
   for (const storyId of readdirSync(storiesDir)) {

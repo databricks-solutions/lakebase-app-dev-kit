@@ -18,6 +18,7 @@ import {
   type AgentLogEvent,
   type AgentRole,
 } from "./agent-log.js";
+import { featureResolved, storyTestListJson } from "./tdd-paths.js";
 
 export interface ReconcileOpts {
   /** Path to the .tdd/ root. Default: "./.tdd". */
@@ -37,7 +38,7 @@ interface ArtifactSpec {
 /** The design artifacts a feature produces, attributed to their owning role. */
 function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
   const out: ArtifactSpec[] = [];
-  const fdir = join(tddDir, "features", featureId);
+  const fdir = featureResolved(tddDir, featureId);
   if (!existsSync(fdir)) return out;
   const add = (abs: string, role: AgentRole, message: string) => {
     if (existsSync(abs)) out.push({ path: relative(tddDir, abs), role, message });
@@ -65,7 +66,7 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
           }
         }
       }
-      add(join(storyDir, "test-list-per-story.json"), "test-strategist", `per-story test list for ${s}`);
+      add(storyTestListJson(tddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
     }
   }
   return out;

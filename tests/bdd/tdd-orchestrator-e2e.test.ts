@@ -83,7 +83,9 @@ describe("orchestrator e2e (hermetic – stubbed Navigator + Driver, real script
     expect(analysis.proposed_plan.mode).toBe("N=1");
     recordPlan(tdd, analysis.proposed_plan, "kevin@example.com");
     writePlan(tdd, analysis.proposed_plan);
-    expect(existsSync(join(tdd, "features", "F1", "stories", "S1", "plan.json"))).toBe(true);
+    // plan.json lands in the feature's resolved dir (the <id>-<slug> dirs seeded
+    // above), co-located with its ACs , what readPlan reads back.
+    expect(existsSync(join(tdd, "features", "F1-test", "stories", "S1-test", "plan.json"))).toBe(true);
     expect(readFileSync(join(tdd, "selection-log.md"), "utf8")).toContain("Experiment plan for F1");
 
     // HITL Gate 4 approval – transition to implementation

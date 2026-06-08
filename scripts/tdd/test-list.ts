@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { join, dirname } from "path";
 import {
   requireFeatureDir as findFeatureDir,
+  findStoryDir as findStoryDirOf,
   featureTestListJson,
   featureTestListMd,
   storyTestListJson,
@@ -155,20 +156,9 @@ function acIdsInStoryDir(storyDir: string): string[] {
     .sort();
 }
 
-/** Resolve a story's directory under stories/, matching by exact name then prefix. */
-function findStoryDir(featureDir: string, storyId: string): string | null {
-  const storiesDir = join(featureDir, "stories");
-  if (!existsSync(storiesDir)) return null;
-  const dirs = readdirSync(storiesDir).filter((d) =>
-    statSync(join(storiesDir, d)).isDirectory(),
-  );
-  const match = dirs.find((d) => d === storyId) ?? dirs.find((d) => d.startsWith(storyId));
-  return match ? join(storiesDir, match) : null;
-}
-
 /** AC ids declared for a story, read from stories/<story>/acs/*.json. */
 export function acsForStory(tddDir: string, featureId: string, storyId: string): string[] {
-  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  const storyDir = findStoryDirOf(tddDir, featureId, storyId);
   return storyDir ? acIdsInStoryDir(storyDir) : [];
 }
 
@@ -198,7 +188,7 @@ export function writeStoryTestList(
   featureId: string,
   storyId: string,
 ): string | null {
-  const storyDir = findStoryDir(findFeatureDir(tddDir, featureId), storyId);
+  const storyDir = findStoryDirOf(tddDir, featureId, storyId);
   if (!storyDir) return null;
   let master: TestList;
   try {

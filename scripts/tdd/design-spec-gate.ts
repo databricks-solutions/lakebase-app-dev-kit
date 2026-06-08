@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { readMasterTestList, scopeToStory, acsForStory } from "./test-list";
+import { storyPlanJson } from "./tdd-paths.js";
 import type { TestList, TestListItem } from "./test-list";
 import { readAcLayer } from "./run-cycle";
 import type { AcLayer } from "./experiment";
@@ -233,7 +234,7 @@ export function recordPlan(tddDir: string, plan: ExperimentPlan, deciderEmail?: 
 }
 
 export function readPlan(tddDir: string, featureId: string, storyId: string): ExperimentPlan | null {
-  const planPath = join(tddDir, "features", featureId, "stories", storyId, "plan.json");
+  const planPath = storyPlanJson(tddDir, featureId, storyId);
   if (!existsSync(planPath)) return null;
   return JSON.parse(readFileSync(planPath, "utf8"));
 }
@@ -242,9 +243,9 @@ export function writePlan(tddDir: string, plan: ExperimentPlan): void {
   // Plan persists per story (FEIP-7566) as features/<F>/stories/<story>/plan.json
   // for downstream readers (orchestrator). Conformance keys plan.json by
   // basename, so the per-story location still validates against plan.schema.json.
-  const dir = join(tddDir, "features", plan.feature_id, "stories", plan.story_id);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "plan.json"), JSON.stringify(plan, null, 2) + "\n");
+  const planPath = storyPlanJson(tddDir, plan.feature_id, plan.story_id);
+  mkdirSync(dirname(planPath), { recursive: true });
+  writeFileSync(planPath, JSON.stringify(plan, null, 2) + "\n");
 }
 
 // Re-export TestListItem so consumers don't need to import test-list separately for the type.

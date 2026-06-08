@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { readMasterTestList, type TestListItem } from "./test-list";
 import { readPlan, type ExperimentPlan } from "./design-spec-gate";
+import { storiesDir as storiesDirOf } from "./tdd-paths.js";
 import {
   listExperiments,
   listExperimentStories,
@@ -84,7 +85,7 @@ function readJsonIfExists<T>(path: string): T | null {
 
 /** Story ids under features/<F>/stories/ (each may carry a plan.json). */
 function listFeatureStories(tddDir: string, featureId: string): string[] {
-  const storiesDir = join(tddDir, "features", featureId, "stories");
+  const storiesDir = storiesDirOf(tddDir, featureId);
   if (!existsSync(storiesDir)) return [];
   return readdirSync(storiesDir)
     .filter((d) => statSync(join(storiesDir, d)).isDirectory())

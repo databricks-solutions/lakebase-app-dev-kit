@@ -25,6 +25,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
+import { featurePlanJson } from "./tdd-paths.js";
 
 export interface SpikeInput {
   /** Spike directory name under `.tdd/spikes/`. */
@@ -143,7 +144,7 @@ export interface AttachSpikeInputsResult {
  * Throws if plan.json does not exist (the gate has not run yet).
  */
 export function attachSpikeInputs(args: AttachSpikeInputsArgs): AttachSpikeInputsResult {
-  const planPath = join(args.tddDir, "features", args.featureId, "plan.json");
+  const planPath = featurePlanJson(args.tddDir, args.featureId);
   if (!existsSync(planPath)) {
     throw new Error(
       `attachSpikeInputs: plan.json not found at ${planPath}. Run the design-spec gate first.`

@@ -50,6 +50,7 @@ export const architectureMd = (tdd: string, f: string): string => join(featureRe
 export const featureTestListJson = (tdd: string, f: string): string => join(featureResolved(tdd, f), "test-list.json");
 export const featureTestListMd = (tdd: string, f: string): string => join(featureResolved(tdd, f), "test-list.md");
 export const pipelineJson = (tdd: string, f: string): string => join(featureResolved(tdd, f), "pipeline.json");
+export const featurePlanJson = (tdd: string, f: string): string => join(featureResolved(tdd, f), "plan.json");
 export const featureGatesJson = (tdd: string, f: string): string => join(featureResolved(tdd, f), "gates.json");
 export const featureNfrsMd = (tdd: string, f: string): string => join(featureResolved(tdd, f), "nfrs.md");
 export const featureDeployEvidenceJson = (tdd: string, f: string): string =>

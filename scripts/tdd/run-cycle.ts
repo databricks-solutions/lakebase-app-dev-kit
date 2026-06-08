@@ -12,6 +12,7 @@ import {
   type ExperimentTag,
 } from "./experiment";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log";
+import { readAcLayer as readAcLayerFromPaths } from "./tdd-paths.js";
 
 /**
  * Emit a cycle event to the centralized agent log from the SUBSTRATE, not
@@ -69,24 +70,9 @@ export interface CycleArtifact {
  * layer enum).
  */
 export function readAcLayer(tddDir: string, featureId: string, acId: string): AcLayer | undefined {
-  const featureDir = join(tddDir, "features", featureId);
-  const storiesDir = join(featureDir, "stories");
-  if (!existsSync(storiesDir)) return undefined;
-  for (const storyDirName of readdirSync(storiesDir)) {
-    const storyDir = join(storiesDir, storyDirName);
-    if (!statSync(storyDir).isDirectory()) continue;
-    const acFile = join(storyDir, "acs", `${acId}.json`);
-    if (!existsSync(acFile)) continue;
-    try {
-      const ac = JSON.parse(readFileSync(acFile, "utf8")) as { layer?: AcLayer };
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") {
-        return ac.layer;
-      }
-    } catch {
-      /* ignore malformed AC, treat as "no layer" */
-    }
-  }
-  return undefined;
+  // Single source of truth: delegate to tdd-paths so the AC-layer read lives in
+  // exactly one place. Re-exported under this name for the existing importers.
+  return readAcLayerFromPaths(tddDir, featureId, acId);
 }
 
 export interface CycleScope {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import type { SpecAdapter, AdapterContext, SpecEntity } from "./types";
 import type { Feature, Story, AC } from "../spec-sync";
+import { featuresDir as featuresDirOf } from "../tdd-paths.js";
 
 /**
  * Typed external_id encoding. push* methods emit these so pull can
@@ -40,8 +41,8 @@ function parseExternalId(externalId: string): ParsedRef {
   return { kind: "legacy", id: rest };
 }
 
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
+function findFeatureDirById(tddDir: string, featureId: string): string {
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) {
     throw new Error(
       `MarkdownAdapter.pull: feature ${featureId} not found (no features directory at ${featuresDir})`
@@ -58,8 +59,8 @@ function findFeatureDir(tddDir: string, featureId: string): string {
   throw new Error(`MarkdownAdapter.pull: feature ${featureId} not found under ${featuresDir}`);
 }
 
-function findStoryDir(tddDir: string, featureId: string, storyId: string): string {
-  const featureDir = findFeatureDir(tddDir, featureId);
+function findStoryDirById(tddDir: string, featureId: string, storyId: string): string {
+  const featureDir = findFeatureDirById(tddDir, featureId);
   const storiesDir = join(featureDir, "stories");
   if (!existsSync(storiesDir)) {
     throw new Error(
@@ -80,7 +81,7 @@ function findStoryDir(tddDir: string, featureId: string, storyId: string): strin
 }
 
 function findAcFile(tddDir: string, featureId: string, storyId: string, acId: string): string {
-  const storyDir = findStoryDir(tddDir, featureId, storyId);
+  const storyDir = findStoryDirById(tddDir, featureId, storyId);
   const acsDir = join(storyDir, "acs");
   const acFile = join(acsDir, `${acId}.json`);
   if (!existsSync(acFile)) {
@@ -92,7 +93,7 @@ function findAcFile(tddDir: string, featureId: string, storyId: string, acId: st
 }
 
 function scanForLegacyId(tddDir: string, id: string): SpecEntity {
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) {
     throw new Error(`MarkdownAdapter.pull: no features directory at ${featuresDir}`);
   }
@@ -161,11 +162,11 @@ export class MarkdownAdapter implements SpecAdapter {
     const ref = parseExternalId(externalId);
     switch (ref.kind) {
       case "feature": {
-        const dir = findFeatureDir(ctx.tddDir, ref.featureId);
+        const dir = findFeatureDirById(ctx.tddDir, ref.featureId);
         return JSON.parse(readFileSync(join(dir, "feature-spec.json"), "utf8")) as Feature;
       }
       case "story": {
-        const dir = findStoryDir(ctx.tddDir, ref.featureId, ref.storyId);
+        const dir = findStoryDirById(ctx.tddDir, ref.featureId, ref.storyId);
         return JSON.parse(readFileSync(join(dir, "story.json"), "utf8")) as Story;
       }
       case "ac": {
@@ -186,7 +187,7 @@ export class MarkdownAdapter implements SpecAdapter {
 }
 
 function scanForAcByStory(tddDir: string, storyId: string, acId: string): AC {
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) {
     throw new Error(`MarkdownAdapter.pull: no features directory at ${featuresDir}`);
   }

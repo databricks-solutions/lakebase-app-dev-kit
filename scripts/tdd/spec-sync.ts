@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "
 import { join, basename } from "path";
 import type Ajv from "ajv";
 import { getValidator } from "./schema-loader";
-import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
+import { requireFeatureDir as findFeatureDir, featuresDir as featuresDirOf } from "./tdd-paths.js";
 
 type Phase =
   | "discovery"
@@ -129,7 +129,7 @@ export function validateSpec(tddDir: string): DriftReport[] {
   }
 
   // Features
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) return reports;
   for (const featureDirName of readdirSync(featuresDir)) {
     const featureDir = join(featuresDir, featureDirName);

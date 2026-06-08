@@ -10,6 +10,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { featureResolved } from "./tdd-paths.js";
 import type { ComparisonReport, ExperimentRow, TagMatrixRow } from "./compare-experiments.js";
 
 export interface WriteComparisonReportArgs {
@@ -51,7 +52,7 @@ export interface WriteComparisonReportResult {
  * platforms.
  */
 export function writeComparisonReport(args: WriteComparisonReportArgs): WriteComparisonReportResult {
-  const featureDir = join(args.tddDir, "features", args.featureId);
+  const featureDir = featureResolved(args.tddDir, args.featureId);
   mkdirSync(featureDir, { recursive: true });
   const rawTs = args.filenameTimestamp ?? args.report.generated_at;
   const safeTs = rawTs.replace(/[:]/g, "-");

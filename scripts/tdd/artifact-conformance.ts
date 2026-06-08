@@ -33,6 +33,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join, basename, dirname } from "path";
 import { getValidator, formatSchemaErrors } from "./schema-loader";
+import { featuresDir as featuresDirOf } from "./tdd-paths.js";
 
 export type ConformanceResult =
   | { ok: true }
@@ -384,7 +385,7 @@ export interface FeatureConformanceReport {
  * counterpart to the gate-time check the human-proxy runs.
  */
 export function scanFeatureConformance(tddDir: string, featureId: string): FeatureConformanceReport {
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   const candidates = existsSync(featuresDir)
     ? readdirSync(featuresDir).filter((d) => d.startsWith(featureId))
     : [];

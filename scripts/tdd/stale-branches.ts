@@ -15,6 +15,7 @@ import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { readPipeline } from "./story-pipeline";
 import { listSpikes } from "./spike";
+import { featuresDir as featuresDirOf } from "./tdd-paths.js";
 
 export interface StaleBranchFinding {
   kind: "experiment" | "spike";
@@ -28,7 +29,7 @@ export interface StaleBranchFinding {
 
 /** Feature ids that have a pipeline.json (each dir under .tdd/features/). */
 function listPipelineFeatures(tddDir: string): string[] {
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) return [];
   return readdirSync(featuresDir)
     .filter((d) => statSync(join(featuresDir, d)).isDirectory())
