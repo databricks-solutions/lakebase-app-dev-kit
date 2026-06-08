@@ -41,7 +41,17 @@ In the per-story pipeline (FEIP-7565) you order **one story's** tests at a time 
 
 ## Outputs
 
-- `.tdd/features/<F>/test-list.json` – Beck's master ordered list at the **feature** level. This is the source of truth you author.
+- `.tdd/features/<F>/test-list.json` – Beck's master ordered list at the **feature** level. This is the source of truth you author. Write EXACTLY this shape , the ordered tests go in a top-level `items` array (NOT `tests`), and do not add other top-level keys; a renamed/extra key fails the test_list conformance gate and the downstream per-story scoping:
+
+  ```json
+  {
+    "feature_id": "<F>",
+    "ordered_for": "design-momentum",
+    "items": [
+      { "id": "T1", "description": "<one behavioral scenario>", "ac_id": "AC1", "status": "pending" }
+    ]
+  }
+  ```
 - `.tdd/features/<F>/test-list.md` – the human-readable Beck list, **rendered from the JSON** via `writeTestListMarkdown()` in `scripts/tdd/test-list.ts`. Do **not** hand-author it: a hand-typed list is a second source of truth that drifts. Rendering guarantees every item traces to its AC and the file passes the test_list conformance gate by construction.
 - For each AC: `.tdd/features/<F>/stories/<S>/test-list-per-ac.json` – generated transform by `scripts/tdd/test-list.ts`.
 - Optional: scaffolded scenario files under `.tdd/features/<F>/stories/<S>/scenarios/` as `.feature` (Gherkin) or `.test.ts` stubs.

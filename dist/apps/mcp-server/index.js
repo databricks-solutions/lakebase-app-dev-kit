@@ -10806,7 +10806,8 @@ function readMasterTestList(tddDir, featureId) {
   if (!existsSync21(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
-  return JSON.parse(readFileSync11(file, "utf8"));
+  const parsed = JSON.parse(readFileSync11(file, "utf8"));
+  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
 }
 
 // scripts/tdd/design-spec-gate.ts

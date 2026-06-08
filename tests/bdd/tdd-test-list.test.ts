@@ -164,4 +164,23 @@ describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
     writeMasterTestList(tdd, masterListBothStories());
     expect(readStoryTestList(tdd, "F1", "S1")).toBeNull();
   });
+
+  it("tolerates a non-conformant master (no `items`) without crashing the scope step", () => {
+    // Regression: a Test Strategist (haiku) wrote the master with a top-level
+    // `tests` key + no `items`, and scopeToStory's `list.items.filter` crashed
+    // the whole driver with "Cannot read properties of undefined (reading
+    // 'filter')". readMasterTestList must normalize items to [] so the lane
+    // re-issues the role (clean stall) instead of dying opaquely.
+    writeFileSync(
+      join(tdd, FEATURE_DIR, "test-list.json"),
+      JSON.stringify({ feature_id: "F1", ordered_for: "design-momentum", tests: [{ id: "T1" }], gate_3_status: "ready" }),
+    );
+    const master = readMasterTestList(tdd, "F1");
+    expect(master.items).toEqual([]);
+    expect(() => scopeToStory(master, "S1", ["AC1"])).not.toThrow();
+    // writeStoryTestList yields an empty per-story list (testListReady stays false).
+    const file = writeStoryTestList(tdd, "F1", "S1");
+    expect(file).toBeTruthy();
+    expect(readStoryTestList(tdd, "F1", "S1")!.items).toEqual([]);
+  });
 });

@@ -44,7 +44,8 @@ function readMasterTestList(tddDir, featureId) {
   if (!existsSync2(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
-  return JSON.parse(readFileSync2(file, "utf8"));
+  const parsed = JSON.parse(readFileSync2(file, "utf8"));
+  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
 }
 function viewsForAllAcs(list) {
   const out = {};

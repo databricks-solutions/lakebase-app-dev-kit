@@ -29,7 +29,15 @@ export function readMasterTestList(tddDir: string, featureId: string): TestList 
   if (!existsSync(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
-  return JSON.parse(readFileSync(file, "utf8"));
+  const parsed = JSON.parse(readFileSync(file, "utf8")) as Partial<TestList>;
+  // Normalize `items` to an array at the single read point so every consumer
+  // (scopeToStory / viewByAc / renderTestListMarkdown) is safe. A Test Strategist
+  // that wrote a non-conformant master (e.g. a top-level `tests` key instead of
+  // `items`, which haiku has done) must NOT crash the driver with an opaque
+  // "Cannot read properties of undefined (reading 'filter')": it yields an empty
+  // list, so testListReady stays false and the lane re-issues the role (surfaced
+  // as a clean stall), and the test_list conformance gate flags the bad shape.
+  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] } as TestList;
 }
 
 export function writeMasterTestList(tddDir: string, list: TestList): void {
