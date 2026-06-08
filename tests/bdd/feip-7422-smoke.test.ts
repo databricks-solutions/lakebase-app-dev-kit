@@ -107,11 +107,11 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
     expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model: only architect + code-writers on sonnet, rest haiku", () => {
-    // The architect (AC layering / NFR coverage) stays on sonnet as the quality
-    // backstop; navigator/driver keep the kit-default sonnet (their output must
-    // compile + pass tests). Every other role runs haiku for speed.
-    expect(runSmoke).toMatch(/--agent-model architect-reviewer=sonnet/);
+  it("tiers roles for the smoke via --agent-model: only the code-writers on sonnet, rest haiku", () => {
+    // navigator/driver keep the kit-default sonnet (their output must compile +
+    // pass tests). Every other role , including the architect , runs haiku for
+    // speed (the smoke validates workflow mechanics, not prose quality).
+    expect(runSmoke).toMatch(/--agent-model architect-reviewer=haiku/);
     expect(runSmoke).toMatch(/--agent-model spec-author=haiku/);
     expect(runSmoke).toMatch(/--agent-model test-strategist=haiku/);
     expect(runSmoke).toMatch(/--agent-model ux-designer=haiku/);

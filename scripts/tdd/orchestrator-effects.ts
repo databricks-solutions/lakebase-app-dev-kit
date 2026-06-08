@@ -23,7 +23,10 @@ import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 
 export type DriveCommand =
-  | { kind: "claude"; role: string; model: string; task: string }
+  // resumeKey: when set, the runner resumes this role's Claude session across
+  // its invocations (warm context + prompt cache) instead of a cold respawn.
+  // Keyed by role, scoped to one feature drive (the runner's lifetime).
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string }
   | { kind: "cli"; bin: string; args: string[] }
   | { kind: "set-phase"; phase: string }
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
@@ -123,6 +126,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
+        resumeKey: action.role,
         task: roleTask(action, f),
       };
       const cmds: DriveCommand[] = [claude];
@@ -195,6 +199,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
           task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`,
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
@@ -255,6 +260,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
           task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`,
         },
       ];

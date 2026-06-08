@@ -42,7 +42,9 @@ describe("commandsForAction: invoke-role -> claude", () => {
     // [claude, reconcile]: the role runs, then the orchestrator code-emits
     // artifact.written for whatever it wrote (reconcile reads disk).
     expect(cmds).toHaveLength(2);
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus" });
+    // resumeKey = the role: the runner resumes this role's warm Claude session
+    // across its invocations instead of a cold respawn per story/cycle.
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus", resumeKey: "driver" });
     expect((cmds[0] as { task: string }).task).toMatch(/GREEN/);
     expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
     expect((cmds[1] as { args: string[] }).args).toContain("--reconcile");

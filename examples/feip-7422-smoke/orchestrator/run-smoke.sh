@@ -310,13 +310,13 @@ scaffold_project() {
       `# Per-role model tiering for the smoke (speed): the smoke validates` \
       `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
       `# models than the kit defaults and cuts per-turn generation latency. Only` \
-      `# the architect (AC layering / NFR coverage) and the code-writers` \
-      `# (navigator/driver, whose output must compile + pass tests) stay on` \
-      `# sonnet; every other role runs haiku. This also exercises the per-project` \
-      `# --agent-model override path. (If haiku spec ACs degrade the build, bump` \
-      `# spec-author back to sonnet, the architect on sonnet is a quality backstop.)` \
+      `# the code-writers (navigator/driver, whose output must compile + pass` \
+      `# tests) stay on sonnet; every other role , including the architect , runs` \
+      `# haiku. This also exercises the per-project --agent-model override path.` \
+      `# (If haiku ACs/layering degrade the build, bump spec-author or the` \
+      `# architect back to sonnet.)` \
       --agent-model spec-author=haiku \
-      --agent-model architect-reviewer=sonnet \
+      --agent-model architect-reviewer=haiku \
       --agent-model test-strategist=haiku \
       --agent-model ux-designer=haiku \
       --agent-model product-owner=haiku \

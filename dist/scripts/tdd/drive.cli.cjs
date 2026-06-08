@@ -6644,6 +6644,7 @@ var require_ajv = __commonJS({
 // scripts/tdd/drive.cli.ts
 init_cjs_shims();
 var import_node_child_process9 = require("child_process");
+var import_node_crypto = require("crypto");
 var fs7 = __toESM(require("fs"), 1);
 var path4 = __toESM(require("path"), 1);
 
@@ -7487,6 +7488,7 @@ function commandsForAction(action, cfg) {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
+        resumeKey: action.role,
         task: roleTask(action, f)
       };
       const cmds = [claude];
@@ -7533,6 +7535,7 @@ function commandsForAction(action, cfg) {
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
           task: `Deploy story ${action.story} of feature ${f} from its experiment branch (target ${cfg.deployTarget ?? "local"}) by running lakebase-tdd-deploy --feature ${f} --story ${action.story}, so the Product Owner reviews running software and the story-scoped deploy-evidence (reachable + feature-verify) is recorded.`
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
@@ -7577,6 +7580,7 @@ function commandsForAction(action, cfg) {
           kind: "claude",
           role: "release-engineer",
           model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
           task: `Deploy feature ${f} to its target (${cfg.deployTarget ?? "local"}), prove it is reachable and the feature verify passes against the running app, and produce the deploy-gate evidence for the Product Owner.`
         }
       ];
@@ -7908,6 +7912,7 @@ function resolveKitBinJs(bin) {
   return rel ? path4.join(KIT_ROOT, rel) : null;
 }
 function execRunner(cfg) {
+  const sessions = /* @__PURE__ */ new Map();
   return {
     async run(cmd) {
       if (cmd.kind === "set-phase") {
@@ -7919,11 +7924,18 @@ function execRunner(cfg) {
         return;
       }
       if (cmd.kind === "claude") {
-        await spawnCmd(
-          "claude",
-          ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"],
-          cfg.projectDir
-        );
+        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        if (cmd.resumeKey) {
+          const existing = sessions.get(cmd.resumeKey);
+          if (existing) {
+            args.push("--resume", existing);
+          } else {
+            const id = (0, import_node_crypto.randomUUID)();
+            sessions.set(cmd.resumeKey, id);
+            args.push("--session-id", id);
+          }
+        }
+        await spawnCmd("claude", args, cfg.projectDir);
         return;
       }
       const js = resolveKitBinJs(cmd.bin);

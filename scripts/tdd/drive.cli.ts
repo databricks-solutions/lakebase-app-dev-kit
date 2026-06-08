@@ -16,6 +16,7 @@
 // run, then exits (no execution) - a safe "what will the driver do next?".
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -153,6 +154,13 @@ function resolveKitBinJs(bin: string): string | null {
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct
  *  workflow-state write for the coarse phase. */
 function execRunner(cfg: DriveEffectsConfig): CommandRunner {
+  // Per-role Claude session ids, scoped to this runner (one feature drive). A
+  // role's first invocation creates a session (--session-id); later invocations
+  // resume it (--resume) so the agent's context + prompt cache stay warm instead
+  // of a cold respawn per story/cycle. Resume is an optimization layered on top
+  // of the artifact-as-API contract: each role still reads/writes its artifacts,
+  // so correctness never depends on the retained session, only speed.
+  const sessions = new Map<string, string>();
   return {
     async run(cmd: DriveCommand) {
       if (cmd.kind === "set-phase") {
@@ -166,11 +174,18 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         return;
       }
       if (cmd.kind === "claude") {
-        await spawnCmd(
-          "claude",
-          ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"],
-          cfg.projectDir,
-        );
+        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        if (cmd.resumeKey) {
+          const existing = sessions.get(cmd.resumeKey);
+          if (existing) {
+            args.push("--resume", existing);
+          } else {
+            const id = randomUUID();
+            sessions.set(cmd.resumeKey, id);
+            args.push("--session-id", id);
+          }
+        }
+        await spawnCmd("claude", args, cfg.projectDir);
         return;
       }
       // cmd.kind === "cli": resolve the kit bin to its dist JS via the kit's

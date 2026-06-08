@@ -56,13 +56,17 @@ This is the only planning-phase artifact you own. Everything below is your `/des
 - A new `.tdd/features/<F>/architecture.json` (validated against `architecture.schema.json`): the **NFRs** you propose (`nfrs[]`, each scoped via `applies_to` to the feature or a story id). NFRs live HERE, not on `feature-spec.json`/`story.json`: those are the Spec Author's and are locked by the spec gate, so writing NFRs onto them drifts the gate (FEIP-7508). You propose; the HIL accepts/modifies at Gate 2 (see below).
 - A new `.tdd/features/<F>/architecture.md`: summary of layering decisions, pattern proposals, and the Architectural Concerns Mapping table from `software-design-principles`.
 
-## Canon you must import
+## Canon (inlined , do NOT go read these files per invocation)
 
-Read `skills/software-design-principles/SKILL.md` and its references before annotating. Specifically:
-- [Layered architecture](../../software-design-principles/references/layered-architecture.md) – the four-layer model + dependency direction.
-- [Cross-cutting concerns](../../software-design-principles/references/cross-cutting-concerns.md) – ownership defaults table.
-- [SOLID](../../software-design-principles/references/solid.md) – module-level rules.
-- [NFRs](../../software-design-principles/references/nfrs.md) – baseline checklist.
+The essential rules you apply are below; apply them directly. Only open
+`skills/software-design-principles/` if a specific case is genuinely ambiguous ,
+do not read those files on every story (it adds serial reads to every spawn for
+canon you already have here).
+
+- **Layered architecture , the four layers + dependency direction.** Presentation/API -> Application/Service -> Domain -> Infrastructure. Dependencies point INWARD only (outer depends on inner; the domain depends on nothing). Tag each AC at the outermost boundary it is observable through (see Method step 1).
+- **Cross-cutting concerns , ownership defaults.** auth/authz -> a gateway/middleware at the API layer; validation -> the API/application boundary; audit + logging + metrics -> a cross-cutting service the application layer calls; rate limiting + caching -> the API/edge layer; transactions -> the application/service layer (never the domain). Name the owner layer in `architectural_notes`; never let the domain own a cross-cutting concern.
+- **SOLID , module-level.** Single responsibility per module; depend on abstractions at layer boundaries (so layers are swappable + testable); keep interfaces small + segregated. Propose a module name when one does not exist.
+- **NFRs , baseline categories to walk.** performance, scalability, security, observability, operability, resilience. For each, either propose an `architecture.json` nfr or record "N/A , reason"; "unconsidered" is never acceptable (see Method step 5).
 
 ## Method
 
@@ -78,7 +82,7 @@ For each AC:
 
 For each feature + story:
 
-5. **Honor the HIL's `nfrs.md` first**, then walk the [NFRs checklist](../../software-design-principles/references/nfrs.md). Record NFRs in `architecture.json` (`nfrs[]`, `applies_to` the feature or a story id, `hil_status: "proposed"`). For **every `## Required` item in `nfrs.md`**, emit a matching `architecture.json` nfr carrying that item's id in `brief_ref` (e.g. `"brief_ref": "R1"`); an uncovered Required item HARD-BLOCKS the architecture gate (`checkNfrCoverage`). Honor `## Preferences` unless you record a contrary decision in `architecture.md`; never propose an item the HIL marked `## Out of bounds`. Add your own NFRs from the checklist beyond the HIL's (no `brief_ref` needed for those). "N/A – reason" is allowed; "unconsidered" is not. Do **not** write `nfrs` onto `feature-spec.json`/`story.json`, they are spec-gated. You PROPOSE; the HIL accepts or modifies at Gate 2.
+5. **Honor the HIL's `nfrs.md` first**, then walk the NFR categories inlined in Canon above (performance, scalability, security, observability, operability, resilience). Record NFRs in `architecture.json` (`nfrs[]`, `applies_to` the feature or a story id, `hil_status: "proposed"`). For **every `## Required` item in `nfrs.md`**, emit a matching `architecture.json` nfr carrying that item's id in `brief_ref` (e.g. `"brief_ref": "R1"`); an uncovered Required item HARD-BLOCKS the architecture gate (`checkNfrCoverage`). Honor `## Preferences` unless you record a contrary decision in `architecture.md`; never propose an item the HIL marked `## Out of bounds`. Add your own NFRs from the checklist beyond the HIL's (no `brief_ref` needed for those). "N/A – reason" is allowed; "unconsidered" is not. Do **not** write `nfrs` onto `feature-spec.json`/`story.json`, they are spec-gated. You PROPOSE; the HIL accepts or modifies at Gate 2.
 
 For the feature as a whole:
 
