@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
-import { isHitlGateAction, type WorkflowAction } from "./orchestrator-drive.js";
+import { isHitlGateAction, isHumanInputAction, type WorkflowAction } from "./orchestrator-drive.js";
 import {
   buildDriveEffects,
   commandsForAction,
@@ -209,7 +209,10 @@ function gatedStopWhen(
   interactive: boolean,
 ): RunDriverOptions["stopWhen"] {
   if (!interactive) return base;
-  return (a) => (base?.(a) ?? false) || isHitlGateAction(a);
+  // Interactive: also stop where the HUMAN provides an input artifact (the PO's
+  // feature-requests at author-requests), so the human supplies them and re-runs
+  // , the same transition the Human Proxy performs headless.
+  return (a) => (base?.(a) ?? false) || isHitlGateAction(a) || isHumanInputAction(a);
 }
 
 /** The HITL gate a bounded run halted at (interactive mode), or undefined. */

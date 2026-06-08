@@ -47,7 +47,7 @@ import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
-import { featureResolved } from "./tdd-paths.js";
+import { featureResolved, featureRequestMd } from "./tdd-paths.js";
 
 /**
  * Emit the HITL reviewer's decision to the centralized agent log. The mock
@@ -367,4 +367,71 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
     /* logging is observability, never a gate */
   }
   return { ok: true, artifact, to: args.to };
+}
+
+// ─── author-requests supply (the PO artifacts, given when the state machine asks) ─
+//
+// At the planning `author-requests` step the state machine needs the Product
+// Owner's feature-request.md per committed feature. The machine is identical
+// for a human and the proxy: interactive, the driver stops here and the HUMAN
+// provides the requests (directly, or by working with the PO agent); headless,
+// the Human Proxy provides the pre-recorded answers WHEN ASKED (not before) and
+// logs each, then sync-backlog projects the backlog from what was supplied.
+//
+// The committed set + each request's recorded source are the orchestrator's
+// call, passed in via LAKEBASE_TDD_SPRINT_REQUESTS as one `<feature_id>\t<source
+// path>` per line (the recorded file is named independently of the feature id,
+// e.g. v1-initial-domain.md -> F1-initial-domain). Unset => no-op (the live
+// human provides them out-of-band); the driver still advances once they exist.
+
+export interface SupplyRequestsArgs {
+  tddDir?: string;
+  approver?: string;
+  /** Override the recorded pairs; defaults to $LAKEBASE_TDD_SPRINT_REQUESTS. */
+  pairs?: Array<{ featureId: string; from: string }>;
+}
+
+export interface SupplyRequestsResult {
+  supplied: string[];
+  skipped: Array<{ featureId: string; reason: string }>;
+}
+
+/** Parse the `<feature_id>\t<source>` lines from $LAKEBASE_TDD_SPRINT_REQUESTS. */
+function recordedRequestPairs(): Array<{ featureId: string; from: string }> {
+  const raw = process.env.LAKEBASE_TDD_SPRINT_REQUESTS ?? "";
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [featureId, ...rest] = line.split("\t");
+      const from = rest.join("\t").trim();
+      return featureId && from ? [{ featureId: featureId.trim(), from }] : [];
+    });
+}
+
+/**
+ * Supply the sprint's recorded feature-request.md files when the state machine
+ * asks (the headless stand-in for the PO authoring them). Each is validate-then-
+ * placed at features/<id>/feature-request.md via supplyArtifact, which logs the
+ * interaction. Returns what was supplied + skipped.
+ */
+export function supplyRequests(args: SupplyRequestsArgs = {}): SupplyRequestsResult {
+  const tddDir = args.tddDir ?? "./.tdd";
+  const pairs = args.pairs ?? recordedRequestPairs();
+  const supplied: string[] = [];
+  const skipped: SupplyRequestsResult["skipped"] = [];
+  for (const { featureId, from } of pairs) {
+    const res = supplyArtifact({
+      from,
+      to: featureRequestMd(tddDir, featureId),
+      artifact: "feature-request.md",
+      tddDir,
+      featureId,
+      approver: args.approver,
+    });
+    if (res.ok) supplied.push(featureId);
+    else skipped.push({ featureId, reason: res.reason ?? "unknown" });
+  }
+  return { supplied, skipped };
 }

@@ -547,29 +547,24 @@ run_plan_sprint() {
   [ -n "$_intake_ok" ] \
     || { err "/plan ${sprint_name}: project-intake precondition failed after 3 attempts"; exit 2; }
 
-  # b. STAGE THE PO'S COMMITTED BACKLOG. Sprint membership is the orchestrator's
-  # call (the iteration specs ARE the PO's groomed sprint), so the Human Proxy
-  # places the recorded feature-request.md per sprint item HERE, before driving
-  # planning. This is the recorded human intent the Product Owner commits at the
-  # author-requests step: with the requests present, the driver's PO step affirms
-  # them and the deterministic sync-backlog projects backlog.json from them. The
-  # Spec Author's propose + the Architect's estimate run live in the drive and do
-  # not read the requests, so proposal-first integrity is preserved; feature-
-  # request.md is never overwritten by a downstream role.
-  local iter feature_id spec feature_dir
+  # b. Record the PO's committed backlog for THIS sprint as (feature_id, recorded
+  # source) pairs the Human Proxy supplies WHEN the state machine asks (at the
+  # author-requests step), NOT before. Sprint membership is the orchestrator's
+  # call (the iteration specs ARE the PO's groomed sprint). We do NOT place any
+  # feature-request.md into the project here: the driver's author-requests step is
+  # where the PO's artifacts are provided, and headless the Human Proxy supplies
+  # them then (logging each). The recorded file is named independently of the
+  # feature id (v1-initial-domain.md -> F1-initial-domain), so each pair is
+  # `<feature_id>\t<recorded source>`, passed via LAKEBASE_TDD_SPRINT_REQUESTS.
+  # This is the identical state machine a human runs; only the provider differs.
+  local iter feature_id spec _pairs=""
   for iter in "${iters[@]}"; do
     feature_id="$(iteration_feature_id "$iter")"
     spec="$(iteration_spec "$iter")"
-    if [[ ! -f "$spec" ]]; then err "missing iteration spec: $spec"; exit 2; fi
-    feature_dir="${PROJECT_DIR}/.tdd/features/${feature_id}"
-    mkdir -p "$feature_dir"
-    log "  ${sprint_name}: human-proxy (PO) commits feature-request for ${feature_id}"
-    proxy_supply "$spec" "$feature_dir/feature-request.md" "feature-request.md" "$feature_id" \
-      || { err "human-proxy refused feature-request.md for ${feature_id}"; exit 2; }
-    # Confirm the per-feature precondition now passes (request present + conformant).
-    "$PROJECT_DIR/scripts/lk" lakebase-tdd-intake --feature "$feature_id" \
-      || { err "feature-request.md for ${feature_id} is not conformant"; exit 2; }
+    [[ -f "$spec" ]] || { err "missing iteration spec: $spec"; exit 2; }
+    _pairs+="$(printf '%s\t%s' "$feature_id" "$spec")"$'\n'
   done
+  export LAKEBASE_TDD_SPRINT_REQUESTS="$_pairs"
 
   # c. Drive planning through the deterministic orchestrator (the same CLI the
   # scaffolded /plan command runs). The smoke calls the driver DIRECTLY (as it
@@ -579,10 +574,11 @@ run_plan_sprint() {
   # gate was never approved. Calling the driver here (in this shell, where the env
   # is correct) with an explicit `--gates proxy` is deterministic. The driver runs
   # propose (Spec Author -> feature-proposals.md), estimate (Architect -> planning/
-  # estimates.json t-shirt sizes), author-requests (PO affirms the staged
-  # requests), sync-backlog (projects backlog.json from them), then the Human
-  # Proxy approves the sprint plan gate (teeth: feature-proposals.md exists +
-  # conforms) and it stops at planning-complete.
+  # estimates.json t-shirt sizes), author-requests (the Human Proxy supplies the
+  # recorded feature-requests from LAKEBASE_TDD_SPRINT_REQUESTS + logs each),
+  # sync-backlog (projects backlog.json from them), then the Human Proxy approves
+  # the sprint plan gate (teeth: feature-proposals.md exists + conforms) and it
+  # stops at planning-complete.
   log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
     --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \

@@ -11,7 +11,7 @@
 //   3 = substrate failure
 
 import { isCliEntry } from "../util/cli-entry.js";
-import { drainGatesAsHumanProxy, supplyArtifact } from "./human-proxy.js";
+import { drainGatesAsHumanProxy, supplyArtifact, supplyRequests } from "./human-proxy.js";
 import { approveSprintPlanGate } from "./sprint-gates.js";
 import type { GateName } from "./gates.js";
 
@@ -50,6 +50,40 @@ function runSupplyCli(argv: string[]): number {
   }
   process.stderr.write(`human-proxy: refused to supply ${result.artifact}: ${result.reason}\n`);
   return 4;
+}
+
+/**
+ * `supply-requests` subcommand: at the planning author-requests step, the Human
+ * Proxy supplies the PO's recorded feature-request.md files (the headless stand-
+ * in for the human providing them when the state machine asks). The (feature_id,
+ * recorded source) pairs come from $LAKEBASE_TDD_SPRINT_REQUESTS. Always exits 0:
+ * an unset env is a no-op (a live human provides them out-of-band); a missing or
+ * non-conformant recording is logged + skipped, and the driver surfaces the
+ * unmet need as a stall rather than advancing on absent artifacts.
+ *
+ *   lakebase-tdd-human-proxy supply-requests [--tdd-dir <dir>] [--approver <name>]
+ */
+function runSupplyRequestsCli(argv: string[]): number {
+  let tddDir: string | undefined;
+  let approver: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--approver": approver = argv[++i]; break;
+    }
+  }
+  const result = supplyRequests({ tddDir, approver });
+  if (result.supplied.length > 0) {
+    process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}\n`);
+  } else {
+    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_TDD_SPRINT_REQUESTS unset/empty)\n`);
+  }
+  if (result.skipped.length > 0) {
+    process.stderr.write(
+      `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.featureId} (${s.reason})`).join(", ")}\n`,
+    );
+  }
+  return 0;
 }
 
 interface ParsedArgs {
@@ -126,6 +160,7 @@ export function runHumanProxyCli(argv: string[]): number {
   // Subcommand dispatch: `supply` provides a recorded intake artifact; the
   // default (no subcommand, or `approve`) drains open gates.
   if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
+  if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
   if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);
   if (args.help) {

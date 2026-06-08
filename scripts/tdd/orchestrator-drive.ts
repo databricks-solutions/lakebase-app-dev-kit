@@ -314,3 +314,15 @@ export function isHitlGateAction(action: WorkflowAction): boolean {
     action.kind === "accept"
   );
 }
+
+/**
+ * Steps where the HUMAN provides an input artifact (not an approval): the
+ * Product Owner's feature-requests at `author-requests`. The state machine is
+ * identical for a human and the headless proxy , in interactive mode the driver
+ * STOPS here so the human provides the requests (directly, or by working with
+ * the agents), then re-runs; in proxy mode the Human Proxy supplies the recorded
+ * answers when asked. Same transition, only the provider differs.
+ */
+export function isHumanInputAction(action: WorkflowAction): boolean {
+  return action.kind === "invoke-role" && "mode" in action && action.mode === "author-requests";
+}

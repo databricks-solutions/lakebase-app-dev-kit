@@ -190,15 +190,20 @@ describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", ()
     expect(runSmoke).toMatch(/export LAKEBASE_TDD_UI=1/);
   });
 
-  it("supplies each sprint's feature-request.md via the proxy at /plan (not a bare cp)", () => {
-    expect(runSmoke).toMatch(/proxy_supply "\$spec".*feature-request\.md/);
-    // The old bare `cp "$spec" .../feature-request.md` staging is gone.
+  it("hands the PO's feature-requests to the Human Proxy WHEN the state machine asks (not pre-staged)", () => {
+    // The PO's artifacts are supplied at the author-requests step, not before:
+    // run_plan_sprint records the (feature_id, recorded source) pairs in
+    // LAKEBASE_TDD_SPRINT_REQUESTS, and the driver's author-requests step has the
+    // Human Proxy supply them. No bare cp, and no up-front proxy_supply into .tdd.
+    expect(runSmoke).toMatch(/export LAKEBASE_TDD_SPRINT_REQUESTS=/);
     expect(runSmoke).not.toMatch(/cp "\$spec"/);
-    // The supply is hoisted into /plan (run_plan_sprint), not the per-feature loop.
+    expect(runSmoke, "no up-front feature-request staging").not.toMatch(
+      /proxy_supply "\$spec".*feature-request\.md/,
+    );
     expect(runSmoke).toMatch(/run_plan_sprint\s*\(\)/);
     const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
-    expect(planFn, "feature-request supply lives in run_plan_sprint").toMatch(
-      /proxy_supply "\$spec".*feature-request\.md/
+    expect(planFn, "the recorded request pairs are built in run_plan_sprint").toMatch(
+      /LAKEBASE_TDD_SPRINT_REQUESTS/,
     );
   });
 });
@@ -222,10 +227,10 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
     );
     // The project-level gate calls `lakebase-tdd-intake` (no --feature), wrapped
     // in a retry loop (transient npx flakes must not be fatal) that still exits
-    // 2 after repeated failure. The per-feature confirmation passes --feature.
+    // 2 after repeated failure. (The per-feature requests are no longer staged
+    // here; the Human Proxy supplies them at the driver's author-requests step.)
     expect(planFn).toMatch(/lakebase-tdd-intake; then _intake_ok=1/);
     expect(planFn).toMatch(/project-intake precondition failed after 3 attempts/);
-    expect(planFn).toMatch(/lakebase-tdd-intake --feature/);
   });
 
   it("commits the sprint backlog + project intake to trunk so feature branches inherit requests", () => {

@@ -48,11 +48,21 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((cmds[1] as { args: string[] }).args).toContain("--reconcile");
   });
 
-  it("planning roles get mode-specific tasks", () => {
+  it("propose gets a mode-specific task", () => {
     const propose = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg());
     expect((propose[0] as { task: string }).task).toMatch(/breakdown/i);
+  });
+
+  it("author-requests supplies the PO's requests via the Human Proxy + sync-backlog (no LLM spawned)", () => {
+    // author-requests is a human-input step: the state machine asks, and headless
+    // the Human Proxy supplies the recorded feature-requests (logging each), then
+    // sync-backlog projects the backlog. No claude agent invents them.
     const author = commandsForAction({ kind: "invoke-role", role: "product-owner", mode: "author-requests" }, cfg());
-    expect((author[0] as { task: string }).task).toMatch(/feature-request/i);
+    expect(author).toHaveLength(2);
+    expect(author[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-human-proxy" });
+    expect((author[0] as { args: string[] }).args[0]).toBe("supply-requests");
+    expect(author[1]).toMatchObject({ kind: "sync-backlog" });
+    expect(author.some((c) => (c as { kind?: string }).kind === "claude")).toBe(false);
   });
 
   it("spec-author breakdown also seeds the pipeline (claude + sync-breakdown)", () => {
@@ -202,6 +212,9 @@ describe("buildDriveEffects", () => {
 
     const plan = await planNextAction(cfg({ tddDir }));
     expect(plan.action).toEqual({ kind: "invoke-role", role: "product-owner", mode: "author-requests" });
-    expect(plan.commands[0]).toMatchObject({ kind: "claude", role: "product-owner" });
+    // author-requests is a human-input step: the Human Proxy supplies the PO's
+    // recorded feature-requests when asked, then sync-backlog. No LLM.
+    expect(plan.commands[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-human-proxy" });
+    expect((plan.commands[0] as { args: string[] }).args[0]).toBe("supply-requests");
   });
 });

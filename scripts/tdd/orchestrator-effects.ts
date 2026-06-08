@@ -63,7 +63,9 @@ function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, feat
       case "estimate":
         return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
-        return `Commit the sprint backlog: author a feature-request.md for each feature you are pulling into the sprint (informed by the Architect's t-shirt sizes), on the human's behalf.`;
+        // Unreachable: author-requests is a human-input step the Human Proxy
+        // supplies (see commandsForAction); it never spawns a role agent.
+        return `Provide the sprint's feature-requests.`;
       case "breakdown":
         return `Break feature ${featureId} down into its stories.`;
     }
@@ -104,6 +106,19 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
 
   switch (action.kind) {
     case "invoke-role": {
+      // author-requests is a HUMAN-INPUT step, not an agent task: the state
+      // machine asks for the PO's feature-request.md per committed feature. The
+      // machine is identical for a human and the proxy , interactive, the driver
+      // stops here and the human provides them (directly or via the agents);
+      // headless, the Human Proxy supplies the recorded answers WHEN ASKED (and
+      // logs each). Then sync-backlog (the one writer) projects backlog.json from
+      // exactly what was supplied. No LLM is spawned to invent the requests.
+      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
+        return [
+          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.tddDir, "--approver", approver] },
+          { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
+        ];
+      }
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
@@ -117,14 +132,6 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
-      // After the PO commits the sprint's feature-requests, deterministically
-      // project the backlog (the ONE writer): backlog.json = the features that
-      // now have a feature-request.md, each carrying the Architect's t-shirt
-      // size. requestsAuthored then reads that same projection, so the planning
-      // machine advances on what the PO actually committed (no orphan backlog).
-      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
-        cmds.push({ kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" });
-      }
       // After the Test Strategist orders a story's tests, deterministically
       // scope the feature master to that story and write the canonical per-story
       // list (storyTestListJson) , the exact file + field the testListReady probe
@@ -137,9 +144,9 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,
       // so observability never depends on the role's model emitting it. Skipped
-      // for the sprint-scoped planning roles (propose / author-requests), which
-      // write no feature artifacts to reconcile.
-      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "author-requests");
+      // for the sprint-scoped planning modes (propose / estimate), which write no
+      // feature artifacts to reconcile. (author-requests returned earlier.)
+      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
       return cmds;
     }

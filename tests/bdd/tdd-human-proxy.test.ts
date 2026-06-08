@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { drainGatesAsHumanProxy, supplyArtifact } from "../../scripts/tdd/human-proxy";
+import { drainGatesAsHumanProxy, supplyArtifact, supplyRequests } from "../../scripts/tdd/human-proxy";
 import { readGates } from "../../scripts/tdd/gates";
 import { hashArtifact } from "../../scripts/tdd/gate-hash";
 import { readAgentLog } from "../../scripts/tdd/agent-log";
@@ -281,5 +281,63 @@ describe("drainGatesAsHumanProxy: deploy gate teeth (FEIP-7461)", () => {
     expect(result.approved).toEqual([]);
     expect(result.skipped.find((s) => s.gate === "deploy")?.reason).toMatch(/verify\.passed=false/);
     expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.deploy.status).toBe("open");
+  });
+});
+
+// supplyRequests: at the planning author-requests step the Human Proxy provides
+// the PO's recorded feature-request.md per committed feature WHEN ASKED (not
+// earlier), validate-then-place, and logs each. The recorded source is named
+// independently of the feature id (v1-... -> F1-...), so pairs are explicit.
+describe("Human Proxy supplyRequests (the PO's artifacts, given when the state machine asks)", () => {
+  const CONFORMANT_REQUEST = "# Feature request: initial domain\n\nAs a user I want to file a bug so that it is tracked.\n";
+
+  it("places each recorded feature-request at features/<id>/feature-request.md + logs intake.supplied", () => {
+    const recorded = join(tdd, "recorded-v1.md");
+    writeFileSync(recorded, CONFORMANT_REQUEST);
+
+    const result = supplyRequests({ tddDir: tdd, pairs: [{ featureId: FEATURE_ID, from: recorded }] });
+
+    expect(result.supplied).toEqual([FEATURE_ID]);
+    expect(result.skipped).toEqual([]);
+    // Landed at the resolved feature dir (created above as features/F1-initial-domain).
+    const target = join(fdir, "feature-request.md");
+    expect(existsSync(target)).toBe(true);
+    expect(readFileSync(target, "utf8")).toBe(CONFORMANT_REQUEST);
+    // The interaction is logged (gives, then logs what it gave).
+    const supplied = readAgentLog({ tddDir: tdd }).filter((e) => e.event === "intake.supplied");
+    expect(supplied.some((e) => e.data?.artifact === "feature-request.md")).toBe(true);
+  });
+
+  it("reads the (feature_id, source) pairs from $LAKEBASE_TDD_SPRINT_REQUESTS when pairs are not passed", () => {
+    const recorded = join(tdd, "recorded-v1.md");
+    writeFileSync(recorded, CONFORMANT_REQUEST);
+    const prev = process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
+    process.env.LAKEBASE_TDD_SPRINT_REQUESTS = `${FEATURE_ID}\t${recorded}\n`;
+    try {
+      const result = supplyRequests({ tddDir: tdd });
+      expect(result.supplied).toEqual([FEATURE_ID]);
+      expect(existsSync(join(fdir, "feature-request.md"))).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
+      else process.env.LAKEBASE_TDD_SPRINT_REQUESTS = prev;
+    }
+  });
+
+  it("supplies nothing when unset (a live human provides them out-of-band)", () => {
+    const prev = process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
+    delete process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
+    try {
+      expect(supplyRequests({ tddDir: tdd })).toEqual({ supplied: [], skipped: [] });
+    } finally {
+      if (prev !== undefined) process.env.LAKEBASE_TDD_SPRINT_REQUESTS = prev;
+    }
+  });
+
+  it("skips (does not place) a missing or non-conformant recording", () => {
+    const missing = join(tdd, "nope.md");
+    const result = supplyRequests({ tddDir: tdd, pairs: [{ featureId: FEATURE_ID, from: missing }] });
+    expect(result.supplied).toEqual([]);
+    expect(result.skipped[0]?.featureId).toBe(FEATURE_ID);
+    expect(existsSync(join(fdir, "feature-request.md"))).toBe(false);
   });
 });
