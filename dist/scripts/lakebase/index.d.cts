@@ -753,10 +753,18 @@ interface CreateConventionPairedBranchArgs extends CreateConventionBranchArgs {
     database?: string;
 }
 /**
- * Cut a feature-tier paired branch (Lakebase + git + .env sync) with the
- * 30-day convention TTL. Forks from `staging` by default. Atomic via
- * createPairedBranch: if the Lakebase side fails, no git branch is left
- * dangling.
+ * Cut a feature-tier paired branch (Lakebase + git + .env sync). Forks from
+ * `staging` by default. Atomic via createPairedBranch: if the Lakebase side
+ * fails, no git branch is left dangling.
+ *
+ * Feature branches are created NON-EXPIRING (noExpiry, no TTL). A feature branch
+ * is the PARENT of the per-story experiment branches (FEIP-7566), and Lakebase
+ * forbids an expiring branch from having child branches ("Branches with an
+ * expiration date cannot have child branches", surfaced by the live FEIP-7422
+ * smoke). Feature branches are reaped by the SCM workflow (abandon / merge /
+ * doctor -> deleteBranch), not by TTL; deleting a no-expiry branch through the
+ * substrate is confirmed. An explicit `ttl` still wins (mutually exclusive with
+ * noExpiry) for a finite-lifetime feature branch with no experiments.
  */
 declare function createFeaturePairedBranch(args: CreateConventionPairedBranchArgs): Promise<CreatePairedBranchResult>;
 /** Cut a test-tier paired branch (Lakebase + git + .env) with the 14-day convention TTL. */

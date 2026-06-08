@@ -1219,7 +1219,7 @@ async function createFeaturePairedBranch(args) {
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
+    ...args.ttl ? { ttl: args.ttl } : { noExpiry: true },
     cwd: args.cwd,
     createGitBranch: args.createGitBranch,
     syncEnv: args.syncEnv,

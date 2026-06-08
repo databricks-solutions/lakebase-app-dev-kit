@@ -6662,6 +6662,9 @@ function nextDesignAction(state) {
   if (!state.breakdownDone) {
     return { kind: "invoke-role", role: "spec-author", mode: "breakdown" };
   }
+  if (state.uiTrack && !state.designGuideReady) {
+    return { kind: "invoke-role", role: "ux-designer" };
+  }
   for (const story of state.storyOrder) {
     const v = state.stories[story];
     if (v?.gateApproved) continue;
@@ -6714,6 +6717,8 @@ function toDesignView(state) {
   return {
     breakdownDone: state.breakdownDone,
     storyOrder: state.storyOrder,
+    uiTrack: state.uiTrack,
+    designGuideReady: state.designGuideReady,
     stories: Object.fromEntries(
       Object.entries(state.stories).map(([id, v]) => [
         id,
@@ -7075,6 +7080,7 @@ var planningDir = (tdd) => join5(tdd, "planning");
 var sprintsDir = (tdd) => join5(tdd, "sprints");
 var cyclesRootDir = (tdd) => join5(tdd, "cycles");
 var workflowStateJson = (tdd) => join5(tdd, "workflow-state.json");
+var designGuideJson = (tdd) => join5(tdd, "design", "design-guide.json");
 var featureProposalsMd = (tdd) => join5(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => join5(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
@@ -7446,6 +7452,7 @@ function readPipeline(tddDir, featureId) {
 // scripts/tdd/orchestrator-effects.ts
 var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
+var UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
 function storyStubScope(tddDir, featureId, storyId) {
   try {
     const stub = JSON.parse(fs6.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
@@ -7472,6 +7479,9 @@ function roleTask(action, featureId, uiTrack, tddDir) {
         return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
     }
   }
+  if (action.role === "ux-designer") {
+    return `Translate the HIL design brief (.tdd/design/design-brief.md) into the project design system: write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information architecture: screens, navigation, flows). This is the project-level style guide the Navigator and Driver build the UI against; author it once from the brief + product-overview.md.`;
+  }
   const s = action.story;
   switch (action.role) {
     case "spec-author":
@@ -7481,9 +7491,9 @@ function roleTask(action, featureId, uiTrack, tddDir) {
     case "test-strategist":
       return `Produce the ordered test list for story ${s}.`;
     case "navigator":
-      return `Write the next RED test for story ${s}.`;
+      return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
-      return `Make the failing test for story ${s} GREEN (simplest honest code).`;
+      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
     default:
       return `Work story ${s}.`;
   }
@@ -7644,7 +7654,10 @@ function buildDriveEffects(cfg) {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
       const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId);
-      return deriveDriveState(pipeline, probe, ctx);
+      const state = deriveDriveState(pipeline, probe, ctx);
+      state.uiTrack = cfg.uiTrack ?? false;
+      state.designGuideReady = fs6.existsSync(designGuideJson(cfg.tddDir));
+      return state;
     },
     async perform(action) {
       for (const cmd of commandsForAction(action, cfg)) {
@@ -7660,7 +7673,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync10, mkdirSync as mkdirSync5, readFileSync as readFileSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync7 } from "fs";
+import { existsSync as existsSync11, mkdirSync as mkdirSync5, readFileSync as readFileSync12, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync7 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -7683,7 +7696,7 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync10(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync11(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
     parsed = JSON.parse(readFileSync12(file, "utf8"));
@@ -7739,7 +7752,7 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6 } from "fs";
+import { existsSync as existsSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6 } from "fs";
 import { dirname as dirname3, join as join9 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -7755,7 +7768,7 @@ var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = join9(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
   const p = join9(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync12(p)) return void 0;
+  if (!existsSync13(p)) return void 0;
   return JSON.parse(readFileSync13(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
