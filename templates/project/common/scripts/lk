@@ -22,10 +22,16 @@ fi
 shift
 
 PKG="@databricks-solutions/lakebase-app-dev-kit"
+GH="github:databricks-solutions/lakebase-app-dev-kit"
+GH_URL="https://github.com/databricks-solutions/lakebase-app-dev-kit.git"
 
 # 1. Resolve the kit install dir.
-kit_dir="${LAKEBASE_KIT_DIR:-}"
-if [ -z "$kit_dir" ]; then
+# Dev override: a kit checkout/install pointed at directly. --warm/--rewarm are
+# no-ops here (nothing to cache); a bin still runs.
+if [ -n "${LAKEBASE_KIT_DIR:-}" ]; then
+  kit_dir="$LAKEBASE_KIT_DIR"
+  if [ "$bin" = "--warm" ] || [ "$bin" = "--rewarm" ]; then exit 0; fi
+else
   # ref: env -> .lakebase/kit-ref (from the repo root or cwd) -> main
   ref="${LAKEBASE_KIT_REF:-}"
   if [ -z "$ref" ]; then
@@ -40,34 +46,76 @@ if [ -z "$kit_dir" ]; then
   cache="${cache_root}/${ref}"
   kit_dir="${cache}/node_modules/${PKG}"
 
-  # Install once per ref (idempotent; includes node_modules, which the dist CLIs
-  # require). Build into a temp prefix + atomic rename so parallel role spawns
-  # don't race a half-populated cache.
-  if [ ! -d "${kit_dir}/dist" ]; then
+  # An immutable ref (a 40-hex commit SHA) can never go stale, so we never
+  # re-resolve it. A BRANCH ref MOVES: the prior cache for `feature-x` can hold an
+  # old commit's dist, which is how a re-run silently executed stale code. So at
+  # WARM time (only , bin runs stay network-free + fast) we resolve the branch's
+  # current remote SHA and reinstall if the cached one differs. Best-effort: if
+  # the network probe fails we keep whatever is cached rather than break offline.
+  is_sha=0; case "$ref" in *[!0-9a-fA-F]* ) ;; * ) [ ${#ref} -eq 40 ] && is_sha=1 ;; esac
+
+  remote_sha() { git ls-remote "$GH_URL" "$ref" 2>/dev/null | awk 'NR==1{print $1}'; }
+
+  # Install `<committish>` fresh into the cache via a temp prefix + atomic rename
+  # (so parallel role spawns never see a half-populated cache). Records the
+  # resolved SHA so a later warm can detect a moved branch. Returns nonzero on
+  # failure (caller keeps any existing cache).
+  install_kit() {
+    committish="$1"; sha="$2"
     mkdir -p "$cache_root"
     tmp="$(mktemp -d "${cache_root}/.tmp.XXXXXX")"
-    if npm install --no-save --prefix "$tmp" "github:databricks-solutions/lakebase-app-dev-kit#${ref}" >/dev/null 2>&1 \
+    if npm install --no-save --prefer-online --prefix "$tmp" "${GH}#${committish}" >/dev/null 2>&1 \
        && [ -d "${tmp}/node_modules/${PKG}/dist" ]; then
-      if [ ! -d "${kit_dir}/dist" ]; then
-        mv "$tmp" "$cache" 2>/dev/null || rm -rf "$tmp"
-      else
-        rm -rf "$tmp"
+      rm -rf "$cache"
+      if mv "$tmp" "$cache" 2>/dev/null; then
+        [ -n "$sha" ] && printf '%s\n' "$sha" > "${cache}/.kit-sha" 2>/dev/null || true
+        return 0
       fi
-    else
-      rm -rf "$tmp"
+      rm -rf "$tmp"; return 1
     fi
+    rm -rf "$tmp"; return 1
+  }
+
+  # `lk --rewarm`: force a fresh install, bypassing BOTH the ref-keyed cache AND
+  # npm's cached git resolution , install the resolved SHA committish (content-
+  # addressed) so a moved branch cannot serve a stale build. Falls back to the
+  # branch ref if the SHA cannot be resolved (offline).
+  if [ "$bin" = "--rewarm" ]; then
+    sha="$(remote_sha)"
+    install_kit "${sha:-$ref}" "$sha" || { echo "lk: --rewarm failed for '${ref}'" >&2; exit 1; }
+    exit 0
   fi
 
+  # `lk --warm`: ensure the cache holds the ref's CURRENT commit (createProject
+  # calls this once at scaffold). Reinstall when the dist is missing, or , for a
+  # moving branch , when the remote SHA has advanced past the cached one.
+  if [ "$bin" = "--warm" ]; then
+    need_install=0
+    [ -d "${kit_dir}/dist" ] || need_install=1
+    if [ "$need_install" -eq 0 ] && [ "$is_sha" -eq 0 ]; then
+      cached_sha=""; [ -f "${cache}/.kit-sha" ] && cached_sha="$(tr -d '[:space:]' < "${cache}/.kit-sha")"
+      live_sha="$(remote_sha)"
+      [ -n "$live_sha" ] && [ "$live_sha" != "$cached_sha" ] && need_install=1
+    fi
+    if [ "$need_install" -eq 1 ]; then
+      sha="$([ "$is_sha" -eq 1 ] && printf '%s' "$ref" || remote_sha)"
+      install_kit "${sha:-$ref}" "$sha" || true
+    fi
+    [ -d "${kit_dir}/dist" ] || { echo "lk: could not warm the kit for ref '${ref}' (cache: ${cache})" >&2; exit 1; }
+    exit 0
+  fi
+
+  # A bin run: install once if the cache is cold (fast path , no network when
+  # warm, so per-turn agent calls stay ~0.09s; freshness for a moving branch is
+  # the warm step's job).
+  if [ ! -d "${kit_dir}/dist" ]; then
+    sha="$([ "$is_sha" -eq 1 ] && printf '%s' "$ref" || remote_sha)"
+    install_kit "${sha:-$ref}" "$sha" || true
+  fi
   if [ ! -d "${kit_dir}/dist" ]; then
     echo "lk: could not resolve the kit for ref '${ref}' (cache: ${cache})" >&2
     exit 1
   fi
-fi
-
-# `lk --warm`: resolve/install the kit only (pre-populate the cache), no bin to run.
-# createProject calls this once at scaffold so the first real call is already fast.
-if [ "$bin" = "--warm" ]; then
-  exit 0
 fi
 
 # 2. Map bin -> dist path from the kit's own package.json bin map (authoritative).

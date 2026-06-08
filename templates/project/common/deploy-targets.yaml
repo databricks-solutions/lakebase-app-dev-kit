@@ -19,6 +19,12 @@ targets:
     # Any HTTP response on this path means the server is up (200 not required).
     health_path: /
     ready_timeout_seconds: 60
+    # Verify the running app actually works: the language-agnostic test entrypoint
+    # (runs pending migrations + the project's test suite against the branch DB,
+    # with BASE_URL exported so E2E/Playwright hits this deployment). This is the
+    # teeth for BOTH the deploy gate AND per-cycle honest GREEN , without it the
+    # substrate cannot confirm working software and a build correctly escalates.
+    verify: ./scripts/run-tests.sh
 
   # Remote target (Databricks Apps). Declared for the type discriminator;
   # NOT yet implemented by /deploy. Deploy via the extension / app-deploy skill.
