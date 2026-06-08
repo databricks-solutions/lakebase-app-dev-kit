@@ -54,15 +54,29 @@ export interface DriveEffectsConfig {
   deployTarget?: string;
   /** Lakebase instance id, threaded to the experiment branch ops. */
   instance?: string;
+  /** UI track on (LAKEBASE_TDD_UI=1 / a design-brief.md is part of intake): the
+   *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
+   *  stories, not API-only, when proposing + breaking down. */
+  uiTrack?: boolean;
   onAction?(action: WorkflowAction, iteration: number): void;
 }
 
+/** Appended to the Spec Author's propose/breakdown tasks when the UI track is
+ *  on, so the proposal + story breakdown account for user-facing E2E stories
+ *  (the design lane's `layer: "E2E"` work), not just API surface. */
+const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
+const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
+
 /** Short task directive handed to a role subagent for an invoke-role action. */
-function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, featureId: string): string {
+function roleTask(
+  action: Extract<WorkflowAction, { kind: "invoke-role" }>,
+  featureId: string,
+  uiTrack: boolean,
+): string {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
-        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).`;
+        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).${uiTrack ? UI_TRACK_PROPOSE : ""}`;
       case "estimate":
         return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
@@ -70,7 +84,7 @@ function roleTask(action: Extract<WorkflowAction, { kind: "invoke-role" }>, feat
         // supplies (see commandsForAction); it never spawns a role agent.
         return `Provide the sprint's feature-requests.`;
       case "breakdown":
-        return `Break feature ${featureId} down into its stories.`;
+        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
     }
   }
   const s = action.story;
@@ -127,7 +141,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f),
+        task: roleTask(action, f, cfg.uiTrack ?? false),
       };
       const cmds: DriveCommand[] = [claude];
       // After the Spec Author breaks the feature down, seed the pipeline from

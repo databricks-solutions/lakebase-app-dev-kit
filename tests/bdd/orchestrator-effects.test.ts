@@ -55,6 +55,20 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((propose[0] as { task: string }).task).toMatch(/breakdown/i);
   });
 
+  it("propose + breakdown carry the UI-track E2E directive only when the UI track is on", () => {
+    const task = (cmds: ReturnType<typeof commandsForAction>) => (cmds[0] as { task: string }).task;
+    // Off: no UI directive.
+    expect(task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg()))).not.toMatch(/UI track/i);
+    expect(task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg()))).not.toMatch(/UI track/i);
+    // On: propose + breakdown both instruct E2E (UI) stories.
+    const onPropose = task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg({ uiTrack: true })));
+    expect(onPropose).toMatch(/UI track is ON/);
+    expect(onPropose).toMatch(/E2E/);
+    const onBreakdown = task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg({ uiTrack: true })));
+    expect(onBreakdown).toMatch(/UI track is ON/);
+    expect(onBreakdown).toMatch(/E2E/);
+  });
+
   it("author-requests supplies the PO's requests via the Human Proxy + sync-backlog (no LLM spawned)", () => {
     // author-requests is a human-input step: the state machine asks, and headless
     // the Human Proxy supplies the recorded feature-requests (logging each), then

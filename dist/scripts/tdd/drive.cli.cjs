@@ -7438,17 +7438,19 @@ function readPipeline(tddDir, featureId) {
 }
 
 // scripts/tdd/orchestrator-effects.ts
-function roleTask(action, featureId) {
+var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
+var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
+function roleTask(action, featureId, uiTrack) {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
-        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).`;
+        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).${uiTrack ? UI_TRACK_PROPOSE : ""}`;
       case "estimate":
         return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
         return `Provide the sprint's feature-requests.`;
       case "breakdown":
-        return `Break feature ${featureId} down into its stories.`;
+        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
     }
   }
   const s = action.story;
@@ -7489,7 +7491,7 @@ function commandsForAction(action, cfg) {
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f)
+        task: roleTask(action, f, cfg.uiTrack ?? false)
       };
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
@@ -7958,6 +7960,10 @@ function buildCfg(args, featureId) {
     instance: args.instance,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
+    // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
+    // Spec Author then proposes + breaks down user-facing capabilities as E2E
+    // (browser/screen) stories, not API-only.
+    uiTrack: process.env.LAKEBASE_TDD_UI === "1",
     modelForRole: (role) => resolveModelForRole(role, projectDir),
     runner: { async run() {
     } },

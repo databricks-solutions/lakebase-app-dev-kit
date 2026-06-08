@@ -213,6 +213,10 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     instance: args.instance,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
+    // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
+    // Spec Author then proposes + breaks down user-facing capabilities as E2E
+    // (browser/screen) stories, not API-only.
+    uiTrack: process.env.LAKEBASE_TDD_UI === "1",
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
