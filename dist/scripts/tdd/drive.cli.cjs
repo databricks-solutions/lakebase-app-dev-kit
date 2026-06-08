@@ -6653,11 +6653,14 @@ init_cjs_shims();
 
 // scripts/tdd/orchestrator-drive.ts
 init_cjs_shims();
+function uxDesignerPending(s) {
+  return !!s.uiTrack && s.breakdownDone && !s.designGuideReady;
+}
 function nextDesignAction(state) {
   if (!state.breakdownDone) {
     return { kind: "invoke-role", role: "spec-author", mode: "breakdown" };
   }
-  if (state.uiTrack && !state.designGuideReady) {
+  if (uxDesignerPending(state)) {
     return { kind: "invoke-role", role: "ux-designer" };
   }
   for (const story of state.storyOrder) {
@@ -6697,6 +6700,9 @@ function nextTransition(state) {
     return { kind: "done" };
   }
   if (state.phase === "done") return { kind: "done" };
+  if (uxDesignerPending(state)) {
+    return { kind: "invoke-role", role: "ux-designer" };
+  }
   if (state.buildActive) {
     return nextBuildAction(state.buildActive, state.stories[state.buildActive].build);
   }
