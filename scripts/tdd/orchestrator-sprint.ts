@@ -46,8 +46,18 @@ export {
  * planning-complete, so this static read never needs to reflect a later phase).
  * All paths/accessors come from tdd-paths so a producer cannot write where this
  * consumer does not look.
+ *
+ * `opts.skipSizing` is a POLICY threaded from the CLI, not a disk fact: it tells
+ * the machine to route proposed -> author-requests with no estimate step. Carried
+ * on PlanningState so nextTransition stays pure. DEFAULTS TO TRUE: t-shirt-sizing
+ * is off unless a caller opts in (`--sizing`), so the common path skips the
+ * Architect estimate turn.
  */
-export function deriveSprintPlanningState(tddDir: string, sprint: string): DriveState {
+export function deriveSprintPlanningState(
+  tddDir: string,
+  sprint: string,
+  opts: { skipSizing?: boolean } = {},
+): DriveState {
   const proposed = fs.existsSync(featureProposalsMd(tddDir));
   const estimated = hasEstimates(tddDir);
   const backlog = readBacklog(tddDir, sprint).features;
@@ -60,7 +70,7 @@ export function deriveSprintPlanningState(tddDir: string, sprint: string): Drive
   }
   return {
     phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved },
+    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? true },
     breakdownDone: false,
     storyOrder: [],
     stories: {},

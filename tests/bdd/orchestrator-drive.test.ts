@@ -145,6 +145,21 @@ describe("nextTransition: planning lane", () => {
     expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, estimated: true, requestsAuthored: true, gateApproved: true } })))
       .toEqual({ kind: "planning-complete" });
   });
+
+  it("--no-sizing (skipSizing) routes proposed -> author-requests, never estimating", () => {
+    // With sizing skipped, the Architect estimate step is dropped entirely: a
+    // proposed-but-unestimated sprint goes straight to the PO authoring requests.
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, estimated: false, requestsAuthored: false, skipSizing: true } })))
+      .toEqual({ kind: "invoke-role", role: "product-owner", mode: "author-requests" });
+    // The rest of the planning sequence is unchanged.
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, estimated: false, requestsAuthored: true, skipSizing: true } })))
+      .toEqual({ kind: "approve-plan-gate" });
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: true, estimated: false, requestsAuthored: true, gateApproved: true, skipSizing: true } })))
+      .toEqual({ kind: "planning-complete" });
+    // skipSizing never suppresses the propose step.
+    expect(nextTransition(ws({ phase: "planning", planning: { proposed: false, estimated: false, requestsAuthored: false, skipSizing: true } })))
+      .toEqual({ kind: "invoke-role", role: "spec-author", mode: "propose" });
+  });
 });
 
 describe("nextTransition: build lane (after a story is gated)", () => {

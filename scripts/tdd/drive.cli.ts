@@ -55,6 +55,8 @@ interface ParsedArgs {
   planOnly?: boolean;
   only?: string;
   gates?: string;
+  sizing?: boolean;
+  noSizing?: boolean;
   help?: boolean;
 }
 
@@ -74,6 +76,16 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--plan-only": out.planOnly = true; break;
       case "--only": out.only = argv[++i]; break;
       case "--gates": out.gates = argv[++i]; break;
+      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is OFF by
+      // default. Opt back IN with --sizing when the candidate set is large enough
+      // that the PO needs sizes to commit against capacity. --no-sizing is still
+      // accepted (it is the default) so existing invocations keep working.
+      case "--sizing":
+      case "--planning-poker":
+      case "--t-shirt-sizing": out.sizing = true; break;
+      case "--no-sizing":
+      case "--no-planning-poker":
+      case "--no-t-shirt-sizing": out.noSizing = true; break;
       case "--help": case "-h": out.help = true; break;
       default: break;
     }
@@ -100,6 +112,11 @@ Flags:
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
+  --sizing             Opt IN to the Architect's t-shirt-sizing (planning-poker)
+                       step (estimate the candidates before the PO commits).
+                       Sizing is OFF by default; planning goes propose ->
+                       author-requests. Aliases: --planning-poker, --t-shirt-sizing.
+                       (--no-sizing is accepted too, it is the default.)
 `;
 }
 
@@ -283,7 +300,9 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
       const planning: DriveEffects = {
-        readState: async () => deriveSprintPlanningState(tddDir, sprint),
+        // Sizing is off by default; --sizing opts back in. (--no-sizing is the
+        // default and remains accepted.)
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: !args.sizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },

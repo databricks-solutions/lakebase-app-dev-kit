@@ -127,6 +127,11 @@ export interface PlanningState {
   /** The Architect t-shirt-sized the candidates (planning/estimates.json), so
    *  the Product Owner can commit against sprint capacity. */
   estimated: boolean;
+  /** Policy: skip the Architect's estimation (t-shirt sizing) step entirely
+   *  (`--no-sizing`). When set, the machine routes proposed -> author-requests
+   *  with no estimate action, and the backlog is projected without sizes. A
+   *  config decision threaded from the CLI, NOT derived from disk. */
+  skipSizing?: boolean;
   /** The Product Owner committed the sprint backlog (authored a feature-request
    *  per committed feature; sync-backlog projected backlog.json). */
   requestsAuthored: boolean;
@@ -202,7 +207,9 @@ export function nextTransition(state: DriveState): WorkflowAction {
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
     // The Architect t-shirt-sizes the candidates before the PO commits, so the
     // PO can pick a backlog that fits sprint capacity (the team's estimation).
-    if (!p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
+    // `--no-sizing` (p.skipSizing) drops this step: proposed -> author-requests
+    // with no estimate action, for a backlog small enough not to need sizing.
+    if (!p.skipSizing && !p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
     // The sprint plan gate is the HITL checkpoint between planning + execution.
     // It locks the backlog (human live / Human Proxy headless) before any
