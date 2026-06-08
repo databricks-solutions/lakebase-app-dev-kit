@@ -132,6 +132,7 @@ const KIT_CLI_JS: Record<string, string> = {
   "lakebase-tdd-deploy": "deploy.cli.js",
   "lakebase-tdd-human-proxy": "human-proxy.cli.js",
   "lakebase-tdd-test-list": "test-list.cli.js",
+  "lakebase-tdd-log": "agent-log.cli.js",
 };
 
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct

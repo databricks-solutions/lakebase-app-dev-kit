@@ -7898,7 +7898,8 @@ var KIT_CLI_JS = {
   "lakebase-tdd-experiment": "story-experiment.cli.js",
   "lakebase-tdd-deploy": "deploy.cli.js",
   "lakebase-tdd-human-proxy": "human-proxy.cli.js",
-  "lakebase-tdd-test-list": "test-list.cli.js"
+  "lakebase-tdd-test-list": "test-list.cli.js",
+  "lakebase-tdd-log": "agent-log.cli.js"
 };
 function execRunner(cfg) {
   return {
