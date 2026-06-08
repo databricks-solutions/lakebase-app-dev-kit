@@ -9,7 +9,15 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { beginNextPendingCycle, greenOpenCycle, storyTestProgress } from "../../scripts/tdd/cycle-record.js";
+import {
+  beginNextPendingCycle,
+  greenOpenCycle,
+  storyTestProgress,
+  firstReviewPendingAc,
+  firstRefactorPendingAc,
+  reviewAc,
+  refactorAc,
+} from "../../scripts/tdd/cycle-record.js";
 
 let tdd: string;
 const F = "F1";
@@ -106,6 +114,30 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     expect(perStory.items.every((i: { status: string }) => i.status === "green")).toBe(true);
     const ac1 = JSON.parse(readFileSync(join(tdd, "features", F, "stories", S, "acs", "AC1.json"), "utf8"));
     expect(ac1.status).toBe("passing"); // all of AC1's tests are green
+  });
+
+  it("per-AC REVIEW/REFACTOR: AC awaits review once all its tests are green; verdict drives refactor", () => {
+    // Green both of AC1's tests.
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    // AC1 now awaits the Navigator REVIEW.
+    expect(firstReviewPendingAc(tdd, F, S)).toBe("AC1");
+    // Navigator left a verdict requesting a refactor.
+    writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
+    const r = reviewAc(tdd, F, S, "AC1");
+    expect(r.refactorRequested).toBe(true);
+    expect(firstReviewPendingAc(tdd, F, S)).toBeNull(); // reviewed
+    expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1"); // refactor pending
+    refactorAc(tdd, F, S, "AC1");
+    expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored , AC fully done
+  });
+
+  it("per-AC REVIEW with no refactor verdict (looks good) does not request a refactor", () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    const r = reviewAc(tdd, F, S, "AC1"); // no verdict file => looks good
+    expect(r.refactorRequested).toBe(false);
+    expect(firstRefactorPendingAc(tdd, F, S)).toBeNull();
   });
 
   it("greenOpenCycle throws when there is no open RED cycle (driver dispatched with nothing to green)", () => {

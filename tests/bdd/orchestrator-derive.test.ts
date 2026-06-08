@@ -23,6 +23,9 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     testsWritten: (s) => get(s, "testsWritten"),
     codeWritten: (s) => get(s, "codeWritten"),
     storyDeployVerified: (s) => get(s, "storyDeployVerified"),
+    // Per-AC REVIEW/REFACTOR: not exercised by these derive tests (default: none pending).
+    reviewPendingAc: () => null,
+    refactorPendingAc: () => null,
   };
 }
 

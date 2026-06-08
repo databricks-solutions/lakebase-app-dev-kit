@@ -135,6 +135,12 @@ export interface StoryBuild {
   testsWritten: boolean;
   /** The Driver made the tests pass. */
   codeWritten: boolean;
+  /** An AC whose tests are all green but not yet REVIEWed by the Navigator
+   *  (against architecture + design guide), or null. Drives the per-AC REVIEW. */
+  reviewAc?: string | null;
+  /** An AC the Navigator REVIEW asked to refactor, not yet refactored by the
+   *  Driver, or null. Drives the per-AC REFACTOR. */
+  refactorAc?: string | null;
   /** The built story was deployed for the PO's acceptance review. */
   awaitingAcceptance: boolean;
   /** The story's deploy verified (reachable + verify.passed on its experiment
@@ -206,7 +212,7 @@ export type WorkflowAction =
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
   | { kind: "cut-experiment"; story: string }
-  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string }
+  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor"; ac?: string }
   | { kind: "await-acceptance"; story: string }
   | { kind: "accept"; story: string }
   | { kind: "complete"; story: string }
@@ -220,6 +226,11 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
+  // Per-AC handoff (driver-navigator-tdd): once an AC's tests are green, the
+  // Navigator REVIEWs it (against architecture + design guide) and the Driver
+  // REFACTORs on request, before the story is accepted.
+  if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
+  if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
   // Teeth: a story cannot be accepted (merged) until its deploy verified
   // (reachable + verify.passed). Re-deploy until it does; a story that never

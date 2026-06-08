@@ -69,7 +69,7 @@ These are PROJECT-level artifacts (one design system per app), refined over time
 1. **Establish the starting point** for the design language, in this order:
    - If `.tdd/design/design-brief.md` exists, that is the source. For each reference site the HIL named, analyze it for the specific thing they asked for (brand + color from one, layout + tone from another) and extract the design language from it. You MAY use the browser / devtools tools to open each reference and read its real fonts, colors, and spacing rather than guessing. Cite which reference each major token decision came from.
    - Else if the project already has a design guide (`design-guide.{md,json}` or a shipped `STYLE_GUIDE.md` + `theme.css`), start from it as the model and iterate.
-   - Else use the kit default design guide (`skills/lakebase-tdd-workflows/references/default-design-guide.md`, the Databricks-brand baseline) as the default.
+   - Else use the kit default design guide (`@lakebase-tdd-workflows/references/default-design-guide.md`, the Databricks-brand baseline) as the default.
 2. Read the PO intent + the structured spec. Identify the user-facing surface: which stories produce screens.
 3. Define or update the **information architecture** (`ia.md`): the screens, how they connect, the primary flows. Each flow should map to one or more stories.
 4. Define or update the **design guide** (`design-guide.md` + `design-guide.json`): the tokens and component standards the UI must follow, derived from the references (or the default). Keep the markdown and JSON in sync; the JSON is the source of truth for tokens.

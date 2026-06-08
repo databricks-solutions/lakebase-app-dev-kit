@@ -18,9 +18,9 @@
 // drift , the bug that stalled the live smoke (the Navigator hand-wrote a
 // cycle with `status:"red"` instead of the `red_at` the probe reads).
 
-import { existsSync, readFileSync, readdirSync, statSync } from "fs";
-import { join } from "path";
-import { storyTestListJson, cyclesRootDir } from "./tdd-paths.js";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./tdd-paths.js";
 import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import {
@@ -199,4 +199,123 @@ export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string 
     /* status propagation is observability for downstream consumers, not a gate */
   }
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
+}
+
+// ─── Per-AC REVIEW / REFACTOR (driver-navigator-tdd handoff) ───────
+//
+// Once an AC's tests are all GREEN, the Navigator REVIEWs the AC's diff against
+// the architecture + design guide and the Driver REFACTORs on request , the
+// per-slice handoff from /driver-navigator-tdd, at AC grain. The review verdict
+// is the Navigator's output (review-verdict.json: { refactor, notes }); the
+// orchestration records the transition (review.json: reviewed_at /
+// refactor_requested / refactored_at) , same producer/consumer split as the
+// RED/GREEN recording. Both roles read architecture.md + design-guide.md.
+
+export interface AcReviewState {
+  acId: string;
+  /** Every test-list item for this AC has a green cycle (AC ready to REVIEW). */
+  allTestsGreen: boolean;
+  /** review.json has reviewed_at (the Navigator REVIEWed this AC). */
+  reviewed: boolean;
+  /** The REVIEW requested a refactor. */
+  refactorRequested: boolean;
+  /** review.json has refactored_at (the Driver completed the refactor). */
+  refactored: boolean;
+}
+
+interface ReviewRecord {
+  reviewed_at?: string;
+  refactor_requested?: boolean;
+  refactor_notes?: string;
+  refactored_at?: string;
+}
+
+function readReview(tddDir: string, featureId: string, story: string, acId: string): ReviewRecord {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!existsSync(f)) return {};
+  try {
+    return JSON.parse(readFileSync(f, "utf8")) as ReviewRecord;
+  } catch {
+    return {};
+  }
+}
+
+/** Per-AC review state, in test-list AC order (first occurrence of each ac_id). */
+export function acReviewStates(tddDir: string, featureId: string, story: string): AcReviewState[] {
+  let items: StoryTestItem[] = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const acOrder: string[] = [];
+  const acTests = new Map<string, string[]>();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id)!.push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId)!;
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at),
+    };
+  });
+}
+
+/** First AC whose tests are all green but not yet REVIEWed (-> Navigator REVIEW). */
+export function firstReviewPendingAc(tddDir: string, featureId: string, story: string): string | null {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+
+/** First AC REVIEWed with a refactor request not yet satisfied (-> Driver REFACTOR). */
+export function firstRefactorPendingAc(tddDir: string, featureId: string, story: string): string | null {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
+
+/**
+ * Record the Navigator's REVIEW of an AC: read its verdict (review-verdict.json,
+ * the Navigator's output { refactor, notes }) and stamp review.json with
+ * reviewed_at + refactor_requested. No verdict present => refactor_requested
+ * false ("looks good"), so a Navigator that finds nothing to fix never stalls.
+ */
+export function reviewAc(tddDir: string, featureId: string, story: string, acId: string): { reviewed: boolean; refactorRequested: boolean } {
+  let verdict: { refactor?: boolean; notes?: string } = {};
+  const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
+  if (existsSync(vf)) {
+    try {
+      verdict = JSON.parse(readFileSync(vf, "utf8")) as { refactor?: boolean; notes?: string };
+    } catch {
+      verdict = {};
+    }
+  }
+  const refactorRequested = verdict.refactor === true;
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    JSON.stringify(
+      { ...prior, reviewed_at: new Date().toISOString(), refactor_requested: refactorRequested, ...(verdict.notes ? { refactor_notes: verdict.notes } : {}) },
+      null,
+      2,
+    ) + "\n",
+  );
+  return { reviewed: true, refactorRequested };
+}
+
+/** Record that the Driver completed the requested REFACTOR for an AC. */
+export function refactorAc(tddDir: string, featureId: string, story: string, acId: string): void {
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
 }

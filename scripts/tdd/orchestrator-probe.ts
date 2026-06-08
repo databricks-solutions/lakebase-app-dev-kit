@@ -13,7 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
-import { storyTestProgress } from "./cycle-record.js";
+import { storyTestProgress, firstReviewPendingAc, firstRefactorPendingAc } from "./cycle-record.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
@@ -159,6 +159,14 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
         return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
       }
       return p.allGreen;
+    },
+
+    reviewPendingAc(story) {
+      return firstReviewPendingAc(tddDir, featureId, story);
+    },
+
+    refactorPendingAc(story) {
+      return firstRefactorPendingAc(tddDir, featureId, story);
     },
 
     storyDeployVerified(story) {

@@ -39,6 +39,10 @@ export interface StoryArtifactProbe {
   testsWritten(story: string): boolean;
   /** The Driver made those tests pass. */
   codeWritten(story: string): boolean;
+  /** An AC whose tests are all green but not yet Navigator-REVIEWed, or null. */
+  reviewPendingAc(story: string): string | null;
+  /** An AC the REVIEW asked to refactor, not yet Driver-refactored, or null. */
+  refactorPendingAc(story: string): string | null;
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
   storyDeployVerified(story: string): boolean;
@@ -81,6 +85,8 @@ function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryV
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted,

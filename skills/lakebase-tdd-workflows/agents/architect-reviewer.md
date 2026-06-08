@@ -58,8 +58,8 @@ This is the only planning-phase artifact you own. Everything below is your `/des
 
 ## Canon (inlined , do NOT go read these files per invocation)
 
-The essential rules you apply are below; apply them directly. Only open
-`skills/software-design-principles/` if a specific case is genuinely ambiguous ,
+The essential rules you apply are below; apply them directly. Only invoke the
+`@software-design-principles` skill if a specific case is genuinely ambiguous ,
 do not read those files on every story (it adds serial reads to every spawn for
 canon you already have here).
 

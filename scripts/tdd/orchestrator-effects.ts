@@ -163,8 +163,27 @@ function roleTask(
     case "test-strategist":
       return `Produce the ordered test list for story ${s}.`;
     case "navigator":
+      if (action.buildMode === "review") {
+        return (
+          `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
+          ` Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md),` +
+          ` and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer` +
+          ` boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA` +
+          ` adherence. Write your verdict to` +
+          ` .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+          ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
+        );
+      }
       return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
+      if (action.buildMode === "refactor") {
+        return (
+          `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
+          ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
+          ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+          ` Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`
+        );
+      }
       return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
     default:
       return `Work story ${s}.`;
@@ -249,10 +268,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // probe's red_at/green_at reading in lockstep with what was produced ,
       // the drift that stalled the live smoke.
       if (!("mode" in action) && action.role === "navigator") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["begin", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       if (!("mode" in action) && action.role === "driver") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["green", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,

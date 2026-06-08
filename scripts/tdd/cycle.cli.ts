@@ -13,12 +13,20 @@
 // Exit: 0 ok; 2 bad args; 1 op failure (e.g. no open RED cycle to green).
 
 import { join } from "path";
-import { beginNextPendingCycle, greenOpenCycle } from "./cycle-record.js";
+import {
+  beginNextPendingCycle,
+  greenOpenCycle,
+  reviewAc,
+  refactorAc,
+  firstReviewPendingAc,
+  firstRefactorPendingAc,
+} from "./cycle-record.js";
 
 interface Args {
   cmd?: string;
   feature?: string;
   story?: string;
+  ac?: string;
   tddDir?: string;
 }
 
@@ -28,6 +36,7 @@ function parse(argv: string[]): Args {
     switch (argv[i]) {
       case "--feature": out.feature = argv[++i]; break;
       case "--story": out.story = argv[++i]; break;
+      case "--ac": out.ac = argv[++i]; break;
       case "--tdd-dir": out.tddDir = argv[++i]; break;
     }
   }
@@ -36,7 +45,7 @@ function parse(argv: string[]): Args {
 
 function usage(msg: string): number {
   process.stderr.write(
-    `${msg}\nUsage: lakebase-tdd-cycle <begin|green> --feature <F> --story <S> [--tdd-dir <D>]\n`,
+    `${msg}\nUsage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>]\n`,
   );
   return 2;
 }
@@ -60,6 +69,28 @@ function main(): number {
     case "green": {
       const r = greenOpenCycle(base);
       process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}\n`);
+      return 0;
+    }
+    case "review": {
+      // Record the Navigator's REVIEW of an AC (after its tests are all green).
+      const ac = a.ac ?? firstReviewPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting review for ${a.story}\n`);
+        return 0;
+      }
+      const r = reviewAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REVIEWED ${ac}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}\n`);
+      return 0;
+    }
+    case "refactor": {
+      // Record that the Driver completed the requested REFACTOR for an AC.
+      const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
+        return 0;
+      }
+      refactorAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REFACTORED ${ac}\n`);
       return 0;
     }
     default:

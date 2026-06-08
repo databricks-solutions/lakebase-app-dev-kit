@@ -18,6 +18,16 @@ export const sprintsDir = (tdd: string): string => join(tdd, "sprints");
 export const cyclesRootDir = (tdd: string): string => join(tdd, "cycles");
 export const experimentsRootDir = (tdd: string): string => join(tdd, "experiments");
 
+// Per-AC REVIEW (FEIP-7461): once an AC's tests are all green, the Navigator
+// REVIEWs the AC's diff against the architecture + design guide and writes its
+// verdict (review-verdict.json: { refactor, notes }); the orchestration records
+// the review transition (review.json: { reviewed_at, refactor_requested,
+// refactored_at }). Both live under the AC's cycles dir.
+export const acReviewJson = (tdd: string, f: string, s: string, ac: string): string =>
+  join(cyclesRootDir(tdd), f, s, ac, "review.json");
+export const acReviewVerdictJson = (tdd: string, f: string, s: string, ac: string): string =>
+  join(cyclesRootDir(tdd), f, s, ac, "review-verdict.json");
+
 // ── Project-level artifacts ───────────────────────────────────────
 export const workflowStateJson = (tdd: string): string => join(tdd, "workflow-state.json");
 export const productOverviewMd = (tdd: string): string => join(tdd, "product-overview.md");

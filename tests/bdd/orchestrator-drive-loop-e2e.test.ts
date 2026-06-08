@@ -18,6 +18,7 @@ import { deriveDriveState } from "../../scripts/tdd/orchestrator-derive";
 import { diskArtifactProbe, readDriveContext } from "../../scripts/tdd/orchestrator-probe";
 import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
 import { writeCycleArtifact } from "../../scripts/tdd/run-cycle";
+import { acReviewJson } from "../../scripts/tdd/tdd-paths";
 import {
   readPipeline,
   writePipeline,
@@ -116,15 +117,24 @@ function replayEffects(feature: string, stories: string[]) {
               items: [{ id: "T1", description: "t", ac_id: ac(s), status: "pending" }],
             });
           } else if (action.role === "navigator") {
-            writeCycleArtifact(
-              { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
-              { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT },
-            );
+            if (action.buildMode === "review") {
+              // Per-AC REVIEW: simulate "looks good" (no refactor requested).
+              writeJson(acReviewJson(tddDir, feature, s, ac(s)), { reviewed_at: AT, refactor_requested: false });
+            } else {
+              writeCycleArtifact(
+                { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
+                { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT },
+              );
+            }
           } else if (action.role === "driver") {
-            writeCycleArtifact(
-              { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
-              { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT, green_at: AT },
-            );
+            if (action.buildMode === "refactor") {
+              writeJson(acReviewJson(tddDir, feature, s, ac(s)), { reviewed_at: AT, refactor_requested: true, refactored_at: AT });
+            } else {
+              writeCycleArtifact(
+                { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
+                { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT, green_at: AT },
+              );
+            }
           }
           return;
         }
