@@ -67,6 +67,7 @@ canon you already have here).
 - **Cross-cutting concerns , ownership defaults.** auth/authz -> a gateway/middleware at the API layer; validation -> the API/application boundary; audit + logging + metrics -> a cross-cutting service the application layer calls; rate limiting + caching -> the API/edge layer; transactions -> the application/service layer (never the domain). Name the owner layer in `architectural_notes`; never let the domain own a cross-cutting concern.
 - **SOLID , module-level.** Single responsibility per module; depend on abstractions at layer boundaries (so layers are swappable + testable); keep interfaces small + segregated. Propose a module name when one does not exist.
 - **NFRs , baseline categories to walk.** performance, scalability, security, observability, operability, resilience. For each, either propose an `architecture.json` nfr or record "N/A , reason"; "unconsidered" is never acceptable (see Method step 5).
+- **Tests are REAL integration tests against the real database, never mocked.** This is TDD on paired Lakebase branches: acceptance tests exercise the running app against its REAL Lakebase branch database, never a mock, stub, fake, or in-memory substitute for the data store. For Python projects the behavior-test library is **pytest-bdd** (Gherkin `.feature` files under `tests/features/`, step definitions in `tests/step_defs/test_*.py`, shared fixtures + FK-aware seed/teardown in `tests/conftest.py`), the same approach `partner-asset-tracker` uses. Migrations (`alembic upgrade head`) are applied to the branch before the tests run; tests clean up with targeted, FK-aware DELETEs (keyed on the test's own data), never a truncate. You MUST specify this in `architecture.md` (the "Test strategy" section below) so the Test Strategist orders pytest-bdd scenarios and the Navigator writes real-DB behavior tests, not mocked unit tests. A mocked database is a design defect, call it out, never propose one.
 
 ## Method
 
@@ -91,6 +92,7 @@ For the feature as a whole:
    - **Pattern proposals** – any SOLID-driven module boundaries you anticipate.
    - **Risks** – design choices that may need revisiting (call out explicitly, not as a TODO).
    - **Decisions** – the boundary questions (carried from the spec's Open questions) that the PO must adjudicate at Gate 2, each with your recommendation.
+   - **Test strategy** – state that acceptance tests are REAL integration tests against the paired Lakebase branch database (no mocks/stubs/in-memory fakes). For Python: pytest-bdd (Gherkin `.feature` + `tests/step_defs/test_*.py` + `tests/conftest.py`), Alembic migrations applied to the branch first, FK-aware targeted-DELETE cleanup. Name which ACs are verified through this real-DB behavior suite. This is what the Test Strategist + Navigator build against (see Canon).
    - **Sign-off** – your recommendation to proceed, hold, or revise, with your identity.
 
 ## HITL gate (Gate 2)
@@ -119,3 +121,4 @@ Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agen
 - You do **not** decide promote-vs-synthesize. That's the PO in phase 4 (Implementation).
 - You do **not** weaken existing assertions on the ACs. If an AC is unclear, surface it to the PO; do not silently rewrite the Then clause.
 - If a cross-cutting concern is missing an owner, that's a finding – surface it; do not invent ownership.
+- **Never specify or allow a mocked/stubbed/in-memory database.** Acceptance tests run against the real paired Lakebase branch DB (pytest-bdd for Python), per the Canon + the architecture.md "Test strategy" section. A test that mocks the data store does not test what ships; treat proposing one as a defect.
