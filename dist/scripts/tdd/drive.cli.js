@@ -6653,6 +6653,255 @@ import { randomUUID } from "crypto";
 import * as fs9 from "fs";
 import * as path6 from "path";
 
+// scripts/tdd/replay-artifacts.ts
+init_esm_shims();
+import { existsSync as existsSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, copyFileSync, statSync as statSync2 } from "fs";
+import { join as join2, dirname } from "path";
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join } from "path";
+var featuresDir = (tdd) => join(tdd, "features");
+var planningDir = (tdd) => join(tdd, "planning");
+var sprintsDir = (tdd) => join(tdd, "sprints");
+var cyclesRootDir = (tdd) => join(tdd, "cycles");
+var workflowStateJson = (tdd) => join(tdd, "workflow-state.json");
+var designGuideJson = (tdd) => join(tdd, "design", "design-guide.json");
+var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
+var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureSpecJson = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.json");
+var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
+var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
+var featureDeployEvidenceJson = (tdd, f) => join(featureResolved(tdd, f), "deploy-evidence.json");
+var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
+var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
+var backlogJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "backlog.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
+      }
+    } catch {
+    }
+  }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (m) ids.add(m[1]);
+      }
+    } catch {
+    }
+  }
+  return [...ids];
+}
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
+  }
+  return void 0;
+}
+var hasFeatureRequest = (tdd, f) => fs.existsSync(featureRequestMd(tdd, f));
+var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
+var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
+var planningEstimatesJson = (tdd) => join(planningDir(tdd), "estimates.json");
+function readEstimates(tdd) {
+  const file = planningEstimatesJson(tdd);
+  if (!fs.existsSync(file)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!Array.isArray(data.estimates)) return [];
+    return data.estimates.flatMap((e) => {
+      const id = e?.feature_id;
+      const size = e?.size;
+      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
+      const rationale = e?.rationale;
+      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
+    });
+  } catch {
+    return [];
+  }
+}
+var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
+var backlogFeatureIds = (b) => b.features.map((f) => f.id);
+function readBacklog(tdd, sprint) {
+  const file = backlogJson(tdd, sprint);
+  if (!fs.existsSync(file)) return { sprint, features: [] };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
+      if (typeof x === "string" && x.length > 0) return [{ id: x }];
+      const id = x?.id;
+      if (typeof id !== "string" || !id) return [];
+      const size = x?.size;
+      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
+    }) : [];
+    return { sprint, features };
+  } catch {
+    return { sprint, features: [] };
+  }
+}
+function writeBacklog(tdd, backlog) {
+  fs.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
+  fs.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
+}
+function syncBacklog(tdd, sprint) {
+  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
+  const root = featuresDir(tdd);
+  const committed = fs.existsSync(root) ? fs.readdirSync(root).filter((d) => {
+    try {
+      return fs.statSync(join(root, d)).isDirectory() && fs.existsSync(join(root, d, "feature-request.md"));
+    } catch {
+      return false;
+    }
+  }).sort() : [];
+  const features = committed.map((id) => {
+    const size = sizeOf.get(id);
+    return { id, ...size ? { size } : {} };
+  });
+  const backlog = { sprint, features };
+  writeBacklog(tdd, backlog);
+  return backlog;
+}
+
+// scripts/tdd/replay-artifacts.ts
+var REPLAYABLE_DESIGN_ROLES = /* @__PURE__ */ new Set([
+  "spec-author",
+  "architect-reviewer",
+  "test-strategist",
+  "ux-designer",
+  "product-owner"
+]);
+function cp(src, dst) {
+  if (!existsSync2(src)) return false;
+  mkdirSync2(dirname(dst), { recursive: true });
+  copyFileSync(src, dst);
+  return true;
+}
+function cpDir(srcDir, dstDir, transform) {
+  if (!existsSync2(srcDir)) return false;
+  let copied = false;
+  mkdirSync2(dstDir, { recursive: true });
+  for (const name of readdirSync2(srcDir)) {
+    const s = join2(srcDir, name);
+    if (!statSync2(s).isFile()) continue;
+    const text = readFileSync2(s, "utf8");
+    writeFileSync2(join2(dstDir, name), transform ? transform(name, text) : text);
+    copied = true;
+  }
+  return copied;
+}
+function stripLayer(name, text) {
+  if (!name.endsWith(".json")) return text;
+  try {
+    const ac = JSON.parse(text);
+    delete ac.layer;
+    return JSON.stringify(ac, null, 2) + "\n";
+  } catch {
+    return text;
+  }
+}
+function replayDesignTurn(args) {
+  const { turn, replayDir, tddDir, featureId } = args;
+  const cf = join2(featuresDir(replayDir), featureId);
+  const tf = join2(featuresDir(tddDir), featureId);
+  switch (turn.role) {
+    case "spec-author": {
+      if (turn.mode === "propose") {
+        return cp(join2(replayDir, "planning", "feature-proposals.md"), join2(tddDir, "planning", "feature-proposals.md"));
+      }
+      if (turn.mode === "breakdown") {
+        let ok = cp(join2(cf, "feature-spec.json"), join2(tf, "feature-spec.json"));
+        cp(join2(cf, "feature-spec.md"), join2(tf, "feature-spec.md"));
+        const storiesSrc = join2(cf, "stories");
+        if (existsSync2(storiesSrc)) {
+          for (const s of readdirSync2(storiesSrc)) {
+            cp(join2(storiesSrc, s, "story.json"), join2(tf, "stories", s, "story.json"));
+            cp(join2(storiesSrc, s, "story.md"), join2(tf, "stories", s, "story.md"));
+          }
+        }
+        return ok;
+      }
+      if (turn.story) {
+        return cpDir(join2(cf, "stories", turn.story, "acs"), join2(tf, "stories", turn.story, "acs"), stripLayer);
+      }
+      return false;
+    }
+    case "architect-reviewer": {
+      let ok = cp(join2(cf, "architecture.json"), join2(tf, "architecture.json"));
+      cp(join2(cf, "architecture.md"), join2(tf, "architecture.md"));
+      if (turn.story) {
+        const acs = cpDir(join2(cf, "stories", turn.story, "acs"), join2(tf, "stories", turn.story, "acs"));
+        ok = ok || acs;
+      }
+      return ok;
+    }
+    case "test-strategist": {
+      let ok = cp(join2(cf, "test-list.json"), join2(tf, "test-list.json"));
+      cp(join2(cf, "test-list.md"), join2(tf, "test-list.md"));
+      const story = turn.story;
+      if (story) {
+        cp(join2(cf, "stories", story, "test-list-per-ac.json"), join2(tf, "stories", story, "test-list-per-ac.json"));
+      }
+      return ok;
+    }
+    case "ux-designer": {
+      let ok = cp(join2(replayDir, "design", "design-guide.json"), join2(tddDir, "design", "design-guide.json"));
+      cp(join2(replayDir, "design", "design-guide.md"), join2(tddDir, "design", "design-guide.md"));
+      cp(join2(replayDir, "design", "ia.md"), join2(tddDir, "design", "ia.md"));
+      return ok;
+    }
+    default:
+      return false;
+  }
+}
+
 // scripts/tdd/orchestrator-run.ts
 init_esm_shims();
 
@@ -6964,7 +7213,7 @@ init_esm_shims();
 
 // scripts/lakebase/paired-branch.ts
 init_esm_shims();
-import * as fs3 from "fs";
+import * as fs4 from "fs";
 import * as path3 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
@@ -7003,32 +7252,32 @@ import { execFileSync as execFileSync2 } from "child_process";
 
 // scripts/lakebase/env-file.ts
 init_esm_shims();
-import * as fs from "fs";
+import * as fs2 from "fs";
 import * as path2 from "path";
 
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 
 // scripts/util/exec.ts
 init_esm_shims();
-import * as cp from "child_process";
+import * as cp2 from "child_process";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync4, readFileSync as readFileSync5 } from "fs";
-import { join as join4 } from "path";
+import { appendFileSync, existsSync as existsSync6, readFileSync as readFileSync7 } from "fs";
+import { join as join6 } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync4 } from "fs";
-import { join as join3 } from "path";
-var SCHEMA_DIR = join3(__dirname, "schemas");
+import { readFileSync as readFileSync6 } from "fs";
+import { join as join5 } from "path";
+var SCHEMA_DIR = join5(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse(readFileSync4(join3(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse(readFileSync6(join5(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7048,7 +7297,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return join4(tddDir, "agent-log.jsonl");
+  return join6(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7063,158 +7312,6 @@ function emitAgentLogEvent(input, opts = {}) {
   return event;
 }
 
-// scripts/tdd/tdd-paths.ts
-init_esm_shims();
-import * as fs4 from "fs";
-import { join as join5 } from "path";
-var featuresDir = (tdd) => join5(tdd, "features");
-var planningDir = (tdd) => join5(tdd, "planning");
-var sprintsDir = (tdd) => join5(tdd, "sprints");
-var cyclesRootDir = (tdd) => join5(tdd, "cycles");
-var workflowStateJson = (tdd) => join5(tdd, "workflow-state.json");
-var designGuideJson = (tdd) => join5(tdd, "design", "design-guide.json");
-var featureProposalsMd = (tdd) => join5(planningDir(tdd), "feature-proposals.md");
-var featureDir = (tdd, featureId) => join5(featuresDir(tdd), featureId);
-var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureSpecJson = (tdd, f) => join5(featureResolved(tdd, f), "feature-spec.json");
-var featureRequestMd = (tdd, f) => join5(featureResolved(tdd, f), "feature-request.md");
-var pipelineJson = (tdd, f) => join5(featureResolved(tdd, f), "pipeline.json");
-var featureDeployEvidenceJson = (tdd, f) => join5(featureResolved(tdd, f), "deploy-evidence.json");
-var storiesDir = (tdd, f) => join5(featureResolved(tdd, f), "stories");
-var storyDir = (tdd, f, s) => join5(storiesDir(tdd, f), s);
-function findStoryDir(tdd, f, s) {
-  const root = storiesDir(tdd, f);
-  if (!fs4.existsSync(root)) return void 0;
-  const exact = join5(root, s);
-  if (fs4.existsSync(exact)) return exact;
-  const matches = fs4.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
-  return matches.length === 1 ? join5(root, matches[0]) : void 0;
-}
-var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
-var storyJson = (tdd, f, s) => join5(storyResolved(tdd, f, s), "story.json");
-var acsDir = (tdd, f, s) => join5(storyResolved(tdd, f, s), "acs");
-var acJson = (tdd, f, s, ac) => join5(acsDir(tdd, f, s), `${ac}.json`);
-var storyTestListJson = (tdd, f, s) => join5(storyResolved(tdd, f, s), "test-list-per-story.json");
-var sprintDir = (tdd, sprint) => join5(sprintsDir(tdd), sprint);
-var sprintGatesJson = (tdd, sprint) => join5(sprintDir(tdd, sprint), "gates.json");
-var backlogJson = (tdd, sprint) => join5(sprintDir(tdd, sprint), "backlog.json");
-function findFeatureDir(tdd, featureId) {
-  const root = featuresDir(tdd);
-  if (!fs4.existsSync(root)) return void 0;
-  const exact = join5(root, featureId);
-  if (fs4.existsSync(exact)) return exact;
-  const matches = fs4.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? join5(root, matches[0]) : void 0;
-}
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-function storyAcIds(tdd, f, s) {
-  const ids = /* @__PURE__ */ new Set();
-  const sj = storyJson(tdd, f, s);
-  if (fs4.existsSync(sj)) {
-    try {
-      const data = JSON.parse(fs4.readFileSync(sj, "utf8"));
-      if (Array.isArray(data.acs)) {
-        for (const a of data.acs) {
-          const id = typeof a === "string" ? a : a?.id;
-          if (typeof id === "string" && id.length > 0) ids.add(id);
-        }
-      }
-    } catch {
-    }
-  }
-  const dir = acsDir(tdd, f, s);
-  if (fs4.existsSync(dir)) {
-    try {
-      for (const file of fs4.readdirSync(dir)) {
-        const m = /^(.+)\.json$/.exec(file);
-        if (m) ids.add(m[1]);
-      }
-    } catch {
-    }
-  }
-  return [...ids];
-}
-function readAcLayer(tdd, f, acId) {
-  const stories = storiesDir(tdd, f);
-  if (!fs4.existsSync(stories)) return void 0;
-  for (const s of fs4.readdirSync(stories)) {
-    const file = acJson(tdd, f, s, acId);
-    if (!fs4.existsSync(file)) continue;
-    try {
-      const ac = JSON.parse(fs4.readFileSync(file, "utf8"));
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
-    } catch {
-    }
-  }
-  return void 0;
-}
-var hasFeatureRequest = (tdd, f) => fs4.existsSync(featureRequestMd(tdd, f));
-var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
-var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
-var planningEstimatesJson = (tdd) => join5(planningDir(tdd), "estimates.json");
-function readEstimates(tdd) {
-  const file = planningEstimatesJson(tdd);
-  if (!fs4.existsSync(file)) return [];
-  try {
-    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-    if (!Array.isArray(data.estimates)) return [];
-    return data.estimates.flatMap((e) => {
-      const id = e?.feature_id;
-      const size = e?.size;
-      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
-      const rationale = e?.rationale;
-      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
-    });
-  } catch {
-    return [];
-  }
-}
-var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
-var backlogFeatureIds = (b) => b.features.map((f) => f.id);
-function readBacklog(tdd, sprint) {
-  const file = backlogJson(tdd, sprint);
-  if (!fs4.existsSync(file)) return { sprint, features: [] };
-  try {
-    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
-      if (typeof x === "string" && x.length > 0) return [{ id: x }];
-      const id = x?.id;
-      if (typeof id !== "string" || !id) return [];
-      const size = x?.size;
-      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
-    }) : [];
-    return { sprint, features };
-  } catch {
-    return { sprint, features: [] };
-  }
-}
-function writeBacklog(tdd, backlog) {
-  fs4.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
-  fs4.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
-}
-function syncBacklog(tdd, sprint) {
-  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
-  const root = featuresDir(tdd);
-  const committed = fs4.existsSync(root) ? fs4.readdirSync(root).filter((d) => {
-    try {
-      return fs4.statSync(join5(root, d)).isDirectory() && fs4.existsSync(join5(root, d, "feature-request.md"));
-    } catch {
-      return false;
-    }
-  }).sort() : [];
-  const features = committed.map((id) => {
-    const size = sizeOf.get(id);
-    return { id, ...size ? { size } : {} };
-  });
-  const backlog = { sprint, features };
-  writeBacklog(tdd, backlog);
-  return backlog;
-}
-
 // scripts/tdd/run-cycle.ts
 function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
@@ -7222,31 +7319,36 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync7, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
-import { join as join6 } from "path";
+import { existsSync as existsSync7, readFileSync as readFileSync8, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
+import { join as join7 } from "path";
+
+// scripts/tdd/test-list.ts
+init_esm_shims();
+
+// scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync6(file)) {
+  if (!existsSync7(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse(readFileSync7(file, "utf8"));
+  const data = JSON.parse(readFileSync8(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = join6(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync6(base)) return [];
+  const base = join7(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync7(base)) return [];
   const out = [];
-  for (const acDir of readdirSync2(base)) {
-    const dir = join6(base, acDir);
+  for (const acDir of readdirSync3(base)) {
+    const dir = join7(base, acDir);
     try {
-      if (!statSync2(dir).isDirectory()) continue;
+      if (!statSync3(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of readdirSync2(dir)) {
+    for (const f of readdirSync3(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(readFileSync7(join6(dir, f), "utf8")));
+        out.push(JSON.parse(readFileSync8(join7(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7271,8 +7373,8 @@ function storyTestProgress(tddDir, featureId, story) {
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync7, readFileSync as readFileSync8, renameSync, unlinkSync, writeFileSync as writeFileSync4 } from "fs";
-import { join as join7 } from "path";
+import { existsSync as existsSync8, readFileSync as readFileSync9, renameSync, unlinkSync, writeFileSync as writeFileSync5 } from "fs";
+import { join as join8 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7291,10 +7393,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync7(file)) {
+  if (!existsSync8(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync8(file, "utf8");
+  const raw = readFileSync9(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7305,7 +7407,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return join7(requireFeatureDir(tddDir, featureId), "gates.json");
+  return join8(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7366,8 +7468,8 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync3, readFileSync as readFileSync9, rmSync, writeFileSync as writeFileSync5 } from "fs";
-import { dirname as dirname2, join as join8 } from "path";
+import { existsSync as existsSync9, mkdirSync as mkdirSync4, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync6 } from "fs";
+import { dirname as dirname3, join as join9 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7377,9 +7479,9 @@ function deployEvidencePasses(e) {
   return e !== void 0 && e.reachable === true && e.verify?.passed === true;
 }
 function readDeployEvidence(file) {
-  if (!existsSync8(file)) return void 0;
+  if (!existsSync9(file)) return void 0;
   try {
-    return JSON.parse(readFileSync9(file, "utf8"));
+    return JSON.parse(readFileSync10(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -7387,7 +7489,7 @@ function readDeployEvidence(file) {
 function storyDeployVerified(tddDir, featureId, storyId) {
   const fdir = findFeatureDir(tddDir, featureId);
   if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence(join8(fdir, "stories", storyId, "deploy-evidence.json")));
+  return deployEvidencePasses(readDeployEvidence(join9(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
 // scripts/tdd/orchestrator-probe.ts
@@ -7494,7 +7596,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync6, statSync as statSync4 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7503,8 +7605,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync10(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync11(p, "utf8"));
+  if (!existsSync11(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync12(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7582,7 +7684,11 @@ function commandsForAction(action, cfg) {
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        replay: {
+          mode: "mode" in action ? action.mode : void 0,
+          story: "story" in action ? action.story : void 0
+        }
       };
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
@@ -7739,7 +7845,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync12, mkdirSync as mkdirSync5, readFileSync as readFileSync13, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync7 } from "fs";
+import { existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync14, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync8 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -7762,10 +7868,10 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync12(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync13(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync13(file, "utf8"));
+    parsed = JSON.parse(readFileSync14(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -7818,8 +7924,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6 } from "fs";
-import { dirname as dirname3, join as join10 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync9, mkdirSync as mkdirSync7 } from "fs";
+import { dirname as dirname4, join as join11 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -7831,11 +7937,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join10(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join11(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = join10(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync14(p)) return void 0;
-  return JSON.parse(readFileSync14(p, "utf8"));
+  const p = join11(projectDir, AGENT_CONFIG_REL);
+  if (!existsSync15(p)) return void 0;
+  return JSON.parse(readFileSync15(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -8231,6 +8337,24 @@ function execRunner(cfg) {
         return;
       }
       if (cmd.kind === "claude") {
+        const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
+        if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
+          const replayed = replayDesignTurn({
+            turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
+            replayDir,
+            tddDir: cfg.tddDir,
+            featureId: cfg.featureId
+          });
+          if (replayed) {
+            process.stderr.write(
+              `[drive] replayed ${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""} from corpus (no model spawn)
+`
+            );
+            return;
+          }
+          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent
+`);
+        }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);

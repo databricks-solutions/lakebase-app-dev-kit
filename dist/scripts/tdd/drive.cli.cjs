@@ -6648,6 +6648,255 @@ var import_node_crypto = require("crypto");
 var fs9 = __toESM(require("fs"), 1);
 var path5 = __toESM(require("path"), 1);
 
+// scripts/tdd/replay-artifacts.ts
+init_cjs_shims();
+var import_fs = require("fs");
+var import_path = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
+var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
+var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
+var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
+var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
+var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
+var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
+var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
+var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
+var backlogJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "backlog.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
+      }
+    } catch {
+    }
+  }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (m) ids.add(m[1]);
+      }
+    } catch {
+    }
+  }
+  return [...ids];
+}
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
+  }
+  return void 0;
+}
+var hasFeatureRequest = (tdd, f) => fs.existsSync(featureRequestMd(tdd, f));
+var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
+var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
+var planningEstimatesJson = (tdd) => (0, import_node_path.join)(planningDir(tdd), "estimates.json");
+function readEstimates(tdd) {
+  const file = planningEstimatesJson(tdd);
+  if (!fs.existsSync(file)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!Array.isArray(data.estimates)) return [];
+    return data.estimates.flatMap((e) => {
+      const id = e?.feature_id;
+      const size = e?.size;
+      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
+      const rationale = e?.rationale;
+      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
+    });
+  } catch {
+    return [];
+  }
+}
+var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
+var backlogFeatureIds = (b) => b.features.map((f) => f.id);
+function readBacklog(tdd, sprint) {
+  const file = backlogJson(tdd, sprint);
+  if (!fs.existsSync(file)) return { sprint, features: [] };
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
+      if (typeof x === "string" && x.length > 0) return [{ id: x }];
+      const id = x?.id;
+      if (typeof id !== "string" || !id) return [];
+      const size = x?.size;
+      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
+    }) : [];
+    return { sprint, features };
+  } catch {
+    return { sprint, features: [] };
+  }
+}
+function writeBacklog(tdd, backlog) {
+  fs.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
+  fs.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
+}
+function syncBacklog(tdd, sprint) {
+  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
+  const root = featuresDir(tdd);
+  const committed = fs.existsSync(root) ? fs.readdirSync(root).filter((d) => {
+    try {
+      return fs.statSync((0, import_node_path.join)(root, d)).isDirectory() && fs.existsSync((0, import_node_path.join)(root, d, "feature-request.md"));
+    } catch {
+      return false;
+    }
+  }).sort() : [];
+  const features = committed.map((id) => {
+    const size = sizeOf.get(id);
+    return { id, ...size ? { size } : {} };
+  });
+  const backlog = { sprint, features };
+  writeBacklog(tdd, backlog);
+  return backlog;
+}
+
+// scripts/tdd/replay-artifacts.ts
+var REPLAYABLE_DESIGN_ROLES = /* @__PURE__ */ new Set([
+  "spec-author",
+  "architect-reviewer",
+  "test-strategist",
+  "ux-designer",
+  "product-owner"
+]);
+function cp(src, dst) {
+  if (!(0, import_fs.existsSync)(src)) return false;
+  (0, import_fs.mkdirSync)((0, import_path.dirname)(dst), { recursive: true });
+  (0, import_fs.copyFileSync)(src, dst);
+  return true;
+}
+function cpDir(srcDir, dstDir, transform) {
+  if (!(0, import_fs.existsSync)(srcDir)) return false;
+  let copied = false;
+  (0, import_fs.mkdirSync)(dstDir, { recursive: true });
+  for (const name of (0, import_fs.readdirSync)(srcDir)) {
+    const s = (0, import_path.join)(srcDir, name);
+    if (!(0, import_fs.statSync)(s).isFile()) continue;
+    const text = (0, import_fs.readFileSync)(s, "utf8");
+    (0, import_fs.writeFileSync)((0, import_path.join)(dstDir, name), transform ? transform(name, text) : text);
+    copied = true;
+  }
+  return copied;
+}
+function stripLayer(name, text) {
+  if (!name.endsWith(".json")) return text;
+  try {
+    const ac = JSON.parse(text);
+    delete ac.layer;
+    return JSON.stringify(ac, null, 2) + "\n";
+  } catch {
+    return text;
+  }
+}
+function replayDesignTurn(args) {
+  const { turn, replayDir, tddDir, featureId } = args;
+  const cf = (0, import_path.join)(featuresDir(replayDir), featureId);
+  const tf = (0, import_path.join)(featuresDir(tddDir), featureId);
+  switch (turn.role) {
+    case "spec-author": {
+      if (turn.mode === "propose") {
+        return cp((0, import_path.join)(replayDir, "planning", "feature-proposals.md"), (0, import_path.join)(tddDir, "planning", "feature-proposals.md"));
+      }
+      if (turn.mode === "breakdown") {
+        let ok = cp((0, import_path.join)(cf, "feature-spec.json"), (0, import_path.join)(tf, "feature-spec.json"));
+        cp((0, import_path.join)(cf, "feature-spec.md"), (0, import_path.join)(tf, "feature-spec.md"));
+        const storiesSrc = (0, import_path.join)(cf, "stories");
+        if ((0, import_fs.existsSync)(storiesSrc)) {
+          for (const s of (0, import_fs.readdirSync)(storiesSrc)) {
+            cp((0, import_path.join)(storiesSrc, s, "story.json"), (0, import_path.join)(tf, "stories", s, "story.json"));
+            cp((0, import_path.join)(storiesSrc, s, "story.md"), (0, import_path.join)(tf, "stories", s, "story.md"));
+          }
+        }
+        return ok;
+      }
+      if (turn.story) {
+        return cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"), stripLayer);
+      }
+      return false;
+    }
+    case "architect-reviewer": {
+      let ok = cp((0, import_path.join)(cf, "architecture.json"), (0, import_path.join)(tf, "architecture.json"));
+      cp((0, import_path.join)(cf, "architecture.md"), (0, import_path.join)(tf, "architecture.md"));
+      if (turn.story) {
+        const acs = cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"));
+        ok = ok || acs;
+      }
+      return ok;
+    }
+    case "test-strategist": {
+      let ok = cp((0, import_path.join)(cf, "test-list.json"), (0, import_path.join)(tf, "test-list.json"));
+      cp((0, import_path.join)(cf, "test-list.md"), (0, import_path.join)(tf, "test-list.md"));
+      const story = turn.story;
+      if (story) {
+        cp((0, import_path.join)(cf, "stories", story, "test-list-per-ac.json"), (0, import_path.join)(tf, "stories", story, "test-list-per-ac.json"));
+      }
+      return ok;
+    }
+    case "ux-designer": {
+      let ok = cp((0, import_path.join)(replayDir, "design", "design-guide.json"), (0, import_path.join)(tddDir, "design", "design-guide.json"));
+      cp((0, import_path.join)(replayDir, "design", "design-guide.md"), (0, import_path.join)(tddDir, "design", "design-guide.md"));
+      cp((0, import_path.join)(replayDir, "design", "ia.md"), (0, import_path.join)(tddDir, "design", "ia.md"));
+      return ok;
+    }
+    default:
+      return false;
+  }
+}
+
 // scripts/tdd/orchestrator-run.ts
 init_cjs_shims();
 
@@ -6959,7 +7208,7 @@ init_cjs_shims();
 
 // scripts/lakebase/paired-branch.ts
 init_cjs_shims();
-var fs3 = __toESM(require("fs"), 1);
+var fs4 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -6998,32 +7247,32 @@ var import_node_child_process6 = require("child_process");
 
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
-var fs = __toESM(require("fs"), 1);
+var fs2 = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 
 // scripts/lakebase/databricks-profile.ts
 init_cjs_shims();
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 
 // scripts/util/exec.ts
 init_cjs_shims();
-var cp = __toESM(require("child_process"), 1);
+var cp2 = __toESM(require("child_process"), 1);
 
 // scripts/tdd/agent-log.ts
 init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
+var import_fs3 = require("fs");
+var import_path3 = require("path");
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_fs = require("fs");
-var import_path = require("path");
+var import_fs2 = require("fs");
+var import_path2 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse((0, import_fs2.readFileSync)((0, import_path2.join)(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7043,7 +7292,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return (0, import_path2.join)(tddDir, "agent-log.jsonl");
+  return (0, import_path3.join)(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7053,161 +7302,9 @@ function emitAgentLogEvent(input, opts = {}) {
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
   }
-  (0, import_fs2.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
+  (0, import_fs3.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
 `, "utf8");
   return event;
-}
-
-// scripts/tdd/tdd-paths.ts
-init_cjs_shims();
-var fs4 = __toESM(require("fs"), 1);
-var import_node_path = require("path");
-var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
-var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
-var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
-var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
-var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
-var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
-var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
-var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
-var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
-var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
-var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
-var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
-var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
-var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
-function findStoryDir(tdd, f, s) {
-  const root = storiesDir(tdd, f);
-  if (!fs4.existsSync(root)) return void 0;
-  const exact = (0, import_node_path.join)(root, s);
-  if (fs4.existsSync(exact)) return exact;
-  const matches = fs4.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
-  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
-}
-var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
-var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
-var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
-var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
-var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
-var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
-var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
-var backlogJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "backlog.json");
-function findFeatureDir(tdd, featureId) {
-  const root = featuresDir(tdd);
-  if (!fs4.existsSync(root)) return void 0;
-  const exact = (0, import_node_path.join)(root, featureId);
-  if (fs4.existsSync(exact)) return exact;
-  const matches = fs4.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
-}
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-function storyAcIds(tdd, f, s) {
-  const ids = /* @__PURE__ */ new Set();
-  const sj = storyJson(tdd, f, s);
-  if (fs4.existsSync(sj)) {
-    try {
-      const data = JSON.parse(fs4.readFileSync(sj, "utf8"));
-      if (Array.isArray(data.acs)) {
-        for (const a of data.acs) {
-          const id = typeof a === "string" ? a : a?.id;
-          if (typeof id === "string" && id.length > 0) ids.add(id);
-        }
-      }
-    } catch {
-    }
-  }
-  const dir = acsDir(tdd, f, s);
-  if (fs4.existsSync(dir)) {
-    try {
-      for (const file of fs4.readdirSync(dir)) {
-        const m = /^(.+)\.json$/.exec(file);
-        if (m) ids.add(m[1]);
-      }
-    } catch {
-    }
-  }
-  return [...ids];
-}
-function readAcLayer(tdd, f, acId) {
-  const stories = storiesDir(tdd, f);
-  if (!fs4.existsSync(stories)) return void 0;
-  for (const s of fs4.readdirSync(stories)) {
-    const file = acJson(tdd, f, s, acId);
-    if (!fs4.existsSync(file)) continue;
-    try {
-      const ac = JSON.parse(fs4.readFileSync(file, "utf8"));
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
-    } catch {
-    }
-  }
-  return void 0;
-}
-var hasFeatureRequest = (tdd, f) => fs4.existsSync(featureRequestMd(tdd, f));
-var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
-var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
-var planningEstimatesJson = (tdd) => (0, import_node_path.join)(planningDir(tdd), "estimates.json");
-function readEstimates(tdd) {
-  const file = planningEstimatesJson(tdd);
-  if (!fs4.existsSync(file)) return [];
-  try {
-    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-    if (!Array.isArray(data.estimates)) return [];
-    return data.estimates.flatMap((e) => {
-      const id = e?.feature_id;
-      const size = e?.size;
-      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
-      const rationale = e?.rationale;
-      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
-    });
-  } catch {
-    return [];
-  }
-}
-var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
-var backlogFeatureIds = (b) => b.features.map((f) => f.id);
-function readBacklog(tdd, sprint) {
-  const file = backlogJson(tdd, sprint);
-  if (!fs4.existsSync(file)) return { sprint, features: [] };
-  try {
-    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
-      if (typeof x === "string" && x.length > 0) return [{ id: x }];
-      const id = x?.id;
-      if (typeof id !== "string" || !id) return [];
-      const size = x?.size;
-      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
-    }) : [];
-    return { sprint, features };
-  } catch {
-    return { sprint, features: [] };
-  }
-}
-function writeBacklog(tdd, backlog) {
-  fs4.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
-  fs4.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
-}
-function syncBacklog(tdd, sprint) {
-  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
-  const root = featuresDir(tdd);
-  const committed = fs4.existsSync(root) ? fs4.readdirSync(root).filter((d) => {
-    try {
-      return fs4.statSync((0, import_node_path.join)(root, d)).isDirectory() && fs4.existsSync((0, import_node_path.join)(root, d, "feature-request.md"));
-    } catch {
-      return false;
-    }
-  }).sort() : [];
-  const features = committed.map((id) => {
-    const size = sizeOf.get(id);
-    return { id, ...size ? { size } : {} };
-  });
-  const backlog = { sprint, features };
-  writeBacklog(tdd, backlog);
-  return backlog;
 }
 
 // scripts/tdd/run-cycle.ts
@@ -7217,31 +7314,36 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
+var import_fs4 = require("fs");
+var import_path4 = require("path");
+
+// scripts/tdd/test-list.ts
+init_cjs_shims();
+
+// scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!(0, import_fs3.existsSync)(file)) {
+  if (!(0, import_fs4.existsSync)(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse((0, import_fs3.readFileSync)(file, "utf8"));
+  const data = JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = (0, import_path3.join)(cyclesRootDir(tddDir), featureId, story);
-  if (!(0, import_fs3.existsSync)(base)) return [];
+  const base = (0, import_path4.join)(cyclesRootDir(tddDir), featureId, story);
+  if (!(0, import_fs4.existsSync)(base)) return [];
   const out = [];
-  for (const acDir of (0, import_fs3.readdirSync)(base)) {
-    const dir = (0, import_path3.join)(base, acDir);
+  for (const acDir of (0, import_fs4.readdirSync)(base)) {
+    const dir = (0, import_path4.join)(base, acDir);
     try {
-      if (!(0, import_fs3.statSync)(dir).isDirectory()) continue;
+      if (!(0, import_fs4.statSync)(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of (0, import_fs3.readdirSync)(dir)) {
+    for (const f of (0, import_fs4.readdirSync)(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse((0, import_fs3.readFileSync)((0, import_path3.join)(dir, f), "utf8")));
+        out.push(JSON.parse((0, import_fs4.readFileSync)((0, import_path4.join)(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7266,8 +7368,8 @@ function storyTestProgress(tddDir, featureId, story) {
 
 // scripts/tdd/gates.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_fs5 = require("fs");
+var import_path5 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7286,10 +7388,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs4.existsSync)(file)) {
+  if (!(0, import_fs5.existsSync)(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs4.readFileSync)(file, "utf8");
+  const raw = (0, import_fs5.readFileSync)(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7300,7 +7402,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path4.join)(requireFeatureDir(tddDir, featureId), "gates.json");
+  return (0, import_path5.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7489,7 +7591,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
+var import_fs6 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7498,8 +7600,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs5.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs5.readFileSync)(p, "utf8"));
+  if (!(0, import_fs6.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs6.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7577,7 +7679,11 @@ function commandsForAction(action, cfg) {
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        replay: {
+          mode: "mode" in action ? action.mode : void 0,
+          story: "story" in action ? action.story : void 0
+        }
       };
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
@@ -7813,8 +7919,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path5 = require("path");
+var import_fs7 = require("fs");
+var import_path6 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -7826,11 +7932,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path5.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path6.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path5.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs6.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs6.readFileSync)(p, "utf8"));
+  const p = (0, import_path6.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs7.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs7.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -8226,6 +8332,24 @@ function execRunner(cfg) {
         return;
       }
       if (cmd.kind === "claude") {
+        const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
+        if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
+          const replayed = replayDesignTurn({
+            turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
+            replayDir,
+            tddDir: cfg.tddDir,
+            featureId: cfg.featureId
+          });
+          if (replayed) {
+            process.stderr.write(
+              `[drive] replayed ${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""} from corpus (no model spawn)
+`
+            );
+            return;
+          }
+          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent
+`);
+        }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);

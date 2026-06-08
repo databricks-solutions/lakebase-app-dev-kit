@@ -1,0 +1,9 @@
+{
+  "id": "AC2-form-accepts-input",
+  "given": "the create bug form is displayed",
+  "when": "the user enters text into the title field and the description field",
+  "then": "the entered text is visible and retained in the respective fields",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E AC verifying form input state management. User input in title and description fields is captured and displayed. Owned by the frontend presentation layer (CreateBugForm component)."
+}

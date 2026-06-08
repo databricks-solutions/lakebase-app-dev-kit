@@ -1,0 +1,48 @@
+{
+  "feature_id": "F1-file-bug",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T1",
+      "description": "Form with title and description fields renders on page load",
+      "ac_id": "AC1-form-renders",
+      "status": "pending"
+    },
+    {
+      "id": "T2",
+      "description": "User can enter and retain text in form title and description fields",
+      "ac_id": "AC2-form-accepts-input",
+      "status": "pending"
+    },
+    {
+      "id": "T3",
+      "description": "Form submission is initiated when submit button is clicked",
+      "ac_id": "AC3-form-can-be-submitted",
+      "status": "pending"
+    },
+    {
+      "id": "T4",
+      "description": "Bug is created in database with submitted title and description",
+      "ac_id": "AC4-bug-created-with-data",
+      "status": "pending"
+    },
+    {
+      "id": "T5",
+      "description": "Created bug is assigned a unique numeric identifier",
+      "ac_id": "AC5-bug-has-unique-id",
+      "status": "pending"
+    },
+    {
+      "id": "T6",
+      "description": "Created bug's status is initialized to open",
+      "ac_id": "AC6-bug-starts-open",
+      "status": "pending"
+    },
+    {
+      "id": "T7",
+      "description": "User is navigated to bug detail page with correct bug ID in URL after successful submission",
+      "ac_id": "AC7-user-navigated-to-detail",
+      "status": "pending"
+    }
+  ]
+}

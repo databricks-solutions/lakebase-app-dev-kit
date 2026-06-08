@@ -1,0 +1,9 @@
+{
+  "id": "AC1-form-renders",
+  "given": "a user navigates to the application",
+  "when": "the page loads",
+  "then": "a form is displayed with input fields for bug title and bug description, and a submit button",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E AC verifying the create-bug form UI renders with required fields (title, description) and submit button. Owned by the frontend presentation layer (CreateBugForm component)."
+}

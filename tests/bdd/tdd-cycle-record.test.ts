@@ -36,14 +36,14 @@ beforeEach(() => {
   const acsDir = join(tdd, "features", F, "stories", S, "acs");
   mkdirSync(acsDir, { recursive: true });
   writeJson(join(acsDir, "AC1.json"), { id: "AC1", layer: "API", text: "the API returns" });
-  writeJson(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), {
-    feature_id: F,
-    story_id: S,
-    items: [
-      { id: "T1", description: "first thing fails", ac_id: "AC1", status: "pending" },
-      { id: "T2", description: "second thing fails", ac_id: "AC1", status: "pending" },
-    ],
-  });
+  const items = [
+    { id: "T1", description: "first thing fails", ac_id: "AC1", status: "pending" },
+    { id: "T2", description: "second thing fails", ac_id: "AC1", status: "pending" },
+  ];
+  writeJson(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), { feature_id: F, story_id: S, items });
+  // The MASTER test-list (the single source markTestItemGreen updates; the
+  // per-story list is re-derived from it).
+  writeJson(join(tdd, "features", F, "test-list.json"), { feature_id: F, items });
   // A cut experiment (slug + branch.txt + outcomes.json) so cycles tie to its DB
   // and markGreen's runner contract can be satisfied via recordRunnerOutcome.
   const expDir = join(tdd, "experiments", F, S, "exp1");
@@ -92,6 +92,20 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     const after = beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     expect(after.recorded).toBe(false);
     expect(cyclesFor("AC1").length).toBe(2);
+  });
+
+  it("greenOpenCycle propagates green to the master test-list item + flips the AC to `passing`", () => {
+    // The await-acceptance stall: the cycle was green but the test-list items
+    // stayed `pending` + the AC `draft`, so the Release Engineer refused to
+    // deploy. Greening every test for an AC must mark the items green + the AC passing.
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // T1
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // T2
+    const master = JSON.parse(readFileSync(join(tdd, "features", F, "test-list.json"), "utf8"));
+    expect(master.items.every((i: { status: string }) => i.status === "green")).toBe(true);
+    const perStory = JSON.parse(readFileSync(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), "utf8"));
+    expect(perStory.items.every((i: { status: string }) => i.status === "green")).toBe(true);
+    const ac1 = JSON.parse(readFileSync(join(tdd, "features", F, "stories", S, "acs", "AC1.json"), "utf8"));
+    expect(ac1.status).toBe("passing"); // all of AC1's tests are green
   });
 
   it("greenOpenCycle throws when there is no open RED cycle (driver dispatched with nothing to green)", () => {

@@ -21,6 +21,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { storyTestListJson, cyclesRootDir } from "./tdd-paths.js";
+import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import {
   beginCycle,
@@ -187,5 +188,15 @@ export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string 
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: true });
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
+  // Propagate green to the artifacts the acceptance/deploy consumers read: the
+  // test-list item (master + per-story) and the AC (-> passing when all its
+  // tests are green). Without this the cycle is green but the Release Engineer
+  // sees the test-list item still `pending` + the AC `draft` and refuses to
+  // deploy (the await-acceptance stall). Best-effort: never fail a green here.
+  try {
+    markTestItemGreen(tddDir, featureId, story, open.test_id);
+  } catch {
+    /* status propagation is observability for downstream consumers, not a gate */
+  }
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
 }

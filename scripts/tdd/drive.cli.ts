@@ -20,6 +20,7 @@ import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { isHitlGateAction, isHumanInputAction, type WorkflowAction } from "./orchestrator-drive.js";
 import {
@@ -186,6 +187,29 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         return;
       }
       if (cmd.kind === "claude") {
+        // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
+        // role's turn copies its recorded output from the corpus instead of
+        // spawning the model. The orchestrator still VISITS the turn (logs +
+        // transitions + runs its deterministic effects); only the LLM generation
+        // is replaced. Navigator/Driver are never replayed (not design roles),
+        // so the real TDD begins at the Navigator handoff. A turn the corpus
+        // lacks (e.g. an un-recorded story) falls through to the real agent.
+        const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
+        if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
+          const replayed = replayDesignTurn({
+            turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
+            replayDir,
+            tddDir: cfg.tddDir,
+            featureId: cfg.featureId,
+          });
+          if (replayed) {
+            process.stderr.write(
+              `[drive] replayed ${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""} from corpus (no model spawn)\n`,
+            );
+            return;
+          }
+          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
+        }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);

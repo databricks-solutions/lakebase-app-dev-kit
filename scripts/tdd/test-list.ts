@@ -6,6 +6,7 @@ import {
   featureTestListJson,
   featureTestListMd,
   storyTestListJson,
+  acJson,
 } from "./tdd-paths.js";
 
 export interface TestListItem {
@@ -209,6 +210,68 @@ export function writeStoryTestList(
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(scoped, null, 2) + "\n");
   return file;
+}
+
+export interface TestItemGreenResult {
+  /** The test_id was found in the master list + marked green. */
+  found: boolean;
+  /** The AC the test belongs to. */
+  acId?: string;
+  /** True iff EVERY test for that AC is now green/refactored (AC -> passing). */
+  acPassing: boolean;
+}
+
+/**
+ * Propagate a GREEN cycle up the artifact hierarchy the downstream consumers
+ * read: mark the test-list item green (master + the re-derived per-story list)
+ * and, when every test for its AC is green, flip the AC's status to `passing`.
+ *
+ * This is the deterministic record the orchestration writes when it greens a
+ * cycle. Without it the cycle artifact says green but the test-list items stay
+ * `pending` + the AC stays `draft`, so the Release Engineer (reading those)
+ * judges the build incomplete and refuses to deploy , the await-acceptance
+ * stall. Cycle bookkeeping is an orchestration concern; so is propagating it.
+ */
+export function markTestItemGreen(
+  tddDir: string,
+  featureId: string,
+  storyId: string,
+  testId: string,
+): TestItemGreenResult {
+  let master: TestList;
+  try {
+    master = readMasterTestList(tddDir, featureId);
+  } catch {
+    return { found: false, acPassing: false };
+  }
+  const item = master.items.find((i) => i.id === testId);
+  if (!item) return { found: false, acPassing: false };
+  item.status = "green";
+  writeMasterTestList(tddDir, master);
+  try {
+    writeTestListMarkdown(tddDir, featureId);
+  } catch {
+    /* md render is observability, never fatal */
+  }
+  // Re-derive the per-story list from master so its items carry the green too.
+  writeStoryTestList(tddDir, featureId, storyId);
+
+  const acId = item.ac_id;
+  const acItems = master.items.filter((i) => i.ac_id === acId);
+  const acPassing = acItems.length > 0 && acItems.every((i) => i.status === "green" || i.status === "refactored");
+  if (acPassing) {
+    try {
+      const f = acJson(tddDir, featureId, storyId, acId);
+      if (existsSync(f)) {
+        const ac = JSON.parse(readFileSync(f, "utf8")) as Record<string, unknown>;
+        ac.status = "passing"; // ac.schema.json enum: draft|approved|in-progress|passing|deprecated
+        writeFileSync(f, JSON.stringify(ac, null, 2) + "\n");
+      }
+    } catch {
+      /* best-effort: a malformed/absent AC file must not break greening */
+    }
+  }
+  return { found: true, acId, acPassing };
 }
 
 /** Read the canonical per-story list (storyTestListJson), or null when absent. */

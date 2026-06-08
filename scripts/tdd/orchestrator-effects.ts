@@ -28,7 +28,10 @@ export type DriveCommand =
   // resumeKey: when set, the runner resumes this role's Claude session across
   // its invocations (warm context + prompt cache) instead of a cold respawn.
   // Keyed by role, scoped to one feature drive (the runner's lifetime).
-  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string }
+  // `replay` carries the turn identity (sprint mode / story) so the runner can,
+  // in fast-forward replay mode, copy this design turn's recorded artifact
+  // instead of spawning the model. Ignored by the normal (live) runner.
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; replay?: { mode?: string; story?: string } }
   | { kind: "cli"; bin: string; args: string[] }
   | { kind: "set-phase"; phase: string }
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
@@ -216,6 +219,10 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        replay: {
+          mode: "mode" in action ? action.mode : undefined,
+          story: "story" in action ? action.story : undefined,
+        },
       };
       const cmds: DriveCommand[] = [claude];
       // After the Spec Author breaks the feature down, seed the pipeline from

@@ -1,0 +1,9 @@
+{
+  "id": "AC6-bug-starts-open",
+  "given": "a bug is created via form submission",
+  "when": "the creation completes",
+  "then": "the bug's status is set to \"open\"",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E AC verifying newly created bugs start with status 'open'. BugService (application layer) enforces this invariant. The status type and constraints are owned by the Bug domain model, which validates that 'open' is a recognized state per R2 (status validation at write time)."
+}

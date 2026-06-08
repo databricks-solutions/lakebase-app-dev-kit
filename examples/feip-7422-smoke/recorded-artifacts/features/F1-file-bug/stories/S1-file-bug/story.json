@@ -1,0 +1,8 @@
+{
+  "id": "S1-file-bug",
+  "title": "File a bug",
+  "status": "draft",
+  "asA": "team member",
+  "iWantTo": "fill in a form with a bug's title and description and submit it",
+  "soThat": "I can create a bug in the tracker"
+}
