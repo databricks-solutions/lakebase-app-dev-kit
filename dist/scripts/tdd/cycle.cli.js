@@ -6648,12 +6648,12 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/cycle.cli.ts
 init_esm_shims();
-import { join as join10 } from "path";
+import { join as join12 } from "path";
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6 } from "fs";
-import { join as join9, dirname as dirname3 } from "path";
+import { existsSync as existsSync12, readFileSync as readFileSync13, readdirSync as readdirSync7, statSync as statSync5, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8 } from "fs";
+import { join as join11, dirname as dirname4 } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
@@ -6661,6 +6661,8 @@ import * as fs from "fs";
 import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
 var cyclesRootDir = (tdd) => join(tdd, "cycles");
+var escalationsDir = (tdd) => join(tdd, "escalations");
+var escalationFile = (tdd, id) => join(escalationsDir(tdd), `${id}.json`);
 var acReviewJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review.json");
 var acReviewVerdictJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review-verdict.json");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
@@ -6841,6 +6843,46 @@ init_esm_shims();
 
 // scripts/util/delay.ts
 init_esm_shims();
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// scripts/util/poll-until.ts
+async function pollUntil(args) {
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const sleep = args.sleep ?? delay;
+  const startedAt = now().getTime();
+  let polls = 0;
+  while (true) {
+    const elapsedMs = now().getTime() - startedAt;
+    if (elapsedMs >= args.timeoutMs && polls > 0) {
+      return { outcome: "timeout", polls, elapsedMs };
+    }
+    polls += 1;
+    const result = await args.probe({ pollIndex: polls, elapsedMs });
+    const afterProbeElapsed = now().getTime() - startedAt;
+    if (args.onPoll) {
+      args.onPoll({ pollIndex: polls, elapsedMs: afterProbeElapsed, result });
+    } else if (args.label && !result.done) {
+      const seconds = Math.round(afterProbeElapsed / 1e3);
+      console.log(
+        `[${args.label}] still pending after ${seconds}s (poll ${polls})`
+      );
+    }
+    if (result.done) {
+      return {
+        outcome: "done",
+        value: result.value,
+        polls,
+        elapsedMs: afterProbeElapsed
+      };
+    }
+    if (afterProbeElapsed >= args.timeoutMs) {
+      return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
+    }
+    await sleep(args.intervalMs);
+  }
+}
 
 // scripts/util/sanitize-branch-name.ts
 init_esm_shims();
@@ -7000,26 +7042,71 @@ function writeOutcomes(tddDir, featureId, storyId, slug, outcomes) {
   writeFileSync5(file, JSON.stringify(outcomes, null, 2) + "\n");
 }
 
+// scripts/tdd/deploy.ts
+init_esm_shims();
+import { execSync, spawn } from "child_process";
+import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync12, rmSync, writeFileSync as writeFileSync9 } from "fs";
+import { dirname as dirname3, join as join10 } from "path";
+
+// scripts/lakebase/deploy-targets.ts
+init_esm_shims();
+import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "fs";
+import { join as join6 } from "path";
+var TARGETS_FILE = "deploy-targets.yaml";
+function readTargets(workspaceRoot) {
+  const targetsFile = join6(workspaceRoot, TARGETS_FILE);
+  if (!existsSync7(targetsFile)) return null;
+  return parseTargetsYaml(readFileSync7(targetsFile, "utf-8"));
+}
+function parseTargetsYaml(content) {
+  const targets = {};
+  let currentTarget = null;
+  for (const rawLine of content.split("\n")) {
+    const trimmed = rawLine.trimEnd();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (trimmed === "targets:") continue;
+    const targetMatch = trimmed.match(/^ {2}(\S+):$/);
+    if (targetMatch) {
+      currentTarget = targetMatch[1];
+      targets[currentTarget] = {};
+      continue;
+    }
+    const kvMatch = trimmed.match(/^ {4}(\S+):\s*"?([^"]*)"?\s*$/);
+    if (kvMatch && currentTarget) {
+      const key = kvMatch[1];
+      targets[currentTarget][key] = kvMatch[2];
+    }
+  }
+  return { targets };
+}
+
+// scripts/tdd/escalation.ts
+init_esm_shims();
+import * as fs5 from "fs";
+
+// scripts/tdd/smells.ts
+init_esm_shims();
+
 // scripts/tdd/run-cycle.ts
 init_esm_shims();
-import { existsSync as existsSync8, mkdirSync as mkdirSync5, readdirSync as readdirSync4, readFileSync as readFileSync9, writeFileSync as writeFileSync6 } from "fs";
-import { join as join8 } from "path";
+import { existsSync as existsSync9, mkdirSync as mkdirSync5, readdirSync as readdirSync4, readFileSync as readFileSync10, writeFileSync as writeFileSync7 } from "fs";
+import { join as join9 } from "path";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync7, readFileSync as readFileSync8 } from "fs";
-import { join as join7 } from "path";
+import { appendFileSync, existsSync as existsSync8, readFileSync as readFileSync9 } from "fs";
+import { join as join8 } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync7 } from "fs";
-import { join as join6 } from "path";
-var SCHEMA_DIR = join6(__dirname, "schemas");
+import { readFileSync as readFileSync8 } from "fs";
+import { join as join7 } from "path";
+var SCHEMA_DIR = join7(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse(readFileSync7(join6(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse(readFileSync8(join7(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7039,7 +7126,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return join7(tddDir, "agent-log.jsonl");
+  return join8(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7065,11 +7152,11 @@ function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
 function cyclesDir(scope) {
-  return join8(scope.tddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
+  return join9(scope.tddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
 }
 function nextCycleId(scope) {
   const dir = cyclesDir(scope);
-  if (!existsSync8(dir)) return "cycle-001";
+  if (!existsSync9(dir)) return "cycle-001";
   const ids = readdirSync4(dir).filter((f) => /^cycle-\d+\.json$/.test(f)).map((f) => parseInt(f.match(/cycle-(\d+)/)[1], 10)).sort((a, b) => a - b);
   const next = (ids.at(-1) ?? 0) + 1;
   return `cycle-${String(next).padStart(3, "0")}`;
@@ -7077,14 +7164,14 @@ function nextCycleId(scope) {
 function writeCycleArtifact(scope, artifact) {
   const dir = cyclesDir(scope);
   mkdirSync5(dir, { recursive: true });
-  const file = join8(dir, `${artifact.cycle_id}.json`);
-  writeFileSync6(file, JSON.stringify(artifact, null, 2) + "\n");
+  const file = join9(dir, `${artifact.cycle_id}.json`);
+  writeFileSync7(file, JSON.stringify(artifact, null, 2) + "\n");
   return file;
 }
 function readCycleArtifact(scope, cycleId) {
-  const file = join8(cyclesDir(scope), `${cycleId}.json`);
-  if (!existsSync8(file)) return null;
-  return JSON.parse(readFileSync9(file, "utf8"));
+  const file = join9(cyclesDir(scope), `${cycleId}.json`);
+  if (!existsSync9(file)) return null;
+  return JSON.parse(readFileSync10(file, "utf8"));
 }
 function beginCycle(args) {
   const cycle_id = nextCycleId(args);
@@ -7164,13 +7251,132 @@ function markGreen(scope, cycleId, driverChanges) {
   return a;
 }
 
+// scripts/tdd/escalation.ts
+function escalationId(parts) {
+  return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
+}
+function writeEscalation(tddDir, esc) {
+  const id = esc.id ?? escalationId(esc);
+  const file = escalationFile(tddDir, id);
+  const existing = readEscalationFile(file);
+  if (existing && !existing.resolved_at) return existing;
+  const full = {
+    id,
+    source: esc.source,
+    reason: esc.reason,
+    ...esc.feature_id ? { feature_id: esc.feature_id } : {},
+    ...esc.story_id ? { story_id: esc.story_id } : {},
+    ...esc.ac_id ? { ac_id: esc.ac_id } : {},
+    raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
+  };
+  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
+  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
+  return full;
+}
+function readEscalationFile(file) {
+  if (!fs5.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs5.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+
+// scripts/tdd/deploy.ts
+function resolveDeployTarget(projectDir, name) {
+  const cfg = readTargets(projectDir);
+  if (!cfg) return { kind: "missing", reason: "deploy-targets.yaml not found in project root" };
+  const raw = cfg.targets[name];
+  if (!raw) return { kind: "missing", reason: `target '${name}' not found in deploy-targets.yaml` };
+  const type = raw.type ?? "";
+  if (type !== "local") return { kind: "unsupported", type: type || "(no type)" };
+  return {
+    kind: "local",
+    config: {
+      type: "local",
+      run: raw.run ?? "",
+      baseUrl: (raw.base_url ?? "http://localhost:8000").replace(/\/+$/, ""),
+      healthPath: raw.health_path ?? "/",
+      readyTimeoutSeconds: Number(raw.ready_timeout_seconds ?? "60") || 60,
+      verify: raw.verify || void 0
+    }
+  };
+}
+async function probeReachable(url) {
+  try {
+    await fetch(url, { method: "GET" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function pidFile(projectDir, target) {
+  return join10(projectDir, ".tdd", "deploy", `${target}.pid`);
+}
+function defaultRunVerify(cmd, cwd, env) {
+  try {
+    execSync(cmd, { cwd, stdio: "ignore", env: env ?? process.env });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function defaultStart(cmd, cwd, env) {
+  const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore", env: env ?? process.env });
+  child.unref();
+  return child.pid ?? -1;
+}
+async function ensureDeployedAndVerify(args) {
+  const targetName = args.targetName ?? "local";
+  const resolved = resolveDeployTarget(args.projectDir, targetName);
+  if (resolved.kind !== "local") {
+    return { passed: false, reachable: false, summary: `no local deploy target to verify GREEN against (${resolved.kind})` };
+  }
+  const cfg = resolved.config;
+  if (!cfg.run) return { passed: false, reachable: false, summary: `target '${targetName}' has no run command` };
+  if (!cfg.verify) {
+    return { passed: false, reachable: false, summary: `target '${targetName}' has no verify command; cannot honestly confirm GREEN` };
+  }
+  const reachable = args.reachable ?? probeReachable;
+  const start = args.startProcess ?? defaultStart;
+  const runVerify = args.runVerify ?? defaultRunVerify;
+  const url = cfg.baseUrl + cfg.healthPath;
+  const env = {
+    ...process.env,
+    BASE_URL: cfg.baseUrl,
+    ...args.lakebaseBranch ? { LAKEBASE_BRANCH_ID: args.lakebaseBranch } : {}
+  };
+  let up = await reachable(url);
+  if (!up) {
+    const pid = start(cfg.run, args.projectDir, env);
+    const pf = pidFile(args.projectDir, targetName);
+    mkdirSync7(dirname3(pf), { recursive: true });
+    writeFileSync9(pf, String(pid));
+    const poll = await pollUntil({
+      probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
+      timeoutMs: cfg.readyTimeoutSeconds * 1e3,
+      intervalMs: 1e3,
+      sleep: args.sleep,
+      now: args.now
+    });
+    up = poll.outcome === "done";
+  }
+  if (!up) return { passed: false, reachable: false, summary: `app not reachable at ${url}; cannot run GREEN verify` };
+  const passed = runVerify(cfg.verify, args.projectDir, env);
+  return {
+    passed,
+    reachable: true,
+    summary: passed ? "GREEN verify passed against the running app" : "GREEN verify FAILED against the running app"
+  };
+}
+
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync9(file)) {
+  if (!existsSync12(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse(readFileSync10(file, "utf8"));
+  const data = JSON.parse(readFileSync13(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyExperiment(tddDir, featureId, story) {
@@ -7179,20 +7385,20 @@ function storyExperiment(tddDir, featureId, story) {
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = join9(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync9(base)) return [];
+  const base = join11(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync12(base)) return [];
   const out = [];
-  for (const acDir of readdirSync5(base)) {
-    const dir = join9(base, acDir);
+  for (const acDir of readdirSync7(base)) {
+    const dir = join11(base, acDir);
     try {
       if (!statSync5(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of readdirSync5(dir)) {
+    for (const f of readdirSync7(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(readFileSync10(join9(dir, f), "utf8")));
+        out.push(JSON.parse(readFileSync13(join11(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7231,7 +7437,11 @@ function beginNextPendingCycle(args) {
   });
   return { recorded: true, cycleId: art.cycle_id, testId: pending.id, acId: pending.ac_id };
 }
-function greenOpenCycle(args) {
+var defaultGreenVerifier = async ({ projectDir, branchId }) => {
+  const r = await ensureDeployedAndVerify({ projectDir, lakebaseBranch: branchId });
+  return { passed: r.passed, summary: r.summary };
+};
+async function greenOpenCycle(args) {
   const { tddDir, featureId, story } = args;
   const open = storyTestProgress(tddDir, featureId, story).openRed.sort((a, b) => a.red_at < b.red_at ? 1 : -1)[0];
   if (!open) {
@@ -7245,21 +7455,33 @@ function greenOpenCycle(args) {
     experiment_slug: open.experiment_slug,
     branch_id: open.branch_id
   };
+  const verify = args.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname4(tddDir), tddDir, featureId, story, branchId: open.branch_id });
   if (open.layer && open.experiment_slug) {
-    recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: true });
+    recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
+  }
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-green",
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+      ac_id: open.ac_id
+    });
+    return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   try {
     markTestItemGreen(tddDir, featureId, story, open.test_id);
   } catch {
   }
-  return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
+  return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!existsSync9(f)) return {};
+  if (!existsSync12(f)) return {};
   try {
-    return JSON.parse(readFileSync10(f, "utf8"));
+    return JSON.parse(readFileSync13(f, "utf8"));
   } catch {
     return {};
   }
@@ -7302,9 +7524,9 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 function reviewAc(tddDir, featureId, story, acId) {
   let verdict = {};
   const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
-  if (existsSync9(vf)) {
+  if (existsSync12(vf)) {
     try {
-      verdict = JSON.parse(readFileSync10(vf, "utf8"));
+      verdict = JSON.parse(readFileSync13(vf, "utf8"));
     } catch {
       verdict = {};
     }
@@ -7312,8 +7534,8 @@ function reviewAc(tddDir, featureId, story, acId) {
   const refactorRequested = verdict.refactor === true;
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  mkdirSync6(dirname3(file), { recursive: true });
-  writeFileSync7(
+  mkdirSync8(dirname4(file), { recursive: true });
+  writeFileSync10(
     file,
     JSON.stringify(
       { ...prior, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), refactor_requested: refactorRequested, ...verdict.notes ? { refactor_notes: verdict.notes } : {} },
@@ -7326,8 +7548,8 @@ function reviewAc(tddDir, featureId, story, acId) {
 function refactorAc(tddDir, featureId, story, acId) {
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  mkdirSync6(dirname3(file), { recursive: true });
-  writeFileSync7(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  mkdirSync8(dirname4(file), { recursive: true });
+  writeFileSync10(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
 }
 
 // scripts/tdd/cycle.cli.ts
@@ -7359,10 +7581,10 @@ Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S
   );
   return 2;
 }
-function main() {
+async function main() {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? join10(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? join12(process.cwd(), ".tdd");
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {
@@ -7375,9 +7597,14 @@ function main() {
       return 0;
     }
     case "green": {
-      const r = greenOpenCycle(base);
-      process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}
+      const r = await greenOpenCycle(base);
+      if (r.escalated) {
+        process.stdout.write(`cycle: GREEN BLOCKED for ${r.testId} -> raised to HIL: ${r.summary}
 `);
+      } else {
+        process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}
+`);
+      }
       return 0;
     }
     case "review": {
@@ -7408,11 +7635,9 @@ function main() {
       return usage(`unknown subcommand: ${a.cmd}`);
   }
 }
-try {
-  process.exit(main());
-} catch (err) {
+main().then((code) => process.exit(code)).catch((err) => {
   process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);
   process.exit(1);
-}
+});
 //# sourceMappingURL=cycle.cli.js.map
