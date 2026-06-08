@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # FEIP-7422 TDD-workflow smoke.
 #
-# Drives a real bug-tracker project through 5 evolution iterations
-# (v1..v5), grouped into TWO SPRINTS, to exercise the TDD substrate:
+# Drives a real bug-tracker project through 2 evolution iterations
+# (v1..v2), grouped into TWO SPRINTS, to exercise the TDD substrate:
 # /plan + /design + /build + /deploy + HITL gates (spec / plan /
 # test_list / promote / deploy) + per-iteration local tests. The
 # human-proxy replaces a human approver so the smoke runs headless.
@@ -13,11 +13,12 @@
 # discovered by scripts/run-all-live-tests.sh.
 #
 # Sprints (the /plan cadence; features are NOT pre-planned all at once):
-#   sprint-1 = v1..v3   sprint-2 = v4..v5
+#   sprint-1 = v1   sprint-2 = v2
 # /plan runs once per sprint (run_plan_sprint), ABOVE the per-feature loop:
-# the Spec Author proposes the candidate breakdown, the Architect t-shirt-sizes
-# the candidates, and the Product Owner commits the backlog. Headless, the
-# human-proxy SUPPLIES the recorded backlog (the PO's commitment). sprint-2 is
+# the Spec Author proposes the candidate breakdown and the Product Owner commits
+# the backlog. (The Architect's t-shirt-sizing step is skipped via --no-sizing:
+# each sprint is a single feature, so there is no capacity tradeoff to size.)
+# Headless, the human-proxy SUPPLIES the recorded backlog (the PO's commitment). sprint-2 is
 # planned only AFTER sprint-1's features have shipped working software (their
 # /deploy gates), modeling the feedback loop: the PO folds what they saw into
 # the next sprint's requests. The sprint backlog is committed to trunk (main) so
@@ -31,12 +32,12 @@
 #      item's recorded feature-request.md. Sprint membership is the orchestrator's
 #      call, so the requests are present before the drive; the driver's PO
 #      author-requests step affirms them and sync-backlog projects backlog.json.
-#   c. Drive planning via lakebase-tdd-drive --plan-only --gates proxy (the same
-#      CLI the scaffolded /plan command runs): propose (Spec Author ->
-#      feature-proposals.md), estimate (Architect -> planning/estimates.json
-#      t-shirt sizes), author-requests (PO affirms), sync-backlog (-> backlog.json),
-#      then the Human Proxy approves the sprint plan gate. Called directly (not via
-#      claude -p) so gate mode + env are deterministic.
+#   c. Drive planning via lakebase-tdd-drive --plan-only --gates proxy --no-sizing
+#      (the same CLI the scaffolded /plan command runs): propose (Spec Author ->
+#      feature-proposals.md), author-requests (PO affirms), sync-backlog
+#      (-> backlog.json), then the Human Proxy approves the sprint plan gate. The
+#      Architect estimate step is skipped (--no-sizing; single-feature sprints).
+#      Called directly (not via claude -p) so gate mode + env are deterministic.
 #   d. Commit the sprint backlog + planning artifacts to trunk.
 #
 # What each iteration does (the per-feature loop, after its request exists):
@@ -48,7 +49,7 @@
 #      Proxy (--gates proxy headless). The release-engineer's deploy phase polls
 #      reachable + runs the feature verify and records the PO deploy gate.
 #   5. Local tests (./scripts/run-tests.sh).
-#   6. Per-iteration verify (assertions/verify-vN.sh).
+#   6. Generic deploy-gate verify (assertions/verify-deploy-gate.sh).
 #   6.5 Stop the local app before the next iteration (idempotent teardown).
 #   7. Commit the iteration's work on the feature branch.
 #   8. SCM doctor (advisory cross-check; warning-only).
@@ -59,8 +60,7 @@
 #
 # Other flags:
 #   --resume <iter>      skip earlier iterations + start at <iter>
-#                        (v1 / v2 / v3 / v4 / v5). Useful when iterating
-#                        on the smoke itself.
+#                        (v1 / v2). Useful when iterating on the smoke itself.
 #   --project-dir <dir>  override the scaffold target. Default:
 #                        $SMOKE_ROOT_DEFAULT/bug-tracker
 #   --skip-scaffold      assume bug-tracker is already scaffolded; jump
@@ -101,12 +101,12 @@ TIERS=""                      # 2 or 3; required architectural choice, no defaul
 # Exported so the kit's templated /design + /design.pre-hook (which both
 # invoke `npx ... lakebase-scm-claim-feature-branch`) can read the same ref.
 KIT_REF="${LAKEBASE_KIT_REF:-}"
-ITERATIONS=(v1-initial-domain v2-add-owners v3-status-table v4-split-bug-entity v5-list-view)
+ITERATIONS=(v1-file-bug v2-transition-status)
 # Sprints are slices of ITERATIONS (DRY: the canonical order lives in one place).
-# sprint-1 = v1..v3, sprint-2 = v4..v5. sprint-2 is planned only after sprint-1
-# ships working software, modeling the PO folding feedback into the next sprint.
-SPRINT1_ITERS=("${ITERATIONS[@]:0:3}")
-SPRINT2_ITERS=("${ITERATIONS[@]:3:2}")
+# sprint-1 = v1, sprint-2 = v2. sprint-2 is planned only after sprint-1 ships
+# working software, modeling the PO folding feedback into the next sprint.
+SPRINT1_ITERS=("${ITERATIONS[@]:0:1}")
+SPRINT2_ITERS=("${ITERATIONS[@]:1:1}")
 
 ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FEATURE_REQ_DIR="${ORCHESTRATOR_DIR}/feature-requests"
@@ -170,9 +170,11 @@ export LAKEBASE_TDD_HUMAN_PROXY=1
 # for determinism. Same directory the recorded product-overview.md / nfrs.md live in.
 export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 
-# This smoke is a UI project (v5 ships a bug-list view). LAKEBASE_TDD_UI=1 tells
-# /design to run the UX Designer phase and require design-brief.md at intake, so
-# the UX track (design-guide.{md,json} + ia.md + token adherence) is exercised.
+# This smoke is a UI project (every feature is a browser-facing capability:
+# filing a bug, transitioning its status). LAKEBASE_TDD_UI=1 tells /design to run
+# the UX Designer phase and require design-brief.md at intake, so the UX track
+# (design-guide.{md,json} + ia.md + token adherence) is exercised, and the Spec
+# Author proposes E2E (browser) stories rather than API-only.
 export LAKEBASE_TDD_UI=1
 
 # The smoke drives the deterministic orchestrator (`lakebase-tdd-drive`) CLI
@@ -187,9 +189,9 @@ export LAKEBASE_TDD_UI=1
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
-# --tiers is required when scaffolding (architectural choice). The
-# bug-tracker iteration specs all declare `Lakebase parent: staging`,
-# so this smoke is 2-tier (prod + staging) by definition. --tiers 1
+# --tiers is required when scaffolding (architectural choice). This smoke is
+# opinionated 2-tier (prod + staging): features fork from staging, so each
+# iteration's work lands on a staging-parented feature branch. --tiers 1
 # (prod only) and --tiers 3 (prod + staging + dev) are rejected because
 # either would break the staging-as-parent assumption.
 #
@@ -200,10 +202,9 @@ log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX}
 if [[ "$SKIP_SCAFFOLD" -eq 0 ]]; then
   if [[ "$TIERS" != "2" ]]; then
     echo "smoke: --tiers 2 is required for this smoke. Got: '${TIERS:-<unset>}'." >&2
-    echo "       The bug-tracker iteration specs declare 'Lakebase parent: staging'," >&2
-    echo "       so the project must be 2-tier (prod + staging). 1-tier would have" >&2
-    echo "       features forking from prod; 3-tier would add a dev layer and require" >&2
-    echo "       rewriting every iteration spec." >&2
+    echo "       The bug-tracker is 2-tier (prod + staging): features fork from" >&2
+    echo "       staging. 1-tier would have features forking from prod; 3-tier" >&2
+    echo "       would add a dev layer and change the staging-as-parent assumption." >&2
     exit 10
   fi
 fi
@@ -244,9 +245,11 @@ iteration_spec() {
 }
 
 iteration_verify() {
-  local iter="$1"
-  local short="${iter%%-*}"   # v1
-  echo "${ASSERT_DIR}/verify-${short}.sh"
+  # One generic, feature-agnostic deploy-gate verify for every iteration
+  # (replaces the bespoke per-vN scripts): it asserts the feature reached its
+  # deploy gate (migration + routes + tests + an E2E AC + approved PO deploy
+  # gate) rather than a hand-coded per-feature schema/endpoint shape.
+  echo "${ASSERT_DIR}/verify-deploy-gate.sh"
 }
 
 # Feature id used by /design + /build. The kit's TDD workflow expects
@@ -427,10 +430,12 @@ run_iteration() {
     uv run pytest || python -m pytest
   fi
 
-  # 6. per-iteration verification (asserts the right files / migration shape exist)
+  # 6. deploy-gate verification (generic: migration + routes + tests + an E2E AC
+  #    + the approved PO deploy gate). Feature-agnostic, so it survives changes
+  #    to the seed feature-requests without a per-feature assertion rewrite.
   if [[ -x "$verify" ]]; then
-    log "  step 6: $verify"
-    "$verify" "$PROJECT_DIR"
+    log "  step 6: $verify ${feature_id}"
+    "$verify" "$PROJECT_DIR" "$feature_id"
   else
     log "  step 6: no verify script for $iter (skipping)."
   fi
@@ -493,8 +498,8 @@ proxy_supply() {
 
 # Project-level intake, staged once before the iteration loop. product-overview.md
 # and nfrs.md are project-scoped (refined across features in a real run; recorded
-# here). design-brief.md is also supplied: this smoke is a UI project (v5 ships a
-# bug-list view), so LAKEBASE_TDD_UI=1 turns on the UX track and the intake
+# here). design-brief.md is also supplied: this smoke is a UI project (every
+# feature is browser-facing), so LAKEBASE_TDD_UI=1 turns on the UX track and the intake
 # precondition requires the brief.
 stage_project_intake() {
   log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"
@@ -573,15 +578,18 @@ run_plan_sprint() {
   # command's gate-mode check fell through to `interactive` headless and the plan
   # gate was never approved. Calling the driver here (in this shell, where the env
   # is correct) with an explicit `--gates proxy` is deterministic. The driver runs
-  # propose (Spec Author -> feature-proposals.md), estimate (Architect -> planning/
-  # estimates.json t-shirt sizes), author-requests (the Human Proxy supplies the
-  # recorded feature-requests from LAKEBASE_TDD_SPRINT_REQUESTS + logs each),
-  # sync-backlog (projects backlog.json from them), then the Human Proxy approves
-  # the sprint plan gate (teeth: feature-proposals.md exists + conforms) and it
-  # stops at planning-complete.
-  log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy"
+  # propose (Spec Author -> feature-proposals.md), author-requests (the Human Proxy
+  # supplies the recorded feature-requests from LAKEBASE_TDD_SPRINT_REQUESTS + logs
+  # each), sync-backlog (projects backlog.json from them), then the Human Proxy
+  # approves the sprint plan gate (teeth: feature-proposals.md exists + conforms)
+  # and it stops at planning-complete.
+  #
+  # --no-sizing: each sprint is a SINGLE feature, so the Architect's t-shirt-sizing
+  # (planning-poker) step adds nothing the PO needs to fit capacity. Skipping it
+  # drops one haiku turn per sprint and goes straight propose -> author-requests.
+  log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy --no-sizing"
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
-    --sprint "${sprint_name}" --plan-only --gates proxy --project-dir "$PROJECT_DIR" \
+    --sprint "${sprint_name}" --plan-only --gates proxy --no-sizing --project-dir "$PROJECT_DIR" \
     || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
 
   # d. Commit the sprint backlog + planning artifacts to trunk so each feature

@@ -1,6 +1,6 @@
 # FEIP-7422: End-to-End TDD Workflow Smoke
 
-Drives a real bug-tracker project through 5 evolution iterations (v1..v5),
+Drives a real bug-tracker project through 2 evolution iterations (v1..v2),
 grouped into two sprints, to exercise the kit's TDD workflow end to end:
 `/plan` -> `/design` -> `/build` -> `/deploy`, with every HITL gate stood in
 for by the Human Proxy so the smoke runs headless. Closes FEIP-7422 ("Kit:
@@ -41,8 +41,8 @@ Proxy stands in for the human:
 
 | Sprint | Iterations | Planned |
 |--------|------------|---------|
-| sprint-1 | v1, v2, v3 | up front |
-| sprint-2 | v4, v5 | after sprint-1 ships working software |
+| sprint-1 | v1 | up front |
+| sprint-2 | v2 | after sprint-1 ships working software |
 
 sprint-2 is planned only after sprint-1's features have passed their `/deploy`
 gates, modeling the Product Owner folding what they saw into the next sprint's
@@ -52,15 +52,17 @@ requests. The sprints are slices of the canonical `ITERATIONS=(...)` list in
 ## Domain: bug-tracker
 
 A small bug-tracking app (Python + FastAPI + SQLAlchemy + Alembic +
-Playwright) that evolves across 5 iterations:
+Playwright) that evolves across 2 browser-facing iterations:
 
-| Iter | Headline | Refactor type |
-|------|----------|---------------|
-| v1 | Bug CRUD baseline | Greenfield |
-| v2 | Users entity + FK from bugs | FK introduction |
-| v3 | Promote status enum to its own table | Enum -> table + data backfill |
-| v4 | Extract BugDetails from Bug | Split-entity refactor |
-| v5 | HTML list view + `[E2E]` AC | Frontend + Playwright (verified via `/deploy --target local`) |
+| Iter | Headline | What the user does |
+|------|----------|--------------------|
+| v1 | File a bug in the browser | Fill a create form, submit, land on `/bugs/{id}` (the bug starts `open`) |
+| v2 | Move a bug through its states | Change status on the detail page; unrecognized values are rejected at save |
+
+These seed feature-requests are what the Spec Author proposed from
+`product-overview.md` + `nfrs.md` alone (the closed-loop smoke: the workflow's
+own proposal becomes the deterministic seed). Both are user-facing, so each
+ships an E2E (browser) story under the UI track.
 
 Product Owner overview: [`orchestrator/product-overview.md`](orchestrator/product-overview.md).
 NFR brief (the Architect's intake): [`orchestrator/nfrs.md`](orchestrator/nfrs.md).
@@ -83,20 +85,20 @@ long-running tiers only, NOT feature branches:
 | 2 | prod + staging | staging |
 | 3 | prod + staging + dev | dev |
 
-Every iteration's Lakebase parent is `staging`, so the project must be 2-tier.
-`run-smoke.sh` enforces `--tiers 2`; 1 or 3 are rejected.
+Features fork from `staging`, so the project must be 2-tier. `run-smoke.sh`
+enforces `--tiers 2`; 1 or 3 are rejected.
 
-### Final state after v5
+### Final state after v2
 
-Tables: `users` (id, email, display_name), `statuses` (id, name, sort_order),
-`bugs` (id, title, status_id FK, owner_id FK), `bug_details` (bug_id PK+FK,
-description, repro_steps), `alembic_version`.
+Tables: `bugs` (id, title, description, status), `alembic_version`. The exact
+columns + how status is modeled are the Architect's / implementation's concern,
+derived from the feature-requests, not the Product Owner's `product-overview.md`.
 
-Endpoints: `POST /bugs`, `GET /bugs/{id}`, `GET /bugs` (HTML list, v5),
-`PATCH /bugs/{id}`, `POST /users` + `GET /users` (v2+), `GET /statuses` (v3+).
-
-These are the Architect's / implementation's concern, recorded here for
-reference, not in the Product Owner's `product-overview.md`.
+Endpoints + screens: a create form, the bug detail page at `/bugs/{id}` (showing
+title / description / status / identifier), and a status control on the detail
+page. The precise routes are the Architect's call; the generic deploy-gate
+verify (`assertions/verify-deploy-gate.sh`) asserts the net effect rather than a
+hand-coded endpoint list.
 
 ## How to run
 
@@ -114,8 +116,8 @@ reference, not in the Product Owner's `product-overview.md`.
 bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --tiers 2
 ```
 
-Scaffolds the project, stages project intake, then runs sprint-1 (`/plan` +
-v1..v3) and sprint-2 (`/plan` + v4..v5). Headless throughout
+Scaffolds the project, stages project intake, then runs sprint-1 (`/plan` + v1)
+and sprint-2 (`/plan` + v2). Headless throughout
 (`LAKEBASE_TDD_HUMAN_PROXY=1`, set by the script).
 
 ### Resume
@@ -123,10 +125,10 @@ v1..v3) and sprint-2 (`/plan` + v4..v5). Headless throughout
 If an iteration fails and you've fixed it:
 
 ```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v3 --skip-scaffold
+bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v2 --skip-scaffold
 ```
 
-Re-plans each sprint (idempotent) and starts the per-feature loop at v3.
+Re-plans each sprint (idempotent) and starts the per-feature loop at v2.
 
 ### Other useful flags
 
@@ -151,21 +153,22 @@ asserts (among others):
 
 - `product-overview.md` (Product Owner voice), `nfrs.md`, and `design-brief.md`
   exist and carry their required sections.
-- A `feature-requests/` subdir holds the 5 per-iteration requests, each in
+- A `feature-requests/` subdir holds one request per iteration, each in
   feature-request voice (no SQL / HTTP verbs / table names / file paths, no
   Acceptance Criteria tables, no operational metadata).
 - The orchestrator runs two sprints sliced from `ITERATIONS=(...)` (sprint-1 =
-  v1..v3, sprint-2 = v4..v5), supplies each sprint's requests via the Human
-  Proxy at `/plan`, enforces the intake precondition, and commits the backlog
-  to trunk.
+  v1, sprint-2 = v2), supplies each sprint's requests via the Human Proxy at
+  `/plan`, enforces the intake precondition, and commits the backlog to trunk.
 - `/deploy --target local` runs per iteration and records the deploy gate.
 - `claude` is a required-on-PATH check; the SCM PR/CI CLIs are NOT invoked.
-- Each iteration has a matching `verify-v*.sh`.
+- Every iteration is verified by the single generic
+  `assertions/verify-deploy-gate.sh` (migration + routes + tests + an E2E AC +
+  the approved PO deploy gate); there are no bespoke per-iteration scripts.
 
 To add a new iteration: append the feature request under `feature-requests/`,
-append a `verify-v*.sh` under `assertions/`, extend the `ITERATIONS=(...)` line
-in `run-smoke.sh` (and the `SPRINT*_ITERS` slices), and update the BDD test's
-`ITERATIONS` constant + the sprint-slice assertions.
+extend the `ITERATIONS=(...)` line in `run-smoke.sh` (and the `SPRINT*_ITERS`
+slices), and update the BDD test's `ITERATIONS` constant + the sprint-slice
+assertions. The generic deploy-gate verify needs no per-iteration change.
 
 ## Status
 

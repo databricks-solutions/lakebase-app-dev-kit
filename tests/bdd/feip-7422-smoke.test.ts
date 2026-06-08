@@ -1,14 +1,14 @@
 // FEIP-7422: hermetic guard rails on the smoke artifacts.
 //
 // The smoke itself (examples/feip-7422-smoke/orchestrator/run-smoke.sh)
-// drives a real scaffolded project through 5 iterations + CI; it's
+// drives a real scaffolded project through 2 iterations + CI; it's
 // expensive and not appropriate as a vitest. This test only asserts
 // the smoke's SHAPE and that its authored documents follow the kit's
 // role conventions: the Product Owner's product-overview.md is
-// open-ended product intent, the 5 per-iteration feature-requests/ are
+// open-ended product intent, the per-iteration feature-requests/ are
 // in Feature Requester voice (no implementation or operational detail),
-// the orchestrator references all 5 iterations in order, the 3 mode
-// flags are documented, and each iteration has a matching verify-v*.sh.
+// the orchestrator references all iterations in order, and each
+// iteration is verified by the generic deploy-gate assertion.
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -21,11 +21,8 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SMOKE_DIR = path.join(REPO_ROOT, "examples", "feip-7422-smoke", "orchestrator");
 
 const ITERATIONS = [
-  "v1-initial-domain",
-  "v2-add-owners",
-  "v3-status-table",
-  "v4-split-bug-entity",
-  "v5-list-view",
+  "v1-file-bug",
+  "v2-transition-status",
 ];
 
 describe("FEIP-7422 smoke: directory structure", () => {
@@ -45,21 +42,32 @@ describe("FEIP-7422 smoke: directory structure", () => {
     expect(fs.existsSync(path.join(SMOKE_DIR, "design-brief.md"))).toBe(true);
   });
 
-  it("has a feature-requests/ subdir with the 5 specs", () => {
+  it("has a feature-requests/ subdir with the seed specs (one per iteration)", () => {
     const reqDir = path.join(SMOKE_DIR, "feature-requests");
     expect(fs.existsSync(reqDir)).toBe(true);
     for (const iter of ITERATIONS) {
       expect(fs.existsSync(path.join(reqDir, `${iter}.md`)), `missing feature-requests/${iter}.md`).toBe(true);
     }
+    // No stale per-iteration specs left behind from the prior seed.
+    const present = fs.readdirSync(reqDir).filter((f) => f.endsWith(".md")).sort();
+    expect(present).toEqual(ITERATIONS.map((i) => `${i}.md`).sort());
   });
 
-  it("has an assertions/ subdir with verify-v1..v5 + verify-v5-e2e", () => {
+  it("verifies every iteration with the single generic deploy-gate assertion (executable, wired in)", () => {
     const assertDir = path.join(SMOKE_DIR, "assertions");
     expect(fs.existsSync(assertDir)).toBe(true);
+    const verify = path.join(assertDir, "verify-deploy-gate.sh");
+    expect(fs.existsSync(verify), "missing assertions/verify-deploy-gate.sh").toBe(true);
+    expect((fs.statSync(verify).mode & 0o111) !== 0, "verify-deploy-gate.sh must be executable").toBe(true);
+    // run-smoke.sh resolves the generic verify for every iteration (no bespoke
+    // per-vN scripts) and passes the feature id.
+    const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
+    expect(runSmoke).toMatch(/verify-deploy-gate\.sh/);
+    // The retired bespoke scripts must be gone.
     for (const v of ["v1", "v2", "v3", "v4", "v5"]) {
-      expect(fs.existsSync(path.join(assertDir, `verify-${v}.sh`)), `missing assertions/verify-${v}.sh`).toBe(true);
+      expect(fs.existsSync(path.join(assertDir, `verify-${v}.sh`)), `stale assertions/verify-${v}.sh should be removed`).toBe(false);
     }
-    expect(fs.existsSync(path.join(assertDir, "verify-v5-e2e.sh"))).toBe(true);
+    expect(fs.existsSync(path.join(assertDir, "verify-v5-e2e.sh")), "stale verify-v5-e2e.sh should be removed").toBe(false);
   });
 
   it("has an advisory verify-story-pipeline.sh assert (FEIP-7565) wired into run-smoke.sh", () => {
@@ -211,9 +219,9 @@ describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", ()
 describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, feedback loop)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("runs two sprints sliced from ITERATIONS (sprint-1 = v1..v3, sprint-2 = v4..v5)", () => {
-    expect(runSmoke).toMatch(/SPRINT1_ITERS=\(.*ITERATIONS\[@\]:0:3.*\)/);
-    expect(runSmoke).toMatch(/SPRINT2_ITERS=\(.*ITERATIONS\[@\]:3:2.*\)/);
+  it("runs two sprints sliced from ITERATIONS (sprint-1 = v1, sprint-2 = v2)", () => {
+    expect(runSmoke).toMatch(/SPRINT1_ITERS=\(.*ITERATIONS\[@\]:0:1.*\)/);
+    expect(runSmoke).toMatch(/SPRINT2_ITERS=\(.*ITERATIONS\[@\]:1:1.*\)/);
     expect(runSmoke).toMatch(/run_sprint "sprint-1" "\$\{SPRINT1_ITERS\[@\]\}"/);
     expect(runSmoke).toMatch(/run_sprint "sprint-2" "\$\{SPRINT2_ITERS\[@\]\}"/);
   });
@@ -248,6 +256,14 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
     // No EXECUTABLE claude -p "/plan" line (a line-start invocation, not a comment).
     expect(planFn, "planning must not go through claude -p").not.toMatch(/^\s*claude -p "\/plan/m);
   });
+
+  it("skips the Architect t-shirt-sizing step (--no-sizing): single-feature sprints need no capacity tradeoff", () => {
+    // Each sprint is one feature, so planning-poker adds nothing the PO needs to
+    // commit a backlog; --no-sizing drops the estimate turn (propose ->
+    // author-requests). The driver invocation must carry the flag.
+    const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
+    expect(planFn).toMatch(/lakebase-tdd-drive[\s\S]*--no-sizing/);
+  });
 });
 
 describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working software)", () => {
@@ -264,9 +280,11 @@ describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working
     expect(runSmoke).toMatch(/lakebase-tdd-deploy --target local --project-dir "\$PROJECT_DIR" --stop/);
   });
 
-  it("v5's feature request is list-view-only: deploy/reachability moved to the per-sprint /deploy", () => {
-    const v5 = fs.readFileSync(path.join(SMOKE_DIR, "feature-requests", "v5-list-view.md"), "utf8");
-    expect(v5, "v5 should not carry per-PR deployment intent (that is the orchestrated /deploy)").not.toMatch(/pull request|deployed to a new environment/i);
+  it("no feature request carries per-PR deployment intent (that is the orchestrated deploy)", () => {
+    for (const iter of ITERATIONS) {
+      const md = fs.readFileSync(path.join(SMOKE_DIR, "feature-requests", `${iter}.md`), "utf8");
+      expect(md, `${iter} should not carry per-PR deployment intent (that is the orchestrated deploy)`).not.toMatch(/pull request|deployed to a new environment/i);
+    }
   });
 });
 
@@ -338,7 +356,7 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md v
 describe("FEIP-7422 smoke: orchestrator is TDD-only (SCM workflow tested elsewhere)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
-  it("declares ITERATIONS in order v1..v5", () => {
+  it("declares ITERATIONS in order (v1..v2)", () => {
     const m = runSmoke.match(/ITERATIONS=\(([^)]+)\)/);
     expect(m, "run-smoke.sh missing ITERATIONS=(...) declaration").not.toBeNull();
     const declared = m![1].trim().split(/\s+/);
