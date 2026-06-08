@@ -67,6 +67,8 @@ function makeFakeWorld(storyIds: string[]) {
               state.storyOrder = [...storyIds];
               for (const id of storyIds) state.stories[id] = freshStory();
             }
+          } else if (action.role === "ux-designer") {
+            state.designGuideReady = true;
           } else {
             const s = state.stories[action.story];
             if (action.role === "spec-author") s.design.hasAcs = true;

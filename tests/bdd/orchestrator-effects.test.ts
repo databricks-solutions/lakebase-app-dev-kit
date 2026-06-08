@@ -159,6 +159,25 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(cmd.args).toContain("feature/x");
   });
 
+  it("ux-designer translates the design brief into the project style guide", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "ux-designer" }, cfg());
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "ux-designer" });
+    const task = (cmds[0] as { task: string }).task;
+    expect(task).toMatch(/design-brief\.md/);
+    expect(task).toMatch(/design-guide\.md/);
+    expect(task).toMatch(/design-guide\.json/);
+  });
+
+  it("navigator + driver get the design guide as a build input only when the UI track is on", () => {
+    const task = (action: Parameters<typeof commandsForAction>[0], over = {}) =>
+      (commandsForAction(action, cfg(over))[0] as { task: string }).task;
+    // Off: no design-guide directive.
+    expect(task({ kind: "invoke-role", role: "navigator", story: "S1" })).not.toMatch(/design guide/i);
+    // On: both build roles are pointed at the design guide.
+    expect(task({ kind: "invoke-role", role: "navigator", story: "S1" }, { uiTrack: true })).toMatch(/design guide/i);
+    expect(task({ kind: "invoke-role", role: "driver", story: "S1" }, { uiTrack: true })).toMatch(/design guide/i);
+  });
+
   it("accept merges the experiment AND records the pipeline acceptance (two commands)", () => {
     const cmds = commandsForAction({ kind: "accept", story: "S1" }, cfg());
     expect(cmds).toHaveLength(2);

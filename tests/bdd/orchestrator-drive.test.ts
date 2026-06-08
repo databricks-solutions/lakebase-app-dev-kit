@@ -128,6 +128,26 @@ function ws(over: Partial<DriveState>): DriveState {
   };
 }
 
+describe("nextDesignAction: UX Designer (UI track)", () => {
+  const stories = { S1: fresh(), S2: fresh(), S3: fresh() };
+  it("emits ux-designer after breakdown when uiTrack is on and no design guide exists yet", () => {
+    expect(nextDesignAction(state({ uiTrack: true, designGuideReady: false, stories })))
+      .toEqual({ kind: "invoke-role", role: "ux-designer" });
+  });
+  it("skips ux-designer once the design guide exists, proceeds to the first story", () => {
+    expect(nextDesignAction(state({ uiTrack: true, designGuideReady: true, stories })))
+      .toEqual({ kind: "invoke-role", role: "spec-author", story: "S1" });
+  });
+  it("never emits ux-designer when uiTrack is off (API / CLI / Infra projects)", () => {
+    expect(nextDesignAction(state({ uiTrack: false, designGuideReady: false, stories })))
+      .toEqual({ kind: "invoke-role", role: "spec-author", story: "S1" });
+  });
+  it("runs the UX step only after breakdown, breakdown still comes first", () => {
+    expect(nextDesignAction(state({ breakdownDone: false, uiTrack: true, designGuideReady: false, stories: {} })))
+      .toEqual({ kind: "invoke-role", role: "spec-author", mode: "breakdown" });
+  });
+});
+
 describe("nextTransition: planning lane", () => {
   it("proposes, estimates, authors requests, approves the PLAN GATE, then completes", () => {
     const base = ws({ phase: "planning", planning: { proposed: false, estimated: false, requestsAuthored: false } });

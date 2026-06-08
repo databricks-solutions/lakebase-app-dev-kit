@@ -22,7 +22,7 @@ import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson } from "./tdd-paths.js";
+import { storyJson, designGuideJson } from "./tdd-paths.js";
 
 export type DriveCommand =
   // resumeKey: when set, the runner resumes this role's Claude session across
@@ -72,6 +72,7 @@ export interface DriveEffectsConfig {
  *  (the design lane's `layer: "E2E"` work), not just API surface. */
 const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
+const UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
 
 /**
  * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
@@ -118,6 +119,17 @@ function roleTask(
         return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
     }
   }
+  // UX Designer (UI track): translate the design brief into the project style
+  // guide. Project-level, no story scope, so handle it before reading a story.
+  if (action.role === "ux-designer") {
+    return (
+      `Translate the HIL design brief (.tdd/design/design-brief.md) into the project design system:` +
+      ` write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable` +
+      ` tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information` +
+      ` architecture: screens, navigation, flows). This is the project-level style guide the Navigator` +
+      ` and Driver build the UI against; author it once from the brief + product-overview.md.`
+    );
+  }
   const s = action.story;
   switch (action.role) {
     case "spec-author":
@@ -138,9 +150,9 @@ function roleTask(
     case "test-strategist":
       return `Produce the ordered test list for story ${s}.`;
     case "navigator":
-      return `Write the next RED test for story ${s}.`;
+      return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
-      return `Make the failing test for story ${s} GREEN (simplest honest code).`;
+      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
     default:
       return `Work story ${s}.`;
   }
@@ -389,7 +401,12 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
       const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId);
-      return deriveDriveState(pipeline, probe, ctx);
+      const state = deriveDriveState(pipeline, probe, ctx);
+      // UI track: gate the UX Designer step. uiTrack is config (env); the design
+      // guide's existence is disk truth (project-level, authored once + reused).
+      state.uiTrack = cfg.uiTrack ?? false;
+      state.designGuideReady = fs.existsSync(designGuideJson(cfg.tddDir));
+      return state;
     },
     async perform(action) {
       for (const cmd of commandsForAction(action, cfg)) {

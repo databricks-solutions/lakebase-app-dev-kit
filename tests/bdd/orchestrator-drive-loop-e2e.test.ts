@@ -95,6 +95,8 @@ function replayEffects(feature: string, stories: string[]) {
             // propose / author-requests: planning, not exercised here
             return;
           }
+          // ux-designer (UI track) has no story; not exercised in this e2e.
+          if (action.role === "ux-designer") return;
           const s = action.story;
           if (action.role === "spec-author") {
             // draft ACs (story.json acs + the AC file, no layer yet)

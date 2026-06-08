@@ -43,11 +43,20 @@ export interface DesignDriveState {
   /** Story ids in breakdown order; the lane advances them in this order. */
   storyOrder: string[];
   stories: Record<string, DriveStoryView>;
+  /** UI track on (a design brief is part of intake): the UX Designer must
+   *  produce the project style guide before any UI is architected or built. */
+  uiTrack?: boolean;
+  /** The project design guide (design-guide.json) exists, the UX Designer has
+   *  already translated the design brief. Project-level, authored once. */
+  designGuideReady?: boolean;
 }
 
 /** The single next design-lane action. A later phase maps each to an effect. */
 export type DriveAction =
   | { kind: "invoke-role"; role: "spec-author"; mode: "breakdown" }
+  // The UX Designer (UI track only) translates the design brief into the project
+  // style guide. Feature/project-level + once, so no story scope.
+  | { kind: "invoke-role"; role: "ux-designer" }
   | { kind: "invoke-role"; role: DesignRole; story: string }
   | { kind: "surface-gate"; story: string }
   | { kind: "approve-gate"; story: string }
@@ -65,6 +74,15 @@ export type DriveAction =
 export function nextDesignAction(state: DesignDriveState): DriveAction {
   if (!state.breakdownDone) {
     return { kind: "invoke-role", role: "spec-author", mode: "breakdown" };
+  }
+
+  // UI track: the UX Designer translates the design brief into the project style
+  // guide ONCE (design-guide.{md,json} + ia.md), after breakdown and before any
+  // story is architected or built, so the Architect's E2E layers and the
+  // Navigator/Driver's UI build against it. Idempotent: skipped once the guide
+  // exists (it is project-level, reused across features).
+  if (state.uiTrack && !state.designGuideReady) {
+    return { kind: "invoke-role", role: "ux-designer" };
   }
 
   for (const story of state.storyOrder) {
@@ -157,6 +175,10 @@ export interface DriveState {
   /** The story the single build lane is on, or null when idle. */
   buildActive: string | null;
   deploy?: DeployState;
+  /** UI track on (set from cfg.uiTrack at readState): gates the UX Designer step. */
+  uiTrack?: boolean;
+  /** The project design guide exists (design-guide.json on disk). */
+  designGuideReady?: boolean;
 }
 
 export type WorkflowAction =
@@ -249,6 +271,8 @@ function toDesignView(state: DriveState): DesignDriveState {
   return {
     breakdownDone: state.breakdownDone,
     storyOrder: state.storyOrder,
+    uiTrack: state.uiTrack,
+    designGuideReady: state.designGuideReady,
     stories: Object.fromEntries(
       Object.entries(state.stories).map(([id, v]) => [
         id,

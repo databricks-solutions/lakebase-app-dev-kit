@@ -23,6 +23,10 @@ export const workflowStateJson = (tdd: string): string => join(tdd, "workflow-st
 export const productOverviewMd = (tdd: string): string => join(tdd, "product-overview.md");
 export const nfrsMd = (tdd: string): string => join(tdd, "nfrs.md");
 export const designBriefMd = (tdd: string): string => join(tdd, "design", "design-brief.md");
+/** The UX Designer's project-level style guide (machine-checkable tokens),
+ *  authored once from the design brief; gates the UI build (design-guide.md is
+ *  its human-readable sibling, ia.md the information architecture). */
+export const designGuideJson = (tdd: string): string => join(tdd, "design", "design-guide.json");
 /** The Spec Author's sprint proposal. ONE canonical location (project-level,
  *  sequential across sprints) , the path the spec-author actually writes. */
 export const featureProposalsMd = (tdd: string): string => join(planningDir(tdd), "feature-proposals.md");
