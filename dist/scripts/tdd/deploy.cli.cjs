@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 "use strict";
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -16,6 +18,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // scripts/tdd/deploy.cli.ts
@@ -53,7 +63,7 @@ function isCliEntry(importMetaUrl2) {
 // scripts/tdd/deploy.ts
 var import_node_child_process = require("child_process");
 var import_node_fs2 = require("fs");
-var import_node_path = require("path");
+var import_node_path2 = require("path");
 
 // scripts/lakebase/deploy-targets.ts
 var import_fs = require("fs");
@@ -128,6 +138,19 @@ async function pollUntil(args) {
   }
 }
 
+// scripts/tdd/tdd-paths.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+
 // scripts/tdd/deploy.ts
 var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 function resolveDeployTarget(projectDir, name) {
@@ -158,13 +181,7 @@ async function probeReachable(url) {
   }
 }
 function pidFile(projectDir, target) {
-  return (0, import_node_path.join)(projectDir, ".tdd", "deploy", `${target}.pid`);
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_node_path.join)(tddDir, "features");
-  if (!(0, import_node_fs2.existsSync)(featuresDir)) return void 0;
-  const match = (0, import_node_fs2.readdirSync)(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? (0, import_node_path.join)(featuresDir, match) : void 0;
+  return (0, import_node_path2.join)(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -177,9 +194,9 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? (0, import_node_path.join)(fdir, "stories", evidence.story_id) : fdir;
+  const dir = evidence.story_id ? (0, import_node_path2.join)(fdir, "stories", evidence.story_id) : fdir;
   (0, import_node_fs2.mkdirSync)(dir, { recursive: true });
-  const file = (0, import_node_path.join)(dir, "deploy-evidence.json");
+  const file = (0, import_node_path2.join)(dir, "deploy-evidence.json");
   (0, import_node_fs2.writeFileSync)(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
@@ -202,7 +219,7 @@ async function deployToTarget(args) {
   const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
-  (0, import_node_fs2.mkdirSync)((0, import_node_path.dirname)(pf), { recursive: true });
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(pf), { recursive: true });
   (0, import_node_fs2.writeFileSync)(pf, String(pid));
   const poll = await pollUntil({
     probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
@@ -226,7 +243,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? (0, import_node_path.join)(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? (0, import_node_path2.join)(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,

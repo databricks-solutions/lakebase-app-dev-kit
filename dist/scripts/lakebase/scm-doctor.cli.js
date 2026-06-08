@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/lakebase/scm-doctor.cli.ts
-import * as fs12 from "fs";
+import * as fs13 from "fs";
 import * as path12 from "path";
 
 // scripts/util/cli-entry.ts
@@ -26,7 +26,7 @@ function isCliEntry(importMetaUrl) {
 }
 
 // scripts/lakebase/scm-doctor.ts
-import * as fs11 from "fs";
+import * as fs12 from "fs";
 import * as path11 from "path";
 
 // scripts/lakebase/branch-utils.ts
@@ -1448,40 +1448,57 @@ function parentForTopology(t, defaultLeaf) {
 }
 
 // scripts/tdd/stale-branches.ts
-import { existsSync as existsSync7, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
+import { existsSync as existsSync8, readdirSync as readdirSync4, statSync as statSync4 } from "fs";
 import { join as join6 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync4, mkdirSync as mkdirSync3, readdirSync, statSync } from "fs";
-import { dirname as dirname2, join as join4 } from "path";
+import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+
+// scripts/tdd/tdd-paths.ts
+import * as fs5 from "fs";
+import { join as join4 } from "path";
+var featuresDir = (tdd) => join4(tdd, "features");
+var featureDir = (tdd, featureId) => join4(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => join4(featureResolved(tdd, f), "pipeline.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs5.existsSync(root)) return void 0;
+  const exact = join4(root, featureId);
+  if (fs5.existsSync(exact)) return exact;
+  const matches = fs5.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join4(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return join4(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync5(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync5(p, "utf8"));
+  if (!existsSync6(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync6(p, "utf8"));
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync2, readFileSync as readFileSync6, statSync as statSync2, writeFileSync as writeFileSync5 } from "fs";
+import { existsSync as existsSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync3, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync6 } from "fs";
 import { join as join5 } from "path";
 function listSpikes(tddDir) {
   const root = join5(tddDir, "spikes");
-  if (!existsSync6(root)) return [];
+  if (!existsSync7(root)) return [];
   const out = [];
-  for (const slug of readdirSync2(root)) {
+  for (const slug of readdirSync3(root)) {
     const dir = join5(root, slug);
-    if (!statSync2(dir).isDirectory()) continue;
+    if (!statSync3(dir).isDirectory()) continue;
     const branchFile = join5(dir, "branch.txt");
-    if (!existsSync6(branchFile)) continue;
+    if (!existsSync7(branchFile)) continue;
     out.push({
       spike_slug: slug,
-      branch_id: readFileSync6(branchFile, "utf8").trim(),
-      created_at: statSync2(branchFile).birthtime.toISOString(),
+      branch_id: readFileSync7(branchFile, "utf8").trim(),
+      created_at: statSync3(branchFile).birthtime.toISOString(),
       dir
     });
   }
@@ -1490,9 +1507,9 @@ function listSpikes(tddDir) {
 
 // scripts/tdd/stale-branches.ts
 function listPipelineFeatures(tddDir) {
-  const featuresDir = join6(tddDir, "features");
-  if (!existsSync7(featuresDir)) return [];
-  return readdirSync3(featuresDir).filter((d) => statSync3(join6(featuresDir, d)).isDirectory()).filter((d) => existsSync7(join6(featuresDir, d, "pipeline.json"))).sort();
+  const featuresDir2 = featuresDir(tddDir);
+  if (!existsSync8(featuresDir2)) return [];
+  return readdirSync4(featuresDir2).filter((d) => statSync4(join6(featuresDir2, d)).isDirectory()).filter((d) => existsSync8(join6(featuresDir2, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];
@@ -1526,16 +1543,16 @@ function findStaleBranches(tddDir) {
 }
 
 // scripts/lakebase/schema-migrate.ts
-import * as fs10 from "fs";
+import * as fs11 from "fs";
 import * as path10 from "path";
 
 // scripts/lakebase/adapters/alembic-adapter.ts
-import * as fs6 from "fs";
+import * as fs7 from "fs";
 import * as path5 from "path";
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
 import { spawn } from "child_process";
-import * as fs5 from "fs";
+import * as fs6 from "fs";
 import * as path4 from "path";
 function resolveAlembicBin(projectDir) {
   const candidates = [
@@ -1544,7 +1561,7 @@ function resolveAlembicBin(projectDir) {
   ];
   for (const candidate of candidates) {
     try {
-      if (fs5.existsSync(candidate)) return candidate;
+      if (fs6.existsSync(candidate)) return candidate;
     } catch {
     }
   }
@@ -1600,8 +1617,8 @@ async function createAlembicRevision(opts) {
   if (m) return m[1].trim();
   for (const rel of ["migrations/versions", "alembic/versions"]) {
     const dir = path4.join(opts.projectDir, rel);
-    if (!fs5.existsSync(dir)) continue;
-    const hit = fs5.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (!fs6.existsSync(dir)) continue;
+    const hit = fs6.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
     if (hit) return path4.join(dir, hit);
   }
   throw new SchemaMigrationError(
@@ -1735,12 +1752,12 @@ function findVersionsDir(projectDir) {
     path5.join(projectDir, "migrations", "versions"),
     path5.join(projectDir, "alembic", "versions")
   ];
-  return candidates.find((p) => fs6.existsSync(p));
+  return candidates.find((p) => fs7.existsSync(p));
 }
 function listAlembicFiles(projectDir) {
   const dir = findVersionsDir(projectDir);
   if (!dir) return [];
-  const files = fs6.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  const files = fs7.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
   return files.map((filename) => {
     const stem = filename.replace(/\.py$/, "");
     const sep = stem.indexOf("_");
@@ -1765,9 +1782,9 @@ var AlembicAdapter = {
    * here. Callers can still force-select via project.yaml#migration_tool.
    */
   detect(projectDir) {
-    if (fs6.existsSync(path5.join(projectDir, "alembic.ini"))) return true;
-    if (fs6.existsSync(path5.join(projectDir, "migrations", "env.py"))) return true;
-    if (fs6.existsSync(path5.join(projectDir, "alembic", "env.py"))) return true;
+    if (fs7.existsSync(path5.join(projectDir, "alembic.ini"))) return true;
+    if (fs7.existsSync(path5.join(projectDir, "migrations", "env.py"))) return true;
+    if (fs7.existsSync(path5.join(projectDir, "alembic", "env.py"))) return true;
     return false;
   },
   async apply(args) {
@@ -1891,7 +1908,7 @@ var AlembicAdapter = {
 registerSchemaMigrationAdapter(AlembicAdapter);
 
 // scripts/lakebase/adapters/flyway-adapter.ts
-import * as fs7 from "fs";
+import * as fs8 from "fs";
 import * as path7 from "path";
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
@@ -2031,8 +2048,8 @@ async function buildDsn3(args) {
 }
 function listFlywayFiles(projectDir) {
   const dir = path7.join(projectDir, "src", "main", "resources", "db", "migration");
-  if (!fs7.existsSync(dir)) return [];
-  const files = fs7.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  if (!fs8.existsSync(dir)) return [];
+  const files = fs8.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
   return files.map((filename) => {
     const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
     const version = m[1];
@@ -2055,7 +2072,7 @@ var FlywayAdapter = {
   id: "flyway",
   languages: ["java", "kotlin"],
   detect(projectDir) {
-    return fs7.existsSync(path7.join(projectDir, "pom.xml"));
+    return fs8.existsSync(path7.join(projectDir, "pom.xml"));
   },
   async apply(args) {
     const dsn = await buildDsn3(args);
@@ -2114,13 +2131,13 @@ var FlywayAdapter = {
   async newMigration(args) {
     try {
       const dir = path7.join(args.projectDir, "src", "main", "resources", "db", "migration");
-      fs7.mkdirSync(dir, { recursive: true });
+      fs8.mkdirSync(dir, { recursive: true });
       const version = migrationTimestamp();
       const slug = migrationSlug2(args.slug);
       const filename = `V${version}__${slug}.sql`;
       const full = path7.join(dir, filename);
-      if (fs7.existsSync(full)) throw new Error(`${filename} already exists`);
-      fs7.writeFileSync(
+      if (fs8.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs8.writeFileSync(
         full,
         `-- V${version}: ${args.slug}
 -- Flyway migration (write your DDL/DML below).
@@ -2142,18 +2159,18 @@ var FlywayAdapter = {
 registerSchemaMigrationAdapter(FlywayAdapter);
 
 // scripts/lakebase/adapters/knex-adapter.ts
-import * as fs9 from "fs";
+import * as fs10 from "fs";
 import * as path9 from "path";
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
 import { spawn as spawn3 } from "child_process";
-import * as fs8 from "fs";
+import * as fs9 from "fs";
 import * as path8 from "path";
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function findKnexfile(projectDir) {
   for (const name of KNEXFILE_VARIANTS) {
     const p = path8.join(projectDir, name);
-    if (fs8.existsSync(p)) return p;
+    if (fs9.existsSync(p)) return p;
   }
   return void 0;
 }
@@ -2306,8 +2323,8 @@ async function buildDsn4(args) {
 var KNEXFILE_VARIANTS2 = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function listKnexFiles(projectDir) {
   const dir = path9.join(projectDir, "migrations");
-  if (!fs9.existsSync(dir)) return [];
-  const files = fs9.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  if (!fs10.existsSync(dir)) return [];
+  const files = fs10.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
   return files.map((filename) => {
     const stem = filename.replace(/\.(js|ts)$/, "");
     const m = stem.match(/^(\d{14})_(.+)$/);
@@ -2327,7 +2344,7 @@ var KnexAdapter = {
    * project.yaml#migration_tool.
    */
   detect(projectDir) {
-    return KNEXFILE_VARIANTS2.some((name) => fs9.existsSync(path9.join(projectDir, name)));
+    return KNEXFILE_VARIANTS2.some((name) => fs10.existsSync(path9.join(projectDir, name)));
   },
   async apply(args) {
     const dsn = await buildDsn4(args);
@@ -2466,8 +2483,8 @@ var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
 function readEnv(projectDir) {
   const envPath = path11.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
-  if (!fs11.existsSync(envPath)) return out;
-  const lines = fs11.readFileSync(envPath, "utf8").split("\n");
+  if (!fs12.existsSync(envPath)) return out;
+  const lines = fs12.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
     if (m) out.set(m[1], m[2].replace(/^["']|["']$/g, ""));
@@ -2830,8 +2847,8 @@ Exit codes (--fix mode):
 `;
 function readEnvProjectId(projectDir) {
   const envPath = path12.join(projectDir, ".env");
-  if (!fs12.existsSync(envPath)) return void 0;
-  const lines = fs12.readFileSync(envPath, "utf8").split("\n");
+  if (!fs13.existsSync(envPath)) return void 0;
+  const lines = fs13.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*LAKEBASE_PROJECT_ID\s*=\s*(.+?)\s*$/);
     if (m) return m[1].replace(/^["']|["']$/g, "");

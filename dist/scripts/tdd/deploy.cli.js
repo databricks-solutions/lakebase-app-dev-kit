@@ -23,8 +23,8 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/deploy.ts
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, readdirSync, rmSync, writeFileSync as writeFileSync2 } from "fs";
-import { dirname, join as join2 } from "path";
+import { existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync3, rmSync, writeFileSync as writeFileSync3 } from "fs";
+import { dirname, join as join3 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 import { existsSync, readFileSync, writeFileSync } from "fs";
@@ -99,6 +99,19 @@ async function pollUntil(args) {
   }
 }
 
+// scripts/tdd/tdd-paths.ts
+import * as fs from "fs";
+import { join as join2 } from "path";
+var featuresDir = (tdd) => join2(tdd, "features");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join2(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join2(root, matches[0]) : void 0;
+}
+
 // scripts/tdd/deploy.ts
 var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 function resolveDeployTarget(projectDir, name) {
@@ -129,13 +142,7 @@ async function probeReachable(url) {
   }
 }
 function pidFile(projectDir, target) {
-  return join2(projectDir, ".tdd", "deploy", `${target}.pid`);
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = join2(tddDir, "features");
-  if (!existsSync2(featuresDir)) return void 0;
-  const match = readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? join2(featuresDir, match) : void 0;
+  return join3(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -148,10 +155,10 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? join2(fdir, "stories", evidence.story_id) : fdir;
-  mkdirSync(dir, { recursive: true });
-  const file = join2(dir, "deploy-evidence.json");
-  writeFileSync2(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
+  const dir = evidence.story_id ? join3(fdir, "stories", evidence.story_id) : fdir;
+  mkdirSync2(dir, { recursive: true });
+  const file = join3(dir, "deploy-evidence.json");
+  writeFileSync3(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
 function defaultStart(cmd, cwd, env) {
@@ -173,8 +180,8 @@ async function deployToTarget(args) {
   const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
-  mkdirSync(dirname(pf), { recursive: true });
-  writeFileSync2(pf, String(pid));
+  mkdirSync2(dirname(pf), { recursive: true });
+  writeFileSync3(pf, String(pid));
   const poll = await pollUntil({
     probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
     timeoutMs: cfg.readyTimeoutSeconds * 1e3,
@@ -197,7 +204,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? join2(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? join3(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -224,8 +231,8 @@ async function deployToTarget(args) {
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
-  if (!existsSync2(pf)) return { stopped: false };
-  const pid = Number(readFileSync2(pf, "utf8").trim());
+  if (!existsSync3(pf)) return { stopped: false };
+  const pid = Number(readFileSync3(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);

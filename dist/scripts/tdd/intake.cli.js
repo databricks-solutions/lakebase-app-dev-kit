@@ -6673,8 +6673,8 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/intake.ts
 init_esm_shims();
-import { existsSync, readFileSync as readFileSync2, readdirSync } from "fs";
-import { join as join2 } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync3 } from "fs";
+import { join as join3 } from "path";
 
 // scripts/tdd/artifact-conformance.ts
 init_esm_shims();
@@ -6704,6 +6704,23 @@ function formatSchemaErrors(validate) {
     const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
     return `${where}: ${e.message ?? "invalid"}`;
   });
+}
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join as join2 } from "path";
+var featuresDir = (tdd) => join2(tdd, "features");
+var featureDir = (tdd, featureId) => join2(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureRequestMd = (tdd, f) => join2(featureResolved(tdd, f), "feature-request.md");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join2(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join2(root, matches[0]) : void 0;
 }
 
 // scripts/tdd/artifact-conformance.ts
@@ -6882,31 +6899,23 @@ function checkTestListMd(content) {
 }
 
 // scripts/tdd/intake.ts
-function resolveFeatureDir(tddDir, featureId) {
-  const featuresDir = join2(tddDir, "features");
-  if (!existsSync(featuresDir)) return void 0;
-  const match = readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? join2(featuresDir, match) : void 0;
-}
 function checkIntakePreconditions(args = {}) {
   const tddDir = args.tddDir ?? "./.tdd";
   const required = [
-    { artifact: "product-overview.md", path: join2(tddDir, "product-overview.md") },
-    { artifact: "nfrs.md", path: join2(tddDir, "nfrs.md") }
+    { artifact: "product-overview.md", path: join3(tddDir, "product-overview.md") },
+    { artifact: "nfrs.md", path: join3(tddDir, "nfrs.md") }
   ];
   if (args.ui) {
-    required.push({ artifact: "design-brief.md", path: join2(tddDir, "design", "design-brief.md") });
+    required.push({ artifact: "design-brief.md", path: join3(tddDir, "design", "design-brief.md") });
   }
   if (args.featureId) {
-    const fdir = resolveFeatureDir(tddDir, args.featureId);
-    const fpath = fdir ? join2(fdir, "feature-request.md") : join2(tddDir, "features", args.featureId, "feature-request.md");
-    required.push({ artifact: "feature-request.md", path: fpath });
+    required.push({ artifact: "feature-request.md", path: featureRequestMd(tddDir, args.featureId) });
   }
   const statuses = required.map(({ artifact, path: path2 }) => {
-    if (!existsSync(path2)) {
+    if (!existsSync2(path2)) {
       return { artifact, path: path2, present: false, conformant: false, violations: [] };
     }
-    const result = checkArtifactConformance(artifact, readFileSync2(path2, "utf8"));
+    const result = checkArtifactConformance(artifact, readFileSync3(path2, "utf8"));
     return {
       artifact,
       path: path2,

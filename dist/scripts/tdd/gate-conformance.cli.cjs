@@ -6711,6 +6711,12 @@ function formatSchemaErrors(validate) {
   });
 }
 
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+
 // scripts/tdd/artifact-conformance.ts
 var ARTIFACT_FORMATS = {
   "feature-spec.json": { kind: "json-schema", schema: "feature.schema.json" },
@@ -6942,12 +6948,12 @@ function canonicalArtifactName(path) {
   return base;
 }
 function scanFeatureConformance(tddDir, featureId) {
-  const featuresDir = (0, import_path2.join)(tddDir, "features");
-  const candidates = (0, import_fs2.existsSync)(featuresDir) ? (0, import_fs2.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId)) : [];
+  const featuresDir2 = featuresDir(tddDir);
+  const candidates = (0, import_fs2.existsSync)(featuresDir2) ? (0, import_fs2.readdirSync)(featuresDir2).filter((d) => d.startsWith(featureId)) : [];
   if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
+    throw new Error(`feature ${featureId} not found under ${featuresDir2}`);
   }
-  const featureDir = (0, import_path2.join)(featuresDir, candidates[0]);
+  const featureDir = (0, import_path2.join)(featuresDir2, candidates[0]);
   const paths = [];
   const pushIfExists = (p) => {
     if ((0, import_fs2.existsSync)(p)) paths.push(p);

@@ -6647,36 +6647,59 @@ init_cjs_shims();
 // scripts/tdd/feature-status.ts
 init_cjs_shims();
 var import_fs6 = require("fs");
-var import_path7 = require("path");
+var import_path5 = require("path");
 
 // scripts/tdd/test-list.ts
 init_cjs_shims();
 var import_fs = require("fs");
-var import_path = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureTestListJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "test-list.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyPlanJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "plan.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+
+// scripts/tdd/test-list.ts
 function readMasterTestList(tddDir, featureId) {
-  const dir = findFeatureDir(tddDir, featureId);
-  const file = (0, import_path.join)(dir, "test-list.json");
+  requireFeatureDir(tddDir, featureId);
+  const file = featureTestListJson(tddDir, featureId);
   if (!(0, import_fs.existsSync)(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
   return JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
 }
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_path.join)(tddDir, "features");
-  if (!(0, import_fs.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path.join)(featuresDir, candidates[0]);
-}
 
 // scripts/tdd/design-spec-gate.ts
 init_cjs_shims();
 var import_fs3 = require("fs");
-var import_path4 = require("path");
 
 // scripts/tdd/run-cycle.ts
 init_cjs_shims();
@@ -6747,7 +6770,7 @@ init_cjs_shims();
 // scripts/tdd/experiment.ts
 init_cjs_shims();
 var import_fs2 = require("fs");
-var import_path2 = require("path");
+var import_path = require("path");
 
 // scripts/lakebase/convention-branches.ts
 init_cjs_shims();
@@ -6777,7 +6800,7 @@ var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.exe
 
 // scripts/lakebase/paired-branch.ts
 init_cjs_shims();
-var fs3 = __toESM(require("fs"), 1);
+var fs4 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -6793,12 +6816,12 @@ var import_node_child_process6 = require("child_process");
 
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
-var fs = __toESM(require("fs"), 1);
+var fs2 = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 
 // scripts/lakebase/databricks-profile.ts
 init_cjs_shims();
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 
 // scripts/util/exec.ts
 init_cjs_shims();
@@ -6814,24 +6837,24 @@ var CONVENTION_TIER_DEFAULTS = {
 
 // scripts/tdd/experiment.ts
 function experimentsRoot(tddDir, featureId, storyId) {
-  return (0, import_path2.join)(tddDir, "experiments", featureId, storyId);
+  return (0, import_path.join)(tddDir, "experiments", featureId, storyId);
 }
 function experimentDir(tddDir, featureId, storyId, slug) {
-  return (0, import_path2.join)(experimentsRoot(tddDir, featureId, storyId), slug);
+  return (0, import_path.join)(experimentsRoot(tddDir, featureId, storyId), slug);
 }
 function listExperimentStories(tddDir, featureId) {
-  const root = (0, import_path2.join)(tddDir, "experiments", featureId);
+  const root = (0, import_path.join)(tddDir, "experiments", featureId);
   if (!(0, import_fs2.existsSync)(root)) return [];
-  return (0, import_fs2.readdirSync)(root).filter((d) => (0, import_fs2.statSync)((0, import_path2.join)(root, d)).isDirectory()).sort();
+  return (0, import_fs2.readdirSync)(root).filter((d) => (0, import_fs2.statSync)((0, import_path.join)(root, d)).isDirectory()).sort();
 }
 function listExperiments(tddDir, featureId, storyId) {
   const root = experimentsRoot(tddDir, featureId, storyId);
   if (!(0, import_fs2.existsSync)(root)) return [];
   const out = [];
   for (const slug of (0, import_fs2.readdirSync)(root)) {
-    const dir = (0, import_path2.join)(root, slug);
+    const dir = (0, import_path.join)(root, slug);
     if (!(0, import_fs2.statSync)(dir).isDirectory()) continue;
-    const branchFile = (0, import_path2.join)(dir, "branch.txt");
+    const branchFile = (0, import_path.join)(dir, "branch.txt");
     if (!(0, import_fs2.existsSync)(branchFile)) continue;
     out.push({
       feature_id: featureId,
@@ -6845,7 +6868,7 @@ function listExperiments(tddDir, featureId, storyId) {
   return out;
 }
 function readOutcomes(tddDir, featureId, storyId, slug) {
-  const file = (0, import_path2.join)(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
+  const file = (0, import_path.join)(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
   if (!(0, import_fs2.existsSync)(file)) return null;
   return JSON.parse((0, import_fs2.readFileSync)(file, "utf8"));
 }
@@ -6855,9 +6878,9 @@ init_cjs_shims();
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_path3 = require("path");
+var import_path2 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path3.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 
 // scripts/tdd/spike-carryforward.ts
@@ -6865,7 +6888,7 @@ init_cjs_shims();
 
 // scripts/tdd/design-spec-gate.ts
 function readPlan(tddDir, featureId, storyId) {
-  const planPath = (0, import_path4.join)(tddDir, "features", featureId, "stories", storyId, "plan.json");
+  const planPath = storyPlanJson(tddDir, featureId, storyId);
   if (!(0, import_fs3.existsSync)(planPath)) return null;
   return JSON.parse((0, import_fs3.readFileSync)(planPath, "utf8"));
 }
@@ -6873,9 +6896,9 @@ function readPlan(tddDir, featureId, storyId) {
 // scripts/tdd/smells.ts
 init_cjs_shims();
 var import_fs4 = require("fs");
-var import_path5 = require("path");
+var import_path3 = require("path");
 function readSmellsLog(tddDir) {
-  const file = (0, import_path5.join)(tddDir, "smells.json");
+  const file = (0, import_path3.join)(tddDir, "smells.json");
   if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
   return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
 }
@@ -6883,7 +6906,7 @@ function readSmellsLog(tddDir) {
 // scripts/tdd/gates.ts
 init_cjs_shims();
 var import_fs5 = require("fs");
-var import_path6 = require("path");
+var import_path4 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
@@ -6917,18 +6940,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path6.join)(findFeatureDir2(tddDir, featureId), "gates.json");
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = (0, import_path6.join)(tddDir, "features");
-  if (!(0, import_fs5.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs5.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path6.join)(featuresDir, candidates[0]);
+  return (0, import_path4.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -6993,13 +7005,13 @@ function readJsonIfExists(path3) {
   return JSON.parse((0, import_fs6.readFileSync)(path3, "utf8"));
 }
 function listFeatureStories(tddDir, featureId) {
-  const storiesDir = (0, import_path7.join)(tddDir, "features", featureId, "stories");
-  if (!(0, import_fs6.existsSync)(storiesDir)) return [];
-  return (0, import_fs6.readdirSync)(storiesDir).filter((d) => (0, import_fs6.statSync)((0, import_path7.join)(storiesDir, d)).isDirectory()).sort();
+  const storiesDir2 = storiesDir(tddDir, featureId);
+  if (!(0, import_fs6.existsSync)(storiesDir2)) return [];
+  return (0, import_fs6.readdirSync)(storiesDir2).filter((d) => (0, import_fs6.statSync)((0, import_path5.join)(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    (0, import_path7.join)(experimentDir2, "timeline.json")
+    (0, import_path5.join)(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -7026,7 +7038,7 @@ function summarizeTestList(tddDir, featureId) {
   }
 }
 function readSelectionLogRecent(tddDir, limit) {
-  const path3 = (0, import_path7.join)(tddDir, "selection-log.md");
+  const path3 = (0, import_path5.join)(tddDir, "selection-log.md");
   if (!(0, import_fs6.existsSync)(path3)) return [];
   const text = (0, import_fs6.readFileSync)(path3, "utf8");
   const entries = [];
@@ -7055,7 +7067,7 @@ function readGatesSummary(tddDir, featureId) {
   }
 }
 function readWorkflowState(tddDir) {
-  const state = readJsonIfExists((0, import_path7.join)(tddDir, "workflow-state.json"));
+  const state = readJsonIfExists((0, import_path5.join)(tddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,

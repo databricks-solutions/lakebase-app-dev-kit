@@ -1,9 +1,61 @@
 #!/usr/bin/env node
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
 // scripts/tdd/story-pipeline.ts
 var import_fs = require("fs");
 var import_path = require("path");
+
+// scripts/tdd/tdd-paths.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/story-pipeline.ts
 var STORY_STATUSES = [
   "designing",
   "awaiting-gate",
@@ -17,7 +69,7 @@ function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return (0, import_path.join)(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
@@ -35,14 +87,14 @@ function setStoryStatus(pipeline, storyId, status) {
   return pipeline;
 }
 function syncBreakdownToPipeline(tddDir, featureId) {
-  const storiesDir = (0, import_path.join)(tddDir, "features", featureId, "stories");
+  const storiesDir2 = storiesDir(tddDir, featureId);
   const pipeline = readPipeline(tddDir, featureId);
   const added = [];
-  if ((0, import_fs.existsSync)(storiesDir)) {
-    for (const storyId of (0, import_fs.readdirSync)(storiesDir).sort()) {
+  if ((0, import_fs.existsSync)(storiesDir2)) {
+    for (const storyId of (0, import_fs.readdirSync)(storiesDir2).sort()) {
       let isDir = false;
       try {
-        isDir = (0, import_fs.statSync)((0, import_path.join)(storiesDir, storyId)).isDirectory();
+        isDir = (0, import_fs.statSync)((0, import_path.join)(storiesDir2, storyId)).isDirectory();
       } catch {
         isDir = false;
       }
@@ -77,15 +129,15 @@ function completeActive(pipeline) {
   return done;
 }
 function storyHasAcceptanceCriteria(tddDir, featureId, storyId) {
-  const acsDir = (0, import_path.join)(tddDir, "features", featureId, "stories", storyId, "acs");
-  if (!(0, import_fs.existsSync)(acsDir)) return false;
-  return (0, import_fs.readdirSync)(acsDir).some((f) => f.endsWith(".json"));
+  const acsDir2 = acsDir(tddDir, featureId, storyId);
+  if (!(0, import_fs.existsSync)(acsDir2)) return false;
+  return (0, import_fs.readdirSync)(acsDir2).some((f) => f.endsWith(".json"));
 }
 function findBatchedDraftStories(tddDir, featureId, pipeline, gatingStoryId) {
-  const storiesDir = (0, import_path.join)(tddDir, "features", featureId, "stories");
-  if (!(0, import_fs.existsSync)(storiesDir)) return [];
+  const storiesDir2 = storiesDir(tddDir, featureId);
+  if (!(0, import_fs.existsSync)(storiesDir2)) return [];
   const offenders = [];
-  for (const storyId of (0, import_fs.readdirSync)(storiesDir)) {
+  for (const storyId of (0, import_fs.readdirSync)(storiesDir2)) {
     if (storyId === gatingStoryId) continue;
     if (!storyHasAcceptanceCriteria(tddDir, featureId, storyId)) continue;
     const status = pipeline.stories[storyId]?.status;

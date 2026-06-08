@@ -6673,13 +6673,13 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/human-proxy.ts
 init_esm_shims();
-import { existsSync as existsSync5, readFileSync as readFileSync6, writeFileSync as writeFileSync4, mkdirSync as mkdirSync2 } from "fs";
-import { join as join6, dirname, basename } from "path";
+import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5, mkdirSync as mkdirSync3 } from "fs";
+import { join as join7, dirname, basename } from "path";
 
 // scripts/tdd/approve-gate.ts
 init_esm_shims();
-import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3 } from "path";
+import { existsSync as existsSync4, readFileSync as readFileSync4, writeFileSync as writeFileSync4 } from "fs";
+import { join as join4 } from "path";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -6696,8 +6696,36 @@ function hashArtifact(content) {
 
 // scripts/tdd/gates-lock.ts
 init_esm_shims();
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
+import { closeSync, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2 } from "fs";
+import { join as join2 } from "path";
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
 import { join } from "path";
+var featuresDir = (tdd) => join(tdd, "features");
+var planningDir = (tdd) => join(tdd, "planning");
+var sprintsDir = (tdd) => join(tdd, "sprints");
+var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
+var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
+var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+
+// scripts/tdd/gates-lock.ts
 var GatesLockBusyError = class extends Error {
   constructor(featureId, heldByPid, retries) {
     super(
@@ -6723,7 +6751,7 @@ function withGatesLock(featureId, fn, opts = {}) {
   while (!acquired && attempts <= maxRetries) {
     try {
       const fd = openSync(lockPath, "wx");
-      writeFileSync(fd, String(process.pid));
+      writeFileSync2(fd, String(process.pid));
       closeSync(fd);
       acquired = true;
     } catch (err) {
@@ -6750,7 +6778,7 @@ function isEexist(err) {
 }
 function readHeldByPid(lockPath) {
   try {
-    const text = readFileSync(lockPath, "utf8");
+    const text = readFileSync2(lockPath, "utf8");
     const n = Number(text.trim());
     return Number.isFinite(n) && n > 0 ? n : null;
   } catch {
@@ -6758,20 +6786,9 @@ function readHeldByPid(lockPath) {
   }
 }
 function gatesLockFilePath(tddDir, featureId) {
-  const dir = findFeatureDir(tddDir, featureId);
-  mkdirSync(dir, { recursive: true });
-  return join(dir, ".gates.lock");
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join(featuresDir, candidates[0]);
+  const dir = requireFeatureDir(tddDir, featureId);
+  mkdirSync2(dir, { recursive: true });
+  return join2(dir, ".gates.lock");
 }
 function defaultSleep(ms) {
   const buf = new Int32Array(new SharedArrayBuffer(4));
@@ -6780,8 +6797,8 @@ function defaultSleep(ms) {
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync as readdirSync2, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync2 } from "fs";
-import { join as join2 } from "path";
+import { existsSync as existsSync3, readFileSync as readFileSync3, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync3 } from "fs";
+import { join as join3 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
@@ -6801,10 +6818,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync2(file)) {
+  if (!existsSync3(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync2(file, "utf8");
+  const raw = readFileSync3(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -6822,7 +6839,7 @@ function writeGates(state, opts = {}) {
   const file = gatesFilePath(tddDir, state.feature_id);
   const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
   const payload = JSON.stringify(state, null, 2) + "\n";
-  writeFileSync2(tempFile, payload, "utf8");
+  writeFileSync3(tempFile, payload, "utf8");
   try {
     renameSync(tempFile, file);
   } catch (err) {
@@ -6834,18 +6851,7 @@ function writeGates(state, opts = {}) {
   }
 }
 function gatesFilePath(tddDir, featureId) {
-  return join2(findFeatureDir2(tddDir, featureId), "gates.json");
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = join2(tddDir, "features");
-  if (!existsSync2(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync2(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join2(featuresDir, candidates[0]);
+  return join3(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -6982,7 +6988,7 @@ function approveGate(args) {
   );
 }
 function appendSelectionLog(tddDir, entry) {
-  const logPath = join3(tddDir, "selection-log.md");
+  const logPath = join4(tddDir, "selection-log.md");
   const hashList = Object.entries(entry.capturedHashes).map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``).join("\n");
   const lines = [
     "",
@@ -6993,10 +6999,10 @@ function appendSelectionLog(tddDir, entry) {
     ""
   ];
   const text = lines.join("\n");
-  if (existsSync3(logPath)) {
-    writeFileSync3(logPath, readFileSync3(logPath, "utf8") + text);
+  if (existsSync4(logPath)) {
+    writeFileSync4(logPath, readFileSync4(logPath, "utf8") + text);
   } else {
-    writeFileSync3(logPath, text);
+    writeFileSync4(logPath, text);
   }
 }
 
@@ -7006,13 +7012,13 @@ init_esm_shims();
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync4 } from "fs";
-import { join as join4 } from "path";
-var SCHEMA_DIR = join4(__dirname, "schemas");
+import { readFileSync as readFileSync5 } from "fs";
+import { join as join5 } from "path";
+var SCHEMA_DIR = join5(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse(readFileSync4(join4(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse(readFileSync5(join5(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7207,10 +7213,10 @@ function checkTestListMd(content) {
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync4, readFileSync as readFileSync5 } from "fs";
-import { join as join5 } from "path";
+import { appendFileSync, existsSync as existsSync5, readFileSync as readFileSync6 } from "fs";
+import { join as join6 } from "path";
 function logFilePath(tddDir) {
-  return join5(tddDir, "agent-log.jsonl");
+  return join6(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7257,8 +7263,8 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
   }
 }
 var HUMAN_PROXY = "human-proxy";
-function featureDir(tddDir, featureId) {
-  return join6(tddDir, "features", featureId);
+function featureDir2(tddDir, featureId) {
+  return featureResolved(tddDir, featureId);
 }
 function conformanceReason(inputs) {
   const problems = [];
@@ -7270,9 +7276,9 @@ function conformanceReason(inputs) {
 }
 function resolveArtifactInputs(gate, fdir, promoteRef) {
   const readIfPresent = (name) => {
-    const p = join6(fdir, name);
+    const p = join7(fdir, name);
     try {
-      return existsSync5(p) ? readFileSync6(p, "utf8") : void 0;
+      return existsSync6(p) ? readFileSync7(p, "utf8") : void 0;
     } catch {
       return void 0;
     }
@@ -7345,7 +7351,7 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
 function drainGatesAsHumanProxy(args) {
   const tddDir = args.tddDir ?? "./.tdd";
   const approver = args.approver ?? HUMAN_PROXY;
-  const fdir = featureDir(tddDir, args.featureId);
+  const fdir = featureDir2(tddDir, args.featureId);
   let state = readGates(args.featureId, { tddDir });
   const approved = [];
   const skipped = [];
@@ -7405,16 +7411,16 @@ function supplyArtifact(args) {
     }
     return { ok: false, artifact, to: args.to, reason };
   };
-  if (!existsSync5(args.from)) {
+  if (!existsSync6(args.from)) {
     return refuse(`recorded source not found: ${args.from}`);
   }
-  const content = readFileSync6(args.from, "utf8");
+  const content = readFileSync7(args.from, "utf8");
   const conformance = checkArtifactConformance(artifact, content);
   if (!conformance.ok) {
     return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
   }
-  mkdirSync2(dirname(args.to), { recursive: true });
-  writeFileSync4(args.to, content);
+  mkdirSync3(dirname(args.to), { recursive: true });
+  writeFileSync5(args.to, content);
   try {
     emitAgentLogEvent(
       {
@@ -7434,8 +7440,7 @@ function supplyArtifact(args) {
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync6, mkdirSync as mkdirSync3, readFileSync as readFileSync7, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync5 } from "fs";
-import { join as join7 } from "path";
+import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync8, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "fs";
 var SPRINT_GATES_SCHEMA_VERSION = 1;
 var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
@@ -7445,25 +7450,16 @@ function defaultSprintGatesState(sprint) {
     gates: { plan: { status: "open", history: [] } }
   };
 }
-function sprintDir(tddDir, sprint) {
-  return join7(tddDir, "sprints", sprint);
-}
-function sprintProposalPath(tddDir, sprint) {
-  const scoped = join7(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
-  if (existsSync6(scoped)) return scoped;
-  const planning = join7(tddDir, "planning", PLAN_GATE_ARTIFACT);
-  return existsSync6(planning) ? planning : scoped;
-}
 function sprintGatesFile(tddDir, sprint) {
-  return join7(sprintDir(tddDir, sprint), "gates.json");
+  return sprintGatesJson(tddDir, sprint);
 }
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync6(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync7(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync7(file, "utf8"));
+    parsed = JSON.parse(readFileSync8(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -7477,11 +7473,10 @@ function readSprintGates(sprint, opts = {}) {
 }
 function writeSprintGates(state, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
-  const dir = sprintDir(tddDir, state.sprint);
-  mkdirSync3(dir, { recursive: true });
-  const file = join7(dir, "gates.json");
+  mkdirSync4(sprintDir(tddDir, state.sprint), { recursive: true });
+  const file = sprintGatesJson(tddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync5(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  writeFileSync6(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
     renameSync2(tmp, file);
   } catch (err) {
@@ -7496,11 +7491,11 @@ function approveSprintPlanGate(args) {
   if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const tddDir = args.tddDir ?? "./.tdd";
-  const file = sprintProposalPath(tddDir, args.sprint);
-  if (!existsSync6(file)) {
+  const file = featureProposalsMd(tddDir);
+  if (!existsSync7(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }
-  const content = readFileSync7(file, "utf8");
+  const content = readFileSync8(file, "utf8");
   const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
   if (!conf.ok) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };

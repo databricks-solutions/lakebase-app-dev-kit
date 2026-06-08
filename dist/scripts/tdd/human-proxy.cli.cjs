@@ -6682,7 +6682,7 @@ function isCliEntry(importMetaUrl2) {
 // scripts/tdd/human-proxy.ts
 init_cjs_shims();
 var import_node_fs2 = require("fs");
-var import_node_path = require("path");
+var import_node_path2 = require("path");
 
 // scripts/tdd/approve-gate.ts
 init_cjs_shims();
@@ -6706,6 +6706,34 @@ function hashArtifact(content) {
 init_cjs_shims();
 var import_fs = require("fs");
 var import_path = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
+var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
+var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
+var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+
+// scripts/tdd/gates-lock.ts
 var GatesLockBusyError = class extends Error {
   constructor(featureId, heldByPid, retries) {
     super(
@@ -6766,20 +6794,9 @@ function readHeldByPid(lockPath) {
   }
 }
 function gatesLockFilePath(tddDir, featureId) {
-  const dir = findFeatureDir(tddDir, featureId);
+  const dir = requireFeatureDir(tddDir, featureId);
   (0, import_fs.mkdirSync)(dir, { recursive: true });
   return (0, import_path.join)(dir, ".gates.lock");
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_path.join)(tddDir, "features");
-  if (!(0, import_fs.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path.join)(featuresDir, candidates[0]);
 }
 function defaultSleep(ms) {
   const buf = new Int32Array(new SharedArrayBuffer(4));
@@ -6842,18 +6859,7 @@ function writeGates(state, opts = {}) {
   }
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path2.join)(findFeatureDir2(tddDir, featureId), "gates.json");
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = (0, import_path2.join)(tddDir, "features");
-  if (!(0, import_fs2.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs2.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path2.join)(featuresDir, candidates[0]);
+  return (0, import_path2.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7265,8 +7271,8 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
   }
 }
 var HUMAN_PROXY = "human-proxy";
-function featureDir(tddDir, featureId) {
-  return (0, import_node_path.join)(tddDir, "features", featureId);
+function featureDir2(tddDir, featureId) {
+  return featureResolved(tddDir, featureId);
 }
 function conformanceReason(inputs) {
   const problems = [];
@@ -7278,7 +7284,7 @@ function conformanceReason(inputs) {
 }
 function resolveArtifactInputs(gate, fdir, promoteRef) {
   const readIfPresent = (name) => {
-    const p = (0, import_node_path.join)(fdir, name);
+    const p = (0, import_node_path2.join)(fdir, name);
     try {
       return (0, import_node_fs2.existsSync)(p) ? (0, import_node_fs2.readFileSync)(p, "utf8") : void 0;
     } catch {
@@ -7353,7 +7359,7 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
 function drainGatesAsHumanProxy(args) {
   const tddDir = args.tddDir ?? "./.tdd";
   const approver = args.approver ?? HUMAN_PROXY;
-  const fdir = featureDir(tddDir, args.featureId);
+  const fdir = featureDir2(tddDir, args.featureId);
   let state = readGates(args.featureId, { tddDir });
   const approved = [];
   const skipped = [];
@@ -7394,7 +7400,7 @@ function drainGatesAsHumanProxy(args) {
 }
 function supplyArtifact(args) {
   const approver = args.approver ?? HUMAN_PROXY;
-  const artifact = args.artifact ?? (0, import_node_path.basename)(args.to);
+  const artifact = args.artifact ?? (0, import_node_path2.basename)(args.to);
   const tddDir = args.tddDir ?? "./.tdd";
   const refuse = (reason) => {
     try {
@@ -7421,7 +7427,7 @@ function supplyArtifact(args) {
   if (!conformance.ok) {
     return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
   }
-  (0, import_node_fs2.mkdirSync)((0, import_node_path.dirname)(args.to), { recursive: true });
+  (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(args.to), { recursive: true });
   (0, import_node_fs2.writeFileSync)(args.to, content);
   try {
     emitAgentLogEvent(
@@ -7443,7 +7449,6 @@ function supplyArtifact(args) {
 // scripts/tdd/sprint-gates.ts
 init_cjs_shims();
 var import_node_fs3 = require("fs");
-var import_node_path2 = require("path");
 var SPRINT_GATES_SCHEMA_VERSION = 1;
 var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
@@ -7453,17 +7458,8 @@ function defaultSprintGatesState(sprint) {
     gates: { plan: { status: "open", history: [] } }
   };
 }
-function sprintDir(tddDir, sprint) {
-  return (0, import_node_path2.join)(tddDir, "sprints", sprint);
-}
-function sprintProposalPath(tddDir, sprint) {
-  const scoped = (0, import_node_path2.join)(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
-  if ((0, import_node_fs3.existsSync)(scoped)) return scoped;
-  const planning = (0, import_node_path2.join)(tddDir, "planning", PLAN_GATE_ARTIFACT);
-  return (0, import_node_fs3.existsSync)(planning) ? planning : scoped;
-}
 function sprintGatesFile(tddDir, sprint) {
-  return (0, import_node_path2.join)(sprintDir(tddDir, sprint), "gates.json");
+  return sprintGatesJson(tddDir, sprint);
 }
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7485,9 +7481,8 @@ function readSprintGates(sprint, opts = {}) {
 }
 function writeSprintGates(state, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
-  const dir = sprintDir(tddDir, state.sprint);
-  (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
-  const file = (0, import_node_path2.join)(dir, "gates.json");
+  (0, import_node_fs3.mkdirSync)(sprintDir(tddDir, state.sprint), { recursive: true });
+  const file = sprintGatesJson(tddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
   (0, import_node_fs3.writeFileSync)(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
@@ -7504,7 +7499,7 @@ function approveSprintPlanGate(args) {
   if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const tddDir = args.tddDir ?? "./.tdd";
-  const file = sprintProposalPath(tddDir, args.sprint);
+  const file = featureProposalsMd(tddDir);
   if (!(0, import_node_fs3.existsSync)(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }

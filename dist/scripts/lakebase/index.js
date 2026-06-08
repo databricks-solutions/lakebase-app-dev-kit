@@ -7332,44 +7332,61 @@ function parentForTopology(t, defaultLeaf) {
 }
 
 // scripts/lakebase/scm-doctor.ts
-import * as fs27 from "fs";
+import * as fs28 from "fs";
 import * as path27 from "path";
 
 // scripts/tdd/stale-branches.ts
-import { existsSync as existsSync28, readdirSync as readdirSync14, statSync as statSync8 } from "fs";
+import { existsSync as existsSync29, readdirSync as readdirSync15, statSync as statSync9 } from "fs";
 import { join as join30 } from "path";
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync as existsSync26, readFileSync as readFileSync15, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, readdirSync as readdirSync12, statSync as statSync6 } from "fs";
-import { dirname as dirname9, join as join28 } from "path";
+import { existsSync as existsSync27, readFileSync as readFileSync16, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
+
+// scripts/tdd/tdd-paths.ts
+import * as fs27 from "fs";
+import { join as join28 } from "path";
+var featuresDir = (tdd) => join28(tdd, "features");
+var featureDir = (tdd, featureId) => join28(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => join28(featureResolved(tdd, f), "pipeline.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs27.existsSync(root)) return void 0;
+  const exact = join28(root, featureId);
+  if (fs27.existsSync(exact)) return exact;
+  const matches = fs27.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join28(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return join28(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync26(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync15(p, "utf8"));
+  if (!existsSync27(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync16(p, "utf8"));
 }
 
 // scripts/tdd/spike.ts
-import { existsSync as existsSync27, mkdirSync as mkdirSync15, readdirSync as readdirSync13, readFileSync as readFileSync16, statSync as statSync7, writeFileSync as writeFileSync17 } from "fs";
+import { existsSync as existsSync28, mkdirSync as mkdirSync16, readdirSync as readdirSync14, readFileSync as readFileSync17, statSync as statSync8, writeFileSync as writeFileSync18 } from "fs";
 import { join as join29 } from "path";
 function listSpikes(tddDir) {
   const root = join29(tddDir, "spikes");
-  if (!existsSync27(root)) return [];
+  if (!existsSync28(root)) return [];
   const out = [];
-  for (const slug of readdirSync13(root)) {
+  for (const slug of readdirSync14(root)) {
     const dir = join29(root, slug);
-    if (!statSync7(dir).isDirectory()) continue;
+    if (!statSync8(dir).isDirectory()) continue;
     const branchFile = join29(dir, "branch.txt");
-    if (!existsSync27(branchFile)) continue;
+    if (!existsSync28(branchFile)) continue;
     out.push({
       spike_slug: slug,
-      branch_id: readFileSync16(branchFile, "utf8").trim(),
-      created_at: statSync7(branchFile).birthtime.toISOString(),
+      branch_id: readFileSync17(branchFile, "utf8").trim(),
+      created_at: statSync8(branchFile).birthtime.toISOString(),
       dir
     });
   }
@@ -7378,9 +7395,9 @@ function listSpikes(tddDir) {
 
 // scripts/tdd/stale-branches.ts
 function listPipelineFeatures(tddDir) {
-  const featuresDir = join30(tddDir, "features");
-  if (!existsSync28(featuresDir)) return [];
-  return readdirSync14(featuresDir).filter((d) => statSync8(join30(featuresDir, d)).isDirectory()).filter((d) => existsSync28(join30(featuresDir, d, "pipeline.json"))).sort();
+  const featuresDir2 = featuresDir(tddDir);
+  if (!existsSync29(featuresDir2)) return [];
+  return readdirSync15(featuresDir2).filter((d) => statSync9(join30(featuresDir2, d)).isDirectory()).filter((d) => existsSync29(join30(featuresDir2, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];
@@ -7419,8 +7436,8 @@ var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
 function readEnv(projectDir) {
   const envPath = path27.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
-  if (!fs27.existsSync(envPath)) return out;
-  const lines = fs27.readFileSync(envPath, "utf8").split("\n");
+  if (!fs28.existsSync(envPath)) return out;
+  const lines = fs28.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
     if (m) out.set(m[1], m[2].replace(/^["']|["']$/g, ""));
@@ -7784,7 +7801,7 @@ function escapeShellArg5(s) {
 }
 
 // scripts/lakebase/update-commands.ts
-import * as fs28 from "fs";
+import * as fs29 from "fs";
 import * as path28 from "path";
 var COMMAND_HOOK_FILE_PATTERN = /\.(pre|post)-hook\.md$/;
 function findKitCommandsDir(start) {
@@ -7798,7 +7815,7 @@ function findKitCommandsDir(start) {
       ".claude",
       "commands"
     );
-    if (fs28.existsSync(candidate)) return candidate;
+    if (fs29.existsSync(candidate)) return candidate;
     const parent = path28.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7813,7 +7830,7 @@ function readKitVersion(kitCommandsDir) {
     dir = path28.dirname(dir);
   }
   try {
-    const raw = fs28.readFileSync(path28.join(dir, "package.json"), "utf-8");
+    const raw = fs29.readFileSync(path28.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7829,19 +7846,19 @@ function updateCommands(args) {
   const kitCommandsDir = args.kitDir ? path28.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir(here);
   const dryRun = args.dryRun === true;
   const force = args.force !== false;
-  const templateFiles = fs28.existsSync(kitCommandsDir) ? fs28.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs28.existsSync(projectCommandsDir)) {
-    fs28.mkdirSync(projectCommandsDir, { recursive: true });
+  const templateFiles = fs29.existsSync(kitCommandsDir) ? fs29.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs29.existsSync(projectCommandsDir)) {
+    fs29.mkdirSync(projectCommandsDir, { recursive: true });
   }
   const version = readKitVersion(kitCommandsDir);
   const files = [];
   for (const name of templateFiles) {
     const projectPath2 = path28.join(projectCommandsDir, name);
     const templatePath = path28.join(kitCommandsDir, name);
-    const templateRaw = fs28.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs29.readFileSync(templatePath, "utf-8");
     const desired = applyCommandPlaceholders(templateRaw, version);
-    const existed = fs28.existsSync(projectPath2);
-    const current = existed ? fs28.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs29.existsSync(projectPath2);
+    const current = existed ? fs29.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -7853,7 +7870,7 @@ function updateCommands(args) {
       outcome = "updated";
     }
     if (!dryRun && (outcome === "added" || outcome === "updated")) {
-      fs28.writeFileSync(projectPath2, desired);
+      fs29.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -7869,7 +7886,7 @@ function updateCommands(args) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-import * as fs29 from "fs";
+import * as fs30 from "fs";
 import * as path29 from "path";
 function findKitTemplatesDir(start) {
   let dir = start;
@@ -7882,7 +7899,7 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs29.existsSync(candidate)) return candidate;
+    if (fs30.existsSync(candidate)) return candidate;
     const parent = path29.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7921,20 +7938,20 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs30.existsSync(kitWorkflowsDir) ? fs30.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs30.existsSync(projectWorkflowsDir) ? fs30.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path29.join(projectWorkflowsDir, name);
     const templatePath = path29.join(kitWorkflowsDir, name);
-    if (!fs29.existsSync(projectPath2)) {
+    if (!fs30.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs29.readFileSync(projectPath2, "utf8");
-    const templateContent = fs29.readFileSync(templatePath, "utf8");
+    const projectContent = fs30.readFileSync(projectPath2, "utf8");
+    const templateContent = fs30.readFileSync(templatePath, "utf8");
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -7968,7 +7985,7 @@ function readKitVersion2(kitWorkflowsDir) {
     dir = path29.dirname(dir);
   }
   try {
-    const raw = fs29.readFileSync(path29.join(dir, "package.json"), "utf-8");
+    const raw = fs30.readFileSync(path29.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7993,7 +8010,7 @@ function findKitCommandsDir2(start) {
       ".claude",
       "commands"
     );
-    if (fs29.existsSync(candidate)) return candidate;
+    if (fs30.existsSync(candidate)) return candidate;
     const parent = path29.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -8011,20 +8028,20 @@ function detectCommandDrift(args) {
   const here = path29.dirname(new URL(import.meta.url).pathname);
   const kitCommandsDir = args.kitDir ? path29.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir2(here);
   const kitVersion2 = readKitVersionFromCommandsDir(kitCommandsDir);
-  const templateFiles = fs29.existsSync(kitCommandsDir) ? fs29.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
-  const projectFiles = fs29.existsSync(projectCommandsDir) ? fs29.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const templateFiles = fs30.existsSync(kitCommandsDir) ? fs30.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const projectFiles = fs30.existsSync(projectCommandsDir) ? fs30.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path29.join(projectCommandsDir, name);
     const templatePath = path29.join(kitCommandsDir, name);
-    const templateRaw = fs29.readFileSync(templatePath, "utf8");
-    if (!fs29.existsSync(projectPath2)) {
+    const templateRaw = fs30.readFileSync(templatePath, "utf8");
+    if (!fs30.existsSync(projectPath2)) {
       files.push({ name, status: "missing", kit_version: kitVersion2 });
       continue;
     }
-    const projectContent = fs29.readFileSync(projectPath2, "utf8");
+    const projectContent = fs30.readFileSync(projectPath2, "utf8");
     const pinned = parsePinnedVersion(projectContent);
     const versionForCompare = pinned ?? kitVersion2;
     const templateContent = applyCommandPlaceholders2(templateRaw, versionForCompare);
@@ -8065,7 +8082,7 @@ function readKitVersionFromCommandsDir(kitCommandsDir) {
     dir = path29.dirname(dir);
   }
   try {
-    const raw = fs29.readFileSync(path29.join(dir, "package.json"), "utf-8");
+    const raw = fs30.readFileSync(path29.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -8099,10 +8116,10 @@ function updateWorkflows(args) {
   const substitute = args.substitute !== false;
   const dryRun = args.dryRun === true;
   const pruneExtras = args.pruneExtras === true;
-  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs29.existsSync(projectWorkflowsDir)) {
-    fs29.mkdirSync(projectWorkflowsDir, { recursive: true });
+  const templateFiles = fs30.existsSync(kitWorkflowsDir) ? fs30.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs30.existsSync(projectWorkflowsDir) ? fs30.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs30.existsSync(projectWorkflowsDir)) {
+    fs30.mkdirSync(projectWorkflowsDir, { recursive: true });
   }
   const version = substitute ? readKitVersion2(kitWorkflowsDir) : "";
   const seen = /* @__PURE__ */ new Set();
@@ -8111,10 +8128,10 @@ function updateWorkflows(args) {
     seen.add(name);
     const projectPath2 = path29.join(projectWorkflowsDir, name);
     const templatePath = path29.join(kitWorkflowsDir, name);
-    const templateRaw = fs29.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs30.readFileSync(templatePath, "utf-8");
     const desired = substitute ? applyPlaceholders(templateRaw, version) : templateRaw;
-    const existed = fs29.existsSync(projectPath2);
-    const current = existed ? fs29.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs30.existsSync(projectPath2);
+    const current = existed ? fs30.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -8124,7 +8141,7 @@ function updateWorkflows(args) {
       outcome = "updated";
     }
     if (!dryRun && outcome !== "unchanged") {
-      fs29.writeFileSync(projectPath2, desired);
+      fs30.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -8133,7 +8150,7 @@ function updateWorkflows(args) {
       if (seen.has(name)) continue;
       const projectPath2 = path29.join(projectWorkflowsDir, name);
       if (!dryRun) {
-        fs29.unlinkSync(projectPath2);
+        fs30.unlinkSync(projectPath2);
       }
       files.push({ name, outcome: "removed" });
     }

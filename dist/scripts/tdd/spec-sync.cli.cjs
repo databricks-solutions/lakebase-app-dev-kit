@@ -6668,6 +6668,12 @@ function getValidator(name) {
   return validate;
 }
 
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+
 // scripts/tdd/spec-sync.ts
 function makeValidator() {
   return {
@@ -6688,10 +6694,10 @@ function validateSpec(tddDir) {
       reports.push({ file: wsPath, kind: "schema", detail: JSON.stringify(v.workflowState.errors) });
     }
   }
-  const featuresDir = (0, import_path2.join)(tddDir, "features");
-  if (!(0, import_fs2.existsSync)(featuresDir)) return reports;
-  for (const featureDirName of (0, import_fs2.readdirSync)(featuresDir)) {
-    const featureDir = (0, import_path2.join)(featuresDir, featureDirName);
+  const featuresDir2 = featuresDir(tddDir);
+  if (!(0, import_fs2.existsSync)(featuresDir2)) return reports;
+  for (const featureDirName of (0, import_fs2.readdirSync)(featuresDir2)) {
+    const featureDir = (0, import_path2.join)(featuresDir2, featureDirName);
     if (!(0, import_fs2.statSync)(featureDir).isDirectory()) continue;
     checkPair(featureDir, "feature", v.feature, reports);
     const storiesDir = (0, import_path2.join)(featureDir, "stories");

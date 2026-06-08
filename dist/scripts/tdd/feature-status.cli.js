@@ -6651,37 +6651,60 @@ init_esm_shims();
 
 // scripts/tdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync9, readdirSync as readdirSync4, statSync as statSync3 } from "fs";
-import { join as join9 } from "path";
+import { existsSync as existsSync10, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync4 } from "fs";
+import { join as join8 } from "path";
 
 // scripts/tdd/test-list.ts
 init_esm_shims();
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
-import { join, dirname } from "path";
+import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join } from "path";
+var featuresDir = (tdd) => join(tdd, "features");
+var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
+var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyPlanJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "plan.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+
+// scripts/tdd/test-list.ts
 function readMasterTestList(tddDir, featureId) {
-  const dir = findFeatureDir(tddDir, featureId);
-  const file = join(dir, "test-list.json");
-  if (!existsSync(file)) {
+  requireFeatureDir(tddDir, featureId);
+  const file = featureTestListJson(tddDir, featureId);
+  if (!existsSync2(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
-  return JSON.parse(readFileSync(file, "utf8"));
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join(featuresDir, candidates[0]);
+  return JSON.parse(readFileSync2(file, "utf8"));
 }
 
 // scripts/tdd/design-spec-gate.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4 } from "fs";
-import { dirname as dirname3, join as join6 } from "path";
+import { appendFileSync, existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync6, mkdirSync as mkdirSync5 } from "fs";
 
 // scripts/tdd/run-cycle.ts
 init_esm_shims();
@@ -6751,7 +6774,7 @@ init_esm_shims();
 
 // scripts/tdd/experiment.ts
 init_esm_shims();
-import { existsSync as existsSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2, writeFileSync as writeFileSync4 } from "fs";
+import { existsSync as existsSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3, writeFileSync as writeFileSync5 } from "fs";
 import { join as join4 } from "path";
 
 // scripts/lakebase/convention-branches.ts
@@ -6782,7 +6805,7 @@ var execFileP3 = promisify3(execFile3);
 
 // scripts/lakebase/paired-branch.ts
 init_esm_shims();
-import * as fs3 from "fs";
+import * as fs4 from "fs";
 import * as path3 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
@@ -6798,12 +6821,12 @@ import { execFileSync as execFileSync2 } from "child_process";
 
 // scripts/lakebase/env-file.ts
 init_esm_shims();
-import * as fs from "fs";
+import * as fs2 from "fs";
 import * as path2 from "path";
 
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 
 // scripts/util/exec.ts
 init_esm_shims();
@@ -6826,24 +6849,24 @@ function experimentDir(tddDir, featureId, storyId, slug) {
 }
 function listExperimentStories(tddDir, featureId) {
   const root = join4(tddDir, "experiments", featureId);
-  if (!existsSync5(root)) return [];
-  return readdirSync2(root).filter((d) => statSync2(join4(root, d)).isDirectory()).sort();
+  if (!existsSync6(root)) return [];
+  return readdirSync3(root).filter((d) => statSync3(join4(root, d)).isDirectory()).sort();
 }
 function listExperiments(tddDir, featureId, storyId) {
   const root = experimentsRoot(tddDir, featureId, storyId);
-  if (!existsSync5(root)) return [];
+  if (!existsSync6(root)) return [];
   const out = [];
-  for (const slug of readdirSync2(root)) {
+  for (const slug of readdirSync3(root)) {
     const dir = join4(root, slug);
-    if (!statSync2(dir).isDirectory()) continue;
+    if (!statSync3(dir).isDirectory()) continue;
     const branchFile = join4(dir, "branch.txt");
-    if (!existsSync5(branchFile)) continue;
+    if (!existsSync6(branchFile)) continue;
     out.push({
       feature_id: featureId,
       story_id: storyId,
       experiment_slug: slug,
-      branch_id: readFileSync5(branchFile, "utf8").trim(),
-      created_at: statSync2(branchFile).birthtime.toISOString(),
+      branch_id: readFileSync6(branchFile, "utf8").trim(),
+      created_at: statSync3(branchFile).birthtime.toISOString(),
       dir
     });
   }
@@ -6851,8 +6874,8 @@ function listExperiments(tddDir, featureId, storyId) {
 }
 function readOutcomes(tddDir, featureId, storyId, slug) {
   const file = join4(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
-  if (!existsSync5(file)) return null;
-  return JSON.parse(readFileSync5(file, "utf8"));
+  if (!existsSync6(file)) return null;
+  return JSON.parse(readFileSync6(file, "utf8"));
 }
 
 // scripts/tdd/agent-log.ts
@@ -6870,25 +6893,25 @@ init_esm_shims();
 
 // scripts/tdd/design-spec-gate.ts
 function readPlan(tddDir, featureId, storyId) {
-  const planPath = join6(tddDir, "features", featureId, "stories", storyId, "plan.json");
-  if (!existsSync6(planPath)) return null;
-  return JSON.parse(readFileSync6(planPath, "utf8"));
+  const planPath = storyPlanJson(tddDir, featureId, storyId);
+  if (!existsSync7(planPath)) return null;
+  return JSON.parse(readFileSync7(planPath, "utf8"));
 }
 
 // scripts/tdd/smells.ts
 init_esm_shims();
-import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync6 } from "fs";
-import { join as join7 } from "path";
+import { existsSync as existsSync8, readFileSync as readFileSync8, writeFileSync as writeFileSync7 } from "fs";
+import { join as join6 } from "path";
 function readSmellsLog(tddDir) {
-  const file = join7(tddDir, "smells.json");
-  if (!existsSync7(file)) return { detected: [] };
-  return JSON.parse(readFileSync7(file, "utf8"));
+  const file = join6(tddDir, "smells.json");
+  if (!existsSync8(file)) return { detected: [] };
+  return JSON.parse(readFileSync8(file, "utf8"));
 }
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync8, readFileSync as readFileSync8, readdirSync as readdirSync3, renameSync, unlinkSync, writeFileSync as writeFileSync7 } from "fs";
-import { join as join8 } from "path";
+import { existsSync as existsSync9, readFileSync as readFileSync9, renameSync, unlinkSync, writeFileSync as writeFileSync8 } from "fs";
+import { join as join7 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
@@ -6908,10 +6931,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync8(file)) {
+  if (!existsSync9(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync8(file, "utf8");
+  const raw = readFileSync9(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -6922,18 +6945,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return join8(findFeatureDir2(tddDir, featureId), "gates.json");
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = join8(tddDir, "features");
-  if (!existsSync8(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = readdirSync3(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return join8(featuresDir, candidates[0]);
+  return join7(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -6994,17 +7006,17 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path4) {
-  if (!existsSync9(path4)) return null;
-  return JSON.parse(readFileSync9(path4, "utf8"));
+  if (!existsSync10(path4)) return null;
+  return JSON.parse(readFileSync10(path4, "utf8"));
 }
 function listFeatureStories(tddDir, featureId) {
-  const storiesDir = join9(tddDir, "features", featureId, "stories");
-  if (!existsSync9(storiesDir)) return [];
-  return readdirSync4(storiesDir).filter((d) => statSync3(join9(storiesDir, d)).isDirectory()).sort();
+  const storiesDir2 = storiesDir(tddDir, featureId);
+  if (!existsSync10(storiesDir2)) return [];
+  return readdirSync5(storiesDir2).filter((d) => statSync4(join8(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    join9(experimentDir2, "timeline.json")
+    join8(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -7031,9 +7043,9 @@ function summarizeTestList(tddDir, featureId) {
   }
 }
 function readSelectionLogRecent(tddDir, limit) {
-  const path4 = join9(tddDir, "selection-log.md");
-  if (!existsSync9(path4)) return [];
-  const text = readFileSync9(path4, "utf8");
+  const path4 = join8(tddDir, "selection-log.md");
+  if (!existsSync10(path4)) return [];
+  const text = readFileSync10(path4, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -7060,7 +7072,7 @@ function readGatesSummary(tddDir, featureId) {
   }
 }
 function readWorkflowState(tddDir) {
-  const state = readJsonIfExists(join9(tddDir, "workflow-state.json"));
+  const state = readJsonIfExists(join8(tddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,

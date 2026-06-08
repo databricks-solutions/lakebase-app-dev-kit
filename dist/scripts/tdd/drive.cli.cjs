@@ -3254,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path6) {
-      let input = path6;
+    function removeDotSegments(path5) {
+      let input = path5;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path6, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path6 && path6 !== "/" ? path6 : void 0;
+        const [path5, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6644,8 +6644,8 @@ var require_ajv = __commonJS({
 // scripts/tdd/drive.cli.ts
 init_cjs_shims();
 var import_node_child_process9 = require("child_process");
-var fs6 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
+var fs7 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
 
 // scripts/tdd/orchestrator-run.ts
 init_cjs_shims();
@@ -6679,8 +6679,9 @@ function nextBuildAction(story, b) {
 }
 function nextTransition(state) {
   if (state.phase === "planning") {
-    const p = state.planning ?? { proposed: false, requestsAuthored: false };
+    const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
+    if (!p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
     if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
     if (!p.gateApproved) return { kind: "approve-plan-gate" };
     return { kind: "planning-complete" };
@@ -6871,13 +6872,11 @@ function driverPhaseForTdd(tddPhase) {
 
 // scripts/tdd/orchestrator-probe.ts
 init_cjs_shims();
-var fs4 = __toESM(require("fs"), 1);
+var fs5 = __toESM(require("fs"), 1);
 var path3 = __toESM(require("path"), 1);
 
 // scripts/tdd/run-cycle.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
 
 // scripts/lakebase/get-connection.ts
 init_cjs_shims();
@@ -7057,31 +7056,166 @@ function emitAgentLogEvent(input, opts = {}) {
   return event;
 }
 
-// scripts/tdd/run-cycle.ts
-function readAcLayer(tddDir, featureId, acId) {
-  const featureDir = (0, import_path3.join)(tddDir, "features", featureId);
-  const storiesDir = (0, import_path3.join)(featureDir, "stories");
-  if (!(0, import_fs3.existsSync)(storiesDir)) return void 0;
-  for (const storyDirName of (0, import_fs3.readdirSync)(storiesDir)) {
-    const storyDir2 = (0, import_path3.join)(storiesDir, storyDirName);
-    if (!(0, import_fs3.statSync)(storyDir2).isDirectory()) continue;
-    const acFile = (0, import_path3.join)(storyDir2, "acs", `${acId}.json`);
-    if (!(0, import_fs3.existsSync)(acFile)) continue;
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs4 = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
+var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
+var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
+var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
+var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
+var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
+var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs4.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs4.existsSync(exact)) return exact;
+  const matches = fs4.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
+var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
+var backlogJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "backlog.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs4.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs4.existsSync(exact)) return exact;
+  const matches = fs4.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs4.existsSync(sj)) {
     try {
-      const ac = JSON.parse((0, import_fs3.readFileSync)(acFile, "utf8"));
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") {
-        return ac.layer;
+      const data = JSON.parse(fs4.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
       }
+    } catch {
+    }
+  }
+  const dir = acsDir(tdd, f, s);
+  if (fs4.existsSync(dir)) {
+    try {
+      for (const file of fs4.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (m) ids.add(m[1]);
+      }
+    } catch {
+    }
+  }
+  return [...ids];
+}
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs4.existsSync(stories)) return void 0;
+  for (const s of fs4.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs4.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs4.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
     } catch {
     }
   }
   return void 0;
 }
+var hasFeatureRequest = (tdd, f) => fs4.existsSync(featureRequestMd(tdd, f));
+var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
+var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
+var planningEstimatesJson = (tdd) => (0, import_node_path.join)(planningDir(tdd), "estimates.json");
+function readEstimates(tdd) {
+  const file = planningEstimatesJson(tdd);
+  if (!fs4.existsSync(file)) return [];
+  try {
+    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
+    if (!Array.isArray(data.estimates)) return [];
+    return data.estimates.flatMap((e) => {
+      const id = e?.feature_id;
+      const size = e?.size;
+      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
+      const rationale = e?.rationale;
+      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
+    });
+  } catch {
+    return [];
+  }
+}
+var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
+var backlogFeatureIds = (b) => b.features.map((f) => f.id);
+function readBacklog(tdd, sprint) {
+  const file = backlogJson(tdd, sprint);
+  if (!fs4.existsSync(file)) return { sprint, features: [] };
+  try {
+    const data = JSON.parse(fs4.readFileSync(file, "utf8"));
+    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
+      if (typeof x === "string" && x.length > 0) return [{ id: x }];
+      const id = x?.id;
+      if (typeof id !== "string" || !id) return [];
+      const size = x?.size;
+      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
+    }) : [];
+    return { sprint, features };
+  } catch {
+    return { sprint, features: [] };
+  }
+}
+function writeBacklog(tdd, backlog) {
+  fs4.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
+  fs4.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
+}
+function syncBacklog(tdd, sprint) {
+  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
+  const root = featuresDir(tdd);
+  const committed = fs4.existsSync(root) ? fs4.readdirSync(root).filter((d) => {
+    try {
+      return fs4.statSync((0, import_node_path.join)(root, d)).isDirectory() && fs4.existsSync((0, import_node_path.join)(root, d, "feature-request.md"));
+    } catch {
+      return false;
+    }
+  }).sort() : [];
+  const features = committed.map((id) => {
+    const size = sizeOf.get(id);
+    return { id, ...size ? { size } : {} };
+  });
+  const backlog = { sprint, features };
+  writeBacklog(tdd, backlog);
+  return backlog;
+}
+
+// scripts/tdd/run-cycle.ts
+function readAcLayer2(tddDir, featureId, acId) {
+  return readAcLayer(tddDir, featureId, acId);
+}
 
 // scripts/tdd/gates.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_fs3 = require("fs");
+var import_path3 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7100,10 +7234,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs4.existsSync)(file)) {
+  if (!(0, import_fs3.existsSync)(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs4.readFileSync)(file, "utf8");
+  const raw = (0, import_fs3.readFileSync)(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7114,18 +7248,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path4.join)(findFeatureDir(tddDir, featureId), "gates.json");
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_path4.join)(tddDir, "features");
-  if (!(0, import_fs4.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs4.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path4.join)(featuresDir, candidates[0]);
+  return (0, import_path3.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7187,7 +7310,7 @@ function validateGateRecord(parsed, gateName, file) {
 init_cjs_shims();
 var import_node_child_process8 = require("child_process");
 var import_node_fs = require("fs");
-var import_node_path = require("path");
+var import_node_path2 = require("path");
 
 // scripts/lakebase/deploy-targets.ts
 init_cjs_shims();
@@ -7205,66 +7328,29 @@ function readDeployEvidence(file) {
   }
 }
 function storyDeployVerified(tddDir, featureId, storyId) {
-  const fdir = findFeatureDir2(tddDir, featureId);
+  const fdir = findFeatureDir(tddDir, featureId);
   if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence((0, import_node_path.join)(fdir, "stories", storyId, "deploy-evidence.json")));
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = (0, import_node_path.join)(tddDir, "features");
-  if (!(0, import_node_fs.existsSync)(featuresDir)) return void 0;
-  const match = (0, import_node_fs.readdirSync)(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? (0, import_node_path.join)(featuresDir, match) : void 0;
+  return deployEvidencePasses(readDeployEvidence((0, import_node_path2.join)(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
 // scripts/tdd/orchestrator-probe.ts
-function storyDir(tddDir, featureId, story) {
-  return path3.join(tddDir, "features", featureId, "stories", story);
-}
-function storyAcIds(tddDir, featureId, story) {
-  const dir = storyDir(tddDir, featureId, story);
-  const ids = /* @__PURE__ */ new Set();
-  const file = path3.join(dir, "story.json");
-  if (fs4.existsSync(file)) {
-    try {
-      const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-      if (Array.isArray(data.acs)) {
-        for (const a of data.acs) {
-          const id = typeof a === "string" ? a : a?.id;
-          if (typeof id === "string" && id.length > 0) ids.add(id);
-        }
-      }
-    } catch {
-    }
-  }
-  const acsDir = path3.join(dir, "acs");
-  if (fs4.existsSync(acsDir)) {
-    try {
-      for (const f of fs4.readdirSync(acsDir)) {
-        const m = /^(.+)\.json$/.exec(f);
-        if (m) ids.add(m[1]);
-      }
-    } catch {
-    }
-  }
-  return [...ids];
-}
 function storyCycles(tddDir, featureId, story) {
-  const base = path3.join(tddDir, "cycles", featureId, story);
-  if (!fs4.existsSync(base)) return [];
+  const base = path3.join(cyclesRootDir(tddDir), featureId, story);
+  if (!fs5.existsSync(base)) return [];
   const out = [];
-  for (const acDir of fs4.readdirSync(base)) {
+  for (const acDir of fs5.readdirSync(base)) {
     const dir = path3.join(base, acDir);
     let isDir = false;
     try {
-      isDir = fs4.statSync(dir).isDirectory();
+      isDir = fs5.statSync(dir).isDirectory();
     } catch {
       isDir = false;
     }
     if (!isDir) continue;
-    for (const f of fs4.readdirSync(dir)) {
+    for (const f of fs5.readdirSync(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(fs4.readFileSync(path3.join(dir, f), "utf8")));
+        out.push(JSON.parse(fs5.readFileSync(path3.join(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7272,22 +7358,21 @@ function storyCycles(tddDir, featureId, story) {
   return out;
 }
 function readJson(file) {
-  if (!fs4.existsSync(file)) return void 0;
+  if (!fs5.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs4.readFileSync(file, "utf8"));
+    return JSON.parse(fs5.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
 }
 function readDriveContext(tddDir, featureId) {
-  const ws = readJson(path3.join(tddDir, "workflow-state.json"));
+  const ws = readJson(workflowStateJson(tddDir));
   const tddPhase = typeof ws?.phase === "string" ? ws.phase : "feature";
-  const featureDir = path3.join(tddDir, "features", featureId);
-  const spec = readJson(path3.join(featureDir, "feature-spec.json"));
+  const spec = readJson(featureSpecJson(tddDir, featureId));
   const proposed = spec !== void 0;
   const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs4.existsSync(path3.join(featureDir, "feature-request.md"));
-  const deployed = fs4.existsSync(path3.join(featureDir, "deploy-evidence.json"));
+  const requestsAuthored = fs5.existsSync(featureRequestMd(tddDir, featureId));
+  const deployed = fs5.existsSync(featureDeployEvidenceJson(tddDir, featureId));
   let gateApproved = false;
   try {
     gateApproved = readGates(featureId, { tddDir }).gates.deploy.status === "approved";
@@ -7297,7 +7382,7 @@ function readDriveContext(tddDir, featureId) {
   return {
     phase: driverPhaseForTdd(tddPhase),
     breakdownDone,
-    planning: { proposed, requestsAuthored },
+    planning: { proposed, estimated: hasEstimates(tddDir), requestsAuthored },
     deploy: { deployed, gateApproved }
   };
 }
@@ -7308,14 +7393,14 @@ function diskArtifactProbe(tddDir, featureId) {
     },
     architectAnnotated(story) {
       const acs = storyAcIds(tddDir, featureId, story);
-      return acs.length > 0 && acs.every((ac) => readAcLayer(tddDir, featureId, ac) !== void 0);
+      return acs.length > 0 && acs.every((ac) => readAcLayer2(tddDir, featureId, ac) !== void 0);
     },
     testListReady(story) {
-      const file = path3.join(storyDir(tddDir, featureId, story), "test-list.json");
-      if (!fs4.existsSync(file)) return false;
+      const file = storyTestListJson(tddDir, featureId, story);
+      if (!fs5.existsSync(file)) return false;
       try {
-        const data = JSON.parse(fs4.readFileSync(file, "utf8"));
-        return Array.isArray(data.tests) ? data.tests.length > 0 : true;
+        const data = JSON.parse(fs5.readFileSync(file, "utf8"));
+        return Array.isArray(data.items) && data.items.length > 0;
       } catch {
         return false;
       }
@@ -7335,18 +7420,17 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
+var import_fs4 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return (0, import_path5.join)(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs5.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs5.readFileSync)(p, "utf8"));
+  if (!(0, import_fs4.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs4.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7354,9 +7438,11 @@ function roleTask(action, featureId) {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
-        return `Propose the sprint's feature breakdown for planning.`;
+        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).`;
+      case "estimate":
+        return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
-        return `Author the sprint's feature-requests on the human's behalf.`;
+        return `Commit the sprint backlog: author a feature-request.md for each feature you are pulling into the sprint (informed by the Architect's t-shirt sizes), on the human's behalf.`;
       case "breakdown":
         return `Break feature ${featureId} down into its stories.`;
     }
@@ -7381,6 +7467,7 @@ var PIPELINE_BIN = "lakebase-tdd-pipeline";
 var EXPERIMENT_BIN = "lakebase-tdd-experiment";
 var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 var LOG_BIN = "lakebase-tdd-log";
+var TEST_LIST_BIN = "lakebase-tdd-test-list";
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
@@ -7396,6 +7483,12 @@ function commandsForAction(action, cfg) {
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
+      }
+      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
+        cmds.push({ kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" });
+      }
+      if (!("mode" in action) && action.role === "test-strategist") {
+        cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
       const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "author-requests");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
@@ -7515,13 +7608,10 @@ function buildDriveEffects(cfg) {
 
 // scripts/tdd/orchestrator-sprint.ts
 init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
 
 // scripts/tdd/sprint-gates.ts
 init_cjs_shims();
 var import_node_fs2 = require("fs");
-var import_node_path2 = require("path");
 
 // scripts/tdd/gate-hash.ts
 init_cjs_shims();
@@ -7531,7 +7621,6 @@ init_cjs_shims();
 
 // scripts/tdd/sprint-gates.ts
 var SPRINT_GATES_SCHEMA_VERSION = 1;
-var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
   return {
     sprint,
@@ -7539,17 +7628,8 @@ function defaultSprintGatesState(sprint) {
     gates: { plan: { status: "open", history: [] } }
   };
 }
-function sprintDir(tddDir, sprint) {
-  return (0, import_node_path2.join)(tddDir, "sprints", sprint);
-}
-function sprintProposalPath(tddDir, sprint) {
-  const scoped = (0, import_node_path2.join)(sprintDir(tddDir, sprint), PLAN_GATE_ARTIFACT);
-  if ((0, import_node_fs2.existsSync)(scoped)) return scoped;
-  const planning = (0, import_node_path2.join)(tddDir, "planning", PLAN_GATE_ARTIFACT);
-  return (0, import_node_fs2.existsSync)(planning) ? planning : scoped;
-}
 function sprintGatesFile(tddDir, sprint) {
-  return (0, import_node_path2.join)(sprintDir(tddDir, sprint), "gates.json");
+  return sprintGatesJson(tddDir, sprint);
 }
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7571,33 +7651,12 @@ function readSprintGates(sprint, opts = {}) {
 }
 
 // scripts/tdd/orchestrator-sprint.ts
-function backlogFile(tddDir, sprint) {
-  return path4.join(sprintDir(tddDir, sprint), "backlog.json");
-}
-function readSprintBacklog(tddDir, sprint) {
-  const file = backlogFile(tddDir, sprint);
-  if (!fs5.existsSync(file)) return { sprint, features: [] };
-  try {
-    const data = JSON.parse(fs5.readFileSync(file, "utf8"));
-    const features = Array.isArray(data.features) ? data.features.filter((f) => typeof f === "string" && f.length > 0) : [];
-    return { sprint, features };
-  } catch {
-    return { sprint, features: [] };
-  }
-}
-function findFeatureDir3(tddDir, featureId) {
-  const featuresDir = path4.join(tddDir, "features");
-  if (!fs5.existsSync(featuresDir)) return void 0;
-  const match = fs5.readdirSync(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? path4.join(featuresDir, match) : void 0;
-}
+var fs6 = __toESM(require("fs"), 1);
 function deriveSprintPlanningState(tddDir, sprint) {
-  const proposed = fs5.existsSync(sprintProposalPath(tddDir, sprint));
-  const backlog = readSprintBacklog(tddDir, sprint).features;
-  const requestsAuthored = backlog.length > 0 && backlog.every((f) => {
-    const fdir = findFeatureDir3(tddDir, f);
-    return fdir !== void 0 && fs5.existsSync(path4.join(fdir, "feature-request.md"));
-  });
+  const proposed = fs6.existsSync(featureProposalsMd(tddDir));
+  const estimated = hasEstimates(tddDir);
+  const backlog = readBacklog(tddDir, sprint).features;
+  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
   let gateApproved = false;
   try {
     gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";
@@ -7606,7 +7665,7 @@ function deriveSprintPlanningState(tddDir, sprint) {
   }
   return {
     phase: "planning",
-    planning: { proposed, requestsAuthored, gateApproved },
+    planning: { proposed, estimated, requestsAuthored, gateApproved },
     breakdownDone: false,
     storyOrder: [],
     stories: {},
@@ -7631,8 +7690,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path6 = require("path");
+var import_fs5 = require("fs");
+var import_path4 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -7644,11 +7703,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path6.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path4.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path6.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs6.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs6.readFileSync)(p, "utf8"));
+  const p = (0, import_path4.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs5.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs5.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -7808,18 +7867,18 @@ Flags:
 `;
 }
 function writeWorkflowPhase(tddDir, phase) {
-  const file = path5.join(tddDir, "workflow-state.json");
+  const file = path4.join(tddDir, "workflow-state.json");
   let state = {};
-  if (fs6.existsSync(file)) {
+  if (fs7.existsSync(file)) {
     try {
-      state = JSON.parse(fs6.readFileSync(file, "utf8"));
+      state = JSON.parse(fs7.readFileSync(file, "utf8"));
     } catch {
       state = {};
     }
   }
   state.phase = phase;
-  fs6.mkdirSync(tddDir, { recursive: true });
-  fs6.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+  fs7.mkdirSync(tddDir, { recursive: true });
+  fs7.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve, reject) => {
@@ -7832,13 +7891,18 @@ var KIT_CLI_JS = {
   "lakebase-tdd-pipeline": "story-pipeline.cli.js",
   "lakebase-tdd-experiment": "story-experiment.cli.js",
   "lakebase-tdd-deploy": "deploy.cli.js",
-  "lakebase-tdd-human-proxy": "human-proxy.cli.js"
+  "lakebase-tdd-human-proxy": "human-proxy.cli.js",
+  "lakebase-tdd-test-list": "test-list.cli.js"
 };
 function execRunner(cfg) {
   return {
     async run(cmd) {
       if (cmd.kind === "set-phase") {
         writeWorkflowPhase(cfg.tddDir, cmd.phase);
+        return;
+      }
+      if (cmd.kind === "sync-backlog") {
+        syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
       if (cmd.kind === "claude") {
@@ -7851,7 +7915,7 @@ function execRunner(cfg) {
       }
       const sibling = KIT_CLI_JS[cmd.bin];
       if (sibling) {
-        await spawnCmd("node", [path5.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
+        await spawnCmd("node", [path4.join(__dirname, sibling), ...cmd.args], cfg.projectDir);
       } else {
         await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
       }
@@ -7860,7 +7924,7 @@ function execRunner(cfg) {
 }
 function buildCfg(args, featureId) {
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
+  const tddDir = args.tddDir ?? path4.join(projectDir, ".tdd");
   return {
     projectDir,
     tddDir,
@@ -7903,8 +7967,8 @@ function reportGate(gate) {
 async function runSprintMode(args) {
   const sprint = args.sprint;
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
-  const claimJs = path5.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const tddDir = args.tddDir ?? path4.join(projectDir, ".tdd");
+  const claimJs = path4.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
   const interactive = args.gates === "interactive";
   const effects = {
     async drivePlanning() {
@@ -7922,7 +7986,7 @@ async function runSprintMode(args) {
       return { pendingGate: pendingGateOf(r) };
     },
     async readBacklog() {
-      return readSprintBacklog(tddDir, sprint).features;
+      return backlogFeatureIds(readBacklog(tddDir, sprint));
     },
     async claimFeature(featureId) {
       await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);

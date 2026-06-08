@@ -6682,7 +6682,7 @@ function isCliEntry(importMetaUrl2) {
 // scripts/tdd/intake.ts
 init_cjs_shims();
 var import_node_fs2 = require("fs");
-var import_node_path = require("path");
+var import_node_path2 = require("path");
 
 // scripts/tdd/artifact-conformance.ts
 init_cjs_shims();
@@ -6712,6 +6712,23 @@ function formatSchemaErrors(validate) {
     const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
     return `${where}: ${e.message ?? "invalid"}`;
   });
+}
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
 }
 
 // scripts/tdd/artifact-conformance.ts
@@ -6890,25 +6907,17 @@ function checkTestListMd(content) {
 }
 
 // scripts/tdd/intake.ts
-function resolveFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_node_path.join)(tddDir, "features");
-  if (!(0, import_node_fs2.existsSync)(featuresDir)) return void 0;
-  const match = (0, import_node_fs2.readdirSync)(featuresDir).find((d) => d.startsWith(featureId));
-  return match ? (0, import_node_path.join)(featuresDir, match) : void 0;
-}
 function checkIntakePreconditions(args = {}) {
   const tddDir = args.tddDir ?? "./.tdd";
   const required = [
-    { artifact: "product-overview.md", path: (0, import_node_path.join)(tddDir, "product-overview.md") },
-    { artifact: "nfrs.md", path: (0, import_node_path.join)(tddDir, "nfrs.md") }
+    { artifact: "product-overview.md", path: (0, import_node_path2.join)(tddDir, "product-overview.md") },
+    { artifact: "nfrs.md", path: (0, import_node_path2.join)(tddDir, "nfrs.md") }
   ];
   if (args.ui) {
-    required.push({ artifact: "design-brief.md", path: (0, import_node_path.join)(tddDir, "design", "design-brief.md") });
+    required.push({ artifact: "design-brief.md", path: (0, import_node_path2.join)(tddDir, "design", "design-brief.md") });
   }
   if (args.featureId) {
-    const fdir = resolveFeatureDir(tddDir, args.featureId);
-    const fpath = fdir ? (0, import_node_path.join)(fdir, "feature-request.md") : (0, import_node_path.join)(tddDir, "features", args.featureId, "feature-request.md");
-    required.push({ artifact: "feature-request.md", path: fpath });
+    required.push({ artifact: "feature-request.md", path: featureRequestMd(tddDir, args.featureId) });
   }
   const statuses = required.map(({ artifact, path }) => {
     if (!(0, import_node_fs2.existsSync)(path)) {

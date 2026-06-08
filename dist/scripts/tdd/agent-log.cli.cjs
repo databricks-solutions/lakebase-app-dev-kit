@@ -6754,9 +6754,39 @@ function readAgentLog(opts = {}) {
 init_cjs_shims();
 var import_fs3 = require("fs");
 var import_path3 = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/log-reconcile.ts
 function discoverArtifacts(tddDir, featureId) {
   const out = [];
-  const fdir = (0, import_path3.join)(tddDir, "features", featureId);
+  const fdir = featureResolved(tddDir, featureId);
   if (!(0, import_fs3.existsSync)(fdir)) return out;
   const add = (abs, role, message) => {
     if ((0, import_fs3.existsSync)(abs)) out.push({ path: (0, import_path3.relative)(tddDir, abs), role, message });
@@ -6769,10 +6799,10 @@ function discoverArtifacts(tddDir, featureId) {
   const sdir = (0, import_path3.join)(fdir, "stories");
   if ((0, import_fs3.existsSync)(sdir)) {
     for (const s of (0, import_fs3.readdirSync)(sdir).sort()) {
-      const storyDir = (0, import_path3.join)(sdir, s);
-      if (!(0, import_fs3.statSync)(storyDir).isDirectory()) continue;
-      add((0, import_path3.join)(storyDir, "story.json"), "spec-author", `story stub ${s}`);
-      const acsDir = (0, import_path3.join)(storyDir, "acs");
+      const storyDir2 = (0, import_path3.join)(sdir, s);
+      if (!(0, import_fs3.statSync)(storyDir2).isDirectory()) continue;
+      add((0, import_path3.join)(storyDir2, "story.json"), "spec-author", `story stub ${s}`);
+      const acsDir = (0, import_path3.join)(storyDir2, "acs");
       if ((0, import_fs3.existsSync)(acsDir)) {
         for (const ac of (0, import_fs3.readdirSync)(acsDir).sort()) {
           if (ac.endsWith(".json")) {
@@ -6780,7 +6810,7 @@ function discoverArtifacts(tddDir, featureId) {
           }
         }
       }
-      add((0, import_path3.join)(storyDir, "test-list-per-story.json"), "test-strategist", `per-story test list for ${s}`);
+      add(storyTestListJson(tddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
     }
   }
   return out;

@@ -6673,8 +6673,8 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/artifact-conformance.ts
 init_esm_shims();
-import { existsSync, readFileSync as readFileSync2, readdirSync, statSync } from "fs";
-import { join as join2, basename, dirname } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { join as join3, basename, dirname } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
@@ -6702,6 +6702,12 @@ function formatSchemaErrors(validate) {
     return `${where}: ${e.message ?? "invalid"}`;
   });
 }
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join as join2 } from "path";
+var featuresDir = (tdd) => join2(tdd, "features");
 
 // scripts/tdd/artifact-conformance.ts
 var ARTIFACT_FORMATS = {
@@ -6934,40 +6940,40 @@ function canonicalArtifactName(path2) {
   return base;
 }
 function scanFeatureConformance(tddDir, featureId) {
-  const featuresDir = join2(tddDir, "features");
-  const candidates = existsSync(featuresDir) ? readdirSync(featuresDir).filter((d) => d.startsWith(featureId)) : [];
+  const featuresDir2 = featuresDir(tddDir);
+  const candidates = existsSync2(featuresDir2) ? readdirSync2(featuresDir2).filter((d) => d.startsWith(featureId)) : [];
   if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
+    throw new Error(`feature ${featureId} not found under ${featuresDir2}`);
   }
-  const featureDir = join2(featuresDir, candidates[0]);
+  const featureDir = join3(featuresDir2, candidates[0]);
   const paths = [];
   const pushIfExists = (p) => {
-    if (existsSync(p)) paths.push(p);
+    if (existsSync2(p)) paths.push(p);
   };
-  pushIfExists(join2(tddDir, "product-overview.md"));
-  pushIfExists(join2(tddDir, "nfrs.md"));
+  pushIfExists(join3(tddDir, "product-overview.md"));
+  pushIfExists(join3(tddDir, "nfrs.md"));
   for (const name of ["design-brief.md", "design-guide.md", "design-guide.json", "ia.md"]) {
-    pushIfExists(join2(tddDir, "design", name));
+    pushIfExists(join3(tddDir, "design", name));
   }
   for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "nfrs.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
-    pushIfExists(join2(featureDir, name));
+    pushIfExists(join3(featureDir, name));
   }
-  const storiesDir = join2(featureDir, "stories");
-  if (existsSync(storiesDir)) {
-    for (const storyName of readdirSync(storiesDir)) {
-      const storyDir = join2(storiesDir, storyName);
-      if (!statSync(storyDir).isDirectory()) continue;
-      pushIfExists(join2(storyDir, "story.json"));
-      const acsDir = join2(storyDir, "acs");
-      if (existsSync(acsDir)) {
-        for (const acFile of readdirSync(acsDir).filter((f) => f.endsWith(".json"))) {
-          paths.push(join2(acsDir, acFile));
+  const storiesDir = join3(featureDir, "stories");
+  if (existsSync2(storiesDir)) {
+    for (const storyName of readdirSync2(storiesDir)) {
+      const storyDir = join3(storiesDir, storyName);
+      if (!statSync2(storyDir).isDirectory()) continue;
+      pushIfExists(join3(storyDir, "story.json"));
+      const acsDir = join3(storyDir, "acs");
+      if (existsSync2(acsDir)) {
+        for (const acFile of readdirSync2(acsDir).filter((f) => f.endsWith(".json"))) {
+          paths.push(join3(acsDir, acFile));
         }
       }
     }
   }
   const entries = paths.map((p) => {
-    const content = readFileSync2(p, "utf8");
+    const content = readFileSync3(p, "utf8");
     const result = checkArtifactConformance(canonicalArtifactName(p), content);
     return {
       artifact: p.startsWith(tddDir) ? p.slice(tddDir.length).replace(/^\//, "") : p,
@@ -6975,12 +6981,12 @@ function scanFeatureConformance(tddDir, featureId) {
       violations: result.ok ? [] : result.violations
     };
   });
-  const archPath = join2(featureDir, "architecture.json");
-  if (existsSync(archPath)) {
-    const archContent = readFileSync2(archPath, "utf8");
-    for (const nfrsPath of [join2(tddDir, "nfrs.md"), join2(featureDir, "nfrs.md")]) {
-      if (!existsSync(nfrsPath)) continue;
-      const cov = checkNfrCoverage(readFileSync2(nfrsPath, "utf8"), archContent);
+  const archPath = join3(featureDir, "architecture.json");
+  if (existsSync2(archPath)) {
+    const archContent = readFileSync3(archPath, "utf8");
+    for (const nfrsPath of [join3(tddDir, "nfrs.md"), join3(featureDir, "nfrs.md")]) {
+      if (!existsSync2(nfrsPath)) continue;
+      const cov = checkNfrCoverage(readFileSync3(nfrsPath, "utf8"), archContent);
       const rel = nfrsPath.startsWith(tddDir) ? nfrsPath.slice(tddDir.length).replace(/^\//, "") : nfrsPath;
       entries.push({
         artifact: `${rel} -> architecture.json (NFR coverage)`,

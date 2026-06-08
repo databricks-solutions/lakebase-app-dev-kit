@@ -6744,35 +6744,65 @@ function readAgentLog(opts = {}) {
 
 // scripts/tdd/log-reconcile.ts
 init_esm_shims();
-import { existsSync as existsSync2, readdirSync, statSync } from "fs";
-import { join as join3, relative } from "path";
+import { existsSync as existsSync3, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { join as join4, relative } from "path";
+
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join as join3 } from "path";
+var featuresDir = (tdd) => join3(tdd, "features");
+var featureDir = (tdd, featureId) => join3(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var storiesDir = (tdd, f) => join3(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join3(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join3(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join3(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyTestListJson = (tdd, f, s) => join3(storyResolved(tdd, f, s), "test-list-per-story.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join3(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join3(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/log-reconcile.ts
 function discoverArtifacts(tddDir, featureId) {
   const out = [];
-  const fdir = join3(tddDir, "features", featureId);
-  if (!existsSync2(fdir)) return out;
+  const fdir = featureResolved(tddDir, featureId);
+  if (!existsSync3(fdir)) return out;
   const add = (abs, role, message) => {
-    if (existsSync2(abs)) out.push({ path: relative(tddDir, abs), role, message });
+    if (existsSync3(abs)) out.push({ path: relative(tddDir, abs), role, message });
   };
-  add(join3(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
-  add(join3(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
-  add(join3(fdir, "test-list.json"), "test-strategist", "test-list.json");
-  add(join3(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
-  add(join3(fdir, "ia.md"), "ux-designer", "ia.md");
-  const sdir = join3(fdir, "stories");
-  if (existsSync2(sdir)) {
-    for (const s of readdirSync(sdir).sort()) {
-      const storyDir = join3(sdir, s);
-      if (!statSync(storyDir).isDirectory()) continue;
-      add(join3(storyDir, "story.json"), "spec-author", `story stub ${s}`);
-      const acsDir = join3(storyDir, "acs");
-      if (existsSync2(acsDir)) {
-        for (const ac of readdirSync(acsDir).sort()) {
+  add(join4(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
+  add(join4(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
+  add(join4(fdir, "test-list.json"), "test-strategist", "test-list.json");
+  add(join4(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add(join4(fdir, "ia.md"), "ux-designer", "ia.md");
+  const sdir = join4(fdir, "stories");
+  if (existsSync3(sdir)) {
+    for (const s of readdirSync2(sdir).sort()) {
+      const storyDir2 = join4(sdir, s);
+      if (!statSync2(storyDir2).isDirectory()) continue;
+      add(join4(storyDir2, "story.json"), "spec-author", `story stub ${s}`);
+      const acsDir = join4(storyDir2, "acs");
+      if (existsSync3(acsDir)) {
+        for (const ac of readdirSync2(acsDir).sort()) {
           if (ac.endsWith(".json")) {
-            add(join3(acsDir, ac), "spec-author", `AC ${ac.replace(/\.json$/, "")} for story ${s}`);
+            add(join4(acsDir, ac), "spec-author", `AC ${ac.replace(/\.json$/, "")} for story ${s}`);
           }
         }
       }
-      add(join3(storyDir, "test-list-per-story.json"), "test-strategist", `per-story test list for ${s}`);
+      add(storyTestListJson(tddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
     }
   }
   return out;

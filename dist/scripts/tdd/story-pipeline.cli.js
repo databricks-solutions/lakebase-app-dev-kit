@@ -1,8 +1,38 @@
 #!/usr/bin/env node
 
 // scripts/tdd/story-pipeline.ts
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { dirname, join as join2 } from "path";
+
+// scripts/tdd/tdd-paths.ts
+import * as fs from "fs";
+import { join } from "path";
+var featuresDir = (tdd) => join(tdd, "features");
+var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
+var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/story-pipeline.ts
 var STORY_STATUSES = [
   "designing",
   "awaiting-gate",
@@ -16,17 +46,17 @@ function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 function pipelinePath(tddDir, featureId) {
-  return join(tddDir, "features", featureId, "pipeline.json");
+  return pipelineJson(tddDir, featureId);
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync(p, "utf8"));
+  if (!existsSync2(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync2(p, "utf8"));
 }
 function writePipeline(tddDir, pipeline) {
   const p = pipelinePath(tddDir, pipeline.feature_id);
-  mkdirSync(dirname(p), { recursive: true });
-  writeFileSync(p, JSON.stringify(pipeline, null, 2) + "\n");
+  mkdirSync2(dirname(p), { recursive: true });
+  writeFileSync2(p, JSON.stringify(pipeline, null, 2) + "\n");
 }
 function setStoryStatus(pipeline, storyId, status) {
   const existing = pipeline.stories[storyId];
@@ -34,14 +64,14 @@ function setStoryStatus(pipeline, storyId, status) {
   return pipeline;
 }
 function syncBreakdownToPipeline(tddDir, featureId) {
-  const storiesDir = join(tddDir, "features", featureId, "stories");
+  const storiesDir2 = storiesDir(tddDir, featureId);
   const pipeline = readPipeline(tddDir, featureId);
   const added = [];
-  if (existsSync(storiesDir)) {
-    for (const storyId of readdirSync(storiesDir).sort()) {
+  if (existsSync2(storiesDir2)) {
+    for (const storyId of readdirSync2(storiesDir2).sort()) {
       let isDir = false;
       try {
-        isDir = statSync(join(storiesDir, storyId)).isDirectory();
+        isDir = statSync2(join2(storiesDir2, storyId)).isDirectory();
       } catch {
         isDir = false;
       }
@@ -76,15 +106,15 @@ function completeActive(pipeline) {
   return done;
 }
 function storyHasAcceptanceCriteria(tddDir, featureId, storyId) {
-  const acsDir = join(tddDir, "features", featureId, "stories", storyId, "acs");
-  if (!existsSync(acsDir)) return false;
-  return readdirSync(acsDir).some((f) => f.endsWith(".json"));
+  const acsDir2 = acsDir(tddDir, featureId, storyId);
+  if (!existsSync2(acsDir2)) return false;
+  return readdirSync2(acsDir2).some((f) => f.endsWith(".json"));
 }
 function findBatchedDraftStories(tddDir, featureId, pipeline, gatingStoryId) {
-  const storiesDir = join(tddDir, "features", featureId, "stories");
-  if (!existsSync(storiesDir)) return [];
+  const storiesDir2 = storiesDir(tddDir, featureId);
+  if (!existsSync2(storiesDir2)) return [];
   const offenders = [];
-  for (const storyId of readdirSync(storiesDir)) {
+  for (const storyId of readdirSync2(storiesDir2)) {
     if (storyId === gatingStoryId) continue;
     if (!storyHasAcceptanceCriteria(tddDir, featureId, storyId)) continue;
     const status = pipeline.stories[storyId]?.status;
@@ -216,7 +246,7 @@ function reviseStory(pipeline, storyId, opts) {
 }
 
 // scripts/tdd/story-pipeline.cli.ts
-import { join as join2 } from "path";
+import { join as join3 } from "path";
 function parse(argv) {
   const out = {};
   out.cmd = argv[0];
@@ -270,7 +300,7 @@ Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author once p
 }
 function main() {
   const args = parse(process.argv.slice(2));
-  const tddDir = args.tddDir ?? join2(process.cwd(), ".tdd");
+  const tddDir = args.tddDir ?? join3(process.cwd(), ".tdd");
   if (!args.cmd) return usage("missing subcommand");
   if (!args.feature && args.cmd !== "help") return usage("missing --feature");
   const feature = args.feature;
