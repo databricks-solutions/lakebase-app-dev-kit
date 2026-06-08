@@ -6734,9 +6734,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -10822,9 +10819,6 @@ init_esm_shims();
 import { existsSync as existsSync24, mkdirSync as mkdirSync13, readdirSync as readdirSync12, readFileSync as readFileSync14, statSync as statSync6, writeFileSync as writeFileSync15 } from "fs";
 import { join as join24 } from "path";
 
-// scripts/lakebase/convention-branches.ts
-init_esm_shims();
-
 // scripts/lakebase/paired-branch.ts
 init_esm_shims();
 import * as fs23 from "fs";
@@ -11372,54 +11366,6 @@ async function resolveFeatureParent(args) {
     }
   }
   return void 0;
-}
-
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createTestBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createUatBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createPerfBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent
-  });
 }
 
 // scripts/tdd/experiment.ts
@@ -12954,33 +12900,9 @@ var TOOLS = [
       return info ?? null;
     }
   },
-  {
-    name: "lakebase_branch_create",
-    description: "Create a Lakebase branch (no git side-effects). For paired git+Lakebase creation, use lakebase_branch_create_paired. Will not exceed the workspace's TTL cap; pass noExpiry: true for long-running tiers.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name (will be sanitized)." },
-        parentBranch: { type: "string", description: "Parent branch override (e.g. 'staging'). Default: project default branch." },
-        ttl: { type: "string", description: "Lifetime in Lakebase duration format (e.g. '604800s')." },
-        noExpiry: { type: "boolean", description: "Set no_expiry=true (long-running tiers only)." },
-        host: { type: "string", description: "Workspace host override." }
-      },
-      required: ["instance", "branch"],
-      additionalProperties: false
-    },
-    handler: async (args) => {
-      return createBranch({
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        parentBranch: optionalString(args, "parentBranch"),
-        ttl: optionalString(args, "ttl"),
-        noExpiry: typeof args.noExpiry === "boolean" ? args.noExpiry : void 0,
-        host: optionalString(args, "host")
-      });
-    }
-  },
+  // NOTE: the unpaired `lakebase_branch_create` tool was DELETED. It exposed a
+  // Lakebase-only create (no git branch, no .env) to agents. Every branch is
+  // paired through the substrate; use lakebase_branch_create_paired below.
   {
     name: "lakebase_branch_create_paired",
     description: "Create a Lakebase branch + matching local git branch + .env update in one call. The canonical 'fork from current' workflow op (mirrors the post-checkout git hook).",
@@ -13010,69 +12932,12 @@ var TOOLS = [
       });
     }
   },
-  {
-    name: "lakebase_branch_create_tier",
-    description: "Create a convention-tier Lakebase branch (feature / test / uat / perf). Each tier has its own default TTL and forks from 'staging' by default. PSA branching methodology.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tier: { type: "string", enum: ["feature", "test", "uat", "perf"], description: "Convention tier." },
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name (will be sanitized)." },
-        parentBranch: { type: "string", description: "Parent override. Default: 'staging' for all four tiers." },
-        ttl: { type: "string", description: "TTL override. Default: tier-specific (30d / 14d / 14d / 7d)." },
-        strictParent: { type: "boolean", description: "Throw if convention's default parent missing instead of falling back. Default: false." },
-        host: { type: "string", description: "Workspace host override." }
-      },
-      required: ["tier", "instance", "branch"],
-      additionalProperties: false
-    },
-    handler: async (args) => {
-      const tier = requireString(args, "tier");
-      const common = {
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        parentBranch: optionalString(args, "parentBranch"),
-        ttl: optionalString(args, "ttl"),
-        strictParent: typeof args.strictParent === "boolean" ? args.strictParent : void 0,
-        host: optionalString(args, "host")
-      };
-      switch (tier) {
-        case "feature":
-          return createFeatureBranch(common);
-        case "test":
-          return createTestBranch(common);
-        case "uat":
-          return createUatBranch(common);
-        case "perf":
-          return createPerfBranch(common);
-        default:
-          throw new Error(`Unknown tier: ${tier}`);
-      }
-    }
-  },
-  {
-    name: "lakebase_branch_delete",
-    description: "Delete a Lakebase branch (no git side-effects). For paired git+Lakebase cleanup, use lakebase_branch_delete_paired. Throws if the branch cannot be resolved.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name, uid, or full resource name." },
-        host: { type: "string", description: "Workspace host override." }
-      },
-      required: ["instance", "branch"],
-      additionalProperties: false
-    },
-    handler: async (args) => {
-      await deleteBranch({
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        host: optionalString(args, "host")
-      });
-      return { deleted: true, branch: args.branch };
-    }
-  },
+  // NOTE: the unpaired `lakebase_branch_create_tier` tool was DELETED. It made a
+  // Lakebase branch with no git branch + no .env sync. Use the paired tier-create
+  // tool above: every branch is paired through the substrate.
+  // NOTE: the unpaired `lakebase_branch_delete` tool was DELETED. Use
+  // lakebase_branch_delete_paired so the git branch is cleaned up alongside the
+  // Lakebase branch.
   {
     name: "lakebase_branch_delete_paired",
     description: "Delete a Lakebase branch + local git branch + remote git branch in one call. Skips deletion of branches that are currently checked out (local) or absent (remote). Default deletes everything; pass deleteGitLocal/deleteGitRemote: false to skip a side.",

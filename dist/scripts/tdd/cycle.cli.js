@@ -3670,21 +3670,21 @@ var require_fast_uri = __commonJS({
         normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
-        parse(serialize(uri, options), options);
+        parse2(serialize(uri, options), options);
       }
       return uri;
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
+      const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
     function resolveComponent(base, relative, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
-        base = parse(serialize(base, options), options);
-        relative = parse(serialize(relative, options), options);
+        base = parse2(serialize(base, options), options);
+        relative = parse2(serialize(relative, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative.scheme) {
@@ -3907,7 +3907,7 @@ var require_fast_uri = __commonJS({
       }
       return { parsed, malformedAuthorityOrPort };
     }
-    function parse(uri, opts) {
+    function parse2(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
     }
     function normalizeString(uri, opts) {
@@ -3936,7 +3936,7 @@ var require_fast_uri = __commonJS({
       resolveComponent,
       equal,
       serialize,
-      parse
+      parse: parse2
     };
     module.exports = fastUri;
     module.exports.default = fastUri;
@@ -4134,7 +4134,7 @@ var require_core = __commonJS({
         if (typeof this.opts.loadSchema != "function") {
           throw new Error("options.loadSchema should be a function");
         }
-        const { loadSchema } = this.opts;
+        const { loadSchema: loadSchema2 } = this.opts;
         return runCompileAsync.call(this, schema, meta);
         async function runCompileAsync(_schema, _meta) {
           await loadMetaSchema.call(this, _schema.$schema);
@@ -4174,7 +4174,7 @@ var require_core = __commonJS({
           if (p)
             return p;
           try {
-            return await (this._loading[ref] = loadSchema(ref));
+            return await (this._loading[ref] = loadSchema2(ref));
           } finally {
             delete this._loading[ref];
           }
@@ -6646,17 +6646,13 @@ var require_ajv = __commonJS({
   }
 });
 
-// scripts/tdd/feature-status.cli.ts
+// scripts/tdd/cycle.cli.ts
 init_esm_shims();
-
-// scripts/tdd/feature-status.ts
-init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync4 } from "fs";
 import { join as join8 } from "path";
 
-// scripts/tdd/test-list.ts
+// scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { existsSync as existsSync8, readFileSync as readFileSync9 } from "fs";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
@@ -6665,7 +6661,6 @@ import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
@@ -6677,7 +6672,9 @@ function findStoryDir(tdd, f, s) {
   return matches.length === 1 ? join(root, matches[0]) : void 0;
 }
 var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
-var storyPlanJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "plan.json");
+var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -6686,43 +6683,53 @@ function findFeatureDir(tdd, featureId) {
   const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
   return matches.length === 1 ? join(root, matches[0]) : void 0;
 }
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-
-// scripts/tdd/test-list.ts
-function readMasterTestList(tddDir, featureId) {
-  requireFeatureDir(tddDir, featureId);
-  const file = featureTestListJson(tddDir, featureId);
-  if (!existsSync2(file)) {
-    throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
   }
-  const parsed = JSON.parse(readFileSync2(file, "utf8"));
-  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
+  return void 0;
 }
 
-// scripts/tdd/design-spec-gate.ts
+// scripts/tdd/experiment.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync6, mkdirSync as mkdirSync5 } from "fs";
+import { existsSync as existsSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2, writeFileSync as writeFileSync4 } from "fs";
+import { join as join4 } from "path";
 
-// scripts/tdd/run-cycle.ts
+// scripts/lakebase/paired-branch.ts
+init_esm_shims();
+import * as fs4 from "fs";
+import * as path3 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
+// scripts/lakebase/branch-create.ts
+init_esm_shims();
+import { execFile as execFile3 } from "child_process";
+import { promisify as promisify3 } from "util";
+
+// scripts/util/poll-until.ts
 init_esm_shims();
 
-// scripts/lakebase/get-connection.ts
+// scripts/util/delay.ts
 init_esm_shims();
-import { execFileSync } from "child_process";
-import { createLakebasePool } from "@databricks/lakebase";
-import { Client } from "pg";
+
+// scripts/util/sanitize-branch-name.ts
+init_esm_shims();
+
+// scripts/lakebase/branch-id.ts
+init_esm_shims();
 
 // scripts/lakebase/branch-utils.ts
 init_esm_shims();
 import { execFile } from "child_process";
 import { promisify } from "util";
-
-// scripts/lakebase/branch-id.ts
-init_esm_shims();
 
 // scripts/lakebase/kit-config.ts
 init_esm_shims();
@@ -6767,34 +6774,6 @@ var KIT_REGISTRIES = {
 // scripts/lakebase/branch-utils.ts
 var execFileP = promisify(execFile);
 
-// scripts/lakebase/constants.ts
-init_esm_shims();
-
-// scripts/tdd/experiment.ts
-init_esm_shims();
-import { existsSync as existsSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3, writeFileSync as writeFileSync5 } from "fs";
-import { join as join4 } from "path";
-
-// scripts/lakebase/paired-branch.ts
-init_esm_shims();
-import * as fs4 from "fs";
-import * as path3 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
-
-// scripts/lakebase/branch-create.ts
-init_esm_shims();
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
-
-// scripts/util/poll-until.ts
-init_esm_shims();
-
-// scripts/util/delay.ts
-init_esm_shims();
-
-// scripts/util/sanitize-branch-name.ts
-init_esm_shims();
-
 // scripts/lakebase/lakebase-project.ts
 init_esm_shims();
 import { execFile as execFile2 } from "child_process";
@@ -6814,6 +6793,15 @@ var execFileP4 = promisify4(execFile4);
 init_esm_shims();
 import { execFileSync as execFileSync2 } from "child_process";
 
+// scripts/lakebase/get-connection.ts
+init_esm_shims();
+import { execFileSync } from "child_process";
+import { createLakebasePool } from "@databricks/lakebase";
+import { Client } from "pg";
+
+// scripts/lakebase/constants.ts
+init_esm_shims();
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs2 from "fs";
@@ -6828,32 +6816,53 @@ init_esm_shims();
 import * as cp from "child_process";
 
 // scripts/tdd/experiment.ts
+function acLayerToTag(layer) {
+  switch (layer) {
+    case "API":
+      return "api";
+    case "E2E":
+      return "e2e";
+    case "Infra":
+      return "infra";
+  }
+}
+function recordTagRun(outcomes, tag, passed) {
+  const byTag = outcomes.by_tag ??= {};
+  const slot = byTag[tag] ??= { passed: 0, failed: 0 };
+  if (passed) {
+    slot.passed += 1;
+    outcomes.tests_passed = (outcomes.tests_passed ?? 0) + 1;
+  } else {
+    slot.failed += 1;
+    outcomes.tests_failed = (outcomes.tests_failed ?? 0) + 1;
+  }
+  return outcomes;
+}
+function tagRunCount(outcomes, tag) {
+  const slot = outcomes.by_tag?.[tag];
+  return slot ? slot.passed + slot.failed : 0;
+}
 function experimentsRoot(tddDir, featureId, storyId) {
   return join4(tddDir, "experiments", featureId, storyId);
 }
 function experimentDir(tddDir, featureId, storyId, slug) {
   return join4(experimentsRoot(tddDir, featureId, storyId), slug);
 }
-function listExperimentStories(tddDir, featureId) {
-  const root = join4(tddDir, "experiments", featureId);
-  if (!existsSync6(root)) return [];
-  return readdirSync3(root).filter((d) => statSync3(join4(root, d)).isDirectory()).sort();
-}
 function listExperiments(tddDir, featureId, storyId) {
   const root = experimentsRoot(tddDir, featureId, storyId);
-  if (!existsSync6(root)) return [];
+  if (!existsSync5(root)) return [];
   const out = [];
-  for (const slug of readdirSync3(root)) {
+  for (const slug of readdirSync2(root)) {
     const dir = join4(root, slug);
-    if (!statSync3(dir).isDirectory()) continue;
+    if (!statSync2(dir).isDirectory()) continue;
     const branchFile = join4(dir, "branch.txt");
-    if (!existsSync6(branchFile)) continue;
+    if (!existsSync5(branchFile)) continue;
     out.push({
       feature_id: featureId,
       story_id: storyId,
       experiment_slug: slug,
-      branch_id: readFileSync6(branchFile, "utf8").trim(),
-      created_at: statSync3(branchFile).birthtime.toISOString(),
+      branch_id: readFileSync5(branchFile, "utf8").trim(),
+      created_at: statSync2(branchFile).birthtime.toISOString(),
       dir
     });
   }
@@ -6861,396 +6870,297 @@ function listExperiments(tddDir, featureId, storyId) {
 }
 function readOutcomes(tddDir, featureId, storyId, slug) {
   const file = join4(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
-  if (!existsSync6(file)) return null;
-  return JSON.parse(readFileSync6(file, "utf8"));
+  if (!existsSync5(file)) return null;
+  return JSON.parse(readFileSync5(file, "utf8"));
 }
+function writeOutcomes(tddDir, featureId, storyId, slug, outcomes) {
+  const file = join4(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
+  writeFileSync4(file, JSON.stringify(outcomes, null, 2) + "\n");
+}
+
+// scripts/tdd/run-cycle.ts
+init_esm_shims();
+import { existsSync as existsSync7, mkdirSync as mkdirSync4, readdirSync as readdirSync3, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "fs";
+import { join as join7 } from "path";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
+import { appendFileSync, existsSync as existsSync6, readFileSync as readFileSync7 } from "fs";
+import { join as join6 } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
+import { readFileSync as readFileSync6 } from "fs";
 import { join as join5 } from "path";
 var SCHEMA_DIR = join5(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
-
-// scripts/tdd/spike-carryforward.ts
-init_esm_shims();
-
-// scripts/tdd/design-spec-gate.ts
-function readPlan(tddDir, featureId, storyId) {
-  const planPath = storyPlanJson(tddDir, featureId, storyId);
-  if (!existsSync7(planPath)) return null;
-  return JSON.parse(readFileSync7(planPath, "utf8"));
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse(readFileSync6(join5(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
 }
 
-// scripts/tdd/smells.ts
-init_esm_shims();
-import { existsSync as existsSync8, readFileSync as readFileSync8, writeFileSync as writeFileSync7 } from "fs";
-import { join as join6 } from "path";
-function readSmellsLog(tddDir) {
-  const file = join6(tddDir, "smells.json");
-  if (!existsSync8(file)) return { detected: [] };
+// scripts/tdd/agent-log.ts
+function logFilePath(tddDir) {
+  return join6(tddDir, "agent-log.jsonl");
+}
+function emitAgentLogEvent(input, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
+
+// scripts/tdd/run-cycle.ts
+function logCycleEvent(tddDir, event) {
+  try {
+    emitAgentLogEvent(event, { tddDir });
+  } catch {
+  }
+}
+function readAcLayer2(tddDir, featureId, acId) {
+  return readAcLayer(tddDir, featureId, acId);
+}
+function cyclesDir(scope) {
+  return join7(scope.tddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
+}
+function nextCycleId(scope) {
+  const dir = cyclesDir(scope);
+  if (!existsSync7(dir)) return "cycle-001";
+  const ids = readdirSync3(dir).filter((f) => /^cycle-\d+\.json$/.test(f)).map((f) => parseInt(f.match(/cycle-(\d+)/)[1], 10)).sort((a, b) => a - b);
+  const next = (ids.at(-1) ?? 0) + 1;
+  return `cycle-${String(next).padStart(3, "0")}`;
+}
+function writeCycleArtifact(scope, artifact) {
+  const dir = cyclesDir(scope);
+  mkdirSync4(dir, { recursive: true });
+  const file = join7(dir, `${artifact.cycle_id}.json`);
+  writeFileSync5(file, JSON.stringify(artifact, null, 2) + "\n");
+  return file;
+}
+function readCycleArtifact(scope, cycleId) {
+  const file = join7(cyclesDir(scope), `${cycleId}.json`);
+  if (!existsSync7(file)) return null;
   return JSON.parse(readFileSync8(file, "utf8"));
 }
-
-// scripts/tdd/gates.ts
-init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync9, renameSync, unlinkSync, writeFileSync as writeFileSync8 } from "fs";
-import { join as join7 } from "path";
-var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
-var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
-function defaultGatesState(featureId) {
-  return {
-    feature_id: featureId,
-    schema_version: GATES_SCHEMA_VERSION,
-    gates: {
-      spec: { status: "open", history: [] },
-      plan: { status: "open", history: [] },
-      test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] },
-      deploy: { status: "open", history: [] }
-    }
+function listCycles(scope) {
+  const dir = cyclesDir(scope);
+  if (!existsSync7(dir)) return [];
+  return readdirSync3(dir).filter((f) => f.endsWith(".json")).sort().map((f) => JSON.parse(readFileSync8(join7(dir, f), "utf8")));
+}
+function beginCycle(args) {
+  const cycle_id = nextCycleId(args);
+  const layer = args.layer ?? readAcLayer2(args.tddDir, args.feature_id, args.ac_id);
+  const artifact = {
+    cycle_id,
+    feature_id: args.feature_id,
+    story_id: args.story_id,
+    ac_id: args.ac_id,
+    test_id: args.test_id,
+    test_description: args.test_description,
+    experiment_slug: args.experiment_slug,
+    branch_id: args.branch_id,
+    navigator_plan: args.navigator_plan,
+    red_at: (/* @__PURE__ */ new Date()).toISOString(),
+    layer
   };
+  writeCycleArtifact(args, artifact);
+  logCycleEvent(args.tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.red",
+    message: `${args.test_id} RED: ${args.test_description}`,
+    feature_id: args.feature_id,
+    cycle_id,
+    data: { test_id: args.test_id, ac_id: args.ac_id, layer }
+  });
+  return artifact;
 }
-function readGates(featureId, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync9(file)) {
-    return defaultGatesState(featureId);
-  }
-  const raw = readFileSync9(file, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  return validateGatesState(parsed, file);
-}
-function gatesFilePath(tddDir, featureId) {
-  return join7(requireFeatureDir(tddDir, featureId), "gates.json");
-}
-function validateGatesState(parsed, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file} is not an object`);
-  }
-  const obj = parsed;
-  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
-    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
-  }
-  if (typeof obj.schema_version !== "number") {
-    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
-  }
-  if (typeof obj.gates !== "object" || obj.gates === null) {
-    throw new Error(`gates.json at ${file}: missing or invalid gates`);
-  }
-  const gates = obj.gates;
-  const out = {
-    spec: validateGateRecord(gates.spec, "spec", file),
-    plan: validateGateRecord(gates.plan, "plan", file),
-    test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file),
-    // The deploy gate (working-software) was added after the original four.
-    // A gates.json written before it lacks the key, so backfill a default-open
-    // record rather than reject the file (forward-compatible read).
-    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
-  };
-  return {
-    feature_id: obj.feature_id,
-    schema_version: obj.schema_version,
-    gates: out
-  };
-}
-function validateGateRecord(parsed, gateName, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
-  }
-  const obj = parsed;
-  const status = obj.status;
-  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
+function recordRunnerOutcome(args) {
+  const cycle = readCycleArtifact(args.scope, args.cycleId);
+  if (!cycle) throw new Error(`cycle ${args.cycleId} not found`);
+  const layer = args.layer ?? cycle.layer;
+  if (!layer) {
     throw new Error(
-      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
+      `cycle ${args.cycleId} has no layer and recordRunnerOutcome was called without one. Either stamp AC.layer or pass {layer} explicitly.`
     );
   }
-  const history = obj.history;
-  if (history !== void 0 && !Array.isArray(history)) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
-  }
-  return {
-    status,
-    approver: typeof obj.approver === "string" ? obj.approver : void 0,
-    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
-    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
-    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
-    history: history ?? []
+  const tag = acLayerToTag(layer);
+  const outcomes = readOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug) ?? {
+    status: "running"
   };
+  recordTagRun(outcomes, tag, args.passed);
+  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug, outcomes);
+  if (!cycle.layer && args.layer) {
+    cycle.layer = args.layer;
+    writeCycleArtifact(args.scope, cycle);
+  }
+  return { cycle, tag, runsForTag: tagRunCount(outcomes, tag) };
+}
+function markGreen(scope, cycleId, driverChanges) {
+  const a = readCycleArtifact(scope, cycleId);
+  if (!a) throw new Error(`cycle ${cycleId} not found`);
+  if (a.layer && a.experiment_slug) {
+    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, scope.story_id, a.experiment_slug);
+    const tag = acLayerToTag(a.layer);
+    const runs = outcomes ? tagRunCount(outcomes, tag) : 0;
+    if (runs === 0) {
+      throw new Error(
+        `markGreen refused: cycle ${cycleId} is tagged [${a.layer}] but outcomes.json records zero runs for "${tag}" on experiment "${a.experiment_slug}". The Driver must call recordRunnerOutcome before markGreen so the substrate can verify the right runner fired (see SKILL.md tagToRunner table).`
+      );
+    }
+  }
+  a.green_at = (/* @__PURE__ */ new Date()).toISOString();
+  a.driver_changes = driverChanges;
+  a.navigator_verdict = "passed";
+  writeCycleArtifact(scope, a);
+  logCycleEvent(scope.tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.green",
+    message: `${a.test_id} GREEN${driverChanges ? ": " + driverChanges : ""}`,
+    feature_id: scope.feature_id,
+    cycle_id: cycleId,
+    data: { test_id: a.test_id }
+  });
+  return a;
 }
 
-// scripts/tdd/feature-status.ts
-var MAX_RECENT_LOG_ENTRIES = 5;
-function readJsonIfExists(path4) {
-  if (!existsSync10(path4)) return null;
-  return JSON.parse(readFileSync10(path4, "utf8"));
-}
-function listFeatureStories(tddDir, featureId) {
-  const storiesDir2 = storiesDir(tddDir, featureId);
-  if (!existsSync10(storiesDir2)) return [];
-  return readdirSync5(storiesDir2).filter((d) => statSync4(join8(storiesDir2, d)).isDirectory()).sort();
-}
-function timelineCycleCount(experimentDir2) {
-  const timeline = readJsonIfExists(
-    join8(experimentDir2, "timeline.json")
-  );
-  return timeline?.entries?.length ?? 0;
-}
-function summarizeTestList(tddDir, featureId) {
-  try {
-    const list = readMasterTestList(tddDir, featureId);
-    const counters = {
-      pending: 0,
-      red: 0,
-      green: 0,
-      refactored: 0,
-      skipped: 0
-    };
-    for (const item of list.items) counters[item.status]++;
-    const total = list.items.length;
-    const done = counters.green + counters.refactored;
-    return {
-      total,
-      by_status: counters,
-      completion_pct: total === 0 ? 0 : Math.round(done / total * 100)
-    };
-  } catch {
-    return null;
+// scripts/tdd/cycle-record.ts
+function readStoryItems(tddDir, featureId, story) {
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!existsSync8(file)) {
+    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
+  const data = JSON.parse(readFileSync9(file, "utf8"));
+  return Array.isArray(data.items) ? data.items : [];
 }
-function readSelectionLogRecent(tddDir, limit) {
-  const path4 = join8(tddDir, "selection-log.md");
-  if (!existsSync10(path4)) return [];
-  const text = readFileSync10(path4, "utf8");
-  const entries = [];
-  const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
-  let match;
-  while ((match = headingRe.exec(text)) !== null) {
-    entries.push({ timestamp: match[1], title: match[2].trim() });
-  }
-  return entries.slice(-limit);
+function storyExperiment(tddDir, featureId, story) {
+  const exps = listExperiments(tddDir, featureId, story);
+  const e = exps[0];
+  return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
-function readGatesSummary(tddDir, featureId) {
-  try {
-    const state = readGates(featureId, { tddDir });
-    const out = {};
-    for (const name of GATE_NAMES) {
-      const rec = state.gates[name];
-      out[name] = {
-        status: rec.status,
-        approver: rec.approver ?? null,
-        approved_at: rec.approved_at ?? null
-      };
-    }
-    return out;
-  } catch {
-    return null;
+function storyCycles(tddDir, featureId, story, acIds) {
+  const out = [];
+  for (const ac of new Set(acIds)) {
+    out.push(...listCycles({ tddDir, feature_id: featureId, story_id: story, ac_id: ac }));
   }
+  return out;
 }
-function readWorkflowState(tddDir) {
-  const state = readJsonIfExists(join8(tddDir, "workflow-state.json"));
-  if (!state) return { phase: null, pointer: null };
-  return {
-    phase: state.phase ?? null,
-    pointer: {
-      feature_id: state.feature_id ?? null,
-      story_id: state.story_id ?? null,
-      ac_id: state.ac_id ?? null,
-      cycle_id: state.cycle_id ?? null,
-      experiment_id: state.experiment_id ?? null
-    }
-  };
-}
-function getFeatureStatus(tddDir, featureId) {
-  const plans = [];
-  for (const storyId of listFeatureStories(tddDir, featureId)) {
-    const p = readPlan(tddDir, featureId, storyId);
-    if (p) plans.push({ story_id: storyId, plan: p });
-  }
-  const experiments = [];
-  for (const storyId of listExperimentStories(tddDir, featureId)) {
-    for (const rec of listExperiments(tddDir, featureId, storyId)) {
-      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
-      experiments.push({
-        story_id: storyId,
-        slug: rec.experiment_slug,
-        branch_id: rec.branch_id,
-        status: outcomes?.status ?? null,
-        tests_passed: outcomes?.tests_passed ?? null,
-        tests_failed: outcomes?.tests_failed ?? null,
-        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-        cycle_count: timelineCycleCount(rec.dir)
-      });
-    }
-  }
-  let smells = [];
-  try {
-    smells = readSmellsLog(tddDir).detected.filter((d) => !d.resolution);
-  } catch {
-    smells = [];
-  }
-  const { phase, pointer } = readWorkflowState(tddDir);
-  return {
+function beginNextPendingCycle(args) {
+  const { tddDir, featureId, story } = args;
+  const items = readStoryItems(tddDir, featureId, story);
+  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
+  const cycled = new Set(cycles.map((c) => c.test_id));
+  const pending = items.find((i) => !cycled.has(i.id));
+  if (!pending) return { recorded: false };
+  const exp = storyExperiment(tddDir, featureId, story);
+  const art = beginCycle({
+    tddDir,
     feature_id: featureId,
-    current_workflow_phase: phase,
-    current_workflow_pointer: pointer,
-    plans,
-    test_list: summarizeTestList(tddDir, featureId),
-    experiments,
-    selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
-    open_smells: smells,
-    gates: readGatesSummary(tddDir, featureId)
+    story_id: story,
+    ac_id: pending.ac_id,
+    test_id: pending.id,
+    test_description: pending.description,
+    experiment_slug: exp.slug,
+    branch_id: exp.branch
+  });
+  return { recorded: true, cycleId: art.cycle_id, testId: pending.id, acId: pending.ac_id };
+}
+function greenOpenCycle(args) {
+  const { tddDir, featureId, story } = args;
+  const items = readStoryItems(tddDir, featureId, story);
+  const cycles = storyCycles(tddDir, featureId, story, items.map((i) => i.ac_id));
+  const open = cycles.filter((c) => c.red_at && !c.green_at).sort((a, b) => a.red_at < b.red_at ? 1 : -1)[0];
+  if (!open) {
+    throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
+  }
+  const scope = {
+    tddDir,
+    feature_id: featureId,
+    story_id: story,
+    ac_id: open.ac_id,
+    experiment_slug: open.experiment_slug,
+    branch_id: open.branch_id
   };
-}
-function formatTestPassRatio(exp) {
-  if (exp.tests_passed === null && exp.tests_failed === null) {
-    return "tests=n/a";
+  if (open.layer && open.experiment_slug) {
+    recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: true });
   }
-  const passed = exp.tests_passed ?? 0;
-  const failed = exp.tests_failed ?? 0;
-  return `tests=${passed}/${passed + failed} pass`;
-}
-function renderFeatureStatus(snapshot) {
-  const lines = [];
-  lines.push(`Feature: ${snapshot.feature_id}`);
-  if (snapshot.current_workflow_phase) {
-    const ptr = snapshot.current_workflow_pointer;
-    const focus = ptr?.feature_id === snapshot.feature_id ? " (active workflow)" : ptr?.feature_id ? ` (active workflow on ${ptr.feature_id})` : "";
-    lines.push(`  Phase: ${snapshot.current_workflow_phase}${focus}`);
-  } else {
-    lines.push(`  Phase: unknown (no workflow-state.json)`);
-  }
-  if (snapshot.plans.length > 0) {
-    for (const { story_id, plan } of snapshot.plans) {
-      const plural = plan.strategies.length === 1 ? "y" : "ies";
-      lines.push(
-        `  Plan [${story_id}]: ${plan.mode} (N=${plan.N}, ${plan.strategies.length} strateg${plural})`
-      );
-    }
-  } else {
-    lines.push(`  Plan: not yet approved (design-spec gate pending)`);
-  }
-  if (snapshot.test_list) {
-    const s = snapshot.test_list;
-    const breakdown = Object.entries(s.by_status).filter(([, n]) => n > 0).map(([k, n]) => `${k}:${n}`).join(" ");
-    const done = s.by_status.green + s.by_status.refactored;
-    lines.push(
-      `  Test list: ${done}/${s.total} (${s.completion_pct}%)${breakdown ? `  [${breakdown}]` : ""}`
-    );
-  } else {
-    lines.push(`  Test list: not yet written`);
-  }
-  lines.push(``);
-  if (snapshot.experiments.length > 0) {
-    lines.push(`Experiments (${snapshot.experiments.length}):`);
-    for (const exp of snapshot.experiments) {
-      lines.push(
-        `  ${exp.slug.padEnd(28)} branch=${exp.branch_id.padEnd(22)} status=${(exp.status ?? "unknown").padEnd(11)} ${formatTestPassRatio(exp)}  cycles=${exp.cycle_count}`
-      );
-    }
-  } else {
-    lines.push(`Experiments: none cut yet`);
-  }
-  if (snapshot.gates) {
-    lines.push(``);
-    lines.push(`Gates:`);
-    for (const name of GATE_NAMES) {
-      const g = snapshot.gates[name];
-      const when = g.approved_at ? ` @ ${g.approved_at}` : "";
-      const by = g.approver ? ` by ${g.approver}` : "";
-      lines.push(`  ${name.padEnd(10)} ${g.status}${when}${by}`);
-    }
-  }
-  if (snapshot.selection_log_recent.length > 0) {
-    lines.push(``);
-    lines.push(`Recent decisions (${snapshot.selection_log_recent.length}):`);
-    for (const entry of snapshot.selection_log_recent) {
-      lines.push(`  ${entry.timestamp} \u2013 ${entry.title}`);
-    }
-  }
-  lines.push(``);
-  if (snapshot.open_smells.length > 0) {
-    lines.push(`Open smells (${snapshot.open_smells.length}):`);
-    for (const hit of snapshot.open_smells) {
-      lines.push(`  ${hit.smell} \u2013 ${hit.detail}`);
-    }
-  } else {
-    lines.push(`Open smells: none`);
-  }
-  return lines.join("\n") + "\n";
+  markGreen(scope, open.cycle_id, args.driverChanges);
+  return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
 }
 
-// scripts/tdd/feature-status.cli.ts
-function parseArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    switch (a) {
-      case "--tdd":
-        out.tdd = argv[++i];
+// scripts/tdd/cycle.cli.ts
+function parse(argv) {
+  const out = { cmd: argv[0] };
+  for (let i = 1; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--feature":
+        out.feature = argv[++i];
         break;
-      case "--json":
-        out.json = true;
+      case "--story":
+        out.story = argv[++i];
         break;
-      case "--help":
-      case "-h":
-        out.help = true;
-        break;
-      default:
-        if (!a.startsWith("--") && !out.featureId) {
-          out.featureId = a;
-        }
+      case "--tdd-dir":
+        out.tddDir = argv[++i];
         break;
     }
   }
   return out;
 }
-var HELP = `lakebase-feature-status \u2014 one-screen snapshot of a feature's TDD workflow state
-
-Usage:
-  lakebase-feature-status <feature-id> [--tdd <dir>] [--json]
-
-Flags:
-  --tdd <dir>   Path to the .tdd/ directory (default: ./.tdd)
-  --json        Print the snapshot as JSON instead of human-readable text
-  --help, -h    Show this help message
-
-Examples:
-  lakebase-feature-status F1-checkout
-  lakebase-feature-status F1-checkout --json | jq '.experiments[].slug'
-  lakebase-feature-status F1-checkout --tdd path/to/.tdd
-`;
+function usage(msg) {
+  process.stderr.write(
+    `${msg}
+Usage: lakebase-tdd-cycle <begin|green> --feature <F> --story <S> [--tdd-dir <D>]
+`
+  );
+  return 2;
+}
 function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.help) {
-    process.stdout.write(HELP);
-    return 0;
+  const a = parse(process.argv.slice(2));
+  if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
+  const tddDir = a.tddDir ?? join8(process.cwd(), ".tdd");
+  const base = { tddDir, featureId: a.feature, story: a.story };
+  switch (a.cmd) {
+    case "begin": {
+      const r = beginNextPendingCycle(base);
+      process.stdout.write(
+        r.recorded ? `cycle: RED ${r.cycleId} for ${r.testId} (${r.acId})
+` : `cycle: no pending test for ${a.story} (every test-list item already has a cycle)
+`
+      );
+      return 0;
+    }
+    case "green": {
+      const r = greenOpenCycle(base);
+      process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}
+`);
+      return 0;
+    }
+    default:
+      return usage(`unknown subcommand: ${a.cmd}`);
   }
-  if (!args.featureId) {
-    process.stderr.write(`Error: feature-id is required.
-
-${HELP}`);
-    return 2;
-  }
-  const tddDir = args.tdd ?? "./.tdd";
-  const snapshot = getFeatureStatus(tddDir, args.featureId);
-  if (args.json) {
-    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
-  } else {
-    process.stdout.write(renderFeatureStatus(snapshot));
-  }
-  return 0;
 }
 try {
   process.exit(main());
@@ -7259,4 +7169,4 @@ try {
 `);
   process.exit(1);
 }
-//# sourceMappingURL=feature-status.cli.js.map
+//# sourceMappingURL=cycle.cli.js.map

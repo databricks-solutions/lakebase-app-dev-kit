@@ -15,6 +15,8 @@ export interface SynthesisPick {
 
 export interface SynthesizeArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git + .env). Required: the synthesized experiment is PAIRED. */
+  projectDir: string;
   featureId: string;
   storyId: string;
   picks: SynthesisPick[];
@@ -46,7 +48,7 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
   if (!args.hitlApproved) {
     throw new Error("synthesizeExperiments requires hitlApproved: true (HITL Gate)");
   }
-  const { tddDir, featureId, storyId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
+  const { tddDir, projectDir, featureId, storyId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
 
   if (picks.length < 2) {
     throw new Error(`synthesis requires picks from at least 2 experiments (got ${picks.length})`);
@@ -114,6 +116,7 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
   const fresh = await cutExperiment({
     ...lookup,
     tddDir,
+    projectDir,
     featureId,
     storyId,
     experimentSlug: synthesizedSlug,

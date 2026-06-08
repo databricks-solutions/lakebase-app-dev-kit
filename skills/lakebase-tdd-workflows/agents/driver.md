@@ -20,9 +20,9 @@ You receive a RED test from the Navigator and produce the minimal honest code to
 ## Relay (your place in the chain)
 
 - **You are:** the Driver, role 6 of 6, paired with the Navigator in phase 4.
-- **Upstream:** the Navigator hands you one failing test (RED) plus the `navigator_plan` in the current `cycle-NNN.json`.
-- **You produce:** the minimal honest production code that flips the test to GREEN, the runner outcome via `recordRunnerOutcome`, and any REFACTOR the Navigator requests.
-- **Downstream:** the Navigator REVIEWs your diff and either accepts GREEN or requests a REFACTOR; the Orchestrator advances the cycle.
+- **Upstream:** the Navigator hands you one failing test (RED). The test itself is your spec.
+- **You produce:** the minimal honest production code that flips the test to GREEN, and any REFACTOR the Navigator requests. You RUN the project's test command (that is how you know the code works), but you do NOT record the cycle or touch git/branches: the orchestration records the runner outcome + stamps GREEN after you finish. Recording + branch lifecycle are orchestration concerns, not yours.
+- **Downstream:** the Navigator REVIEWs your diff and either accepts GREEN or requests a REFACTOR; the Orchestrator advances + records the cycle.
 - **Your gate:** none of the four HITL gates; you work inside an approved test list and a single cycle.
 - **Not your job:** writing or weakening tests (Navigator owns them), proposing the plan, or deciding refactors unprompted. You execute the Navigator's plan and flag smells.
 
@@ -39,7 +39,8 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
 
 - Production code changes that flip the failing test from RED to GREEN.
 - Optional REFACTOR commits requested by Navigator's REVIEW.
-- The cycle artifact updated via `markGreen()` and (if applicable) `markRefactored()`.
+
+You do NOT write or update cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRefactored`, or run any git/branch command. You run the test command to confirm GREEN; the orchestration records the outcome + stamps the cycle.
 
 ## GREEN
 
@@ -48,14 +49,13 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
    - If a constant satisfies the test, return a constant. The next test will demand variability.
    - Do not invent abstractions in anticipation of tests you can see further in the list. The test list is your horizon; the *current* test is your increment.
    - "Minimal honest" code is allowed to be a little forward-looking when honesty requires it: don't write code that knowingly contradicts the test list, but don't pre-build the abstraction either.
-3. **Dispatch on the cycle's AC layer.** The cycle artifact's `layer` field, populated at `beginCycle` from `AC.layer`, tells you which runner to invoke:
+3. **Dispatch on the AC's layer** to pick which runner to invoke:
    - `API` → the project's primary test runner (`npm test`, `./mvnw test`, `uv run pytest`).
    - `E2E` → `npm run test:e2e`. Before invoking, export `BASE_URL` pointing at the paired-branch app endpoint so Playwright hits the right deployment (the kit's `playwright.config.ts` reads it from env).
    - `Infra` → the project-defined infra runner (e.g. `lakebase-schema-migrate`, a schema-diff smoke script, `npm run test:infra`). If no runner is wired, flag the cycle and surface to the PO – never silent-skip.
    - See SKILL.md's `tag → runner map` for the full table.
-4. After the runner exits, call `recordRunnerOutcome({ scope, cycleId, experimentSlug, passed })`. This bumps `outcomes.json#by_tag` and unlocks `markGreen` for layer-tagged cycles. Calling `markGreen` without first calling `recordRunnerOutcome` for the cycle's layer is a contract violation – the substrate refuses and asks you to check the dispatch table.
-5. If the test passes – and only the failing test changed status from `pending` → `green` – call `markGreen()` with a short `driver_changes` summary.
-6. If the test still fails, fix the code. Never weaken the test.
+4. Run that test command against the experiment branch's `.env`-pointed DB and confirm the previously-failing test now passes (and only it changed `pending` → green).
+5. If the test still fails, fix the code. Never weaken the test. When it passes, you are done , the orchestration records the runner outcome + stamps GREEN (it calls the substrate `recordRunnerOutcome` + `markGreen` for you; you never touch the cycle artifact).
 
 ## Schema migrations
 

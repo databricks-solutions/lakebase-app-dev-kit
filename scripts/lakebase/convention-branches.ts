@@ -26,8 +26,7 @@
  * projects can override via `parentBranch`.
  */
 
-import { createBranch as createLakebaseBranch } from "./branch-create.js";
-import { LakebaseBranchInfo, BranchLookupOpts } from "./branch-utils.js";
+import { BranchLookupOpts } from "./branch-utils.js";
 import { KIT_TIMEOUTS, formatLakebaseTtl } from "./kit-config.js";
 import {
   createPairedBranch,
@@ -74,65 +73,15 @@ export interface CreateConventionBranchArgs extends BranchLookupOpts {
   strictParent?: boolean;
 }
 
-/**
- * Cut a feature-tier Lakebase branch off `staging` with a 30-day TTL.
- * Lakebase deletes the branch automatically when the TTL expires – useful
- * for feature dev cycles where the branch lives only as long as the work.
- */
-export async function createFeatureBranch(
-  args: CreateConventionBranchArgs,
-): Promise<LakebaseBranchInfo> {
-  return createLakebaseBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent,
-  });
-}
-
-/** Cut a test-tier Lakebase branch off `staging` with a 14-day TTL. */
-export async function createTestBranch(
-  args: CreateConventionBranchArgs,
-): Promise<LakebaseBranchInfo> {
-  return createLakebaseBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent,
-  });
-}
-
-/** Cut a uat-tier Lakebase branch off `staging` with a 14-day TTL. */
-export async function createUatBranch(
-  args: CreateConventionBranchArgs,
-): Promise<LakebaseBranchInfo> {
-  return createLakebaseBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent,
-  });
-}
-
-/** Cut a perf-tier Lakebase branch off `staging` with a 7-day TTL. */
-export async function createPerfBranch(
-  args: CreateConventionBranchArgs,
-): Promise<LakebaseBranchInfo> {
-  return createLakebaseBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent,
-  });
-}
+// NOTE: the Lakebase-ONLY convention creators (createFeatureBranch /
+// createTestBranch / createUatBranch / createPerfBranch) were DELETED. They
+// created a Lakebase branch with no git branch + no .env sync, which violates
+// the kit's one rule: every branch is paired (Lakebase + git + .env), created
+// only through the substrate. Callers MUST use the PAIRED helpers below
+// (createFeaturePairedBranch / createTestPairedBranch / ...) or, for the
+// experiment/spike lifecycle, the paired-branch primitives directly
+// (createPairedBranch / deletePairedBranch / checkoutPaired). There is no
+// unpaired branch-creation path in this kit by design.
 
 // ─── Per-tier-type PAIRED helpers (atomic Lakebase + git + .env) ─────
 //

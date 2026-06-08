@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
-import { createFeatureBranch } from "../lakebase/convention-branches";
-import { deleteBranch } from "../lakebase/branch-delete";
+import { createPairedBranch, deletePairedBranch } from "../lakebase/paired-branch";
 import type { BranchLookupOpts, LakebaseBranchInfo } from "../lakebase/branch-utils";
 
 function branchIdOf(info: LakebaseBranchInfo): string {
@@ -123,6 +122,8 @@ export function experimentDir(tddDir: string, featureId: string, storyId: string
 
 export interface CutExperimentArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git + .env). Required: the experiment branch is PAIRED. */
+  projectDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
@@ -142,9 +143,22 @@ export interface ExperimentRecord {
 }
 
 export async function cutExperiment(args: CutExperimentArgs): Promise<ExperimentRecord> {
-  const { tddDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
-  const branchInfo = await createFeatureBranch({ ...lookup, branch, parentBranch, ttl });
-  const branchId = branchIdOf(branchInfo);
+  const { tddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
+  // PAIRED cut through the substrate: Lakebase branch + git branch + .env sync,
+  // atomically. The experiment is a child of the feature branch (parentBranch),
+  // so it forks Lakebase from the feature branch and git-branches off the
+  // currently-checked-out feature branch. ttl when given (ephemeral spike),
+  // else noExpiry (matches createFeaturePairedBranch's tier semantics).
+  const paired = await createPairedBranch({
+    instance: lookup.instance,
+    branch,
+    parentBranch,
+    cwd: projectDir,
+    createGitBranch: true,
+    syncEnv: true,
+    ...(ttl ? { ttl } : { noExpiry: true }),
+  });
+  const branchId = branchIdOf(paired.branch);
 
   const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
   mkdirSync(dir, { recursive: true });
@@ -228,22 +242,25 @@ export function writeOutcomes(
 
 export interface DeleteExperimentArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git). Required when deleteBranchToo: the teardown is PAIRED. */
+  projectDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
-  /** Delete the Lakebase branch as well. Default false; HITL-gated. */
+  /** Delete the Lakebase branch + git branch as well. Default false; HITL-gated. */
   deleteBranchToo?: boolean;
 }
 
 export async function deleteExperiment(args: DeleteExperimentArgs): Promise<void> {
-  const { tddDir, featureId, storyId, experimentSlug, deleteBranchToo, ...lookup } = args;
+  const { tddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo, ...lookup } = args;
   const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
   if (!existsSync(dir)) {
     throw new Error(`experiment ${featureId}/${storyId}/${experimentSlug} not found at ${dir}`);
   }
   if (deleteBranchToo) {
     const branchId = readFileSync(join(dir, "branch.txt"), "utf8").trim();
-    await deleteBranch({ ...lookup, branch: branchId });
+    // PAIRED teardown: Lakebase branch + git branch (local + remote). Best-effort.
+    await deletePairedBranch({ instance: lookup.instance, branch: branchId, cwd: projectDir });
   }
   // The on-disk record is preserved by default so the experiment's notes + outcomes
   // remain available after the branch goes away.

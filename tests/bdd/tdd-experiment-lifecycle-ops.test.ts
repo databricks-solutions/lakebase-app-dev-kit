@@ -43,6 +43,7 @@ const MERGE_ARGS = {
 
 const DISCARD_ARGS = {
   tddDir: "/tmp/.tdd",
+  projectDir: "/tmp/proj",
   featureId: "F1",
   storyId: "S1",
   experimentSlug: "s1-exp",

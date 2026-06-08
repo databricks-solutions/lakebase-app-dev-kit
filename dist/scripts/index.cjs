@@ -90,21 +90,17 @@ __export(scripts_exports, {
   commitSignedOff: () => commitSignedOff,
   copyDirSubstituted: () => copyDirSubstituted,
   createBranch: () => createBranch,
-  createFeatureBranch: () => createFeatureBranch,
   createFeaturePairedBranch: () => createFeaturePairedBranch,
   createLakebaseProject: () => createLakebaseProject,
   createLongRunningBranch: () => createLongRunningBranch,
   createPairedBranch: () => createPairedBranch,
-  createPerfBranch: () => createPerfBranch,
   createPerfPairedBranch: () => createPerfPairedBranch,
   createProject: () => createProject,
   createPullRequest: () => createPullRequest,
   createRegistrationToken: () => createRegistrationToken,
   createRepo: () => createRepo,
   createTag: () => createTag,
-  createTestBranch: () => createTestBranch,
   createTestPairedBranch: () => createTestPairedBranch,
-  createUatBranch: () => createUatBranch,
   createUatPairedBranch: () => createUatPairedBranch,
   createWorktree: () => createWorktree,
   cutBackup: () => cutBackup,
@@ -233,6 +229,7 @@ __export(scripts_exports, {
   listWorktrees: () => listWorktrees,
   mergeBranch: () => mergeBranch,
   mergeFeature: () => mergeFeature,
+  mergePaired: () => mergePaired,
   mergePairedPullRequest: () => mergePairedPullRequest,
   mergePullRequest: () => mergePullRequest,
   minLakebaseTtl: () => minLakebaseTtl,
@@ -3181,6 +3178,13 @@ function gitCheckoutExistingBranch(cwd, branch) {
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
+function gitMergeBranch(cwd, branch) {
+  (0, import_node_child_process8.execFileSync)("git", ["merge", "--no-edit", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
 function gitDeleteLocalBranch(cwd, branch, force = true) {
   (0, import_node_child_process8.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
@@ -3505,6 +3509,18 @@ async function resolveFeatureParent(args) {
   }
   return void 0;
 }
+async function mergePaired(args) {
+  const warnings = [];
+  const syncEnv = args.syncEnv !== false;
+  gitCheckoutExistingBranch(args.cwd, args.into);
+  let checkout;
+  if (syncEnv) {
+    checkout = await checkoutPaired({ cwd: args.cwd, branch: args.into, instance: args.instance });
+    warnings.push(...checkout.warnings);
+  }
+  gitMergeBranch(args.cwd, args.from);
+  return { merged: true, into: args.into, from: args.from, checkout, warnings };
+}
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {
@@ -3513,46 +3529,6 @@ var CONVENTION_TIER_DEFAULTS = {
   uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
   perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
 };
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createTestBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createUatBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createPerfBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent
-  });
-}
 async function createFeaturePairedBranch(args) {
   return createPairedBranch({
     instance: args.instance,
@@ -9367,21 +9343,17 @@ function withProxyEnv(base = {}) {
   commitSignedOff,
   copyDirSubstituted,
   createBranch,
-  createFeatureBranch,
   createFeaturePairedBranch,
   createLakebaseProject,
   createLongRunningBranch,
   createPairedBranch,
-  createPerfBranch,
   createPerfPairedBranch,
   createProject,
   createPullRequest,
   createRegistrationToken,
   createRepo,
   createTag,
-  createTestBranch,
   createTestPairedBranch,
-  createUatBranch,
   createUatPairedBranch,
   createWorktree,
   cutBackup,
@@ -9510,6 +9482,7 @@ function withProxyEnv(base = {}) {
   listWorktrees,
   mergeBranch,
   mergeFeature,
+  mergePaired,
   mergePairedPullRequest,
   mergePullRequest,
   minLakebaseTtl,

@@ -38,6 +38,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
         picks: [
@@ -57,6 +58,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
         picks: [{ source_slug: "exp-a", capability: "only" }],
@@ -73,6 +75,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
         picks: [
@@ -94,6 +97,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       await synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
         picks: [
@@ -136,6 +140,7 @@ liveDescribe("synthesizeExperiments (live – LAKEBASE_TEST_E2E=1)", () => {
     const result = await synthesizeExperiments({
       instance,
       tddDir: tdd,
+      projectDir: tdd,
       featureId: "F1",
       storyId: "S1",
       picks: [

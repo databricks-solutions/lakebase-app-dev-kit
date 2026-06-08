@@ -34,8 +34,7 @@ import {
   discardStory,
   reviseStory,
 } from "./story-pipeline";
-import { checkoutBranch } from "../git/mutation";
-import { mergeBranch } from "../git/branch-tag";
+import { mergePaired } from "../lakebase/paired-branch";
 import { applySchemaMigrations } from "../lakebase/schema-migrate";
 import { parseExperimentArgs, validateExperimentArgs } from "./experiment-args";
 import { join } from "path";
@@ -55,14 +54,15 @@ function usage(msg: string): number {
 // experiment-lifecycle.ts; these are the side-effectful leaves.
 const realOps: ExperimentBranchOps = {
   gitMerge: async ({ from, into, projectDir }) => {
-    await checkoutBranch({ cwd: projectDir, branch: into });
-    await mergeBranch({ cwd: projectDir, branch: from });
+    // PAIRED merge via the substrate: checkout `into`, re-sync .env to its
+    // Lakebase branch, then git-merge `from`. No raw git in the orchestration.
+    await mergePaired({ cwd: projectDir, from, into });
   },
   runMigrations: async ({ instance, branch, projectDir }) => {
     await applySchemaMigrations({ instance, branch, projectDir });
   },
-  teardown: async ({ tddDir, featureId, storyId, experimentSlug, instance }) => {
-    await deleteExperiment({ instance, tddDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
+  teardown: async ({ tddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
+    await deleteExperiment({ instance, tddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
   },
 };
 
@@ -85,6 +85,7 @@ async function main(): Promise<number> {
       const rec = await cutExperiment({
         instance,
         tddDir,
+        projectDir,
         featureId: feature,
         storyId: story,
         experimentSlug: slug,
@@ -125,7 +126,7 @@ async function main(): Promise<number> {
     }
     case "discard": {
       await discardExperimentBranch(
-        { tddDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
+        { tddDir, projectDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
         realOps,
       );
       const p = readPipeline(tddDir, feature);

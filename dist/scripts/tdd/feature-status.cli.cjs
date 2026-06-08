@@ -6749,9 +6749,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -6773,8 +6770,11 @@ init_cjs_shims();
 var import_fs2 = require("fs");
 var import_path = require("path");
 
-// scripts/lakebase/convention-branches.ts
+// scripts/lakebase/paired-branch.ts
 init_cjs_shims();
+var fs4 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
 
 // scripts/lakebase/branch-create.ts
 init_cjs_shims();
@@ -6799,12 +6799,6 @@ var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.exe
 // scripts/lakebase/branch-create.ts
 var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
 
-// scripts/lakebase/paired-branch.ts
-init_cjs_shims();
-var fs4 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
-
 // scripts/lakebase/branch-delete.ts
 init_cjs_shims();
 var import_node_child_process5 = require("child_process");
@@ -6827,14 +6821,6 @@ var fs3 = __toESM(require("fs"), 1);
 // scripts/util/exec.ts
 init_cjs_shims();
 var cp = __toESM(require("child_process"), 1);
-
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
 
 // scripts/tdd/experiment.ts
 function experimentsRoot(tddDir, featureId, storyId) {

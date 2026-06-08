@@ -661,6 +661,11 @@ async function adoptScmState(args) {
   return { state: adopted, notes };
 }
 
+// scripts/lakebase/paired-branch.ts
+var fs4 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
+
 // scripts/lakebase/branch-create.ts
 var import_node_child_process3 = require("child_process");
 var import_node_util3 = require("util");
@@ -939,11 +944,6 @@ stderr: ${stderr.trim()}` : ""}`
     );
   }
 }
-
-// scripts/lakebase/paired-branch.ts
-var fs4 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
 
 // scripts/lakebase/branch-delete.ts
 var import_node_child_process4 = require("child_process");

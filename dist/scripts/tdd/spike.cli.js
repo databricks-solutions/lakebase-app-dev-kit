@@ -28,6 +28,11 @@ function isCliEntry(importMetaUrl) {
 import { existsSync as existsSync4, mkdirSync as mkdirSync2, readdirSync, readFileSync as readFileSync4, statSync, writeFileSync as writeFileSync3 } from "fs";
 import { join as join3 } from "path";
 
+// scripts/lakebase/paired-branch.ts
+import * as fs3 from "fs";
+import * as path2 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
 // scripts/lakebase/branch-create.ts
 import { execFile as execFile3 } from "child_process";
 import { promisify as promisify3 } from "util";
@@ -157,9 +162,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -511,11 +513,6 @@ stderr: ${stderr.trim()}` : ""}`
   }
 }
 
-// scripts/lakebase/paired-branch.ts
-import * as fs3 from "fs";
-import * as path2 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
-
 // scripts/lakebase/branch-delete.ts
 import { execFile as execFile4 } from "child_process";
 import { promisify as promisify4 } from "util";
@@ -566,32 +563,392 @@ import { execFileSync } from "child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
+// scripts/lakebase/constants.ts
+var POSTGRES_PORT = 5432;
+var DEFAULT_DATABASE = "databricks_postgres";
+var DEFAULT_ENDPOINT = "primary";
+
+// scripts/lakebase/get-connection.ts
+async function mintCredential(endpointPath2) {
+  const raw = dbcli5(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
+  const token = JSON.parse(raw)?.token ?? "";
+  if (!token) {
+    throw new Error(`generate-database-credential returned no token for ${endpointPath2}`);
+  }
+  const email = await resolveCurrentUser();
+  return { token, email };
+}
+async function resolveCurrentUser() {
+  const raw = dbcli5(["current-user", "me", "-o", "json"]);
+  const parsed = JSON.parse(raw);
+  const email = parsed.userName ?? parsed.emails?.[0]?.value;
+  if (!email) {
+    throw new Error("Could not resolve current user from `databricks current-user me`");
+  }
+  return email;
+}
+function dbcli5(args) {
+  try {
+    return execFileSync("databricks", args, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    const e = err;
+    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
+    throw new Error(
+      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
+stderr: ${stderr.trim()}` : ""}`
+    );
+  }
+}
+
+// scripts/lakebase/branch-endpoint.ts
+async function getEndpoint(args) {
+  const branchPath = await resolveBranchPath(args.branch, { instance: args.instance });
+  if (!branchPath) {
+    return void 0;
+  }
+  let raw;
+  try {
+    raw = execFileSync2("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.cliDefault
+    });
+  } catch {
+    return void 0;
+  }
+  let endpoints;
+  try {
+    endpoints = JSON.parse(raw);
+  } catch {
+    return void 0;
+  }
+  if (!Array.isArray(endpoints) || endpoints.length === 0) {
+    return void 0;
+  }
+  const ep = endpoints[0];
+  return {
+    host: ep?.status?.hosts?.host ?? "",
+    state: ep?.status?.current_state ?? "UNKNOWN"
+  };
+}
+function endpointPath(instance, branch, endpointName = DEFAULT_ENDPOINT) {
+  return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
+}
+
 // scripts/lakebase/env-file.ts
 import * as fs from "fs";
 import * as path from "path";
+var CONNECTION_KEYS = [
+  "DATABASE_URL",
+  "DB_USERNAME",
+  "DB_PASSWORD",
+  "LAKEBASE_BRANCH_ID",
+  "LAKEBASE_HOST"
+];
+function updateEnvConnection(args) {
+  const existing = fs.existsSync(args.envPath) ? fs.readFileSync(args.envPath, "utf-8") : "";
+  const preserved = existing.split("\n").filter((line) => {
+    const trimmed = line.trimStart();
+    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
+  }).join("\n").replace(/\n+$/, "");
+  const lines = [];
+  if (args.comment !== void 0) {
+    lines.push(args.comment);
+  }
+  if (args.endpointHost !== void 0) {
+    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
+  }
+  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
+  lines.push(`DATABASE_URL=${args.databaseUrl}`);
+  lines.push(`DB_USERNAME=${args.username}`);
+  lines.push(`DB_PASSWORD=${args.password}`);
+  lines.push("");
+  const block = lines.join("\n");
+  const content = preserved ? `${preserved}
+${block}` : block;
+  fs.mkdirSync(path.dirname(args.envPath), { recursive: true });
+  fs.writeFileSync(args.envPath, content);
+}
 
 // scripts/lakebase/databricks-profile.ts
 import * as fs2 from "fs";
 
 // scripts/util/exec.ts
 import * as cp from "child_process";
-
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
+function exec2(command, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve(String(stdout).trim());
+    });
   });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs2.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
+// scripts/lakebase/paired-branch.ts
+function gitCurrentBranch(cwd) {
+  return execFileSync3("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  }).trim();
+}
+function gitHasLocalBranch(cwd, branch) {
+  try {
+    execFileSync3("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
+      cwd,
+      stdio: "ignore",
+      timeout: KIT_TIMEOUTS.gitDefault
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function gitCheckoutNewBranch(cwd, branch) {
+  execFileSync3("git", ["checkout", "-b", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitCheckout
+  });
+}
+function gitCheckoutExistingBranch(cwd, branch) {
+  execFileSync3("git", ["checkout", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitCheckout
+  });
+}
+function gitDeleteLocalBranch(cwd, branch, force = true) {
+  execFileSync3("git", ["branch", force ? "-D" : "-d", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
+function gitHasRemoteBranch(cwd, remote, branch) {
+  try {
+    const out = execFileSync3(
+      "git",
+      ["ls-remote", "--exit-code", "--heads", remote, branch],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
+    );
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+function gitDeleteRemoteBranch(cwd, remote, branch) {
+  execFileSync3("git", ["push", remote, "--delete", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitPush
+  });
+}
+function buildDsn(host, database, user, password) {
+  const u = new URL(`postgresql://${host}:${POSTGRES_PORT}/${encodeURIComponent(database)}`);
+  u.username = encodeURIComponent(user);
+  u.password = encodeURIComponent(password);
+  u.searchParams.set("sslmode", "require");
+  return u.toString();
+}
+async function createPairedBranch(args) {
+  const warnings = [];
+  const sanitized = sanitizeBranchName(args.branch);
+  const createGitBranch = args.createGitBranch !== false;
+  const syncEnv = args.syncEnv !== false;
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
+  const branch = await createBranch({
+    instance: args.instance,
+    branch: args.branch,
+    parentBranch: args.parentBranch,
+    ttl: args.ttl,
+    noExpiry: args.noExpiry
+  });
+  let ready = branch;
+  if (branch.state !== "READY") {
+    try {
+      ready = await waitForBranchReady({
+        instance: args.instance,
+        branch: sanitized,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
+      });
+    } catch (err) {
+      warnings.push(
+        `Lakebase branch created but did not reach READY: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  let gitBranchCreated = false;
+  if (createGitBranch) {
+    try {
+      if (gitHasLocalBranch(args.cwd, sanitized)) {
+        gitCheckoutExistingBranch(args.cwd, sanitized);
+      } else {
+        gitCheckoutNewBranch(args.cwd, sanitized);
+        gitBranchCreated = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Failed to create/switch git branch "${sanitized}": ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  let envSynced = false;
+  if (syncEnv && ready.state === "READY") {
+    try {
+      const ep = await getEndpoint({ instance: args.instance, branch: sanitized });
+      if (!ep?.host) {
+        warnings.push(`Endpoint not yet available for "${sanitized}" \u2013 .env not updated`);
+      } else {
+        const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
+        const dsn = buildDsn(ep.host, database, email, token);
+        const envPath = path2.join(args.cwd, ".env");
+        updateEnvConnection({
+          envPath,
+          branchId: sanitized,
+          databaseUrl: dsn,
+          username: email,
+          password: token,
+          endpointHost: ep.host
+        });
+        await ensureProfilePinned({ envPath }).catch(() => void 0);
+        envSynced = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `.env sync failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  return {
+    branch: ready,
+    gitBranch: sanitized,
+    gitBranchCreated,
+    envSynced,
+    warnings
+  };
+}
+async function deletePairedBranch(args) {
+  const warnings = [];
+  const sanitized = sanitizeBranchName(args.branch);
+  const deleteGitLocal = args.deleteGitLocal !== false;
+  const deleteGitRemote = args.deleteGitRemote !== false;
+  const gitRemote = args.gitRemote ?? "origin";
+  let lakebaseDeleted = false;
+  try {
+    await deleteBranch({ instance: args.instance, branch: sanitized });
+    lakebaseDeleted = true;
+  } catch (err) {
+    warnings.push(
+      `Lakebase delete failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  let gitLocalDeleted = false;
+  if (deleteGitLocal) {
+    try {
+      const current = gitCurrentBranch(args.cwd);
+      if (current === sanitized) {
+        warnings.push(`Skipped local git delete: branch "${sanitized}" is currently checked out`);
+      } else if (!gitHasLocalBranch(args.cwd, sanitized)) {
+        gitLocalDeleted = true;
+      } else {
+        gitDeleteLocalBranch(args.cwd, sanitized, true);
+        gitLocalDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Local git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  let gitRemoteDeleted = false;
+  if (deleteGitRemote) {
+    try {
+      if (gitHasRemoteBranch(args.cwd, gitRemote, sanitized)) {
+        gitDeleteRemoteBranch(args.cwd, gitRemote, sanitized);
+        gitRemoteDeleted = true;
+      } else {
+        gitRemoteDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Remote git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  return { lakebaseDeleted, gitLocalDeleted, gitRemoteDeleted, warnings };
 }
 
 // scripts/tdd/spike.ts
@@ -612,9 +969,17 @@ ${intro} Code is **not** promoted as-is. Capture the learning here before deleti
 `;
 }
 async function cutSpike(args) {
-  const { tddDir, spikeSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
-  const branchInfo = await createFeatureBranch({ ...lookup, branch, parentBranch, ttl });
-  const branchId = branchIdOf(branchInfo);
+  const { tddDir, projectDir, spikeSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
+  const paired = await createPairedBranch({
+    instance: lookup.instance,
+    branch,
+    parentBranch,
+    cwd: projectDir,
+    createGitBranch: true,
+    syncEnv: true,
+    ...ttl ? { ttl } : { noExpiry: true }
+  });
+  const branchId = branchIdOf(paired.branch);
   const dir = join3(tddDir, "spikes", spikeSlug);
   mkdirSync2(dir, { recursive: true });
   writeFileSync3(join3(dir, "branch.txt"), branchId);
@@ -651,12 +1016,12 @@ function listSpikes(tddDir) {
   return out;
 }
 async function deleteSpike(args) {
-  const { tddDir, spikeSlug, deleteBranchToo = true, ...lookup } = args;
+  const { tddDir, projectDir, spikeSlug, deleteBranchToo = true, ...lookup } = args;
   const dir = join3(tddDir, "spikes", spikeSlug);
   if (!existsSync4(dir)) throw new Error(`spike ${spikeSlug} not found at ${dir}`);
   if (deleteBranchToo) {
     const branchId = readFileSync4(join3(dir, "branch.txt"), "utf8").trim();
-    await deleteBranch({ ...lookup, branch: branchId });
+    await deletePairedBranch({ instance: lookup.instance, branch: branchId, cwd: projectDir });
   }
 }
 
@@ -728,6 +1093,7 @@ async function runSpikeCli(argv) {
       }
       const rec = await cutSpike({
         tddDir,
+        projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         branch: `spike/${args.slug}`,
         parentBranch: args.parent,
@@ -758,6 +1124,7 @@ async function runSpikeCli(argv) {
       }
       await deleteSpike({
         tddDir,
+        projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         deleteBranchToo: !args.keepBranch,
         instance: args.instance ?? "",

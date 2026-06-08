@@ -66,12 +66,12 @@ async function accept(p: StoryPipeline, storyId: string, slug: string, branch: s
 }
 
 async function discard(p: StoryPipeline, storyId: string, slug: string, ops: ExperimentBranchOps, reason: string) {
-  await discardExperimentBranch({ tddDir: "/tmp/.tdd", featureId: "F1", storyId, experimentSlug: slug, instance: "lb" }, ops);
+  await discardExperimentBranch({ tddDir: "/tmp/.tdd", projectDir: "/tmp", featureId: "F1", storyId, experimentSlug: slug, instance: "lb" }, ops);
   discardStory(p, storyId, { approver: "po", at: AT, reason });
 }
 
 async function revise(p: StoryPipeline, storyId: string, slug: string, ops: ExperimentBranchOps, reason: string) {
-  await discardExperimentBranch({ tddDir: "/tmp/.tdd", featureId: "F1", storyId, experimentSlug: slug, instance: "lb" }, ops);
+  await discardExperimentBranch({ tddDir: "/tmp/.tdd", projectDir: "/tmp", featureId: "F1", storyId, experimentSlug: slug, instance: "lb" }, ops);
   reviseStory(p, storyId, { approver: "po", at: AT, reason });
 }
 

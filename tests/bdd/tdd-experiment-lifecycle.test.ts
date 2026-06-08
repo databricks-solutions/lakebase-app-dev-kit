@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "fs";
+import { execSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -115,8 +116,8 @@ describe("experiment lifecycle (hermetic)", () => {
     writeFileSync(join(dir, "branch.txt"), "feature/test-exp-1");
     await deleteExperiment({
       instance: "irrelevant",
-      
       tddDir: tdd,
+      projectDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-1",
@@ -131,8 +132,8 @@ describe("experiment lifecycle (hermetic)", () => {
     await expect(
       deleteExperiment({
         instance: "irrelevant",
-        
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: "ghost",
@@ -148,30 +149,50 @@ liveDescribe("experiment lifecycle (live, LAKEBASE_TEST_E2E=1)", () => {
   const instance = process.env.LAKEBASE_TEST_INSTANCE;
   const parentBranch = process.env.LAKEBASE_TEST_PARENT || "staging";
 
-  it("cuts and tears down a real feature branch + on-disk record", async () => {
+  it("cuts and tears down a real PAIRED branch (Lakebase + git) + on-disk record", async () => {
     if (!instance) throw new Error("LAKEBASE_TEST_INSTANCE required for live test");
-    const slug = `exp-test-${Date.now()}`;
-    const rec = await cutExperiment({
-      instance,
-      tddDir: tdd,
-      featureId: "F1",
-      storyId: "S1",
-      experimentSlug: slug,
-      branch: slug,
-      parentBranch,
-    });
-    expect(rec.dir).toContain(slug);
-    expect(existsSync(join(rec.dir, "branch.txt"))).toBe(true);
-    expect(existsSync(join(rec.dir, "outcomes.json"))).toBe(true);
-    expect(existsSync(join(rec.dir, "timeline.json"))).toBe(true);
-    expect(rec.branch_id).toBeTruthy();
-    await deleteExperiment({
-      instance,
-      tddDir: tdd,
-      featureId: "F1",
-      storyId: "S1",
-      experimentSlug: slug,
-      deleteBranchToo: true,
-    });
+    // The PAIRED cut needs a real git repo + .env at projectDir (it creates a
+    // git branch + syncs .env alongside the Lakebase branch).
+    const projectDir = mkdtempSync(join(tmpdir(), "tdd-exp-proj-"));
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t",
+    };
+    execSync("git init -q", { cwd: projectDir });
+    execSync("git commit -q --allow-empty -m init", { cwd: projectDir, env: gitEnv });
+    writeFileSync(join(projectDir, ".env"), `LAKEBASE_PROJECT_ID=${instance}\n`);
+    try {
+      const slug = `exp-test-${Date.now()}`;
+      const rec = await cutExperiment({
+        instance,
+        tddDir: tdd,
+        projectDir,
+        featureId: "F1",
+        storyId: "S1",
+        experimentSlug: slug,
+        branch: slug,
+        parentBranch,
+      });
+      expect(rec.dir).toContain(slug);
+      expect(existsSync(join(rec.dir, "branch.txt"))).toBe(true);
+      expect(existsSync(join(rec.dir, "outcomes.json"))).toBe(true);
+      expect(existsSync(join(rec.dir, "timeline.json"))).toBe(true);
+      expect(rec.branch_id).toBeTruthy();
+      // The cut is PAIRED: a git branch with the same id exists.
+      const branches = execSync("git branch --list", { cwd: projectDir, encoding: "utf8" });
+      expect(branches).toContain(rec.branch_id);
+      await deleteExperiment({
+        instance,
+        tddDir: tdd,
+        projectDir,
+        featureId: "F1",
+        storyId: "S1",
+        experimentSlug: slug,
+        deleteBranchToo: true,
+      });
+    } finally {
+      rmSync(projectDir, { recursive: true, force: true });
+    }
   }, 600_000);
 });

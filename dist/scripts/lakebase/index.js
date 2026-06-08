@@ -2207,6 +2207,13 @@ function gitCheckoutExistingBranch(cwd, branch) {
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
+function gitMergeBranch(cwd, branch) {
+  execFileSync3("git", ["merge", "--no-edit", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
 function gitDeleteLocalBranch(cwd, branch, force = true) {
   execFileSync3("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
@@ -2531,6 +2538,18 @@ async function resolveFeatureParent(args) {
   }
   return void 0;
 }
+async function mergePaired(args) {
+  const warnings = [];
+  const syncEnv = args.syncEnv !== false;
+  gitCheckoutExistingBranch(args.cwd, args.into);
+  let checkout;
+  if (syncEnv) {
+    checkout = await checkoutPaired({ cwd: args.cwd, branch: args.into, instance: args.instance });
+    warnings.push(...checkout.warnings);
+  }
+  gitMergeBranch(args.cwd, args.from);
+  return { merged: true, into: args.into, from: args.from, checkout, warnings };
+}
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {
@@ -2539,46 +2558,6 @@ var CONVENTION_TIER_DEFAULTS = {
   uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
   perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
 };
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createTestBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createUatBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createPerfBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent
-  });
-}
 async function createFeaturePairedBranch(args) {
   return createPairedBranch({
     instance: args.instance,
@@ -8316,17 +8295,13 @@ export {
   claimFeatureBranch,
   clearRetentionCache,
   createBranch,
-  createFeatureBranch,
   createFeaturePairedBranch,
   createLakebaseProject,
   createLongRunningBranch,
   createPairedBranch,
-  createPerfBranch,
   createPerfPairedBranch,
   createProject,
-  createTestBranch,
   createTestPairedBranch,
-  createUatBranch,
   createUatPairedBranch,
   cutBackup,
   deleteAppEndpoint,
@@ -8399,6 +8374,7 @@ export {
   listBranches,
   listSchemaMigrations,
   mergeFeature,
+  mergePaired,
   minLakebaseTtl,
   mintCredential,
   normalizeHost,

@@ -82,6 +82,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
       }
       const rec = await cutSpike({
         tddDir,
+        projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         branch: `spike/${args.slug}`,
         parentBranch: args.parent,
@@ -117,6 +118,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
       }
       await deleteSpike({
         tddDir,
+        projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         deleteBranchToo: !args.keepBranch,
         instance: args.instance ?? "",

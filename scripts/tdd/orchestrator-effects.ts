@@ -74,6 +74,16 @@ const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a 
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
 const UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
 
+// Appended to every role spawn: the artifacts ARE the deliverable; free-text
+// response tokens are pure latency. Keep the model from narrating a plan,
+// summarizing what it did, or printing tables/rationale to stdout (all of that
+// is wasted output, the slowest part of each turn). Structured logging still
+// goes through the lakebase-tdd-log CLI, not stdout prose.
+const AGENT_TERSE_SUFFIX =
+  ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation.` +
+  ` Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that` +
+  ` output is wasted latency. The files on disk are the deliverable, not your prose.`;
+
 /**
  * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
  * the Spec Author's per-story draft prompt to exactly that story (FEIP-7461: an
@@ -160,6 +170,7 @@ function roleTask(
 
 const PIPELINE_BIN = "lakebase-tdd-pipeline";
 const EXPERIMENT_BIN = "lakebase-tdd-experiment";
+const CYCLE_BIN = "lakebase-tdd-cycle";
 const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
@@ -204,7 +215,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir),
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
       };
       const cmds: DriveCommand[] = [claude];
       // After the Spec Author breaks the feature down, seed the pipeline from
@@ -221,6 +232,20 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // waiting on a per-story list the role wrote under a different name/shape.
       if (!("mode" in action) && action.role === "test-strategist") {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
+      }
+      // Cycle recording is an ORCHESTRATION concern, not the role's: the
+      // Navigator/Driver are pure (write the failing test / write the code +
+      // run the project's tests) and never touch git or the cycle artifacts.
+      // After the Navigator writes the next test, stamp the RED cycle; after
+      // the Driver makes it pass, record the run + stamp GREEN. Code-emitting
+      // this (vs the agent hand-writing cycle-NNN.json) is what keeps the
+      // probe's red_at/green_at reading in lockstep with what was produced ,
+      // the drift that stalled the live smoke.
+      if (!("mode" in action) && action.role === "navigator") {
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["begin", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+      }
+      if (!("mode" in action) && action.role === "driver") {
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["green", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,

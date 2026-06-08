@@ -6943,9 +6943,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -6965,8 +6962,11 @@ init_esm_shims();
 // scripts/tdd/experiment.ts
 init_esm_shims();
 
-// scripts/lakebase/convention-branches.ts
+// scripts/lakebase/paired-branch.ts
 init_esm_shims();
+import * as fs3 from "fs";
+import * as path3 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
 
 // scripts/lakebase/branch-create.ts
 init_esm_shims();
@@ -6991,12 +6991,6 @@ var execFileP2 = promisify2(execFile2);
 // scripts/lakebase/branch-create.ts
 var execFileP3 = promisify3(execFile3);
 
-// scripts/lakebase/paired-branch.ts
-init_esm_shims();
-import * as fs3 from "fs";
-import * as path3 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
-
 // scripts/lakebase/branch-delete.ts
 init_esm_shims();
 import { execFile as execFile4 } from "child_process";
@@ -7019,14 +7013,6 @@ import * as fs2 from "fs";
 // scripts/util/exec.ts
 init_esm_shims();
 import * as cp from "child_process";
-
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
@@ -7459,6 +7445,7 @@ function readPipeline(tddDir, featureId) {
 var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
 var UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
+var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
 function storyStubScope(tddDir, featureId, storyId) {
   try {
     const stub = JSON.parse(fs6.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
@@ -7506,6 +7493,7 @@ function roleTask(action, featureId, uiTrack, tddDir) {
 }
 var PIPELINE_BIN = "lakebase-tdd-pipeline";
 var EXPERIMENT_BIN = "lakebase-tdd-experiment";
+var CYCLE_BIN = "lakebase-tdd-cycle";
 var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 var LOG_BIN = "lakebase-tdd-log";
 var TEST_LIST_BIN = "lakebase-tdd-test-list";
@@ -7528,7 +7516,7 @@ function commandsForAction(action, cfg) {
         role: action.role,
         model: cfg.modelForRole(action.role),
         resumeKey: action.role,
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir)
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX
       };
       const cmds = [claude];
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
@@ -7536,6 +7524,12 @@ function commandsForAction(action, cfg) {
       }
       if (!("mode" in action) && action.role === "test-strategist") {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
+      }
+      if (!("mode" in action) && action.role === "navigator") {
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["begin", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+      }
+      if (!("mode" in action) && action.role === "driver") {
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["green", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
       }
       const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });

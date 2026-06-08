@@ -39,15 +39,32 @@ describe("commandsForAction: invoke-role -> claude", () => {
   it("maps a build role to a claude command with the resolved model", () => {
     const c = cfg({ modelForRole: (r) => (r === "driver" ? "opus" : "sonnet") });
     const cmds = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c);
-    // [claude, reconcile]: the role runs, then the orchestrator code-emits
-    // artifact.written for whatever it wrote (reconcile reads disk).
-    expect(cmds).toHaveLength(2);
+    // [claude, cycle green, reconcile]: the Driver runs (writes code + runs the
+    // project's tests), then the ORCHESTRATION records the cycle (stamps GREEN
+    // via the substrate, not the agent), then reconcile logs what landed.
+    expect(cmds).toHaveLength(3);
     // resumeKey = the role: the runner resumes this role's warm Claude session
     // across its invocations instead of a cold respawn per story/cycle.
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus", resumeKey: "driver" });
     expect((cmds[0] as { task: string }).task).toMatch(/GREEN/);
-    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
-    expect((cmds[1] as { args: string[] }).args).toContain("--reconcile");
+    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-cycle" });
+    expect((cmds[1] as { args: string[] }).args[0]).toBe("green");
+    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
+    expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
+  });
+
+  it("navigator: agent writes the test, orchestration stamps the RED cycle (agent records nothing)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
+    // [claude, cycle begin, reconcile]. The Navigator is pure; the cycle CLI
+    // (orchestration) records RED so the probe's red_at reading never depends
+    // on the agent hand-writing a cycle artifact.
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "navigator" });
+    const cycle = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-tdd-cycle") as { args: string[] } | undefined;
+    expect(cycle).toBeTruthy();
+    expect(cycle!.args[0]).toBe("begin");
+    expect(cycle!.args).toContain("S1");
+    // The agent is NOT told to record the cycle or touch git.
+    expect((cmds[0] as { task: string }).task).not.toMatch(/beginCycle|markGreen|git /i);
   });
 
   it("propose gets a mode-specific task", () => {

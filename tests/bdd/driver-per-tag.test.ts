@@ -338,15 +338,20 @@ describe("SKILL.md + driver.md: tagToRunner documentation", () => {
     expect(skill).toMatch(/recordRunnerOutcome/);
   });
 
-  it("driver.md instructs the Driver to dispatch on AC layer and call recordRunnerOutcome", () => {
+  it("driver.md keeps the Driver pure: it runs the layer runner, the orchestration records the cycle", () => {
     const driver = fs.readFileSync(
       path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "agents", "driver.md"),
       "utf8"
     );
-    expect(driver).toMatch(/cycle's AC layer|AC\.layer/);
+    // The Driver still dispatches on the AC layer + runs the project's test command.
+    expect(driver).toMatch(/AC.{0,4}layer/i);
     expect(driver).toMatch(/BASE_URL/);
-    expect(driver).toMatch(/recordRunnerOutcome/);
     expect(driver).toMatch(/tagToRunner|tag → runner map|tag-to-runner/i);
+    // But RECORDING is an orchestration concern now (the bug: agents freehand
+    // cycle artifacts). The doc states the orchestration stamps GREEN, and the
+    // Driver is told it does not touch the cycle artifact or git.
+    expect(driver).toMatch(/orchestration records the runner outcome|stamps GREEN/i);
+    expect(driver).toMatch(/never touch the cycle artifact|do NOT/);
   });
 });
 
