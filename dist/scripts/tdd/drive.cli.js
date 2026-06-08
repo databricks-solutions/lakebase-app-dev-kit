@@ -7021,6 +7021,14 @@ function toDesignView(state) {
 function nextDesignOnlyTransition(state) {
   return nextDesignAction(toDesignView(state));
 }
+function stopBeforeMilestone(m) {
+  switch (m) {
+    case "navigator":
+      return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === void 0;
+    case "release-engineer":
+      return (a) => a.kind === "await-acceptance" || a.kind === "deploy";
+  }
+}
 function actionLane(action) {
   switch (action.kind) {
     case "invoke-role": {
@@ -8452,6 +8460,9 @@ function parseArgs(argv) {
       case "--only":
         out.only = argv[++i];
         break;
+      case "--stop-before":
+        out.stopBefore = argv[++i];
+        break;
       case "--gates":
         out.gates = argv[++i];
         break;
@@ -8490,6 +8501,8 @@ Flags:
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
   --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
+  --stop-before <m>    Stop cleanly JUST BEFORE a handoff: navigator (the build
+                       kickoff) | release-engineer (the deploy/verify). Exit 0.
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
@@ -8754,6 +8767,21 @@ ${help()}`);
     bound = args.only;
   }
   const boundOpts = bound ? driverBoundOptions(bound) : {};
+  let stopMilestone;
+  if (args.stopBefore) {
+    if (!["navigator", "release-engineer"].includes(args.stopBefore)) {
+      process.stderr.write(
+        `lakebase-tdd-drive: --stop-before must be navigator|release-engineer (got "${args.stopBefore}").
+`
+      );
+      return 2;
+    }
+    stopMilestone = args.stopBefore;
+  }
+  const stopFns = [boundOpts.stopWhen, stopMilestone ? stopBeforeMilestone(stopMilestone) : void 0].filter(
+    (f) => Boolean(f)
+  );
+  const baseStopWhen = stopFns.length ? (a) => stopFns.some((f) => f(a)) : void 0;
   const cfg = buildCfg(args, args.feature);
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);
@@ -8766,7 +8794,7 @@ ${help()}`);
     const result = await runDriver(buildDriveEffects(cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive)
+      stopWhen: gatedStopWhen(baseStopWhen, interactive)
     });
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
@@ -8784,6 +8812,11 @@ ${help()}`);
 `);
     } else if (pendingGate) {
       reportGate(pendingGate);
+    } else if (result.stoppedAtBound && stopMilestone && result.stoppedAt && stopBeforeMilestone(stopMilestone)(result.stoppedAt)) {
+      process.stderr.write(
+        `[drive] stopped JUST BEFORE the ${stopMilestone} handoff after ${result.iterations} actions (next action: ${describeAction(result.stoppedAt)}). Review, then re-run without --stop-before to continue.
+`
+      );
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
 `);

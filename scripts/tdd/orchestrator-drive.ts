@@ -354,6 +354,30 @@ export function nextDesignOnlyTransition(state: DriveState): WorkflowAction {
   return nextDesignAction(toDesignView(state));
 }
 
+/**
+ * A handoff the human can stop a driver run JUST BEFORE (a finer bound than the
+ * Tier-2 lanes): "navigator" = the first build handoff (the Navigator kickoff,
+ * before any code is written), "release-engineer" = the deploy/verify (the
+ * Release Engineer takes the built + reviewed story and ships it). Backs the
+ * run-to-navigator / run-to-release-engineer smokes (and `--stop-before`).
+ */
+export type StopMilestone = "navigator" | "release-engineer";
+
+/** A `stopWhen` predicate that halts cleanly BEFORE the given handoff fires. */
+export function stopBeforeMilestone(m: StopMilestone): (action: WorkflowAction) => boolean {
+  switch (m) {
+    case "navigator":
+      // The initial Navigator handoff writes the first failing test (tests not
+      // yet written). The per-AC REVIEW/REFACTOR turns also invoke the navigator
+      // but carry a buildMode, so exclude those , we stop at the build kickoff.
+      return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === undefined;
+    case "release-engineer":
+      // The per-story deploy + verify (await-acceptance) and the feature-level
+      // deploy both hand the working software to the Release Engineer.
+      return (a) => a.kind === "await-acceptance" || a.kind === "deploy";
+  }
+}
+
 /** The lane a WorkflowAction belongs to, for the driver's Tier-2 phase bounds.
  *  "coarse" is the feature->deploy boundary (feature-complete). */
 export type ActionLane = "planning" | "design" | "build" | "deploy" | "coarse" | "done";

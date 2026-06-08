@@ -23,7 +23,13 @@ import * as path from "node:path";
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { restoreBuildTurn } from "./replay-build.js";
 import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
-import { isHitlGateAction, isHumanInputAction, type WorkflowAction } from "./orchestrator-drive.js";
+import {
+  isHitlGateAction,
+  isHumanInputAction,
+  stopBeforeMilestone,
+  type StopMilestone,
+  type WorkflowAction,
+} from "./orchestrator-drive.js";
 import {
   buildDriveEffects,
   commandsForAction,
@@ -57,6 +63,7 @@ interface ParsedArgs {
   maxSteps?: number;
   planOnly?: boolean;
   only?: string;
+  stopBefore?: string;
   gates?: string;
   noSizing?: boolean;
   help?: boolean;
@@ -77,6 +84,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--max-steps": out.maxSteps = Number(argv[++i]); break;
       case "--plan-only": out.planOnly = true; break;
       case "--only": out.only = argv[++i]; break;
+      case "--stop-before": out.stopBefore = argv[++i]; break;
       case "--gates": out.gates = argv[++i]; break;
       // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
       // default. --no-sizing opts OUT: planning goes propose -> author-requests
@@ -108,6 +116,8 @@ Flags:
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
   --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
+  --stop-before <m>    Stop cleanly JUST BEFORE a handoff: navigator (the build
+                       kickoff) | release-engineer (the deploy/verify). Exit 0.
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
@@ -440,6 +450,26 @@ async function main(): Promise<number> {
   }
   const boundOpts = bound ? driverBoundOptions(bound) : {};
 
+  // --stop-before: a finer stop than the Tier-2 lanes. Halt JUST BEFORE a
+  // handoff (the Navigator build kickoff, or the Release Engineer deploy). Backs
+  // the run-to-navigator / run-to-release-engineer smokes.
+  let stopMilestone: StopMilestone | undefined;
+  if (args.stopBefore) {
+    if (!["navigator", "release-engineer"].includes(args.stopBefore)) {
+      process.stderr.write(
+        `lakebase-tdd-drive: --stop-before must be navigator|release-engineer (got "${args.stopBefore}").\n`,
+      );
+      return 2;
+    }
+    stopMilestone = args.stopBefore as StopMilestone;
+  }
+  // Compose the (at most one) phase bound with the handoff stop: the run halts at
+  // whichever the next action satisfies first.
+  const stopFns = [boundOpts.stopWhen, stopMilestone ? stopBeforeMilestone(stopMilestone) : undefined].filter(
+    (f): f is (a: WorkflowAction) => boolean => Boolean(f),
+  );
+  const baseStopWhen = stopFns.length ? (a: WorkflowAction) => stopFns.some((f) => f(a)) : undefined;
+
   const cfg = buildCfg(args, args.feature);
 
   if (args.dryRun) {
@@ -454,7 +484,7 @@ async function main(): Promise<number> {
     const result = await runDriver(buildDriveEffects(cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
+      stopWhen: gatedStopWhen(baseStopWhen, interactive),
     });
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
@@ -472,6 +502,11 @@ async function main(): Promise<number> {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
       reportGate(pendingGate);
+    } else if (result.stoppedAtBound && stopMilestone && result.stoppedAt && stopBeforeMilestone(stopMilestone)(result.stoppedAt)) {
+      process.stderr.write(
+        `[drive] stopped JUST BEFORE the ${stopMilestone} handoff after ${result.iterations} actions ` +
+          `(next action: ${describeAction(result.stoppedAt)}). Review, then re-run without --stop-before to continue.\n`,
+      );
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)\n`);
     } else {

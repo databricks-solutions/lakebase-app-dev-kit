@@ -130,6 +130,23 @@ bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v2 --skip-scaff
 
 Re-plans each sprint (idempotent) and starts the per-feature loop at v2.
 
+### The scripts (one job each)
+
+`orchestrator/` holds exactly four runnable scripts (plus sourced helpers
+`_replay-smoke.sh` and `assertions/_*.sh`). All resolve the kit through the
+committed `lk` resolver, and the three smokes default to THIS checkout's built
+`dist/` (deterministic + offline) unless you pass `--kit-ref`:
+
+| Script | What it does |
+|--------|--------------|
+| `run-smoke.sh` | Full end-to-end: scaffold → plan → design → build → deploy, live, nothing replayed. |
+| `run-to-navigator.sh` | Replays the design lane, then STOPS just before the Navigator build handoff. A launch pad to inspect/take over the build. |
+| `run-to-release-engineer.sh` | Replays design + restores the recorded build, then STOPS just before the Release Engineer deploy handoff. |
+| `rebuild-push-warm.sh` | Publishes the current branch: rebuild + commit `dist/` + push + warm the lk cache. Run it when you want the pushed/published bits; the smokes don't need it. |
+
+`run-to-*` resume from where they stopped: `cd <project> && ./scripts/lk
+lakebase-tdd-drive --feature F1-file-bug`.
+
 ### Other useful flags
 
 | Flag | Meaning |

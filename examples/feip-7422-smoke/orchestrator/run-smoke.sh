@@ -165,6 +165,13 @@ export LAKEBASE_KIT_NPX="$KIT_NPX"
 # every step of every run.
 KIT_ROOT="$(cd "${ORCHESTRATOR_DIR}/../../.." && pwd)"
 KIT_LK="${KIT_ROOT}/templates/project/common/scripts/lk"
+# Deterministic kit resolution (in code): explicit $LAKEBASE_KIT_DIR wins; else an
+# explicit --kit-ref resolves via lk; else default to THIS checkout's built dist
+# (offline, content-stable), so a plain end-to-end run is deterministic without a
+# push. Run rebuild-push-warm.sh + pass --kit-ref to validate the published path.
+if [[ -z "${LAKEBASE_KIT_DIR:-}" && -z "$KIT_REF" ]]; then
+  export LAKEBASE_KIT_DIR="$KIT_ROOT"
+fi
 
 # Headless run: the human reviewer at each HITL gate is performed by
 # human-proxy, which validates the gate's artifacts exist + carry their
