@@ -44,6 +44,7 @@ __export(scripts_exports, {
   LakebaseProjectError: () => LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES: () => PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE: () => PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROJECT_SKILLS: () => PROJECT_SKILLS,
   PROXY_ENV_KEYS: () => PROXY_ENV_KEYS,
   ProtectedBranchError: () => ProtectedBranchError,
   SCM_STATES: () => SCM_STATES,
@@ -117,6 +118,7 @@ __export(scripts_exports, {
   deleteTag: () => deleteTag,
   deployClaudeAgents: () => deployClaudeAgents,
   deployClaudeCommands: () => deployClaudeCommands,
+  deployClaudeSkills: () => deployClaudeSkills,
   deployDeployTargets: () => deployDeployTargets,
   deployEnv: () => deployEnv,
   deployEnvExample: () => deployEnvExample,
@@ -1908,6 +1910,33 @@ async function deployClaudeAgents(targetDir, opts) {
   }
   return { written, skipped };
 }
+var PROJECT_SKILLS = [
+  "software-design-principles",
+  "lakebase-tdd-workflows",
+  "lakebase-scm-workflows",
+  "lakebase-release-workflows",
+  "databricks-lakebase",
+  "databricks-core"
+];
+async function deployClaudeSkills(targetDir, opts) {
+  const kitRoot = path5.dirname(path5.dirname(templatesRoot(opts)));
+  const written = [];
+  const skipped = [];
+  for (const skill of PROJECT_SKILLS) {
+    const src = path5.join(kitRoot, "skills", skill);
+    if (!fs6.existsSync(src)) continue;
+    const relDest = path5.join(".claude", "skills", skill);
+    const destPath = path5.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.mkdirSync(path5.dirname(destPath), { recursive: true });
+    fs6.cpSync(src, destPath, { recursive: true });
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path5.join(commonDir(opts), ".github", "workflows"),
@@ -2094,6 +2123,7 @@ async function scaffoldStaticAll(args) {
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
   let claudeAgents = [];
+  let claudeSkills = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
@@ -2101,8 +2131,11 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
+    report("Deploying .claude/skills/ (software-design-principles)");
+    const skills = await deployClaudeSkills(args.targetDir, opts);
+    claudeSkills = skills.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents, claudeSkills };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -9297,6 +9330,7 @@ function withProxyEnv(base = {}) {
   LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROJECT_SKILLS,
   PROXY_ENV_KEYS,
   ProtectedBranchError,
   SCM_STATES,
@@ -9370,6 +9404,7 @@ function withProxyEnv(base = {}) {
   deleteTag,
   deployClaudeAgents,
   deployClaudeCommands,
+  deployClaudeSkills,
   deployDeployTargets,
   deployEnv,
   deployEnvExample,

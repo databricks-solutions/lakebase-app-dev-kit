@@ -8074,6 +8074,33 @@ async function deployClaudeAgents(targetDir, opts) {
   }
   return { written, skipped };
 }
+var PROJECT_SKILLS = [
+  "software-design-principles",
+  "lakebase-tdd-workflows",
+  "lakebase-scm-workflows",
+  "lakebase-release-workflows",
+  "databricks-lakebase",
+  "databricks-core"
+];
+async function deployClaudeSkills(targetDir, opts) {
+  const kitRoot = path7.dirname(path7.dirname(templatesRoot(opts)));
+  const written = [];
+  const skipped = [];
+  for (const skill of PROJECT_SKILLS) {
+    const src = path7.join(kitRoot, "skills", skill);
+    if (!fs8.existsSync(src)) continue;
+    const relDest = path7.join(".claude", "skills", skill);
+    const destPath = path7.join(targetDir, relDest);
+    if (fs8.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs8.mkdirSync(path7.dirname(destPath), { recursive: true });
+    fs8.cpSync(src, destPath, { recursive: true });
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path7.join(commonDir(opts), ".github", "workflows"),
@@ -8260,6 +8287,7 @@ async function scaffoldStaticAll(args) {
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
   let claudeAgents = [];
+  let claudeSkills = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
@@ -8267,8 +8295,11 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
+    report("Deploying .claude/skills/ (software-design-principles)");
+    const skills = await deployClaudeSkills(args.targetDir, opts);
+    claudeSkills = skills.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents, claudeSkills };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {

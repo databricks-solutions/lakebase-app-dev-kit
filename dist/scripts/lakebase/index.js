@@ -724,6 +724,33 @@ async function deployClaudeAgents(targetDir, opts) {
   }
   return { written, skipped };
 }
+var PROJECT_SKILLS = [
+  "software-design-principles",
+  "lakebase-tdd-workflows",
+  "lakebase-scm-workflows",
+  "lakebase-release-workflows",
+  "databricks-lakebase",
+  "databricks-core"
+];
+async function deployClaudeSkills(targetDir, opts) {
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+  const written = [];
+  const skipped = [];
+  for (const skill of PROJECT_SKILLS) {
+    const src = path6.join(kitRoot, "skills", skill);
+    if (!fs6.existsSync(src)) continue;
+    const relDest = path6.join(".claude", "skills", skill);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.mkdirSync(path6.dirname(destPath), { recursive: true });
+    fs6.cpSync(src, destPath, { recursive: true });
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path6.join(commonDir(opts), ".github", "workflows"),
@@ -910,6 +937,7 @@ async function scaffoldStaticAll(args) {
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
   let claudeAgents = [];
+  let claudeSkills = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
@@ -917,8 +945,11 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
+    report("Deploying .claude/skills/ (software-design-principles)");
+    const skills = await deployClaudeSkills(args.targetDir, opts);
+    claudeSkills = skills.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents, claudeSkills };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -8265,6 +8296,7 @@ export {
   LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROJECT_SKILLS,
   SCM_STATES,
   STATE_FILE_REL,
   SchemaMigrationError,
@@ -8310,6 +8342,7 @@ export {
   deletePairedBranch,
   deployClaudeAgents,
   deployClaudeCommands,
+  deployClaudeSkills,
   deployDeployTargets,
   deployEnv,
   deployEnvExample,

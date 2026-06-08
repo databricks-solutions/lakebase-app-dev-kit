@@ -6666,6 +6666,7 @@ var featuresDir = (tdd) => join(tdd, "features");
 var planningDir = (tdd) => join(tdd, "planning");
 var sprintsDir = (tdd) => join(tdd, "sprints");
 var cyclesRootDir = (tdd) => join(tdd, "cycles");
+var acReviewJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review.json");
 var workflowStateJson = (tdd) => join(tdd, "workflow-state.json");
 var designGuideJson = (tdd) => join(tdd, "design", "design-guide.json");
 var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
@@ -6933,6 +6934,8 @@ function nextBuildAction(story, b) {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
+  if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
+  if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
   if (!b.deployVerified) return { kind: "await-acceptance", story };
   if (!b.accepted) return { kind: "accept", story };
@@ -7103,6 +7106,8 @@ function storyView(id, e, probe) {
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted
@@ -7319,8 +7324,8 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync7, readFileSync as readFileSync8, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
-import { join as join7 } from "path";
+import { existsSync as existsSync7, readFileSync as readFileSync8, readdirSync as readdirSync3, statSync as statSync3, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4 } from "fs";
+import { join as join7, dirname as dirname3 } from "path";
 
 // scripts/tdd/test-list.ts
 init_esm_shims();
@@ -7370,10 +7375,54 @@ function storyTestProgress(tddDir, featureId, story) {
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
   return { total: items.length, pending, openRed, allGreen };
 }
+function readReview(tddDir, featureId, story, acId) {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!existsSync7(f)) return {};
+  try {
+    return JSON.parse(readFileSync8(f, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function acReviewStates(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const acOrder = [];
+  const acTests = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id).push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId);
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at)
+    };
+  });
+}
+function firstReviewPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+function firstRefactorPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync8, readFileSync as readFileSync9, renameSync, unlinkSync, writeFileSync as writeFileSync5 } from "fs";
+import { existsSync as existsSync8, readFileSync as readFileSync9, renameSync, unlinkSync, writeFileSync as writeFileSync6 } from "fs";
 import { join as join8 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
@@ -7468,8 +7517,8 @@ function validateGateRecord(parsed, gateName, file) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync9, mkdirSync as mkdirSync4, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync6 } from "fs";
-import { dirname as dirname3, join as join9 } from "path";
+import { existsSync as existsSync9, mkdirSync as mkdirSync5, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync7 } from "fs";
+import { dirname as dirname4, join as join9 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7588,6 +7637,12 @@ function diskArtifactProbe(tddDir, featureId) {
       }
       return p.allGreen;
     },
+    reviewPendingAc(story) {
+      return firstReviewPendingAc(tddDir, featureId, story);
+    },
+    refactorPendingAc(story) {
+      return firstRefactorPendingAc(tddDir, featureId, story);
+    },
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
     }
@@ -7596,7 +7651,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7652,8 +7707,14 @@ function roleTask(action, featureId, uiTrack, tddDir) {
     case "test-strategist":
       return `Produce the ordered test list for story ${s}.`;
     case "navigator":
+      if (action.buildMode === "review") {
+        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green. Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
+      }
       return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
+      if (action.buildMode === "refactor") {
+        return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`;
+      }
       return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
     default:
       return `Work story ${s}.`;
@@ -7698,10 +7759,14 @@ function commandsForAction(action, cfg) {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
       if (!("mode" in action) && action.role === "navigator") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["begin", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       if (!("mode" in action) && action.role === "driver") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["green", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
@@ -7845,7 +7910,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync13, mkdirSync as mkdirSync6, readFileSync as readFileSync14, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync13, mkdirSync as mkdirSync7, readFileSync as readFileSync14, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync9 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -7924,8 +7989,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync9, mkdirSync as mkdirSync7 } from "fs";
-import { dirname as dirname4, join as join11 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8 } from "fs";
+import { dirname as dirname5, join as join11 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",

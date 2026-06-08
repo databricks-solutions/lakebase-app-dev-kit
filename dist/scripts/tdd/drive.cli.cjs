@@ -6661,6 +6661,7 @@ var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
 var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
 var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var acReviewJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review.json");
 var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
 var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
 var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
@@ -6928,6 +6929,8 @@ function nextBuildAction(story, b) {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
+  if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
+  if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
   if (!b.deployVerified) return { kind: "await-acceptance", story };
   if (!b.accepted) return { kind: "accept", story };
@@ -7098,6 +7101,8 @@ function storyView(id, e, probe) {
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted
@@ -7365,6 +7370,50 @@ function storyTestProgress(tddDir, featureId, story) {
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
   return { total: items.length, pending, openRed, allGreen };
 }
+function readReview(tddDir, featureId, story, acId) {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!(0, import_fs4.existsSync)(f)) return {};
+  try {
+    return JSON.parse((0, import_fs4.readFileSync)(f, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function acReviewStates(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const acOrder = [];
+  const acTests = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id).push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId);
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at)
+    };
+  });
+}
+function firstReviewPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+function firstRefactorPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
 
 // scripts/tdd/gates.ts
 init_cjs_shims();
@@ -7583,6 +7632,12 @@ function diskArtifactProbe(tddDir, featureId) {
       }
       return p.allGreen;
     },
+    reviewPendingAc(story) {
+      return firstReviewPendingAc(tddDir, featureId, story);
+    },
+    refactorPendingAc(story) {
+      return firstRefactorPendingAc(tddDir, featureId, story);
+    },
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
     }
@@ -7647,8 +7702,14 @@ function roleTask(action, featureId, uiTrack, tddDir) {
     case "test-strategist":
       return `Produce the ordered test list for story ${s}.`;
     case "navigator":
+      if (action.buildMode === "review") {
+        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green. Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
+      }
       return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
+      if (action.buildMode === "refactor") {
+        return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`;
+      }
       return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
     default:
       return `Work story ${s}.`;
@@ -7693,10 +7754,14 @@ function commandsForAction(action, cfg) {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
       if (!("mode" in action) && action.role === "navigator") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["begin", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       if (!("mode" in action) && action.role === "driver") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["green", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
       }
       const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });

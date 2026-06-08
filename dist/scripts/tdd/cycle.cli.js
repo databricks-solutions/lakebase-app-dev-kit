@@ -6652,8 +6652,8 @@ import { join as join10 } from "path";
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync5 } from "fs";
-import { join as join9 } from "path";
+import { existsSync as existsSync9, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6 } from "fs";
+import { join as join9, dirname as dirname3 } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
@@ -6661,6 +6661,8 @@ import * as fs from "fs";
 import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
 var cyclesRootDir = (tdd) => join(tdd, "cycles");
+var acReviewJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review.json");
+var acReviewVerdictJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review-verdict.json");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
@@ -7253,6 +7255,80 @@ function greenOpenCycle(args) {
   }
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
 }
+function readReview(tddDir, featureId, story, acId) {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!existsSync9(f)) return {};
+  try {
+    return JSON.parse(readFileSync10(f, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function acReviewStates(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const acOrder = [];
+  const acTests = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id).push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId);
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at)
+    };
+  });
+}
+function firstReviewPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+function firstRefactorPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
+function reviewAc(tddDir, featureId, story, acId) {
+  let verdict = {};
+  const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
+  if (existsSync9(vf)) {
+    try {
+      verdict = JSON.parse(readFileSync10(vf, "utf8"));
+    } catch {
+      verdict = {};
+    }
+  }
+  const refactorRequested = verdict.refactor === true;
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  mkdirSync6(dirname3(file), { recursive: true });
+  writeFileSync7(
+    file,
+    JSON.stringify(
+      { ...prior, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), refactor_requested: refactorRequested, ...verdict.notes ? { refactor_notes: verdict.notes } : {} },
+      null,
+      2
+    ) + "\n"
+  );
+  return { reviewed: true, refactorRequested };
+}
+function refactorAc(tddDir, featureId, story, acId) {
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  mkdirSync6(dirname3(file), { recursive: true });
+  writeFileSync7(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+}
 
 // scripts/tdd/cycle.cli.ts
 function parse(argv) {
@@ -7265,6 +7341,9 @@ function parse(argv) {
       case "--story":
         out.story = argv[++i];
         break;
+      case "--ac":
+        out.ac = argv[++i];
+        break;
       case "--tdd-dir":
         out.tddDir = argv[++i];
         break;
@@ -7275,7 +7354,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-tdd-cycle <begin|green> --feature <F> --story <S> [--tdd-dir <D>]
+Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>]
 `
   );
   return 2;
@@ -7298,6 +7377,30 @@ function main() {
     case "green": {
       const r = greenOpenCycle(base);
       process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}
+`);
+      return 0;
+    }
+    case "review": {
+      const ac = a.ac ?? firstReviewPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting review for ${a.story}
+`);
+        return 0;
+      }
+      const r = reviewAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REVIEWED ${ac}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}
+`);
+      return 0;
+    }
+    case "refactor": {
+      const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}
+`);
+        return 0;
+      }
+      refactorAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REFACTORED ${ac}
 `);
       return 0;
     }

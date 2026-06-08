@@ -6656,6 +6656,8 @@ var fs = __toESM(require("fs"), 1);
 var import_node_path = require("path");
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var acReviewJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review.json");
+var acReviewVerdictJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review-verdict.json");
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureTestListJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "test-list.json");
@@ -7248,6 +7250,80 @@ function greenOpenCycle(args) {
   }
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
 }
+function readReview(tddDir, featureId, story, acId) {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!(0, import_fs6.existsSync)(f)) return {};
+  try {
+    return JSON.parse((0, import_fs6.readFileSync)(f, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function acReviewStates(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const acOrder = [];
+  const acTests = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id).push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId);
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at)
+    };
+  });
+}
+function firstReviewPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+function firstRefactorPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
+function reviewAc(tddDir, featureId, story, acId) {
+  let verdict = {};
+  const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
+  if ((0, import_fs6.existsSync)(vf)) {
+    try {
+      verdict = JSON.parse((0, import_fs6.readFileSync)(vf, "utf8"));
+    } catch {
+      verdict = {};
+    }
+  }
+  const refactorRequested = verdict.refactor === true;
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  (0, import_fs6.mkdirSync)((0, import_path6.dirname)(file), { recursive: true });
+  (0, import_fs6.writeFileSync)(
+    file,
+    JSON.stringify(
+      { ...prior, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), refactor_requested: refactorRequested, ...verdict.notes ? { refactor_notes: verdict.notes } : {} },
+      null,
+      2
+    ) + "\n"
+  );
+  return { reviewed: true, refactorRequested };
+}
+function refactorAc(tddDir, featureId, story, acId) {
+  const file = acReviewJson(tddDir, featureId, story, acId);
+  const prior = readReview(tddDir, featureId, story, acId);
+  (0, import_fs6.mkdirSync)((0, import_path6.dirname)(file), { recursive: true });
+  (0, import_fs6.writeFileSync)(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+}
 
 // scripts/tdd/cycle.cli.ts
 function parse(argv) {
@@ -7260,6 +7336,9 @@ function parse(argv) {
       case "--story":
         out.story = argv[++i];
         break;
+      case "--ac":
+        out.ac = argv[++i];
+        break;
       case "--tdd-dir":
         out.tddDir = argv[++i];
         break;
@@ -7270,7 +7349,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-tdd-cycle <begin|green> --feature <F> --story <S> [--tdd-dir <D>]
+Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>]
 `
   );
   return 2;
@@ -7293,6 +7372,30 @@ function main() {
     case "green": {
       const r = greenOpenCycle(base);
       process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}
+`);
+      return 0;
+    }
+    case "review": {
+      const ac = a.ac ?? firstReviewPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting review for ${a.story}
+`);
+        return 0;
+      }
+      const r = reviewAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REVIEWED ${ac}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}
+`);
+      return 0;
+    }
+    case "refactor": {
+      const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
+      if (!ac) {
+        process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}
+`);
+        return 0;
+      }
+      refactorAc(tddDir, a.feature, a.story, ac);
+      process.stdout.write(`cycle: REFACTORED ${ac}
 `);
       return 0;
     }
