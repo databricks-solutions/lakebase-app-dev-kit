@@ -63,13 +63,29 @@ export type DriveAction =
   | { kind: "design-complete" };
 
 /**
+ * UI track: the project design guide (the UX Designer's output) is a hard
+ * prerequisite for building any UI. True when the UI track is on, the feature is
+ * broken down (the UX Designer needs the spec), and the guide is not on disk
+ * yet. Used BOTH in the design lane and (hoisted) in nextTransition before the
+ * build lane dispatches, so a pre-gated story still waits for the guide.
+ */
+export function uxDesignerPending(s: {
+  uiTrack?: boolean;
+  breakdownDone: boolean;
+  designGuideReady?: boolean;
+}): boolean {
+  return !!s.uiTrack && s.breakdownDone && !s.designGuideReady;
+}
+
+/**
  * Compute the next design-lane action from the recorded state. Pure.
  *
  * Order of precedence:
  *   1. Break the feature down if not done.
- *   2. Otherwise advance the FIRST story (in breakdown order) whose gate is not
+ *   2. UI track: author the project design guide (UX Designer) once.
+ *   3. Otherwise advance the FIRST story (in breakdown order) whose gate is not
  *      yet approved, through: ACs -> architecture -> tests -> surface -> approve.
- *   3. When every story's gate is approved, the design lane is complete.
+ *   4. When every story's gate is approved, the design lane is complete.
  */
 export function nextDesignAction(state: DesignDriveState): DriveAction {
   if (!state.breakdownDone) {
@@ -80,8 +96,8 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
   // guide ONCE (design-guide.{md,json} + ia.md), after breakdown and before any
   // story is architected or built, so the Architect's E2E layers and the
   // Navigator/Driver's UI build against it. Idempotent: skipped once the guide
-  // exists (it is project-level, reused across features).
-  if (state.uiTrack && !state.designGuideReady) {
+  // exists (project-level, reused across features).
+  if (uxDesignerPending(state)) {
     return { kind: "invoke-role", role: "ux-designer" };
   }
 
@@ -250,6 +266,14 @@ export function nextTransition(state: DriveState): WorkflowAction {
   if (state.phase === "done") return { kind: "done" };
 
   // phase === "feature": stream design + build.
+  // UI-track prerequisite: the project design guide must exist before ANY UI is
+  // built. Run the UX Designer (once, after breakdown) BEFORE the build lane can
+  // dispatch a story, so a story whose spec gate is already approved still waits
+  // for the guide rather than building UI against a guide that does not exist.
+  // Idempotent: skipped once design-guide.json is on disk.
+  if (uxDesignerPending(state)) {
+    return { kind: "invoke-role", role: "ux-designer" };
+  }
   // 1. Finish/advance the story the build lane is already on.
   if (state.buildActive) {
     return nextBuildAction(state.buildActive, state.stories[state.buildActive].build);

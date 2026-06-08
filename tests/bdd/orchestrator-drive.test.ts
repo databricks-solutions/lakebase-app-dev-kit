@@ -148,6 +148,25 @@ describe("nextDesignAction: UX Designer (UI track)", () => {
   });
 });
 
+describe("nextTransition: UX Designer prerequisite (hoisted above build dispatch)", () => {
+  it("a gate-approved story still WAITS for the design guide (UX wins over dispatch)", () => {
+    // The reused-project / last-stage case: S1's spec gate is already approved
+    // (would normally dispatch to build), but the project design guide does not
+    // exist yet. The UX step must fire BEFORE the dispatch, so the UI is never
+    // built against a guide that does not exist.
+    const st = ws({ stories: { S1: gatedUnbuilt() }, uiTrack: true, designGuideReady: false });
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "ux-designer" });
+  });
+  it("once the design guide exists, the gate-approved story dispatches to build", () => {
+    const st = ws({ stories: { S1: gatedUnbuilt() }, uiTrack: true, designGuideReady: true });
+    expect(nextTransition(st)).toEqual({ kind: "dispatch", story: "S1" });
+  });
+  it("no UX gating for non-UI projects: the gate-approved story dispatches", () => {
+    const st = ws({ stories: { S1: gatedUnbuilt() }, uiTrack: false, designGuideReady: false });
+    expect(nextTransition(st)).toEqual({ kind: "dispatch", story: "S1" });
+  });
+});
+
 describe("nextTransition: planning lane", () => {
   it("proposes, estimates, authors requests, approves the PLAN GATE, then completes", () => {
     const base = ws({ phase: "planning", planning: { proposed: false, estimated: false, requestsAuthored: false } });
