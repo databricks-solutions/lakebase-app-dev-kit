@@ -3,8 +3,5 @@
   "name": "File a Bug in the Browser",
   "status": "draft",
   "tdd_mode": "N>=2",
-  "stories": [
-    "S1-file-bug",
-    "S2-view-bug-detail"
-  ]
+  "stories": ["S1-create-bug", "S2-view-bug-detail"]
 }

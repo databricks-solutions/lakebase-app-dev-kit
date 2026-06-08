@@ -1,9 +1,0 @@
-{
-  "id": "AC7-user-navigated-to-detail",
-  "given": "a user submits the create bug form",
-  "when": "the bug is created successfully",
-  "then": "the user's browser navigates to the bug's detail page at URL /bugs/{bug-id}, where {bug-id} is the numeric identifier of the created bug",
-  "status": "draft",
-  "layer": "E2E",
-  "architectural_notes": "E2E AC verifying the browser navigates to the bug detail page after successful creation. The frontend router owns the navigation logic; it triggers after receiving the bug ID from the backend API response."
-}

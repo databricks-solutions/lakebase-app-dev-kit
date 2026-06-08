@@ -2,40 +2,33 @@
   "feature_id": "F1-file-bug",
   "nfrs": [
     {
-      "id": "NFR-R1-migration-durability",
-      "brief_ref": "R1",
-      "category": "resilience",
-      "brief": "Existing bugs and their data survive every schema migration with no loss; each iteration's model change preserves the bugs filed before it",
+      "id": "NFR-R1-schema-migration-preservation",
+      "brief": "Existing bugs and their data survive every schema migration with no loss of data.",
       "applies_to": "F1-file-bug",
-      "hil_status": "proposed"
+      "category": "operability",
+      "hil_status": "proposed",
+      "brief_ref": "R1"
     },
     {
       "id": "NFR-R2-status-validation",
-      "brief_ref": "R2",
-      "category": "security",
-      "brief": "A bug's status is always one of the recognized states; an unrecognized status is rejected at write time, never stored",
-      "applies_to": "F1-file-bug",
-      "hil_status": "proposed"
-    },
-    {
-      "id": "NFR-error-messages",
-      "category": "observability",
-      "brief": "Error messages are clear and specific, naming the offending value rather than generic 'bad request' responses",
-      "applies_to": "F1-file-bug",
-      "hil_status": "proposed"
-    },
-    {
-      "id": "NFR-migration-additive",
+      "brief": "A bug's status is always one of the recognized states; an unrecognized status is rejected at write time, never stored.",
+      "applies_to": "S1-create-bug",
       "category": "operability",
-      "brief": "New tables introduced by a migration are additive where possible; old reads keep working during rollout",
-      "applies_to": "F1-file-bug",
+      "hil_status": "proposed",
+      "brief_ref": "R2"
+    },
+    {
+      "id": "NFR-error-message-clarity",
+      "brief": "Clear, specific error messages that name the offending value (not just 'bad request').",
+      "applies_to": "S1-create-bug",
+      "category": "operability",
       "hil_status": "proposed"
     },
     {
-      "id": "NFR-persistence",
-      "category": "resilience",
-      "brief": "Bug data is durably persisted to the database on successful form submission",
-      "applies_to": "S1-file-bug",
+      "id": "NFR-additive-migrations",
+      "brief": "New tables introduced by a migration are additive where possible; old reads keep working during rollout.",
+      "applies_to": "F1-file-bug",
+      "category": "operability",
       "hil_status": "proposed"
     }
   ]

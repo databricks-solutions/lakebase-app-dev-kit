@@ -1,0 +1,7 @@
+{
+  "id": "S1-create-bug",
+  "asA": "team member",
+  "iWantTo": "fill in a form with a title and description and submit it",
+  "soThat": "I file a bug and receive a stable URL to share",
+  "status": "draft"
+}

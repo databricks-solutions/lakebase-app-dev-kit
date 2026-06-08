@@ -38,7 +38,13 @@ export type DriveCommand =
   // commits its requests, project backlog.json from the on-disk feature-request
   // set + the Architect's estimates. Handled in-process by the runner (no CLI),
   // mirroring set-phase. See syncBacklog in tdd-paths.
-  | { kind: "sync-backlog"; sprint: string };
+  | { kind: "sync-backlog"; sprint: string }
+  // Fast-forward-to-release: restore a story's recorded BUILD (the whole code
+  // tree + GREEN/reviewed cycles + experiment records) from the build corpus,
+  // so the driver skips the live Navigator/Driver loop and lands on
+  // await-acceptance (the deterministic Release Engineer deploy). Emitted right
+  // after cut-experiment, only when a build corpus is configured (replayBuildDir).
+  | { kind: "replay-build"; story: string };
 
 export interface CommandRunner {
   run(cmd: DriveCommand): Promise<void>;
@@ -57,6 +63,10 @@ export interface DriveEffectsConfig {
   sprintName?: string;
   /** Deploy target for the deploy action (e.g. "local"). */
   deployTarget?: string;
+  /** Build corpus root (LAKEBASE_TDD_REPLAY_BUILD_DIR). When set, cut-experiment
+   *  is followed by a replay-build step that restores the recorded build so the
+   *  drive fast-forwards past Navigator/Driver to the Release Engineer. */
+  replayBuildDir?: string;
   /** Lakebase instance id (the Lakebase project id), threaded to the experiment
    *  branch ops. The experiment CLI requires it; resolved from SCM state. */
   instance?: string;
@@ -330,6 +340,11 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
             cfg.tddDir,
           ],
         },
+        // Fast-forward-to-release: with a build corpus configured, restore the
+        // recorded build onto the just-cut experiment branch so the driver skips
+        // the live Navigator/Driver loop and lands on the deterministic Release
+        // Engineer deploy. A no-op (corpus miss) falls through to the live build.
+        ...(cfg.replayBuildDir ? [{ kind: "replay-build", story: action.story } as DriveCommand] : []),
       ];
 
     case "await-acceptance":

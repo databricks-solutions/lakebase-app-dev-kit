@@ -1,0 +1,9 @@
+{
+  "id": "AC1-create-form-accessible",
+  "given": "the user opens the app",
+  "when": "the user navigates to create a new bug",
+  "then": "a form displays with input fields for title and description",
+  "status": "passing",
+  "layer": "API",
+  "architectural_notes": "Form HTML is served by the API layer (GET /bugs/create route). No cross-cutting concerns. Module: pages/CreateBugForm or routes/bugs."
+}

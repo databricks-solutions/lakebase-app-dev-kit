@@ -37,7 +37,7 @@ ASSERT_DIR="${ORCHESTRATOR_DIR}/assertions"
 CORPUS_DIR="${ORCHESTRATOR_DIR}/../recorded-artifacts"
 
 FEATURE_ID="F1-file-bug"
-STORY_IDS=("S1-file-bug" "S2-view-bug-detail")
+STORY_IDS=("S1-create-bug" "S2-view-bug-detail")
 TIERS="${TIERS:-}"
 KIT_REF="${LAKEBASE_KIT_REF:-}"
 PROJECT_NAME="bug-tracker-ff-$(date +%Y%m%d-%H%M%S)"

@@ -21,6 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
+import { restoreBuildTurn } from "./replay-build.js";
 import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { isHitlGateAction, isHumanInputAction, type WorkflowAction } from "./orchestrator-drive.js";
 import {
@@ -186,6 +187,28 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
+      if (cmd.kind === "replay-build") {
+        // Fast-forward-to-release: restore the recorded build (whole code tree +
+        // GREEN/reviewed cycles + experiment) so the drive skips Navigator/Driver
+        // and lands on the deterministic Release Engineer deploy. A corpus miss
+        // is a no-op , the live build then runs as normal.
+        const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
+        if (replayBuildDir) {
+          const restored = restoreBuildTurn({
+            replayBuildDir,
+            projectDir: cfg.projectDir,
+            tddDir: cfg.tddDir,
+            featureId: cfg.featureId,
+            story: cmd.story,
+          });
+          process.stderr.write(
+            restored
+              ? `[drive] restored build for ${cmd.story} from corpus (skip to release engineer)\n`
+              : `[drive] build replay miss for ${cmd.story} (no corpus); running the real build\n`,
+          );
+        }
+        return;
+      }
       if (cmd.kind === "claude") {
         // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
         // role's turn copies its recorded output from the corpus instead of
@@ -256,6 +279,10 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
+    // Build corpus (fast-forward-to-release): when set, cut-experiment is
+    // followed by a replay-build that restores the recorded build so the drive
+    // skips Navigator/Driver and lands on the Release Engineer deploy.
+    replayBuildDir: process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR,
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.

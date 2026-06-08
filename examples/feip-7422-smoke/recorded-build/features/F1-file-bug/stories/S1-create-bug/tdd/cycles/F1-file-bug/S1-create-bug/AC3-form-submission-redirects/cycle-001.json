@@ -1,0 +1,14 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "ac_id": "AC3-form-submission-redirects",
+  "test_id": "T3",
+  "test_description": "Submitting the form with title and description persists the bug and redirects to its detail page.",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s1-create-bug-exp1",
+  "red_at": "2026-06-08T18:51:54.197Z",
+  "layer": "E2E",
+  "green_at": "2026-06-08T18:54:04.789Z",
+  "navigator_verdict": "passed"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "AC2-form-accepts-input",
+  "given": "the user is viewing the create form",
+  "when": "the user enters \"Login fails on mobile\" in the title field and \"When user opens app on iPhone, login page appears blank\" in the description field",
+  "then": "the form displays the entered values in both fields",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "Form input capture and display requires browser interaction and DOM manipulation; cross-cutting concern: client-side validation. Module: pages/CreateBugForm, components/BugForm."
+}

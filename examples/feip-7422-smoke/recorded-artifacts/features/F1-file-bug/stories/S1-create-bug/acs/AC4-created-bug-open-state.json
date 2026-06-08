@@ -1,0 +1,9 @@
+{
+  "id": "AC4-created-bug-open-state",
+  "given": "the user has just submitted a new bug via the create form",
+  "when": "the user is redirected to and views the bug detail page at /bugs/{bugId}",
+  "then": "the bug's status field displays \"open\"",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "Bug detail page rendering requires database read and UI display; cross-cutting concern: bug state validation (status must be one of recognized states per R2). Module: pages/BugDetail, services/bugService, BugRepository."
+}

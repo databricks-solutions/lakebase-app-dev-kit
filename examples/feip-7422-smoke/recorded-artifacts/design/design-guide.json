@@ -1,242 +1,83 @@
 {
-  "version": "1.0.0",
-  "project": "bug-tracker",
-  "description": "Design system tokens for the bug tracker application, sourced from Databricks-brand default and GitHub Issues reference",
-  "provenance": {
-    "brand-colors": "Databricks-brand default",
-    "layout-density": "GitHub Issues (github.com/issues)"
-  },
   "typography": {
-    "fontStack": "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif",
+    "fontFamily": {
+      "system": "\"DM Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "mono": "\"DM Mono\", ui-monospace, monospace"
+    },
     "scale": {
-      "type-xs": {
-        "fontSize": "12px",
-        "lineHeight": "1.5",
-        "fontWeight": "400",
-        "description": "Helper text, timestamps, captions"
-      },
-      "type-sm": {
-        "fontSize": "13px",
-        "lineHeight": "1.5",
-        "fontWeight": "400",
-        "description": "Form labels, secondary information"
-      },
-      "type-base": {
-        "fontSize": "16px",
-        "lineHeight": "1.5",
-        "fontWeight": "400",
-        "description": "Body text, list rows, form fields"
-      },
-      "type-lg": {
-        "fontSize": "18px",
-        "lineHeight": "1.6",
-        "fontWeight": "500",
-        "description": "Subheadings, form section titles"
-      },
-      "type-xl": {
-        "fontSize": "24px",
-        "lineHeight": "1.3",
-        "fontWeight": "600",
-        "description": "Page headings, detail page title"
-      },
-      "type-mono": {
-        "fontSize": "13px",
-        "lineHeight": "1.5",
-        "fontWeight": "400",
-        "fontFamily": "'Monaco', 'Courier New', monospace",
-        "description": "Bug identifiers (e.g., #42)"
-      }
+      "text-xs": "10px",
+      "text-sm": "13px",
+      "text-base": "15px",
+      "text-md": "16px",
+      "text-lg": "20px",
+      "text-xl": "24px",
+      "text-xxl": "29px"
+    },
+    "lineHeight": {
+      "body": 1.5,
+      "headings": 1.25
     }
   },
   "colors": {
     "brand": {
-      "--color-brand-red": "#E74C3C"
+      "red": "#FF3621",
+      "red-hover": "#EB1600"
     },
-    "neutral": {
-      "--color-neutral-white": "#FFFFFF",
-      "--color-neutral-900": "#1A1A1A",
-      "--color-neutral-700": "#4A4A4A",
-      "--color-neutral-500": "#757575",
-      "--color-neutral-300": "#EBEBEB",
-      "--color-neutral-200": "#F5F5F5",
-      "--color-neutral-100": "#FAFAFA"
+    "navy": {
+      "900": "#1B3139",
+      "800": "#334455",
+      "700": "#4D5F70",
+      "600": "#666D7A",
+      "500": "#7F8590",
+      "400": "#99A1AA",
+      "300": "#B2B9C2",
+      "200": "#CCCEDB",
+      "100": "#EDF2F8"
+    },
+    "surfaces": {
+      "white": "#FFFFFF",
+      "page": "#F9F7F4",
+      "cool": "#F0F2F5"
     },
     "semantic": {
-      "--color-status-open": "#1A73E8",
-      "--color-status-closed": "#34A853",
-      "--color-status-in-progress": "#EA4335",
-      "--color-feedback-error": "#D32F2F",
-      "--color-feedback-success": "#388E3C",
-      "--color-feedback-warning": "#F57C00"
-    },
-    "surface": {
-      "--color-surface-page": "#FFFFFF",
-      "--color-surface-card": "#FFFFFF",
-      "--color-surface-hover": "#F5F5F5",
-      "--color-surface-focus": "#EBEBEB"
+      "success": "#2E844A",
+      "warning": "#FFAB00",
+      "info": "#0176D3",
+      "error": "#FF3621"
     }
   },
   "spacing": {
-    "--space-xs": "4px",
-    "--space-sm": "8px",
-    "--space-md": "16px",
-    "--space-lg": "24px",
-    "--space-xl": "32px",
-    "--space-2xl": "48px"
+    "space-1": "4px",
+    "space-2": "8px",
+    "space-3": "12px",
+    "space-4": "16px",
+    "space-5": "20px",
+    "space-6": "24px",
+    "space-8": "32px",
+    "space-12": "48px",
+    "space-16": "64px"
   },
   "radius": {
-    "--radius-none": "0px",
-    "--radius-sm": "2px",
-    "--radius-md": "4px",
-    "--radius-lg": "8px"
+    "sharp": "0px",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "pill": "9999px"
   },
   "shadows": {
-    "--shadow-none": "none",
-    "--shadow-sm": "0 1px 2px rgba(0, 0, 0, 0.05)",
-    "--shadow-md": "0 4px 6px rgba(0, 0, 0, 0.1)",
-    "--shadow-lg": "0 10px 15px rgba(0, 0, 0, 0.1)"
+    "sm": "0 1px 2px rgba(27, 49, 57, 0.08)",
+    "md": "0 4px 8px rgba(27, 49, 57, 0.12)",
+    "lg": "0 8px 16px rgba(27, 49, 57, 0.16)"
+  },
+  "layout": {
+    "navbarHeight": "64px",
+    "maxContentWidth": "960px",
+    "cardPadding": "20px",
+    "sectionGap": "32px"
   },
   "breakpoints": {
-    "--breakpoint-mobile": "480px",
-    "--breakpoint-tablet": "768px",
-    "--breakpoint-desktop": "1024px",
-    "--breakpoint-wide": "1440px"
-  },
-  "components": {
-    "button-primary": {
-      "background": "--color-brand-red",
-      "color": "--color-neutral-white",
-      "padding": "8px 16px",
-      "radius": "--radius-md",
-      "font": "16px / 1.5 400",
-      "minHeight": "40px",
-      "states": {
-        "hover": {
-          "background": "#EC7063"
-        },
-        "active": {
-          "background": "#C0392B"
-        },
-        "disabled": {
-          "opacity": "0.5"
-        }
-      }
-    },
-    "button-secondary": {
-      "background": "--color-neutral-200",
-      "color": "--color-neutral-900",
-      "padding": "8px 16px",
-      "radius": "--radius-md",
-      "font": "16px / 1.5 500",
-      "minHeight": "40px",
-      "border": "1px solid --color-neutral-300",
-      "states": {
-        "hover": {
-          "background": "#EBEBEB"
-        },
-        "active": {
-          "background": "#DCDCDC"
-        },
-        "disabled": {
-          "opacity": "0.5"
-        }
-      }
-    },
-    "button-link": {
-      "background": "transparent",
-      "color": "--color-brand-red",
-      "padding": "0",
-      "font": "16px / 1.5 400",
-      "textDecoration": "none",
-      "states": {
-        "hover": {
-          "textDecoration": "underline"
-        },
-        "disabled": {
-          "opacity": "0.5"
-        }
-      }
-    },
-    "input-text": {
-      "background": "--color-surface-card",
-      "border": "1px solid --color-neutral-300",
-      "padding": "8px",
-      "radius": "--radius-sm",
-      "font": "16px / 1.5 400",
-      "states": {
-        "focus": {
-          "borderColor": "--color-brand-red",
-          "boxShadow": "0 0 0 3px rgba(231, 76, 60, 0.1)"
-        },
-        "error": {
-          "borderColor": "--color-feedback-error"
-        },
-        "disabled": {
-          "opacity": "0.5",
-          "backgroundColor": "--color-neutral-100"
-        }
-      }
-    },
-    "textarea": {
-      "background": "--color-surface-card",
-      "border": "1px solid --color-neutral-300",
-      "padding": "8px",
-      "radius": "--radius-sm",
-      "font": "16px / 1.5 400",
-      "minHeight": "120px",
-      "states": {
-        "focus": {
-          "borderColor": "--color-brand-red",
-          "boxShadow": "0 0 0 3px rgba(231, 76, 60, 0.1)"
-        },
-        "error": {
-          "borderColor": "--color-feedback-error"
-        }
-      }
-    },
-    "label": {
-      "font": "13px / 1.5 600",
-      "color": "--color-neutral-900",
-      "marginBottom": "4px"
-    },
-    "helper-text": {
-      "font": "12px / 1.5 400",
-      "color": "--color-neutral-700",
-      "marginTop": "4px"
-    },
-    "error-text": {
-      "font": "12px / 1.5 400",
-      "color": "--color-feedback-error",
-      "marginTop": "4px"
-    },
-    "status-pill": {
-      "padding": "4px 8px",
-      "radius": "--radius-md",
-      "font": "13px / 1.5 500"
-    },
-    "status-pill-open": {
-      "background": "rgba(26, 115, 232, 0.15)",
-      "color": "--color-status-open"
-    },
-    "status-pill-closed": {
-      "background": "rgba(52, 168, 83, 0.15)",
-      "color": "--color-status-closed"
-    },
-    "card": {
-      "background": "--color-surface-card",
-      "border": "1px solid --color-neutral-300",
-      "padding": "24px",
-      "radius": "--radius-md",
-      "shadow": "--shadow-md",
-      "marginBottom": "24px"
-    },
-    "empty-state": {
-      "background": "--color-surface-card",
-      "padding": "32px",
-      "radius": "--radius-md",
-      "border": "1px dashed --color-neutral-300",
-      "font": "16px / 1.5 400",
-      "color": "--color-neutral-700"
-    }
+    "mobile": "0px",
+    "tablet": "640px",
+    "desktop": "1024px"
   }
 }

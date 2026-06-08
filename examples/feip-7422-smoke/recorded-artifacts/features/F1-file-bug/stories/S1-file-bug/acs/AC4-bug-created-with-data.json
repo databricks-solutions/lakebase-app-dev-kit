@@ -1,9 +1,0 @@
-{
-  "id": "AC4-bug-created-with-data",
-  "given": "a user submits the form with title \"Login button broken\" and description \"Users cannot click the login button on mobile devices\"",
-  "when": "the form submission completes successfully",
-  "then": "a bug is created in the system with title \"Login button broken\" and description \"Users cannot click the login button on mobile devices\"",
-  "status": "draft",
-  "layer": "E2E",
-  "architectural_notes": "E2E AC verifying end-to-end form submission creates a bug in the database with submitted data. The bug service application layer owns the create-bug business logic (validation, persistence). Audit logging of bug creation is a cross-cutting concern owned by the application layer."
-}

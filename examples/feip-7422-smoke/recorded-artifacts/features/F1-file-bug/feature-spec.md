@@ -2,26 +2,19 @@
 
 ## Summary
 
-Teams can file bugs directly in the browser by filling in a form with a title and description. After submission, the bug is created in the system with a unique identifier and `open` status, and the user is taken to the bug's detail page. The detail page displays the bug's complete information at a stable, shareable URL.
+A team member can open the app and fill in a short title and longer description on a create form. When they submit, they receive a stable, shareable URL to that bug's detail page (e.g., `/bugs/42`). The detail page shows the bug's title, description, status, and identifier.
 
 ## Stories
 
-- **S1-file-bug** - User can fill in a form with a bug's title and description and submit it to create a bug
-- **S2-view-bug-detail** - User can view a created bug's details at a stable URL with title, description, status, and identifier
+- S1-create-bug: User can fill in title and description on a form, submit it, and receive a stable URL for the new bug.
+- S2-view-bug-detail: User can view a filed bug's detail page showing its title, description, status, and identifier.
 
 ## Out of scope
 
-Per the Product Owner's intent, the following capabilities are explicitly deferred:
-
-- Bug list or queue view (only accessible via direct URL)
-- Editing or deleting bugs after they are filed
-- Assigning owners to bugs or reassigning them
-- State management beyond the fixed `open` initial state (user-defined states come in a later sprint)
-- Search, filtering, or any other discovery mechanism beyond direct URL access
-- Any authentication, sign-in, or permission controls
+This feature does not include bug list or queue views; the only way back to a bug after filing is via its URL. Editing, deleting, assigning owners, search, filtering, and state management are deferred to later sprints.
 
 ## Open questions
 
-1. **Form field validation** - What validation rules should the form enforce for title and description? For example, should there be minimum length requirements, or must both fields be non-empty?
-2. **Error handling** - If form submission fails (e.g., due to a server error), what error message and user guidance should be shown?
-3. **Form UI layout** - Should the create form be a dedicated page, a modal, or some other UI pattern? The feature request does not specify.
+1. Is the create form the app's landing page, or accessible at a dedicated route?
+2. Are there validation rules for title and description fields (e.g., required fields, maximum length)?
+3. After form submission, does the user land directly on the bug detail page, or is there a confirmation screen?

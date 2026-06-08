@@ -1,0 +1,12 @@
+{
+  "$schema": "./scm-workflow-state.schema.json",
+  "version": 1,
+  "state": "feature-claimed",
+  "tier_topology": 2,
+  "project_id": "bug-tracker-20260608-133114",
+  "feature_id": "F1-file-bug",
+  "branch": "feature-f1-file-bug",
+  "parent_branch": "staging",
+  "lakebase_branch_uid": "br-old-darkness-d2m7q0a0",
+  "claimed_at": "2026-06-08T18:34:34.649Z"
+}

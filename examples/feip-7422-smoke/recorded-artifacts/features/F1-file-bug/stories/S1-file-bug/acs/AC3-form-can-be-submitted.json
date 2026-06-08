@@ -1,9 +1,0 @@
-{
-  "id": "AC3-form-can-be-submitted",
-  "given": "the user has entered a title and description in the form",
-  "when": "the user clicks the submit button",
-  "then": "the form submission is initiated",
-  "status": "draft",
-  "layer": "E2E",
-  "architectural_notes": "E2E AC verifying form submission is triggered when submit button is clicked. Form data is prepared for transmission to the backend. Owned by the frontend presentation layer (CreateBugForm component)."
-}
