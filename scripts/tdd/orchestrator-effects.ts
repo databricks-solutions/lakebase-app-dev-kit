@@ -54,8 +54,12 @@ export interface DriveEffectsConfig {
   sprintName?: string;
   /** Deploy target for the deploy action (e.g. "local"). */
   deployTarget?: string;
-  /** Lakebase instance id, threaded to the experiment branch ops. */
+  /** Lakebase instance id (the Lakebase project id), threaded to the experiment
+   *  branch ops. The experiment CLI requires it; resolved from SCM state. */
   instance?: string;
+  /** The feature's git + Lakebase branch (the PARENT a per-story experiment is
+   *  cut off, and merged back into). Resolved from SCM state at drive start. */
+  featureBranch?: string;
   /** UI track on (LAKEBASE_TDD_UI=1 / a design-brief.md is part of intake): the
    *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
    *  stories, not API-only, when proposing + breaking down. */
@@ -148,6 +152,13 @@ const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
 
+// A story runs ONE experiment by default (N=1); these derive its slug + branch
+// name. `cut` and `accept` (merge) BOTH compute them from here, so the branch
+// cut and the branch merged back always agree. The experiment branch forks off
+// (and merges into) the feature branch, which is cfg.featureBranch.
+const EXPERIMENT_SLUG = "exp1";
+const experimentBranchName = (storyId: string): string => `experiment/${storyId}-${EXPERIMENT_SLUG}`;
+
 /**
  * The concrete commands that carry out one action. Depends on the action +
  * config (and, for the Spec Author's per-story draft, reads that story's stub
@@ -222,21 +233,32 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["dispatch", ...tdd] }];
 
     case "cut-experiment":
+      // `cut` requires the full set: feature + story + slug + instance, plus the
+      // experiment branch to create (--branch) and the feature branch it forks
+      // off (--parent). Emit them all; an unset featureBranch/instance surfaces
+      // as a validation failure (see validateExperimentArgs), not a silent skip.
       return [
         {
           kind: "cli",
           bin: EXPERIMENT_BIN,
           args: [
             "cut",
-            "--story",
-            action.story,
             "--feature",
             f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--branch",
+            experimentBranchName(action.story),
+            "--parent",
+            cfg.featureBranch ?? "",
+            "--instance",
+            cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
             "--tdd-dir",
             cfg.tddDir,
-            ...(cfg.instance ? ["--instance", cfg.instance] : []),
           ],
         },
       ];
@@ -262,22 +284,33 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     case "accept":
       // Merge the experiment into the feature branch (git + migrations), then
       // record the PO acceptance. collapseMigrationHeads runs at the later
-      // feature->tier merge, not per-story.
+      // feature->tier merge, not per-story. The experiment branch + slug match
+      // what `cut` created (same experimentBranchName), and the feature branch is
+      // the merge target. All `merge`-required args are emitted (validated).
       return [
         {
           kind: "cli",
           bin: EXPERIMENT_BIN,
           args: [
             "merge",
-            "--story",
-            action.story,
             "--feature",
             f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--experiment-branch",
+            experimentBranchName(action.story),
+            "--feature-branch",
+            cfg.featureBranch ?? "",
+            "--approver",
+            approver,
+            "--instance",
+            cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
             "--tdd-dir",
             cfg.tddDir,
-            ...(cfg.instance ? ["--instance", cfg.instance] : []),
           ],
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] },

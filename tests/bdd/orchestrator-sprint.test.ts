@@ -63,7 +63,7 @@ describe("deriveSprintPlanningState", () => {
   it("nothing on disk => all planning flags false", () => {
     const s = deriveSprintPlanningState(tdd, SPRINT);
     expect(s.phase).toBe("planning");
-    expect(s.planning).toEqual({ proposed: false, estimated: false, requestsAuthored: false, gateApproved: false, skipSizing: true });
+    expect(s.planning).toEqual({ proposed: false, estimated: false, requestsAuthored: false, gateApproved: false, skipSizing: false });
   });
 
   it("estimated when the Architect wrote planning/estimates.json", () => {
@@ -118,12 +118,12 @@ describe("deriveSprintPlanningState", () => {
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.gateApproved).toBe(true);
   });
 
-  it("threads skipSizing onto the planning state, DEFAULT TRUE (sizing is opt-in)", () => {
+  it("threads skipSizing onto the planning state, DEFAULT FALSE (sizing is ON, --no-sizing opts out)", () => {
     // The policy is carried on PlanningState (not derived from disk) so
     // nextTransition can route proposed -> author-requests with no estimate.
-    // Sizing is off by default; a caller opts in with skipSizing: false (--sizing).
-    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.skipSizing).toBe(true);
-    expect(deriveSprintPlanningState(tdd, SPRINT, { skipSizing: false }).planning?.skipSizing).toBe(false);
+    // Sizing is ON by default; a caller opts OUT with skipSizing: true (--no-sizing).
+    expect(deriveSprintPlanningState(tdd, SPRINT).planning?.skipSizing).toBe(false);
+    expect(deriveSprintPlanningState(tdd, SPRINT, { skipSizing: true }).planning?.skipSizing).toBe(true);
   });
 });
 

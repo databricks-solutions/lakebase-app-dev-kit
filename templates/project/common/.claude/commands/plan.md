@@ -78,11 +78,11 @@ GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 
 The driver routes planning to the role agents, at their resolved per-role models:
 - **spec-author** proposes the feature breakdown (`.tdd/sprints/<name>/feature-proposals.md`).
-- **architect-reviewer** (optional) t-shirt-sizes the candidates
+- **architect-reviewer** t-shirt-sizes the candidates
   (`.tdd/planning/estimates.json`) so the PO can commit a backlog that fits sprint
-  capacity. **Sizing is OFF by default**: planning goes straight propose ->
-  author-requests. Opt in with `--sizing` (aliases `--planning-poker`,
-  `--t-shirt-sizing`) when the candidate set is large enough to need it.
+  capacity. **Sizing is ON by default.** Opt OUT with `--no-sizing` (aliases
+  `--no-planning-poker`, `--no-t-shirt-sizing`) when the candidate set is small
+  enough not to need it, planning then goes straight propose -> author-requests.
 - **product-owner** prioritizes + authors the sprint's `feature-request.md` files
   (headless: the Human Proxy supplies them from the recorded backlog, above).
 

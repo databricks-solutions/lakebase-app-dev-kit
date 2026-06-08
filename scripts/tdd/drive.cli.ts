@@ -41,6 +41,7 @@ import {
 import { resolveModelForRole } from "./agent-models.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction } from "./orchestrator-logging.js";
+import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 interface ParsedArgs {
   feature?: string;
@@ -55,7 +56,6 @@ interface ParsedArgs {
   planOnly?: boolean;
   only?: string;
   gates?: string;
-  sizing?: boolean;
   noSizing?: boolean;
   help?: boolean;
 }
@@ -76,13 +76,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--plan-only": out.planOnly = true; break;
       case "--only": out.only = argv[++i]; break;
       case "--gates": out.gates = argv[++i]; break;
-      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is OFF by
-      // default. Opt back IN with --sizing when the candidate set is large enough
-      // that the PO needs sizes to commit against capacity. --no-sizing is still
-      // accepted (it is the default) so existing invocations keep working.
-      case "--sizing":
-      case "--planning-poker":
-      case "--t-shirt-sizing": out.sizing = true; break;
+      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
+      // default. --no-sizing opts OUT: planning goes propose -> author-requests
+      // with no estimate, for a backlog small enough not to need capacity sizing.
       case "--no-sizing":
       case "--no-planning-poker":
       case "--no-t-shirt-sizing": out.noSizing = true; break;
@@ -112,11 +108,10 @@ Flags:
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
-  --sizing             Opt IN to the Architect's t-shirt-sizing (planning-poker)
-                       step (estimate the candidates before the PO commits).
-                       Sizing is OFF by default; planning goes propose ->
-                       author-requests. Aliases: --planning-poker, --t-shirt-sizing.
-                       (--no-sizing is accepted too, it is the default.)
+  --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
+                       planning goes propose -> author-requests, no estimate.
+                       Sizing is ON by default. Aliases: --no-planning-poker,
+                       --no-t-shirt-sizing.
 `;
 }
 
@@ -222,12 +217,19 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
 function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   const projectDir = args.projectDir ?? process.cwd();
   const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
+  // Resolve the Lakebase instance + the feature's branch from the SCM workflow
+  // state (.lakebase/workflow-state.json, written at claim). The per-story
+  // experiment ops need both: the instance to create/merge the paired branch,
+  // and the feature branch as the experiment's parent + merge target. --instance
+  // overrides the recorded project_id when given.
+  const scm = readWorkflowState(projectDir);
   return {
     projectDir,
     tddDir,
     featureId,
     sprintName: args.sprint,
-    instance: args.instance,
+    instance: args.instance ?? scm?.project_id,
+    featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
@@ -300,9 +302,8 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
       const planning: DriveEffects = {
-        // Sizing is off by default; --sizing opts back in. (--no-sizing is the
-        // default and remains accepted.)
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: !args.sizing }),
+        // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },

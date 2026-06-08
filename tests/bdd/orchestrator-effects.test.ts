@@ -143,13 +143,20 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(approve.args).toContain("human-proxy");
   });
 
-  it("cut-experiment routes to lakebase-tdd-experiment with story + instance", () => {
-    const cmds = commandsForAction({ kind: "cut-experiment", story: "S1" }, cfg());
+  it("cut-experiment routes to a COMPLETE lakebase-tdd-experiment cut command", () => {
+    const cmds = commandsForAction({ kind: "cut-experiment", story: "S1" }, cfg({ featureBranch: "feature/x" }));
     const cmd = cmds[0] as { bin: string; args: string[] };
     expect(cmd.bin).toBe("lakebase-tdd-experiment");
-    expect(cmd.args.slice(0, 2)).toEqual(["cut", "--story"]);
-    expect(cmd.args).toContain("--instance");
+    expect(cmd.args[0]).toBe("cut");
+    // Every flag the experiment CLI requires for `cut` must be emitted (the bug
+    // that broke the smoke was an incomplete command; the contract test in
+    // orchestrator-experiment-contract.test.ts validates it through the CLI's
+    // own validator, this asserts the flags are present at all).
+    for (const flag of ["--feature", "--story", "--slug", "--branch", "--parent", "--instance"]) {
+      expect(cmd.args, `cut missing ${flag}`).toContain(flag);
+    }
     expect(cmd.args).toContain("inst-x");
+    expect(cmd.args).toContain("feature/x");
   });
 
   it("accept merges the experiment AND records the pipeline acceptance (two commands)", () => {

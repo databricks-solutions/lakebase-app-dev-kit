@@ -49,9 +49,9 @@ export {
  *
  * `opts.skipSizing` is a POLICY threaded from the CLI, not a disk fact: it tells
  * the machine to route proposed -> author-requests with no estimate step. Carried
- * on PlanningState so nextTransition stays pure. DEFAULTS TO TRUE: t-shirt-sizing
- * is off unless a caller opts in (`--sizing`), so the common path skips the
- * Architect estimate turn.
+ * on PlanningState so nextTransition stays pure. DEFAULTS TO FALSE: t-shirt-sizing
+ * is ON by default (the Architect sizes the candidates); a caller opts OUT with
+ * `--no-sizing` to skip the Architect estimate turn.
  */
 export function deriveSprintPlanningState(
   tddDir: string,
@@ -70,7 +70,7 @@ export function deriveSprintPlanningState(
   }
   return {
     phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? true },
+    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? false },
     breakdownDone: false,
     storyOrder: [],
     stories: {},
