@@ -41,7 +41,7 @@ import {
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import type { AgentRole } from "./agent-log.js";
-import { makeOnAction } from "./orchestrator-logging.js";
+import { makeOnAction, describeAction } from "./orchestrator-logging.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 interface ParsedArgs {
@@ -263,7 +263,12 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
-      (action, i) => process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${JSON.stringify(action)}\n`),
+      // Narrate each routing decision in plain language (DRY: the same message
+      // the structured log uses), then the raw action for machine-trace parity.
+      (action, i) =>
+        process.stderr.write(
+          `[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}  ${JSON.stringify(action)}\n`,
+        ),
       // Code-emit the orchestrator's lifecycle (handoff / phase.start /
       // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
       // so the structured trail is written every run with no LLM in the loop.
@@ -425,7 +430,18 @@ async function main(): Promise<number> {
       stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
     });
     const pendingGate = pendingGateOf(result);
-    if (result.stoppedAtMax) {
+    if (result.escalated) {
+      // Surface + halt: a blocking problem was raised to the HIL. The escalation
+      // is recorded under .tdd/escalations/; exit non-zero so the run fails loud
+      // (the increment is genuinely not done) and a human resolves it.
+      const e = result.escalation;
+      process.stderr.write(
+        `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.\n` +
+          `        source: ${e?.source}\n        reason: ${e?.reason}\n` +
+          `        recorded under .tdd/escalations/ ; resolve it, then re-run to resume.\n`,
+      );
+      return 3;
+    } else if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
       reportGate(pendingGate);

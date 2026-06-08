@@ -59,7 +59,7 @@ You do NOT write or update cycle artifacts, call `recordRunnerOutcome`/`markGree
    - `Infra` → the project-defined infra runner (e.g. `lakebase-schema-migrate`, a schema-diff smoke script, `npm run test:infra`). If no runner is wired, flag the cycle and surface to the PO – never silent-skip.
    - See SKILL.md's `tag → runner map` for the full table.
 4. Run that test command against the experiment branch's `.env`-pointed DB and confirm the previously-failing test now passes (and only it changed `pending` → green).
-5. If the test still fails, fix the code. Never weaken the test. When it passes, you are done , the orchestration records the runner outcome + stamps GREEN (it calls the substrate `recordRunnerOutcome` + `markGreen` for you; you never touch the cycle artifact).
+5. If the test still fails, fix the code. Never weaken the test. When it passes, you are done , the orchestration records the runner outcome + stamps GREEN (it calls the substrate `recordRunnerOutcome` + `markGreen` for you; you never touch the cycle artifact). **GREEN is verified, not asserted:** the orchestration runs the project's verify suite against the running app (it deploys during the build for E2E) and only stamps GREEN if it genuinely passes; if your change makes the current test pass but breaks a sibling test, the verify fails, the cycle stays RED, and the orchestration raises it to the HIL. So make the test pass WITHOUT regressing the others , a green you cannot honestly achieve is surfaced, never faked.
 
 ## Schema migrations
 

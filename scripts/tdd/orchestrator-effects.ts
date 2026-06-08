@@ -427,6 +427,13 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     case "done":
       return [{ kind: "set-phase", phase: "shipped" }];
 
+    case "raise-to-hil":
+      // Surface + halt: the escalation is already recorded under
+      // .tdd/escalations/ (that is how it was detected). No CLI to run , the
+      // onAction logging emits the loud "RAISED TO HIL" line + runDriver returns
+      // escalated, and drive.cli exits non-zero. A no-op command list.
+      return [];
+
     case "design-complete":
       // In the union (from the design sub-machine) but never emitted by
       // nextTransition, which rewrites it to feature-complete. No-op defensively.

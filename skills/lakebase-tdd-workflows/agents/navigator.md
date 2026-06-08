@@ -83,6 +83,9 @@ Set `"refactor": true` ONLY when a concrete improvement against the rubric is wa
 
 ## Smells you must flag (not silently fix)
 
+A flagged **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`) is not advisory: the orchestration halts the build and raises it to the HIL (it does not advance or stamp anything green past it). Flag the contradiction honestly , e.g. a test that can only pass by breaking a sibling test is `test-list-drift`; do not weaken either test to force GREEN.
+
+
 - **Driver attempts to delete or weaken a test.** Hard block. Surface to PO; never accept.
 - **Test cost spiral** – each new test is taking >2x the lines of the prior one. Flag via `flagSmells(["test-cost-spiral"])`.
 - **API coherence drift** – the same concept named differently across two consecutive PASS reviews. Flag `["api-coherence-drift"]`; request a rename refactor before the next test.

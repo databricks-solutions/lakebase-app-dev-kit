@@ -17,6 +17,12 @@ export const planningDir = (tdd: string): string => join(tdd, "planning");
 export const sprintsDir = (tdd: string): string => join(tdd, "sprints");
 export const cyclesRootDir = (tdd: string): string => join(tdd, "cycles");
 export const experimentsRootDir = (tdd: string): string => join(tdd, "experiments");
+/** Where escalations raised to the HIL are recorded (FEIP-7510 follow-up): any
+ *  role/orchestration that hits a blocking problem (failed-green run, blocking
+ *  smell, deploy verify-fail) writes one here; the driver routes to a single
+ *  raise-to-hil halt while an unresolved one exists. */
+export const escalationsDir = (tdd: string): string => join(tdd, "escalations");
+export const escalationFile = (tdd: string, id: string): string => join(escalationsDir(tdd), `${id}.json`);
 
 // Per-AC REVIEW (FEIP-7461): once an AC's tests are all green, the Navigator
 // REVIEWs the AC's diff against the architecture + design guide and writes its

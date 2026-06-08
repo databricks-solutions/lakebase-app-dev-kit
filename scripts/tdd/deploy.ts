@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
 import { findFeatureDir } from "./tdd-paths.js";
+import { writeEscalation } from "./escalation.js";
 
 export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -283,6 +284,22 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
       ...(args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {}),
       deployed_at: at,
     });
+    // Raise to the HIL when the deploy could not prove working software
+    // (unreachable, or reachable but verify FAILED). This is what turns the
+    // Release Engineer's honest "1 of N ACs failed" into a clean raise-to-hil
+    // halt instead of the await-acceptance spin (the live FEIP-7422 stall): the
+    // deployVerified teeth stay false, so without this the driver re-issues
+    // await-acceptance forever. Surface + halt; a human resolves it.
+    if (!(reachableNow && verify.passed)) {
+      writeEscalation(tddDir, {
+        source: "deploy-verify",
+        reason: `deploy of ${args.featureId}${args.storyId ? `/${args.storyId}` : ""} did not prove working software: ${
+          reachableNow ? verify.summary ?? "verify failed" : `app not reachable at ${url}`
+        }`,
+        feature_id: args.featureId,
+        ...(args.storyId ? { story_id: args.storyId } : {}),
+      });
+    }
   }
 
   if (!reachableNow) {
@@ -295,6 +312,80 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     };
   }
   return { ok: true, url, pid, verify, evidencePath };
+}
+
+export interface CycleVerifyArgs {
+  projectDir: string;
+  targetName?: string;
+  /** Bind the run + verify to the cycle's experiment branch DB (LAKEBASE_BRANCH_ID). */
+  lakebaseBranch?: string;
+  startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
+  reachable?: (url: string) => Promise<boolean>;
+  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => Date;
+}
+
+export interface CycleVerifyResult {
+  passed: boolean;
+  reachable: boolean;
+  summary: string;
+}
+
+/**
+ * Honestly confirm a cycle is GREEN by running the project's verify suite against
+ * the running app , deploy-during-build (FEIP-7510 follow-up): the per-cycle GREEN
+ * used to be FAKED (`recordRunnerOutcome({passed:true})`), which shipped a
+ * false-green to the deploy gate. This ensures the local app is up (idempotent:
+ * reuses a reachable one, else starts it + polls), then runs the SAME verify
+ * command the Release Engineer uses , so a cycle whose test breaks a sibling test
+ * (a contradictory test list) fails here, at GREEN, not three roles later. Does
+ * NOT write deploy-evidence (that is the Release Engineer's gate artifact); it
+ * only returns pass/fail for the cycle recorder.
+ */
+export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<CycleVerifyResult> {
+  const targetName = args.targetName ?? "local";
+  const resolved = resolveDeployTarget(args.projectDir, targetName);
+  if (resolved.kind !== "local") {
+    return { passed: false, reachable: false, summary: `no local deploy target to verify GREEN against (${resolved.kind})` };
+  }
+  const cfg = resolved.config;
+  if (!cfg.run) return { passed: false, reachable: false, summary: `target '${targetName}' has no run command` };
+  if (!cfg.verify) {
+    return { passed: false, reachable: false, summary: `target '${targetName}' has no verify command; cannot honestly confirm GREEN` };
+  }
+  const reachable = args.reachable ?? probeReachable;
+  const start = args.startProcess ?? defaultStart;
+  const runVerify = args.runVerify ?? defaultRunVerify;
+  const url = cfg.baseUrl + cfg.healthPath;
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BASE_URL: cfg.baseUrl,
+    ...(args.lakebaseBranch ? { LAKEBASE_BRANCH_ID: args.lakebaseBranch } : {}),
+  };
+  // Idempotent: reuse a reachable app, else start it (deploy-during-build) + poll.
+  let up = await reachable(url);
+  if (!up) {
+    const pid = start(cfg.run, args.projectDir, env);
+    const pf = pidFile(args.projectDir, targetName);
+    mkdirSync(dirname(pf), { recursive: true });
+    writeFileSync(pf, String(pid));
+    const poll = await pollUntil<boolean>({
+      probe: async () => ((await reachable(url)) ? { done: true, value: true } : { done: false }),
+      timeoutMs: cfg.readyTimeoutSeconds * 1000,
+      intervalMs: 1000,
+      sleep: args.sleep,
+      now: args.now,
+    });
+    up = poll.outcome === "done";
+  }
+  if (!up) return { passed: false, reachable: false, summary: `app not reachable at ${url}; cannot run GREEN verify` };
+  const passed = runVerify(cfg.verify, args.projectDir, env);
+  return {
+    passed,
+    reachable: true,
+    summary: passed ? "GREEN verify passed against the running app" : "GREEN verify FAILED against the running app",
+  };
 }
 
 /** Tear down a previously-deployed local target (kills its process group). */

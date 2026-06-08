@@ -50,7 +50,7 @@ function usage(msg: string): number {
   return 2;
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
   const tddDir = a.tddDir ?? join(process.cwd(), ".tdd");
@@ -67,8 +67,16 @@ function main(): number {
       return 0;
     }
     case "green": {
-      const r = greenOpenCycle(base);
-      process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}\n`);
+      // HONEST GREEN: greenOpenCycle runs the verify suite against the running
+      // app. On failure it leaves the cycle RED + raises an escalation; we exit
+      // 0 (the escalation is recorded data, not a command crash) so the driver's
+      // next readState routes to a clean raise-to-hil halt.
+      const r = await greenOpenCycle(base);
+      if (r.escalated) {
+        process.stdout.write(`cycle: GREEN BLOCKED for ${r.testId} -> raised to HIL: ${r.summary}\n`);
+      } else {
+        process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}\n`);
+      }
       return 0;
     }
     case "review": {
@@ -98,9 +106,9 @@ function main(): number {
   }
 }
 
-try {
-  process.exit(main());
-} catch (err) {
-  process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
-  process.exit(1);
-}
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  });

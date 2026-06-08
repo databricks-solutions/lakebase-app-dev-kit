@@ -23,6 +23,8 @@ import { join, dirname } from "path";
 import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./tdd-paths.js";
 import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
+import { ensureDeployedAndVerify } from "./deploy.js";
+import { writeEscalation, type Escalation } from "./escalation.js";
 import {
   beginCycle,
   recordRunnerOutcome,
@@ -159,7 +161,29 @@ export interface GreenResult {
   recorded: boolean;
   cycleId?: string;
   testId?: string;
+  /** Set when the honest GREEN verify FAILED: the cycle stays RED + an escalation
+   *  was raised to the HIL (the orchestration will route to raise-to-hil). */
+  escalated?: boolean;
+  escalation?: Escalation;
+  /** The GREEN verify summary (pass or the failure reason). */
+  summary?: string;
 }
+
+/** Confirm a cycle is genuinely GREEN: returns true only when the project's
+ *  verify suite passes against the running app. Injected in tests; the default
+ *  is the real deploy-during-build verifier. */
+export type GreenVerifier = (args: {
+  projectDir: string;
+  tddDir: string;
+  featureId: string;
+  story: string;
+  branchId?: string;
+}) => Promise<{ passed: boolean; summary: string }>;
+
+const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => {
+  const r = await ensureDeployedAndVerify({ projectDir, lakebaseBranch: branchId });
+  return { passed: r.passed, summary: r.summary };
+};
 
 /**
  * Record the runner outcome + stamp GREEN on the story's open RED cycle (red_at
@@ -169,7 +193,9 @@ export interface GreenResult {
  * layer-tagged cycles) and marks the cycle green. Throws when there is no open
  * RED cycle (the Driver was dispatched with nothing to green , a real defect).
  */
-export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string }): GreenResult {
+export async function greenOpenCycle(
+  args: CycleRecordArgs & { driverChanges?: string; verify?: GreenVerifier },
+): Promise<GreenResult> {
   const { tddDir, featureId, story } = args;
   const open = storyTestProgress(tddDir, featureId, story).openRed
     .sort((a, b) => (a.red_at! < b.red_at! ? 1 : -1))[0];
@@ -184,8 +210,26 @@ export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string 
     experiment_slug: open.experiment_slug,
     branch_id: open.branch_id,
   };
+  // HONEST GREEN (FEIP-7510 follow-up): run the project's verify suite against
+  // the running app and record the REAL outcome. The old code hardcoded
+  // passed:true , which faked the FEIP-7094 runner contract and shipped a
+  // false-green (a test that broke a sibling test was stamped green). A failure
+  // here leaves the cycle RED and raises an escalation to the HIL; the
+  // orchestration then routes to raise-to-hil rather than advancing.
+  const verify = args.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: open.branch_id });
   if (open.layer && open.experiment_slug) {
-    recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: true });
+    recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
+  }
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-green",
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+      ac_id: open.ac_id,
+    });
+    return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   // Propagate green to the artifacts the acceptance/deploy consumers read: the
@@ -198,7 +242,7 @@ export function greenOpenCycle(args: CycleRecordArgs & { driverChanges?: string 
   } catch {
     /* status propagation is observability for downstream consumers, not a gate */
   }
-  return { recorded: true, cycleId: open.cycle_id, testId: open.test_id };
+  return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 
 // ─── Per-AC REVIEW / REFACTOR (driver-navigator-tdd handoff) ───────

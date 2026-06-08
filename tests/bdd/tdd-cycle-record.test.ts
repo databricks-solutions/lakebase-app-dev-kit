@@ -17,7 +17,14 @@ import {
   firstRefactorPendingAc,
   reviewAc,
   refactorAc,
+  type GreenVerifier,
 } from "../../scripts/tdd/cycle-record.js";
+
+// greenOpenCycle now runs an HONEST verify (deploy-during-build) before stamping
+// green. These cycle-record unit tests inject a passing verifier so they exercise
+// the recording path without a real app; the failing-verifier -> escalation path
+// is covered in tdd-honest-green.test.ts.
+const pass: GreenVerifier = async () => ({ passed: true, summary: "verify passed (test stub)" });
 
 let tdd: string;
 const F = "F1";
@@ -64,8 +71,8 @@ afterEach(() => {
   rmSync(tdd, { recursive: true, force: true });
 });
 
-describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () => {
-  it("beginNextPendingCycle stamps red_at (NOT a freehand status) for the first pending test", () => {
+describe("cycle-record: orchestration stamps RED/GREEN the probe can read", async () => {
+  it("beginNextPendingCycle stamps red_at (NOT a freehand status) for the first pending test", async () => {
     const r = beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     expect(r.recorded).toBe(true);
     expect(r.testId).toBe("T1");
@@ -79,9 +86,9 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     expect(cycles[0].experiment_slug).toBe("exp1");
   });
 
-  it("greenOpenCycle records the run + stamps green_at on the open RED cycle", () => {
+  it("greenOpenCycle records the run + stamps green_at on the open RED cycle", async () => {
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const g = greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    const g = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     expect(g.recorded).toBe(true);
     expect(g.testId).toBe("T1");
     const cycles = cyclesFor("AC1");
@@ -91,23 +98,23 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     expect(outcomes.by_tag).toBeTruthy();
   });
 
-  it("sequences one test at a time: begin -> green -> begin advances to the next pending", () => {
+  it("sequences one test at a time: begin -> green -> begin advances to the next pending", async () => {
     expect(beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }).testId).toBe("T1");
-    greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     expect(beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }).testId).toBe("T2");
-    greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     // Both tests have green cycles now , nothing pending.
     const after = beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     expect(after.recorded).toBe(false);
     expect(cyclesFor("AC1").length).toBe(2);
   });
 
-  it("greenOpenCycle propagates green to the master test-list item + flips the AC to `passing`", () => {
+  it("greenOpenCycle propagates green to the master test-list item + flips the AC to `passing`", async () => {
     // The await-acceptance stall: the cycle was green but the test-list items
     // stayed `pending` + the AC `draft`, so the Release Engineer refused to
     // deploy. Greening every test for an AC must mark the items green + the AC passing.
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // T1
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // T2
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass }); // T1
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass }); // T2
     const master = JSON.parse(readFileSync(join(tdd, "features", F, "test-list.json"), "utf8"));
     expect(master.items.every((i: { status: string }) => i.status === "green")).toBe(true);
     const perStory = JSON.parse(readFileSync(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), "utf8"));
@@ -116,10 +123,10 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     expect(ac1.status).toBe("passing"); // all of AC1's tests are green
   });
 
-  it("per-AC REVIEW/REFACTOR: AC awaits review once all its tests are green; verdict drives refactor", () => {
+  it("per-AC REVIEW/REFACTOR: AC awaits review once all its tests are green; verdict drives refactor", async () => {
     // Green both of AC1's tests.
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     // AC1 now awaits the Navigator REVIEW.
     expect(firstReviewPendingAc(tdd, F, S)).toBe("AC1");
     // Navigator left a verdict requesting a refactor.
@@ -132,25 +139,27 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", () =
     expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored , AC fully done
   });
 
-  it("per-AC REVIEW with no refactor verdict (looks good) does not request a refactor", () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); greenOpenCycle({ tddDir: tdd, featureId: F, story: S });
+  it("per-AC REVIEW with no refactor verdict (looks good) does not request a refactor", async () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     const r = reviewAc(tdd, F, S, "AC1"); // no verdict file => looks good
     expect(r.refactorRequested).toBe(false);
     expect(firstRefactorPendingAc(tdd, F, S)).toBeNull();
   });
 
-  it("greenOpenCycle throws when there is no open RED cycle (driver dispatched with nothing to green)", () => {
-    expect(() => greenOpenCycle({ tddDir: tdd, featureId: F, story: S })).toThrow(/no open RED cycle/);
+  it("greenOpenCycle throws when there is no open RED cycle (driver dispatched with nothing to green)", async () => {
+    await expect(greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass })).rejects.toThrow(
+      /no open RED cycle/,
+    );
   });
 
-  it("storyTestProgress: after only T1 is green, the loop must CONTINUE (T2 pending, not allGreen)", () => {
+  it("storyTestProgress: after only T1 is green, the loop must CONTINUE (T2 pending, not allGreen)", async () => {
     // The exact regression that stalled the live smoke: the build advanced to
     // await-acceptance after one test because "all RED cycles are green" was
     // true. With test-list-driven progress, T2 is still pending and allGreen is
     // false, so the Navigator is dispatched for T2 instead of awaiting acceptance.
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); // RED T1
-    greenOpenCycle({ tddDir: tdd, featureId: F, story: S }); // GREEN T1
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass }); // GREEN T1
     const p = storyTestProgress(tdd, F, S);
     expect(p.total).toBe(2);
     expect(p.openRed.length).toBe(0);

@@ -61,6 +61,11 @@ export interface RunDriverResult {
   /** The action the bound stopped BEFORE performing (e.g. the HITL gate awaiting
    *  the human in interactive mode, or the first out-of-scope action). */
   stoppedAt?: WorkflowAction;
+  /** True if the run halted because a blocking problem was raised to the HIL
+   *  (surface + halt). The escalation is recorded under .tdd/escalations/. */
+  escalated?: boolean;
+  /** The raise-to-hil action that halted the run (its reason + source). */
+  escalation?: WorkflowAction & { kind: "raise-to-hil" };
 }
 
 export interface RunDriverOptions {
@@ -138,6 +143,16 @@ export async function runDriver(
       effects.onAction?.(action, i);
       await effects.perform(action);
       return { iterations: i + 1 };
+    }
+
+    // Surface + halt: a blocking problem was raised to the HIL. Terminal, like
+    // `done` (handled BEFORE the stall check so a still-unresolved escalation
+    // does not look like a stall). The escalation is already recorded on disk;
+    // perform() emits the loud halt log. A human resumes after resolving it.
+    if (action.kind === "raise-to-hil") {
+      effects.onAction?.(action, i);
+      await effects.perform(action);
+      return { iterations: i + 1, escalated: true, escalation: action };
     }
 
     // A Tier-2 phase bound: stop cleanly before performing the out-of-scope

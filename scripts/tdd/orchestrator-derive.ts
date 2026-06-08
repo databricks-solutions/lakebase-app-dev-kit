@@ -19,6 +19,7 @@ import type {
   PlanningState,
   DeployState,
   StoryView,
+  DriveEscalation,
 } from "./orchestrator-drive.js";
 
 /**
@@ -46,6 +47,9 @@ export interface StoryArtifactProbe {
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
   storyDeployVerified(story: string): boolean;
+  /** An unresolved blocking escalation (failed honest-GREEN run, blocking smell,
+   *  deploy verify-fail), or null. When set the driver routes to raise-to-hil. */
+  pendingEscalation(): DriveEscalation | null;
 }
 
 /** Coarse driver context that lives outside pipeline.json (in workflow-state). */
@@ -123,6 +127,7 @@ export function deriveDriveState(
     storyOrder,
     stories,
     buildActive: pipeline.build_active,
+    escalation: probe.pendingEscalation(),
   };
 }
 

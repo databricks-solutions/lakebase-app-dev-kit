@@ -49,7 +49,7 @@ You do not reinvent deploy or release. You **compose** on the substrate: `lakeba
 1. **Precondition**: confirm the feature is built (`test-list.json` cycles green). Else stop and point back to `/build <feature-id>`.
 2. **Deploy**: `lakebase-tdd-deploy --target <name> --project-dir "$PWD"` , starts the app (the target's `run`) and polls `base_url` + `health_path` until it answers (exit 6 if it never does). A non-reachable app is NOT working software.
 3. **Verify usable**: run the feature's verification against the running app , the API answers the new endpoints; for UI features, Playwright against the local server (the same `webServer`-boots-locally pattern `pr.yml` uses with no remote endpoint).
-4. **Hand to the PO**: surface the running URL + verify result for the deploy gate. You do not approve it.
+4. **Hand to the PO**: surface the running URL + verify result for the deploy gate. You do not approve it. When the deploy cannot prove working software (unreachable, or reachable but the verify FAILED), the substrate raises the failure to the HIL automatically , the run halts there for a human, instead of the gate spinning. Report the honest result; never round a failed verify up to passed.
 5. **Teardown**: `lakebase-tdd-deploy --target <name> --project-dir "$PWD" --stop` between iterations (an interactive user may leave it up to keep using it).
 
 ### Remote targets (deferred; compose, do not reinvent)

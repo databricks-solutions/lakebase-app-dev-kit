@@ -188,6 +188,17 @@ export interface DeployState {
   gateApproved: boolean;
 }
 
+/** A blocking problem an agent/step surfaced, derived from disk (escalation
+ *  files + blocking smells). Structural copy of escalation.ts's Escalation so the
+ *  pure state machine stays fs-free. While one is unresolved the driver routes to
+ *  raise-to-hil before any other transition. */
+export interface DriveEscalation {
+  id: string;
+  source: string;
+  reason: string;
+  story_id?: string;
+}
+
 export interface DriveState {
   phase: DrivePhase;
   planning?: PlanningState;
@@ -201,6 +212,9 @@ export interface DriveState {
   uiTrack?: boolean;
   /** The project design guide exists (design-guide.json on disk). */
   designGuideReady?: boolean;
+  /** An unresolved blocking escalation (failed-green run, blocking smell, verify
+   *  fail). When set, nextTransition pre-empts everything with raise-to-hil. */
+  escalation?: DriveEscalation | null;
 }
 
 export type WorkflowAction =
@@ -219,6 +233,7 @@ export type WorkflowAction =
   | { kind: "feature-complete" }
   | { kind: "deploy" }
   | { kind: "approve-deploy-gate" }
+  | { kind: "raise-to-hil"; reason: string; source: string; story?: string }
   | { kind: "done" };
 
 /** The next build-lane action for the story the lane is on. */
@@ -251,6 +266,17 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
  *   deploy:    deploy -> approve-deploy-gate -> done.
  */
 export function nextTransition(state: DriveState): WorkflowAction {
+  // Escalation pre-empts everything (FEIP-7510 follow-up): any unresolved
+  // blocking problem an agent surfaced (a failed honest-GREEN run, a blocking
+  // bad-smell, a deploy verify-fail) routes to a single raise-to-hil halt rather
+  // than advancing or re-issuing an action that never changes state (the
+  // await-acceptance spin). The run stops cleanly for the HIL; it never
+  // false-greens past the problem or silently stalls.
+  if (state.escalation) {
+    const e = state.escalation;
+    return { kind: "raise-to-hil", reason: e.reason, source: e.source, ...(e.story_id ? { story: e.story_id } : {}) };
+  }
+
   if (state.phase === "planning") {
     const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
     if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
@@ -359,6 +385,9 @@ export function actionLane(action: WorkflowAction): ActionLane {
     case "deploy":
     case "approve-deploy-gate":
       return "deploy";
+    case "raise-to-hil":
+      // Terminal halt: surfaced to the HIL, the run stops here for a human.
+      return "done";
     case "done":
       return "done";
   }

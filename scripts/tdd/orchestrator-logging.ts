@@ -89,6 +89,16 @@ export function orchestratorLogEvents(
       return [{ ...base, event: "phase.end", message: `design complete` }];
     case "feature-complete":
       return [{ ...base, event: "phase.end", message: `feature complete` }];
+    case "raise-to-hil":
+      return [
+        {
+          ...base,
+          level: "error",
+          event: "escalation.raised",
+          message: `RAISED TO HIL (${action.source}): ${action.reason}`,
+          data: { source: action.source, ...(story ? { story } : {}) },
+        },
+      ];
     case "done":
       return [{ ...base, event: "phase.end", message: `workflow complete` }];
     default: {
@@ -97,6 +107,17 @@ export function orchestratorLogEvents(
       return [{ ...base, event: `action.${k}`, message: `orchestrator: ${k}` }];
     }
   }
+}
+
+/**
+ * A one-line human-readable description of an action, for the driver's stdout
+ * trace. Reuses orchestratorLogEvents' canonical message (DRY: one source of
+ * narration for both the structured log + the console) so the smoke/console shows
+ * "dispatch driver (story S1)" / "RAISED TO HIL (...)" instead of raw JSON.
+ */
+export function describeAction(action: WorkflowAction, ctx: OrchestratorLogContext = {}): string {
+  const events = orchestratorLogEvents(action, ctx);
+  return events[0]?.message ?? (action as { kind: string }).kind;
 }
 
 /**

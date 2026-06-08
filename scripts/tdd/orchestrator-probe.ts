@@ -15,8 +15,10 @@ import * as path from "node:path";
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
 import { storyTestProgress, firstReviewPendingAc, firstRefactorPendingAc } from "./cycle-record.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
+import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
+import { firstPendingEscalation } from "./escalation.js";
 import {
   cyclesRootDir,
   workflowStateJson,
@@ -171,6 +173,12 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
 
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
+    },
+
+    pendingEscalation(): DriveEscalation | null {
+      const e = firstPendingEscalation(tddDir, featureId);
+      if (!e) return null;
+      return { id: e.id, source: e.source, reason: e.reason, ...(e.story_id ? { story_id: e.story_id } : {}) };
     },
   };
 }
