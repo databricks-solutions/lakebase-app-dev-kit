@@ -32,6 +32,21 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(start!.feature_id).toBe("F1-initial-domain");
   });
 
+  it("await-acceptance narrates the release-engineer handoff + phase.start (it is the invisible deploy actor)", () => {
+    // The Release Engineer runs the deterministic deploy at await-acceptance, but
+    // the deploy is a CLI and the RE's own model may stay silent. The orchestrator
+    // must still record that the RE was dispatched, so a run shows it was invoked.
+    const action = { kind: "await-acceptance", story: "S1-file-bug" } as WorkflowAction;
+    const events = orchestratorLogEvents(action, { featureId: "F1" });
+    const handoff = events.find((e) => e.event === "handoff");
+    expect(handoff, "expected a release-engineer handoff").toBeTruthy();
+    expect(handoff!.message).toMatch(/release-engineer/);
+    const start = events.find((e) => e.event === "phase.start" && e.role === "release-engineer");
+    expect(start, "expected a release-engineer phase.start").toBeTruthy();
+    // The acceptance gate is still surfaced.
+    expect(events.some((e) => e.event === "gate.surfaced")).toBe(true);
+  });
+
   it("a gate-surfacing action emits an orchestrator gate.surfaced", () => {
     const action = { kind: "surface-gate", gate: "spec", story: "S1" } as unknown as WorkflowAction;
     const events = orchestratorLogEvents(action, { featureId: "F1" });

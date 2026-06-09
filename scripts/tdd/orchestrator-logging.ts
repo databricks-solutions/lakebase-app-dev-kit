@@ -66,7 +66,27 @@ export function orchestratorLogEvents(
     case "surface-gate":
       return [{ ...base, event: "gate.surfaced", message: `surfacing spec gate for story ${story}`, data: { story } }];
     case "await-acceptance":
-      return [{ ...base, event: "gate.surfaced", message: `awaiting acceptance for story ${story}`, data: { story } }];
+      // The Release Engineer takes over here to run the deterministic deploy +
+      // verify. Narrate the handoff + its phase.start under the release-engineer
+      // role, so the run shows the RE was dispatched even if the RE's own model
+      // never logs (the deploy is a CLI; the role can be silent). Then the gate.
+      return [
+        {
+          ...base,
+          event: "handoff",
+          message: `dispatch release-engineer (deploy + verify story ${story})`,
+          data: { story, role: "release-engineer" },
+        },
+        {
+          role: "release-engineer",
+          level: "info",
+          feature_id,
+          event: "phase.start",
+          message: `release-engineer starting: deploy + verify story ${story}`,
+          data: { story },
+        },
+        { ...base, event: "gate.surfaced", message: `awaiting acceptance for story ${story}`, data: { story } },
+      ];
     case "approve-gate":
       return [{ ...base, event: "gate.approved", message: `spec gate approved for story ${story}`, data: { story } }];
     case "approve-plan-gate":

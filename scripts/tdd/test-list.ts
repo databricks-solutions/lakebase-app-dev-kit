@@ -199,13 +199,39 @@ export function writeStoryTestList(
 ): string | null {
   const storyDir = findStoryDirOf(tddDir, featureId, storyId);
   if (!storyDir) return null;
-  let master: TestList;
+  const storyAcIds = acIdsInStoryDir(storyDir);
+
+  let master: TestList | null = null;
   try {
     master = readMasterTestList(tddDir, featureId);
   } catch {
-    return null; // master not authored yet; nothing to scope
+    master = null; // master not authored yet
   }
-  const scoped = scopeToStory(master, storyId, acIdsInStoryDir(storyDir));
+
+  // The streaming pipeline hands the Test Strategist ONE story at a time; it
+  // writes that story's per-story list. Accumulate those items into the feature
+  // master, which otherwise only ever holds the FIRST story's tests. Both
+  // scopeToStory (here) and markTestItemGreen read the master, so a later story
+  // whose tests never reach the master scopes to an EMPTY per-story list, which
+  // leaves testListReady false and stalls the design lane re-issuing the role.
+  const authored = readStoryTestList(tddDir, featureId, storyId);
+  if (authored?.items?.length) {
+    const baseList: TestList =
+      master ?? {
+        feature_id: featureId,
+        ...(authored.ordered_for ? { ordered_for: authored.ordered_for } : {}),
+        items: [],
+      };
+    const haveIds = new Set(baseList.items.map((i) => i.id));
+    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
+    if (additions.length > 0 || master === null) {
+      master = { ...baseList, items: [...baseList.items, ...additions] };
+      writeMasterTestList(tddDir, master);
+    }
+  }
+  if (!master) return null; // no master and no authored per-story list , nothing to scope
+
+  const scoped = scopeToStory(master, storyId, storyAcIds);
   const file = storyTestListJson(tddDir, featureId, storyId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(scoped, null, 2) + "\n");
