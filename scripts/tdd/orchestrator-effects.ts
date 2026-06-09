@@ -341,37 +341,38 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         },
       ];
 
-    case "await-acceptance":
-      // The ORCHESTRATION deploys the story + runs the verify, deterministically,
-      // exactly like honest GREEN records the runner outcome itself. It does NOT
-      // dispatch the Release Engineer LLM to "go deploy": that trusted the model
-      // to run the substrate, and when it narrated success instead of running
-      // `lakebase-tdd-deploy`, no deploy-evidence.json was written, deployVerified
-      // stayed false, and the driver stalled at await-acceptance forever. Now the
-      // driver runs the substrate: `lakebase-tdd-deploy --gate` starts the app on
-      // the story's experiment branch, polls reachable, runs the project verify,
-      // and writes the STORY-scoped deploy-evidence (the teeth before accept). A
-      // stale/foreign app on the port or a failed verify is recorded as honest
-      // evidence + an escalation (--gate soft-fails, exit 0), which the next
-      // readState routes to a raise-to-hil halt , never a false-green or a stall.
-      // (Teardown first so a prior story's app frees the port.)
+    case "await-acceptance": {
+      // The Release Engineer (role) TAKES OVER here: it is dispatched to RUN the
+      // deterministic deploy gate (`lakebase-tdd-deploy --gate`), which starts the
+      // app on the story's experiment branch, polls reachable, runs the project
+      // verify, and writes the STORY-scoped deploy-evidence. So the RE is the
+      // visible actor, but the deploy itself is the deterministic CLI, not the
+      // model's word: if the RE narrates success without running it, no
+      // deploy-evidence.json is written, deployVerified stays false, and the
+      // driver does NOT accept (the honest-deploy backstop , a false narration
+      // cannot pass). The CLI's --gate soft-fails (exit 0) on a real failure,
+      // recording honest evidence + an escalation that the next readState routes
+      // to a raise-to-hil halt. (Teardown first so a prior story's app frees the port.)
+      const deployCmd =
+        `./scripts/lk lakebase-tdd-deploy --target ${deployTarget} --feature ${f} --story ${action.story}` +
+        ` --lakebase-branch ${experimentBranchName(action.story)} --tdd-dir ${cfg.tddDir} --gate`;
       return [
         { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: [
-            "--target", deployTarget,
-            "--feature", f,
-            "--story", action.story,
-            "--lakebase-branch", experimentBranchName(action.story),
-            "--project-dir", cfg.projectDir,
-            "--tdd-dir", cfg.tddDir,
-            "--gate",
-          ],
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
+          task:
+            `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget}` +
+            ` target and verify it actually serves: from the project root run exactly\n  ${deployCmd}\n` +
+            `That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence` +
+            ` the acceptance gate reads. Do NOT report success without running it , the orchestration checks the` +
+            ` evidence on disk, not your word.` + AGENT_TERSE_SUFFIX,
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
       ];
+    }
 
     case "accept":
       // Merge the experiment into the feature branch (git + migrations), then

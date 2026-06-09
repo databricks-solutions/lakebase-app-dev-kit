@@ -7997,30 +7997,22 @@ function commandsForAction(action, cfg) {
           ]
         }
       ];
-    case "await-acceptance":
+    case "await-acceptance": {
+      const deployCmd = `./scripts/lk lakebase-tdd-deploy --target ${deployTarget} --feature ${f} --story ${action.story} --lakebase-branch ${experimentBranchName(action.story)} --tdd-dir ${cfg.tddDir} --gate`;
       return [
         { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: [
-            "--target",
-            deployTarget,
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--lakebase-branch",
-            experimentBranchName(action.story),
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.tddDir,
-            "--gate"
-          ]
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
+          task: `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget} target and verify it actually serves: from the project root run exactly
+  ${deployCmd}
+That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence the acceptance gate reads. Do NOT report success without running it , the orchestration checks the evidence on disk, not your word.` + AGENT_TERSE_SUFFIX
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
       ];
+    }
     case "accept":
       return [
         {

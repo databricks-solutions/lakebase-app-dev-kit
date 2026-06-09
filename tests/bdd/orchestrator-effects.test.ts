@@ -226,16 +226,24 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(cmds.some((c) => "role" in c && (c as { role?: string }).role === "release-engineer")).toBe(false);
   });
 
-  it("await-acceptance: orchestration deploys the STORY (gated) then marks awaiting , no LLM", () => {
+  it("await-acceptance: the Release Engineer is dispatched to RUN the deterministic deploy gate, then marks awaiting", () => {
     const cmds = commandsForAction({ kind: "await-acceptance", story: "S1" }, cfg());
+    // teardown first (free the port).
     expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
     expect((cmds[0] as { args: string[] }).args).toContain("--stop");
-    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-deploy" });
-    const g = (cmds[1] as { args: string[] }).args;
-    expect(g).toEqual(expect.arrayContaining(["--gate", "--story", "S1", "--lakebase-branch"]));
+    // the RELEASE ENGINEER takes over (visible actor) , a claude turn whose task
+    // is to run the deterministic deploy gate (the deploy is the CLI, not the
+    // model's word; deploy-evidence is the backstop).
+    const re = cmds[1] as { kind: string; role?: string; task?: string };
+    expect(re.kind).toBe("claude");
+    expect(re.role).toBe("release-engineer");
+    expect(re.task).toContain("lakebase-tdd-deploy");
+    expect(re.task).toEqual(expect.stringContaining("--gate"));
+    expect(re.task).toEqual(expect.stringContaining("--story S1"));
+    expect(re.task).toEqual(expect.stringContaining("--lakebase-branch"));
+    // then the pipeline marks awaiting-acceptance.
     expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-pipeline" });
     expect((cmds[2] as { args: string[] }).args[0]).toBe("await-acceptance");
-    expect(cmds.some((c) => "role" in c && (c as { role?: string }).role === "release-engineer")).toBe(false);
   });
 
   it("approve-deploy-gate is the PO gate via the Human Proxy", () => {
