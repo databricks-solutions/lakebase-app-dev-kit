@@ -573,7 +573,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-adopt-state (FEIP-7458 phase B+)
+var HELP = `lakebase-scm-adopt-state (phase B+)
 
 Seed .lakebase/workflow-state.json for a project that pre-dates the
 SCM workflow state machine. Reads the current git branch + the

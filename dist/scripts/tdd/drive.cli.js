@@ -7810,7 +7810,7 @@ function diskArtifactProbe(tddDir, featureId) {
     // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
     // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
     // it the loop advanced after a single test and stalled at await-acceptance
-    // with the rest of the list unbuilt (the live FEIP-7422 stall).
+    // with the rest of the list unbuilt (the live stall).
     testsWritten(story) {
       const p = storyTestProgress(tddDir, featureId, story);
       if (p.total === 0) {

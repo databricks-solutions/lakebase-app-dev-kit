@@ -8679,7 +8679,7 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-var RUN_TESTS_E2E_MARKER = "# FEIP-7094: run Playwright E2E suite when configured";
+var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path9.join(args.projectDir, "scripts", "run-tests.sh");
   if (!fs10.existsSync(scriptPath)) {
@@ -12348,7 +12348,7 @@ function checkWorkflowDrift(projectDir) {
       status: "warn",
       message: `Scaffolded workflows drift from kit: ${drifted} drifted, ${missing} missing`,
       detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
-      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until FEIP-7139 updateWorkflows lands."
+      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until updateWorkflows lands."
     };
   } catch (err) {
     return {
@@ -12698,7 +12698,7 @@ var TOOLS = [
       );
     }
   },
-  // ------------------------- FEIP-7328 P0.2 PR tools -------------------------
+  // ------------------------- PR tools -------------------------
   {
     name: "lakebase_pr_open",
     description: "Create a GitHub pull request via the REST API. Returns the PR html_url.",
@@ -12854,7 +12854,7 @@ var TOOLS = [
       return getPullRequestComments(requireString(args, "ownerRepo"), num);
     }
   },
-  // ------------------------- FEIP-7330 P0.4 doctor -------------------------
+  // ------------------------- doctor -------------------------
   {
     name: "lakebase_doctor",
     description: "Run health checks on a Lakebase project: CLI version + auth, .env shape, project reachability, git remote, language, git hooks. Returns a structured report with per-check status + remediation hints.",
@@ -12875,7 +12875,7 @@ var TOOLS = [
       });
     }
   },
-  // ------------------------- FEIP-7140 workflow drift ----------------------
+  // ------------------------- workflow drift ----------------------
   {
     name: "lakebase_workflow_drift",
     description: "Detect drift between a scaffolded project's .github/workflows/*.yml and the kit's current templates. Returns per-file status (unchanged / drifted / missing / extra) and a unified diff for drifted files. Use when a maintainer wants to know if a project's CI templates are stale vs the kit it pins.",
@@ -12895,7 +12895,7 @@ var TOOLS = [
       });
     }
   },
-  // ------------------------- FEIP-7331 P0.1 branch read tools -------------
+  // ------------------------- branch read tools -------------
   {
     name: "lakebase_branch_list",
     description: "List branches on a Lakebase project (name, uid, parent, expiration, state).",

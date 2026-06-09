@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/architecture.schema.json",
   "title": "Architecture",
-  "description": "The Architect Reviewer's structured output for a feature, persisted as features/<F>/architecture.json (the machine-checkable companion to architecture.md). NFRs live HERE, not on the spec-author-owned, spec-gated feature-spec.json/story.json: the architect proposes them and the HIL (Product Owner) accepts or modifies them at Gate 2. Moving NFRs off feature-spec.json resolves the spec-gate integrity drift (FEIP-7508): the architect annotating feature-spec.json after the spec gate hashed it tripped verify-gate-integrity.",
+  "description": "The Architect Reviewer's structured output for a feature, persisted as features/<F>/architecture.json (the machine-checkable companion to architecture.md). NFRs live HERE, not on the spec-author-owned, spec-gated feature-spec.json/story.json: the architect proposes them and the HIL (Product Owner) accepts or modifies them at Gate 2. Moving NFRs off feature-spec.json resolves the spec-gate integrity drift: the architect annotating feature-spec.json after the spec gate hashed it tripped verify-gate-integrity.",
   "type": "object",
   "required": ["feature_id", "nfrs"],
   "properties": {

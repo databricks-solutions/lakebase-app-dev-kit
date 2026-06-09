@@ -690,7 +690,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-wait-ci (FEIP-7458 phase B+)
+var HELP = `lakebase-scm-wait-ci (phase B+)
 
 Block until the PR's CI checks turn green, then transition
 pr-ready -> ci-green. On CI failure or timeout, exits non-zero

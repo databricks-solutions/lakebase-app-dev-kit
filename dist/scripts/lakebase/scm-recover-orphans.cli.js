@@ -1297,7 +1297,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-recover-orphans (FEIP-7458 phase C)
+var HELP = `lakebase-scm-recover-orphans (phase C)
 
 Detect (and optionally claim) git branches that lack a paired Lakebase
 branch. Migration path for projects with orphans created by the pre-

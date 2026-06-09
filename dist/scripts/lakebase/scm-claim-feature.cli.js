@@ -1270,7 +1270,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-claim-feature-branch (FEIP-7458, phase B)
+var HELP = `lakebase-scm-claim-feature-branch (phase B)
 
 Claim a new feature branch through the SCM workflow. Cuts the paired
 Lakebase + git branch via createFeaturePairedBranch (30-day TTL),

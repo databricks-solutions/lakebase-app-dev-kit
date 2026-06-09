@@ -591,7 +591,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-pr (FEIP-7328)
+var HELP = `lakebase-pr
 
 Subcommands:
   open          Create a new PR (returns html_url)
