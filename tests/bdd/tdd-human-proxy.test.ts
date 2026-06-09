@@ -160,10 +160,10 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
 
     const log = readAgentLog({ tddDir: tdd, role: "product-owner" });
-    const approved = log.find((e) => e.event === "gate.approved" && (e.data as { gate?: string })?.gate === "spec");
+    const approved = log.find((e) => e.event === "gate.approved" && (e.metadata as { gate?: string })?.gate === "spec");
     expect(approved).toBeDefined();
-    expect((approved?.data as { validated?: boolean })?.validated).toBe(true);
-    expect((approved?.data as { approver?: string })?.approver).toBe("human-proxy");
+    expect((approved?.metadata as { validated?: boolean })?.validated).toBe(true);
+    expect((approved?.metadata as { approver?: string })?.approver).toBe("human-proxy");
   });
 
   it("records the HITL decision: product-owner gate.refused (warn) when an artifact is non-conformant", () => {
@@ -172,7 +172,7 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
 
     const refused = readAgentLog({ tddDir: tdd, role: "product-owner" }).find(
-      (e) => e.event === "gate.refused" && (e.data as { gate?: string })?.gate === "spec",
+      (e) => e.event === "gate.refused" && (e.metadata as { gate?: string })?.gate === "spec",
     );
     expect(refused).toBeDefined();
     expect(refused?.level).toBe("warn");
@@ -208,7 +208,7 @@ describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-
     expect(readFileSync(to, "utf8")).toBe(PRODUCT_OVERVIEW);
     const supplied = readAgentLog({ tddDir: tdd, role: "product-owner" }).find((e) => e.event === "intake.supplied");
     expect(supplied).toBeDefined();
-    expect((supplied?.data as { validated?: boolean })?.validated).toBe(true);
+    expect((supplied?.metadata as { validated?: boolean })?.validated).toBe(true);
   });
 
   it("refuses (does not place) a non-conformant recording", () => {
@@ -305,7 +305,7 @@ describe("Human Proxy supplyRequests (the PO's artifacts, given when the state m
     expect(readFileSync(target, "utf8")).toBe(CONFORMANT_REQUEST);
     // The interaction is logged (gives, then logs what it gave).
     const supplied = readAgentLog({ tddDir: tdd }).filter((e) => e.event === "intake.supplied");
-    expect(supplied.some((e) => e.data?.artifact === "feature-request.md")).toBe(true);
+    expect(supplied.some((e) => e.metadata?.artifact === "feature-request.md")).toBe(true);
   });
 
   it("reads the (feature_id, source) pairs from $LAKEBASE_TDD_SPRINT_REQUESTS when pairs are not passed", () => {

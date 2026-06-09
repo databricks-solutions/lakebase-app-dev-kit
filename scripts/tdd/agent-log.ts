@@ -30,20 +30,45 @@ export type AgentLogLevel = "debug" | "info" | "warn" | "error";
 /** Severity ordering for minLevel filtering. */
 const LEVEL_ORDER: Record<AgentLogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
+/**
+ * Structured payload. `feature_id` is the top-level metadata attribute (the
+ * primary scope key); `phase` / `cycle_id` and any event-specific keys
+ * (artifact path, gate name, conformance violations, ...) follow.
+ */
+export interface AgentLogMetadata {
+  feature_id?: string;
+  phase?: string;
+  cycle_id?: string;
+  [key: string]: unknown;
+}
+
+/** One persisted log line. Field order: timestamp, level, role, event, message, metadata. */
 export interface AgentLogEvent {
-  ts: string;
-  role: AgentRole;
+  timestamp: string;
   level: AgentLogLevel;
+  role: AgentRole;
+  event: string;
+  message: string;
+  metadata?: AgentLogMetadata;
+}
+
+/**
+ * Input to emit. The logger stamps `timestamp` if omitted and assembles
+ * `metadata` from the convenience fields (`feature_id` / `phase` / `cycle_id` /
+ * `data`) plus any explicit `metadata`, with `feature_id` first.
+ */
+export interface AgentLogEventInput {
+  timestamp?: string;
+  level: AgentLogLevel;
+  role: AgentRole;
   event: string;
   message: string;
   feature_id?: string;
   phase?: string;
   cycle_id?: string;
   data?: Record<string, unknown>;
+  metadata?: AgentLogMetadata;
 }
-
-/** Input to emit: everything but the timestamp (which the logger stamps). */
-export type AgentLogEventInput = Omit<AgentLogEvent, "ts"> & { ts?: string };
 
 export interface AgentLogIoOpts {
   /** Path to the .tdd/ root. Default: "./.tdd". */
@@ -65,7 +90,23 @@ function logFilePath(tddDir: string): string {
 export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => new Date());
-  const event: AgentLogEvent = { ...input, ts: input.ts ?? now().toISOString() } as AgentLogEvent;
+  // Assemble metadata with feature_id first, then phase / cycle_id, then the
+  // free-form payload + any explicit metadata. Omit entirely when empty.
+  const metadata: AgentLogMetadata = {
+    ...(input.feature_id !== undefined ? { feature_id: input.feature_id } : {}),
+    ...(input.phase !== undefined ? { phase: input.phase } : {}),
+    ...(input.cycle_id !== undefined ? { cycle_id: input.cycle_id } : {}),
+    ...(input.data ?? {}),
+    ...(input.metadata ?? {}),
+  };
+  const event: AgentLogEvent = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message: input.message,
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
 
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
@@ -103,7 +144,7 @@ export function readAgentLog(opts: ReadAgentLogOpts = {}): AgentLogEvent[] {
       continue; // skip a malformed / partially-written line
     }
     if (opts.role !== undefined && ev.role !== opts.role) continue;
-    if (opts.featureId !== undefined && ev.feature_id !== opts.featureId) continue;
+    if (opts.featureId !== undefined && ev.metadata?.feature_id !== opts.featureId) continue;
     if (minRank !== undefined && LEVEL_ORDER[ev.level] < minRank) continue;
     out.push(ev);
   }

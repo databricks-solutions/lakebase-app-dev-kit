@@ -8,17 +8,18 @@ them into one file. This is the audit + debug trail for the whole relay.
 ## 1. Format
 
 One JSON object per line (JSON Lines) in `.tdd/agent-log.jsonl`, validated
-against `scripts/tdd/schemas/agent-log-event.schema.json`. Required fields:
+against `scripts/tdd/schemas/agent-log-event.schema.json`. Fields, in order:
 
 | Field | Meaning |
 |---|---|
-| `ts` | ISO-8601 UTC timestamp (stamped by the logger) |
-| `role` | the role performing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
+| `timestamp` | ISO-8601 UTC timestamp (stamped by the logger) |
 | `level` | `debug` / `info` / `warn` / `error` (see below) |
+| `role` | the role performing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
 | `event` | dotted machine name (e.g. `phase.start`, `artifact.written`, `gate.surfaced`, `handoff`, `reasoning`, `smell.flagged`) |
 | `message` | human-readable one-liner |
+| `metadata` | optional structured payload |
 
-Optional: `feature_id`, `phase`, `cycle_id`, `data` (structured payload, e.g. artifact path, gate name, conformance violations).
+`timestamp`, `level`, `role`, `event`, `message` are required. `metadata` is optional; when present, `feature_id` is its top-level attribute (the primary scope key), followed by `phase`, `cycle_id`, and any event-specific keys (artifact path, gate name, conformance violations, ...).
 
 ## 2. Levels (what to log at each)
 
@@ -68,12 +69,12 @@ In-process callers use `emitAgentLogEvent` / `readAgentLog` from
 There is exactly ONE logging function, `emitAgentLogEvent` (the `lakebase-tdd-log`
 CLI is its shell face); `role` is a parameter, not a function per agent. It is
 the only thing that may write `.tdd/agent-log.jsonl`: it stamps the canonical
-`ts`, validates against the schema, and atomically appends one line.
+`timestamp`, validates against the schema, and atomically appends one line.
 
 **NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into
 `agent-log.jsonl`, and do not invent fields. A model that hand-writes invariably
 mangles the schema (the observed failure: a `timestamp` field with a local
-wall-clock instead of the required `ts` stamped in UTC). Always shell out to
+wall-clock instead of the required `timestamp` stamped in UTC). Always shell out to
 `lakebase-tdd-log`, which fills the required fields for you. If a field is not
 accepted by the CLI, it is not part of the schema.
 
@@ -129,7 +130,7 @@ recorded, the audit trail must show who was asked and what they decided.
    - `--event gate.approved --message "<what they approved + any decisions>"`
    - `--event gate.modified --message "<what they changed>"` (with the change)
    - `--event gate.rejected --message "<why, what to revise>"`
-   Capture the human's ACTUAL decision verbatim in the message + `data`, not a
+   Capture the human's ACTUAL decision verbatim in the message + `metadata`, not a
    paraphrase. If the human answered open questions, record their answers.
 
 So a normal (human) run logs: `gate.surfaced` (transition) then the human's

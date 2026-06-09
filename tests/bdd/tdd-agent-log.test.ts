@@ -23,7 +23,7 @@ describe("emitAgentLogEvent", () => {
       { role: "spec-author", level: "info", event: "artifact.written", message: "wrote feature-spec.json", feature_id: "F1-initial-domain", data: { path: "feature-spec.json" } },
       { tddDir: tdd, now: clock },
     );
-    expect(ev.ts).toBe("2026-06-05T10:00:00.000Z");
+    expect(ev.timestamp).toBe("2026-06-05T10:00:00.000Z");
 
     const file = join(tdd, "agent-log.jsonl");
     expect(existsSync(file)).toBe(true);
@@ -32,7 +32,7 @@ describe("emitAgentLogEvent", () => {
     const parsed = JSON.parse(lines[0]);
     expect(parsed.role).toBe("spec-author");
     expect(parsed.event).toBe("artifact.written");
-    expect(parsed.data.path).toBe("feature-spec.json");
+    expect(parsed.metadata.path).toBe("feature-spec.json");
   });
 
   it("appends (does not overwrite) across multiple emits + roles", () => {

@@ -75,11 +75,11 @@ describe("makeOnAction: code-emits through the ONE common logger", () => {
 
     const events = readAgentLog({ tddDir: tdd });
     expect(events.length).toBeGreaterThanOrEqual(2); // handoff + phase.start
-    // emitAgentLogEvent stamps a real UTC ts (the malformed role logs used a
-    // bare "timestamp" with a local clock; this proves we go through the logger).
+    // emitAgentLogEvent stamps a real UTC timestamp; this proves we go through
+    // the logger (not a role writing its own line with a local clock).
     for (const e of events) {
-      expect(e.ts, "logger stamps ts").toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
-      expect((e as unknown as Record<string, unknown>).timestamp, "no stray 'timestamp' field").toBeUndefined();
+      expect(e.timestamp, "logger stamps timestamp").toMatch(/^\d{4}-\d{2}-\d{2}T.*Z$/);
+      expect((e as unknown as Record<string, unknown>).ts, "no stray legacy 'ts' field").toBeUndefined();
     }
     expect(events.some((e) => e.role === "orchestrator")).toBe(true);
     expect(events.some((e) => e.role === "spec-author" && e.event === "phase.start")).toBe(true);

@@ -78,7 +78,7 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
 function alreadyLogged(events: AgentLogEvent[], relPath: string): boolean {
   return events.some((e) => {
     if (e.event !== "artifact.written") return false;
-    const p = e.data?.path;
+    const p = e.metadata?.path;
     if (typeof p !== "string") return false;
     return p === relPath || p.endsWith(`/${relPath}`) || (p.includes("/") && relPath.endsWith(p));
   });

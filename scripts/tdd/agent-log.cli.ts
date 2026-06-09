@@ -107,7 +107,7 @@ export function runAgentLogCli(argv: string[]): number {
         process.stdout.write(`${JSON.stringify(emitted)}\n`);
       } else {
         process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}\n`);
-        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.data?.path}\n`);
+        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.metadata?.path}\n`);
       }
       return 0;
     } catch (e) {
@@ -127,7 +127,7 @@ export function runAgentLogCli(argv: string[]): number {
       process.stdout.write(`${JSON.stringify(events)}\n`);
     } else {
       for (const e of events) {
-        process.stdout.write(`${e.ts} ${e.level.toUpperCase().padEnd(5)} [${e.role}] ${e.event}: ${e.message}\n`);
+        process.stdout.write(`${e.timestamp} ${e.level.toUpperCase().padEnd(5)} [${e.role}] ${e.event}: ${e.message}\n`);
       }
     }
     return 0;
