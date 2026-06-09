@@ -161,6 +161,43 @@ Project names always have a timestamp suffix so re-runs and concurrent runs do n
 
 Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTANCE` + `LAKEBASE_TEST_BRANCH` activates the read-only live tests in any `vitest run` invocation; `LAKEBASE_TEST_INITIALIZR=1` enables the Spring Initializr live fetch; `LAKEBASE_TEST_PARENT` configures the parent for diff suites; `LAKEBASE_TEST_E2E_GITHUB=1` enables the FEIP-7138 self-hosted-runner suite.
 
+### FEIP-7422 TDD-workflow smoke
+
+The end-to-end TDD-workflow smoke lives in `examples/feip-7422-smoke/`. It scaffolds a real bug-tracker project and drives it through two sprints (`/plan` -> `/design` -> `/build` -> `/deploy` with the HITL gates played by the Human Proxy). It runs against **your own** Databricks workspace and GitHub owner, not anyone else's.
+
+**Configure** , copy the template and fill in your values:
+
+```bash
+cp examples/feip-7422-smoke/.env.example ~/lakebase-smoke.env
+# edit ~/lakebase-smoke.env
+set -a; source ~/lakebase-smoke.env; set +a
+```
+
+Required env vars:
+
+| Var | Purpose |
+|---|---|
+| `DATABRICKS_HOST` | Your workspace URL (or set `DATABRICKS_CONFIG_PROFILE` + have `~/.databrickscfg`). |
+| `GITHUB_OWNER` | Your sandbox GitHub user or org; the smoke creates + uses a repo under it. |
+
+Optional: `LAKEBASE_KIT_REF` (pin the kit to a branch/tag/sha instead of this checkout's built `dist/`), `LAKEBASE_KIT_DIR` (point `lk` at a specific kit install), `LAKEBASE_TDD_AUTO_CONTINUE=1` (auto-answer the pause-at-handoff gates in CI).
+
+**Run** , the orchestrator has four scripts in `examples/feip-7422-smoke/orchestrator/`:
+
+```bash
+# 1. (maintainers) rebuild + push + warm the kit cache; only needed to validate a published ref
+examples/feip-7422-smoke/orchestrator/rebuild-push-warm.sh
+
+# 2. end-to-end against your workspace (--tiers 2 is required)
+examples/feip-7422-smoke/orchestrator/run-smoke.sh --tiers 2
+
+# pause just before the Navigator / Release Engineer handoffs (replay-fed)
+examples/feip-7422-smoke/orchestrator/run-to-navigator.sh --tiers 2
+examples/feip-7422-smoke/orchestrator/run-to-release-engineer.sh --tiers 2
+```
+
+By default the smoke runs your local working tree's `dist/`. Pass `--kit-ref <ref>` to validate a published branch/tag instead. The scaffold target defaults to `~/code/feip-7422-smoke/`; override with `--project-dir <dir>`. See `examples/feip-7422-smoke/README.md` for the full script reference.
+
 ### When to run which tier
 
 | Change scope | Minimum |
@@ -171,6 +208,7 @@ Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTAN
 | `scripts/lakebase/*` (branch lifecycle, endpoints, migrate) | **Tier 2 mandatory** |
 | MCP / Foundry tool definitions | Tier 1 + `python3 scripts/openai-foundry.py validate` |
 | Vendored skills (`skills/databricks-*`) | Pull via `npm run sync:devhub` only; do not hand-edit |
+| TDD orchestrator / role agents / scaffolded commands | Tier 1 + the [FEIP-7422 smoke](#feip-7422-tdd-workflow-smoke) (Tier 2) |
 
 ## Pull requests
 

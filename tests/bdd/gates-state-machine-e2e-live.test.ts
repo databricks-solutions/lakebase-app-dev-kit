@@ -64,7 +64,7 @@ const GH_AVAILABLE = E2E ? hasCmd("gh") : false;
 const RUN_SUITE =
   E2E && DATABRICKS_HOST && GITHUB_OWNER && DATABRICKS_AVAILABLE && GH_AVAILABLE;
 
-const APPROVER = "kevin.hartman@databricks.com";
+const APPROVER = process.env.LAKEBASE_TEST_APPROVER_EMAIL ?? "approver@example.com";
 const FEATURE_ID = "F-AUDIT";
 
 function run(cmd: string, args: string[], cwd?: string): {
