@@ -7,7 +7,10 @@ The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and w
 ```
 .tdd/
   product-overview.md                ← Product Owner's project-level overview (open-ended; software is a product)
+  nfrs.md                            ← non-functional-requirements brief; the Architect's intake (project-level)
   workflow-state.json                ← current phase + locus (feature/story/ac/cycle/experiment)
+  planning/
+    feature-proposals.md             ← Spec Author's sprint-planning proposal (/plan): candidate feature breakdown, the PO's INPUT
   features/
     F1-partner-submits-assets/
       feature-request.md                  ← Feature Requester's original ask (Spec Author's INPUT; never overwritten)
@@ -66,7 +69,9 @@ Requester's original ask is `feature-request.md` and is never overwritten.
 | Artifact | Author | Scope |
 |---|---|---|
 | `product-overview.md` | Product Owner | Project-level (`.tdd/` root). Open-ended intent; not part of the per-feature spec gate. |
-| `feature-request.md` | Feature Requester | Per-feature. The original ask; the Spec Author's INPUT, read but never overwritten. |
+| `nfrs.md` | Product Owner / HIL | Non-functional-requirements brief; the Architect's intake. Project-level (`.tdd/nfrs.md`) + optional per-feature (`.tdd/features/<F>/nfrs.md`). Each Required item has an `R<n>` id the Architect covers via `brief_ref`. |
+| `feature-proposals.md` | Spec Author | Project-level (`.tdd/planning/`). The Spec Author's sprint-planning proposal of how to divide the work into features (`/plan` phase 1), the PO's INPUT. Not a per-feature spec-gate deliverable. |
+| `feature-request.md` | Product Owner (as Feature Requester) | Per-feature. The PO's prioritized ask, authored at `/plan` (sprint planning) from the Spec Author's proposal; the Spec Author's `/design` INPUT, read but never overwritten. |
 | `feature-spec.md` | Spec Author | Per-feature narrative draft-spec (Summary, Stories, Out of scope, Open questions). |
 | `feature-spec.json` | Spec Author | Per-feature machine contract (validated against `feature.schema.json`). |
 | `story.md` / `story.json` | Spec Author | Per-story narrative + machine contract. |
@@ -138,7 +143,7 @@ Every artifact a role produces has a declared format, derived from that role's
 contract in `agents/*.md`. A gate approves an artifact only when it both EXISTS
 (Layer 1) and CONFORMS to its format (Layer 2). Conformance is enforced by
 `scripts/tdd/artifact-conformance.ts` (`checkArtifactConformance(name, content)`)
-and re-checked at approval time by the mock approver / orchestrator. JSON
+and re-checked at approval time by the Human Proxy / orchestrator. JSON
 schema failures and missing required narrative sections both hard-block the gate.
 
 | Artifact | Producing role | Required format |
@@ -146,10 +151,12 @@ schema failures and missing required narrative sections both hard-block the gate
 | `feature-spec.json` / `story.json` / `ac.json` | Spec Author | JSON Schema (`scripts/tdd/schemas/`) |
 | `test-list.json` | Test Strategist | `test-list.schema.json` |
 | `plan.json` | Architect / Orchestrator | `plan.schema.json` |
-| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2). NFRs live here, NOT on the spec-gated `feature-spec.json`/`story.json`. |
+| `architecture.json` | Architect Reviewer | `architecture.schema.json` (carries `nfrs[]`, HIL-adjudicated at Gate 2; each NFR may carry `brief_ref` to the `nfrs.md` Required id it satisfies). NFRs live here, NOT on the spec-gated `feature-spec.json`/`story.json`. |
 | `workflow-state.json` | Orchestrator | `workflow-state.schema.json` |
 | `product-overview.md` | Product Owner | H1 + non-empty body (open-ended intent; project-level; not gate-locked) |
-| `feature-request.md` | Feature Requester | H1 + non-empty body (the original ask; the Spec Author's INPUT, never overwritten) |
+| `nfrs.md` | Product Owner / HIL | H1 + **Required**, **Preferences**, **Out of bounds**. Every Required item carries an `R<n>` id; the Architect must cover each via `architecture.json` `brief_ref` (`checkNfrCoverage` hard-blocks the architecture gate otherwise). |
+| `feature-proposals.md` | Spec Author | H1 + non-empty body (sprint-planning proposal authored at `/plan`; the PO's INPUT; not gate-locked) |
+| `feature-request.md` | Product Owner (as Feature Requester) | H1 + non-empty body (the PO's ask, authored at `/plan`; the Spec Author's `/design` INPUT, never overwritten) |
 | `feature-spec.md` | Spec Author | H1 + **Summary**, **Stories**, **Out of scope**, **Open questions** |
 | `architecture.md` | Architect Reviewer | H1 + **Architectural Concerns Mapping**, **Pattern proposals**, **Risks**, **Decisions**, **Sign-off** |
 | `test-list.md` | Test Strategist | Rendered from JSON: H1 + `Ordered for:` + an AC reference on every item + a **Deferred / skipped** section |
@@ -159,10 +166,14 @@ schema failures and missing required narrative sections both hard-block the gate
 | `ia.md` | UX Designer (UI projects) | H1 + **Screens**, **Navigation**, **User flows** |
 
 `product-overview.md` is intentionally loose: it is the Product Owner's living,
-project-level, plain-English statement of intent, refined across sprints. The
-per-feature `feature-request.md` (the Feature Requester's original ask) is the
-Spec Author's input; the structured deliverables the Spec Author composes
-(feature-spec, story, AC) carry the strong contracts.
+project-level, plain-English statement of intent, refined across sprints. From it,
+the per-feature `feature-request.md` is teased out during `/plan` (sprint planning):
+the Spec Author proposes the feature breakdown (`feature-proposals.md`) and the
+Product Owner prioritizes and authors the individual requests for the sprint. The
+PO does not pre-author the whole backlog; they fold each sprint's working software
+(the `/deploy` gate) back into the next round of requests. Each `feature-request.md`
+is then the Spec Author's `/design` input; the structured deliverables the Spec
+Author composes (feature-spec, story, AC) carry the strong contracts.
 
 CLI: `lakebase-tdd-gate-conformance --feature <id>` scans a feature's artifacts
 and reports any that do not conform. Exit 1 if any artifact is non-conformant.

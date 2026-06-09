@@ -27,9 +27,9 @@ function seedExperiment(
   tddDir: string,
   featureId: string,
   slug: string,
-  opts: { cutAt?: string } = {}
+  opts: { cutAt?: string; storyId?: string } = {}
 ): void {
-  const dir = path.join(tddDir, "experiments", featureId, slug);
+  const dir = path.join(tddDir, "experiments", featureId, opts.storyId ?? "S1", slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "branch.txt"), `feature-${slug}`);
   fs.writeFileSync(path.join(dir, "outcomes.json"), JSON.stringify({ status: "running" }, null, 2) + "\n");
@@ -44,6 +44,7 @@ describe("checkPerExperimentCap: no cap configured", () => {
     const result = checkPerExperimentCap({
       tddDir: "/tmp/anywhere",
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cycleCount: 1000,
     });
@@ -54,6 +55,7 @@ describe("checkPerExperimentCap: no cap configured", () => {
     const result = checkPerExperimentCap({
       tddDir: "/tmp/anywhere",
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: {},
       cycleCount: 1000,
@@ -65,6 +67,7 @@ describe("checkPerExperimentCap: no cap configured", () => {
     const result = checkPerExperimentCap({
       tddDir: "/tmp/anywhere",
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_cycles: 0 },
       cycleCount: 100,
@@ -85,6 +88,7 @@ describe("checkPerExperimentCap: max_cycles", () => {
     const result = checkPerExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_cycles: 10 },
       cycleCount: 10,
@@ -99,6 +103,7 @@ describe("checkPerExperimentCap: max_cycles", () => {
     const result = checkPerExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_cycles: 10 },
       cycleCount: 9,
@@ -110,6 +115,7 @@ describe("checkPerExperimentCap: max_cycles", () => {
     const result = checkPerExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_cycles: 5, max_wall_clock_minutes: 30 },
       cycleCount: 5,
@@ -131,6 +137,7 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
     const result = checkPerExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_wall_clock_minutes: 30 },
       cycleCount: 1,
@@ -146,6 +153,7 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
     const result = checkPerExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       cap: { max_wall_clock_minutes: 30 },
       cycleCount: 1,
@@ -157,10 +165,11 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
   it("silently skips the wall-clock check when no timeline.json exists", () => {
     const bareTdd = mkTempTdd("bare");
     try {
-      fs.mkdirSync(path.join(bareTdd, "experiments", "F1", "exp"), { recursive: true });
+      fs.mkdirSync(path.join(bareTdd, "experiments", "F1", "S1", "exp"), { recursive: true });
       const result = checkPerExperimentCap({
         tddDir: bareTdd,
         featureId: "F1",
+      storyId: "S1",
         experimentSlug: "exp",
         cap: { max_wall_clock_minutes: 1 },
         cycleCount: 1,
@@ -185,10 +194,11 @@ describe("recordExperimentCap + clearExperimentCap", () => {
     recordExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
-    const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
     expect(outcomes.capped).toEqual({ reason: "max_cycles", at_cycle: 10, cap_value: 10 });
   });
 
@@ -196,16 +206,18 @@ describe("recordExperimentCap + clearExperimentCap", () => {
     recordExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
     recordExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_wall_clock_minutes", at_cycle: 12, cap_value: 60, at_minutes: 61.2 },
     });
-    const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
     expect(outcomes.capped?.reason).toBe("max_wall_clock_minutes");
     expect(outcomes.capped?.at_minutes).toBe(61.2);
   });
@@ -217,6 +229,7 @@ describe("recordExperimentCap + clearExperimentCap", () => {
         recordExperimentCap({
           tddDir: empty,
           featureId: "F1",
+      storyId: "S1",
           experimentSlug: "exp",
           hit: { reason: "max_cycles", at_cycle: 1, cap_value: 1 },
         })
@@ -230,14 +243,15 @@ describe("recordExperimentCap + clearExperimentCap", () => {
     recordExperimentCap({
       tddDir,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
-    clearExperimentCap({ tddDir, featureId: "F1", experimentSlug: "exp" });
-    expect(readOutcomes(tddDir, "F1", "exp")?.capped).toBeUndefined();
+    clearExperimentCap({ tddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" });
+    expect(readOutcomes(tddDir, "F1", "S1", "exp")?.capped).toBeUndefined();
     // Idempotent.
     expect(() =>
-      clearExperimentCap({ tddDir, featureId: "F1", experimentSlug: "exp" })
+      clearExperimentCap({ tddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" })
     ).not.toThrow();
   });
 });
@@ -253,7 +267,7 @@ describe("analyzeForGate populates a default per-experiment cap", () => {
         feature_id: "F1",
         items: [{ id: "T1", description: "any", ac_id: "AC1", status: "pending" }],
       });
-      const analysis = analyzeForGate(tddDir, "F1");
+      const analysis = analyzeForGate(tddDir, "F1", "S1");
       expect(analysis.proposed_plan.budget.per_experiment).toBeDefined();
       expect(analysis.proposed_plan.budget.per_experiment?.max_cycles).toBeGreaterThan(0);
       expect(analysis.proposed_plan.budget.per_experiment?.max_wall_clock_minutes).toBeGreaterThan(0);
@@ -272,10 +286,11 @@ describe("compareExperiments surfaces capped outcomes", () => {
       recordExperimentCap({
         tddDir,
         featureId: "F1",
+      storyId: "S1",
         experimentSlug: "exp-a",
         hit: { reason: "max_cycles", at_cycle: 30, cap_value: 30 },
       });
-      const report = compareExperiments(tddDir, "F1");
+      const report = compareExperiments(tddDir, "F1", "S1");
       const row = report.rows.find((r) => r.experiment_slug === "exp-a")!;
       expect(row.signal).toBe("capped");
       expect(row.capped?.reason).toBe("max_cycles");
@@ -290,6 +305,7 @@ describe("comparison-report renders the cap status", () => {
     const { renderComparisonReport } = await import("../../scripts/tdd/comparison-report");
     const md = renderComparisonReport({
       feature_id: "F1",
+      story_id: "S1",
       generated_at: "2026-06-02T08:15:00.000Z",
       rows: [
         {

@@ -28,7 +28,13 @@ import { getConnection } from "./get-connection.js";
 import "./adapters/alembic-adapter.js";
 import "./adapters/flyway-adapter.js";
 import "./adapters/knex-adapter.js";
-import { resolveSchemaMigrationAdapter, type SchemaMigrationAdapterId } from "./schema-migration-adapter.js";
+import {
+  resolveSchemaMigrationAdapter,
+  type SchemaMigrationAdapterId,
+  type NewMigrationArgs,
+  type NewMigrationResult,
+  type CollapseHeadsResult,
+} from "./schema-migration-adapter.js";
 
 export type SchemaMigrationLanguage = "java" | "kotlin" | "python" | "nodejs";
 
@@ -355,4 +361,101 @@ export async function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Pr
     pending: r.pending,
     tool: adapter.id as SchemaMigrationToolName,
   };
+}
+
+// ---- createSchemaMigration -----------------------------------------------------
+//
+// The create side of the adapter contract. The build (Driver) calls this
+// tool-agnostically; each adapter names the new migration in its own native
+// sequential scheme (Flyway V<n>, Alembic zero-padded rev-id, Knex timestamp)
+// so the Driver never learns three toolchains.
+
+/**
+ * A migration version stamp: 14-digit UTC `YYYYMMDDHHMMSS`, matching Knex's
+ * default migration prefix. All three tools share this one scheme so versions
+ * are globally unique (no cross-branch collision when sibling features fork
+ * from the same tier head) and lexicographically == chronologically sortable.
+ * The clock is injectable so tests are deterministic.
+ */
+export function migrationTimestamp(now: Date = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return (
+    `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}` +
+    `${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`
+  );
+}
+
+/** Slugify a human description into a snake_case filename component. */
+export function migrationSlug(description: string): string {
+  return (
+    description
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "migration"
+  );
+}
+
+export interface CreateSchemaMigrationArgs extends NewMigrationArgs {
+  /** Override language detection. Defaults to auto-detect from project files. */
+  language?: SchemaMigrationLanguage;
+}
+
+/**
+ * Create a new, correctly-named migration via the project's tool adapter.
+ * Throws SchemaMigrationError if the resolved adapter has no create step.
+ */
+export async function createSchemaMigration(args: CreateSchemaMigrationArgs): Promise<NewMigrationResult> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.newMigration) {
+    throw new SchemaMigrationError(
+      `Adapter '${adapter.id}' does not support creating migrations.`
+    );
+  }
+  const r = await adapter.newMigration({
+    projectDir,
+    slug: args.slug,
+    autogenerate: args.autogenerate,
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "create migration failed");
+  }
+  return r;
+}
+
+// ---- collapseMigrationHeads ----------------------------------------------------
+//
+// Unify multiple migration heads at a sibling-merge boundary. DAG tools
+// (Alembic) implement it; flat-list tools (Flyway, Knex) omit it, so this is a
+// no-op for them. Idempotent: a single head is a no-op too.
+
+export interface CollapseMigrationHeadsArgs {
+  projectDir?: string;
+  /** Override language detection. Defaults to auto-detect from project files. */
+  language?: SchemaMigrationLanguage;
+  /** Message for the generated merge revision (Alembic). */
+  message?: string;
+  /** Detect-only: report heads without creating a merge revision. */
+  dryRun?: boolean;
+}
+
+export async function collapseMigrationHeads(
+  args: CollapseMigrationHeadsArgs
+): Promise<CollapseHeadsResult> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.collapseHeads) {
+    // Flat-list tool (Flyway/Knex): no DAG, nothing to collapse.
+    return { status: "noop", headsBefore: [] };
+  }
+  const r = await adapter.collapseHeads({ projectDir, message: args.message, dryRun: args.dryRun });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "collapse heads failed");
+  }
+  return r;
 }

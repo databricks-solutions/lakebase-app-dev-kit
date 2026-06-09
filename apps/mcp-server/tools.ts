@@ -41,14 +41,6 @@ import {
   listBranches,
   getBranchByName,
 } from "../../scripts/lakebase/branch-utils.js";
-import { createBranch } from "../../scripts/lakebase/branch-create.js";
-import { deleteBranch } from "../../scripts/lakebase/branch-delete.js";
-import {
-  createFeatureBranch,
-  createTestBranch,
-  createUatBranch,
-  createPerfBranch,
-} from "../../scripts/lakebase/convention-branches.js";
 import {
   createPairedBranch,
   deletePairedBranch,
@@ -594,33 +586,9 @@ export const TOOLS: ToolDefinition[] = [
       return info ?? null;
     },
   },
-  {
-    name: "lakebase_branch_create",
-    description: "Create a Lakebase branch (no git side-effects). For paired git+Lakebase creation, use lakebase_branch_create_paired. Will not exceed the workspace's TTL cap; pass noExpiry: true for long-running tiers.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name (will be sanitized)." },
-        parentBranch: { type: "string", description: "Parent branch override (e.g. 'staging'). Default: project default branch." },
-        ttl: { type: "string", description: "Lifetime in Lakebase duration format (e.g. '604800s')." },
-        noExpiry: { type: "boolean", description: "Set no_expiry=true (long-running tiers only)." },
-        host: { type: "string", description: "Workspace host override." },
-      },
-      required: ["instance", "branch"],
-      additionalProperties: false,
-    },
-    handler: async (args) => {
-      return createBranch({
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        parentBranch: optionalString(args, "parentBranch"),
-        ttl: optionalString(args, "ttl"),
-        noExpiry: typeof args.noExpiry === "boolean" ? (args.noExpiry as boolean) : undefined,
-        host: optionalString(args, "host"),
-      });
-    },
-  },
+  // NOTE: the unpaired `lakebase_branch_create` tool was DELETED. It exposed a
+  // Lakebase-only create (no git branch, no .env) to agents. Every branch is
+  // paired through the substrate; use lakebase_branch_create_paired below.
   {
     name: "lakebase_branch_create_paired",
     description: "Create a Lakebase branch + matching local git branch + .env update in one call. The canonical 'fork from current' workflow op (mirrors the post-checkout git hook).",
@@ -650,64 +618,12 @@ export const TOOLS: ToolDefinition[] = [
       });
     },
   },
-  {
-    name: "lakebase_branch_create_tier",
-    description: "Create a convention-tier Lakebase branch (feature / test / uat / perf). Each tier has its own default TTL and forks from 'staging' by default. PSA branching methodology.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        tier: { type: "string", enum: ["feature", "test", "uat", "perf"], description: "Convention tier." },
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name (will be sanitized)." },
-        parentBranch: { type: "string", description: "Parent override. Default: 'staging' for all four tiers." },
-        ttl: { type: "string", description: "TTL override. Default: tier-specific (30d / 14d / 14d / 7d)." },
-        strictParent: { type: "boolean", description: "Throw if convention's default parent missing instead of falling back. Default: false." },
-        host: { type: "string", description: "Workspace host override." },
-      },
-      required: ["tier", "instance", "branch"],
-      additionalProperties: false,
-    },
-    handler: async (args) => {
-      const tier = requireString(args, "tier") as "feature" | "test" | "uat" | "perf";
-      const common = {
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        parentBranch: optionalString(args, "parentBranch"),
-        ttl: optionalString(args, "ttl"),
-        strictParent: typeof args.strictParent === "boolean" ? (args.strictParent as boolean) : undefined,
-        host: optionalString(args, "host"),
-      };
-      switch (tier) {
-        case "feature": return createFeatureBranch(common);
-        case "test": return createTestBranch(common);
-        case "uat": return createUatBranch(common);
-        case "perf": return createPerfBranch(common);
-        default: throw new Error(`Unknown tier: ${tier}`);
-      }
-    },
-  },
-  {
-    name: "lakebase_branch_delete",
-    description: "Delete a Lakebase branch (no git side-effects). For paired git+Lakebase cleanup, use lakebase_branch_delete_paired. Throws if the branch cannot be resolved.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        instance: { type: "string", description: "Lakebase project id." },
-        branch: { type: "string", description: "Branch name, uid, or full resource name." },
-        host: { type: "string", description: "Workspace host override." },
-      },
-      required: ["instance", "branch"],
-      additionalProperties: false,
-    },
-    handler: async (args) => {
-      await deleteBranch({
-        instance: requireString(args, "instance"),
-        branch: requireString(args, "branch"),
-        host: optionalString(args, "host"),
-      });
-      return { deleted: true, branch: args.branch };
-    },
-  },
+  // NOTE: the unpaired `lakebase_branch_create_tier` tool was DELETED. It made a
+  // Lakebase branch with no git branch + no .env sync. Use the paired tier-create
+  // tool above: every branch is paired through the substrate.
+  // NOTE: the unpaired `lakebase_branch_delete` tool was DELETED. Use
+  // lakebase_branch_delete_paired so the git branch is cleaned up alongside the
+  // Lakebase branch.
   {
     name: "lakebase_branch_delete_paired",
     description: "Delete a Lakebase branch + local git branch + remote git branch in one call. Skips deletion of branches that are currently checked out (local) or absent (remote). Default deletes everything; pass deleteGitLocal/deleteGitRemote: false to skip a side.",

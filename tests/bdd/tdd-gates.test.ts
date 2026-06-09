@@ -127,6 +127,7 @@ describe("gates: writeGates (S1.2 round-trip + S1.4 atomicity)", () => {
         plan: { status: "open", history: [] },
         test_list: { status: "open", history: [] },
         promote: { status: "open", history: [] },
+        deploy: { status: "open", history: [] },
       },
     };
     writeGates(state, { tddDir: tdd });

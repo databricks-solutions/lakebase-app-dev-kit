@@ -25,21 +25,6 @@ function isCliEntry(importMetaUrl) {
 import * as fs5 from "fs";
 import * as path4 from "path";
 
-// scripts/lakebase/branch-create.ts
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
-
-// scripts/util/sanitize-branch-name.ts
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
-  while (name.length < 3) name += "-x";
-  return name;
-}
-
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
-import { promisify } from "util";
-
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
   const raw = process.env[name];
@@ -82,7 +67,25 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
+// scripts/lakebase/paired-branch.ts
+import * as fs3 from "fs";
+import * as path2 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
+// scripts/lakebase/branch-create.ts
+import { execFile as execFile3 } from "child_process";
+import { promisify as promisify3 } from "util";
+
+// scripts/util/sanitize-branch-name.ts
+function sanitizeBranchName(gitBranch) {
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  while (name.length < 3) name += "-x";
+  return name;
+}
+
 // scripts/lakebase/branch-utils.ts
+import { execFile } from "child_process";
+import { promisify } from "util";
 var execFileP = promisify(execFile);
 
 // scripts/lakebase/lakebase-project.ts
@@ -92,11 +95,6 @@ var execFileP2 = promisify2(execFile2);
 
 // scripts/lakebase/branch-create.ts
 var execFileP3 = promisify3(execFile3);
-
-// scripts/lakebase/paired-branch.ts
-import * as fs3 from "fs";
-import * as path2 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
 
 // scripts/lakebase/branch-delete.ts
 import { execFile as execFile4 } from "child_process";

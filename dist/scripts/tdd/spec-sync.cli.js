@@ -6651,8 +6651,8 @@ init_esm_shims();
 
 // scripts/tdd/spec-sync.ts
 init_esm_shims();
-import { readFileSync as readFileSync2, existsSync, readdirSync, writeFileSync, statSync } from "fs";
-import { join as join2, basename } from "path";
+import { readFileSync as readFileSync3, existsSync as existsSync2, readdirSync as readdirSync2, writeFileSync as writeFileSync2, statSync as statSync2 } from "fs";
+import { join as join3, basename } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
@@ -6673,6 +6673,12 @@ function getValidator(name) {
   return validate;
 }
 
+// scripts/tdd/tdd-paths.ts
+init_esm_shims();
+import * as fs from "fs";
+import { join as join2 } from "path";
+var featuresDir = (tdd) => join2(tdd, "features");
+
 // scripts/tdd/spec-sync.ts
 function makeValidator() {
   return {
@@ -6686,43 +6692,43 @@ function makeValidator() {
 function validateSpec(tddDir) {
   const reports = [];
   const v = makeValidator();
-  const wsPath = join2(tddDir, "workflow-state.json");
-  if (existsSync(wsPath)) {
-    const ws = JSON.parse(readFileSync2(wsPath, "utf8"));
+  const wsPath = join3(tddDir, "workflow-state.json");
+  if (existsSync2(wsPath)) {
+    const ws = JSON.parse(readFileSync3(wsPath, "utf8"));
     if (!v.workflowState(ws)) {
       reports.push({ file: wsPath, kind: "schema", detail: JSON.stringify(v.workflowState.errors) });
     }
   }
-  const featuresDir = join2(tddDir, "features");
-  if (!existsSync(featuresDir)) return reports;
-  for (const featureDirName of readdirSync(featuresDir)) {
-    const featureDir = join2(featuresDir, featureDirName);
-    if (!statSync(featureDir).isDirectory()) continue;
+  const featuresDir2 = featuresDir(tddDir);
+  if (!existsSync2(featuresDir2)) return reports;
+  for (const featureDirName of readdirSync2(featuresDir2)) {
+    const featureDir = join3(featuresDir2, featureDirName);
+    if (!statSync2(featureDir).isDirectory()) continue;
     checkPair(featureDir, "feature", v.feature, reports);
-    const storiesDir = join2(featureDir, "stories");
-    if (!existsSync(storiesDir)) continue;
-    for (const storyDirName of readdirSync(storiesDir)) {
-      const storyDir = join2(storiesDir, storyDirName);
-      if (!statSync(storyDir).isDirectory()) continue;
+    const storiesDir = join3(featureDir, "stories");
+    if (!existsSync2(storiesDir)) continue;
+    for (const storyDirName of readdirSync2(storiesDir)) {
+      const storyDir = join3(storiesDir, storyDirName);
+      if (!statSync2(storyDir).isDirectory()) continue;
       checkPair(storyDir, "story", v.story, reports);
-      const acsDir = join2(storyDir, "acs");
-      if (existsSync(acsDir)) {
-        for (const acFile of readdirSync(acsDir).filter((f) => f.endsWith(".json"))) {
-          const acJsonPath = join2(acsDir, acFile);
-          const ac = JSON.parse(readFileSync2(acJsonPath, "utf8"));
+      const acsDir = join3(storyDir, "acs");
+      if (existsSync2(acsDir)) {
+        for (const acFile of readdirSync2(acsDir).filter((f) => f.endsWith(".json"))) {
+          const acJsonPath = join3(acsDir, acFile);
+          const ac = JSON.parse(readFileSync3(acJsonPath, "utf8"));
           if (!v.ac(ac)) {
             reports.push({ file: acJsonPath, kind: "schema", detail: JSON.stringify(v.ac.errors) });
           }
           const mdPath = acJsonPath.replace(/\.json$/, ".md");
-          if (!existsSync(mdPath)) {
+          if (!existsSync2(mdPath)) {
             reports.push({ file: mdPath, kind: "pair-missing", detail: "AC .md narrative missing" });
           }
         }
       }
     }
-    const testListJson = join2(featureDir, "test-list.json");
-    if (existsSync(testListJson)) {
-      const list = JSON.parse(readFileSync2(testListJson, "utf8"));
+    const testListJson = join3(featureDir, "test-list.json");
+    if (existsSync2(testListJson)) {
+      const list = JSON.parse(readFileSync3(testListJson, "utf8"));
       if (!v.testList(list)) {
         reports.push({ file: testListJson, kind: "schema", detail: JSON.stringify(v.testList.errors) });
       }
@@ -6732,18 +6738,18 @@ function validateSpec(tddDir) {
 }
 function checkPair(dir, kind, validator, reports) {
   const stem = kind === "feature" ? "feature-spec" : kind;
-  const jsonPath = join2(dir, `${stem}.json`);
-  const mdPath = join2(dir, `${stem}.md`);
-  if (!existsSync(jsonPath)) {
+  const jsonPath = join3(dir, `${stem}.json`);
+  const mdPath = join3(dir, `${stem}.md`);
+  if (!existsSync2(jsonPath)) {
     reports.push({ file: jsonPath, kind: "pair-missing", detail: `${stem}.json missing` });
     return;
   }
-  if (!existsSync(mdPath)) {
+  if (!existsSync2(mdPath)) {
     reports.push({ file: mdPath, kind: "pair-missing", detail: `${stem}.md missing` });
-  } else if (statSync(mdPath).size < 20) {
+  } else if (statSync2(mdPath).size < 20) {
     reports.push({ file: mdPath, kind: "narrative-empty", detail: `${stem}.md narrative empty` });
   }
-  const obj = JSON.parse(readFileSync2(jsonPath, "utf8"));
+  const obj = JSON.parse(readFileSync3(jsonPath, "utf8"));
   if (!validator(obj)) {
     reports.push({ file: jsonPath, kind: "schema", detail: JSON.stringify(validator.errors) });
   }

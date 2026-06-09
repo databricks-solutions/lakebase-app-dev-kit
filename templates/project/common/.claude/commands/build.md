@@ -1,6 +1,6 @@
 # /build : feature build pipeline
 
-Drives a designed feature through TDD cycles to ready-for-review. This wraps the lakebase-tdd-workflows Scrum-Master orchestrator as a one-shot you can invoke from Claude Code in a Lakebase-paired project.
+Drives a designed feature through TDD cycles to ready-for-review by delegating to the deterministic orchestrator driver. It is the second phase of the per-feature loop: `/design` -> `/build` -> `/deploy`, which a sprint of features runs after `/plan` authored their requests. When the stories are built + accepted, run `/deploy <feature-id>` to ship the increment to a target and verify it is working software (the per-sprint review).
 
 ## Usage
 
@@ -10,21 +10,38 @@ Drives a designed feature through TDD cycles to ready-for-review. This wraps the
 
 Requires `.tdd/features/<feature-id>/test-list.json` to exist (the artifact `/design` produces). If the test list is missing, this command stops with a pointer back to `/design <feature-id>`.
 
-## Phases
+## How it runs: the deterministic driver
 
-1. **Scrum-Master orchestrator** picks the next AC, runs Driver / Navigator cycles, watches smells, surfaces gate 3 (test-list immutability) and gate 4 (promote vs synthesize) to the human.
-2. At gate 3 the orchestrator stops and refers back to `/design --resume <feature-id>` when the test list needs renegotiation.
-3. At gate 4 the orchestrator invokes `archiveExperiment` for losing branches once the human picks promote or synthesize.
+`/build` delegates the build lane to the deterministic orchestrator driver. Run
+it bounded to `build`, with interactive gates so YOU answer each per-story
+acceptance (headless: the Human Proxy answers):
 
-The orchestrator is implemented by the substrate agent at `@lakebase-tdd-workflows/agents/scrum-master`. Per-cycle work fans out to `@lakebase-tdd-workflows/agents/driver` and `@lakebase-tdd-workflows/agents/navigator`.
+```bash
+GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+./scripts/lk \
+  lakebase-tdd-drive --feature "<feature-id>" --only build --gates "$GATES" --project-dir "$PWD"
+```
 
-## Auto-approve (headless) mode
+The driver:
+- builds on a **single Navigator+Driver lane** fed by a FIFO ready queue: one
+  gate-approved story at a time, cut its paired experiment branch -> Navigator
+  (PLAN + RED) -> Driver (GREEN + REFACTOR) -> deploy the story for the PO's
+  acceptance review (the story's deploy must be reachable + verify-green, the
+  teeth) -> **accept** (merge the experiment) -> pull the next ready story.
+- routes deterministically (routing is code, not an LLM orchestrator): spawns `@lakebase-tdd-workflows/agents/{navigator,driver,release-engineer}`
+  at their resolved per-role models, emits the cycle/handoff log as code. Tail:
+  `lakebase-tdd-log --read --feature <id>`.
+- **requires design done**: `--only build` REFUSES (stops at iteration 0) if a
+  story is not yet designed (its spec gate unapproved). If it refuses, run
+  `/design <feature-id>` first.
+- `--only build` STOPS before deploy; the merged feature is ready for `/deploy`.
 
-If `LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI / the smoke), the human review at gate 3 (test-list immutability) and gate 4 (promote vs synthesize) is performed by `ci-mock-approver`: it validates the gate's artifacts exist + carry their expected elements (format-conformant) and approves only then. The orchestrator advances on that validated approval, never by skipping the gate, and never on a missing/malformed artifact. See `@lakebase-tdd-workflows/SKILL.md` "Headless / auto-approve mode".
-
-## Logging
-
-Every agent emits structured events via `lakebase-tdd-log` to `.tdd/agent-log.jsonl` (see `@lakebase-tdd-workflows/references/agent-logging.md`). The orchestrator emits `phase.start` / `phase.end` per cycle and `gate.approved` at gates 3/4; the Navigator emits `cycle.red` + `review.verdict`; the Driver emits `cycle.green` + `cycle.refactored`; smells go to `--level warn --event smell.flagged`. Tail with `lakebase-tdd-log --read --feature <id>`.
+**Gates.** Interactive: the driver stops at each per-story acceptance (and any
+test-list / promote gate) and prints a `GATE` marker. Surface the running story
+to the human; on accept, record it (`lakebase-tdd-experiment merge` +
+`lakebase-tdd-pipeline accept --story <s> --approver <human>`), then re-run to
+resume. Headless (`--gates proxy`): the Human Proxy validates + approves. A story
+that is not reachable + verify-green cannot be accepted (never a silent merge).
 
 ## Project pre/post hooks
 

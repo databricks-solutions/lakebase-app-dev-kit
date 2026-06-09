@@ -8,6 +8,10 @@ import {
   viewByAc,
   viewsForAllAcs,
   writePerAcViews,
+  acsForStory,
+  scopeToStory,
+  writeStoryTestList,
+  readStoryTestList,
   type TestList,
 } from "../../scripts/tdd/test-list";
 
@@ -15,12 +19,17 @@ let tdd: string;
 const FEATURE_DIR = "features/F1-test-feature";
 const STORY_DIR = `${FEATURE_DIR}/stories/S1-test-story`;
 const ACS_DIR = `${STORY_DIR}/acs`;
+// A second story owning AC3, to prove scoping isolates one story's ACs.
+const STORY2_DIR = `${FEATURE_DIR}/stories/S2-other-story`;
+const ACS2_DIR = `${STORY2_DIR}/acs`;
 
 beforeEach(() => {
   tdd = mkdtempSync(join(tmpdir(), "tdd-test-list-"));
   mkdirSync(join(tdd, ACS_DIR), { recursive: true });
   writeFileSync(join(tdd, ACS_DIR, "AC1.json"), JSON.stringify({ id: "AC1", layer: "API" }));
   writeFileSync(join(tdd, ACS_DIR, "AC2.json"), JSON.stringify({ id: "AC2", layer: "API" }));
+  mkdirSync(join(tdd, ACS2_DIR), { recursive: true });
+  writeFileSync(join(tdd, ACS2_DIR, "AC3.json"), JSON.stringify({ id: "AC3", layer: "API" }));
 });
 
 afterEach(() => {
@@ -91,5 +100,87 @@ describe("test-list", () => {
     expect(views.length).toBe(2);
     const ac1 = views.find((v: { ac_id: string }) => v.ac_id === "AC1");
     expect(ac1.items[0].status).toBe("red");
+  });
+});
+
+// Master list spanning both stories: AC1/AC2 -> S1, AC3 -> S2. Interleaved so
+// scoping must select by AC membership, not by contiguity.
+function masterListBothStories(): TestList {
+  return {
+    feature_id: "F1",
+    ordered_for: "risk-first",
+    items: [
+      { id: "T1", description: "force API shape", ac_id: "AC1", status: "pending" },
+      { id: "T3", description: "other-story edge", ac_id: "AC3", status: "pending" },
+      { id: "T2", description: "happy path", ac_id: "AC2", status: "green" },
+      { id: "T4", description: "other-story happy", ac_id: "AC3", status: "pending" },
+    ],
+  };
+}
+
+describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
+  it("acsForStory reads a story's AC ids from its acs/ dir", () => {
+    expect(acsForStory(tdd, "F1", "S1")).toEqual(["AC1", "AC2"]);
+    expect(acsForStory(tdd, "F1", "S2")).toEqual(["AC3"]);
+  });
+
+  it("acsForStory returns [] for an unknown story", () => {
+    expect(acsForStory(tdd, "F1", "S9")).toEqual([]);
+  });
+
+  it("scopeToStory selects only the story's ACs, preserving master order + status", () => {
+    const scoped = scopeToStory(masterListBothStories(), "S1", ["AC1", "AC2"]);
+    expect(scoped.story_id).toBe("S1");
+    expect(scoped.feature_id).toBe("F1");
+    expect(scoped.ordered_for).toBe("risk-first");
+    // T1 (AC1) then T2 (AC2): master order kept, T3/T4 (AC3) excluded.
+    expect(scoped.items.map((i) => i.id)).toEqual(["T1", "T2"]);
+    expect(scoped.items.find((i) => i.id === "T2")?.status).toBe("green");
+  });
+
+  it("writeStoryTestList writes stories/<story>/test-list-per-story.json scoped to that story", () => {
+    writeMasterTestList(tdd, masterListBothStories());
+    const file = writeStoryTestList(tdd, "F1", "S2");
+    expect(file).toBe(join(tdd, STORY2_DIR, "test-list-per-story.json"));
+    const scoped = JSON.parse(readFileSync(file!, "utf8"));
+    expect(scoped.story_id).toBe("S2");
+    expect(scoped.items.map((i: { id: string }) => i.id)).toEqual(["T3", "T4"]);
+  });
+
+  it("writeStoryTestList returns null for an unresolvable story", () => {
+    writeMasterTestList(tdd, masterListBothStories());
+    expect(writeStoryTestList(tdd, "F1", "S9")).toBeNull();
+  });
+
+  it("readStoryTestList round-trips what writeStoryTestList wrote", () => {
+    writeMasterTestList(tdd, masterListBothStories());
+    writeStoryTestList(tdd, "F1", "S1");
+    const read = readStoryTestList(tdd, "F1", "S1");
+    expect(read?.story_id).toBe("S1");
+    expect(read?.items.map((i) => i.id)).toEqual(["T1", "T2"]);
+  });
+
+  it("readStoryTestList returns null before the per-story list is written", () => {
+    writeMasterTestList(tdd, masterListBothStories());
+    expect(readStoryTestList(tdd, "F1", "S1")).toBeNull();
+  });
+
+  it("tolerates a non-conformant master (no `items`) without crashing the scope step", () => {
+    // Regression: a Test Strategist (haiku) wrote the master with a top-level
+    // `tests` key + no `items`, and scopeToStory's `list.items.filter` crashed
+    // the whole driver with "Cannot read properties of undefined (reading
+    // 'filter')". readMasterTestList must normalize items to [] so the lane
+    // re-issues the role (clean stall) instead of dying opaquely.
+    writeFileSync(
+      join(tdd, FEATURE_DIR, "test-list.json"),
+      JSON.stringify({ feature_id: "F1", ordered_for: "design-momentum", tests: [{ id: "T1" }], gate_3_status: "ready" }),
+    );
+    const master = readMasterTestList(tdd, "F1");
+    expect(master.items).toEqual([]);
+    expect(() => scopeToStory(master, "S1", ["AC1"])).not.toThrow();
+    // writeStoryTestList yields an empty per-story list (testListReady stays false).
+    const file = writeStoryTestList(tdd, "F1", "S1");
+    expect(file).toBeTruthy();
+    expect(readStoryTestList(tdd, "F1", "S1")!.items).toEqual([]);
   });
 });

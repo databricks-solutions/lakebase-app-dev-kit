@@ -188,7 +188,7 @@ describe("analyzeForGate populates spike_inputs when spikes match", () => {
         items: [{ id: "T1", description: "POST /orders returns 201", ac_id: "AC1", status: "pending" }],
       });
       seedSpike(tddDir, "explore-cart", "for_feature: F1\n\nTried arrays.\n");
-      const analysis = analyzeForGate(tddDir, "F1");
+      const analysis = analyzeForGate(tddDir, "F1", "S1");
       expect(analysis.proposed_plan.spike_inputs).toHaveLength(1);
       expect(analysis.proposed_plan.spike_inputs?.[0].slug).toBe("explore-cart");
     } finally {
@@ -206,7 +206,7 @@ describe("analyzeForGate populates spike_inputs when spikes match", () => {
         feature_id: "F1",
         items: [{ id: "T1", description: "any", ac_id: "AC1", status: "pending" }],
       });
-      const analysis = analyzeForGate(tddDir, "F1");
+      const analysis = analyzeForGate(tddDir, "F1", "S1");
       expect(analysis.proposed_plan.spike_inputs).toBeUndefined();
     } finally {
       rm(tddDir);

@@ -10,6 +10,7 @@ import {
 
 let tdd: string;
 const FEATURE_ID = "F1-checkout";
+const STORY_ID = "S1-cart";
 const EXP = "exp-postgres-arrays";
 
 beforeEach(() => {
@@ -25,6 +26,7 @@ describe("artifact persistence", () => {
     const path = writeArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "vitest.junit.xml",
@@ -39,6 +41,7 @@ describe("artifact persistence", () => {
     const path = writeArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "traces/network/spec-1.har",
@@ -53,6 +56,7 @@ describe("artifact persistence", () => {
       writeArtifact({
         tddDir: tdd,
         featureId: FEATURE_ID,
+      storyId: STORY_ID,
         experimentSlug: EXP,
         cycleId: "C1",
         name: "../../escape.txt",
@@ -66,6 +70,7 @@ describe("artifact persistence", () => {
       writeArtifact({
         tddDir: tdd,
         featureId: FEATURE_ID,
+      storyId: STORY_ID,
         experimentSlug: EXP,
         cycleId: "C1",
         name: "/etc/passwd",
@@ -75,37 +80,43 @@ describe("artifact persistence", () => {
   });
 
   it("listArtifacts scoped to a cycle returns just that cycle's files (sorted)", () => {
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID, experimentSlug: EXP, cycleId: "C1", name: "b.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID, experimentSlug: EXP, cycleId: "C2", name: "z.log", content: "" });
-    const c1 = listArtifacts(tdd, FEATURE_ID, EXP, "C1");
+    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+      storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "b.log", content: "" });
+    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+      storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
+    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+      storyId: STORY_ID, experimentSlug: EXP, cycleId: "C2", name: "z.log", content: "" });
+    const c1 = listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP, "C1");
     expect(c1.map((e) => e.name)).toEqual(["a.log", "b.log"]);
     expect(c1.every((e) => e.cycle_id === "C1")).toBe(true);
   });
 
   it("listArtifacts without cycleId enumerates across all cycles", () => {
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID, experimentSlug: EXP, cycleId: "C2", name: "a.log", content: "" });
-    const all = listArtifacts(tdd, FEATURE_ID, EXP);
+    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+      storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
+    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+      storyId: STORY_ID, experimentSlug: EXP, cycleId: "C2", name: "a.log", content: "" });
+    const all = listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP);
     expect(all).toHaveLength(2);
     expect(new Set(all.map((e) => e.cycle_id))).toEqual(new Set(["C1", "C2"]));
   });
 
   it("listArtifacts returns empty when the experiment has no artifacts dir yet", () => {
-    expect(listArtifacts(tdd, FEATURE_ID, EXP)).toEqual([]);
-    expect(listArtifacts(tdd, FEATURE_ID, EXP, "C-missing")).toEqual([]);
+    expect(listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP)).toEqual([]);
+    expect(listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP, "C-missing")).toEqual([]);
   });
 
   it("each ArtifactEntry has the documented shape (name, path, cycle_id, size, modified)", () => {
     writeArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "report.json",
       content: '{"ok":true}',
     });
-    const [entry] = listArtifacts(tdd, FEATURE_ID, EXP, "C1");
+    const [entry] = listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP, "C1");
     expect(Object.keys(entry).sort()).toEqual(["cycle_id", "modified", "name", "path", "size"].sort());
     expect(entry.size).toBeGreaterThan(0);
     expect(entry.modified).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -116,6 +127,7 @@ describe("artifact persistence", () => {
     writeArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "trace.bin",
@@ -124,6 +136,7 @@ describe("artifact persistence", () => {
     const round = readArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "trace.bin",
@@ -135,6 +148,7 @@ describe("artifact persistence", () => {
     const round = readArtifact({
       tddDir: tdd,
       featureId: FEATURE_ID,
+      storyId: STORY_ID,
       experimentSlug: EXP,
       cycleId: "C1",
       name: "ghost.txt",

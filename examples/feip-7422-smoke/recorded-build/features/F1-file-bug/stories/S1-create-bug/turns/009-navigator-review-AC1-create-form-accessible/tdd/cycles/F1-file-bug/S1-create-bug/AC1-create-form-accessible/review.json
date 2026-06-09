@@ -1,0 +1,5 @@
+{
+  "reviewed_at": "2026-06-09T05:07:27.710Z",
+  "refactor_requested": true,
+  "refactor_notes": "Two concrete improvements against the rubric. (1) Design token deviation: the submit button uses color:#FFFFFF instead of color:#1B3139 (navy-900), violating design-guide.md Buttons spec ('Primary = brand-red, sharp corners, navy-900 text'). (2) Layer boundary: the HTML page shell (_PAGE_SHELL), form renderer (_render_create_form), and all routes live in app/main.py; architecture.md AC1 row calls for module 'pages/CreateBugForm or routes/bugs' -- extract the route handler and template helper to app/routes/bugs.py so the entry point is not also the presentation layer."
+}

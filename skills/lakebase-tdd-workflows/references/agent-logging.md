@@ -13,7 +13,7 @@ against `scripts/tdd/schemas/agent-log-event.schema.json`. Required fields:
 | Field | Meaning |
 |---|---|
 | `ts` | ISO-8601 UTC timestamp (stamped by the logger) |
-| `role` | the role performing the work (spec-author, ux-designer, architect-reviewer, test-strategist, scrum-master, navigator, driver, product-owner) |
+| `role` | the role performing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
 | `level` | `debug` / `info` / `warn` / `error` (see below) |
 | `event` | dotted machine name (e.g. `phase.start`, `artifact.written`, `gate.surfaced`, `handoff`, `reasoning`, `smell.flagged`) |
 | `message` | human-readable one-liner |
@@ -27,12 +27,29 @@ Optional: `feature_id`, `phase`, `cycle_id`, `data` (structured payload, e.g. ar
 - **`warn` , things the HIL should see.** A bad smell flagged, ambiguity surfaced to the PO, gate-integrity drift detected.
 - **`error` , hard stops.** A gate refused, conformance failed, a substrate call errored.
 
-## 3. How to emit
+## 2.5 Progress cadence (emit during long phases)
 
-Shell out to the kit CLI (works from a headless `claude -p` agent):
+A role's work between phase boundaries can take many minutes (an LLM drafting a dozen ACs, assigning layers, ordering tests, running a cycle). If you only emit at `phase.start` / `phase.end`, an observer sees a long silent block and cannot tell "working" from "stuck." So emit a `progress` event at each meaningful **sub-step**:
+
+- **Spec Author:** one per candidate feature proposed (planning); one per story and per AC drafted (drafting).
+- **Architect Reviewer:** one per AC layer assigned; one per `nfrs.md` Required item covered (`brief_ref`).
+- **Test Strategist:** one per test ordered into the list.
+- **Navigator / Driver:** one per cycle step (PLAN / RED / REVIEW; GREEN / REFACTOR).
+- **Release Engineer:** one per deploy step (deploy / reachable / verify).
 
 ```bash
-lakebase-tdd-log --role spec-author --level info \
+./scripts/lk lakebase-tdd-log --role spec-author --level debug --event progress \
+  --message "AC 4/11 drafted: bug is reachable by identifier after filing" --feature F1-initial-domain
+```
+
+Use `debug` for sub-step progress (so `info` stays the outputs/decisions stream). The rule is cadence: roughly one line per sub-step, so a gap in the log reliably means stuck, not working.
+
+## 3. How to emit
+
+Shell out to the kit CLI (works from a headless `claude -p` agent). Roles invoke it through the project's `./scripts/lk` resolver shim (fast; no npx), which is always present at the project root:
+
+```bash
+./scripts/lk lakebase-tdd-log --role spec-author --level info \
   --event artifact.written --message "wrote feature-spec.json + 3 stories" \
   --feature F1-initial-domain --data '{"path":"feature-spec.json","conformant":true}'
 ```
@@ -40,16 +57,49 @@ lakebase-tdd-log --role spec-author --level info \
 Read / tail the centralized log:
 
 ```bash
-lakebase-tdd-log --read --feature F1-initial-domain --min-level info
+./scripts/lk lakebase-tdd-log --read --feature F1-initial-domain --min-level info
 ```
 
 In-process callers use `emitAgentLogEvent` / `readAgentLog` from
 `scripts/tdd/agent-log.ts`.
 
+### One common function, two callers
+
+There is exactly ONE logging function, `emitAgentLogEvent` (the `lakebase-tdd-log`
+CLI is its shell face); `role` is a parameter, not a function per agent. It is
+the only thing that may write `.tdd/agent-log.jsonl`: it stamps the canonical
+`ts`, validates against the schema, and atomically appends one line.
+
+**NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into
+`agent-log.jsonl`, and do not invent fields. A model that hand-writes invariably
+mangles the schema (the observed failure: a `timestamp` field with a local
+wall-clock instead of the required `ts` stamped in UTC). Always shell out to
+`lakebase-tdd-log`, which fills the required fields for you. If a field is not
+accepted by the CLI, it is not part of the schema.
+
+### Who emits what
+
+- The **orchestrator owns the lifecycle as CODE**: the deterministic driver
+  (`lakebase-tdd-drive`) emits `handoff` (which role it dispatched), the invoked
+  role's `phase.start`, the gate events (`gate.surfaced` / `gate.approved`),
+  `experiment.cut` / `experiment.accepted`, and `phase.end`. It also runs the
+  artifact **reconcile** after each role, which code-emits `artifact.written`
+  for everything the role left on disk. These are guaranteed every run,
+  regardless of model, with no agent action required.
+- Each **role** adds only its in-flight JUDGMENT events through the same CLI:
+  `progress` sub-steps, `reasoning` (debug), `smell.flagged` (warn), and the
+  human's recorded gate decision. You do not need to emit your own
+  `phase.start` / `phase.end` / `artifact.written`, the orchestrator already
+  does. The shared `.tdd/agent-log.jsonl` is the bus: you append to it as you
+  work; there is no need to return events to the orchestrator (a subagent only
+  returns its completion).
+
 ## 4. Per-role emit points (instrumentation)
 
-Each role emits at its phase boundaries, on each artifact it writes, and on its
-handoff. Minimum expected events:
+The orchestrator code-emits the lifecycle skeleton below (phase boundaries,
+handoffs, gates, `artifact.written` via reconcile). The "info/debug/warn"
+columns are the JUDGMENT events each role adds on top, through the
+`lakebase-tdd-log` CLI:
 
 | Role | info | debug | warn / error |
 |---|---|---|---|
@@ -57,7 +107,7 @@ handoff. Minimum expected events:
 | **UX Designer** | `artifact.written` design-guide/ia; `handoff` | `reasoning` on token/IA choices, reference provenance | `error` adherence check failed |
 | **Architect Reviewer** | `artifact.written` architecture.{md,json}; `gate.surfaced` (NFRs proposed to HIL) | `reasoning` on layer/NFR proposals | `warn` cross-cutting concern with no owner |
 | **Test Strategist** | `artifact.written` test-list; `gate.surfaced` | `reasoning` on ordering rationale | `warn` a test needing impl-first (smell) |
-| **Scrum-Master** | `phase.start`/`phase.end` per transition; `gate.approved`; `experiment.cut` | `reasoning` on N=1 vs N>=2 | `warn` budget cap; `error` postcondition unmet |
+| **Orchestrator** (the deterministic driver) | `phase.start`/`phase.end` per transition; `gate.approved`; `experiment.cut` | the chosen action + the state it was derived from | `warn` budget cap; `error` postcondition unmet |
 | **Navigator** | `cycle.red` (failing test written); `review.verdict` | `reasoning` on the design the test forces | `warn` smell flagged (`smell.flagged`) |
 | **Driver** | `cycle.green`; `cycle.refactored` | `reasoning` on the minimal change | `warn` cycle stall; `error` runner missing |
 
@@ -84,8 +134,8 @@ recorded, the audit trail must show who was asked and what they decided.
 
 So a normal (human) run logs: `gate.surfaced` (transition) then the human's
 `gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then
-the next phase's `phase.start`. In **auto-approve mode** the human is performed
-by `ci-mock-approver`, which emits the SAME `product-owner` `gate.approved` /
+the next phase's `phase.start`. In **Human Proxy mode** the human is performed
+by `human-proxy`, which emits the SAME `product-owner` `gate.approved` /
 `gate.refused` events (it validated the artifact's expected elements first). The
 log shape is identical; only the approver identity in `data.approver` differs,
 so an auditor sees exactly where a human was, or was not, in the loop.

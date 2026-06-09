@@ -74,6 +74,14 @@ function gitCheckoutExistingBranch(cwd: string, branch: string): void {
   });
 }
 
+function gitMergeBranch(cwd: string, branch: string): void {
+  execFileSync("git", ["merge", "--no-edit", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault,
+  });
+}
+
 function gitDeleteLocalBranch(cwd: string, branch: string, force = true): void {
   execFileSync("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
@@ -700,4 +708,59 @@ async function resolveFeatureParent(args: {
   }
   // 3. Project default (handled by createBranch when parentBranch is undefined)
   return undefined;
+}
+
+// ─── mergePaired ───────────────────────────────────────────────
+
+export interface MergePairedArgs {
+  /** Project directory (must contain .git + .env). */
+  cwd: string;
+  /** Branch to merge FROM (e.g. an experiment branch). */
+  from: string;
+  /** Branch to merge INTO (e.g. the feature branch). */
+  into: string;
+  /** Lakebase instance. Default: read LAKEBASE_PROJECT_ID from .env. */
+  instance?: string;
+  /**
+   * Re-sync .env to `into`'s Lakebase branch after switching to it (so a
+   * subsequent migration run targets the merge TARGET's database, not the
+   * source branch's). Default: true.
+   */
+  syncEnv?: boolean;
+}
+
+export interface MergePairedResult {
+  merged: true;
+  into: string;
+  from: string;
+  /** checkoutPaired result for `into`, when syncEnv. */
+  checkout?: CheckoutPairedResult;
+  warnings: string[];
+}
+
+/**
+ * Merge one git branch into another inside a paired project: check out `into`,
+ * re-sync .env to into's Lakebase branch (so downstream migrations hit the
+ * right DB), then git-merge `from`. The paired counterpart to a bare
+ * `git merge`: the per-story experiment accept path uses it so the .env ends
+ * up pointed at the feature branch's database, never the experiment's. This is
+ * Lakebase-aware workflow coordination (this module's charter), which is why
+ * the orchestration layer calls it instead of shelling git itself.
+ */
+export async function mergePaired(args: MergePairedArgs): Promise<MergePairedResult> {
+  const warnings: string[] = [];
+  const syncEnv = args.syncEnv !== false;
+
+  // Switch git to the merge target. checkoutPaired only resolves Lakebase +
+  // .env; it does NOT perform the git checkout, so do that first.
+  gitCheckoutExistingBranch(args.cwd, args.into);
+
+  let checkout: CheckoutPairedResult | undefined;
+  if (syncEnv) {
+    checkout = await checkoutPaired({ cwd: args.cwd, branch: args.into, instance: args.instance });
+    warnings.push(...checkout.warnings);
+  }
+
+  gitMergeBranch(args.cwd, args.from);
+  return { merged: true, into: args.into, from: args.from, checkout, warnings };
 }

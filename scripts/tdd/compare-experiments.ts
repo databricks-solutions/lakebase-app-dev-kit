@@ -31,6 +31,7 @@ export interface TagMatrixRow {
 
 export interface ComparisonReport {
   feature_id: string;
+  story_id: string;
   generated_at: string;
   rows: ExperimentRow[];
   /**
@@ -85,10 +86,10 @@ function buildMatrix(tddDir: string, featureId: string, rows: ExperimentRow[]): 
   }));
 }
 
-export function compareExperiments(tddDir: string, featureId: string): ComparisonReport {
-  const experiments = listExperiments(tddDir, featureId);
+export function compareExperiments(tddDir: string, featureId: string, storyId: string): ComparisonReport {
+  const experiments = listExperiments(tddDir, featureId, storyId);
   const rows: ExperimentRow[] = experiments.map((exp) => {
-    const o = readOutcomes(tddDir, featureId, exp.experiment_slug);
+    const o = readOutcomes(tddDir, featureId, storyId, exp.experiment_slug);
     return {
       experiment_slug: exp.experiment_slug,
       branch_id: exp.branch_id,
@@ -101,7 +102,7 @@ export function compareExperiments(tddDir: string, featureId: string): Compariso
       by_tag: o?.by_tag,
       capped: o?.capped,
       cycle_count: readCycleCount(exp.dir),
-      artifact_count: listArtifacts(tddDir, featureId, exp.experiment_slug).length,
+      artifact_count: listArtifacts(tddDir, featureId, storyId, exp.experiment_slug).length,
       duration_ms: readDurationMs(exp.dir),
     };
   });
@@ -109,6 +110,7 @@ export function compareExperiments(tddDir: string, featureId: string): Compariso
   const { recommendation, rationale } = recommend(rows);
   return {
     feature_id: featureId,
+    story_id: storyId,
     generated_at: new Date().toISOString(),
     rows,
     matrix,

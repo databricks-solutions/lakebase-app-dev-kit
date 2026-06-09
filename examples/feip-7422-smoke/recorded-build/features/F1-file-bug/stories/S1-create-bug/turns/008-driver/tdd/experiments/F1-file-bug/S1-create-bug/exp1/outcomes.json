@@ -1,0 +1,14 @@
+{
+  "status": "running",
+  "by_tag": {
+    "api": {
+      "passed": 1,
+      "failed": 0
+    },
+    "e2e": {
+      "passed": 3,
+      "failed": 0
+    }
+  },
+  "tests_passed": 4
+}

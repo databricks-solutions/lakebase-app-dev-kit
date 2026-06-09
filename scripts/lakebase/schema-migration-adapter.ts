@@ -117,6 +117,61 @@ export interface BaselineResult {
   tool_specific?: Record<string, unknown>;
 }
 
+export interface NewMigrationArgs {
+  projectDir: string;
+  /** Human description; adapters slugify it into the filename. */
+  slug: string;
+  /**
+   * Alembic only: diff the SQLAlchemy models against the live branch DB to
+   * pre-populate the migration body. Requires instance+branch. Defaults to
+   * false, which creates an empty skeleton the Driver fills in.
+   */
+  autogenerate?: boolean;
+  /** Connection (only consulted when autogenerate is true). */
+  instance?: string;
+  branch?: string;
+  database?: string;
+  endpointName?: string;
+}
+
+export interface NewMigrationResult {
+  status: "ok" | "error";
+  /**
+   * The version assigned, in the tool's native scheme: a UTC timestamp
+   * (`YYYYMMDDHHMMSS`) for all three tools. Empty string on error.
+   */
+  version: string;
+  /** Created file's basename (empty on error). */
+  filename: string;
+  /** Absolute path to the created migration (empty on error). */
+  path: string;
+  error?: string;
+  tool_specific?: Record<string, unknown>;
+}
+
+export interface CollapseHeadsArgs {
+  projectDir: string;
+  /** Message for the generated merge revision (Alembic). */
+  message?: string;
+  /**
+   * Detect-only: report the heads without creating a merge revision. Used by
+   * scm-doctor to surface a multi-head branch without mutating it.
+   */
+  dryRun?: boolean;
+}
+
+export interface CollapseHeadsResult {
+  /** "noop" when there was nothing to collapse (<=1 head, or a flat-list tool). */
+  status: "ok" | "noop" | "error";
+  /** Heads present before the collapse; length > 1 means a merge was created. */
+  headsBefore: string[];
+  /** The merge revision id created to unify the heads, when applicable. */
+  mergeRevision?: string;
+  /** Absolute path to the created merge revision file, when applicable. */
+  path?: string;
+  error?: string;
+}
+
 /**
  * Cross-tool migration adapter contract. Every adapter exposes the same
  * surface; tool-specific fields ride on `tool_specific` so the contract
@@ -151,6 +206,22 @@ export interface SchemaMigrationAdapter {
    * Apply Flyway-style baseline marker to an existing schema. OPTIONAL.
    */
   baseline?(args: BaselineArgs): Promise<BaselineResult>;
+
+  /**
+   * Create a NEW migration named in the tool's native scheme (a UTC timestamp
+   * version for all three tools), so the build never has to know the tool. The
+   * caller (Driver) authors the body. OPTIONAL: an adapter omits this when its
+   * tool has no create step.
+   */
+  newMigration?(args: NewMigrationArgs): Promise<NewMigrationResult>;
+
+  /**
+   * Collapse multiple migration heads into one at a sibling-merge boundary.
+   * Only DAG tools (Alembic, via `alembic merge heads`) need this; flat-list
+   * tools (Flyway, Knex) omit it, so the dispatcher treats them as a no-op.
+   * Idempotent: a single head (or none) is a no-op.
+   */
+  collapseHeads?(args: CollapseHeadsArgs): Promise<CollapseHeadsResult>;
 }
 
 /**

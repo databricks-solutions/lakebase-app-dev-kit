@@ -7,7 +7,7 @@ import { promoteExperiment } from "../../scripts/tdd/promote-experiment";
 let tdd: string;
 
 function seedExperiment(slug: string, outcomes: object): string {
-  const dir = join(tdd, "experiments", "F1", slug);
+  const dir = join(tdd, "experiments", "F1", "S1",slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), `feature/${slug}`);
   writeFileSync(join(dir, "outcomes.json"), JSON.stringify(outcomes));
@@ -36,14 +36,14 @@ describe("promoteExperiment", () => {
   it("throws when hitlApproved is false", async () => {
     seedExperiment("exp-winner", { status: "succeeded" });
     await expect(
-      promoteExperiment({ tddDir: tdd, featureId: "F1", winnerSlug: "exp-winner", hitlApproved: false })
+      promoteExperiment({ tddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "exp-winner", hitlApproved: false })
     ).rejects.toThrow(/HITL/);
   });
 
   it("throws when winnerSlug does not exist", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
     await expect(
-      promoteExperiment({ tddDir: tdd, featureId: "F1", winnerSlug: "ghost", hitlApproved: true })
+      promoteExperiment({ tddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "ghost", hitlApproved: true })
     ).rejects.toThrow(/not found/);
   });
 
@@ -54,6 +54,7 @@ describe("promoteExperiment", () => {
     const result = await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       winnerSlug: "exp-a",
       hitlApproved: true,
       approverEmail: "kevin@example.com",
@@ -61,11 +62,11 @@ describe("promoteExperiment", () => {
     expect(result.winner_slug).toBe("exp-a");
     expect(result.archived_slugs.sort()).toEqual(["exp-b", "exp-c"]);
     const winnerOutcomes = JSON.parse(
-      readFileSync(join(tdd, "experiments", "F1", "exp-a", "outcomes.json"), "utf8")
+      readFileSync(join(tdd, "experiments", "F1", "S1","exp-a", "outcomes.json"), "utf8")
     );
     expect(winnerOutcomes.status).toBe("succeeded");
     expect(
-      existsSync(join(tdd, "experiments", "F1", "_archive", "exp-b", "outcomes.json"))
+      existsSync(join(tdd, "experiments", "F1", "S1","_archive", "exp-b", "outcomes.json"))
     ).toBe(true);
   });
 
@@ -75,6 +76,7 @@ describe("promoteExperiment", () => {
     const result = await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       winnerSlug: "exp-a",
       hitlApproved: true,
     });
@@ -90,6 +92,7 @@ describe("promoteExperiment", () => {
     await promoteExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       winnerSlug: "exp-a",
       hitlApproved: true,
       approverEmail: "kevin@example.com",

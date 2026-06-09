@@ -22,6 +22,6 @@ When editing scripts, always run `npm run typecheck` before committing. When add
 
 ## When proposing changes
 
-Follow `lakebase-tdd-workflows` for TDD on Lakebase-paired projects: spec → architectural review → test list → design-spec gate → cycles. The Scrum-Master agent (`skills/lakebase-tdd-workflows/agents/scrum-master.md`) facilitates phase transitions and surfaces bad smells. Every gate is HITL.
+Follow `lakebase-tdd-workflows` for TDD on Lakebase-paired projects: spec → architectural review → test list → design-spec gate → cycles. The orchestrator is a deterministic driver (`lakebase-tdd-drive`), not an LLM agent: it routes phase transitions over `workflow-state.json`, spawns the role agents, and surfaces bad smells. Every gate is HITL.
 
 For non-TDD work in this substrate repo itself, follow the conventions in [`CONTRIBUTING.md`](CONTRIBUTING.md): tier 1 hermetic tests required, tier 2 live tests for `scripts/lakebase/*` changes, single-seam credential rules enforced by CI grep guards.

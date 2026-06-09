@@ -1,5 +1,5 @@
 // FEIP-7508 Layer 2 (conformance): "did this artifact adhere to the format
-// expected?" Layer 1 (existence) is the mock-approver no-fabrication fix;
+// expected?" Layer 1 (existence) is the human-proxy no-fabrication fix;
 // Layer 3 (signoff) is approveGate. This is the missing middle: a gate must
 // not approve an artifact that exists but does not conform to its declared
 // format. JSON artifacts validate against their schema; narrative MD
@@ -82,6 +82,7 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
   it("validates plan.json against the new plan schema", () => {
     const plan = JSON.stringify({
       feature_id: "F1-initial-domain",
+      story_id: "S1-submit",
       N: 1,
       mode: "N=1",
       strategies: [{ name: "single", rationale: "iterate" }],

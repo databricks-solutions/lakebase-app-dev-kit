@@ -6647,36 +6647,60 @@ init_cjs_shims();
 // scripts/tdd/feature-status.ts
 init_cjs_shims();
 var import_fs6 = require("fs");
-var import_path7 = require("path");
+var import_path5 = require("path");
 
 // scripts/tdd/test-list.ts
 init_cjs_shims();
 var import_fs = require("fs");
-var import_path = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureTestListJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "test-list.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyPlanJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "plan.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+function requireFeatureDir(tdd, featureId) {
+  const dir = findFeatureDir(tdd, featureId);
+  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
+  return dir;
+}
+
+// scripts/tdd/test-list.ts
 function readMasterTestList(tddDir, featureId) {
-  const dir = findFeatureDir(tddDir, featureId);
-  const file = (0, import_path.join)(dir, "test-list.json");
+  requireFeatureDir(tddDir, featureId);
+  const file = featureTestListJson(tddDir, featureId);
   if (!(0, import_fs.existsSync)(file)) {
     throw new Error(`master test-list.json not found for ${featureId} at ${file}`);
   }
-  return JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
-}
-function findFeatureDir(tddDir, featureId) {
-  const featuresDir = (0, import_path.join)(tddDir, "features");
-  if (!(0, import_fs.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path.join)(featuresDir, candidates[0]);
+  const parsed = JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
+  return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
 }
 
 // scripts/tdd/design-spec-gate.ts
 init_cjs_shims();
 var import_fs3 = require("fs");
-var import_path4 = require("path");
 
 // scripts/tdd/run-cycle.ts
 init_cjs_shims();
@@ -6725,9 +6749,6 @@ var KIT_TIMEOUTS = {
   uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
   perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
 };
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
 function urlFromEnv(name, fallback) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -6747,10 +6768,13 @@ init_cjs_shims();
 // scripts/tdd/experiment.ts
 init_cjs_shims();
 var import_fs2 = require("fs");
-var import_path2 = require("path");
+var import_path = require("path");
 
-// scripts/lakebase/convention-branches.ts
+// scripts/lakebase/paired-branch.ts
 init_cjs_shims();
+var fs4 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
 
 // scripts/lakebase/branch-create.ts
 init_cjs_shims();
@@ -6775,12 +6799,6 @@ var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.exe
 // scripts/lakebase/branch-create.ts
 var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
 
-// scripts/lakebase/paired-branch.ts
-init_cjs_shims();
-var fs3 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
-
 // scripts/lakebase/branch-delete.ts
 init_cjs_shims();
 var import_node_child_process5 = require("child_process");
@@ -6793,37 +6811,41 @@ var import_node_child_process6 = require("child_process");
 
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
-var fs = __toESM(require("fs"), 1);
+var fs2 = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 
 // scripts/lakebase/databricks-profile.ts
 init_cjs_shims();
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 
 // scripts/util/exec.ts
 init_cjs_shims();
 var cp = __toESM(require("child_process"), 1);
 
-// scripts/lakebase/convention-branches.ts
-var CONVENTION_TIER_DEFAULTS = {
-  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
-  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
-  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
-  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
-};
-
 // scripts/tdd/experiment.ts
-function listExperiments(tddDir, featureId) {
-  const root = (0, import_path2.join)(tddDir, "experiments", featureId);
+function experimentsRoot(tddDir, featureId, storyId) {
+  return (0, import_path.join)(tddDir, "experiments", featureId, storyId);
+}
+function experimentDir(tddDir, featureId, storyId, slug) {
+  return (0, import_path.join)(experimentsRoot(tddDir, featureId, storyId), slug);
+}
+function listExperimentStories(tddDir, featureId) {
+  const root = (0, import_path.join)(tddDir, "experiments", featureId);
+  if (!(0, import_fs2.existsSync)(root)) return [];
+  return (0, import_fs2.readdirSync)(root).filter((d) => (0, import_fs2.statSync)((0, import_path.join)(root, d)).isDirectory()).sort();
+}
+function listExperiments(tddDir, featureId, storyId) {
+  const root = experimentsRoot(tddDir, featureId, storyId);
   if (!(0, import_fs2.existsSync)(root)) return [];
   const out = [];
   for (const slug of (0, import_fs2.readdirSync)(root)) {
-    const dir = (0, import_path2.join)(root, slug);
+    const dir = (0, import_path.join)(root, slug);
     if (!(0, import_fs2.statSync)(dir).isDirectory()) continue;
-    const branchFile = (0, import_path2.join)(dir, "branch.txt");
+    const branchFile = (0, import_path.join)(dir, "branch.txt");
     if (!(0, import_fs2.existsSync)(branchFile)) continue;
     out.push({
       feature_id: featureId,
+      story_id: storyId,
       experiment_slug: slug,
       branch_id: (0, import_fs2.readFileSync)(branchFile, "utf8").trim(),
       created_at: (0, import_fs2.statSync)(branchFile).birthtime.toISOString(),
@@ -6832,8 +6854,8 @@ function listExperiments(tddDir, featureId) {
   }
   return out;
 }
-function readOutcomes(tddDir, featureId, slug) {
-  const file = (0, import_path2.join)(tddDir, "experiments", featureId, slug, "outcomes.json");
+function readOutcomes(tddDir, featureId, storyId, slug) {
+  const file = (0, import_path.join)(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
   if (!(0, import_fs2.existsSync)(file)) return null;
   return JSON.parse((0, import_fs2.readFileSync)(file, "utf8"));
 }
@@ -6843,17 +6865,17 @@ init_cjs_shims();
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_path3 = require("path");
+var import_path2 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path3.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 
 // scripts/tdd/spike-carryforward.ts
 init_cjs_shims();
 
 // scripts/tdd/design-spec-gate.ts
-function readPlan(tddDir, featureId) {
-  const planPath = (0, import_path4.join)(tddDir, "features", `${featureId}`, "plan.json");
+function readPlan(tddDir, featureId, storyId) {
+  const planPath = storyPlanJson(tddDir, featureId, storyId);
   if (!(0, import_fs3.existsSync)(planPath)) return null;
   return JSON.parse((0, import_fs3.readFileSync)(planPath, "utf8"));
 }
@@ -6861,9 +6883,9 @@ function readPlan(tddDir, featureId) {
 // scripts/tdd/smells.ts
 init_cjs_shims();
 var import_fs4 = require("fs");
-var import_path5 = require("path");
+var import_path3 = require("path");
 function readSmellsLog(tddDir) {
-  const file = (0, import_path5.join)(tddDir, "smells.json");
+  const file = (0, import_path3.join)(tddDir, "smells.json");
   if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
   return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
 }
@@ -6871,9 +6893,9 @@ function readSmellsLog(tddDir) {
 // scripts/tdd/gates.ts
 init_cjs_shims();
 var import_fs5 = require("fs");
-var import_path6 = require("path");
+var import_path4 = require("path");
 var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote"];
+var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
   return {
@@ -6883,7 +6905,8 @@ function defaultGatesState(featureId) {
       spec: { status: "open", history: [] },
       plan: { status: "open", history: [] },
       test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] }
+      promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] }
     }
   };
 }
@@ -6904,18 +6927,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path6.join)(findFeatureDir2(tddDir, featureId), "gates.json");
-}
-function findFeatureDir2(tddDir, featureId) {
-  const featuresDir = (0, import_path6.join)(tddDir, "features");
-  if (!(0, import_fs5.existsSync)(featuresDir)) {
-    throw new Error(`${featuresDir} does not exist`);
-  }
-  const candidates = (0, import_fs5.readdirSync)(featuresDir).filter((d) => d.startsWith(featureId));
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  return (0, import_path6.join)(featuresDir, candidates[0]);
+  return (0, import_path4.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -6936,7 +6948,11 @@ function validateGatesState(parsed, file) {
     spec: validateGateRecord(gates.spec, "spec", file),
     plan: validateGateRecord(gates.plan, "plan", file),
     test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file)
+    promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
   };
   return {
     feature_id: obj.feature_id,
@@ -6975,9 +6991,14 @@ function readJsonIfExists(path3) {
   if (!(0, import_fs6.existsSync)(path3)) return null;
   return JSON.parse((0, import_fs6.readFileSync)(path3, "utf8"));
 }
-function timelineCycleCount(experimentDir) {
+function listFeatureStories(tddDir, featureId) {
+  const storiesDir2 = storiesDir(tddDir, featureId);
+  if (!(0, import_fs6.existsSync)(storiesDir2)) return [];
+  return (0, import_fs6.readdirSync)(storiesDir2).filter((d) => (0, import_fs6.statSync)((0, import_path5.join)(storiesDir2, d)).isDirectory()).sort();
+}
+function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    (0, import_path7.join)(experimentDir, "timeline.json")
+    (0, import_path5.join)(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -7004,7 +7025,7 @@ function summarizeTestList(tddDir, featureId) {
   }
 }
 function readSelectionLogRecent(tddDir, limit) {
-  const path3 = (0, import_path7.join)(tddDir, "selection-log.md");
+  const path3 = (0, import_path5.join)(tddDir, "selection-log.md");
   if (!(0, import_fs6.existsSync)(path3)) return [];
   const text = (0, import_fs6.readFileSync)(path3, "utf8");
   const entries = [];
@@ -7033,7 +7054,7 @@ function readGatesSummary(tddDir, featureId) {
   }
 }
 function readWorkflowState(tddDir) {
-  const state = readJsonIfExists((0, import_path7.join)(tddDir, "workflow-state.json"));
+  const state = readJsonIfExists((0, import_path5.join)(tddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,
@@ -7047,20 +7068,27 @@ function readWorkflowState(tddDir) {
   };
 }
 function getFeatureStatus(tddDir, featureId) {
-  const plan = readPlan(tddDir, featureId);
-  const experimentRecords = listExperiments(tddDir, featureId);
-  const experiments = experimentRecords.map((rec) => {
-    const outcomes = readOutcomes(tddDir, featureId, rec.experiment_slug);
-    return {
-      slug: rec.experiment_slug,
-      branch_id: rec.branch_id,
-      status: outcomes?.status ?? null,
-      tests_passed: outcomes?.tests_passed ?? null,
-      tests_failed: outcomes?.tests_failed ?? null,
-      schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-      cycle_count: timelineCycleCount(rec.dir)
-    };
-  });
+  const plans = [];
+  for (const storyId of listFeatureStories(tddDir, featureId)) {
+    const p = readPlan(tddDir, featureId, storyId);
+    if (p) plans.push({ story_id: storyId, plan: p });
+  }
+  const experiments = [];
+  for (const storyId of listExperimentStories(tddDir, featureId)) {
+    for (const rec of listExperiments(tddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+      experiments.push({
+        story_id: storyId,
+        slug: rec.experiment_slug,
+        branch_id: rec.branch_id,
+        status: outcomes?.status ?? null,
+        tests_passed: outcomes?.tests_passed ?? null,
+        tests_failed: outcomes?.tests_failed ?? null,
+        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
+        cycle_count: timelineCycleCount(rec.dir)
+      });
+    }
+  }
   let smells = [];
   try {
     smells = readSmellsLog(tddDir).detected.filter((d) => !d.resolution);
@@ -7072,7 +7100,7 @@ function getFeatureStatus(tddDir, featureId) {
     feature_id: featureId,
     current_workflow_phase: phase,
     current_workflow_pointer: pointer,
-    plan,
+    plans,
     test_list: summarizeTestList(tddDir, featureId),
     experiments,
     selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
@@ -7098,11 +7126,13 @@ function renderFeatureStatus(snapshot) {
   } else {
     lines.push(`  Phase: unknown (no workflow-state.json)`);
   }
-  if (snapshot.plan) {
-    const plural = snapshot.plan.strategies.length === 1 ? "y" : "ies";
-    lines.push(
-      `  Plan: ${snapshot.plan.mode} (N=${snapshot.plan.N}, ${snapshot.plan.strategies.length} strateg${plural})`
-    );
+  if (snapshot.plans.length > 0) {
+    for (const { story_id, plan } of snapshot.plans) {
+      const plural = plan.strategies.length === 1 ? "y" : "ies";
+      lines.push(
+        `  Plan [${story_id}]: ${plan.mode} (N=${plan.N}, ${plan.strategies.length} strateg${plural})`
+      );
+    }
   } else {
     lines.push(`  Plan: not yet approved (design-spec gate pending)`);
   }

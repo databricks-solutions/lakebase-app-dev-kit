@@ -146,6 +146,99 @@ export async function deployClaudeCommands(
   return { written, skipped };
 }
 
+/**
+ * Deploy the TDD-workflow role agent definitions into the project's
+ * `.claude/agents/` so Claude Code can discover + spawn them (FEIP-7510). The
+ * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
+ * this copies each `<role>.md` verbatim (the bodies are the system prompts).
+ * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
+ * to spawn the roles via `claude -p --agent <role>`. Skips files that
+ * already exist unless `force: true`.
+ */
+export async function deployClaudeAgents(
+  targetDir: string,
+  opts?: DeployClaudeCommandsOptions
+): Promise<DeployClaudeCommandsResult> {
+  const kitRoot = path.dirname(path.dirname(templatesRoot(opts)));
+  const src = path.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path.join(targetDir, ".claude", "agents");
+  fs.mkdirSync(destDir, { recursive: true });
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const entry of fs.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path.join(".claude", "agents", entry);
+    const destPath = path.join(targetDir, relDest);
+    if (fs.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs.copyFileSync(path.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
+
+/**
+ * The kit skills a scaffolded project carries in its own `.claude/skills/` so the
+ * deployed agents + commands resolve every `@<skill>/...` cross-reference and a
+ * human can invoke the TDD / SCM / release interactions directly , without the
+ * kit having to be installed as a plugin. The set is the engineering canon plus
+ * the three workflow skills the agents/commands reference and their two Databricks
+ * parents (the `parent:` chain `lakebase-{scm,release}-workflows` -> `databricks-lakebase`):
+ *
+ * - `software-design-principles` , registered by the Navigator/Driver/Architect.
+ * - `lakebase-tdd-workflows` , the `@lakebase-tdd-workflows/...` target the commands
+ *   + agent docs reference (SKILL.md, references/, agents/).
+ * - `lakebase-scm-workflows` / `lakebase-release-workflows` , the human SCM + release
+ *   surface the Release Engineer composes on.
+ * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
+ *   compose on (`parent: databricks-lakebase`).
+ */
+export const PROJECT_SKILLS = [
+  "software-design-principles",
+  "lakebase-tdd-workflows",
+  "lakebase-scm-workflows",
+  "lakebase-release-workflows",
+  "databricks-lakebase",
+  "databricks-core",
+] as const;
+
+/**
+ * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
+ * so the scaffolded project is self-contained: the deployed agents + commands can
+ * resolve their `@<skill>/...` references and a human can drive the TDD / SCM /
+ * release workflows in-project. Without this the references are dead , the skills
+ * only exist in the kit, not the scaffolded project where the agents run. Copies
+ * each whole skill dir (SKILL.md + references/ + any agents/). Skips an existing
+ * copy unless `force: true`.
+ */
+export async function deployClaudeSkills(
+  targetDir: string,
+  opts?: DeployClaudeCommandsOptions
+): Promise<DeployClaudeCommandsResult> {
+  const kitRoot = path.dirname(path.dirname(templatesRoot(opts)));
+  const written: string[] = [];
+  const skipped: string[] = [];
+  for (const skill of PROJECT_SKILLS) {
+    const src = path.join(kitRoot, "skills", skill);
+    if (!fs.existsSync(src)) continue;
+    const relDest = path.join(".claude", "skills", skill);
+    const destPath = path.join(targetDir, relDest);
+    if (fs.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.cpSync(src, destPath, { recursive: true });
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
+
 /** Deploy GitHub Actions workflows from common/.github/workflows/. */
 export async function deployWorkflows(targetDir: string, opts?: ScaffoldOptions): Promise<string[]> {
   const written = copyDir(
@@ -444,6 +537,10 @@ export interface ScaffoldStaticAllResult {
   hooksInstalled: string;
   /** `.claude/commands/*.md` files written this run. Empty when skipped. */
   claudeCommands: string[];
+  /** `.claude/agents/*.md` role definitions written this run. Empty when skipped. */
+  claudeAgents: string[];
+  /** `.claude/skills/*` skill dirs written this run. Empty when skipped. */
+  claudeSkills: string[];
 }
 
 /**
@@ -496,13 +593,21 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
   const hooksInstalled = await installHooks(args.targetDir);
 
   let claudeCommands: string[] = [];
+  let claudeAgents: string[] = [];
+  let claudeSkills: string[] = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
+    report("Deploying .claude/skills/ (software-design-principles)");
+    const skills = await deployClaudeSkills(args.targetDir, opts);
+    claudeSkills = skills.written;
   }
 
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents, claudeSkills };
 }
 
 /**

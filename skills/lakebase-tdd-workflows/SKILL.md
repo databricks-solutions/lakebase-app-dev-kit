@@ -22,7 +22,7 @@ The contract every agent (Navigator, Driver, Orchestrator) and every human colla
 6. Never make a private method public to test it.
 7. Test count is a lagging indicator. The leading indicator is "how cheap is the next test?" Rising cost = design problem.
 8. Spike code is throwaway. Promote nothing from a spike branch into a TDD branch except notes.
-9. N=1 mode is iterative refinement. There is no promote/synthesize ceremony – the branch IS the feature.
+9. Experiments are scoped to a story (the branch forks from feature HEAD). N=1 is one experiment per story (iterative refinement, no promote/synthesize ceremony); N>=2 races competing strategies for that story. The PO accepts a story's experiment by **merge** (git-merge + run its migrations against the feature branch DB), or discards/revises it.
 
 See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents/driver.md) for per-role specializations.
 
@@ -38,12 +38,35 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 Refuse to transition if prior-phase artifacts are missing or invalid.
 
-## Headless / auto-approve mode
+The phases + gates above are the PER-FEATURE pipeline that `/design` (phases 0 to 2 + gates 1 to 4) and `/build` (phase 4) run. They sit inside a larger orchestrated loop:
+
+## Orchestrated commands (the dev loop)
+
+Every command is a thin invocation of the deterministic orchestrator driver (`lakebase-tdd-drive`), scoped to a phase range. The driver sequences the work and spawns each role as a subagent (`claude -p --agent <role>`); routing is code, not an LLM. Gates always pause for a human decision: `--gates interactive` (the default for the live slash commands) stops at each gate so the human answers; `--gates proxy` (headless / CI) has the Human Proxy answer.
+
+```
+Tier 1:  /sprint  = plan ─> [PLAN GATE] ─> per feature: /design ─> /build ─> /deploy
+            ▲                                                                   │
+            └──────────────────── working software feeds back ─────────────────┘
+Tier 2:  /plan  /design  /build  /deploy   (run ONE phase, then stop + suggest next)
+         /spike                            (throwaway exploration, outside the loop)
+```
+
+- **`/sprint [name]`** (Tier 1, the top-level orchestrator): runs the whole sprint as one continuous flow, plan to the plan gate, then claim + drive each backlog feature `design` -> `build` -> `deploy`. Re-invoked per cycle; resumable (halts at the next HITL gate for the human, continues on re-run). `lakebase-tdd-drive --sprint <name>`.
+- **`/plan [name]`** (Tier 2, sprint planning, ABOVE the per-feature loop): the **Spec Author** proposes the candidate breakdown (`.tdd/planning/feature-proposals.md`); the **Architect** t-shirt-sizes the candidates (`.tdd/planning/estimates.json`, XS/S/M/L/XL); the **Product Owner** commits the backlog by authoring a `feature-request.md` per feature that fits sprint capacity; the deterministic `sync-backlog` step projects `.tdd/sprints/<name>/backlog.json` (committed ids + sizes); the **sprint plan gate** is the HITL checkpoint. Stops there (does not flow into design). Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition. `--sprint <name> --plan-only`.
+- **`/design <feature-id>`**: claims the paired branch (Step 0), enforces the feature's `feature-request.md` + project intake (Step 0.5, a precondition, NOT a gate), then drives the per-story design lane to the spec gates. `--only design`.
+- **`/build <feature-id>`**: the TDD cycles + per-story acceptance, to ready-for-review (requires design done). `--only build`.
+- **`/deploy <feature-id> [--target local] [--story <s>]`**: deploys the merged feature (or one story's branch) + verifies reachable + feature-verify; the **deploy gate** is the working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`). `--only deploy`.
+- **`/spike <slug> [--for <feature>]`**: throwaway exploration on its own paired branch, OUTSIDE the workflow (no gates). Notes carry forward into a feature's design-spec gate; code is never promoted. `lakebase-tdd-spike`.
+
+The same orchestrated path runs for real and headless; headless, the Human Proxy stands in for the human at every supply + gate (below).
+
+## Headless / Human Proxy mode
 
 By default every gate is HITL: the workflow halts for the Product Owner. When
-`LAKEBASE_TDD_AUTO_APPROVE=1` (set by CI and the FEIP-7422 smoke), the human
-approver role is **performed by** the `ci-mock-approver` identity. This does not
-skip the gate or rubber-stamp it, the mock stands in as a diligent reviewer and
+`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the FEIP-7422 smoke), the human
+approver role is **performed by** the `human-proxy` identity. This does not
+skip the gate or rubber-stamp it, the Human Proxy stands in as a diligent reviewer and
 does exactly what a careful human would:
 
 - **It must be GIVEN the artifacts.** The mock approves a gate only when the
@@ -61,25 +84,39 @@ does exactly what a careful human would:
 So the producing role's job in this mode is to HAND the approver complete,
 conformant artifacts, recording its recommended resolutions (decisions, NFR
 acceptances, orderings) INSIDE those artifacts rather than leaving them as open
-questions awaiting a human reply. A gate advances because the mock reviewer
+questions awaiting a human reply. A gate advances because the Human Proxy
 verified and approved real, well-formed work, never because the gate was
 skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
 for a human. Auto-approve is automated diligent approval, not auto-fabrication.
 
-Check the mode with `[ "$LAKEBASE_TDD_AUTO_APPROVE" = "1" ]`. Absent or unset =
-normal HITL (halt for human sign-off).
+### The Human Proxy at each point in the orchestrated path
 
-## Agent prompts
+Beyond approving the four design/build gates, the Human Proxy stands in for the human wherever the path needs human input:
 
-Load the per-role prompt for the phase you're in:
+- **Project intake (precondition of `/plan` and `/design`):** where a human would be interviewed to author `product-overview.md` / `nfrs.md` / `design-brief.md`, the Human Proxy SUPPLIES each from the pre-recorded answers directory (`$LAKEBASE_TDD_RECORDED_INTAKE_DIR`) via `lakebase-tdd-human-proxy supply` (validate-then-place; refuses a missing or non-conformant recording). The precondition (`lakebase-tdd-intake`) then passes because the artifacts are present + conformant, not because it was skipped.
+- **`/plan` sprint backlog:** the Architect t-shirt-sizes the candidates (`planning/estimates.json`) live from the proposal. Where the Product Owner would then commit the sprint by authoring the `feature-request.md` files, the Human Proxy supplies them from the recorded backlog. The recorded specs ARE the PO's groomed, prioritized sprint. Same validate-then-place; a missing or non-conformant request refuses, so headless planning never produces an empty or malformed sprint. The deterministic `sync-backlog` step then projects `backlog.json` (committed ids + sizes) , the manifest the per-feature loop drives.
+- **`/deploy` deploy gate:** the per-sprint working-software review. The Human Proxy confirms the app came up reachable AND the feature verify passed, then records the `gate.approved`. It never approves a non-reachable or failed-verify deploy, that hard-blocks exactly as a missing gate artifact would.
 
-- [`agents/spec-author.md`](agents/spec-author.md) – phase 0, the Spec Author: reads the Feature Requester's `feature-request.md` (the original ask) plus the Product Owner's project-level `product-overview.md` intent, and turns them into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
+`supply` (intake + backlog) and `approve` (gates) are the two `lakebase-tdd-human-proxy` subcommands; both are diligent stand-ins, neither fabricates or skips.
+
+Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent or unset =
+normal HITL (halt for human sign-off / interview).
+
+## Agent roles (the per-role agent runtime)
+
+Each role is a separate agent definition under [`agents/`](agents/) with frontmatter (`name`, a `description` that is the auto-selection criteria, least-privilege `tools`, a strongly-recommended `model`, `memory: project`, `color`) and a body that is its system prompt. The roles communicate only through the artifacts on disk, the artifact is the inter-agent API.
+
+- [`agents/product-owner.md`](agents/product-owner.md) – the PO's facilitator: runs the intake interviews + drafts `product-overview.md` / `nfrs.md` / `design-brief.md`, authors the sprint's `feature-request.md` files at `/plan`, and is the approver at every HITL gate. Headless, the Human Proxy plays the PO.
+- [`agents/spec-author.md`](agents/spec-author.md) – the Spec Author (BA). At `/plan`, proposes the feature breakdown from `product-overview.md` + `nfrs.md` (`feature-proposals.md`, the PO's input). At `/design` phase 0, turns one feature's `feature-request.md` into the structured draft spec (`feature-spec.{md,json}` + stories + ACs).
 - [`agents/ux-designer.md`](agents/ux-designer.md) – between phase 0 and 1, **UI projects only**: owns `design-guide.{md,json}` + `ia.md` and the UX adherence gate. Skipped for API/CLI/Infra-only features.
-- [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, imports `software-design-principles`.
+- [`agents/architect-reviewer.md`](agents/architect-reviewer.md) – phase 1, populates `layer` and `architectural_notes`, covers every `nfrs.md` Required item via `architecture.json` `brief_ref`, imports `software-design-principles`.
 - [`agents/test-strategist.md`](agents/test-strategist.md) – phase 2, builds the Beck-style ordered test list.
-- [`agents/scrum-master.md`](agents/scrum-master.md) – phases 3 → 4, orchestrates the design-spec gate, spawns experiments, runs cycles, watches smells, surfaces to HITL.
 - [`agents/navigator.md`](agents/navigator.md) – phase 4 PLAN + RED + REVIEW.
 - [`agents/driver.md`](agents/driver.md) – phase 4 GREEN + REFACTOR.
+- [`agents/release-engineer.md`](agents/release-engineer.md) – `/deploy`: deploys the built increment to its target, polls reachable, runs the feature verify, hands the evidence to the PO for the deploy gate. Composes on `lakebase-release-workflows` for remote/release-on-merge.
+The **orchestrator** is the deterministic driver (`lakebase-tdd-drive`), **not an LLM agent**: it routes over `workflow-state.json`, hands each phase to the right role agent above, carries artifacts forward, and surfaces every gate to the PO. It writes no spec/code/test/deploy.
+
+**How the orchestrator runs them.** The role defs are scaffolded into the project's `.claude/agents/` (so Claude Code can discover + spawn them; the skill copy is the source). The driver computes the next action as a pure function of the recorded state, then spawns the role for that phase via `claude -p --agent <role>`. Routing is code, not a model: there is no LLM orchestrator session. Before spawning a role, the driver resolves the model from the project's `.lakebase/agent-config.json`: `lakebase-tdd-agent-model --role <role>` returns `override ?? recommended ?? inherit` (the HIL sets per-project overrides at `lakebase-create-project`; each role's recommended model lives in its definition's `model:`).
 
 ## References
 
@@ -148,26 +185,29 @@ if (!ok.ok) throw new Error(`budget: ${ok.reason}`);
 import { cutExperiment, listExperiments, readOutcomes, writeOutcomes, deleteExperiment }
   from "@databricks-solutions/lakebase-app-dev-kit/tdd/experiment";
 
-// N=1 – slug matches the feature.
-const feature = await cutExperiment({
+// N=1 – one experiment for story S1, forked from the feature branch.
+const exp = await cutExperiment({
   instance: "proj-checkout",
   tddDir: ".tdd",
   featureId: "F1",
-  experimentSlug: "checkout",       // N=1: slug = feature name
-  branch: "checkout",
-  parentBranch: "staging",
+  storyId: "S1-submit",
+  experimentSlug: "s1-submit",
+  branch: "exp/F1/S1-submit",
+  parentBranch: "feature/F1",       // forks from feature HEAD, not staging
 });
-// feature.dir === ".tdd/experiments/F1/checkout"
+// exp.dir === ".tdd/experiments/F1/S1-submit/s1-submit"
 // Writes branch.txt, notes.md, outcomes.json (status: "running"), timeline.json.
 
-writeOutcomes(".tdd", "F1", "checkout", { status: "succeeded", tests_passed: 2 });
+writeOutcomes(".tdd", "F1", "S1-submit", "s1-submit", { status: "succeeded", tests_passed: 2 });
 
 // Teardown is HITL-gated. deleteBranchToo defaults to false – record survives.
+// (The lakebase-tdd-experiment CLI's merge/discard drive this for the PO.)
 await deleteExperiment({
   instance: "proj-checkout",
   tddDir: ".tdd",
   featureId: "F1",
-  experimentSlug: "checkout",
+  storyId: "S1-submit",
+  experimentSlug: "s1-submit",
   deleteBranchToo: false,
 });
 ```
@@ -484,7 +524,7 @@ migrateGatesFromSelectionLog({
 
 ## Flow patterns
 
-End-to-end orchestrator patterns the Scrum-Master agent runs in response to `/design` and `/build`. Each flow is what the agent assembles from the primitives above; the human-facing prompts that trigger each flow live in [`README.md`](README.md).
+End-to-end orchestrator patterns the deterministic driver runs in response to `/design` and `/build`. Each flow is what the driver assembles from the primitives above; the human-facing prompts that trigger each flow live in [`README.md`](README.md).
 
 ### Author + validate spec (response to `/design`)
 
@@ -528,24 +568,24 @@ import { cutExperiment, writeOutcomes } from "@databricks-solutions/lakebase-app
 import { beginCycle, markGreen } from "@databricks-solutions/lakebase-app-dev-kit/tdd/run-cycle";
 import { runDetectorsForScope, writeSmellsLog } from "@databricks-solutions/lakebase-app-dev-kit/tdd/smells";
 
-const tdd = ".tdd"; const featureId = "F1";
+const tdd = ".tdd"; const featureId = "F1"; const storyId = "S1-submit";
 
 writeMasterTestList(tdd, { feature_id: featureId, ordered_for: "design-momentum", items: [
   { id: "T1", description: "POST /orders returns 201 on valid cart", ac_id: "AC1", status: "pending" },
   { id: "T2", description: "POST /orders rejects empty cart with 400", ac_id: "AC1", status: "pending" },
 ]});
 
-const analysis = analyzeForGate(tdd, featureId);   // -> { mode: "N=1", N: 1, ... }
+const analysis = analyzeForGate(tdd, featureId, storyId);   // scoped to the story -> { mode: "N=1", N: 1, ... }
 recordPlan(tdd, analysis.proposed_plan, "kevin@example.com");
 writePlan(tdd, analysis.proposed_plan);
 
-const feature = await cutExperiment({
+const exp = await cutExperiment({
   instance: "proj-checkout", tddDir: tdd,
-  featureId, experimentSlug: "checkout", branch: "checkout", parentBranch: "staging",
+  featureId, storyId, experimentSlug: "s1-submit", branch: "exp/F1/S1-submit", parentBranch: "feature/F1",
 });
 
-const scope = { tddDir: tdd, feature_id: featureId, story_id: "S1", ac_id: "AC1",
-                experiment_slug: feature.experiment_slug, branch_id: feature.branch_id };
+const scope = { tddDir: tdd, feature_id: featureId, story_id: storyId, ac_id: "AC1",
+                experiment_slug: exp.experiment_slug, branch_id: exp.branch_id };
 
 const c1 = beginCycle({ ...scope, test_id: "T1",
   test_description: "POST /orders returns 201 on valid cart",
@@ -555,7 +595,7 @@ markGreen(scope, c1.cycle_id, "added POST handler + repository write");
 const hits = runDetectorsForScope(tdd, scope);
 if (hits.length) writeSmellsLog(tdd, hits);
 
-writeOutcomes(tdd, featureId, feature.experiment_slug, { status: "succeeded", tests_passed: 2 });
+writeOutcomes(tdd, featureId, storyId, exp.experiment_slug, { status: "succeeded", tests_passed: 2 });
 ```
 
 ### N≥2 race + promote/synthesize
@@ -611,4 +651,4 @@ For non-agent invocation (debugging, CI introspection):
 |---|---|
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state. Use `--json` for machine-readable payload. |
 | `node dist/scripts/tdd/spec-sync.cli.js <tddDir>` | Walk the `.tdd/` tree and print drift reports. Exits 0 even when reports exist (warn-only). |
-| `node dist/scripts/tdd/test-list.cli.js <tddDir> <featureId>` | Regenerate per-AC views from the feature-level master test list. |
+| `node dist/scripts/tdd/test-list.cli.js <tddDir> <featureId> [storyId]` | Regenerate per-AC views from the feature-level master test list. With a `storyId`, instead write that story's scoped per-story test list (`stories/<story>/test-list-per-story.json`), the streaming build lane's per-story input. |

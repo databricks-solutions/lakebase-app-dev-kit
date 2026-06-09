@@ -56,8 +56,8 @@ function seedFeatureAndAc(
   fs.writeFileSync(path.join(acDir, `${opts.acId}.json`), JSON.stringify(ac, null, 2));
 }
 
-function seedExperiment(tddDir: string, featureId: string, slug: string): void {
-  const dir = path.join(tddDir, "experiments", featureId, slug);
+function seedExperiment(tddDir: string, featureId: string, slug: string, storyId = "S1"): void {
+  const dir = path.join(tddDir, "experiments", featureId, storyId, slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "branch.txt"), "test-branch");
   const outcomes: ExperimentOutcomes = { status: "running" };
@@ -200,7 +200,7 @@ describe("recordRunnerOutcome", () => {
     });
     expect(result.tag).toBe("e2e");
     expect(result.runsForTag).toBe(1);
-    const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
     expect(outcomes.by_tag?.e2e).toEqual({ passed: 1, failed: 0 });
   });
 
@@ -338,15 +338,20 @@ describe("SKILL.md + driver.md: tagToRunner documentation", () => {
     expect(skill).toMatch(/recordRunnerOutcome/);
   });
 
-  it("driver.md instructs the Driver to dispatch on AC layer and call recordRunnerOutcome", () => {
+  it("driver.md keeps the Driver pure: it runs the layer runner, the orchestration records the cycle", () => {
     const driver = fs.readFileSync(
       path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "agents", "driver.md"),
       "utf8"
     );
-    expect(driver).toMatch(/cycle's AC layer|AC\.layer/);
+    // The Driver still dispatches on the AC layer + runs the project's test command.
+    expect(driver).toMatch(/AC.{0,4}layer/i);
     expect(driver).toMatch(/BASE_URL/);
-    expect(driver).toMatch(/recordRunnerOutcome/);
     expect(driver).toMatch(/tagToRunner|tag → runner map|tag-to-runner/i);
+    // But RECORDING is an orchestration concern now (the bug: agents freehand
+    // cycle artifacts). The doc states the orchestration stamps GREEN, and the
+    // Driver is told it does not touch the cycle artifact or git.
+    expect(driver).toMatch(/orchestration records the runner outcome|stamps GREEN/i);
+    expect(driver).toMatch(/never touch the cycle artifact|do NOT/);
   });
 });
 
@@ -355,10 +360,10 @@ describe("writeOutcomes pass-through (regression)", () => {
     const tddDir = mkTempTdd("write");
     try {
       seedExperiment(tddDir, "F1", "exp");
-      const outcomes = readOutcomes(tddDir, "F1", "exp")!;
+      const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
       recordTagRun(outcomes, "infra", false);
-      writeOutcomes(tddDir, "F1", "exp", outcomes);
-      const reread = readOutcomes(tddDir, "F1", "exp")!;
+      writeOutcomes(tddDir, "F1", "S1", "exp", outcomes);
+      const reread = readOutcomes(tddDir, "F1", "S1", "exp")!;
       expect(reread.by_tag?.infra).toEqual({ passed: 0, failed: 1 });
       expect(reread.tests_failed).toBe(1);
     } finally {

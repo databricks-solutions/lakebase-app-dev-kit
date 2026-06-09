@@ -229,6 +229,11 @@ stderr: ${stderr.trim()}` : ""}`
   }
 }
 
+// scripts/lakebase/paired-branch.ts
+import * as fs3 from "fs";
+import * as path2 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
 // scripts/lakebase/branch-create.ts
 import { execFile as execFile3 } from "child_process";
 import { promisify as promisify3 } from "util";
@@ -507,11 +512,6 @@ stderr: ${stderr.trim()}` : ""}`
     );
   }
 }
-
-// scripts/lakebase/paired-branch.ts
-import * as fs3 from "fs";
-import * as path2 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
 
 // scripts/lakebase/branch-delete.ts
 import { execFile as execFile4 } from "child_process";
@@ -842,7 +842,7 @@ async function createFeaturePairedBranch(args) {
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
+    ...args.ttl ? { ttl: args.ttl } : { noExpiry: true },
     cwd: args.cwd,
     createGitBranch: args.createGitBranch,
     syncEnv: args.syncEnv,

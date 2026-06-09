@@ -1,0 +1,7 @@
+{
+  "id": "S2-view-bug-detail",
+  "asA": "team member",
+  "iWantTo": "view a filed bug's detail page showing its title, description, status, and identifier",
+  "soThat": "I can see the bug information",
+  "status": "draft"
+}

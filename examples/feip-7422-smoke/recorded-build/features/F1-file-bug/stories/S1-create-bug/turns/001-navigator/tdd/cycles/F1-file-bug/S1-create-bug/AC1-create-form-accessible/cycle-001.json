@@ -1,0 +1,12 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "ac_id": "AC1-create-form-accessible",
+  "test_id": "T1",
+  "test_description": "Form with title and description input fields is displayed when user navigates to /bugs/create.",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s1-create-bug-exp1",
+  "red_at": "2026-06-09T04:55:43.956Z",
+  "layer": "API"
+}

@@ -1,9 +1,11 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { readMasterTestList, type TestListItem } from "./test-list";
 import { readPlan, type ExperimentPlan } from "./design-spec-gate";
+import { storiesDir as storiesDirOf } from "./tdd-paths.js";
 import {
   listExperiments,
+  listExperimentStories,
   readOutcomes,
   type ExperimentOutcomes,
 } from "./experiment";
@@ -19,6 +21,7 @@ export interface TestListSummary {
 }
 
 export interface ExperimentStatusEntry {
+  story_id: string;
   slug: string;
   branch_id: string;
   status: ExperimentOutcomes["status"] | null;
@@ -49,11 +52,17 @@ export interface GateSummary {
 
 export type GatesSummary = Record<GateName, GateSummary>;
 
+export interface PlanStatusEntry {
+  story_id: string;
+  plan: ExperimentPlan;
+}
+
 export interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
   current_workflow_pointer: WorkflowPointer | null;
-  plan: ExperimentPlan | null;
+  /** Per-story experiment plans (FEIP-7566): one entry per story that has a plan.json. */
+  plans: PlanStatusEntry[];
   test_list: TestListSummary | null;
   experiments: ExperimentStatusEntry[];
   selection_log_recent: SelectionLogEntry[];
@@ -72,6 +81,15 @@ const MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists<T>(path: string): T | null {
   if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+/** Story ids under features/<F>/stories/ (each may carry a plan.json). */
+function listFeatureStories(tddDir: string, featureId: string): string[] {
+  const storiesDir = storiesDirOf(tddDir, featureId);
+  if (!existsSync(storiesDir)) return [];
+  return readdirSync(storiesDir)
+    .filter((d) => statSync(join(storiesDir, d)).isDirectory())
+    .sort();
 }
 
 function timelineCycleCount(experimentDir: string): number {
@@ -174,21 +192,32 @@ export function getFeatureStatus(
   tddDir: string,
   featureId: string
 ): FeatureStatusSnapshot {
-  const plan = readPlan(tddDir, featureId);
-  const experimentRecords = listExperiments(tddDir, featureId);
+  // Plans live per story now (FEIP-7566): one plan.json under each
+  // features/<F>/stories/<story>/. Collect every story that has one.
+  const plans: PlanStatusEntry[] = [];
+  for (const storyId of listFeatureStories(tddDir, featureId)) {
+    const p = readPlan(tddDir, featureId, storyId);
+    if (p) plans.push({ story_id: storyId, plan: p });
+  }
 
-  const experiments: ExperimentStatusEntry[] = experimentRecords.map((rec) => {
-    const outcomes = readOutcomes(tddDir, featureId, rec.experiment_slug);
-    return {
-      slug: rec.experiment_slug,
-      branch_id: rec.branch_id,
-      status: outcomes?.status ?? null,
-      tests_passed: outcomes?.tests_passed ?? null,
-      tests_failed: outcomes?.tests_failed ?? null,
-      schema_diff_summary: outcomes?.schema_diff_summary ?? null,
-      cycle_count: timelineCycleCount(rec.dir),
-    };
-  });
+  // Experiments live under stories now (FEIP-7566): collect across every
+  // story that has an experiments subtree.
+  const experiments: ExperimentStatusEntry[] = [];
+  for (const storyId of listExperimentStories(tddDir, featureId)) {
+    for (const rec of listExperiments(tddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+      experiments.push({
+        story_id: storyId,
+        slug: rec.experiment_slug,
+        branch_id: rec.branch_id,
+        status: outcomes?.status ?? null,
+        tests_passed: outcomes?.tests_passed ?? null,
+        tests_failed: outcomes?.tests_failed ?? null,
+        schema_diff_summary: outcomes?.schema_diff_summary ?? null,
+        cycle_count: timelineCycleCount(rec.dir),
+      });
+    }
+  }
 
   let smells: SmellsLog["detected"] = [];
   try {
@@ -203,7 +232,7 @@ export function getFeatureStatus(
     feature_id: featureId,
     current_workflow_phase: phase,
     current_workflow_pointer: pointer,
-    plan,
+    plans,
     test_list: summarizeTestList(tddDir, featureId),
     experiments,
     selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
@@ -238,11 +267,13 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
     lines.push(`  Phase: unknown (no workflow-state.json)`);
   }
 
-  if (snapshot.plan) {
-    const plural = snapshot.plan.strategies.length === 1 ? "y" : "ies";
-    lines.push(
-      `  Plan: ${snapshot.plan.mode} (N=${snapshot.plan.N}, ${snapshot.plan.strategies.length} strateg${plural})`
-    );
+  if (snapshot.plans.length > 0) {
+    for (const { story_id, plan } of snapshot.plans) {
+      const plural = plan.strategies.length === 1 ? "y" : "ies";
+      lines.push(
+        `  Plan [${story_id}]: ${plan.mode} (N=${plan.N}, ${plan.strategies.length} strateg${plural})`
+      );
+    }
   } else {
     lines.push(`  Plan: not yet approved (design-spec gate pending)`);
   }

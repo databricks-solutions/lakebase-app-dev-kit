@@ -1,0 +1,12 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "ac_id": "AC4-created-bug-open-state",
+  "test_id": "T4",
+  "test_description": "Newly created bug displays status \"open\" on the detail page.",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s1-create-bug-exp1",
+  "red_at": "2026-06-09T05:05:34.698Z",
+  "layer": "E2E"
+}

@@ -17,7 +17,7 @@ import {
 let tdd: string;
 
 function seedExperiment(slug: string, outcomes: object): string {
-  const dir = join(tdd, "experiments", "F1", slug);
+  const dir = join(tdd, "experiments", "F1", "S1",slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), `feature/${slug}`);
   writeFileSync(join(dir, "outcomes.json"), JSON.stringify(outcomes));
@@ -39,6 +39,7 @@ describe("archiveExperiment", () => {
       archiveExperiment({
         tddDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         experimentSlug: "exp-a",
         hitlApproved: false,
       })
@@ -50,6 +51,7 @@ describe("archiveExperiment", () => {
       archiveExperiment({
         tddDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         experimentSlug: "ghost",
         hitlApproved: true,
       })
@@ -61,17 +63,18 @@ describe("archiveExperiment", () => {
     const result = await archiveExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
       approverEmail: "kevin@example.com",
     });
     expect(result.experiment_slug).toBe("exp-a");
-    expect(existsSync(join(tdd, "experiments", "F1", "exp-a"))).toBe(false);
-    expect(existsSync(join(tdd, "experiments", "F1", "_archive", "exp-a"))).toBe(true);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","exp-a"))).toBe(false);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","_archive", "exp-a"))).toBe(true);
     // outcomes.json preserved in the moved dir + marked abandoned
     const archivedOutcomes = JSON.parse(
       readFileSync(
-        join(tdd, "experiments", "F1", "_archive", "exp-a", "outcomes.json"),
+        join(tdd, "experiments", "F1", "S1","_archive", "exp-a", "outcomes.json"),
         "utf8"
       )
     );
@@ -89,6 +92,7 @@ describe("archiveExperiment", () => {
     const result = await archiveExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
       deleteLakebaseBranch: async (branchId) => {
@@ -105,6 +109,7 @@ describe("archiveExperiment", () => {
       archiveExperiment({
         tddDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         experimentSlug: "exp-a",
         hitlApproved: true,
         deleteLakebaseBranch: async () => {
@@ -114,11 +119,11 @@ describe("archiveExperiment", () => {
     ).rejects.toBeInstanceOf(ArchiveExperimentError);
 
     // Dir restored
-    expect(existsSync(join(tdd, "experiments", "F1", "exp-a"))).toBe(true);
-    expect(existsSync(join(tdd, "experiments", "F1", "_archive", "exp-a"))).toBe(false);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","exp-a"))).toBe(true);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","_archive", "exp-a"))).toBe(false);
     // Outcomes restored
     const outcomes = JSON.parse(
-      readFileSync(join(tdd, "experiments", "F1", "exp-a", "outcomes.json"), "utf8")
+      readFileSync(join(tdd, "experiments", "F1", "S1","exp-a", "outcomes.json"), "utf8")
     );
     expect(outcomes.status).toBe("running");
     // Selection-log records partial state
@@ -134,6 +139,7 @@ describe("archiveExperiment", () => {
       archiveExperiment({
         tddDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         experimentSlug: "exp-a",
         hitlApproved: true,
         deleteLakebaseBranch: async () => {
@@ -147,7 +153,7 @@ describe("archiveExperiment", () => {
 
     expect(lakebaseCalled).toBe(true);
     // Dir restored despite lakebase having been deleted
-    expect(existsSync(join(tdd, "experiments", "F1", "exp-a"))).toBe(true);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","exp-a"))).toBe(true);
     const log = readFileSync(join(tdd, "selection-log.md"), "utf8");
     expect(log).toMatch(/Lakebase branch deleted:\*\* true/);
     expect(log).toMatch(/App deployment deleted:\*\* false/);
@@ -158,17 +164,19 @@ describe("archiveExperiment", () => {
     await archiveExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
     });
     const second = await archiveExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
     });
     expect(second.archived_dir).toBe(
-      join(tdd, "experiments", "F1", "_archive", "exp-a")
+      join(tdd, "experiments", "F1", "S1","_archive", "exp-a")
     );
     const log = readFileSync(join(tdd, "selection-log.md"), "utf8");
     expect(log).toMatch(/idempotent re-run/);
@@ -179,13 +187,14 @@ describe("archiveExperiment", () => {
     const result = await archiveExperiment({
       tddDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
     });
     expect(result.lakebase_branch_deleted).toBe(false);
     expect(result.app_deployment_deleted).toBe(false);
     // Dir moved, outcomes marked
-    expect(existsSync(join(tdd, "experiments", "F1", "_archive", "exp-a"))).toBe(true);
+    expect(existsSync(join(tdd, "experiments", "F1", "S1","_archive", "exp-a"))).toBe(true);
     const log = readFileSync(join(tdd, "selection-log.md"), "utf8");
     expect(log).toMatch(/Lakebase branch deleted:\*\* false \(no callback\)/);
     expect(log).toMatch(/App deployment deleted:\*\* false \(no callback\)/);

@@ -3683,49 +3683,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative2, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative = parse(serialize(relative, options), options);
+        relative2 = parse(serialize(relative2, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative2.scheme) {
+        target.scheme = relative2.scheme;
+        target.userinfo = relative2.userinfo;
+        target.host = relative2.host;
+        target.port = relative2.port;
+        target.path = removeDotSegments(relative2.path || "");
+        target.query = relative2.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative2.userinfo !== void 0 || relative2.host !== void 0 || relative2.port !== void 0) {
+          target.userinfo = relative2.userinfo;
+          target.host = relative2.host;
+          target.port = relative2.port;
+          target.path = removeDotSegments(relative2.path || "");
+          target.query = relative2.query;
         } else {
-          if (!relative.path) {
+          if (!relative2.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative2.query !== void 0) {
+              target.query = relative2.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative2.path[0] === "/") {
+              target.path = removeDotSegments(relative2.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative2.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative2.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative2.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative2.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3733,7 +3733,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative2.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -6750,6 +6750,102 @@ function readAgentLog(opts = {}) {
   return out;
 }
 
+// scripts/tdd/log-reconcile.ts
+init_cjs_shims();
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+
+// scripts/tdd/tdd-paths.ts
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/log-reconcile.ts
+function discoverArtifacts(tddDir, featureId) {
+  const out = [];
+  const fdir = featureResolved(tddDir, featureId);
+  if (!(0, import_fs3.existsSync)(fdir)) return out;
+  const add = (abs, role, message) => {
+    if ((0, import_fs3.existsSync)(abs)) out.push({ path: (0, import_path3.relative)(tddDir, abs), role, message });
+  };
+  add((0, import_path3.join)(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
+  add((0, import_path3.join)(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
+  add((0, import_path3.join)(fdir, "test-list.json"), "test-strategist", "test-list.json");
+  add((0, import_path3.join)(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add((0, import_path3.join)(fdir, "ia.md"), "ux-designer", "ia.md");
+  const sdir = (0, import_path3.join)(fdir, "stories");
+  if ((0, import_fs3.existsSync)(sdir)) {
+    for (const s of (0, import_fs3.readdirSync)(sdir).sort()) {
+      const storyDir2 = (0, import_path3.join)(sdir, s);
+      if (!(0, import_fs3.statSync)(storyDir2).isDirectory()) continue;
+      add((0, import_path3.join)(storyDir2, "story.json"), "spec-author", `story stub ${s}`);
+      const acsDir = (0, import_path3.join)(storyDir2, "acs");
+      if ((0, import_fs3.existsSync)(acsDir)) {
+        for (const ac of (0, import_fs3.readdirSync)(acsDir).sort()) {
+          if (ac.endsWith(".json")) {
+            add((0, import_path3.join)(acsDir, ac), "spec-author", `AC ${ac.replace(/\.json$/, "")} for story ${s}`);
+          }
+        }
+      }
+      add(storyTestListJson(tddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
+    }
+  }
+  return out;
+}
+function alreadyLogged(events, relPath) {
+  return events.some((e) => {
+    if (e.event !== "artifact.written") return false;
+    const p = e.data?.path;
+    if (typeof p !== "string") return false;
+    return p === relPath || p.endsWith(`/${relPath}`) || p.includes("/") && relPath.endsWith(p);
+  });
+}
+function reconcileArtifactLog(opts) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const existing = readAgentLog({ tddDir, featureId: opts.featureId });
+  const emitted = [];
+  for (const art of discoverArtifacts(tddDir, opts.featureId)) {
+    if (alreadyLogged(existing, art.path)) continue;
+    const ev = emitAgentLogEvent(
+      {
+        role: art.role,
+        level: "info",
+        event: "artifact.written",
+        message: art.message,
+        feature_id: opts.featureId,
+        data: { path: art.path, reconciled: true }
+      },
+      { tddDir, now: opts.now }
+    );
+    existing.push(ev);
+    emitted.push(ev);
+  }
+  return emitted;
+}
+
 // scripts/tdd/agent-log.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -6757,6 +6853,9 @@ function parseArgs(argv) {
     switch (argv[i]) {
       case "--read":
         out.read = true;
+        break;
+      case "--reconcile":
+        out.reconcile = true;
         break;
       case "--role":
         out.role = argv[++i];
@@ -6806,7 +6905,7 @@ Emit or read a structured TDD-workflow agent log event (.tdd/agent-log.jsonl).
 Emit:
   lakebase-tdd-log --role <r> --level <l> --event <e> --message <m> [flags]
     --role     spec-author|ux-designer|architect-reviewer|test-strategist|
-               scrum-master|navigator|driver|product-owner
+               orchestrator|navigator|driver|product-owner
     --level    debug|info|warn|error
     --event    dotted event name (e.g. phase.start, artifact.written, gate.surfaced)
     --message  human-readable one-liner
@@ -6814,6 +6913,12 @@ Emit:
 
 Read:
   lakebase-tdd-log --read [--role <r>] [--min-level <l>] [--feature <id>] [--json]
+
+Reconcile (structural observability backstop):
+  lakebase-tdd-log --reconcile --feature <id> [--json]
+    Emit an artifact.written for every on-disk design artifact the log does not
+    already cover, so observability does not depend on a role model emitting its
+    own events. Idempotent. The orchestrator / smoke calls this after each phase.
 
 Common:
   --tdd-dir <path>   .tdd/ root (default ./.tdd)
@@ -6825,6 +6930,29 @@ function runAgentLogCli(argv) {
     process.stdout.write(`${HELP}
 `);
     return 0;
+  }
+  if (a.reconcile) {
+    if (!a.feature) {
+      process.stderr.write("Error: --reconcile requires --feature.\n");
+      return 2;
+    }
+    try {
+      const emitted = reconcileArtifactLog({ tddDir: a.tddDir, featureId: a.feature });
+      if (a.json) {
+        process.stdout.write(`${JSON.stringify(emitted)}
+`);
+      } else {
+        process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}
+`);
+        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.data?.path}
+`);
+      }
+      return 0;
+    } catch (e) {
+      process.stderr.write(`lakebase-tdd-log --reconcile: ${e.message}
+`);
+      return 3;
+    }
   }
   if (a.read) {
     const events = readAgentLog({

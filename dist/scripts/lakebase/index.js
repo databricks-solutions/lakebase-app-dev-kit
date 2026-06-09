@@ -701,6 +701,56 @@ async function deployClaudeCommands(targetDir, opts) {
   }
   return { written, skipped };
 }
+async function deployClaudeAgents(targetDir, opts) {
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+  const src = path6.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  if (!fs6.existsSync(src)) {
+    return { written: [], skipped: [] };
+  }
+  const destDir = path6.join(targetDir, ".claude", "agents");
+  fs6.mkdirSync(destDir, { recursive: true });
+  const written = [];
+  const skipped = [];
+  for (const entry of fs6.readdirSync(src)) {
+    if (!entry.endsWith(".md")) continue;
+    const relDest = path6.join(".claude", "agents", entry);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.copyFileSync(path6.join(src, entry), destPath);
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
+var PROJECT_SKILLS = [
+  "software-design-principles",
+  "lakebase-tdd-workflows",
+  "lakebase-scm-workflows",
+  "lakebase-release-workflows",
+  "databricks-lakebase",
+  "databricks-core"
+];
+async function deployClaudeSkills(targetDir, opts) {
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+  const written = [];
+  const skipped = [];
+  for (const skill of PROJECT_SKILLS) {
+    const src = path6.join(kitRoot, "skills", skill);
+    if (!fs6.existsSync(src)) continue;
+    const relDest = path6.join(".claude", "skills", skill);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs6.existsSync(destPath) && !opts?.force) {
+      skipped.push(relDest);
+      continue;
+    }
+    fs6.mkdirSync(path6.dirname(destPath), { recursive: true });
+    fs6.cpSync(src, destPath, { recursive: true });
+    written.push(relDest);
+  }
+  return { written, skipped };
+}
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
     path6.join(commonDir(opts), ".github", "workflows"),
@@ -886,12 +936,20 @@ async function scaffoldStaticAll(args) {
   report("Installing git hooks");
   const hooksInstalled = await installHooks(args.targetDir);
   let claudeCommands = [];
+  let claudeAgents = [];
+  let claudeSkills = [];
   if (!args.skipCommands) {
     report("Deploying .claude/commands/");
     const cmd = await deployClaudeCommands(args.targetDir, opts);
     claudeCommands = cmd.written;
+    report("Deploying .claude/agents/");
+    const agents = await deployClaudeAgents(args.targetDir, opts);
+    claudeAgents = agents.written;
+    report("Deploying .claude/skills/ (software-design-principles)");
+    const skills = await deployClaudeSkills(args.targetDir, opts);
+    claudeSkills = skills.written;
   }
-  return { scripts, workflows, hooksInstalled, claudeCommands };
+  return { scripts, workflows, hooksInstalled, claudeCommands, claudeAgents, claudeSkills };
 }
 async function scaffoldAll(args) {
   const report = args.report ?? (() => {
@@ -2180,6 +2238,13 @@ function gitCheckoutExistingBranch(cwd, branch) {
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
+function gitMergeBranch(cwd, branch) {
+  execFileSync3("git", ["merge", "--no-edit", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
 function gitDeleteLocalBranch(cwd, branch, force = true) {
   execFileSync3("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
@@ -2504,6 +2569,18 @@ async function resolveFeatureParent(args) {
   }
   return void 0;
 }
+async function mergePaired(args) {
+  const warnings = [];
+  const syncEnv = args.syncEnv !== false;
+  gitCheckoutExistingBranch(args.cwd, args.into);
+  let checkout;
+  if (syncEnv) {
+    checkout = await checkoutPaired({ cwd: args.cwd, branch: args.into, instance: args.instance });
+    warnings.push(...checkout.warnings);
+  }
+  gitMergeBranch(args.cwd, args.from);
+  return { merged: true, into: args.into, from: args.from, checkout, warnings };
+}
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {
@@ -2512,52 +2589,12 @@ var CONVENTION_TIER_DEFAULTS = {
   uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
   perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
 };
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createTestBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createUatBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createPerfBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent
-  });
-}
 async function createFeaturePairedBranch(args) {
   return createPairedBranch({
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
+    ...args.ttl ? { ttl: args.ttl } : { noExpiry: true },
     cwd: args.cwd,
     createGitBranch: args.createGitBranch,
     syncEnv: args.syncEnv,
@@ -3756,6 +3793,7 @@ async function queryBranchTables(args) {
 // scripts/lakebase/create-project.ts
 import * as fs18 from "fs";
 import * as path17 from "path";
+import { spawnSync } from "child_process";
 
 // scripts/lakebase/project-verify.ts
 import * as fs15 from "fs";
@@ -4638,6 +4676,38 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/agent-models.ts
+import { existsSync as existsSync17, readFileSync as readFileSync14, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10 } from "fs";
+import { dirname as dirname7, join as join18 } from "path";
+var RECOMMENDED_MODELS = {
+  "spec-author": "opus",
+  "architect-reviewer": "opus",
+  "test-strategist": "sonnet",
+  "ux-designer": "sonnet",
+  navigator: "sonnet",
+  driver: "sonnet",
+  "product-owner": "opus",
+  "release-engineer": "sonnet"
+};
+var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
+var AGENT_CONFIG_REL = join18(".lakebase", "agent-config.json");
+function buildAgentConfig(overrides) {
+  const roles = {};
+  for (const role of ALL_AGENT_ROLES) {
+    const recommended = RECOMMENDED_MODELS[role];
+    const ov = overrides?.[role];
+    const entry = { recommended };
+    if (ov && ov !== recommended) entry.override = ov;
+    roles[role] = entry;
+  }
+  return { version: 1, roles };
+}
+function writeAgentConfig(projectDir, config) {
+  const p = join18(projectDir, AGENT_CONFIG_REL);
+  mkdirSync10(dirname7(p), { recursive: true });
+  writeFileSync12(p, JSON.stringify(config, null, 2) + "\n");
+}
+
 // scripts/lakebase/create-project.ts
 async function createProject(input, progress) {
   const report = progress ?? (() => {
@@ -4804,6 +4874,34 @@ Last probe error:
       `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
     );
   }
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+      );
+    }
+  }
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path17.join(projectDir, ".lakebase");
+        fs18.mkdirSync(dir, { recursive: true });
+        fs18.writeFileSync(path17.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+      }
+      const lk = path17.join(projectDir, "scripts", "lk");
+      if (fs18.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
+      );
+    }
+  }
   const langLabels = {
     java: "Java/Spring Boot",
     kotlin: "Kotlin/Spring Boot",
@@ -4862,6 +4960,9 @@ Last probe error:
     report(`Warning: ${w}`);
   }
   report("Project created successfully!");
+  if (enableTdd) {
+    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+  }
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -5109,12 +5210,12 @@ function resolveAlembicBin(projectDir) {
   }
   return "alembic";
 }
-function runAlembic(ctx, args) {
+function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
-    const bin = resolveAlembicBin(ctx.projectDir);
+    const bin = resolveAlembicBin(projectDir);
     const child = spawn5(bin, args, {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -5147,6 +5248,44 @@ stderr: ${stderr}`
       }
     });
   });
+}
+function runAlembic(ctx, args) {
+  return spawnAlembic(ctx.projectDir, args, ctx.dsn);
+}
+async function createAlembicRevision(opts) {
+  const args = ["revision", "--rev-id", opts.revId, "-m", opts.message];
+  if (opts.autogenerate) args.push("--autogenerate");
+  const { stdout } = await spawnAlembic(opts.projectDir, args, opts.dsn);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (m) return m[1].trim();
+  for (const rel of ["migrations/versions", "alembic/versions"]) {
+    const dir = path18.join(opts.projectDir, rel);
+    if (!fs19.existsSync(dir)) continue;
+    const hit = fs19.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path18.join(dir, hit);
+  }
+  throw new SchemaMigrationError(
+    `alembic revision succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
+}
+async function listAlembicHeads(projectDir) {
+  const { stdout } = await spawnAlembic(projectDir, ["heads"]);
+  const heads = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^([0-9a-f]+)\b/);
+    if (m) heads.push(m[1]);
+  }
+  return heads;
+}
+async function mergeAlembicHeads(projectDir, message) {
+  const { stdout } = await spawnAlembic(projectDir, ["merge", "-m", message, "heads"]);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (!m) {
+    throw new SchemaMigrationError(`alembic merge heads created no file.
+stdout: ${stdout}`);
+  }
+  return m[1].trim();
 }
 async function getCurrentRevision(ctx) {
   const { stdout } = await runAlembic(ctx, ["current"]);
@@ -5359,9 +5498,55 @@ var AlembicAdapter = {
   },
   async list(args) {
     return { files: listAlembicFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent in slice 3. Alembic exposes `stamp`
   // as the equivalent operation; deferred to a follow-up.
+  async newMigration(args) {
+    try {
+      if (args.autogenerate && (!args.instance || !args.branch)) {
+        throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
+      }
+      const revId = migrationTimestamp();
+      const dsn = args.autogenerate ? await buildDsn2({
+        instance: args.instance,
+        branch: args.branch,
+        database: args.database,
+        endpointName: args.endpointName
+      }) : void 0;
+      const created = await createAlembicRevision({
+        projectDir: args.projectDir,
+        revId,
+        message: args.slug,
+        autogenerate: !!args.autogenerate,
+        dsn
+      });
+      return { status: "ok", version: revId, filename: path19.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async collapseHeads(args) {
+    try {
+      const heads = await listAlembicHeads(args.projectDir);
+      if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      if (args.dryRun) return { status: "ok", headsBefore: heads };
+      const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
+      const mergeRevision = path19.basename(created).replace(/\.py$/, "").split("_")[0];
+      return { status: "ok", headsBefore: heads, mergeRevision, path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        headsBefore: [],
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(AlembicAdapter);
 
@@ -5581,11 +5766,38 @@ var FlywayAdapter = {
   },
   async list(args) {
     return { files: listFlywayFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent. Flyway DOES support baseline at the
   // tool level, but exposing it cleanly requires plumbing flags into the
   // existing runner. Deferred to a follow-up slice; the adapter's
   // optional-protocol shape makes this additive.
+  async newMigration(args) {
+    try {
+      const dir = path21.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs21.mkdirSync(dir, { recursive: true });
+      const version = migrationTimestamp();
+      const slug = migrationSlug2(args.slug);
+      const filename = `V${version}__${slug}.sql`;
+      const full = path21.join(dir, filename);
+      if (fs21.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs21.writeFileSync(
+        full,
+        `-- V${version}: ${args.slug}
+-- Flyway migration (write your DDL/DML below).
+`,
+        "utf8"
+      );
+      return { status: "ok", version, filename, path: full };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(FlywayAdapter);
 
@@ -5605,20 +5817,20 @@ function findKnexfile(projectDir) {
   }
   return void 0;
 }
-function runKnex(ctx, args) {
+function spawnKnex(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
-    const knexfile = findKnexfile(ctx.projectDir);
+    const knexfile = findKnexfile(projectDir);
     if (!knexfile) {
       reject(
         new SchemaMigrationError(
-          `No knexfile found in ${ctx.projectDir}. Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
+          `No knexfile found in ${projectDir}. Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
         )
       );
       return;
     }
     const child = spawn7("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
-      cwd: ctx.projectDir,
-      env: { ...process.env, DATABASE_URL: ctx.dsn },
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -5651,6 +5863,18 @@ stderr: ${stderr}`
       }
     });
   });
+}
+function runKnex(ctx, args) {
+  return spawnKnex(ctx.projectDir, args, ctx.dsn);
+}
+async function createKnexMigration(opts) {
+  const { stdout } = await spawnKnex(opts.projectDir, ["migrate:make", opts.slug]);
+  const m = stdout.match(/Created Migration:\s*(\S+)/);
+  if (m) return m[1].trim();
+  throw new SchemaMigrationError(
+    `knex migrate:make succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
 }
 function parseKnexStatus(stdout) {
   const completed = [];
@@ -5829,10 +6053,26 @@ var KnexAdapter = {
   },
   async list(args) {
     return { files: listKnexFiles(args.projectDir) };
-  }
+  },
   // baseline intentionally absent. Knex has no native baseline concept;
   // omitting it advertises that correctly via the optional-capability
   // protocol so callers won't attempt the operation.
+  async newMigration(args) {
+    try {
+      const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug2(args.slug) });
+      const stem = path23.basename(created).replace(/\.(js|ts)$/, "");
+      const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
+      return { status: "ok", version, filename: path23.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
 };
 registerSchemaMigrationAdapter(KnexAdapter);
 
@@ -5999,6 +6239,25 @@ async function schemaMigrationStatus(args) {
     pending: r.pending,
     tool: adapter.id
   };
+}
+function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
+}
+function migrationSlug2(description) {
+  return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
+}
+async function collapseMigrationHeads(args) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.collapseHeads) {
+    return { status: "noop", headsBefore: [] };
+  }
+  const r = await adapter.collapseHeads({ projectDir, message: args.message, dryRun: args.dryRun });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "collapse heads failed");
+  }
+  return r;
 }
 
 // scripts/lakebase/infra-runner.ts
@@ -7083,15 +7342,112 @@ function parentForTopology(t, defaultLeaf) {
 }
 
 // scripts/lakebase/scm-doctor.ts
-import * as fs27 from "fs";
+import * as fs28 from "fs";
 import * as path27 from "path";
+
+// scripts/tdd/stale-branches.ts
+import { existsSync as existsSync29, readdirSync as readdirSync15, statSync as statSync9 } from "fs";
+import { join as join30 } from "path";
+
+// scripts/tdd/story-pipeline.ts
+import { existsSync as existsSync27, readFileSync as readFileSync16, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
+
+// scripts/tdd/tdd-paths.ts
+import * as fs27 from "fs";
+import { join as join28 } from "path";
+var featuresDir = (tdd) => join28(tdd, "features");
+var featureDir = (tdd, featureId) => join28(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => join28(featureResolved(tdd, f), "pipeline.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs27.existsSync(root)) return void 0;
+  const exact = join28(root, featureId);
+  if (fs27.existsSync(exact)) return exact;
+  const matches = fs27.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? join28(root, matches[0]) : void 0;
+}
+
+// scripts/tdd/story-pipeline.ts
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(tddDir, featureId) {
+  return pipelineJson(tddDir, featureId);
+}
+function readPipeline(tddDir, featureId) {
+  const p = pipelinePath(tddDir, featureId);
+  if (!existsSync27(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync16(p, "utf8"));
+}
+
+// scripts/tdd/spike.ts
+import { existsSync as existsSync28, mkdirSync as mkdirSync16, readdirSync as readdirSync14, readFileSync as readFileSync17, statSync as statSync8, writeFileSync as writeFileSync18 } from "fs";
+import { join as join29 } from "path";
+function listSpikes(tddDir) {
+  const root = join29(tddDir, "spikes");
+  if (!existsSync28(root)) return [];
+  const out = [];
+  for (const slug of readdirSync14(root)) {
+    const dir = join29(root, slug);
+    if (!statSync8(dir).isDirectory()) continue;
+    const branchFile = join29(dir, "branch.txt");
+    if (!existsSync28(branchFile)) continue;
+    out.push({
+      spike_slug: slug,
+      branch_id: readFileSync17(branchFile, "utf8").trim(),
+      created_at: statSync8(branchFile).birthtime.toISOString(),
+      dir
+    });
+  }
+  return out;
+}
+
+// scripts/tdd/stale-branches.ts
+function listPipelineFeatures(tddDir) {
+  const featuresDir2 = featuresDir(tddDir);
+  if (!existsSync29(featuresDir2)) return [];
+  return readdirSync15(featuresDir2).filter((d) => statSync9(join30(featuresDir2, d)).isDirectory()).filter((d) => existsSync29(join30(featuresDir2, d, "pipeline.json"))).sort();
+}
+function findStaleBranches(tddDir) {
+  const findings = [];
+  for (const featureId of listPipelineFeatures(tddDir)) {
+    const pipeline = readPipeline(tddDir, featureId);
+    for (const [storyId, story] of Object.entries(pipeline.stories)) {
+      const exp = story.experiment;
+      if (!exp) continue;
+      const storyTerminal = story.status === "done" || story.status === "discarded";
+      if (exp.status === "active" && storyTerminal) {
+        findings.push({
+          kind: "experiment",
+          slug: exp.slug,
+          feature_id: pipeline.feature_id,
+          story_id: storyId,
+          branch: exp.branch,
+          reason: `story is ${story.status} but its experiment branch is still active (merge/discard teardown likely failed); a paired Lakebase branch may be lingering`
+        });
+      }
+    }
+  }
+  for (const spike of listSpikes(tddDir)) {
+    findings.push({
+      kind: "spike",
+      slug: spike.spike_slug,
+      branch: spike.branch_id,
+      reason: "spike has a paired branch; spikes are throwaway (only their learning carries forward), tear it down to reclaim the branch"
+    });
+  }
+  return findings;
+}
+
+// scripts/lakebase/scm-doctor.ts
 var FEATURE_PREFIX = "feature/";
 var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
 function readEnv(projectDir) {
   const envPath = path27.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
-  if (!fs27.existsSync(envPath)) return out;
-  const lines = fs27.readFileSync(envPath, "utf8").split("\n");
+  if (!fs28.existsSync(envPath)) return out;
+  const lines = fs28.readFileSync(envPath, "utf8").split("\n");
   for (const line of lines) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.+?)\s*$/);
     if (m) out.set(m[1], m[2].replace(/^["']|["']$/g, ""));
@@ -7112,6 +7468,15 @@ async function runDoctor(args) {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
+  for (const stale of findStaleBranches(path27.join(projectDir, ".tdd"))) {
+    const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
+    findings.push({
+      id: `stale-${stale.kind}`,
+      severity: "warn",
+      message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
+      suggestion: stale.kind === "experiment" ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
+    });
+  }
   if (!workflowStatePresent) {
     findings.push({
       id: "no-state-file",
@@ -7221,6 +7586,18 @@ async function runDoctor(args) {
       });
     }
   }
+  try {
+    const heads = await collapseMigrationHeads({ projectDir, dryRun: true });
+    if (heads.headsBefore.length > 1) {
+      findings.push({
+        id: "multiple-migration-heads",
+        severity: "fail",
+        message: `Migrations have ${heads.headsBefore.length} heads (${heads.headsBefore.join(", ")}); a sibling-feature merge left them un-collapsed. \`upgrade head\` will refuse until they are unified.`,
+        suggestion: "lakebase-tdd-collapse-heads"
+      });
+    }
+  } catch {
+  }
   return finalize({
     projectDir,
     workflowStatePresent,
@@ -7248,7 +7625,8 @@ var FIXABLE_FINDING_IDS = [
   "env-branch-drift",
   "head-branch-drift",
   "tier-topology-mismatch",
-  "orphan-current-branch"
+  "orphan-current-branch",
+  "multiple-migration-heads"
 ];
 async function fixFinding(args) {
   if (!FIXABLE_FINDING_IDS.includes(args.findingId)) {
@@ -7342,6 +7720,17 @@ async function fixFinding(args) {
         action = `recovered orphan ${headBranch} via createFeaturePairedBranch`;
         break;
       }
+      case "multiple-migration-heads": {
+        const r = await collapseMigrationHeads({ projectDir: args.projectDir });
+        if (r.status !== "ok" || !r.mergeRevision) {
+          throw new ScmDoctorFixError(
+            `Expected to create a merge revision but got status="${r.status}".`,
+            "fix-failed"
+          );
+        }
+        action = `collapsed ${r.headsBefore.length} heads into merge revision ${r.mergeRevision} (commit it)`;
+        break;
+      }
     }
   } catch (err) {
     if (err instanceof ScmDoctorFixError) throw err;
@@ -7422,7 +7811,7 @@ function escapeShellArg5(s) {
 }
 
 // scripts/lakebase/update-commands.ts
-import * as fs28 from "fs";
+import * as fs29 from "fs";
 import * as path28 from "path";
 var COMMAND_HOOK_FILE_PATTERN = /\.(pre|post)-hook\.md$/;
 function findKitCommandsDir(start) {
@@ -7436,7 +7825,7 @@ function findKitCommandsDir(start) {
       ".claude",
       "commands"
     );
-    if (fs28.existsSync(candidate)) return candidate;
+    if (fs29.existsSync(candidate)) return candidate;
     const parent = path28.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7451,7 +7840,7 @@ function readKitVersion(kitCommandsDir) {
     dir = path28.dirname(dir);
   }
   try {
-    const raw = fs28.readFileSync(path28.join(dir, "package.json"), "utf-8");
+    const raw = fs29.readFileSync(path28.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7467,19 +7856,19 @@ function updateCommands(args) {
   const kitCommandsDir = args.kitDir ? path28.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir(here);
   const dryRun = args.dryRun === true;
   const force = args.force !== false;
-  const templateFiles = fs28.existsSync(kitCommandsDir) ? fs28.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs28.existsSync(projectCommandsDir)) {
-    fs28.mkdirSync(projectCommandsDir, { recursive: true });
+  const templateFiles = fs29.existsSync(kitCommandsDir) ? fs29.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN.test(f)) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs29.existsSync(projectCommandsDir)) {
+    fs29.mkdirSync(projectCommandsDir, { recursive: true });
   }
   const version = readKitVersion(kitCommandsDir);
   const files = [];
   for (const name of templateFiles) {
     const projectPath2 = path28.join(projectCommandsDir, name);
     const templatePath = path28.join(kitCommandsDir, name);
-    const templateRaw = fs28.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs29.readFileSync(templatePath, "utf-8");
     const desired = applyCommandPlaceholders(templateRaw, version);
-    const existed = fs28.existsSync(projectPath2);
-    const current = existed ? fs28.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs29.existsSync(projectPath2);
+    const current = existed ? fs29.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -7491,7 +7880,7 @@ function updateCommands(args) {
       outcome = "updated";
     }
     if (!dryRun && (outcome === "added" || outcome === "updated")) {
-      fs28.writeFileSync(projectPath2, desired);
+      fs29.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -7507,7 +7896,7 @@ function updateCommands(args) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-import * as fs29 from "fs";
+import * as fs30 from "fs";
 import * as path29 from "path";
 function findKitTemplatesDir(start) {
   let dir = start;
@@ -7520,7 +7909,7 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs29.existsSync(candidate)) return candidate;
+    if (fs30.existsSync(candidate)) return candidate;
     const parent = path29.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7559,20 +7948,20 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs30.existsSync(kitWorkflowsDir) ? fs30.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs30.existsSync(projectWorkflowsDir) ? fs30.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path29.join(projectWorkflowsDir, name);
     const templatePath = path29.join(kitWorkflowsDir, name);
-    if (!fs29.existsSync(projectPath2)) {
+    if (!fs30.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs29.readFileSync(projectPath2, "utf8");
-    const templateContent = fs29.readFileSync(templatePath, "utf8");
+    const projectContent = fs30.readFileSync(projectPath2, "utf8");
+    const templateContent = fs30.readFileSync(templatePath, "utf8");
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -7606,7 +7995,7 @@ function readKitVersion2(kitWorkflowsDir) {
     dir = path29.dirname(dir);
   }
   try {
-    const raw = fs29.readFileSync(path29.join(dir, "package.json"), "utf-8");
+    const raw = fs30.readFileSync(path29.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7631,7 +8020,7 @@ function findKitCommandsDir2(start) {
       ".claude",
       "commands"
     );
-    if (fs29.existsSync(candidate)) return candidate;
+    if (fs30.existsSync(candidate)) return candidate;
     const parent = path29.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -7649,20 +8038,20 @@ function detectCommandDrift(args) {
   const here = path29.dirname(new URL(import.meta.url).pathname);
   const kitCommandsDir = args.kitDir ? path29.join(args.kitDir, "templates", "project", "common", ".claude", "commands") : findKitCommandsDir2(here);
   const kitVersion2 = readKitVersionFromCommandsDir(kitCommandsDir);
-  const templateFiles = fs29.existsSync(kitCommandsDir) ? fs29.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
-  const projectFiles = fs29.existsSync(projectCommandsDir) ? fs29.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const templateFiles = fs30.existsSync(kitCommandsDir) ? fs30.readdirSync(kitCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
+  const projectFiles = fs30.existsSync(projectCommandsDir) ? fs30.readdirSync(projectCommandsDir).filter((f) => f.endsWith(".md") && !COMMAND_HOOK_FILE_PATTERN2.test(f)) : [];
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
     const projectPath2 = path29.join(projectCommandsDir, name);
     const templatePath = path29.join(kitCommandsDir, name);
-    const templateRaw = fs29.readFileSync(templatePath, "utf8");
-    if (!fs29.existsSync(projectPath2)) {
+    const templateRaw = fs30.readFileSync(templatePath, "utf8");
+    if (!fs30.existsSync(projectPath2)) {
       files.push({ name, status: "missing", kit_version: kitVersion2 });
       continue;
     }
-    const projectContent = fs29.readFileSync(projectPath2, "utf8");
+    const projectContent = fs30.readFileSync(projectPath2, "utf8");
     const pinned = parsePinnedVersion(projectContent);
     const versionForCompare = pinned ?? kitVersion2;
     const templateContent = applyCommandPlaceholders2(templateRaw, versionForCompare);
@@ -7703,7 +8092,7 @@ function readKitVersionFromCommandsDir(kitCommandsDir) {
     dir = path29.dirname(dir);
   }
   try {
-    const raw = fs29.readFileSync(path29.join(dir, "package.json"), "utf-8");
+    const raw = fs30.readFileSync(path29.join(dir, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -7737,10 +8126,10 @@ function updateWorkflows(args) {
   const substitute = args.substitute !== false;
   const dryRun = args.dryRun === true;
   const pruneExtras = args.pruneExtras === true;
-  const templateFiles = fs29.existsSync(kitWorkflowsDir) ? fs29.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs29.existsSync(projectWorkflowsDir) ? fs29.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  if (!dryRun && templateFiles.length > 0 && !fs29.existsSync(projectWorkflowsDir)) {
-    fs29.mkdirSync(projectWorkflowsDir, { recursive: true });
+  const templateFiles = fs30.existsSync(kitWorkflowsDir) ? fs30.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs30.existsSync(projectWorkflowsDir) ? fs30.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  if (!dryRun && templateFiles.length > 0 && !fs30.existsSync(projectWorkflowsDir)) {
+    fs30.mkdirSync(projectWorkflowsDir, { recursive: true });
   }
   const version = substitute ? readKitVersion2(kitWorkflowsDir) : "";
   const seen = /* @__PURE__ */ new Set();
@@ -7749,10 +8138,10 @@ function updateWorkflows(args) {
     seen.add(name);
     const projectPath2 = path29.join(projectWorkflowsDir, name);
     const templatePath = path29.join(kitWorkflowsDir, name);
-    const templateRaw = fs29.readFileSync(templatePath, "utf-8");
+    const templateRaw = fs30.readFileSync(templatePath, "utf-8");
     const desired = substitute ? applyPlaceholders(templateRaw, version) : templateRaw;
-    const existed = fs29.existsSync(projectPath2);
-    const current = existed ? fs29.readFileSync(projectPath2, "utf-8") : "";
+    const existed = fs30.existsSync(projectPath2);
+    const current = existed ? fs30.readFileSync(projectPath2, "utf-8") : "";
     let outcome;
     if (!existed) {
       outcome = "added";
@@ -7762,7 +8151,7 @@ function updateWorkflows(args) {
       outcome = "updated";
     }
     if (!dryRun && outcome !== "unchanged") {
-      fs29.writeFileSync(projectPath2, desired);
+      fs30.writeFileSync(projectPath2, desired);
     }
     files.push({ name, outcome });
   }
@@ -7771,7 +8160,7 @@ function updateWorkflows(args) {
       if (seen.has(name)) continue;
       const projectPath2 = path29.join(projectWorkflowsDir, name);
       if (!dryRun) {
-        fs29.unlinkSync(projectPath2);
+        fs30.unlinkSync(projectPath2);
       }
       files.push({ name, outcome: "removed" });
     }
@@ -7907,6 +8296,7 @@ export {
   LakebaseProjectError,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
+  PROJECT_SKILLS,
   SCM_STATES,
   STATE_FILE_REL,
   SchemaMigrationError,
@@ -7937,24 +8327,22 @@ export {
   claimFeatureBranch,
   clearRetentionCache,
   createBranch,
-  createFeatureBranch,
   createFeaturePairedBranch,
   createLakebaseProject,
   createLongRunningBranch,
   createPairedBranch,
-  createPerfBranch,
   createPerfPairedBranch,
   createProject,
-  createTestBranch,
   createTestPairedBranch,
-  createUatBranch,
   createUatPairedBranch,
   cutBackup,
   deleteAppEndpoint,
   deleteBranch,
   deleteLakebaseProject,
   deletePairedBranch,
+  deployClaudeAgents,
   deployClaudeCommands,
+  deployClaudeSkills,
   deployDeployTargets,
   deployEnv,
   deployEnvExample,
@@ -8019,6 +8407,7 @@ export {
   listBranches,
   listSchemaMigrations,
   mergeFeature,
+  mergePaired,
   minLakebaseTtl,
   mintCredential,
   normalizeHost,

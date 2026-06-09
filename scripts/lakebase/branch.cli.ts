@@ -18,10 +18,6 @@ import {
 import { createBranch } from "./branch-create.js";
 import { deleteBranch } from "./branch-delete.js";
 import {
-  createFeatureBranch,
-  createTestBranch,
-  createUatBranch,
-  createPerfBranch,
   createFeaturePairedBranch,
   createTestPairedBranch,
   createUatPairedBranch,
@@ -289,35 +285,10 @@ async function main(): Promise<number> {
         return 0;
       }
 
-      case "create-tier": {
-        const tier = args.positional as Tier | undefined;
-        if (!tier || !["feature", "test", "uat", "perf"].includes(tier)) {
-          process.stderr.write(
-            `create-tier: expected one of feature|test|uat|perf as the first positional arg.\n`
-          );
-          return 2;
-        }
-        if (!requireFlags("create-tier", args, ["instance", "branch"]))
-          return 2;
-        const common = {
-          instance: args.instance!,
-          host: args.host,
-          branch: args.branch!,
-          parentBranch: args.parentBranch,
-          ttl: args.ttl,
-          strictParent: args.strictParent,
-        };
-        const result =
-          tier === "feature"
-            ? await createFeatureBranch(common)
-            : tier === "test"
-              ? await createTestBranch(common)
-              : tier === "uat"
-                ? await createUatBranch(common)
-                : await createPerfBranch(common);
-        printJson(result, pretty);
-        return 0;
-      }
+      // NOTE: the unpaired `create-tier` subcommand was DELETED. It created a
+      // Lakebase branch with no git branch + no .env sync. Use
+      // `create-paired-tier` (below): every branch is paired through the
+      // substrate. There is no unpaired tier-create path by design.
 
       case "create-paired-tier": {
         // Atomic paired (Lakebase + git + .env) + convention TTL per tier.

@@ -18,6 +18,7 @@ const FEATURE_ID = "F1-checkout";
 
 const SAMPLE_PLAN: ExperimentPlan = {
   feature_id: FEATURE_ID,
+  story_id: "S1",
   N: 1,
   mode: "N=1",
   strategies: [
@@ -51,7 +52,7 @@ function stageN1Fixture() {
   writePlan(tdd, SAMPLE_PLAN);
   recordPlan(tdd, SAMPLE_PLAN, "kevin.hartman@databricks.com");
 
-  const expDir = join(tdd, "experiments", FEATURE_ID, "checkout");
+  const expDir = join(tdd, "experiments", FEATURE_ID, "S1", "checkout");
   mkdirSync(expDir, { recursive: true });
   writeFileSync(join(expDir, "branch.txt"), "br-feat-add-orders");
   writeFileSync(join(expDir, "notes.md"), "# checkout\n");
@@ -90,8 +91,10 @@ describe("feature-status N=1 snapshot", () => {
     expect(snapshot.feature_id).toBe(FEATURE_ID);
     expect(snapshot.current_workflow_phase).toBe("implementation");
     expect(snapshot.current_workflow_pointer?.feature_id).toBe(FEATURE_ID);
-    expect(snapshot.plan?.mode).toBe("N=1");
-    expect(snapshot.plan?.N).toBe(1);
+    expect(snapshot.plans).toHaveLength(1);
+    expect(snapshot.plans[0].story_id).toBe("S1");
+    expect(snapshot.plans[0].plan.mode).toBe("N=1");
+    expect(snapshot.plans[0].plan.N).toBe(1);
 
     expect(snapshot.test_list?.total).toBe(5);
     expect(snapshot.test_list?.by_status.green).toBe(1);
@@ -119,7 +122,7 @@ describe("feature-status N=1 snapshot", () => {
     const text = renderFeatureStatus(getFeatureStatus(tdd, FEATURE_ID));
     expect(text).toMatch(/Feature: F1-checkout/);
     expect(text).toMatch(/Phase: implementation \(active workflow\)/);
-    expect(text).toMatch(/Plan: N=1 \(N=1, 1 strategy\)/);
+    expect(text).toMatch(/Plan \[S1\]: N=1 \(N=1, 1 strategy\)/);
     expect(text).toMatch(/Test list: 2\/5 \(40%\)/);
     expect(text).toMatch(/Experiments \(1\)/);
     expect(text).toMatch(/checkout\s+branch=br-feat-add-orders/);
@@ -130,7 +133,7 @@ describe("feature-status N=1 snapshot", () => {
   it("handles an empty .tdd/ tree (no plan, no experiments, no log) gracefully", () => {
     const snapshot = getFeatureStatus(tdd, FEATURE_ID);
     expect(snapshot.feature_id).toBe(FEATURE_ID);
-    expect(snapshot.plan).toBeNull();
+    expect(snapshot.plans).toEqual([]);
     expect(snapshot.test_list).toBeNull();
     expect(snapshot.experiments).toEqual([]);
     expect(snapshot.selection_log_recent).toEqual([]);
@@ -158,7 +161,7 @@ const TOP_LEVEL_KEYS = [
   "feature_id",
   "current_workflow_phase",
   "current_workflow_pointer",
-  "plan",
+  "plans",
   "test_list",
   "experiments",
   "selection_log_recent",
@@ -177,13 +180,14 @@ const POINTER_KEYS = [
   "experiment_id",
 ] as const;
 
-const PLAN_KEYS = ["feature_id", "N", "mode", "strategies", "budget", "rationale"] as const;
+const PLAN_KEYS = ["feature_id", "story_id", "N", "mode", "strategies", "budget", "rationale"] as const;
 const BUDGET_KEYS = ["concurrent_branches", "wall_clock_minutes", "agent_pairs"] as const;
 
 const TEST_LIST_KEYS = ["total", "by_status", "completion_pct"] as const;
 const TEST_LIST_STATUS_KEYS = ["pending", "red", "green", "refactored", "skipped"] as const;
 
 const EXPERIMENT_KEYS = [
+  "story_id",
   "slug",
   "branch_id",
   "status",
@@ -211,10 +215,11 @@ describe("feature-status JSON payload: stable schema", () => {
 
   it("plan object + nested budget object have exactly the documented keys", () => {
     stageN1Fixture();
-    const { plan } = getFeatureStatus(tdd, FEATURE_ID);
-    expect(plan).not.toBeNull();
-    expect(Object.keys(plan!).sort()).toEqual([...PLAN_KEYS].sort());
-    expect(Object.keys(plan!.budget).sort()).toEqual([...BUDGET_KEYS].sort());
+    const { plans } = getFeatureStatus(tdd, FEATURE_ID);
+    expect(plans).toHaveLength(1);
+    const plan = plans[0].plan;
+    expect(Object.keys(plan).sort()).toEqual([...PLAN_KEYS].sort());
+    expect(Object.keys(plan.budget).sort()).toEqual([...BUDGET_KEYS].sort());
   });
 
   it("test_list object + nested by_status have exactly the documented keys", () => {
@@ -250,8 +255,8 @@ describe("feature-status JSON payload: stable schema", () => {
     const s = getFeatureStatus(tdd, FEATURE_ID);
     expect(typeof s.feature_id).toBe("string");
     expect(typeof s.current_workflow_phase).toBe("string");
-    expect(typeof s.plan?.N).toBe("number");
-    expect(typeof s.plan?.mode).toBe("string");
+    expect(typeof s.plans[0].plan.N).toBe("number");
+    expect(typeof s.plans[0].plan.mode).toBe("string");
     expect(typeof s.test_list?.total).toBe("number");
     expect(typeof s.test_list?.completion_pct).toBe("number");
     for (const exp of s.experiments) {
@@ -271,6 +276,7 @@ describe("feature-status JSON payload: stable schema", () => {
 
 const N2_PLAN: ExperimentPlan = {
   feature_id: FEATURE_ID,
+  story_id: "S1",
   N: 2,
   mode: "N>=2",
   strategies: [
@@ -291,7 +297,7 @@ function stageExperiment(
   },
   cycleCount: number
 ) {
-  const dir = join(tdd, "experiments", FEATURE_ID, slug);
+  const dir = join(tdd, "experiments", FEATURE_ID, "S1", slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), branchId);
   writeFileSync(join(dir, "notes.md"), `# ${slug}\n`);
@@ -330,9 +336,10 @@ describe("feature-status N≥2 race snapshot", () => {
     stageN2Fixture();
     const snapshot = getFeatureStatus(tdd, FEATURE_ID);
 
-    expect(snapshot.plan?.mode).toBe("N>=2");
-    expect(snapshot.plan?.N).toBe(2);
-    expect(snapshot.plan?.strategies).toHaveLength(2);
+    expect(snapshot.plans).toHaveLength(1);
+    expect(snapshot.plans[0].plan.mode).toBe("N>=2");
+    expect(snapshot.plans[0].plan.N).toBe(2);
+    expect(snapshot.plans[0].plan.strategies).toHaveLength(2);
 
     expect(snapshot.experiments).toHaveLength(2);
     const bySlug = Object.fromEntries(snapshot.experiments.map((e) => [e.slug, e]));
@@ -347,7 +354,7 @@ describe("feature-status N≥2 race snapshot", () => {
   it("renderer shows the plan as N>=2 and lists both experiment rows", () => {
     stageN2Fixture();
     const text = renderFeatureStatus(getFeatureStatus(tdd, FEATURE_ID));
-    expect(text).toMatch(/Plan: N>=2 \(N=2, 2 strategies\)/);
+    expect(text).toMatch(/Plan \[S1\]: N>=2 \(N=2, 2 strategies\)/);
     expect(text).toMatch(/Experiments \(2\)/);
     expect(text).toMatch(/exp-postgres-arrays\s+branch=br-exp-pg-arrays/);
     expect(text).toMatch(/exp-json-blob\s+branch=br-exp-json-blob/);

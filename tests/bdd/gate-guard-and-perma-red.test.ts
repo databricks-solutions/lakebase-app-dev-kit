@@ -178,7 +178,7 @@ describe("analyzeForGate transition_blockers integration", () => {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e", ac_id: "AC-E2E", status: "pending" }],
     });
-    const analysis = analyzeForGate(tddDir, "F1", { projectDir });
+    const analysis = analyzeForGate(tddDir, "F1", "S1", { projectDir });
     expect(analysis.transition_blockers).toHaveLength(1);
     expect(analysis.transition_blockers[0].kind).toBe("e2e-without-playwright");
   });
@@ -189,7 +189,7 @@ describe("analyzeForGate transition_blockers integration", () => {
       feature_id: "F1",
       items: [{ id: "T1", description: "api", ac_id: "AC1", status: "pending" }],
     });
-    const analysis = analyzeForGate(tddDir, "F1", { projectDir });
+    const analysis = analyzeForGate(tddDir, "F1", "S1", { projectDir });
     expect(analysis.transition_blockers).toEqual([]);
   });
 
@@ -202,7 +202,7 @@ describe("analyzeForGate transition_blockers integration", () => {
       items: [{ id: "T1", description: "e2e", ac_id: "AC-E2E", status: "pending" }],
     });
     fs.writeFileSync(path.join(projectDir, "playwright.config.ts"), "// stub\n");
-    const analysis = analyzeForGate(tddDir, "F1");
+    const analysis = analyzeForGate(tddDir, "F1", "S1");
     expect(analysis.transition_blockers).toEqual([]);
   });
 });

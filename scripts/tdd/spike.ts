@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
-import { createFeatureBranch } from "../lakebase/convention-branches";
-import { deleteBranch } from "../lakebase/branch-delete";
+import { createPairedBranch, deletePairedBranch } from "../lakebase/paired-branch";
 import type { BranchLookupOpts, LakebaseBranchInfo } from "../lakebase/branch-utils";
 
 function branchIdOf(info: LakebaseBranchInfo): string {
@@ -10,8 +9,24 @@ function branchIdOf(info: LakebaseBranchInfo): string {
   return leaf;
 }
 
+/**
+ * Default spike notes.md content. When `forFeature` is given, a `for_feature:`
+ * frontmatter marker is added so the note is picked up by collectSpikeInputs at
+ * that feature's design-spec gate (the throwaway code is dropped; only the
+ * learning carries forward).
+ */
+export function spikeNotes(spikeSlug: string, forFeature?: string): string {
+  const frontmatter = forFeature ? `---\nfor_feature: ${forFeature}\n---\n` : "";
+  const intro = forFeature
+    ? `Throwaway spike for ${forFeature}.`
+    : `Throwaway spike.`;
+  return `${frontmatter}# ${spikeSlug}\n\n${intro} Code is **not** promoted as-is. Capture the learning here before deleting the branch.\n`;
+}
+
 export interface CutSpikeArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git + .env). Required: the spike branch is PAIRED. */
+  projectDir: string;
   spikeSlug: string;
   branch: string;
   parentBranch?: string;
@@ -27,9 +42,18 @@ export interface SpikeRecord {
 }
 
 export async function cutSpike(args: CutSpikeArgs): Promise<SpikeRecord> {
-  const { tddDir, spikeSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
-  const branchInfo = await createFeatureBranch({ ...lookup, branch, parentBranch, ttl });
-  const branchId = branchIdOf(branchInfo);
+  const { tddDir, projectDir, spikeSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
+  // PAIRED cut through the substrate: Lakebase branch + git branch + .env sync.
+  const paired = await createPairedBranch({
+    instance: lookup.instance,
+    branch,
+    parentBranch,
+    cwd: projectDir,
+    createGitBranch: true,
+    syncEnv: true,
+    ...(ttl ? { ttl } : { noExpiry: true }),
+  });
+  const branchId = branchIdOf(paired.branch);
 
   const dir = join(tddDir, "spikes", spikeSlug);
   mkdirSync(dir, { recursive: true });
@@ -68,18 +92,21 @@ export function listSpikes(tddDir: string): SpikeRecord[] {
 
 export interface DeleteSpikeArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git). Required when deleteBranchToo: the teardown is PAIRED. */
+  projectDir: string;
   spikeSlug: string;
-  /** Delete the Lakebase branch as well. Default true for spikes (they're throwaway by definition). */
+  /** Delete the Lakebase branch + git branch. Default true for spikes (they're throwaway by definition). */
   deleteBranchToo?: boolean;
 }
 
 export async function deleteSpike(args: DeleteSpikeArgs): Promise<void> {
-  const { tddDir, spikeSlug, deleteBranchToo = true, ...lookup } = args;
+  const { tddDir, projectDir, spikeSlug, deleteBranchToo = true, ...lookup } = args;
   const dir = join(tddDir, "spikes", spikeSlug);
   if (!existsSync(dir)) throw new Error(`spike ${spikeSlug} not found at ${dir}`);
   if (deleteBranchToo) {
     const branchId = readFileSync(join(dir, "branch.txt"), "utf8").trim();
-    await deleteBranch({ ...lookup, branch: branchId });
+    // PAIRED teardown: Lakebase branch + git branch (local + remote). Best-effort.
+    await deletePairedBranch({ instance: lookup.instance, branch: branchId, cwd: projectDir });
   }
   // Notes preserved on disk so the learning survives the branch teardown.
 }

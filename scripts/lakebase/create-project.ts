@@ -7,6 +7,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { spawnSync } from "node:child_process";
 import { writeEnvFile } from "./env-file.js";
 import { verifyProject, verifyHooks, verifyWorkflows } from "./project-verify.js";
 import { createRepo, getRepoFullName, getCurrentUser } from "../github/repo.js";
@@ -28,6 +29,8 @@ import {
   initWorkflowState,
   writeWorkflowState,
 } from "./scm-workflow-state.js";
+import type { AgentRole } from "../tdd/agent-log.js";
+import { buildAgentConfig, writeAgentConfig } from "../tdd/agent-models.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -99,6 +102,15 @@ export interface CreateProjectArgs {
    * consumers that only use the substrate library.
    */
   skipCommands?: boolean;
+  /**
+   * Per-role model overrides for the TDD-workflow agents (FEIP-7510). Each role
+   * carries a strongly-recommended model in its definition; this is where the
+   * HIL overrides it for THIS project, asked at setup. Keyed by role name
+   * (e.g. { "driver": "haiku", "spec-author": "opus" }). Omitted/empty means
+   * every role uses its recommended model. Persisted to
+   * .lakebase/agent-config.json (recommended seeded from the role defs).
+   */
+  agentModels?: Partial<Record<AgentRole, string>>;
 }
 
 export interface CreateProjectResult {
@@ -341,6 +353,50 @@ export async function createProject(
     );
   }
 
+  // ── Step 7d: per-role agent model config (FEIP-7510) ──────────
+  // Seed .lakebase/agent-config.json with each TDD-workflow role's
+  // strongly-recommended model (from its definition) plus any HIL overrides
+  // chosen at setup. Written before the initial commit so it is tracked, like
+  // workflow-state.json. The orchestrator resolves the per-role model from
+  // this file (override -> recommended -> inherit). Best-effort: a failure is
+  // a warning, the recommended models still apply by default.
+  if (enableTdd) {
+    try {
+      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+    } catch (err) {
+      warnings.push(
+        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
+      );
+    }
+  }
+
+  // ── Step 7e: pin the kit ref + warm the fast-CLI cache (npx-tax kill) ──
+  // The scaffolded scripts/lk runs kit CLIs via `node dist/...` (~0.09s) instead
+  // of npx-from-github (~3.5s/call, re-resolves the ref every time). lk resolves
+  // the kit per ref into a shared cache. Record the ref this project was
+  // scaffolded with WHEN PINNED (LAKEBASE_KIT_REF) so lk resolves it from a file
+  // (a claude -p agent's bash does not inherit env); unset means lk defaults to
+  // "main", matching today's npx default. Then warm the cache once so the first
+  // workflow call is already fast. Best-effort: lk installs lazily on first use.
+  if (enableTdd) {
+    try {
+      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+      if (kitRef) {
+        const dir = path.join(projectDir, ".lakebase");
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "kit-ref"), `${kitRef}\n`, "utf8");
+      }
+      const lk = path.join(projectDir, "scripts", "lk");
+      if (fs.existsSync(lk)) {
+        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 180000 });
+      }
+    } catch (err) {
+      warnings.push(
+        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`,
+      );
+    }
+  }
+
   // ── Step 8: Initial commit (+ push when GitHub configured) ────
   const langLabels: Record<string, string> = {
     java: "Java/Spring Boot",
@@ -420,6 +476,11 @@ export async function createProject(
   }
 
   report("Project created successfully!");
+  if (enableTdd) {
+    // Point the user at the convenient workflow launcher (scaffolded into
+    // scripts/tdd.sh): it drives the deterministic orchestrator.
+    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+  }
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : undefined,

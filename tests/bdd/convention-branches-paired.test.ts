@@ -1,10 +1,15 @@
 // Hermetic coverage for the per-tier-type PAIRED helpers.
 //
-// createFeaturePairedBranch / createTestPairedBranch / createUatPairedBranch /
-// createPerfPairedBranch must forward the convention TTL + parent into
-// createPairedBranch. Verifies the contract that fixes the FEIP-7422 smoke
-// gap: feature branches must get the 30-day TTL, not the legacy no_expiry
-// default from createPairedBranch.
+// createTestPairedBranch / createUatPairedBranch / createPerfPairedBranch
+// forward their convention TTL + parent into createPairedBranch.
+//
+// FEATURE branches are the exception: they are created NON-EXPIRING (noExpiry,
+// no TTL). A feature branch hosts the per-story experiment child branches
+// (FEIP-7566), and Lakebase forbids an expiring branch from having children
+// ("Branches with an expiration date cannot have child branches", surfaced by
+// the live FEIP-7422 smoke). Feature branches are reaped by the SCM workflow
+// (abandon / merge / doctor call deleteBranch), not by TTL, deletion of a
+// no-expiry branch through the substrate is confirmed.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { KIT_TIMEOUTS, formatLakebaseTtl } from "../../scripts/lakebase/kit-config.js";
@@ -35,20 +40,31 @@ beforeEach(() => {
 });
 
 describe("convention-branches paired: defaults", () => {
-  it("createFeaturePairedBranch forwards 30d TTL + parent=staging + cwd", async () => {
+  it("createFeaturePairedBranch forwards noExpiry (NO ttl) + parent=staging + cwd", async () => {
     await conv.createFeaturePairedBranch({
       instance: "p",
       branch: "feature/x",
       cwd: "/some/project",
     });
     expect(mockCreatePairedBranch).toHaveBeenCalledTimes(1);
-    expect(mockCreatePairedBranch.mock.calls[0][0]).toMatchObject({
+    const call = mockCreatePairedBranch.mock.calls[0][0];
+    expect(call).toMatchObject({
       instance: "p",
       branch: "feature/x",
       parentBranch: "staging",
-      ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs),
+      noExpiry: true,
       cwd: "/some/project",
     });
+    // Must NOT carry a TTL: an expiring feature branch cannot parent the
+    // per-story experiment branches.
+    expect(call.ttl).toBeUndefined();
+  });
+
+  it("createFeaturePairedBranch still honors an explicit ttl override (noExpiry then omitted)", async () => {
+    await conv.createFeaturePairedBranch({ instance: "p", branch: "feature/y", ttl: "3600s", cwd: "/some/project" });
+    const call = mockCreatePairedBranch.mock.calls[0][0];
+    expect(call.ttl).toBe("3600s");
+    expect(call.noExpiry).toBeUndefined();
   });
 
   it("createTestPairedBranch forwards 14d test TTL + parent=staging", async () => {
@@ -87,11 +103,14 @@ describe("convention-branches paired: defaults", () => {
     });
   });
 
-  it("crucially: NONE of the paired helpers set noExpiry (would silently create a tier)", async () => {
+  it("only the FEATURE helper sets noExpiry; test/uat/perf stay finite-TTL", async () => {
+    // Feature branches are non-expiring (they parent per-story experiments).
     await conv.createFeaturePairedBranch({ instance: "p", branch: "x", cwd: "/x" });
-    expect(mockCreatePairedBranch.mock.calls[0][0].noExpiry).toBeUndefined();
+    expect(mockCreatePairedBranch.mock.calls[0][0].noExpiry).toBe(true);
+    expect(mockCreatePairedBranch.mock.calls[0][0].ttl).toBeUndefined();
     mockCreatePairedBranch.mockClear();
 
+    // test / uat / perf are finite-lifetime tiers: TTL, never noExpiry.
     await conv.createTestPairedBranch({ instance: "p", branch: "x", cwd: "/x" });
     expect(mockCreatePairedBranch.mock.calls[0][0].noExpiry).toBeUndefined();
     mockCreatePairedBranch.mockClear();

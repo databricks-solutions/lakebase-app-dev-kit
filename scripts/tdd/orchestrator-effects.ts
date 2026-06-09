@@ -1,0 +1,509 @@
+// Real DriveEffects (deterministic-driver phase 3b: the act half).
+//
+// Maps each WorkflowAction to the concrete commands that carry it out, behind a
+// CommandRunner seam so the mapping (commandsForAction) is pure + hermetically
+// testable while the execution is injected. The driver loop (runDriver) calls
+// perform(action); perform asks commandsForAction for the command list and runs
+// each through the runner. readState rebuilds a DriveState from disk via
+// deriveDriveState + diskArtifactProbe + readDriveContext.
+//
+// Command kinds (the runner interprets each):
+//   - "claude":    claude -p "<task>" --agent <role> --model <m> --strict-mcp-config
+//   - "cli":       a kit CLI invocation (lakebase-tdd-pipeline / -experiment / etc.)
+//   - "set-phase": write workflow-state.json `phase` (no CLI owns the coarse phase)
+//
+// The live runner (in the lakebase-tdd-drive CLI) spawns these; the migration
+// create + head-collapse + per-story experiment effects all surface here, in
+// code, plus deterministic per-action logging via the loop's onAction hook.
+
+import * as fs from "node:fs";
+import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
+import type { DriveEffects } from "./orchestrator-run.js";
+import { deriveDriveState } from "./orchestrator-derive.js";
+import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
+import { readPipeline } from "./story-pipeline.js";
+import { storyJson, designGuideJson } from "./tdd-paths.js";
+import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+
+export type DriveCommand =
+  // resumeKey: when set, the runner resumes this role's Claude session across
+  // its invocations (warm context + prompt cache) instead of a cold respawn.
+  // Keyed by role, scoped to one feature drive (the runner's lifetime).
+  // `replay` carries the turn identity (sprint mode / story) so the runner can,
+  // in fast-forward replay mode, copy this design turn's recorded artifact
+  // instead of spawning the model. Ignored by the normal (live) runner.
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; replay?: { mode?: string; story?: string } }
+  | { kind: "cli"; bin: string; args: string[] }
+  | { kind: "set-phase"; phase: string }
+  // Deterministic sprint-backlog projection (the ONE writer): after the PO
+  // commits its requests, project backlog.json from the on-disk feature-request
+  // set + the Architect's estimates. Handled in-process by the runner (no CLI),
+  // mirroring set-phase. See syncBacklog in tdd-paths.
+  | { kind: "sync-backlog"; sprint: string };
+
+export interface CommandRunner {
+  run(cmd: DriveCommand): Promise<void>;
+}
+
+export interface DriveEffectsConfig {
+  projectDir: string;
+  tddDir: string;
+  featureId: string;
+  runner: CommandRunner;
+  /** Resolve a role's model (per-project override -> recommended -> inherit). */
+  modelForRole(role: string): string;
+  /** Approver name for headless gate approvals (the Human Proxy). */
+  approver?: string;
+  /** Sprint name, threaded to the sprint plan gate in the planning phase. */
+  sprintName?: string;
+  /** Deploy target for the deploy action (e.g. "local"). */
+  deployTarget?: string;
+  /** Lakebase instance id (the Lakebase project id), threaded to the experiment
+   *  branch ops. The experiment CLI requires it; resolved from SCM state. */
+  instance?: string;
+  /** The feature's git + Lakebase branch (the PARENT a per-story experiment is
+   *  cut off, and merged back into). Resolved from SCM state at drive start. */
+  featureBranch?: string;
+  /** UI track on (LAKEBASE_TDD_UI=1 / a design-brief.md is part of intake): the
+   *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
+   *  stories, not API-only, when proposing + breaking down. */
+  uiTrack?: boolean;
+  onAction?(action: WorkflowAction, iteration: number): void;
+}
+
+/** Appended to the Spec Author's propose/breakdown tasks when the UI track is
+ *  on, so the proposal + story breakdown account for user-facing E2E stories
+ *  (the design lane's `layer: "E2E"` work), not just API surface. */
+const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
+const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
+const UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
+
+// Appended to every role spawn: the artifacts ARE the deliverable; free-text
+// response tokens are pure latency. Keep the model from narrating a plan,
+// summarizing what it did, or printing tables/rationale to stdout (all of that
+// is wasted output, the slowest part of each turn). Structured logging still
+// goes through the lakebase-tdd-log CLI, not stdout prose.
+const AGENT_TERSE_SUFFIX =
+  ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation.` +
+  ` Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that` +
+  ` output is wasted latency. The files on disk are the deliverable, not your prose.`;
+
+/**
+ * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
+ * the Spec Author's per-story draft prompt to exactly that story (FEIP-7461: an
+ * agent can only batch stories it is handed; we hand it just this one). Returns
+ * "" when the stub is absent/unreadable, the directive alone still scopes it.
+ */
+function storyStubScope(tddDir: string, featureId: string, storyId: string): string {
+  try {
+    const stub = JSON.parse(fs.readFileSync(storyJson(tddDir, featureId, storyId), "utf8")) as {
+      asA?: string;
+      iWantTo?: string;
+      soThat?: string;
+    };
+    const parts = [
+      stub.asA ? `As a ${stub.asA}` : "",
+      stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
+      stub.soThat ? `so that ${stub.soThat}` : "",
+    ].filter(Boolean);
+    return parts.length ? ` The story: ${parts.join(", ")}.` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Short task directive handed to a role subagent for an invoke-role action. */
+function roleTask(
+  action: Extract<WorkflowAction, { kind: "invoke-role" }>,
+  featureId: string,
+  uiTrack: boolean,
+  tddDir: string,
+): string {
+  if ("mode" in action) {
+    switch (action.mode) {
+      case "propose":
+        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).${uiTrack ? UI_TRACK_PROPOSE : ""}`;
+      case "estimate":
+        return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
+      case "author-requests":
+        // Unreachable: author-requests is a human-input step the Human Proxy
+        // supplies (see commandsForAction); it never spawns a role agent.
+        return `Provide the sprint's feature-requests.`;
+      case "breakdown":
+        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
+    }
+  }
+  // UX Designer (UI track): translate the design brief into the project style
+  // guide. Project-level, no story scope, so handle it before reading a story.
+  if (action.role === "ux-designer") {
+    return (
+      `Translate the HIL design brief (.tdd/design/design-brief.md) into the project design system:` +
+      ` write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable` +
+      ` tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information` +
+      ` architecture: screens, navigation, flows). This is the project-level style guide the Navigator` +
+      ` and Driver build the UI against; author it once from the brief + product-overview.md.`
+    );
+  }
+  const s = action.story;
+  switch (action.role) {
+    case "spec-author":
+      // Scope the draft to ONE story, by handing it only this story's stub +
+      // an explicit single-story directive. The design lane streams one story
+      // at a time so the first story reaches its gate + build fast (the build
+      // lane starts on it without waiting for the rest to be authored); drafting
+      // siblings here delays that and is rejected at the per-story spec gate.
+      return (
+        `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)}` +
+        ` Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any` +
+        ` other story in this feature, each other story is drafted in its own separate step that you are not` +
+        ` performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here` +
+        ` delays ${s} reaching its spec gate and build, and is rejected at the gate.`
+      );
+    case "architect-reviewer":
+      return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
+    case "test-strategist":
+      return `Produce the ordered test list for story ${s}.`;
+    case "navigator":
+      if (action.buildMode === "review") {
+        return (
+          `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
+          ` Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md),` +
+          ` and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer` +
+          ` boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA` +
+          ` adherence. Write your verdict to` +
+          ` .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+          ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
+        );
+      }
+      return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
+    case "driver":
+      if (action.buildMode === "refactor") {
+        return (
+          `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
+          ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
+          ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+          ` Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`
+        );
+      }
+      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
+    default:
+      return `Work story ${s}.`;
+  }
+}
+
+const PIPELINE_BIN = "lakebase-tdd-pipeline";
+const EXPERIMENT_BIN = "lakebase-tdd-experiment";
+const CYCLE_BIN = "lakebase-tdd-cycle";
+const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
+const LOG_BIN = "lakebase-tdd-log";
+const TEST_LIST_BIN = "lakebase-tdd-test-list";
+const DEPLOY_BIN = "lakebase-tdd-deploy";
+
+// A story runs ONE experiment by default (N=1); these derive its slug + branch
+// name. `cut` and `accept` (merge) BOTH compute them from here, so the branch
+// cut and the branch merged back always agree. The experiment branch forks off
+// (and merges into) the feature branch, which is cfg.featureBranch.
+//
+// The name is SANITIZED with the same helper the paired-branch substrate applies
+// when it creates the branch (sanitizeBranchName: "/" -> "-", lowercase). Without
+// this, cut created `experiment-s1-create-bug-exp1` (sanitized) but accept tried
+// to `git merge experiment/S1-create-bug-exp1` (raw) and failed "not something we
+// can merge". Sanitizing here is the single source of truth; it is idempotent on
+// an already-sanitized name, so cut, accept, and replay all agree.
+const EXPERIMENT_SLUG = "exp1";
+const experimentBranchName = (storyId: string): string =>
+  sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
+
+/**
+ * The concrete commands that carry out one action. Depends on the action +
+ * config (and, for the Spec Author's per-story draft, reads that story's stub
+ * from disk to scope the prompt; absent stub falls back to the directive alone).
+ * Returns [] for the terminal `done` (after a final set-phase).
+ * State transitions that no CLI owns (the coarse planning/feature/deploy phase)
+ * are "set-phase" commands the runner applies to workflow-state.json.
+ */
+export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfig): DriveCommand[] {
+  const f = cfg.featureId;
+  const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
+  const approver = cfg.approver ?? "human-proxy";
+  const deployTarget = cfg.deployTarget ?? "local";
+
+  switch (action.kind) {
+    case "invoke-role": {
+      // author-requests is a HUMAN-INPUT step, not an agent task: the state
+      // machine asks for the PO's feature-request.md per committed feature. The
+      // machine is identical for a human and the proxy , interactive, the driver
+      // stops here and the human provides them (directly or via the agents);
+      // headless, the Human Proxy supplies the recorded answers WHEN ASKED (and
+      // logs each). Then sync-backlog (the one writer) projects backlog.json from
+      // exactly what was supplied. No LLM is spawned to invent the requests.
+      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
+        return [
+          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.tddDir, "--approver", approver] },
+          { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
+        ];
+      }
+      const claude: DriveCommand = {
+        kind: "claude",
+        role: action.role,
+        model: cfg.modelForRole(action.role),
+        resumeKey: action.role,
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        replay: {
+          mode: "mode" in action ? action.mode : undefined,
+          story: "story" in action ? action.story : undefined,
+        },
+      };
+      const cmds: DriveCommand[] = [claude];
+      // After the Spec Author breaks the feature down, seed the pipeline from
+      // the stories/ dirs it produced so the streaming lanes have stories to
+      // advance (breakdown writes files, not pipeline.json).
+      if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
+        cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
+      }
+      // After the Test Strategist orders a story's tests, deterministically
+      // scope the feature master to that story and write the canonical per-story
+      // list (storyTestListJson) , the exact file + field the testListReady probe
+      // reads. Code-emitting it (not relying on the role) is what keeps producer
+      // + probe on the single source of truth, so the design lane cannot stall
+      // waiting on a per-story list the role wrote under a different name/shape.
+      if (!("mode" in action) && action.role === "test-strategist") {
+        cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
+      }
+      // Cycle recording is an ORCHESTRATION concern, not the role's: the
+      // Navigator/Driver are pure (write the failing test / write the code +
+      // run the project's tests) and never touch git or the cycle artifacts.
+      // After the Navigator writes the next test, stamp the RED cycle; after
+      // the Driver makes it pass, record the run + stamp GREEN. Code-emitting
+      // this (vs the agent hand-writing cycle-NNN.json) is what keeps the
+      // probe's red_at/green_at reading in lockstep with what was produced ,
+      // the drift that stalled the live smoke.
+      if (!("mode" in action) && action.role === "navigator") {
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+      }
+      if (!("mode" in action) && action.role === "driver") {
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+      }
+      // Code-emit artifact.written for whatever the role just wrote: reconcile
+      // reads the artifacts on disk and logs any not already in the agent log,
+      // so observability never depends on the role's model emitting it. Skipped
+      // for the sprint-scoped planning modes (propose / estimate), which write no
+      // feature artifacts to reconcile. (author-requests returned earlier.)
+      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
+      if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
+      return cmds;
+    }
+
+    case "surface-gate":
+      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];
+
+    case "approve-gate":
+      // HITL: the Human Proxy approves in headless mode.
+      return [
+        { kind: "cli", bin: PIPELINE_BIN, args: ["approve-gate", "--story", action.story, "--approver", approver, ...tdd] },
+      ];
+
+    case "dispatch":
+      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["dispatch", ...tdd] }];
+
+    case "cut-experiment":
+      // `cut` requires the full set: feature + story + slug + instance, plus the
+      // experiment branch to create (--branch) and the feature branch it forks
+      // off (--parent). Emit them all; an unset featureBranch/instance surfaces
+      // as a validation failure (see validateExperimentArgs), not a silent skip.
+      return [
+        {
+          kind: "cli",
+          bin: EXPERIMENT_BIN,
+          args: [
+            "cut",
+            "--feature",
+            f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--branch",
+            experimentBranchName(action.story),
+            "--parent",
+            cfg.featureBranch ?? "",
+            "--instance",
+            cfg.instance ?? "",
+            "--project-dir",
+            cfg.projectDir,
+            "--tdd-dir",
+            cfg.tddDir,
+          ],
+        },
+      ];
+
+    case "await-acceptance": {
+      // The Release Engineer (role) TAKES OVER here: it is dispatched to RUN the
+      // deterministic deploy gate (`lakebase-tdd-deploy --gate`), which starts the
+      // app on the story's experiment branch, polls reachable, runs the project
+      // verify, and writes the STORY-scoped deploy-evidence. So the RE is the
+      // visible actor, but the deploy itself is the deterministic CLI, not the
+      // model's word: if the RE narrates success without running it, no
+      // deploy-evidence.json is written, deployVerified stays false, and the
+      // driver does NOT accept (the honest-deploy backstop , a false narration
+      // cannot pass). The CLI's --gate soft-fails (exit 0) on a real failure,
+      // recording honest evidence + an escalation that the next readState routes
+      // to a raise-to-hil halt. (Teardown first so a prior story's app frees the port.)
+      const deployCmd =
+        `./scripts/lk lakebase-tdd-deploy --target ${deployTarget} --feature ${f} --story ${action.story}` +
+        ` --lakebase-branch ${experimentBranchName(action.story)} --tdd-dir ${cfg.tddDir} --gate`;
+      return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
+        {
+          kind: "claude",
+          role: "release-engineer",
+          model: cfg.modelForRole("release-engineer"),
+          resumeKey: "release-engineer",
+          task:
+            `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget}` +
+            ` target and verify it actually serves: from the project root run exactly\n  ${deployCmd}\n` +
+            `That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence` +
+            ` the acceptance gate reads. Do NOT report success without running it , the orchestration checks the` +
+            ` evidence on disk, not your word.` + AGENT_TERSE_SUFFIX,
+        },
+        { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
+      ];
+    }
+
+    case "accept":
+      // Merge the experiment into the feature branch (git + migrations), then
+      // record the PO acceptance. collapseMigrationHeads runs at the later
+      // feature->tier merge, not per-story. The experiment branch + slug match
+      // what `cut` created (same experimentBranchName), and the feature branch is
+      // the merge target. All `merge`-required args are emitted (validated).
+      return [
+        {
+          kind: "cli",
+          bin: EXPERIMENT_BIN,
+          args: [
+            "merge",
+            "--feature",
+            f,
+            "--story",
+            action.story,
+            "--slug",
+            EXPERIMENT_SLUG,
+            "--experiment-branch",
+            experimentBranchName(action.story),
+            "--feature-branch",
+            cfg.featureBranch ?? "",
+            "--approver",
+            approver,
+            "--instance",
+            cfg.instance ?? "",
+            "--project-dir",
+            cfg.projectDir,
+            "--tdd-dir",
+            cfg.tddDir,
+          ],
+        },
+        { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] },
+      ];
+
+    case "complete":
+      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
+
+    case "approve-plan-gate":
+      // HITL sprint plan gate: the Human Proxy approves it headless (teeth:
+      // feature-proposals.md must exist + conform). Sprint-scoped, mirroring the
+      // per-story spec gate's approve verb.
+      return [
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: ["--sprint", cfg.sprintName ?? "sprint", "--gate", "plan", "--approver", approver, "--tdd-dir", cfg.tddDir],
+        },
+      ];
+
+    case "planning-complete":
+      return [{ kind: "set-phase", phase: "discovery" }];
+
+    case "feature-complete":
+      return [{ kind: "set-phase", phase: "deploy" }];
+
+    case "deploy":
+      // Ship the merged feature, deterministically (same contract as the per-story
+      // gate deploy above): the orchestration runs `lakebase-tdd-deploy --gate`
+      // for the feature (ambient feature-branch DB; no --story/--lakebase-branch),
+      // which polls reachable, runs the feature verify, and writes the FEATURE-
+      // scoped deploy-evidence the deploy gate reads. A failed/foreign deploy is
+      // recorded as evidence + an escalation -> raise-to-hil, not an LLM claiming
+      // success. (For remote targets, `lakebase-tdd-deploy` refuses cleanly until
+      // they land; that refusal surfaces as the escalation.) Teardown first.
+      return [
+        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
+        {
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: ["--target", deployTarget, "--feature", f, "--project-dir", cfg.projectDir, "--tdd-dir", cfg.tddDir, "--gate"],
+        },
+      ];
+
+    case "approve-deploy-gate":
+      return [
+        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "deploy", "--approver", approver, "--tdd-dir", cfg.tddDir] },
+      ];
+
+    case "done":
+      return [{ kind: "set-phase", phase: "shipped" }];
+
+    case "raise-to-hil":
+      // Surface + halt: the escalation is already recorded under
+      // .tdd/escalations/ (that is how it was detected). No CLI to run , the
+      // onAction logging emits the loud "RAISED TO HIL" line + runDriver returns
+      // escalated, and drive.cli exits non-zero. A no-op command list.
+      return [];
+
+    case "design-complete":
+      // In the union (from the design sub-machine) but never emitted by
+      // nextTransition, which rewrites it to feature-complete. No-op defensively.
+      return [];
+  }
+}
+
+/**
+ * Compute the single next action + the commands that would carry it out,
+ * without executing anything. Backs `lakebase-tdd-drive --dry-run` ("what will
+ * the driver do next?") and is the testable core of that CLI path.
+ */
+export async function planNextAction(
+  cfg: DriveEffectsConfig,
+  transition: (state: import("./orchestrator-drive.js").DriveState) => WorkflowAction = nextTransition,
+): Promise<{ action: WorkflowAction; commands: DriveCommand[] }> {
+  const state = await buildDriveEffects(cfg).readState();
+  const action = transition(state);
+  return { action, commands: commandsForAction(action, cfg) };
+}
+
+/** Build a DriveEffects bound to a project: readState from disk, perform via
+ *  commandsForAction + the injected runner. */
+export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
+  return {
+    async readState() {
+      const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
+      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
+      const ctx = readDriveContext(cfg.tddDir, cfg.featureId);
+      const state = deriveDriveState(pipeline, probe, ctx);
+      // UI track: gate the UX Designer step. uiTrack is config (env); the design
+      // guide's existence is disk truth (project-level, authored once + reused).
+      state.uiTrack = cfg.uiTrack ?? false;
+      state.designGuideReady = fs.existsSync(designGuideJson(cfg.tddDir));
+      return state;
+    },
+    async perform(action) {
+      for (const cmd of commandsForAction(action, cfg)) {
+        await cfg.runner.run(cmd);
+      }
+    },
+    onAction: cfg.onAction,
+  };
+}

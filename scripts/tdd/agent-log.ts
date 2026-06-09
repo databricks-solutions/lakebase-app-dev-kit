@@ -19,10 +19,11 @@ export type AgentRole =
   | "ux-designer"
   | "architect-reviewer"
   | "test-strategist"
-  | "scrum-master"
+  | "orchestrator"
   | "navigator"
   | "driver"
-  | "product-owner";
+  | "product-owner"
+  | "release-engineer";
 
 export type AgentLogLevel = "debug" | "info" | "warn" | "error";
 

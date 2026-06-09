@@ -5,6 +5,7 @@ import { readOutcomes } from "./experiment";
 
 export interface BudgetSnapshot {
   feature_id: string;
+  story_id: string;
   concurrent_branches_in_use: number;
   concurrent_branches_limit: number;
   wall_clock_minutes_used: number;
@@ -17,12 +18,14 @@ export interface BudgetViolation {
   message: string;
 }
 
-export function snapshotBudget(tddDir: string, featureId: string): BudgetSnapshot | null {
-  const plan = readPlan(tddDir, featureId);
+export function snapshotBudget(tddDir: string, featureId: string, storyId: string): BudgetSnapshot | null {
+  const plan = readPlan(tddDir, featureId, storyId);
   if (!plan) return null;
-  const experiments = listExperiments(tddDir, featureId);
+  // Experiments + their budget are story-scoped (FEIP-7566): the race budget
+  // bounds this story's competing experiments.
+  const experiments = listExperiments(tddDir, featureId, storyId);
   const inUse = experiments.filter((e) => {
-    const o: ExperimentOutcomes | null = readOutcomes(tddDir, featureId, e.experiment_slug);
+    const o: ExperimentOutcomes | null = readOutcomes(tddDir, featureId, storyId, e.experiment_slug);
     return !o || o.status === "running";
   }).length;
   const wallClockMinutes =
@@ -34,6 +37,7 @@ export function snapshotBudget(tddDir: string, featureId: string): BudgetSnapsho
         );
   return {
     feature_id: featureId,
+    story_id: storyId,
     concurrent_branches_in_use: inUse,
     concurrent_branches_limit: plan.budget.concurrent_branches,
     wall_clock_minutes_used: wallClockMinutes,
@@ -59,8 +63,8 @@ export function checkBudget(snapshot: BudgetSnapshot): BudgetViolation[] {
   return violations;
 }
 
-export function canCutAnotherExperiment(tddDir: string, featureId: string): { ok: boolean; reason?: string } {
-  const snap = snapshotBudget(tddDir, featureId);
+export function canCutAnotherExperiment(tddDir: string, featureId: string, storyId: string): { ok: boolean; reason?: string } {
+  const snap = snapshotBudget(tddDir, featureId, storyId);
   if (!snap) return { ok: false, reason: "no plan recorded – run design-spec-gate first" };
   if (snap.concurrent_branches_in_use >= snap.concurrent_branches_limit) {
     return {

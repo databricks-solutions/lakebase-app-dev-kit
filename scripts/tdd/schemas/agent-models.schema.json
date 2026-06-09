@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/agent-config.schema.json",
+  "title": "AgentConfig",
+  "description": "Per-project model selection for the TDD-workflow role agents (FEIP-7510). Each role carries a strongly-recommended model in its definition; the HIL overrides per project, asked at lakebase-create-project setup. Written to .lakebase/agent-config.json. The orchestrator resolves: override -> recommended -> inherit.",
+  "type": "object",
+  "required": ["version", "roles"],
+  "properties": {
+    "version": { "const": 1 },
+    "roles": {
+      "type": "object",
+      "description": "Keyed by role name. Every role agent appears with its recommended model + optional HIL override.",
+      "propertyNames": {
+        "enum": [
+          "spec-author",
+          "ux-designer",
+          "architect-reviewer",
+          "test-strategist",
+          "orchestrator",
+          "navigator",
+          "driver",
+          "product-owner",
+          "release-engineer"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["recommended"],
+        "properties": {
+          "recommended": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The role's strongly-recommended model, mirrored from its definition's frontmatter (e.g. opus / sonnet / haiku / a full model id / inherit)."
+          },
+          "override": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The HIL's per-project override. When absent, the orchestrator uses recommended."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

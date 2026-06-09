@@ -17,16 +17,29 @@ import * as path from "node:path";
 import { getConnection } from "../get-connection.js";
 import {
   applyAlembic,
+  createAlembicRevision,
+  listAlembicHeads,
+  mergeAlembicHeads,
   rollbackAlembic,
   statusAlembic,
 } from "../schema-migrate-runners/alembic.js";
-import type { AppliedSchemaMigration, SchemaMigrationFile, PendingSchemaMigration } from "../schema-migrate.js";
+import {
+  migrationSlug,
+  migrationTimestamp,
+  type AppliedSchemaMigration,
+  type SchemaMigrationFile,
+  type PendingSchemaMigration,
+} from "../schema-migrate.js";
 import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
+  type CollapseHeadsArgs,
+  type CollapseHeadsResult,
   type ListArgs,
   type ListResult,
+  type NewMigrationArgs,
+  type NewMigrationResult,
   type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
@@ -180,6 +193,64 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
 
   // baseline intentionally absent in slice 3. Alembic exposes `stamp`
   // as the equivalent operation; deferred to a follow-up.
+
+  async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
+    try {
+      if (args.autogenerate && (!args.instance || !args.branch)) {
+        throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
+      }
+      // Timestamp rev-id: globally unique + chronologically sortable, so sibling
+      // features forking from the same head never pick the same id. Alembic
+      // still chains via down_revision; collapsing the resulting heads at merge
+      // is handled by the merge step, not here.
+      const revId = migrationTimestamp();
+      const dsn = args.autogenerate
+        ? await buildDsn({
+            instance: args.instance!,
+            branch: args.branch!,
+            database: args.database,
+            endpointName: args.endpointName,
+          })
+        : undefined;
+      const created = await createAlembicRevision({
+        projectDir: args.projectDir,
+        revId,
+        message: args.slug,
+        autogenerate: !!args.autogenerate,
+        dsn,
+      });
+      return { status: "ok", version: revId, filename: path.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+
+  async collapseHeads(args: CollapseHeadsArgs): Promise<CollapseHeadsResult> {
+    // Sibling features forked from the same head leave two heads after merge.
+    // Unify them with a native merge revision (no file rewriting). Idempotent:
+    // a single head is a no-op.
+    try {
+      const heads = await listAlembicHeads(args.projectDir);
+      if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      // Detect-only (scm-doctor): report the multi-head state, do not merge.
+      if (args.dryRun) return { status: "ok", headsBefore: heads };
+      const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
+      const mergeRevision = path.basename(created).replace(/\.py$/, "").split("_")[0];
+      return { status: "ok", headsBefore: heads, mergeRevision, path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        headsBefore: [],
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 };
 
 // Auto-register on import. Consumers that import this module get the

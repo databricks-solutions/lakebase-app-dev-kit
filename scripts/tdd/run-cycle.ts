@@ -12,13 +12,14 @@ import {
   type ExperimentTag,
 } from "./experiment";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log";
+import { readAcLayer as readAcLayerFromPaths } from "./tdd-paths.js";
 
 /**
  * Emit a cycle event to the centralized agent log from the SUBSTRATE, not
  * agent prose. The Navigator/Driver call beginCycle/markGreen/markRefactored
  * as the authoritative RED/GREEN/REFACTOR transitions, so emitting here makes
  * every cycle logged deterministically (the agent need not remember to). Same
- * pattern as the mock approver logging its gate decisions. Best-effort:
+ * pattern as the Human Proxy logging its gate decisions. Best-effort:
  * logging is observability, never a reason to fail a cycle.
  */
 function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
@@ -69,24 +70,9 @@ export interface CycleArtifact {
  * layer enum).
  */
 export function readAcLayer(tddDir: string, featureId: string, acId: string): AcLayer | undefined {
-  const featureDir = join(tddDir, "features", featureId);
-  const storiesDir = join(featureDir, "stories");
-  if (!existsSync(storiesDir)) return undefined;
-  for (const storyDirName of readdirSync(storiesDir)) {
-    const storyDir = join(storiesDir, storyDirName);
-    if (!statSync(storyDir).isDirectory()) continue;
-    const acFile = join(storyDir, "acs", `${acId}.json`);
-    if (!existsSync(acFile)) continue;
-    try {
-      const ac = JSON.parse(readFileSync(acFile, "utf8")) as { layer?: AcLayer };
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") {
-        return ac.layer;
-      }
-    } catch {
-      /* ignore malformed AC, treat as "no layer" */
-    }
-  }
-  return undefined;
+  // Single source of truth: delegate to tdd-paths so the AC-layer read lives in
+  // exactly one place. Re-exported under this name for the existing importers.
+  return readAcLayerFromPaths(tddDir, featureId, acId);
 }
 
 export interface CycleScope {
@@ -240,11 +226,11 @@ export function recordRunnerOutcome(args: RecordRunnerOutcomeArgs): RecordRunner
   }
   const tag = acLayerToTag(layer);
   const outcomes =
-    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug) ?? {
+    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug) ?? {
       status: "running",
     };
   recordTagRun(outcomes, tag, args.passed);
-  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.experimentSlug, outcomes);
+  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug, outcomes);
   // Stamp the layer back onto the cycle when it was inferred from the
   // argument so subsequent reads see it.
   if (!cycle.layer && args.layer) {
@@ -268,7 +254,7 @@ export function markGreen(
   // always means the runner-dispatch map was wrong (npm test invoked
   // for an [E2E] row, [Infra] row with no runner wired, etc.).
   if (a.layer && a.experiment_slug) {
-    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, a.experiment_slug);
+    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, scope.story_id, a.experiment_slug);
     const tag = acLayerToTag(a.layer);
     const runs = outcomes ? tagRunCount(outcomes, tag) : 0;
     if (runs === 0) {

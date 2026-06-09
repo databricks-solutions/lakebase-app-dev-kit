@@ -9,7 +9,7 @@ const LIVE = process.env.LAKEBASE_TEST_E2E === "1" && !!process.env.DATABRICKS_H
 let tdd: string;
 
 function seedExperiment(slug: string): void {
-  const dir = join(tdd, "experiments", "F1", slug);
+  const dir = join(tdd, "experiments", "F1", "S1", slug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), `feature/${slug}`);
 }
@@ -38,7 +38,9 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         picks: [
           { source_slug: "a", capability: "x" },
           { source_slug: "b", capability: "y" },
@@ -56,7 +58,9 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         picks: [{ source_slug: "exp-a", capability: "only" }],
         synthesizedSlug: "exp-synth",
         branch: "exp-synth",
@@ -71,7 +75,9 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         picks: [
           { source_slug: "exp-a", capability: "x" },
           { source_slug: "ghost", capability: "y" },
@@ -91,7 +97,9 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
       await synthesizeExperiments({
         instance: "irrelevant",
         tddDir: tdd,
+        projectDir: tdd,
         featureId: "F1",
+        storyId: "S1",
         picks: [
           { source_slug: "exp-a", capability: "schema design" },
           { source_slug: "exp-b", capability: "API shape" },
@@ -132,7 +140,9 @@ liveDescribe("synthesizeExperiments (live – LAKEBASE_TEST_E2E=1)", () => {
     const result = await synthesizeExperiments({
       instance,
       tddDir: tdd,
+      projectDir: tdd,
       featureId: "F1",
+      storyId: "S1",
       picks: [
         { source_slug: "exp-a", capability: "schema design" },
         { source_slug: "exp-b", capability: "API shape" },

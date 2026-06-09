@@ -1,0 +1,83 @@
+{
+  "typography": {
+    "fontFamily": {
+      "system": "\"DM Sans\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "mono": "\"DM Mono\", ui-monospace, monospace"
+    },
+    "scale": {
+      "text-xs": "10px",
+      "text-sm": "13px",
+      "text-base": "15px",
+      "text-md": "16px",
+      "text-lg": "20px",
+      "text-xl": "24px",
+      "text-xxl": "29px"
+    },
+    "lineHeight": {
+      "body": 1.5,
+      "headings": 1.25
+    }
+  },
+  "colors": {
+    "brand": {
+      "red": "#FF3621",
+      "red-hover": "#EB1600"
+    },
+    "navy": {
+      "900": "#1B3139",
+      "800": "#334455",
+      "700": "#4D5F70",
+      "600": "#666D7A",
+      "500": "#7F8590",
+      "400": "#99A1AA",
+      "300": "#B2B9C2",
+      "200": "#CCCEDB",
+      "100": "#EDF2F8"
+    },
+    "surfaces": {
+      "white": "#FFFFFF",
+      "page": "#F9F7F4",
+      "cool": "#F0F2F5"
+    },
+    "semantic": {
+      "success": "#2E844A",
+      "warning": "#FFAB00",
+      "info": "#0176D3",
+      "error": "#FF3621"
+    }
+  },
+  "spacing": {
+    "space-1": "4px",
+    "space-2": "8px",
+    "space-3": "12px",
+    "space-4": "16px",
+    "space-5": "20px",
+    "space-6": "24px",
+    "space-8": "32px",
+    "space-12": "48px",
+    "space-16": "64px"
+  },
+  "radius": {
+    "sharp": "0px",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "pill": "9999px"
+  },
+  "shadows": {
+    "sm": "0 1px 2px rgba(27, 49, 57, 0.08)",
+    "md": "0 4px 8px rgba(27, 49, 57, 0.12)",
+    "lg": "0 8px 16px rgba(27, 49, 57, 0.16)"
+  },
+  "layout": {
+    "navbarHeight": "64px",
+    "maxContentWidth": "960px",
+    "cardPadding": "20px",
+    "sectionGap": "32px"
+  },
+  "breakpoints": {
+    "mobile": "0px",
+    "tablet": "640px",
+    "desktop": "1024px"
+  }
+}

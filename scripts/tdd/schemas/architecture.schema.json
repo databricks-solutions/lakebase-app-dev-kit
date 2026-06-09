@@ -32,6 +32,11 @@
             "enum": ["proposed", "accepted", "modified", "rejected"],
             "default": "proposed",
             "description": "Architect proposes; the HIL accepts/modifies/rejects at Gate 2."
+          },
+          "brief_ref": {
+            "type": "string",
+            "pattern": "^R[0-9]+$",
+            "description": "The R<n> id of the nfrs.md Required item this NFR satisfies. Every Required item in the HIL's nfrs.md must be covered by some architecture.json nfr carrying its id here, or checkNfrCoverage hard-blocks the architecture gate. Omit for architect-originated NFRs that no Required item drove."
           }
         },
         "additionalProperties": false

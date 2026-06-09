@@ -1,0 +1,37 @@
+# Deploy targets for the /deploy phase.
+#
+# Each target carries a `type` discriminator. Only `local` is implemented today
+# (run the app on this machine and verify it is reachable); remote types
+# (databricks-app, vercel) are declared here but deferred, lakebase-tdd-deploy
+# exits cleanly with "unsupported target type" until they land.
+#
+# /deploy <feature-id> --target local        (the orchestrated deploy phase)
+# Local is the per-sprint "working software" target: it starts the app and
+# polls base_url+health_path until it answers, so each iteration ends as
+# running, reachable software.
+targets:
+  local:
+    type: local
+    # Command that starts the app in the foreground (backgrounded by the
+    # deploy primitive). The Python scaffold serves uvicorn on :8000.
+    run: make run
+    base_url: http://localhost:8000
+    # Any HTTP response on this path means the server is up (200 not required).
+    health_path: /
+    ready_timeout_seconds: 60
+    # Verify the running app actually works: the language-agnostic test entrypoint
+    # (runs pending migrations + the project's test suite against the branch DB,
+    # with BASE_URL exported so E2E/Playwright hits this deployment). This is the
+    # teeth for BOTH the deploy gate AND per-cycle honest GREEN , without it the
+    # substrate cannot confirm working software and a build correctly escalates.
+    verify: ./scripts/run-tests.sh
+
+  # Remote target (Databricks Apps). Declared for the type discriminator;
+  # NOT yet implemented by /deploy. Deploy via the extension / app-deploy skill.
+  prod:
+    type: databricks-app
+    workspace_profile: your-profile-name
+    workspace_path: /Workspace/Users/you@databricks.com/bug-tracker-ff-20260608-235044
+    app_name: bug-tracker-ff-20260608-235044
+    lakebase_project: bug-tracker-ff-20260608-235044
+    lakebase_branch: production

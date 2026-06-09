@@ -25,7 +25,7 @@ interface FeatureStatusSnapshot {
 | `feature_id` | string | Echo of the queried feature id. |
 | `current_workflow_phase` | string \| null | Phase from `.tdd/workflow-state.json` (`discovery` / `architectural-review` / `test-list-construction` / `design-spec-gate` / `implementation` / `synthesis` / `review` / `shipped` / `abandoned`). `null` when `workflow-state.json` is missing. |
 | `current_workflow_pointer` | object \| null | Active workflow locus (feature/story/ac/cycle/experiment ids). `null` when `workflow-state.json` is missing. The pointer's `feature_id` may differ from the queried `feature_id` (the workflow may be focused elsewhere). |
-| `plan` | object \| null | Approved experiment plan from `.tdd/features/<F>/plan.json`. `null` until the design-spec gate is approved. |
+| `plans` | array | Per-story experiment plans (FEIP-7566), one entry `{story_id, plan}` per `.tdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
 | `test_list` | object \| null | Aggregated counts from `.tdd/features/<F>/test-list.json`. `null` when the test list has not been authored yet. |
 | `experiments` | array | One entry per directory under `.tdd/experiments/<F>/`. Empty when no experiments have been cut. |
 | `selection_log_recent` | array | Up to the last 5 entries from `.tdd/selection-log.md`, oldest-first. |

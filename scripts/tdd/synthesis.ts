@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync } from "fs";
 import { join } from "path";
 import { listExperiments } from "./experiment";
 import { cutExperiment } from "./experiment";
+import { findFeatureDir } from "./tdd-paths.js";
 import type { ExperimentRecord } from "./experiment";
 import type { BranchLookupOpts } from "./../lakebase/branch-utils";
 
@@ -14,7 +15,10 @@ export interface SynthesisPick {
 
 export interface SynthesizeArgs extends BranchLookupOpts {
   tddDir: string;
+  /** Project root (.git + .env). Required: the synthesized experiment is PAIRED. */
+  projectDir: string;
   featureId: string;
+  storyId: string;
   picks: SynthesisPick[];
   /** Slug for the new synthesized experiment branch. */
   synthesizedSlug: string;
@@ -44,15 +48,15 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
   if (!args.hitlApproved) {
     throw new Error("synthesizeExperiments requires hitlApproved: true (HITL Gate)");
   }
-  const { tddDir, featureId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
+  const { tddDir, projectDir, featureId, storyId, picks, synthesizedSlug, branch, parentBranch, approverEmail, ...lookup } = args;
 
   if (picks.length < 2) {
     throw new Error(`synthesis requires picks from at least 2 experiments (got ${picks.length})`);
   }
-  const experiments = listExperiments(tddDir, featureId);
+  const experiments = listExperiments(tddDir, featureId, storyId);
   for (const pick of picks) {
     if (!experiments.find((e) => e.experiment_slug === pick.source_slug)) {
-      throw new Error(`pick source ${pick.source_slug} is not an experiment of ${featureId}`);
+      throw new Error(`pick source ${pick.source_slug} is not an experiment of ${featureId}/${storyId}`);
     }
   }
 
@@ -112,7 +116,9 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
   const fresh = await cutExperiment({
     ...lookup,
     tddDir,
+    projectDir,
     featureId,
+    storyId,
     experimentSlug: synthesizedSlug,
     branch,
     parentBranch,
@@ -127,11 +133,6 @@ export async function synthesizeExperiments(args: SynthesizeArgs): Promise<Synth
 }
 
 function locateFeatureDir(tddDir: string, featureId: string): string | null {
-  const featuresDir = join(tddDir, "features");
-  if (!existsSync(featuresDir)) return null;
-  const { readdirSync, statSync } = require("fs") as typeof import("fs");
-  const candidate = readdirSync(featuresDir).find((d: string) => d.startsWith(featureId));
-  if (!candidate) return null;
-  const full = join(featuresDir, candidate);
-  return statSync(full).isDirectory() ? full : null;
+  // One feature-dir resolution rule (tdd-paths), not a local copy.
+  return findFeatureDir(tddDir, featureId) ?? null;
 }

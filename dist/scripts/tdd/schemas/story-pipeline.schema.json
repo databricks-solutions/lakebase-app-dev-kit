@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/story-pipeline.schema.json",
+  "title": "StoryPipeline",
+  "description": "Per-feature per-story pipeline state for the streaming design->build workflow (FEIP-7565). The design lane runs ahead, moving each story designing -> awaiting-gate -> ready; the single build lane consumes the FIFO build_queue one story at a time (build_active), then -> done. The orchestrator owns this; persisted as .tdd/features/<F>/pipeline.json. Exactly one story builds at a time.",
+  "type": "object",
+  "required": ["version", "feature_id", "stories", "build_queue", "build_active"],
+  "properties": {
+    "version": { "const": 1 },
+    "feature_id": {
+      "type": "string",
+      "pattern": "^F[0-9]+(-[a-z0-9-]+)?$"
+    },
+    "stories": {
+      "type": "object",
+      "description": "Keyed by story id (S<n>[-slug]). Every story the design lane has touched.",
+      "propertyNames": { "pattern": "^S[0-9]+(-[a-z0-9-]+)?$" },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["designing", "awaiting-gate", "ready", "building", "awaiting-acceptance", "done", "discarded"],
+            "description": "designing = design lane drafting/annotating/ordering; awaiting-gate = surfaced to the PO for the per-story spec gate; ready = gate-approved, queued for build; building = the single build lane is on it (on its experiment branch); awaiting-acceptance = built + deployed, the PO is reviewing the running story; done = accepted + merged into the feature branch; discarded = the PO threw it away (experiment torn down, out of sprint)."
+          },
+          "gate": {
+            "type": "object",
+            "description": "The per-story spec gate (FEIP-7565 phase 2b). Isolated here in pipeline.json, NOT in the per-feature gates.json. Present once the story has been surfaced for review; an approved gate is what authorizes the awaiting-gate -> ready transition.",
+            "required": ["status", "history"],
+            "properties": {
+              "status": {
+                "enum": ["open", "approved", "withdrawn"],
+                "description": "open = surfaced, awaiting the HIL decision; approved = the HIL (or Human Proxy headless) approved the story into the sprint; withdrawn = approval rescinded, story pulled back out of the build flow."
+              },
+              "approver": { "type": "string" },
+              "approved_at": { "type": "string" },
+              "spec_hash": {
+                "type": "string",
+                "description": "Hash of the story's spec artifact at approval, anchoring the decision."
+              },
+              "withdrawal_reason": { "type": "string" },
+              "history": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["action", "at", "approver"],
+                  "properties": {
+                    "action": { "enum": ["approved", "withdrawn"] },
+                    "at": { "type": "string" },
+                    "approver": { "type": "string" },
+                    "spec_hash": { "type": "string" },
+                    "reason": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "experiment": {
+            "type": "object",
+            "description": "The experiment branch the story is built on (FEIP-7566): an ephemeral paired Lakebase branch forked from feature HEAD. On accept it is merged into the feature branch; on discard/revise it is torn down.",
+            "required": ["slug", "branch", "parent", "n", "status"],
+            "properties": {
+              "slug": { "type": "string" },
+              "branch": { "type": "string" },
+              "lakebase_branch_uid": { "type": "string" },
+              "parent": { "type": "string", "description": "The feature branch this experiment forked from." },
+              "parent_sha": { "type": "string", "description": "Feature-branch HEAD sha at cut time." },
+              "n": { "type": "integer", "minimum": 1, "description": "1 (default) or the count of competing experiments in an N>=2 race." },
+              "status": {
+                "enum": ["active", "merged", "discarded"],
+                "description": "active = building/under review; merged = accepted + merged into the feature branch; discarded = torn down (rejected or revised)."
+              },
+              "cut_at": { "type": "string" },
+              "closed_at": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "acceptance": {
+            "type": "object",
+            "description": "The PO's post-build accept/discard/revise decision (FEIP-7566), distinct from the pre-build spec gate.",
+            "required": ["decision", "history"],
+            "properties": {
+              "decision": {
+                "type": ["string", "null"],
+                "enum": ["accepted", "discarded", "revise", null],
+                "description": "null while the PO is still reviewing (awaiting-acceptance); otherwise the decision."
+              },
+              "approver": { "type": "string" },
+              "at": { "type": "string" },
+              "reason": { "type": "string" },
+              "history": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["decision", "at", "approver"],
+                  "properties": {
+                    "decision": { "enum": ["accepted", "discarded", "revise"] },
+                    "at": { "type": "string" },
+                    "approver": { "type": "string" },
+                    "reason": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "build_queue": {
+      "type": "array",
+      "description": "FIFO of gate-approved (ready) story ids waiting for the single build lane. The head is dispatched next when the lane is free.",
+      "items": { "type": "string", "pattern": "^S[0-9]+(-[a-z0-9-]+)?$" }
+    },
+    "build_active": {
+      "type": ["string", "null"],
+      "description": "The story id the single Navigator+Driver build lane is currently building, or null when idle. At most one."
+    }
+  },
+  "additionalProperties": false
+}

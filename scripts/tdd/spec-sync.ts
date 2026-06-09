@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "
 import { join, basename } from "path";
 import type Ajv from "ajv";
 import { getValidator } from "./schema-loader";
+import { requireFeatureDir as findFeatureDir, featuresDir as featuresDirOf } from "./tdd-paths.js";
 
 type Phase =
   | "discovery"
@@ -114,20 +115,6 @@ export function writeWorkflowState(tddDir: string, state: WorkflowState): void {
   writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 
-function findFeatureDir(tddDir: string, featureId: string): string {
-  const featuresDir = join(tddDir, "features");
-  const candidates = existsSync(featuresDir)
-    ? readdirSync(featuresDir).filter((d) => d.startsWith(featureId))
-    : [];
-  if (candidates.length === 0) {
-    throw new Error(`feature ${featureId} not found under ${featuresDir}`);
-  }
-  if (candidates.length > 1) {
-    throw new Error(`feature ${featureId} resolves to multiple dirs: ${candidates.join(", ")}`);
-  }
-  return join(featuresDir, candidates[0]);
-}
-
 export function validateSpec(tddDir: string): DriftReport[] {
   const reports: DriftReport[] = [];
   const v = makeValidator();
@@ -142,7 +129,7 @@ export function validateSpec(tddDir: string): DriftReport[] {
   }
 
   // Features
-  const featuresDir = join(tddDir, "features");
+  const featuresDir = featuresDirOf(tddDir);
   if (!existsSync(featuresDir)) return reports;
   for (const featureDirName of readdirSync(featuresDir)) {
     const featureDir = join(featuresDir, featureDirName);

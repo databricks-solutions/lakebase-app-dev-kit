@@ -1197,52 +1197,12 @@ var CONVENTION_TIER_DEFAULTS = {
   uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
   perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
 };
-async function createFeatureBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createTestBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.test.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.test.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createUatBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.uat.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.uat.ttl,
-    strictParent: args.strictParent
-  });
-}
-async function createPerfBranch(args) {
-  return createBranch({
-    instance: args.instance,
-    host: args.host,
-    branch: args.branch,
-    parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.perf.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.perf.ttl,
-    strictParent: args.strictParent
-  });
-}
 async function createFeaturePairedBranch(args) {
   return createPairedBranch({
     instance: args.instance,
     branch: args.branch,
     parentBranch: args.parentBranch ?? CONVENTION_TIER_DEFAULTS.feature.parentBranch,
-    ttl: args.ttl ?? CONVENTION_TIER_DEFAULTS.feature.ttl,
+    ...args.ttl ? { ttl: args.ttl } : { noExpiry: true },
     cwd: args.cwd,
     createGitBranch: args.createGitBranch,
     syncEnv: args.syncEnv,
@@ -1502,29 +1462,10 @@ async function main() {
         printJson(result, pretty);
         return 0;
       }
-      case "create-tier": {
-        const tier = args.positional;
-        if (!tier || !["feature", "test", "uat", "perf"].includes(tier)) {
-          process.stderr.write(
-            `create-tier: expected one of feature|test|uat|perf as the first positional arg.
-`
-          );
-          return 2;
-        }
-        if (!requireFlags("create-tier", args, ["instance", "branch"]))
-          return 2;
-        const common = {
-          instance: args.instance,
-          host: args.host,
-          branch: args.branch,
-          parentBranch: args.parentBranch,
-          ttl: args.ttl,
-          strictParent: args.strictParent
-        };
-        const result = tier === "feature" ? await createFeatureBranch(common) : tier === "test" ? await createTestBranch(common) : tier === "uat" ? await createUatBranch(common) : await createPerfBranch(common);
-        printJson(result, pretty);
-        return 0;
-      }
+      // NOTE: the unpaired `create-tier` subcommand was DELETED. It created a
+      // Lakebase branch with no git branch + no .env sync. Use
+      // `create-paired-tier` (below): every branch is paired through the
+      // substrate. There is no unpaired tier-create path by design.
       case "create-paired-tier": {
         const tier = args.positional;
         if (!tier || !["feature", "test", "uat", "perf"].includes(tier)) {

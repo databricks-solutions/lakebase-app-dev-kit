@@ -18,10 +18,11 @@
         "ux-designer",
         "architect-reviewer",
         "test-strategist",
-        "scrum-master",
+        "orchestrator",
         "navigator",
         "driver",
-        "product-owner"
+        "product-owner",
+        "release-engineer"
       ],
       "description": "The role performing the work."
     },

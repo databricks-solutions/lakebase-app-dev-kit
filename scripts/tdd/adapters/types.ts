@@ -10,7 +10,7 @@ export interface AdapterContext {
 
 export interface SyncEventHooks {
   /**
-   * Called by the Scrum-Master after a workflow phase transitions.
+   * Called by the orchestrator after a workflow phase transitions.
    * Failures are logged + surfaced but must not block the workflow.
    */
   onPhaseTransition?(prev: string, next: string, ctx: AdapterContext): Promise<void> | void;

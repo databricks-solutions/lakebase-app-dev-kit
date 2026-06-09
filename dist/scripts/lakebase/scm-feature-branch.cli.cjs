@@ -64,21 +64,6 @@ function isCliEntry(importMetaUrl2) {
 var fs5 = __toESM(require("fs"), 1);
 var path4 = __toESM(require("path"), 1);
 
-// scripts/lakebase/branch-create.ts
-var import_node_child_process3 = require("child_process");
-var import_node_util3 = require("util");
-
-// scripts/util/sanitize-branch-name.ts
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
-  while (name.length < 3) name += "-x";
-  return name;
-}
-
-// scripts/lakebase/branch-utils.ts
-var import_node_child_process = require("child_process");
-var import_node_util = require("util");
-
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
   const raw = process.env[name];
@@ -121,7 +106,25 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
+// scripts/lakebase/paired-branch.ts
+var fs3 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
+
+// scripts/lakebase/branch-create.ts
+var import_node_child_process3 = require("child_process");
+var import_node_util3 = require("util");
+
+// scripts/util/sanitize-branch-name.ts
+function sanitizeBranchName(gitBranch) {
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  while (name.length < 3) name += "-x";
+  return name;
+}
+
 // scripts/lakebase/branch-utils.ts
+var import_node_child_process = require("child_process");
+var import_node_util = require("util");
 var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
 
 // scripts/lakebase/lakebase-project.ts
@@ -131,11 +134,6 @@ var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process2.exe
 
 // scripts/lakebase/branch-create.ts
 var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process3.execFile);
-
-// scripts/lakebase/paired-branch.ts
-var fs3 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
 
 // scripts/lakebase/branch-delete.ts
 var import_node_child_process4 = require("child_process");

@@ -113,10 +113,7 @@ describe("MCP server stdio handshake", () => {
     expect(names).toEqual([
       "lakebase_apply_migrations",
       "lakebase_branch_checkout_paired",
-      "lakebase_branch_create",
       "lakebase_branch_create_paired",
-      "lakebase_branch_create_tier",
-      "lakebase_branch_delete",
       "lakebase_branch_delete_paired",
       "lakebase_branch_list",
       "lakebase_branch_show",
