@@ -6905,27 +6905,89 @@ function replayDesignTurn(args) {
 init_cjs_shims();
 var import_fs2 = require("fs");
 var import_path2 = require("path");
-var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([".git", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules"]);
-function restoreBuildTurn(args) {
-  const { replayBuildDir, projectDir, tddDir, featureId, story } = args;
-  const storyCorpus = (0, import_path2.join)(featuresDir(replayBuildDir), featureId, "stories", story);
-  const codeSrc = (0, import_path2.join)(storyCorpus, "code");
+var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([
+  ".git",
+  ".tdd",
+  ".lakebase",
+  "scripts",
+  ".claude",
+  ".github",
+  "node_modules"
+]);
+var JUNK_DIRS = /* @__PURE__ */ new Set([
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".git",
+  "node_modules"
+]);
+var JUNK_FILES = /* @__PURE__ */ new Set([".env", ".DS_Store"]);
+function codeTreeFilter(root) {
+  return (src) => {
+    const rel = src.slice(root.length).replace(/^[/\\]+/, "");
+    if (rel === "") return true;
+    const segs = rel.split(/[/\\]/);
+    if (SCAFFOLD_OWNED.has(segs[0])) return false;
+    if (segs.some((s) => JUNK_DIRS.has(s))) return false;
+    const base = segs[segs.length - 1];
+    return !(JUNK_FILES.has(base) || base.endsWith(".pyc"));
+  };
+}
+function storyTurnsDir(replayBuildDir, featureId, story) {
+  return (0, import_path2.join)(featuresDir(replayBuildDir), featureId, "stories", story, "turns");
+}
+function listBuildTurns(replayBuildDir, featureId, story) {
+  const dir = storyTurnsDir(replayBuildDir, featureId, story);
+  if (!(0, import_fs2.existsSync)(dir)) return [];
+  return (0, import_fs2.readdirSync)(dir).filter((n) => !n.startsWith(".")).sort();
+}
+function replayBuildTurn(args) {
+  const { replayBuildDir, projectDir, tddDir, featureId, story, turnIndex } = args;
+  const turns = listBuildTurns(replayBuildDir, featureId, story);
+  if (turnIndex < 1 || turnIndex > turns.length) return false;
+  const turnDir = (0, import_path2.join)(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
+  const codeSrc = (0, import_path2.join)(turnDir, "code");
   if (!(0, import_fs2.existsSync)(codeSrc)) return false;
-  (0, import_fs2.cpSync)(codeSrc, projectDir, {
-    recursive: true,
-    force: true,
-    filter: (src) => {
-      const rel = src.slice(codeSrc.length).replace(/^[/\\]+/, "");
-      if (rel === "") return true;
-      const top = rel.split(/[/\\]/)[0];
-      return !SCAFFOLD_OWNED.has(top);
-    }
-  });
-  const cyclesSrc = (0, import_path2.join)(storyCorpus, "tdd", "cycles");
+  (0, import_fs2.cpSync)(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
+  const cyclesSrc = (0, import_path2.join)(turnDir, "tdd", "cycles");
   if ((0, import_fs2.existsSync)(cyclesSrc)) (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
-  const expSrc = (0, import_path2.join)(storyCorpus, "tdd", "experiments");
+  const expSrc = (0, import_path2.join)(turnDir, "tdd", "experiments");
   if ((0, import_fs2.existsSync)(expSrc)) (0, import_fs2.cpSync)(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
   return true;
+}
+
+// scripts/tdd/record-build.ts
+init_cjs_shims();
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+function turnSlug(turn, role, ac, mode) {
+  const n = String(turn).padStart(3, "0");
+  return [n, role, mode, ac].filter(Boolean).join("-");
+}
+function recordBuildTurn(args) {
+  const { recordBuildDir, projectDir, tddDir, featureId, story, turn, role, ac, mode } = args;
+  const turnDir = (0, import_path3.join)(
+    featuresDir(recordBuildDir),
+    featureId,
+    "stories",
+    story,
+    "turns",
+    turnSlug(turn, role, ac, mode)
+  );
+  (0, import_fs3.mkdirSync)(turnDir, { recursive: true });
+  (0, import_fs3.cpSync)(projectDir, (0, import_path3.join)(turnDir, "code"), {
+    recursive: true,
+    force: true,
+    filter: codeTreeFilter(projectDir)
+  });
+  const cyclesSrc = cyclesRootDir(tddDir);
+  if ((0, import_fs3.existsSync)(cyclesSrc)) (0, import_fs3.cpSync)(cyclesSrc, (0, import_path3.join)(turnDir, "tdd", "cycles"), { recursive: true, force: true });
+  const expSrc = experimentsRootDir(tddDir);
+  if ((0, import_fs3.existsSync)(expSrc)) (0, import_fs3.cpSync)(expSrc, (0, import_path3.join)(turnDir, "tdd", "experiments"), { recursive: true, force: true });
+  return turnDir;
 }
 
 // scripts/tdd/orchestrator-run.ts
@@ -7285,6 +7347,11 @@ init_cjs_shims();
 
 // scripts/util/sanitize-branch-name.ts
 init_cjs_shims();
+function sanitizeBranchName(gitBranch) {
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  while (name.length < 3) name += "-x";
+  return name;
+}
 
 // scripts/lakebase/lakebase-project.ts
 init_cjs_shims();
@@ -7320,19 +7387,19 @@ var cp2 = __toESM(require("child_process"), 1);
 
 // scripts/tdd/agent-log.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_fs5 = require("fs");
+var import_path5 = require("path");
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
+var import_fs4 = require("fs");
+var import_path4 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path3.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path4.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse((0, import_fs3.readFileSync)((0, import_path3.join)(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse((0, import_fs4.readFileSync)((0, import_path4.join)(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7352,7 +7419,7 @@ function formatSchemaErrors(validate) {
 
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return (0, import_path4.join)(tddDir, "agent-log.jsonl");
+  return (0, import_path5.join)(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
@@ -7362,7 +7429,7 @@ function emitAgentLogEvent(input, opts = {}) {
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
   }
-  (0, import_fs4.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
+  (0, import_fs5.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
 `, "utf8");
   return event;
 }
@@ -7374,8 +7441,8 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path6 = require("path");
+var import_fs7 = require("fs");
+var import_path7 = require("path");
 
 // scripts/tdd/test-list.ts
 init_cjs_shims();
@@ -7395,12 +7462,12 @@ var fs5 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
+var import_fs6 = require("fs");
+var import_path6 = require("path");
 function readSmellsLog(tddDir) {
-  const file = (0, import_path5.join)(tddDir, "smells.json");
-  if (!(0, import_fs5.existsSync)(file)) return { detected: [] };
-  return JSON.parse((0, import_fs5.readFileSync)(file, "utf8"));
+  const file = (0, import_path6.join)(tddDir, "smells.json");
+  if (!(0, import_fs6.existsSync)(file)) return { detected: [] };
+  return JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
 }
 
 // scripts/tdd/escalation.ts
@@ -7473,27 +7540,27 @@ function storyDeployVerified(tddDir, featureId, storyId) {
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!(0, import_fs6.existsSync)(file)) {
+  if (!(0, import_fs7.existsSync)(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
+  const data = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = (0, import_path6.join)(cyclesRootDir(tddDir), featureId, story);
-  if (!(0, import_fs6.existsSync)(base)) return [];
+  const base = (0, import_path7.join)(cyclesRootDir(tddDir), featureId, story);
+  if (!(0, import_fs7.existsSync)(base)) return [];
   const out = [];
-  for (const acDir of (0, import_fs6.readdirSync)(base)) {
-    const dir = (0, import_path6.join)(base, acDir);
+  for (const acDir of (0, import_fs7.readdirSync)(base)) {
+    const dir = (0, import_path7.join)(base, acDir);
     try {
-      if (!(0, import_fs6.statSync)(dir).isDirectory()) continue;
+      if (!(0, import_fs7.statSync)(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of (0, import_fs6.readdirSync)(dir)) {
+    for (const f of (0, import_fs7.readdirSync)(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse((0, import_fs6.readFileSync)((0, import_path6.join)(dir, f), "utf8")));
+        out.push(JSON.parse((0, import_fs7.readFileSync)((0, import_path7.join)(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7517,9 +7584,9 @@ function storyTestProgress(tddDir, featureId, story) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!(0, import_fs6.existsSync)(f)) return {};
+  if (!(0, import_fs7.existsSync)(f)) return {};
   try {
-    return JSON.parse((0, import_fs6.readFileSync)(f, "utf8"));
+    return JSON.parse((0, import_fs7.readFileSync)(f, "utf8"));
   } catch {
     return {};
   }
@@ -7562,8 +7629,8 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 
 // scripts/tdd/gates.ts
 init_cjs_shims();
-var import_fs7 = require("fs");
-var import_path7 = require("path");
+var import_fs8 = require("fs");
+var import_path8 = require("path");
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -7582,10 +7649,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs7.existsSync)(file)) {
+  if (!(0, import_fs8.existsSync)(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = (0, import_fs7.readFileSync)(file, "utf8");
+  const raw = (0, import_fs8.readFileSync)(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -7596,7 +7663,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return (0, import_path7.join)(requireFeatureDir(tddDir, featureId), "gates.json");
+  return (0, import_path8.join)(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -7769,7 +7836,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs8 = require("fs");
+var import_fs9 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7778,8 +7845,8 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs8.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs8.readFileSync)(p, "utf8"));
+  if (!(0, import_fs9.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -7846,7 +7913,7 @@ var LOG_BIN = "lakebase-tdd-log";
 var TEST_LIST_BIN = "lakebase-tdd-test-list";
 var DEPLOY_BIN = "lakebase-tdd-deploy";
 var EXPERIMENT_SLUG = "exp1";
-var experimentBranchName = (storyId) => `experiment/${storyId}-${EXPERIMENT_SLUG}`;
+var experimentBranchName = (storyId) => sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
@@ -7924,12 +7991,7 @@ function commandsForAction(action, cfg) {
             "--tdd-dir",
             cfg.tddDir
           ]
-        },
-        // Fast-forward-to-release: with a build corpus configured, restore the
-        // recorded build onto the just-cut experiment branch so the driver skips
-        // the live Navigator/Driver loop and lands on the deterministic Release
-        // Engineer deploy. A no-op (corpus miss) falls through to the live build.
-        ...cfg.replayBuildDir ? [{ kind: "replay-build", story: action.story }] : []
+        }
       ];
     case "await-acceptance":
       return [
@@ -8128,8 +8190,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_cjs_shims();
-var import_fs9 = require("fs");
-var import_path8 = require("path");
+var import_fs10 = require("fs");
+var import_path9 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -8141,11 +8203,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path8.join)(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = (0, import_path9.join)(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = (0, import_path8.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs9.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
+  const p = (0, import_path9.join)(projectDir, AGENT_CONFIG_REL);
+  if (!(0, import_fs10.existsSync)(p)) return void 0;
+  return JSON.parse((0, import_fs10.readFileSync)(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -8552,6 +8614,7 @@ function resolveKitBinJs(bin) {
 }
 function execRunner(cfg) {
   const sessions = /* @__PURE__ */ new Map();
+  const buildTurns = /* @__PURE__ */ new Map();
   return {
     async run(cmd) {
       if (cmd.kind === "set-phase") {
@@ -8562,25 +8625,30 @@ function execRunner(cfg) {
         syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
-      if (cmd.kind === "replay-build") {
+      if (cmd.kind === "claude") {
         const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
-        if (replayBuildDir) {
-          const restored = restoreBuildTurn({
+        const story = cmd.replay?.story;
+        if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
+          const turnIndex = (buildTurns.get(story) ?? 0) + 1;
+          buildTurns.set(story, turnIndex);
+          const replayed = replayBuildTurn({
             replayBuildDir,
             projectDir: cfg.projectDir,
             tddDir: cfg.tddDir,
             featureId: cfg.featureId,
-            story: cmd.story
+            story,
+            turnIndex
           });
-          process.stderr.write(
-            restored ? `[drive] restored build for ${cmd.story} from corpus (skip to release engineer)
-` : `[drive] build replay miss for ${cmd.story} (no corpus); running the real build
+          if (replayed) {
+            process.stderr.write(
+              `[drive] replayed build turn ${turnIndex} (${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""} ${story}) from corpus (no model spawn)
 `
-          );
+            );
+            return;
+          }
+          process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent
+`);
         }
-        return;
-      }
-      if (cmd.kind === "claude") {
         const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
         if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
           const replayed = replayDesignTurn({
@@ -8635,10 +8703,6 @@ function buildCfg(args, featureId) {
     featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
-    // Build corpus (fast-forward-to-release): when set, cut-experiment is
-    // followed by a replay-build that restores the recorded build so the drive
-    // skips Navigator/Driver and lands on the Release Engineer deploy.
-    replayBuildDir: process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR,
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.
@@ -8667,49 +8731,99 @@ function composeOnAction(...hooks) {
 }
 function makeConfirmContinue() {
   const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
+  const answerFile = process.env.LAKEBASE_TDD_GATE_ANSWER_FILE?.trim();
+  const isYes = (a) => a === "" || a === "y" || a === "yes";
   return (action) => new Promise((resolve2) => {
     const label = describeAction(action);
+    const prompt = `
+[drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
     if (auto) {
       process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}
 `);
       return resolve2();
     }
-    let tty;
-    try {
-      if (process.stdin.isTTY) {
-        tty = void 0;
-      } else {
-        tty = fs10.createReadStream("/dev/tty");
-      }
-    } catch {
-      process.stderr.write(`[drive] PAUSE gate: no terminal to prompt , auto-continuing past ${label}.
+    if (answerFile) {
+      process.stderr.write(`${prompt}
+[drive] (awaiting answer in ${answerFile})
 `);
-      return resolve2();
-    }
-    const input = tty ?? process.stdin;
-    const ask = () => {
-      const rl = readline.createInterface({ input, output: process.stderr, terminal: false });
-      rl.question(`
-[drive] PAUSED , continue past the ${label} handoff? [Y/n] `, (answer) => {
-        rl.close();
-        const a = answer.trim().toLowerCase();
-        if (a === "" || a === "y" || a === "yes") {
+      const poll = setInterval(() => {
+        let raw;
+        try {
+          raw = fs10.readFileSync(answerFile, "utf8");
+        } catch {
+          return;
+        }
+        const a = raw.trim().toLowerCase();
+        if (a === "") return;
+        try {
+          fs10.rmSync(answerFile, { force: true });
+        } catch {
+        }
+        if (a === "y" || a === "yes") {
+          clearInterval(poll);
           process.stderr.write(`[drive] resuming.
 `);
-          try {
-            tty?.close();
-          } catch {
-          }
           resolve2();
-        } else {
-          process.stderr.write(`[drive] holding , answer Y when ready to continue.
+        } else process.stderr.write(`[drive] holding , write Y to ${answerFile} when ready.
 `);
-          ask();
-        }
-      });
-    };
-    ask();
+      }, 1e3);
+      return;
+    }
+    if (process.stdin.isTTY) {
+      const ask = () => {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stderr, terminal: false });
+        rl.question(prompt, (answer) => {
+          rl.close();
+          if (isYes(answer.trim().toLowerCase())) {
+            process.stderr.write(`[drive] resuming.
+`);
+            resolve2();
+          } else {
+            process.stderr.write(`[drive] holding , answer Y when ready.
+`);
+            ask();
+          }
+        });
+      };
+      return ask();
+    }
+    process.stderr.write(
+      `${prompt}
+[drive] no interactive terminal and no LAKEBASE_TDD_GATE_ANSWER_FILE , auto-continuing past ${label}.
+`
+    );
+    resolve2();
   });
+}
+function withBuildRecording(inner, cfg) {
+  const recordBuildDir = process.env.LAKEBASE_TDD_RECORD_BUILD_DIR?.trim();
+  if (!recordBuildDir) return inner;
+  let turn = 0;
+  return {
+    readState: () => inner.readState(),
+    onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
+    async perform(action) {
+      await inner.perform(action);
+      if (action.kind === "invoke-role" && (action.role === "navigator" || action.role === "driver")) {
+        turn += 1;
+        const dir = recordBuildTurn({
+          recordBuildDir,
+          projectDir: cfg.projectDir,
+          tddDir: cfg.tddDir,
+          featureId: cfg.featureId,
+          story: action.story,
+          turn,
+          role: action.role,
+          ac: action.ac,
+          mode: action.buildMode
+        });
+        process.stderr.write(
+          `[record] turn ${turn}: ${action.role}${action.buildMode ? ` (${action.buildMode})` : ""}${action.ac ? ` ${action.ac}` : ""} -> ${dir}
+`
+        );
+      }
+    }
+  };
 }
 function gatedStopWhen(base, interactive) {
   if (!interactive) return base;
@@ -8839,7 +8953,7 @@ ${help()}`);
   cfg.runner = execRunner(cfg);
   const interactive = args.gates === "interactive";
   try {
-    const result = await runDriver(buildDriveEffects(cfg), {
+    const result = await runDriver(withBuildRecording(buildDriveEffects(cfg), cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
       stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),

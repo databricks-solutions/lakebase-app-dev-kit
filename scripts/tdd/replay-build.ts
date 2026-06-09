@@ -1,31 +1,69 @@
-// Replay a story's BUILD from a recorded-build corpus instead of running the
-// live Navigator/Driver loop , the engine behind "fast-forward to the Release
-// Engineer". It is the build-stage analog of replay-artifacts.ts (which stubs
-// the DESIGN stages "until the navigator"); this stubs the BUILD stage "until
-// the release engineer".
+// Replay a story's BUILD turn by turn from a recorded-build corpus , the engine
+// behind run-to-release-engineer. It is the build-stage analog of
+// replay-artifacts.ts (which replays each DESIGN role turn): instead of one
+// monolithic "skip to the release engineer", the deterministic driver VISITS
+// every Navigator/Driver turn and, instead of spawning the model, overlays that
+// turn's recorded artifact (the code it would have written, plus its cycle +
+// experiment records). Only the artifact DELIVERY is mocked , the events run
+// live: the experiment branch is cut from the feature branch for real, the
+// cycle-record CLIs stamp RED/GREEN against the overlaid code, reviews + refactors
+// drive off the overlaid verdicts. So the log shows every Navigator<->Driver
+// interaction and the substrate ends up in the exact state a real build leaves.
 //
-// HOW IT FITS: in a fast-forward-to-release run, the deterministic driver still
-// VISITS every stage. Design turns replay via replayDesignTurn; then, right
-// AFTER cut-experiment (the experiment branch is freshly checked out), this
-// restores the recorded build , the whole code tree the Driver produced + the
-// GREEN, reviewed cycle records + the experiment outcomes. The next readState
-// then sees the story as testsWritten + codeWritten (all cycles green) with no
-// review/refactor pending, so nextBuildAction skips straight to await-acceptance
-// , i.e. the (now deterministic) Release Engineer deploy + the PO gate. The
-// Navigator/Driver are never spawned for a story the build corpus covers.
-//
-// FAITHFULNESS: experimentBranchName(story) is deterministic, so a recorded
-// cycle's branch_id (e.g. experiment-s1-create-bug-exp1) matches the freshly-cut
-// branch on a new run , the recorded green cycles line up. The code tree is
-// overlaid EXCLUDING scaffold-owned paths (scripts/, .lakebase/, .claude/,
-// .github/, .git/, .tdd/), so the fresh project's lk resolver + kit pin + hooks
-// are never clobbered by the snapshot's copies.
+// CORPUS SHAPE (per-turn): recorded-build/features/<F>/stories/<S>/turns/<NNN-...>/
+// each holding code/ (the working tree at that turn, scaffold + junk filtered) +
+// tdd/{cycles,experiments}. Turns are ordinal-keyed; the Kth Navigator/Driver
+// turn of a deterministic drive maps to the Kth recorded turn dir (sorted).
 
-import { existsSync, cpSync } from "fs";
+import { existsSync, cpSync, readdirSync } from "fs";
 import { join } from "path";
 import { featuresDir, cyclesRootDir, experimentsRootDir } from "./tdd-paths.js";
 
-export interface RestoreBuildArgs {
+/** Project paths the scaffold owns , never overwrite them from the snapshot, or
+ *  the fresh run's kit resolver / pin / hooks break (on replay), and never
+ *  capture them into a snapshot (on record) , they are scaffold, not build output.
+ *  Matched on the first path segment relative to the code root. */
+export const SCAFFOLD_OWNED = new Set([
+  ".git", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules",
+]);
+
+/** Runtime/build junk that must never enter a snapshot or overlay, matched at ANY
+ *  path depth (e.g. app/__pycache__): virtualenvs, caches, vcs, deps. */
+const JUNK_DIRS = new Set([
+  ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".git", "node_modules",
+]);
+/** Files to never capture/overlay: secrets + OS cruft. (.env.example IS kept.) */
+const JUNK_FILES = new Set([".env", ".DS_Store"]);
+
+/** A cpSync filter that copies a code tree under `root` while skipping (a) the
+ *  scaffold-owned top-level dirs (replay must not clobber the fresh scaffold's
+ *  kit resolver/pin/hooks), (b) runtime/build junk at any depth, and (c) secrets.
+ *  Shared by replay (overlay) + record (snapshot) so both stay clean. */
+export function codeTreeFilter(root: string): (src: string) => boolean {
+  return (src: string) => {
+    const rel = src.slice(root.length).replace(/^[/\\]+/, "");
+    if (rel === "") return true;
+    const segs = rel.split(/[/\\]/);
+    if (SCAFFOLD_OWNED.has(segs[0])) return false;
+    if (segs.some((s) => JUNK_DIRS.has(s))) return false;
+    const base = segs[segs.length - 1];
+    return !(JUNK_FILES.has(base) || base.endsWith(".pyc"));
+  };
+}
+
+/** The story's per-turn corpus dir (…/stories/<S>/turns). */
+export function storyTurnsDir(replayBuildDir: string, featureId: string, story: string): string {
+  return join(featuresDir(replayBuildDir), featureId, "stories", story, "turns");
+}
+
+/** Ordered turn dir names for a story (001-…, 002-…), or [] when uncovered. */
+export function listBuildTurns(replayBuildDir: string, featureId: string, story: string): string[] {
+  const dir = storyTurnsDir(replayBuildDir, featureId, story);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((n) => !n.startsWith(".")).sort();
+}
+
+export interface ReplayBuildTurnArgs {
   /** The recorded-build corpus root (LAKEBASE_TDD_REPLAY_BUILD_DIR). */
   replayBuildDir: string;
   /** The target project working tree (the experiment branch is checked out). */
@@ -34,46 +72,31 @@ export interface RestoreBuildArgs {
   tddDir: string;
   featureId: string;
   story: string;
+  /** 1-based ordinal of THIS Navigator/Driver turn within the story's build. */
+  turnIndex: number;
 }
 
-/** Project paths the scaffold owns , never overwrite them from the snapshot, or
- *  the fresh run's kit resolver / pin / hooks break. Matched on the first path
- *  segment of each source entry relative to the corpus `code/` root. */
-const SCAFFOLD_OWNED = new Set([".git", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules"]);
-
 /**
- * Restore a story's recorded build into the project. Returns false (a miss) when
- * the corpus lacks this story, so the caller falls back to the live
- * Navigator/Driver build. On a hit: overlays the code tree (minus scaffold-owned
- * paths) onto the project and copies the recorded cycles + experiment records
- * into the project `.tdd`, so the driver reads the story as fully built + reviewed.
+ * Replay one build turn: overlay the turnIndex-th recorded turn's code + cycle +
+ * experiment records onto the project, in place of spawning the Navigator/Driver.
+ * Returns false (a miss) when the corpus lacks this story OR has fewer turns than
+ * turnIndex, so the caller falls back to the live model for that turn. The code
+ * overlay skips scaffold-owned + junk paths (codeTreeFilter); the .tdd records are
+ * restored so the next readState + the live cycle-record CLIs see this turn's state.
  */
-export function restoreBuildTurn(args: RestoreBuildArgs): boolean {
-  const { replayBuildDir, projectDir, tddDir, featureId, story } = args;
-  const storyCorpus = join(featuresDir(replayBuildDir), featureId, "stories", story);
-  const codeSrc = join(storyCorpus, "code");
-  if (!existsSync(codeSrc)) return false; // corpus lacks this story -> live build
+export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
+  const { replayBuildDir, projectDir, tddDir, featureId, story, turnIndex } = args;
+  const turns = listBuildTurns(replayBuildDir, featureId, story);
+  if (turnIndex < 1 || turnIndex > turns.length) return false; // uncovered -> live
+  const turnDir = join(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
 
-  // 1. Overlay the recorded code tree onto the project working tree, skipping the
-  //    scaffold-owned paths (filter receives the SOURCE path; reject when its
-  //    segment under codeSrc starts with a scaffold-owned dir).
-  cpSync(codeSrc, projectDir, {
-    recursive: true,
-    force: true,
-    filter: (src) => {
-      const rel = src.slice(codeSrc.length).replace(/^[/\\]+/, "");
-      if (rel === "") return true;
-      const top = rel.split(/[/\\]/)[0];
-      return !SCAFFOLD_OWNED.has(top);
-    },
-  });
+  const codeSrc = join(turnDir, "code");
+  if (!existsSync(codeSrc)) return false;
+  cpSync(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
 
-  // 2. Restore the build records into .tdd: the GREEN + reviewed cycles and the
-  //    experiment outcomes (so storyTestProgress.allGreen + no review/refactor
-  //    pending -> nextBuildAction returns await-acceptance).
-  const cyclesSrc = join(storyCorpus, "tdd", "cycles");
+  const cyclesSrc = join(turnDir, "tdd", "cycles");
   if (existsSync(cyclesSrc)) cpSync(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
-  const expSrc = join(storyCorpus, "tdd", "experiments");
+  const expSrc = join(turnDir, "tdd", "experiments");
   if (existsSync(expSrc)) cpSync(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
 
   return true;

@@ -22,7 +22,8 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
-import { restoreBuildTurn } from "./replay-build.js";
+import { replayBuildTurn } from "./replay-build.js";
+import { recordBuildTurn } from "./record-build.js";
 import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import {
   isHitlGateAction,
@@ -189,6 +190,9 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
   // of the artifact-as-API contract: each role still reads/writes its artifacts,
   // so correctness never depends on the retained session, only speed.
   const sessions = new Map<string, string>();
+  // Per-story Navigator/Driver turn ordinal, for per-turn build replay: the Kth
+  // build turn of this story maps to the Kth recorded turn dir in the corpus.
+  const buildTurns = new Map<string, number>();
   return {
     async run(cmd: DriveCommand) {
       if (cmd.kind === "set-phase") {
@@ -201,29 +205,37 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         syncBacklog(cfg.tddDir, cmd.sprint);
         return;
       }
-      if (cmd.kind === "replay-build") {
-        // Fast-forward-to-release: restore the recorded build (whole code tree +
-        // GREEN/reviewed cycles + experiment) so the drive skips Navigator/Driver
-        // and lands on the deterministic Release Engineer deploy. A corpus miss
-        // is a no-op , the live build then runs as normal.
+      if (cmd.kind === "claude") {
+        // Per-turn BUILD replay: when LAKEBASE_TDD_REPLAY_BUILD_DIR is set, a
+        // Navigator/Driver turn overlays its recorded artifact (code + cycle/
+        // experiment records) from the corpus instead of spawning the model. The
+        // orchestrator still VISITS the turn (logs + transitions + runs the live
+        // cycle-record CLIs that stamp RED/GREEN against the overlaid code), so
+        // every Navigator<->Driver event is reproduced , only the artifact
+        // delivery is mocked. The Kth Navigator/Driver turn maps to the Kth
+        // recorded turn dir. A turn the corpus lacks falls through to the real agent.
         const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
-        if (replayBuildDir) {
-          const restored = restoreBuildTurn({
+        const story = cmd.replay?.story;
+        if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
+          const turnIndex = (buildTurns.get(story) ?? 0) + 1;
+          buildTurns.set(story, turnIndex);
+          const replayed = replayBuildTurn({
             replayBuildDir,
             projectDir: cfg.projectDir,
             tddDir: cfg.tddDir,
             featureId: cfg.featureId,
-            story: cmd.story,
+            story,
+            turnIndex,
           });
-          process.stderr.write(
-            restored
-              ? `[drive] restored build for ${cmd.story} from corpus (skip to release engineer)\n`
-              : `[drive] build replay miss for ${cmd.story} (no corpus); running the real build\n`,
-          );
+          if (replayed) {
+            process.stderr.write(
+              `[drive] replayed build turn ${turnIndex} (${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""} ${story}) from corpus (no model spawn)\n`,
+            );
+            return;
+          }
+          process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent\n`);
         }
-        return;
-      }
-      if (cmd.kind === "claude") {
+        // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
         // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
         // role's turn copies its recorded output from the corpus instead of
         // spawning the model. The orchestrator still VISITS the turn (logs +
@@ -293,10 +305,6 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     featureBranch: scm?.branch,
     deployTarget: args.deployTarget ?? "local",
     approver: args.approver ?? "human-proxy",
-    // Build corpus (fast-forward-to-release): when set, cut-experiment is
-    // followed by a replay-build that restores the recorded build so the drive
-    // skips Navigator/Driver and lands on the Release Engineer deploy.
-    replayBuildDir: process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR,
     // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.
@@ -329,50 +337,98 @@ function composeOnAction(
 
 /**
  * The PAUSE gate's human wait: block the state machine at the handoff and ask
- * [Y/n] on the terminal. Y / Enter resolves (the run resumes); n re-asks (we
- * never bail). Reads /dev/tty so the prompt reaches the human even when the
- * driver's stdio is piped. LAKEBASE_TDD_AUTO_CONTINUE=1 auto-confirms (CI /
- * non-interactive), and if no terminal is available it also auto-confirms with a
- * warning rather than hanging a headless run forever.
+ * [Y/n], then RESUME on Y (n re-asks; the run never bails). Three input sources,
+ * in order:
+ *   1. LAKEBASE_TDD_AUTO_CONTINUE=1   , auto-confirm (CI / fully non-interactive).
+ *   2. LAKEBASE_TDD_GATE_ANSWER_FILE  , poll that file for y/n (a parent process
+ *      drives the gate, e.g. a controller answering on the human's behalf).
+ *   3. an interactive stdin TTY       , prompt + read the human's line.
+ * With none of those (piped, no control file), it auto-continues with a warning
+ * rather than crashing or hanging. It never opens /dev/tty (absent in many
+ * sandboxes, and its open error is async , the prior cause of a hard crash).
  */
 function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
   const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
+  const answerFile = process.env.LAKEBASE_TDD_GATE_ANSWER_FILE?.trim();
+  const isYes = (a: string): boolean => a === "" || a === "y" || a === "yes";
   return (action) =>
     new Promise((resolve) => {
       const label = describeAction(action);
+      const prompt = `\n[drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
       if (auto) {
         process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}\n`);
         return resolve();
       }
-      let tty: fs.ReadStream | undefined;
-      try {
-        if (process.stdin.isTTY) {
-          tty = undefined; // use process.stdin directly below
-        } else {
-          tty = fs.createReadStream("/dev/tty");
-        }
-      } catch {
-        process.stderr.write(`[drive] PAUSE gate: no terminal to prompt , auto-continuing past ${label}.\n`);
-        return resolve();
+      // (2) Control channel: poll the answer file (written y/n by a controller).
+      if (answerFile) {
+        process.stderr.write(`${prompt}\n[drive] (awaiting answer in ${answerFile})\n`);
+        const poll = setInterval(() => {
+          let raw: string;
+          try { raw = fs.readFileSync(answerFile, "utf8"); } catch { return; } // not written yet
+          const a = raw.trim().toLowerCase();
+          if (a === "") return; // present but blank , keep waiting
+          try { fs.rmSync(answerFile, { force: true }); } catch { /* ignore */ }
+          if (a === "y" || a === "yes") { clearInterval(poll); process.stderr.write(`[drive] resuming.\n`); resolve(); }
+          else process.stderr.write(`[drive] holding , write Y to ${answerFile} when ready.\n`);
+        }, 1000);
+        return;
       }
-      const input = (tty as unknown as NodeJS.ReadableStream) ?? process.stdin;
-      const ask = (): void => {
-        const rl = readline.createInterface({ input, output: process.stderr, terminal: false });
-        rl.question(`\n[drive] PAUSED , continue past the ${label} handoff? [Y/n] `, (answer) => {
-          rl.close();
-          const a = answer.trim().toLowerCase();
-          if (a === "" || a === "y" || a === "yes") {
-            process.stderr.write(`[drive] resuming.\n`);
-            try { tty?.close(); } catch { /* ignore */ }
-            resolve();
-          } else {
-            process.stderr.write(`[drive] holding , answer Y when ready to continue.\n`);
-            ask();
-          }
-        });
-      };
-      ask();
+      // (3) Interactive terminal.
+      if (process.stdin.isTTY) {
+        const ask = (): void => {
+          const rl = readline.createInterface({ input: process.stdin, output: process.stderr, terminal: false });
+          rl.question(prompt, (answer) => {
+            rl.close();
+            if (isYes(answer.trim().toLowerCase())) { process.stderr.write(`[drive] resuming.\n`); resolve(); }
+            else { process.stderr.write(`[drive] holding , answer Y when ready.\n`); ask(); }
+          });
+        };
+        return ask();
+      }
+      // No terminal + no control channel: never crash or hang , continue.
+      process.stderr.write(
+        `${prompt}\n[drive] no interactive terminal and no LAKEBASE_TDD_GATE_ANSWER_FILE , auto-continuing past ${label}.\n`,
+      );
+      resolve();
     });
+}
+
+/**
+ * Wrap effects so that, when LAKEBASE_TDD_RECORD_BUILD_DIR is set, the driver
+ * snapshots each Navigator/Driver turn AFTER its effect lands , the per-turn
+ * build corpus the event-by-event replay plays back. A no-op when unset, so a
+ * normal run is unaffected. Only build turns (invoke-role navigator|driver) are
+ * recorded; design/deploy turns are not build output.
+ */
+function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveEffects {
+  const recordBuildDir = process.env.LAKEBASE_TDD_RECORD_BUILD_DIR?.trim();
+  if (!recordBuildDir) return inner;
+  let turn = 0;
+  return {
+    readState: () => inner.readState(),
+    onAction: inner.onAction ? (a, i) => inner.onAction!(a, i) : undefined,
+    async perform(action) {
+      await inner.perform(action);
+      if (action.kind === "invoke-role" && (action.role === "navigator" || action.role === "driver")) {
+        turn += 1;
+        const dir = recordBuildTurn({
+          recordBuildDir,
+          projectDir: cfg.projectDir,
+          tddDir: cfg.tddDir,
+          featureId: cfg.featureId,
+          story: action.story,
+          turn,
+          role: action.role,
+          ac: action.ac,
+          mode: action.buildMode,
+        });
+        process.stderr.write(
+          `[record] turn ${turn}: ${action.role}${action.buildMode ? ` (${action.buildMode})` : ""}` +
+            `${action.ac ? ` ${action.ac}` : ""} -> ${dir}\n`,
+        );
+      }
+    },
+  };
 }
 
 /** Compose a phase bound's stopWhen with the interactive gate stop: in
@@ -529,7 +585,7 @@ async function main(): Promise<number> {
   cfg.runner = execRunner(cfg);
   const interactive = args.gates === "interactive";
   try {
-    const result = await runDriver(buildDriveEffects(cfg), {
+    const result = await runDriver(withBuildRecording(buildDriveEffects(cfg), cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
       stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),

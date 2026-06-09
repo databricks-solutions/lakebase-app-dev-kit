@@ -23,6 +23,7 @@ import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson } from "./tdd-paths.js";
+import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
 export type DriveCommand =
   // resumeKey: when set, the runner resumes this role's Claude session across
@@ -38,13 +39,7 @@ export type DriveCommand =
   // commits its requests, project backlog.json from the on-disk feature-request
   // set + the Architect's estimates. Handled in-process by the runner (no CLI),
   // mirroring set-phase. See syncBacklog in tdd-paths.
-  | { kind: "sync-backlog"; sprint: string }
-  // Fast-forward-to-release: restore a story's recorded BUILD (the whole code
-  // tree + GREEN/reviewed cycles + experiment records) from the build corpus,
-  // so the driver skips the live Navigator/Driver loop and lands on
-  // await-acceptance (the deterministic Release Engineer deploy). Emitted right
-  // after cut-experiment, only when a build corpus is configured (replayBuildDir).
-  | { kind: "replay-build"; story: string };
+  | { kind: "sync-backlog"; sprint: string };
 
 export interface CommandRunner {
   run(cmd: DriveCommand): Promise<void>;
@@ -63,10 +58,6 @@ export interface DriveEffectsConfig {
   sprintName?: string;
   /** Deploy target for the deploy action (e.g. "local"). */
   deployTarget?: string;
-  /** Build corpus root (LAKEBASE_TDD_REPLAY_BUILD_DIR). When set, cut-experiment
-   *  is followed by a replay-build step that restores the recorded build so the
-   *  drive fast-forwards past Navigator/Driver to the Release Engineer. */
-  replayBuildDir?: string;
   /** Lakebase instance id (the Lakebase project id), threaded to the experiment
    *  branch ops. The experiment CLI requires it; resolved from SCM state. */
   instance?: string;
@@ -212,8 +203,16 @@ const DEPLOY_BIN = "lakebase-tdd-deploy";
 // name. `cut` and `accept` (merge) BOTH compute them from here, so the branch
 // cut and the branch merged back always agree. The experiment branch forks off
 // (and merges into) the feature branch, which is cfg.featureBranch.
+//
+// The name is SANITIZED with the same helper the paired-branch substrate applies
+// when it creates the branch (sanitizeBranchName: "/" -> "-", lowercase). Without
+// this, cut created `experiment-s1-create-bug-exp1` (sanitized) but accept tried
+// to `git merge experiment/S1-create-bug-exp1` (raw) and failed "not something we
+// can merge". Sanitizing here is the single source of truth; it is idempotent on
+// an already-sanitized name, so cut, accept, and replay all agree.
 const EXPERIMENT_SLUG = "exp1";
-const experimentBranchName = (storyId: string): string => `experiment/${storyId}-${EXPERIMENT_SLUG}`;
+const experimentBranchName = (storyId: string): string =>
+  sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
 
 /**
  * The concrete commands that carry out one action. Depends on the action +
@@ -340,11 +339,6 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
             cfg.tddDir,
           ],
         },
-        // Fast-forward-to-release: with a build corpus configured, restore the
-        // recorded build onto the just-cut experiment branch so the driver skips
-        // the live Navigator/Driver loop and lands on the deterministic Release
-        // Engineer deploy. A no-op (corpus miss) falls through to the live build.
-        ...(cfg.replayBuildDir ? [{ kind: "replay-build", story: action.story } as DriveCommand] : []),
       ];
 
     case "await-acceptance":

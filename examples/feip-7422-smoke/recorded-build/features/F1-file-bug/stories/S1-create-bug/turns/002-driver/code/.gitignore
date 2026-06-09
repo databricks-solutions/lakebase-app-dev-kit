@@ -1,0 +1,18 @@
+# Lakebase project — common ignores
+.env
+application-local.properties
+.tmp/
+*.log
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/

@@ -1,4 +1,0 @@
-{
-  "refactor": false,
-  "notes": "No new production code was introduced for AC4; the status pill and 'open' initialization were pre-implemented during AC3 (test-list-drift was flagged at write time). The display satisfies design guide requirements: pill radius 9999px, text-xs (10px), uppercase, success background #2E844A for 'open', navy-900 text, label present so color alone does not convey state. Hardcoding the success color for 'open' is DTSTTCPW-correct for S1 -- only one status value exists in this story; a status-to-color mapping belongs to a future story that introduces additional states. All layer boundary and R2 service-layer concerns (BugService, BugRepository, ALLOWED_STATUSES dead code) are already captured in the AC3 review verdict and are not duplicated here."
-}

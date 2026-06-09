@@ -1,5 +1,0 @@
-{
-  "reviewed_at": "2026-06-08T19:00:51.172Z",
-  "refactor_requested": false,
-  "refactor_notes": "No new production code was written for AC2: the native HTML <input> from AC1 already captures and redisplays typed text, so T2 passed without changes to the app layer. The two driver changes were (a) python-multipart added to main dependencies (correct placement for a runtime dep) and (b) pytest-playwright placed in a new [dependency-groups] dev section alongside the existing [project.optional-dependencies] dev section in pyproject.toml. The split sections are a minor packaging inconsistency but do not violate architecture.md, nfrs.md, or the design guide, so no dedicated refactor cycle is warranted here. The layer boundary concern (HTML template in main.py vs pages/CreateBugForm) was already captured in the AC1 review verdict and should be addressed there."
-}

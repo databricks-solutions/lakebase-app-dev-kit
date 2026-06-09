@@ -176,18 +176,12 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(cmd.args).toContain("feature/x");
   });
 
-  it("cut-experiment appends a replay-build step ONLY when a build corpus is configured", () => {
-    // No build corpus: just the cut.
-    const plain = commandsForAction({ kind: "cut-experiment", story: "S1" }, cfg({ featureBranch: "feature/x" }));
-    expect(plain.some((c) => c.kind === "replay-build")).toBe(false);
-    // Build corpus set: cut, then restore the recorded build (fast-forward-to-release).
-    const withCorpus = commandsForAction(
-      { kind: "cut-experiment", story: "S1" },
-      cfg({ featureBranch: "feature/x", replayBuildDir: "/corpus/recorded-build" }),
-    );
-    const last = withCorpus[withCorpus.length - 1];
-    expect(last).toMatchObject({ kind: "replay-build", story: "S1" });
-    expect(withCorpus[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-experiment" }); // cut still first
+  it("cut-experiment emits only the cut (build replay is now per-turn, not a post-cut skip)", () => {
+    // The monolithic replay-build step is gone: build replay happens turn by turn
+    // in the runner (per Navigator/Driver turn), so cut-experiment just cuts.
+    const cmds = commandsForAction({ kind: "cut-experiment", story: "S1" }, cfg({ featureBranch: "feature/x" }));
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-experiment" });
+    expect(cmds.some((c) => (c as { kind: string }).kind === "replay-build")).toBe(false);
   });
 
   it("ux-designer translates the design brief into the project style guide", () => {

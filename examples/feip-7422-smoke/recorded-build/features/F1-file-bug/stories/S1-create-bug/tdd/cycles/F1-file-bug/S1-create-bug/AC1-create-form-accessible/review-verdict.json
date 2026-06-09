@@ -1,4 +1,0 @@
-{
-  "refactor": true,
-  "notes": "Two concrete issues against the rubric. (1) Layer boundary: architecture.md names 'pages/CreateBugForm' as the presentation owner, but the HTML template is an inline string literal inside the route handler in main.py. The HTTP layer should delegate rendering to a separate presentation module (pages/ or Jinja2 templates); mixing routing + markup in one function violates SRP and the boundary the Architect drew. (2) DRY violation: create_bug_form embeds its own full copy of the shared base styles (body, nav, card, etc.) while bug_detail uses the _SHARED_STYLES constant that was added for AC3. The two copies are already diverging (create_bug_form has the form-input rules; _SHARED_STYLES omits them). Extract a single shared base and compose per-page additions on top. Neither change alters what the outer-boundary test at GET /bugs/create asserts."
-}

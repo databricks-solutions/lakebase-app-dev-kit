@@ -119,10 +119,6 @@ if ! grep -rq "$MARKER" "${KIT_INSTALL}/dist" 2>/dev/null; then
 fi
 log "GUARD ok , cache @ ${HEAD_SHA} contains '${MARKER}' (fresh dist confirmed)"
 
-# Also re-warm the branch-keyed cache to the current SHA, so a later
-# `--kit-ref <branch>` run resolves THIS commit (lk's warm step is SHA-aware).
-LAKEBASE_KIT_REF="$BRANCH" bash "${KIT_DIR}/templates/project/common/scripts/lk" --rewarm >/dev/null 2>&1 || true
-
 log "✓ published $BRANCH @ $HEAD_SHA and warmed the cache."
 log "  run a smoke against THESE pushed bits with: --kit-ref ${HEAD_SHA}"
 log "  (or pin: export LAKEBASE_KIT_DIR=${KIT_INSTALL})"
