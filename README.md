@@ -71,7 +71,7 @@ Package.json is publish-ready (`private: false`, `files` allow-list, `prepublish
 
 ### For coding agents
 
-`install.sh` at the repo root copies the kit's skill trees under `skills/` into the path each agent reads from. Auto-detects installed agents; `--tools` overrides. Mirrors the pattern in [`databricks-solutions/ai-dev-kit`](https://github.com/databricks-solutions/ai-dev-kit).
+`install.sh` at the repo root copies the kit's skill trees under `skills/` into the path each agent reads from. It first pulls the latest vendored skills via `npm run sync:devhub` (best-effort; skipped offline). Auto-detects installed agents; `--tools` overrides. Mirrors the pattern in [`databricks-solutions/ai-dev-kit`](https://github.com/databricks-solutions/ai-dev-kit).
 
 ```bash
 # Auto-detect installed agents, prompt to pick
