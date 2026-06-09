@@ -1,5 +1,8 @@
 // FEIP-7510: the kit is a Claude Code plugin. /lakebase-app-dev-kit:tdd launches
-// the TDD workflow; the role agents ship as plugin agents. Hermetic JSON/file checks.
+// the TDD workflow. The plugin ships the command + skills + MCP server; the role
+// agents are NOT shipped as plugin agents , the driver invokes them as
+// `claude --agent <role>` against the agents scaffolded into each project's
+// .claude/agents/, so the manifest declares no `agents` field. Hermetic JSON/file checks.
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -21,14 +24,17 @@ describe("plugin manifest (.claude-plugin/plugin.json)", () => {
     expect(manifest.name).toBe("lakebase-app-dev-kit");
   });
 
-  it("exposes skills and the role agents", () => {
+  it("exposes skills and declares NO agents field (agents come from the scaffolded project)", () => {
     expect(manifest.skills).toBe("./skills/");
-    expect(manifest.agents).toBe("skills/lakebase-tdd-workflows/agents");
-    const agentsDir = path.join(REPO_ROOT, manifest.agents);
-    expect(fs.existsSync(agentsDir)).toBe(true);
-    // The agents path resolves to exactly the AgentRole defs.
+    // The `agents` field is intentionally omitted: a dir string is rejected by
+    // the manifest validator, and the driver uses project-scope agents anyway.
+    expect(manifest.agents).toBeUndefined();
+    // The canonical role-agent source (what create-project scaffolds into a
+    // project's .claude/agents/) still resolves to exactly the AgentRole defs.
+    const agentSourceDir = path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "agents");
+    expect(fs.existsSync(agentSourceDir)).toBe(true);
     const onDisk = fs
-      .readdirSync(agentsDir)
+      .readdirSync(agentSourceDir)
       .filter((f) => f.endsWith(".md"))
       .map((f) => f.replace(/\.md$/, ""))
       .sort();
@@ -43,7 +49,9 @@ describe("marketplace catalog (.claude-plugin/marketplace.json)", () => {
     expect(Array.isArray(market.plugins)).toBe(true);
     const entry = market.plugins.find((p: any) => p.name === "lakebase-app-dev-kit");
     expect(entry, "marketplace should list lakebase-app-dev-kit").toBeTruthy();
-    expect(entry.source).toBe(".");
+    // Relative-path plugin sources must start with "./" (a bare "." is rejected
+    // as an unsupported source type by `claude plugin install`).
+    expect(entry.source).toBe("./");
   });
 });
 
@@ -61,10 +69,10 @@ describe("/lakebase-app-dev-kit:tdd launcher command (commands/tdd.md)", () => {
     expect(tdd).toMatch(/\/deploy\b/);
   });
 
-  it("drives via the deterministic orchestrator + the role agents under the kit namespace, coordinates only", () => {
+  it("drives via the deterministic orchestrator + the scaffolded role agents, coordinates only", () => {
     expect(tdd).toMatch(/lakebase-tdd-drive|deterministic orchestrator/); // the driver, not an LLM scrum-master
     expect(tdd).not.toMatch(/scrum-master/);
-    expect(tdd).toMatch(/lakebase-app-dev-kit:<role>/); // documents the role namespace
+    expect(tdd).toMatch(/claude --agent <role>/); // documents how the driver spawns roles
     expect(tdd).toMatch(/coordinate only/i);
     for (const role of ["product-owner", "spec-author", "release-engineer"]) {
       expect(tdd, `role ${role} should be named`).toContain(role);

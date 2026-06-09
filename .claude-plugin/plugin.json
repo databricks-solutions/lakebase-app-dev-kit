@@ -7,6 +7,5 @@
   },
   "repository": "https://github.com/databricks-solutions/lakebase-app-dev-kit",
   "keywords": ["lakebase", "databricks", "postgres", "branch-pairing", "branching", "tdd", "scm", "release-management", "agentic-development", "human-in-the-loop"],
-  "skills": "./skills/",
-  "agents": "skills/lakebase-tdd-workflows/agents"
+  "skills": "./skills/"
 }
