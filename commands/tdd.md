@@ -35,7 +35,17 @@ The commands (`/sprint`, `/plan`, `/design`, `/build`, `/deploy`, `/spike`) are 
 
 There is no `.tdd/` here, so bootstrap one. Walk the user through it (ask, do not assume; offer the noted defaults):
 
-- **Project name** (kebab-case, the Lakebase id + dir name); **parent directory** (default: parent of cwd or `~/code`); **Databricks host** (offer `DATABRICKS_HOST` / `~/.databrickscfg` if present); **GitHub owner** (or `--no-github`); **tiers** (`1` prod / `2` prod+staging / `3` prod+staging+dev, surface this, do not pick silently); **language** (`python`/`nodejs`/`java`/`kotlin`); **E2E/Infra** (default on for nodejs); **per-role models** (advanced, optional, default accept the recommendations, or override e.g. `driver=haiku`).
+- **Project name** (kebab-case, the Lakebase id + dir name); **parent directory** (default: parent of cwd or `~/code`); **Databricks host** (offer `DATABRICKS_HOST` / `~/.databrickscfg` if present); **GitHub owner** (or `--no-github`); **tiers** (`1` prod / `2` prod+staging / `3` prod+staging+dev, surface this, do not pick silently); **language** (`python`/`nodejs`/`java`/`kotlin`); **E2E/Infra** (default on for nodejs); **model profile** (see "Per-role model profile" just below).
+
+### Per-role model profile
+
+Offer the user one of three paths (default to **Full**):
+
+1. **Full (recommended).** Highest-quality specs, architecture, tests, and code; the tradeoff is slower runs and higher token spend. Best for real feature work you intend to keep and ship.
+2. **Lean.** Faster and cheaper; the tradeoff is rougher planning and design output (specs, architecture, and review may need more human correction at the gates). Best for quick experiments, demos, throwaway spikes, or cost/latency-sensitive runs.
+3. **Custom (cherry-pick).** Tune the model per role yourself when you want a specific mix.
+
+Realize the choice through `lakebase-create-project`'s per-role overrides (below): **Full** uses each role's recommended model; **Lean** runs every role on `haiku` except `navigator` and `driver`, which stay on `sonnet`. The selection is persisted to `.lakebase/agent-config.json` and can be edited there later.
 
 Then run the kit's creator (surface the exact command first; report its output, which prints a `Next:` hint):
 
