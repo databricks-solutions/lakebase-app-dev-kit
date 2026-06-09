@@ -185,7 +185,7 @@ Rollback is invasive (it rewrites `to`'s git history). The convention accepts th
 
 ## Future work
 
-Substrate primitives that encode this convention (FEIP-7059 roadmap). Note that none of the release primitives mention specific tier names - they all take `from` / `to` (or just `to` for backup/migrate) so the same primitive serves every adjacent pair:
+Substrate primitives that encode this convention (roadmap). Note that none of the release primitives mention specific tier names - they all take `from` / `to` (or just `to` for backup/migrate) so the same primitive serves every adjacent pair:
 
 - `bootstrap-branch-convention({chain, workingTypeTargets})` - given a fresh project, creates the configured long-running chain (default `[staging, prod]`; an N-tier shop passes e.g. `[dev, staging, prod]`) plus the working-branch types, all from prod (git + Lakebase), and writes parent-pair metadata + the type→target-tier mapping. One-time per project.
 - `cutRC({from, to, releaseId})` - branches the RC off current `to` (git + Lakebase) and merges `from` in.
@@ -197,7 +197,7 @@ Substrate primitives that encode this convention (FEIP-7059 roadmap). Note that 
 Companion changes:
 
 - Extension branch picker (VS Code) restricts new-branch creation to the convention's types and reads the type→target-tier mapping from project metadata.
-- Scaffolded project YAMLs (`pr.yml`, `merge.yml`) call substrate primitives instead of inlining `mvn flyway:migrate` / `alembic upgrade head` (FEIP-7096). `merge.yml`'s `on: push: branches: [...]` list is generated from the project's long-running-branch chain rather than hardcoded.
+- Scaffolded project YAMLs (`pr.yml`, `merge.yml`) call substrate primitives instead of inlining `mvn flyway:migrate` / `alembic upgrade head`. `merge.yml`'s `on: push: branches: [...]` list is generated from the project's long-running-branch chain rather than hardcoded.
 - Coding-agent skills reference this document as the source for "how do releases work in a Lakebase-paired project."
 - Integration test scenarios in the extension (and any downstream consumer) parameterize their merge target via scenario context (e.g. `ctx.baseBranch`) so the same scenario file works at any tier.
 

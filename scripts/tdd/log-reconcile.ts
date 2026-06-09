@@ -1,4 +1,4 @@
-// FEIP-7510/7422: make design-phase observability STRUCTURAL, not dependent on
+///7422: make design-phase observability STRUCTURAL, not dependent on
 // each role model remembering to emit `lakebase-tdd-log` events.
 //
 // Per-role logging is prose-instructed, so a role can do the substantive work

@@ -189,7 +189,7 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
  * Record the runner outcome + stamp GREEN on the story's open RED cycle (red_at
  * set, green_at not). Per the "driver runs, orchestration records" contract the
  * Driver already ran the project's test command in its loop; this records that
- * run (recordRunnerOutcome unlocks markGreen's FEIP-7094 runner contract for
+ * run (recordRunnerOutcome unlocks markGreen's runner contract for
  * layer-tagged cycles) and marks the cycle green. Throws when there is no open
  * RED cycle (the Driver was dispatched with nothing to green , a real defect).
  */
@@ -210,9 +210,9 @@ export async function greenOpenCycle(
     experiment_slug: open.experiment_slug,
     branch_id: open.branch_id,
   };
-  // HONEST GREEN (FEIP-7510 follow-up): run the project's verify suite against
+  // HONEST GREEN (follow-up): run the project's verify suite against
   // the running app and record the REAL outcome. The old code hardcoded
-  // passed:true , which faked the FEIP-7094 runner contract and shipped a
+  // passed:true , which faked the runner contract and shipped a
   // false-green (a test that broke a sibling test was stamped green). A failure
   // here leaves the cycle RED and raises an escalation to the HIL; the
   // orchestration then routes to raise-to-hil rather than advancing.

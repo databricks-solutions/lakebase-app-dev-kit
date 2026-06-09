@@ -1,4 +1,4 @@
-// Inspection primitives (P6g, FEIP-7339). Read-only "what's the
+// Inspection primitives (P6g). Read-only "what's the
 // state?" calls that don't fit cleanly into branches.ts, ancestry.ts,
 // or log.ts. All return safe empty defaults on failure so callers
 // driving status-bar / tree refreshes don't have to wrap every call.

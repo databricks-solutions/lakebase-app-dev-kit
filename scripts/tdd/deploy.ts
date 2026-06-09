@@ -29,7 +29,7 @@ export interface VerifyResult {
   summary?: string;
 }
 
-/** The deploy-gate evidence the Release Engineer produces (FEIP-7461):
+/** The deploy-gate evidence the Release Engineer produces:
  *  features/<F>/deploy-evidence.json. The deploy gate approves only when this
  *  exists, conforms, and records reachable=true AND verify.passed=true. */
 export interface DeployEvidence {
@@ -48,7 +48,7 @@ export interface DeployEvidence {
 
 /** True when deploy evidence proves working software: reachable AND verify
  *  passed. The shared teeth predicate for both the feature deploy gate and the
- *  per-story acceptance (FEIP-7461). */
+ *  per-story acceptance. */
 export function deployEvidencePasses(e: DeployEvidence | undefined): boolean {
   return e !== undefined && e.reachable === true && e.verify?.passed === true;
 }
@@ -79,7 +79,7 @@ export interface LocalTargetConfig {
   readyTimeoutSeconds: number;
   /**
    * Feature-verify command run against the RUNNING app after it is reachable
-   * (FEIP-7461 deploy gate). Its exit code becomes deploy-evidence.json
+   * (deploy gate). Its exit code becomes deploy-evidence.json
    * verify.passed, which the deploy gate requires to be true. Optional: a target
    * with no verify produces verify.passed=false, which the (strict) deploy gate
    * refuses, so a shippable target must declare one.
@@ -180,7 +180,7 @@ export interface DeployArgs {
   targetName: string;
   /**
    * When set, the run command is started with LAKEBASE_BRANCH_ID bound to this
-   * branch (FEIP-7566), so a per-story deploy runs the app against the story's
+   * branch, so a per-story deploy runs the app against the story's
    * EXPERIMENT branch DB, the working software the PO reviews before accept.
    * Unset = the ambient env (the feature branch), the per-sprint deploy.
    */
@@ -191,7 +191,7 @@ export interface DeployArgs {
    */
   featureId?: string;
   /**
-   * Story this deploy belongs to (FEIP-7461). When set (with featureId), the
+   * Story this deploy belongs to. When set (with featureId), the
    * evidence is written at story scope: features/<F>/stories/<S>/, and gates
    * the per-story acceptance. Pair with lakebaseBranch = the story's experiment
    * branch so the PO reviews the story on its own DB.
@@ -268,7 +268,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     return { ok: false, reason, verify, evidencePath };
   }
 
-  // Per-story deploy (FEIP-7566): bind the run command to the experiment
+  // Per-story deploy: bind the run command to the experiment
   // branch's Lakebase DB so the PO reviews the story on its own branch. Unset
   // = the ambient env (the feature branch's per-sprint deploy).
   const env = args.lakebaseBranch
@@ -328,7 +328,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     // Raise to the HIL when the deploy could not prove working software
     // (unreachable, or reachable but verify FAILED). This is what turns the
     // Release Engineer's honest "1 of N ACs failed" into a clean raise-to-hil
-    // halt instead of the await-acceptance spin (the live FEIP-7422 stall): the
+    // halt instead of the await-acceptance spin (the live stall): the
     // deployVerified teeth stay false, so without this the driver re-issues
     // await-acceptance forever. Surface + halt; a human resolves it.
     if (!(reachableNow && verify.passed)) {
@@ -377,7 +377,7 @@ export interface CycleVerifyResult {
 
 /**
  * Honestly confirm a cycle is GREEN by running the project's verify suite against
- * the running app , deploy-during-build (FEIP-7510 follow-up): the per-cycle GREEN
+ * the running app , deploy-during-build (follow-up): the per-cycle GREEN
  * used to be FAKED (`recordRunnerOutcome({passed:true})`), which shipped a
  * false-green to the deploy gate. This ensures the local app is up (idempotent:
  * reuses a reachable one, else starts it + polls), then runs the SAME verify

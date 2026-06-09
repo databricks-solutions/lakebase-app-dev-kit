@@ -90,7 +90,7 @@ const AGENT_TERSE_SUFFIX =
 
 /**
  * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
- * the Spec Author's per-story draft prompt to exactly that story (FEIP-7461: an
+ * the Spec Author's per-story draft prompt to exactly that story (an
  * agent can only batch stories it is handed; we hand it just this one). Returns
  * "" when the stub is absent/unreadable, the directive alone still scopes it.
  */

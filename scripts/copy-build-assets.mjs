@@ -8,7 +8,7 @@
 // this copy, dist/scripts/.../*.schema.json are absent and a CONSUMER install
 // (which ships pre-built dist/ and never rebuilds) hits ENOENT at runtime.
 // The bug stayed latent until artifact-conformance made the mock approver the
-// first consumer-context schema reader (FEIP-7508).
+// first consumer-context schema reader.
 //
 // Wired as tsup `onSuccess`, so `npm run build` always produces a complete
 // dist/. The dev clone commits dist/ at release time, so consumers get the

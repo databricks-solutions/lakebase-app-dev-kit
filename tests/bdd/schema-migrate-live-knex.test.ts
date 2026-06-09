@@ -1,6 +1,6 @@
 // Live integration test for the Knex migrate runner.
-// The runner was a stub in the original primitives lift (FEIP-7091);
-// slice 3 of FEIP-7210 promoted it to a real shell-out implementation
+// The runner was a stub in the original primitives lift;
+// slice 3 of promoted it to a real shell-out implementation
 // and this suite exercises the full lifecycle against real Lakebase.
 //
 // Provisions its own Lakebase project on the configured Databricks

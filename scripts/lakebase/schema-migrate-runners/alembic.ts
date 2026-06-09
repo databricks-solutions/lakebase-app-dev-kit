@@ -1,4 +1,4 @@
-// Alembic runner for the kit's migrate primitives (FEIP-7091).
+// Alembic runner for the kit's migrate primitives.
 //
 // Reference implementation. Shells out to `alembic`. Expects the project
 // to have a working `alembic.ini` and a `migrations/versions/` (or

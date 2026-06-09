@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for the doctor health checks (FEIP-7330, P0.4). Output modes:
+// CLI for the doctor health checks (P0.4). Output modes:
 //   default: human-readable colorized table (no color when not a TTY)
 //   --json : machine-readable structured report
 //
@@ -57,7 +57,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-doctor (FEIP-7330)
+const HELP = `lakebase-doctor
 
 Run health checks on a Lakebase project: Databricks CLI presence + auth,
 .env shape, Lakebase project reachability, git remote, detected

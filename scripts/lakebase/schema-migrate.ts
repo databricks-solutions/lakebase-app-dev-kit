@@ -1,4 +1,4 @@
-// Schema migration primitives for Lakebase-paired projects (FEIP-7091).
+// Schema migration primitives for Lakebase-paired projects.
 //
 // Four canonical operations:
 //   applySchemaMigrations    – run pending forward migrations against a branch
@@ -8,8 +8,8 @@
 //
 // Language dispatch: Python/Alembic, Java+Kotlin/Flyway, and Node/Knex
 // runners are all fully implemented (apply / status / list for all three;
-// rollback for Alembic + Knex). The original primitives lift (FEIP-7091)
-// shipped Flyway + Knex as stubs; they were completed alongside FEIP-7210
+// rollback for Alembic + Knex). The original primitives lift
+// shipped Flyway + Knex as stubs; they were completed alongside
 // (adapter pattern) slices 2 + 3. listSchemaMigrations() is a pure file-scan
 // with no DB or runtime dependency.
 //
@@ -22,7 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConnection } from "./get-connection.js";
 // Adapter modules auto-register on import; routing below uses
-// resolveSchemaMigrationAdapter() (FEIP-7210 slice 4). The legacy public API
+// resolveSchemaMigrationAdapter() (slice 4). The legacy public API
 // (applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus /
 // listSchemaMigrations) is preserved as a thin shim over adapter calls.
 import "./adapters/alembic-adapter.js";

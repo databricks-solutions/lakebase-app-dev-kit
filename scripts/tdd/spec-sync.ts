@@ -18,7 +18,7 @@ type Phase =
 /**
  * Non-functional requirement. NFRs are owned by the Architect and live in
  * architecture.json (HIL-adjudicated at Gate 2), NOT on the spec-author-owned
- * feature-spec.json/story.json, putting them there drifted the spec gate (FEIP-7508).
+ * feature-spec.json/story.json, putting them there drifted the spec gate.
  */
 export interface Nfr {
   category: string;

@@ -39,7 +39,7 @@ describe("lakebase-tdd-workflows hard rules", () => {
     expect(readme).toMatch(/Race parallel experiments/i);
   });
 
-  it("README.md lexicon makes the experiment story-scoped explicit for N=1 (FEIP-7566)", () => {
+  it("README.md lexicon makes the experiment story-scoped explicit for N=1", () => {
     // Experiments are scoped to a story now: N=1 is the story's one isolated build.
     expect(readme).toMatch(/the story's one isolated build/i);
   });

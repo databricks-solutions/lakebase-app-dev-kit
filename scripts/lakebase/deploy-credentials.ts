@@ -1,5 +1,5 @@
 // Service-principal + Lakebase credential propagation for a Databricks
-// App deployment. Slice 5 of FEIP-7130.
+// App deployment. Slice 5 of.
 //
 // When a Databricks App is created, the platform auto-assigns it a
 // dedicated service principal whose client_id surfaces via `apps get`.

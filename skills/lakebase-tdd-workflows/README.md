@@ -80,7 +80,7 @@ The proposal is conservative by design: the analyzer's job is to surface the cho
 
 ### 2. Experiment
 
-With a story's plan approved, the agent cuts branches per the plan – one for N=1, multiple for N≥2 – forked from feature HEAD, and runs cycles against them in phase 4 (Implementation). Experiments are scoped to the story (FEIP-7566): `experiments/<feature>/<story>/<slug>/`.
+With a story's plan approved, the agent cuts branches per the plan – one for N=1, multiple for N≥2 – forked from feature HEAD, and runs cycles against them in phase 4 (Implementation). Experiments are scoped to the story: `experiments/<feature>/<story>/<slug>/`.
 
 ```
 .tdd/

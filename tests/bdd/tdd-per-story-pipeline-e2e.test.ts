@@ -1,4 +1,4 @@
-// FEIP-7565 phase 3: hermetic end-to-end re-validation of the streaming
+// phase 3: hermetic end-to-end re-validation of the streaming
 // per-story design->build pipeline. Drives a 3-story feature through all three
 // substrate layers together (pipeline state 2a + per-story spec gate 2b +
 // per-story test-list scoping 2c) and asserts the headline behavior: the

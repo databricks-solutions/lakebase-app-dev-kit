@@ -1,5 +1,5 @@
 // Roll back a Databricks App to a previous deployment. Slice 6 of
-// FEIP-7130 (lakebase-apps-deploy).
+// (lakebase-apps-deploy).
 //
 // The Databricks Apps platform tracks deployment history per app
 // (`databricks apps list-deployments <name>`). Each deployment carries

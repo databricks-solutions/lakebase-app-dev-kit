@@ -1,4 +1,4 @@
-// SCM workflow merge (FEIP-7458 phase B+): ci-green -> merged.
+// SCM workflow merge (phase B+): ci-green -> merged.
 //
 // Merges the PR via mergePairedPullRequest (handles the GitHub merge +
 // remote branch delete + Lakebase feature branch delete), then switches

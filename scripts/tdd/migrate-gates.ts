@@ -2,7 +2,7 @@
 // gates.json for a feature that has approvals + withdrawals recorded in
 // selection-log.md but no structured state yet.
 //
-// Tracker: FEIP-7357 (G6 / FEIP-7363).
+// Tracker: (G6 /).
 //
 // Use case: a feature scaffolded before the gates state machine existed
 // has its HITL history in selection-log narrative only. Without backfill,

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: SCM workflow doctor (FEIP-7458 phase C). Read-only diagnostic.
+// CLI: SCM workflow doctor (phase C). Read-only diagnostic.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-doctor (FEIP-7458 phase C)
+const HELP = `lakebase-scm-doctor (phase C)
 
 Read-only diagnostic. Cross-checks .lakebase/workflow-state.json,
 .env, the current git branch, and the Lakebase tier inventory.

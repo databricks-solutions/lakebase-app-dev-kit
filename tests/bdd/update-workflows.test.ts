@@ -1,4 +1,4 @@
-// Coverage for the workflow refresh primitive (FEIP-7139). Pure
+// Coverage for the workflow refresh primitive. Pure
 // filesystem; no live Lakebase, runs in the standard non-live suite.
 //
 // Uses a synthetic kit fixture for most cases (kitDir override) to keep
@@ -202,7 +202,7 @@ describe("updateWorkflows – synthetic kit fixture", () => {
 
 describe("updateWorkflows + detectWorkflowDrift integration", () => {
   it("after a raw refresh (substitute=false) the project reads back as overall=ok against the same kit", () => {
-    // detectWorkflowDrift (FEIP-7140) does a byte-equality comparison
+    // detectWorkflowDrift does a byte-equality comparison
     // against the raw template content. When updateWorkflows substitutes
     // {{LAKEBASE_KIT_VERSION}}, the post-refresh project differs from
     // the template by exactly those substituted lines (a known

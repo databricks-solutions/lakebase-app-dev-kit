@@ -9,7 +9,7 @@
 //   assertEquivalent(a, b)    – compare the two outcomes (on-disk diff, git state, Lakebase state)
 //
 // Implementations are deliberately thin until the first operation lands.
-// Each `extract_*` JIRA sub-task (FEIP-7062..7064) extends these helpers
+// Each `extract_*` JIRA sub-task extends these helpers
 // with op-specific assertions.
 
 export type OpResult = {
@@ -29,13 +29,13 @@ export type OpResult = {
 
 export async function runViaExtension(_op: string, _args: Record<string, unknown>): Promise<OpResult> {
   throw new Error(
-    "runViaExtension not implemented yet. Wire to extension service classes once they re-route to scripts (FEIP-7062 onward)."
+    "runViaExtension not implemented yet. Wire to extension service classes once they re-route to scripts (onward)."
   );
 }
 
 export async function runViaAgent(_op: string, _args: Record<string, unknown>): Promise<OpResult> {
   throw new Error(
-    "runViaAgent not implemented yet. Wire to node scripts/lakebase/<op>.js once the first script lands (FEIP-7062 create-project)."
+    "runViaAgent not implemented yet. Wire to node scripts/lakebase/<op>.js once the first script lands (create-project)."
   );
 }
 

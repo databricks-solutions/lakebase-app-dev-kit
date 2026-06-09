@@ -4,8 +4,8 @@ Status: **proposal, not yet implemented.** Defines a single orchestrated path
 through `/design` -> `/build` -> `/ship` that runs identically for real and
 test. The orchestrator interviews the human-in-the-loop (HIL) at intake steps,
 generates the HIL-authored intake artifacts, and pauses at gates. In headless
-test runs a **Human Proxy** stands in for the human. Adjacent to FEIP-7508
-(handoff contracts), FEIP-7459 (agent contracts), FEIP-7510 (per-role runtime).
+test runs a **Human Proxy** stands in for the human. Adjacent to
+(handoff contracts) (agent contracts) (per-role runtime).
 
 ## Principle: one path, the HIL is a human or a Human Proxy
 
@@ -125,7 +125,7 @@ separately; it is named here so the orchestration covers the full lifecycle.
 
 ## Conformance + the Human Proxy
 
-- Conformance (FEIP-7508) hard-blocks malformed artifacts at every gate,
+- Conformance hard-blocks malformed artifacts at every gate,
   unchanged, for both human and proxy.
 - New: when `nfrs.md` exists, the Architect's `architecture.json` must cover
   every `## Required` NFR (see Decision 1). The Human Proxy verifies coverage

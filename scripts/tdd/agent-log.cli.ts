@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: emit (or read) a structured agent-log event. FEIP-7510 observability.
+// CLI: emit (or read) a structured agent-log event. observability.
 //
 // Emit (the entry point a headless role agent shells out to):
 //   lakebase-tdd-log --role spec-author --level info \

@@ -1,4 +1,4 @@
-// FEIP-7138: live integration test that proves substrate's setupRunner
+// live integration test that proves substrate's setupRunner
 // primitive + the v0.3.0-alpha.20 npx routing of lakebase-detect-language
 // work end-to-end against a real GitHub repository.
 //
@@ -65,7 +65,7 @@ function git(workdir: string, args: string[]): void {
 }
 
 describe.skipIf(!E2E)(
-  "detect-language via self-hosted runner (live, FEIP-7138)",
+  "detect-language via self-hosted runner (live)",
   () => {
     let token: string;
     let owner: string;
@@ -87,7 +87,7 @@ describe.skipIf(!E2E)(
       projectName = repo;
 
       console.log("");
-      console.log("[NOTICE] FEIP-7138 will create the following:");
+      console.log("[NOTICE] will create the following:");
       console.log(`         repo:    ${fullRepoName} (private)`);
       console.log(`         runner:  ~/.lakebase/runners/${projectName}/`);
       console.log(`         binary:  ~/.cache/github-actions-runner/`);
@@ -104,7 +104,7 @@ describe.skipIf(!E2E)(
         name: repo,
         private: true,
         auto_init: false,
-        description: "Throwaway: substrate detect-language CLI integration test (FEIP-7138).",
+        description: "Throwaway: substrate detect-language CLI integration test.",
       });
 
       workdir = fs.mkdtempSync(path.join(os.tmpdir(), `${repo}-`));
@@ -128,7 +128,7 @@ describe.skipIf(!E2E)(
         "commit",
         "-q",
         "-m",
-        "FEIP-7138 verify substrate detect-language CLI on self-hosted runner",
+        "verify substrate detect-language CLI on self-hosted runner",
       ]);
       git(workdir, [
         "remote",

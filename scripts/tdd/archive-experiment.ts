@@ -1,4 +1,4 @@
-// archiveExperiment lifecycle primitive (FEIP-7214). Atomically moves a
+// archiveExperiment lifecycle primitive. Atomically moves a
 // losing experiment's dir under _archive/, marks outcomes.json as
 // abandoned, optionally tears down its Lakebase branch + Databricks
 // Apps deployment via callbacks, and appends a selection-log entry.

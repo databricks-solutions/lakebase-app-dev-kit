@@ -1,4 +1,4 @@
-// SCM workflow doctor (FEIP-7458 phase C+): read-only diagnostic that
+// SCM workflow doctor (phase C+): read-only diagnostic that
 // cross-checks .lakebase/workflow-state.json against the actual git +
 // Lakebase + .env state and reports inconsistencies.
 //
@@ -87,7 +87,7 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
 
-  // 0. Stale spikes + experiments (FEIP-7566), named distinctly. Hermetic
+  // 0. Stale spikes + experiments, named distinctly. Hermetic
   // (reads .tdd records only), so it runs even without a Lakebase instance.
   for (const stale of findStaleBranches(path.join(projectDir, ".tdd"))) {
     const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";

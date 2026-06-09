@@ -118,7 +118,7 @@ function masterListBothStories(): TestList {
   };
 }
 
-describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
+describe("test-list: per-story scoping (phase 2c)", () => {
   it("acsForStory reads a story's AC ids from its acs/ dir", () => {
     expect(acsForStory(tdd, "F1", "S1")).toEqual(["AC1", "AC2"]);
     expect(acsForStory(tdd, "F1", "S2")).toEqual(["AC3"]);

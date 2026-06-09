@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for the cutBackup primitive (FEIP-7096).
+// CLI for the cutBackup primitive.
 //
 //   lakebase-cut-backup --instance <id> --source <branch> --name <backup>
 //
@@ -47,7 +47,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-cut-backup (FEIP-7096)
+const HELP = `lakebase-cut-backup
 
 Snapshot a Lakebase branch by forking a new branch off it. Use for
 "cut prod-backup" before a release migrates production.

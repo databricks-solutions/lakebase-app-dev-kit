@@ -2,7 +2,7 @@
 // feature's gates.json state. Composes G1 (readGates / writeGates) +
 // G2 (hashArtifact) + dual-writes a narrative entry to selection-log.md.
 //
-// Design: ADR-0004. Tracker: FEIP-7357 (G3 / FEIP-7360).
+// Design: ADR-0004. Tracker: (G3 /).
 //
 // The hash inputs are passed by the caller, not read from disk by this
 // primitive. The orchestrator (G8) is responsible for collecting the
@@ -93,7 +93,7 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
   const writeLog = args.writeSelectionLog ?? true;
 
   // Lock the gates.json read-modify-write critical section so concurrent
-  // approveGate calls cannot lose either approval (G7 / FEIP-7364).
+  // approveGate calls cannot lose either approval (G7 /).
   return withGatesLock(
     args.featureId,
     (): ApproveGateResult => {

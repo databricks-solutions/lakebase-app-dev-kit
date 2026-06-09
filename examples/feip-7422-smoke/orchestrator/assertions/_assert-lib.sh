@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Shared assertion helpers for the FEIP-7422 per-iteration verify scripts.
+# Shared assertion helpers for the per-iteration verify scripts.
 #
 # Why content/location-based, not filename-based:
 #   - Migrations are named with a UTC timestamp version (YYYYMMDDHHMMSS) for
 #     all three tools (the kit's collision-free scheme), so a migration's
 #     filename is not predictable. The old 000N_ numbered glob is meaningless.
-#   - The per-story pipeline (FEIP-7565) may split one iteration's schema change
+#   - The per-story pipeline may split one iteration's schema change
 #     across several revision files and names tests <slug>_s<N>.py.
 #   - The build chooses its own app layout (a flat app/main.py or an
 #     app/routers/*.py APIRouter), and FastAPI decorators are lowercase

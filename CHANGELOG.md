@@ -38,7 +38,7 @@ First beta on the 0.3.0 line, graduating from the alpha series. Consume via
 
 ### Added
 
-- **Artifact-conformance gate (FEIP-7508).** Per-artifact format registry: JSON
+- **Artifact-conformance gate.** Per-artifact format registry: JSON
   artifacts are validated against their schema and narrative markdown against its
   required sections. The mock HITL approver hard-blocks a gate whose artifact
   exists but is malformed, rather than approving it.
@@ -51,7 +51,7 @@ First beta on the 0.3.0 line, graduating from the alpha series. Consume via
   event) written to `.tdd/agent-log.jsonl`, with the `lakebase-tdd-log` CLI.
   HITL decisions are recorded (the mock reviewer validates expected elements and
   the human response is captured).
-- **Per-role-agent contracts (FEIP-7510).** Relay headers on every role agent; a
+- **Per-role-agent contracts.** Relay headers on every role agent; a
   new Spec Author (Business Analyst) role and a conditional UX Designer (UI-only)
   role with token-level design adherence enforced at the Playwright layer.
 - `feature-request.md` artifact: the Feature Requester's original ask, the Spec

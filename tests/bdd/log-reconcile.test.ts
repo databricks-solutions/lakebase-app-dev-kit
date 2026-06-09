@@ -1,4 +1,4 @@
-// FEIP-7510/7422: per-role logging is prose-instructed, so a role model can do
+///7422: per-role logging is prose-instructed, so a role model can do
 // the substantive work (write story stubs + ACs) while emitting no
 // `artifact.written` events. We saw exactly that when the spec-author was tiered
 // to sonnet: 5 ACs on disk, zero log events. reconcileArtifactLog makes

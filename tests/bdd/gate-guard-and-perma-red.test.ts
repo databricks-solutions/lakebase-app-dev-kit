@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 4 BDD coverage: design-spec-gate refuses phase 4 when
+// Phase 4 BDD coverage: design-spec-gate refuses phase 4 when
 // E2E rows are present but no playwright.config exists, and the new
 // e2e-row-perma-red smell fires after N consecutive cycles without GREEN
 // on an E2E-tagged AC. Hermetic: tmpdir-based .tdd/ trees, no shell-outs.

@@ -1,4 +1,4 @@
-// Sprint-scoped HITL gate state (FEIP-7461).
+// Sprint-scoped HITL gate state.
 //
 // The sprint PLAN gate is the only sprint-level gate: it locks the sprint
 // backlog (the Spec Author's feature-proposals.md) before the per-feature work

@@ -1,4 +1,4 @@
-// FEIP-7145: branch identifier normalization + parent-branch adapter.
+// branch identifier normalization + parent-branch adapter.
 //
 // Two layers of coverage:
 //

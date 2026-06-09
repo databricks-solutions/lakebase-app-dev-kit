@@ -1,4 +1,4 @@
-// SCM workflow abandon (FEIP-7458 phase B+): unwind a feature claim.
+// SCM workflow abandon (phase B+): unwind a feature claim.
 //
 // Transitions feature-claimed -> scaffold-complete. Best-effort cleanup
 // of the paired Lakebase + git pair via deletePairedBranch, then resets

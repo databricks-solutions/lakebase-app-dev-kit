@@ -8,7 +8,7 @@
 // Prints JSON on stdout, progress on stderr.
 //
 // Implementation: routes through scripts/lakebase/migrate.ts, which
-// itself routes through the SchemaMigrationAdapter registry (FEIP-7210
+// itself routes through the SchemaMigrationAdapter registry (adapter
 // slices 1-3). The bin name was finalized in slice 4; the kit has no
 // prior consumers, so no deprecation alias is shipped.
 
@@ -77,7 +77,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function helpFor(binName: string): string {
-  return `${binName} (FEIP-7210 schema migration adapter)
+  return `${binName} (schema migration adapter)
 
 Subcommands:
   apply     Apply pending forward migrations against a branch

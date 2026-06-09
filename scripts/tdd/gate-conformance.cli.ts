@@ -4,7 +4,7 @@
 //   lakebase-tdd-gate-conformance --feature <id>
 //   lakebase-tdd-gate-conformance --feature <id> --json --pretty
 //
-// FEIP-7508 Layer 2. Scans a feature's on-disk artifacts and checks each that
+// Layer 2. Scans a feature's on-disk artifacts and checks each that
 // exists against its declared format (JSON against its schema; narrative MD
 // against its role-documented required sections). Existence is NOT enforced
 // here (a feature mid-design legitimately lacks plan.json); this only reports

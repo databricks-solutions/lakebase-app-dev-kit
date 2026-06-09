@@ -1,4 +1,4 @@
-// Hermetic coverage for the lakebase-detect-language CLI (FEIP-7096).
+// Hermetic coverage for the lakebase-detect-language CLI.
 //
 // The CLI is a thin wrapper over migrate.ts's detectLanguage(projectDir),
 // added so scaffolded pr.yml + merge.yml can route detection through

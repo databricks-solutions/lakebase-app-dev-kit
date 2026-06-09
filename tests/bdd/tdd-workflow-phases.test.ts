@@ -1,4 +1,4 @@
-// FEIP-7510: the orchestrator obeys workflow-state.json, which now carries the
+// the orchestrator obeys workflow-state.json, which now carries the
 // planning (/plan) and deploy (/deploy) phases. Hermetic schema validation.
 
 import { describe, it, expect } from "vitest";

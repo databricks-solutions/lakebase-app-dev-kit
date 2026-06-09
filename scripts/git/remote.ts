@@ -1,6 +1,6 @@
 // Remote primitives. The origin-URL resolution (getGitHubUrl,
 // getOwnerRepo) shipped earlier; the CRUD verbs (addRemote,
-// removeRemote, listRemotes, deleteRemoteBranch) are P6d (FEIP-7336)
+// removeRemote, listRemotes, deleteRemoteBranch) are P6d
 // lifted from the extension's GitService.
 
 import { exec, shq, type CwdOnly } from "../util/exec.js";

@@ -1,4 +1,4 @@
-// Unit tests for scm-merge (FEIP-7458 phase B+).
+// Unit tests for scm-merge (phase B+).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";

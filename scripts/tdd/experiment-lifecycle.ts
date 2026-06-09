@@ -1,4 +1,4 @@
-// FEIP-7566 phase 2: the branch-ops side of a per-story experiment's lifecycle.
+// phase 2: the branch-ops side of a per-story experiment's lifecycle.
 //
 // A story is built on an experiment branch (an ephemeral paired Lakebase branch
 // forked from the feature branch HEAD). On PO accept the experiment is MERGED

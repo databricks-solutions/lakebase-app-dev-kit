@@ -1,4 +1,4 @@
-// SCM workflow prepare-pr (FEIP-7458 phase B+): feature-claimed -> pr-ready.
+// SCM workflow prepare-pr (phase B+): feature-claimed -> pr-ready.
 //
 // Pushes the feature branch to origin, opens a PR via octokit (or
 // updates the existing one if a re-run), syncs CI secrets, and writes
@@ -220,7 +220,7 @@ function defaultBody(featureId: string, parentBranch: string): string {
     "",
     `Forks from \`${parentBranch}\`.`,
     "",
-    "PR opened by `lakebase-scm-prepare-pr` (FEIP-7458 phase B+).",
+    "PR opened by `lakebase-scm-prepare-pr` (phase B+).",
   ].join("\n");
 }
 

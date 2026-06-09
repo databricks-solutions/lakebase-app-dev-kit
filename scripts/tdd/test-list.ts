@@ -138,7 +138,7 @@ function mergeViews(existing: PerAcView[], next: PerAcView): PerAcView[] {
   return remaining;
 }
 
-// --- Per-story scoping (FEIP-7565 phase 2c) -------------------------------
+// --- Per-story scoping (phase 2c) -------------------------------
 //
 // The master test-list.json is feature-level; its items each carry an ac_id.
 // The streaming build lane builds one story at a time, so it needs the subset

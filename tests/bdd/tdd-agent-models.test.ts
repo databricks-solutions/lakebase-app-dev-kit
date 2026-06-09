@@ -1,4 +1,4 @@
-// FEIP-7510: per-role model selection. Hermetic (tmpdir + in-memory); no live Lakebase.
+// per-role model selection. Hermetic (tmpdir + in-memory); no live Lakebase.
 
 import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";

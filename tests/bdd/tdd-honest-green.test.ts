@@ -1,4 +1,4 @@
-// Honest GREEN + escalate-to-HIL (FEIP-7510 follow-up).
+// Honest GREEN + escalate-to-HIL (follow-up).
 //
 // A live smoke shipped a FALSE-GREEN: greenOpenCycle stamped green without a real
 // run (it hardcoded passed:true), so a test that broke a sibling test was marked

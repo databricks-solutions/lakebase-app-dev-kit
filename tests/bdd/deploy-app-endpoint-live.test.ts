@@ -1,4 +1,4 @@
-// Live end-to-end test for FEIP-7130 slice 3's ensureAppEndpoint.
+// Live end-to-end test for slice 3's ensureAppEndpoint.
 //
 // Scaffolds a minimal Node.js HTTP server, generates app.yaml via
 // slice 2's generateAppYaml, calls ensureAppEndpoint to actually
@@ -7,7 +7,7 @@
 //
 // Real Databricks resources are created. The app endpoint stays
 // distinct from the orchestrator-level Lakebase project so the
-// teardown-on-green contract is per-test (mirrors FEIP-7138's pattern
+// teardown-on-green contract is per-test (mirrors's pattern
 // post-fix).
 //
 // Heavy: a full deploy takes 5-10 minutes. Gated on LAKEBASE_TEST_E2E +
@@ -172,7 +172,7 @@ afterAll(async () => {
 });
 
 describe.skipIf(!RUN_LIVE)(
-  "ensureAppEndpoint end-to-end (live, FEIP-7130 slice 3)",
+  "ensureAppEndpoint end-to-end (live, slice 3)",
   () => {
     it("uploads, creates, deploys, returns a URL, app is reachable via apps get", async () => {
       const result = await ensureAppEndpoint({

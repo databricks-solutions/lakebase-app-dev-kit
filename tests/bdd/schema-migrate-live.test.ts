@@ -1,4 +1,4 @@
-// Live integration test for the migrate primitives (FEIP-7091).
+// Live integration test for the migrate primitives.
 //
 // Provisions its own Lakebase project on the configured Databricks
 // workspace, runs the four migrate primitives against the default

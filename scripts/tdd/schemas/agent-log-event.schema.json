@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/agent-log-event.schema.json",
   "title": "AgentLogEvent",
-  "description": "One structured log line emitted by a TDD-workflow role agent. The workflow is a relay of isolated-memory agents (FEIP-7510); each agent emits what it is doing so a centralized log (.tdd/agent-log.jsonl) reconstructs the whole run. Persisted as JSON Lines: one object per line.",
+  "description": "One structured log line emitted by a TDD-workflow role agent. The workflow is a relay of isolated-memory agents; each agent emits what it is doing so a centralized log (.tdd/agent-log.jsonl) reconstructs the whole run. Persisted as JSON Lines: one object per line.",
   "type": "object",
   "required": ["ts", "role", "level", "event", "message"],
   "properties": {

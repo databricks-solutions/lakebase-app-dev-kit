@@ -1,4 +1,4 @@
-// FEIP-7510: the kit is a Claude Code plugin. /lakebase-app-dev-kit:tdd launches
+// the kit is a Claude Code plugin. /lakebase-app-dev-kit:tdd launches
 // the TDD workflow. The plugin ships the command + skills + MCP server; the role
 // agents are NOT shipped as plugin agents , the driver invokes them as
 // `claude --agent <role>` against the agents scaffolded into each project's

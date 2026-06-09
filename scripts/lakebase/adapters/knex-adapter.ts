@@ -1,5 +1,5 @@
 // KnexAdapter: SchemaMigrationAdapter implementation for Node.js projects
-// using Knex. FEIP-7210 slice 3.
+// using Knex. slice 3.
 //
 // Wraps scripts/lakebase/schema-migrate-runners/knex.ts, which shells out to
 // `npx knex` and derives results via before/after `migrate:status`

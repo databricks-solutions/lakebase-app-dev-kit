@@ -1,7 +1,7 @@
 // Live BDD: MCP server tool/call against a real Lakebase project.
 //
 // Complements handshake.test.ts (which covers the JSON-RPC envelope
-// with mocked handlers) by exercising the FEIP-7327 P0 tools
+// with mocked handlers) by exercising the tools
 // (lakebase_branch_*, lakebase_doctor) end-to-end through the stdio
 // protocol against a freshly-provisioned Lakebase project.
 //
@@ -106,7 +106,7 @@ function parseContent(result: unknown): unknown {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "MCP server live tools (FEIP-7327 P0 surface)",
+  "MCP server live tools (surface)",
   () => {
     let projectId: string;
     let defaultBranchName: string;

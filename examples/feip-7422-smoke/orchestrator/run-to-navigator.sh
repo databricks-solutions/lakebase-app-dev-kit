@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FEIP-7422 smoke , PAUSE just before the Navigator handoff.
+# TDD-workflow smoke , PAUSE just before the Navigator handoff.
 #
 # Scaffolds a REAL project, stages intake, claims the paired feature branch, and
 # REPLAYS the design lane (Spec Author, Architect, Test Strategist, UX Designer,

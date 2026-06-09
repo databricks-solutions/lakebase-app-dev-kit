@@ -222,7 +222,7 @@ describe("stopLocal", () => {
   });
 });
 
-describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)", () => {
+describe("deployToTarget: deploy-evidence.json (deploy gate artifact)", () => {
   const FEATURE = "F1-initial-domain";
   function fastClock() {
     let t = 0;
@@ -296,7 +296,7 @@ describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)
   });
 });
 
-describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified (FEIP-7461)", () => {
+describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified", () => {
   const FEATURE = "F1-initial-domain";
   const STORY = "S1-submit";
   function fastClock() {

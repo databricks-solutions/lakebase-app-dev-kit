@@ -1,4 +1,4 @@
-// FEIP-7508: the mock HITL approver must NOT fabricate approvals, and must
+// the mock HITL approver must NOT fabricate approvals, and must
 // NOT approve a gate whose artifacts exist but do not conform to their
 // declared format.
 //
@@ -69,7 +69,7 @@ function assertNoFabricatedHashes(tddDir: string): void {
   }
 }
 
-describe("drainGatesAsHumanProxy: never fabricates (Layer 1, FEIP-7508)", () => {
+describe("drainGatesAsHumanProxy: never fabricates (Layer 1)", () => {
   it("approves ONLY spec when the structured draft spec exists; skips the rest", () => {
     writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
@@ -237,7 +237,7 @@ describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-
   });
 });
 
-describe("drainGatesAsHumanProxy: deploy gate teeth (FEIP-7461)", () => {
+describe("drainGatesAsHumanProxy: deploy gate teeth", () => {
   // The deploy (working-software) gate approves ONLY when deploy-evidence.json
   // exists, conforms, AND records reachable=true + verify.passed=true.
   function writeEvidence(over: Record<string, unknown> = {}): void {

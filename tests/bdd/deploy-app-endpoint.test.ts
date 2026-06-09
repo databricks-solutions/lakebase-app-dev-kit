@@ -133,7 +133,7 @@ describe("deleteAppEndpoint: infra-error contract", () => {
   }, 10_000);
 });
 
-describe("deriveCiAppName (FEIP-7423)", () => {
+describe("deriveCiAppName", () => {
   it("lowercases, sanitizes, and truncates to 26 chars", () => {
     expect(deriveCiAppName("MyProject", "ci-pr-42")).toBe("myproject-ci-pr-42");
   });
@@ -156,7 +156,7 @@ describe("deriveCiAppName (FEIP-7423)", () => {
   });
 });
 
-describe("getCiAppEndpoint (FEIP-7423)", () => {
+describe("getCiAppEndpoint", () => {
   it("rejects when CLI is missing entirely (synthetic infra failure)", async () => {
     const origPath = process.env.PATH;
     process.env.PATH = "/nonexistent-bin";

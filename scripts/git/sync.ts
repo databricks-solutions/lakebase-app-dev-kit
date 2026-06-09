@@ -1,5 +1,5 @@
 // Sync primitives. P5c shipped push / pull / publishBranch /
-// pushCurrentBranchForPr; P6e (FEIP-7337) adds fetch / fetchPrune /
+// pushCurrentBranchForPr; P6e adds fetch / fetchPrune /
 // fetchAll / pullFrom / pushTo / sync.
 //
 // publishBranch and pushCurrentBranchForPr both need the current

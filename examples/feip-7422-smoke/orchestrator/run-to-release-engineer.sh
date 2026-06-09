@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FEIP-7422 smoke , PAUSE just before the Release Engineer handoff.
+# TDD-workflow smoke , PAUSE just before the Release Engineer handoff.
 #
 # Scaffolds a REAL project, stages intake, claims the paired feature branch,
 # REPLAYS the design lane AND RESTORES the recorded build (the whole code tree +

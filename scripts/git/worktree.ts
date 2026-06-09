@@ -1,4 +1,4 @@
-// Worktree primitives (P6c, FEIP-7335). Lifted from extension's
+// Worktree primitives (P6c). Lifted from extension's
 // GitService worktree methods.
 
 import { exec, shq, type CwdOnly } from "../util/exec.js";

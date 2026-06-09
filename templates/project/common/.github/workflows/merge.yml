@@ -201,7 +201,7 @@ jobs:
       # step below explicitly deletes on success and preserves on failure.
       # A catastrophic runner crash between cut-backup and cleanup would
       # leak the snapshot, where the previous inline call's ttl=86400s
-      # was a backstop - tracked as a follow-up on FEIP-7096.
+      # was a backstop - tracked as a follow-up on.
       - name: Create pre-migration snapshot
         id: snapshot
         env:

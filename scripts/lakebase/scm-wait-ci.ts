@@ -1,4 +1,4 @@
-// SCM workflow wait-ci (FEIP-7458 phase B+): pr-ready -> ci-green.
+// SCM workflow wait-ci (phase B+): pr-ready -> ci-green.
 //
 // Polls the PR's check-runs via getPullRequest until the aggregate
 // ciStatus becomes "success" or "failure", up to a configurable

@@ -12,7 +12,7 @@ import {
 
 // Most of runner-setup is destructive (downloads ~250MB, registers with
 // GitHub, spawns a long-running process). End-to-end equivalence lives
-// in FEIP-7071 with a dedicated test project. This suite only covers the
+// in with a dedicated test project. This suite only covers the
 // pure helpers + the filesystem-state lookups (against a tmp HOME).
 
 const ORIGINAL_HOME = os.homedir();

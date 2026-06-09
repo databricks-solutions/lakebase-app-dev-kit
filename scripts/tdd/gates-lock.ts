@@ -1,6 +1,6 @@
 // File-lock primitive for concurrent-safe gates.json mutations.
 //
-// Tracker: FEIP-7357 (G7 / FEIP-7364). Implements the lock approach from
+// Tracker: (G7 /). Implements the lock approach from
 // ADR-0004 open question #2 (file lock via a sibling .gates.lock file).
 //
 // Why we need this:

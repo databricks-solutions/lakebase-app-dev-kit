@@ -1,4 +1,4 @@
-// FEIP-7422: hermetic guard rails on the smoke artifacts.
+// hermetic guard rails on the smoke artifacts.
 //
 // The smoke itself (examples/feip-7422-smoke/orchestrator/run-smoke.sh)
 // drives a real scaffolded project through 2 iterations + CI; it's
@@ -25,7 +25,7 @@ const ITERATIONS = [
   "v2-transition-status",
 ];
 
-describe("FEIP-7422 smoke: directory structure", () => {
+describe("TDD-workflow smoke: directory structure", () => {
   it("ships under examples/feip-7422-smoke/orchestrator/", () => {
     expect(fs.existsSync(SMOKE_DIR)).toBe(true);
   });
@@ -70,7 +70,7 @@ describe("FEIP-7422 smoke: directory structure", () => {
     expect(fs.existsSync(path.join(assertDir, "verify-v5-e2e.sh")), "stale verify-v5-e2e.sh should be removed").toBe(false);
   });
 
-  it("has an advisory verify-story-pipeline.sh assert (FEIP-7565) wired into run-smoke.sh", () => {
+  it("has an advisory verify-story-pipeline.sh assert wired into run-smoke.sh", () => {
     const assertScript = path.join(SMOKE_DIR, "assertions", "verify-story-pipeline.sh");
     expect(fs.existsSync(assertScript), "missing assertions/verify-story-pipeline.sh").toBe(true);
     expect((fs.statSync(assertScript).mode & 0o111) !== 0, "verify-story-pipeline.sh must be executable").toBe(true);
@@ -97,7 +97,7 @@ describe("FEIP-7422 smoke: directory structure", () => {
   });
 });
 
-describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)", () => {
+describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("drives the orchestrator CLI directly, with no top-level claude -p session", () => {
@@ -135,7 +135,7 @@ describe("FEIP-7422 smoke: headless speed (MCP strip + per-role model tiering)",
   // tests (orchestrator-drive / orchestrator-run).
 });
 
-describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voice)", () => {
+describe("TDD-workflow smoke: product-overview.md is well-formed (Product Owner voice)", () => {
   // product-overview.md is the Product Owner's standing intent: who the
   // product is for + what they need to accomplish, open-ended and
   // refined across iterations. Stack, schema, endpoints, and tier flags
@@ -163,7 +163,7 @@ describe("FEIP-7422 smoke: product-overview.md is well-formed (Product Owner voi
   });
 });
 
-describe("FEIP-7422 smoke: recorded HIL intake artifacts conform (Human Proxy answers)", () => {
+describe("TDD-workflow smoke: recorded HIL intake artifacts conform (Human Proxy answers)", () => {
   it("product-overview.md conforms to its declared format", () => {
     const md = fs.readFileSync(path.join(SMOKE_DIR, "product-overview.md"), "utf8");
     expect(checkArtifactConformance("product-overview.md", md)).toEqual({ ok: true });
@@ -183,7 +183,7 @@ describe("FEIP-7422 smoke: recorded HIL intake artifacts conform (Human Proxy an
   });
 });
 
-describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", () => {
+describe("TDD-workflow smoke: orchestrator supplies intake via the Human Proxy", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("stages project intake (product-overview.md + nfrs.md + design-brief.md) via human-proxy supply", () => {
@@ -216,7 +216,7 @@ describe("FEIP-7422 smoke: orchestrator supplies intake via the Human Proxy", ()
   });
 });
 
-describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, feedback loop)", () => {
+describe("TDD-workflow smoke: /plan authors each sprint's backlog (two sprints, feedback loop)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("runs two sprints sliced from ITERATIONS (sprint-1 = v1, sprint-2 = v2)", () => {
@@ -266,7 +266,7 @@ describe("FEIP-7422 smoke: /plan authors each sprint's backlog (two sprints, fee
   });
 });
 
-describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working software)", () => {
+describe("TDD-workflow smoke: orchestrator deploys each iteration to local (working software)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("deploys through the driver's deploy phase (release-engineer), not a separate /deploy or substrate emulation", () => {
@@ -288,7 +288,7 @@ describe("FEIP-7422 smoke: orchestrator deploys each iteration to local (working
   });
 });
 
-describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md voice)", () => {
+describe("TDD-workflow smoke: iteration specs are well-formed (feature-request.md voice)", () => {
   // Iteration specs are feature-request.md files: pure feature-requester narrative
   // describing WHAT the user wants, in user-behavior language. They do NOT
   // contain implementation details (no SQL, no HTTP verbs, no table names,
@@ -353,7 +353,7 @@ describe("FEIP-7422 smoke: iteration specs are well-formed (feature-request.md v
   }
 });
 
-describe("FEIP-7422 smoke: orchestrator is TDD-only (SCM workflow tested elsewhere)", () => {
+describe("TDD-workflow smoke: orchestrator is TDD-only (SCM workflow tested elsewhere)", () => {
   const runSmoke = fs.readFileSync(path.join(SMOKE_DIR, "run-smoke.sh"), "utf8");
 
   it("declares ITERATIONS in order (v1..v2)", () => {

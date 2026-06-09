@@ -1,4 +1,4 @@
-// G7 (FEIP-7364): concurrent-write atomicity via a file lock.
+// G7: concurrent-write atomicity via a file lock.
 //
 // Covers ADR-0004 test plan scenario S8 (two-process concurrent approveGate
 // on different gates) via in-process simulation of the wx-flag lock contract.

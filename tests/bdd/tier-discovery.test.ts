@@ -87,7 +87,7 @@ describe("isTier", () => {
   });
 
   it("returns false for feature branches even though they're non-default", () => {
-    // Reproduces the FEIP-7098 follow-up bug: feature-x and demo-feature
+    // Reproduces the follow-up bug: feature-x and demo-feature
     // are non-default Lakebase branches, but they carry an expireTime
     // (created with TTL) so they're NOT tiers.
     const branches = fixture();

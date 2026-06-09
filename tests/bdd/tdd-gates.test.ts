@@ -1,4 +1,4 @@
-// G1 (FEIP-7358): GatesState types + readGates / writeGates substrate.
+// G1: GatesState types + readGates / writeGates substrate.
 //
 // Covers the ADR-0004 test plan scenarios:
 //   S1.1 readGates returns the default-open shape when gates.json is absent

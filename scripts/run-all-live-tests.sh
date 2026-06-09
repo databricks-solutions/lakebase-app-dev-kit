@@ -39,7 +39,7 @@
 #   --teardown                 After a green run, delete the auto-provisioned project.
 #                              No-op when --project was supplied.
 #   --no-prompt                Skip the grace period entirely (for CI).
-#   --no-github-runner         Skip the FEIP-7138 self-hosted-runner live test
+#   --no-github-runner         Skip the self-hosted-runner live test
 #                              (default: enabled). Requires GitHub auth on the
 #                              host (gh CLI logged in or GITHUB_TOKEN env).
 #   --no-migrate-tools         Skip auto-provisioning alembic/flyway tools and
@@ -53,7 +53,7 @@
 #   - All LAKEBASE_TEST_E2E-gated suites (cut-experiment, paired-branch,
 #     branch-create/delete, branch-utils, branch-endpoint, etc.).
 #   - migrate-live + migrate-live-flyway via auto-provisioned venv + tools.
-#   - migrate-live-knex (FEIP-7210 slice 3) via per-suite `npm install`.
+#   - migrate-live-knex (slice 3) via per-suite `npm install`.
 #   - tdd-experiment-lifecycle live describe (LAKEBASE_TEST_PROJECT_PATH).
 #   - detect-language-via-self-hosted-runner via --include-github-runner
 #     (LAKEBASE_TEST_E2E_GITHUB=1; pass --no-github-runner to opt out).
@@ -76,7 +76,7 @@
 #   Lakebase project (live-all-<ts>) is preserved on a failed run so the
 #   user can inspect; pass --teardown to delete on a fully-green run.
 #   Per-suite ephemera (migrate-7091, migrate-7098 Lakebase projects, the
-#   FEIP-7138 GitHub repo + runner) clean themselves up on green and
+#   GitHub repo + runner) clean themselves up on green and
 #   preserve on fail. The orchestrator and per-suite teardown rules are
 #   independent; LAKEBASE_TEST_NO_TEARDOWN does NOT block per-suite
 #   cleanup of green tests.
@@ -362,7 +362,7 @@ if [[ "$INCLUDE_MIGRATE_TOOLS" -eq 1 ]]; then
   fi
 fi
 
-# FEIP-7138 self-hosted-runner suite: register a real runner against a
+# self-hosted-runner suite: register a real runner against a
 # fresh private repo and prove npx --package=github:... routing works
 # end-to-end. Defaults to enabled (per the "no exceptions" policy) and
 # opts out via --no-github-runner. Requires GitHub auth on the host
@@ -381,7 +381,7 @@ if [[ "$INCLUDE_GITHUB_RUNNER" -eq 1 ]]; then
     yellow "  To opt out, re-run with --no-github-runner."
   fi
 else
-  yellow "  --no-github-runner: skipping FEIP-7138 self-hosted-runner suite"
+  yellow "  --no-github-runner: skipping self-hosted-runner suite"
 fi
 
 # Build dist so the integration tests import the latest compiled substrate.

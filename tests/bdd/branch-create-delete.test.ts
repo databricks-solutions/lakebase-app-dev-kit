@@ -8,7 +8,7 @@ import { LakebaseBranchError } from "../../scripts/lakebase/branch-utils.js";
 // Live tests gated on LAKEBASE_TEST_INSTANCE + LAKEBASE_TEST_PARENT
 // (an existing branch to fork from). The test creates a uniquely-named
 // branch, asserts READY, then deletes it. BDD equivalence vs the
-// extension call site lives in FEIP-7065.
+// extension call site lives in.
 
 const cliAvailable = (() => {
   try {

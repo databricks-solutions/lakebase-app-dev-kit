@@ -372,7 +372,7 @@ describe("feature-status N≥2 race snapshot", () => {
   });
 });
 
-describe("feature-status gates field (G8 / FEIP-7365)", () => {
+describe("feature-status gates field (G8 /)", () => {
   it("returns null gates when the feature directory does not exist", () => {
     // Fresh tdd dir with no feature subtree at all.
     const s = getFeatureStatus(tdd, "F-NEVER-AUTHORED");

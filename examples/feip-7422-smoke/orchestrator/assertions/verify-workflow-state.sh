@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared workflow-state assertion for the FEIP-7422 smoke.
+# Shared workflow-state assertion for the TDD-workflow smoke.
 #
 # Reads .lakebase/workflow-state.json via `lakebase-scm-state --json`
 # and confirms the SCM workflow has advanced to the expected state

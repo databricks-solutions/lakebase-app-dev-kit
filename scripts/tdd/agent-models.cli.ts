@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FEIP-7510: resolve the model the orchestrator should spawn a TDD-workflow
+// resolve the model the orchestrator should spawn a TDD-workflow
 // role agent with, given the project's .lakebase/agent-config.json (override ->
 // recommended -> inherit). Used by the /plan, /design, /build, /deploy command
 // orchestrator to pass the right model per role.

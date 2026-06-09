@@ -2,7 +2,7 @@ import type { SpecAdapter, AdapterContext, SpecEntity } from "./types";
 import type { Feature, Story, AC } from "../spec-sync";
 
 const NOT_IMPLEMENTED = (verb: string) =>
-  new Error(`JiraAdapter.${verb} not implemented; tracked under FEIP-7427`);
+  new Error(`JiraAdapter.${verb} not implemented; tracked under`);
 
 export interface JiraAdapterConfig {
   projectKey: string;

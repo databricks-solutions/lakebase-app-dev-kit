@@ -1,4 +1,4 @@
-// CLI surface tests for lakebase-scm-claim-feature-branch (FEIP-7458 phase B).
+// CLI surface tests for lakebase-scm-claim-feature-branch (phase B).
 //
 // Drives runScmClaimFeatureCli in-process with the substrate primitive
 // stubbed. Verifies argv parsing, output shapes (text + JSON), and exit

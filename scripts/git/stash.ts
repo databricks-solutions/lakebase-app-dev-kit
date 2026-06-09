@@ -1,4 +1,4 @@
-// Stash primitives (P6a, FEIP-7333). Lifted from extension's
+// Stash primitives (P6a). Lifted from extension's
 // GitService stash* methods. All shell-out args use shq().
 //
 // stash() is the basic "stash with optional message"; stashStaged()

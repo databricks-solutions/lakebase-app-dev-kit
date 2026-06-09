@@ -6,7 +6,7 @@
 // They must NOT reach for:
 //   - the low-level Lakebase-only creators/deleters (branch-create.createBranch,
 //     branch-delete.deleteBranch) , those make a Lakebase branch with no git
-//     pair (the FEIP-7422 bug: a Lakebase branch was cut with no git branch);
+//     pair (the bug: a Lakebase branch was cut with no git branch);
 //   - the DELETED unpaired convention creators (createFeatureBranch /
 //     createTestBranch / createUatBranch / createPerfBranch);
 //   - raw git helpers (scripts/git/*) , git is a substrate concern, the paired

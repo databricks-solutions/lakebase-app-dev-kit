@@ -5,9 +5,9 @@
 //
 // FEATURE branches are the exception: they are created NON-EXPIRING (noExpiry,
 // no TTL). A feature branch hosts the per-story experiment child branches
-// (FEIP-7566), and Lakebase forbids an expiring branch from having children
+//, and Lakebase forbids an expiring branch from having children
 // ("Branches with an expiration date cannot have child branches", surfaced by
-// the live FEIP-7422 smoke). Feature branches are reaped by the SCM workflow
+// the live TDD-workflow smoke). Feature branches are reaped by the SCM workflow
 // (abandon / merge / doctor call deleteBranch), not by TTL, deletion of a
 // no-expiry branch through the substrate is confirmed.
 

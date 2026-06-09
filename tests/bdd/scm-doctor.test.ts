@@ -1,4 +1,4 @@
-// Unit tests for scm-doctor (FEIP-7458 phase C).
+// Unit tests for scm-doctor (phase C).
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";

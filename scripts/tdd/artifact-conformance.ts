@@ -1,4 +1,4 @@
-// FEIP-7508 Layer 2 (conformance): "did this artifact adhere to the format
+// Layer 2 (conformance): "did this artifact adhere to the format
 // expected?"
 //
 // The three layers a gate enforces on an artifact:
@@ -98,7 +98,7 @@ export const ARTIFACT_FORMATS: Record<string, FormatSpec> = {
   "feature-request.md": { kind: "md-narrative" },
 
   // Spec Author's sprint backlog proposal: the artifact the sprint PLAN gate
-  // locks (FEIP-7461). Free-form narrative; H1 + non-empty body required.
+  // locks. Free-form narrative; H1 + non-empty body required.
   "feature-proposals.md": { kind: "md-narrative" },
 
   // Product Owner's project-level overview (replaces the old spec.md).

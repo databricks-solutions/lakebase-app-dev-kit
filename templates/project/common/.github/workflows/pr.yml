@@ -419,7 +419,7 @@ jobs:
           DATABRICKS_AUTH_TYPE: pat
         run: npx playwright test
 
-      # FEIP-7094 Phase 2: project-root Playwright wire-up (separate from
+      # Phase 2: project-root Playwright wire-up (separate from
       # the client/ workspace path above). Scaffolded by `lakebase-create-project
       # --enable-e2e` for [E2E]-tagged AC rows. Runs Playwright at the
       # project root and points BASE_URL at the CI branch's deployed app
@@ -427,7 +427,7 @@ jobs:
       # responsible for booting a local server via webServer when BASE_URL
       # is not set.
       #
-      # FEIP-7423: resolve the deployed CI app URL via the kit's
+      # resolve the deployed CI app URL via the kit's
       # lakebase-ci-app-endpoint CLI and export LAKEBASE_APP_ENDPOINT
       # to $GITHUB_ENV when the app exists. The CLI exits 0 with empty
       # stdout when the app does not exist (e.g. no CI-deploy step has
@@ -580,7 +580,7 @@ jobs:
           # The TS substrate queries information_schema directly on both Lakebase
           # branches (target = CI ci-pr-N, parent = PR_BASE_REF), so no pg_dump
           # or format-schema-diff.sh is needed. The pg_dump preamble below is
-          # retained for fallback parity with the pre-FEIP-7494 workflow but is
+          # retained for fallback parity with the older workflow but is
           # only used when the substrate call fails for any reason.
           if [ -n "$PRODUCTION_DATASOURCE_URL" ] && [ -n "$LAKEBASE_BRANCH_NAME" ]; then
             echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
@@ -597,9 +597,9 @@ jobs:
             fi
             rm -f "$MD.err"
           elif [ -n "$PRODUCTION_DATASOURCE_URL" ] && command -v pg_dump >/dev/null 2>&1; then
-            # Legacy fallback (kept for runners that pre-date FEIP-7494): pg_dump
+            # Legacy fallback (kept for runners that pre-date): pg_dump
             # both branches into .tmp/*.sql for downstream comparison. After
-            # FEIP-7494 lands this path is dead; remove in a future PR.
+            # lands this path is dead; remove in a future PR.
             PROD_HP=$(parse_jdbc "$PRODUCTION_DATASOURCE_URL")
             CI_HP=$(parse_jdbc "$CI_JDBC_URL")
             PROD_HOST=$(echo "$PROD_HP" | cut -d'|' -f1); PROD_PORT=$(echo "$PROD_HP" | cut -d'|' -f2); PROD_DB=$(echo "$PROD_HP" | cut -d'|' -f3)
@@ -614,7 +614,7 @@ jobs:
               echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
               echo "" >> "$MD"
               # Legacy formatter was templates/.../scripts/format-schema-diff.sh (deleted in
-              # FEIP-7494). Reach into kit dist if available; otherwise emit a table.
+              #). Reach into kit dist if available; otherwise emit a table.
               if [ -x ./node_modules/.bin/lakebase-schema-diff ]; then
                 ./node_modules/.bin/lakebase-schema-diff --instance "$LAKEBASE_PROJECT_ID" --branch "$LAKEBASE_BRANCH_NAME" --against "$PR_BASE_REF" --format markdown >> "$MD" 2>/dev/null || true
               else

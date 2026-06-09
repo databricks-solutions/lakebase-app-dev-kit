@@ -1,5 +1,5 @@
-// G9 (FEIP-7366): end-to-end SCM-workflow live e2e for the gates state
-// machine track (FEIP-7357 / ADR-0004).
+// G9: end-to-end SCM-workflow live e2e for the gates state
+// machine track (ADR-0004).
 //
 // Walks the F-AUDIT feature (per-branch migration audit log) through
 // the canonical gate lifecycle against a freshly-provisioned Lakebase
@@ -77,7 +77,7 @@ function run(cmd: string, args: string[], cwd?: string): {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "gates state machine: end-to-end SCM workflow (FEIP-7366)",
+  "gates state machine: end-to-end SCM workflow",
   () => {
     let projectId: string;
     let repoName: string;
@@ -121,7 +121,7 @@ describe.skipIf(!RUN_SUITE)(
         ownerRepo,
         "--private",
         "--description",
-        "Throwaway repo for FEIP-7366 gates e2e (auto-delete after test)",
+        "Throwaway repo for gates e2e (auto-delete after test)",
         "--confirm",
       ]);
       if (create.status !== 0) {
@@ -339,7 +339,7 @@ describe.skipIf(!RUN_SUITE)(
         ownerRepo,
         headBranch: gitBranchName,
         title: `F-AUDIT: per-branch migration audit log`,
-        body: `## Gates summary\n\n${gatesSummary}\n\n[FEIP-7366 e2e test PR]\n`,
+        body: `## Gates summary\n\n${gatesSummary}\n\n[e2e test PR]\n`,
         baseBranch: "main",
       });
       expect(url).toMatch(/https:\/\/github\.com\//);

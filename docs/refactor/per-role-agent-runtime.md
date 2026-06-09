@@ -1,9 +1,9 @@
 # Per-role agent runtime + /plan & /deploy parity + state-machine phases
 
 **Status**: Design proposal, 2026-06-06
-**Umbrella FEIP**: FEIP-7461 (workflows as executable state machines)
-**Primary FEIP**: FEIP-7510 (per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check). Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
-**Related**: FEIP-7508 (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).
+**Umbrella FEIP**: (workflows as executable state machines)
+**Primary FEIP**: (per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check). Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
+**Related**: (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).
 
 ---
 
@@ -108,13 +108,13 @@ What the Release Engineer needs, vs what the substrate ships today:
 **Gaps (the Release Engineer cannot yet ship to a remote target end to end)**
 1. `lakebase-tdd-deploy` implements only `type: local`; `databricks-app` is recognized but refused. No routing from a `databricks-app` deploy-target to the existing `deploy-app-*` primitives.
 2. The `deploy-app-*` + `deploy-rollback` modules are not exposed as bins / not composed into a single "deploy this feature to its remote target" surface the Release Engineer can call.
-3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (FEIP-7059 roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
+3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
 4. No rollback command surface wired for the Release Engineer (the module exists; no `/deploy --rollback` or bin).
 
-**Filed tickets (children of FEIP-7059):**
-- **FEIP-7560** , route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives (remote-deploy surface for the Release Engineer).
-- **FEIP-7561** , expose `deploy-rollback` as a Release Engineer rollback surface.
-- **FEIP-7562** , ship the release orchestrator primitives (`cutRC` / `regressionTest` / `migrate` / `release`).
+**Filed tickets (children of):**
+- route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives (remote-deploy surface for the Release Engineer).
+- expose `deploy-rollback` as a Release Engineer rollback surface.
+- ship the release orchestrator primitives (`cutRC` / `regressionTest` / `migrate` / `release`).
 
 ## Gates
 - No version bump / push / PR unless explicitly asked.

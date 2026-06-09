@@ -1,7 +1,7 @@
 # FEIP scope: thin `post-checkout.sh` onto `checkoutPaired`
 
 **Status:** scoping only (no code). Suggested labels: LADT, lakebase-for-agile-dev.
-Cross-refs: FEIP-7494 (substrate-only / thin-wrap shells), FEIP-7458 (SCM
+Cross-refs: (substrate-only / thin-wrap shells) (SCM
 workflow state machine + Phase C orphan refusal).
 
 ## Why
@@ -64,7 +64,7 @@ The current `checkout-paired` CLI case (`branch.cli.ts:385`) only passes
 
 1. **`--no-auto-create` (CRITICAL, safety invariant).** `checkoutPaired`
    defaults `autoCreate: true` and will CREATE a feature branch. Phase C
-   (FEIP-7458) deliberately made the hook REFUSE out-of-band creation. The CLI
+   deliberately made the hook REFUSE out-of-band creation. The CLI
    must expose `--no-auto-create` mapping to `checkoutPaired({autoCreate:
    false})`, and when the branch is missing it must return a **structured
    "orphan-refused" outcome** (a `mode`/result field or a typed exit code), NOT

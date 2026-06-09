@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FEIP-7566: the experiment-branch lifecycle CLI for a per-story experiment.
+// the experiment-branch lifecycle CLI for a per-story experiment.
 // Wires the real substrate (git merge, schema migrate, paired-branch teardown)
 // into the tested orchestration (experiment-lifecycle.ts) and records the
 // pipeline-state transition (story-pipeline.ts).

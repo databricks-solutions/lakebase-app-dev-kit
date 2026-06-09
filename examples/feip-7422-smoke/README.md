@@ -1,9 +1,9 @@
-# FEIP-7422: End-to-End TDD Workflow Smoke
+# End-to-End TDD Workflow Smoke
 
 Drives a real bug-tracker project through 2 evolution iterations (v1..v2),
 grouped into two sprints, to exercise the kit's TDD workflow end to end:
 `/plan` -> `/design` -> `/build` -> `/deploy`, with every HITL gate stood in
-for by the Human Proxy so the smoke runs headless. Closes FEIP-7422 ("Kit:
+for by the Human Proxy so the smoke runs headless. Closes ("Kit:
 end-to-end [E2E] cycle smoke against a scaffolded project").
 
 This directory ships with the kit so the smoke is versioned alongside the code
@@ -159,7 +159,7 @@ auto-confirm in non-interactive / CI runs.
 
 ## What the smoke does NOT prove
 
-- Quality of `/design` + `/build` output (that's the agent-eval pyramid, FEIP-7343).
+- Quality of `/design` + `/build` output (that's the agent-eval pyramid).
 - The SCM workflow PR + CI + merge cycle (tested separately, see Scope above).
 - Remote deploy targets (only `local` is implemented; remote release is `merge.yml`).
 - Multi-user / auth flows; visual regression past structural assertions; performance.
@@ -190,5 +190,5 @@ assertions. The generic deploy-gate verify needs no per-iteration change.
 
 ## Status
 
-FEIP-7422 closed by the PR that lands this directory. The smoke is run manually
+Landed by the PR that introduced this directory. The smoke is run manually
 for now; nightly CI invocation can be wired later as a separate ticket.

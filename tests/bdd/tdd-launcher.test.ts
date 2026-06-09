@@ -1,4 +1,4 @@
-// FEIP-7510: scripts/tdd.sh is the convenient launcher that opens a Claude Code
+// scripts/tdd.sh is the convenient launcher that opens a Claude Code
 // session; the slash commands invoke the deterministic driver (no scrum-master
 // agent). Hermetic: real templates + tmpdir.
 

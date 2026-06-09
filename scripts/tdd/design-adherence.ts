@@ -1,4 +1,4 @@
-// FEIP-7510 / UX adherence: machine-enforce that the running UI matches the
+// / UX adherence: machine-enforce that the running UI matches the
 // design guide. The design guide (design-guide.json) is the declared contract;
 // this checks the IMPLEMENTED design system against it.
 //

@@ -93,7 +93,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(g.testId).toBe("T1");
     const cycles = cyclesFor("AC1");
     expect(cycles[0].green_at).toBeTruthy();
-    // markGreen's FEIP-7094 runner contract was satisfied: an outcome was recorded.
+    // markGreen's runner contract was satisfied: an outcome was recorded.
     const outcomes = JSON.parse(readFileSync(join(tdd, "experiments", F, S, "exp1", "outcomes.json"), "utf8"));
     expect(outcomes.by_tag).toBeTruthy();
   });

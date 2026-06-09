@@ -1,4 +1,4 @@
-// Unit tests for the SCM workflow state surface (FEIP-7458, phase A).
+// Unit tests for the SCM workflow state surface (phase A).
 //
 // Covers: validator (positive + negative shapes), atomic write +
 // round-trip read, init scaffold-complete factory, describeGates ladder.

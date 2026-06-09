@@ -1,4 +1,4 @@
-// Sprint mode: the Tier-1 `/sprint` orchestrator (FEIP-7461).
+// Sprint mode: the Tier-1 `/sprint` orchestrator.
 //
 // `lakebase-tdd-drive --sprint <name>` runs the whole sprint as one continuous
 // flow: sprint planning (to the approved plan gate) -> read the backlog -> for

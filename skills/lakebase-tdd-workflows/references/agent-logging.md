@@ -1,6 +1,6 @@
 # Agent logging (structured, centralized)
 
-The TDD workflow is a relay of role agents with isolated memory (FEIP-7510). To
+The TDD workflow is a relay of role agents with isolated memory. To
 make a run observable, **each agent emits structured log events** describing
 what it is doing (and, at debug level, why), and a centralized logger collects
 them into one file. This is the audit + debug trail for the whole relay.

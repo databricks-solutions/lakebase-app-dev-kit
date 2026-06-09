@@ -4,10 +4,10 @@
 //
 // gates.json is the substrate's authoritative gate state. selection-log.md
 // stays as narrative-of-record (humans grep it when debugging). The
-// orchestrator + downstream primitives (FEIP-7213 test-list immutability,
-// FEIP-7215 feature-status) read this file instead of regex-scanning the log.
+// orchestrator + downstream primitives (test-list immutability,
+// feature-status) read this file instead of regex-scanning the log.
 //
-// Design: ADR-0004. Tracker: FEIP-7357. This module ships G1 only: types +
+// Design: ADR-0004. Tracker:. This module ships G1 only: types +
 // readGates + writeGates. approveGate / verifyGateIntegrity / withdrawGate /
 // hash-normalization / migration backfill / concurrent-write atomicity land
 // in G2 through G7.

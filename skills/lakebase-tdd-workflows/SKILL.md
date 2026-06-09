@@ -64,7 +64,7 @@ The same orchestrated path runs for real and headless; headless, the Human Proxy
 ## Headless / Human Proxy mode
 
 By default every gate is HITL: the workflow halts for the Product Owner. When
-`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the FEIP-7422 smoke), the human
+`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the TDD-workflow smoke), the human
 approver role is **performed by** the `human-proxy` identity. This does not
 skip the gate or rubber-stamp it, the Human Proxy stands in as a diligent reviewer and
 does exactly what a careful human would:
@@ -434,7 +434,7 @@ writePerAcViews(".tdd", "F1", list);
 
 ### Gates state machine (structured HITL approvals)
 
-Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md). Implementation: FEIP-7357.
+Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md).
 
 `.tdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
 

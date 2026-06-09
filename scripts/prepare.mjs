@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// npm prepare lifecycle dispatcher (FEIP-7479).
+// npm prepare lifecycle dispatcher.
 //
 // `npm prepare` fires in two very different contexts that the previous
 // inline command did not distinguish:
@@ -17,7 +17,7 @@
 // hits the network and can hang or fail on github-hosted runners (no
 // GITHUB_TOKEN with kit-repo read access), and husky's "not a git
 // repo" message is harmless but its earlier failure modes were a
-// suspect for FEIP-7479's silent 8-minute hang. Running JUST the
+// suspect for's silent 8-minute hang. Running JUST the
 // build keeps consumer installs deterministic + offline-safe.
 
 import { existsSync } from "node:fs";

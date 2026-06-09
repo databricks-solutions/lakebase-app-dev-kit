@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 3 BDD coverage: per-tag outcomes, runner-contract guard,
+// Phase 3 BDD coverage: per-tag outcomes, runner-contract guard,
 // AC.layer auto-discovery on beginCycle, and the tagToRunner doc surface.
 // Hermetic: tmpdir-based .tdd/ trees, no shell-outs.
 

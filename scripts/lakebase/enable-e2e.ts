@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 2: scaffolder integration for the Playwright primitives.
+// Phase 2: scaffolder integration for the Playwright primitives.
 //
 // installPlaywright (Phase 1) is the generic boot: it drops templates +
 // installs the npm/browser bits in any Node project. This module is the
@@ -98,7 +98,7 @@ export interface AddE2eToRunTestsScriptResult {
  * Marker substring the inserted run-tests.sh block carries so the patch
  * is reliably idempotent across reruns of the scaffolder.
  */
-const RUN_TESTS_E2E_MARKER = "# FEIP-7094: run Playwright E2E suite when configured";
+const RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 
 /**
  * Idempotently append a Playwright invocation to scripts/run-tests.sh.

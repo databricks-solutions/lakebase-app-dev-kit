@@ -5,7 +5,7 @@ import {
   isTtlTooLongError,
 } from "../../scripts/lakebase/branch-utils";
 
-// Workspace-TTL-policy substrate surface. Surfaced during the FEIP-7092
+// Workspace-TTL-policy substrate surface. Surfaced during the
 // live E2E: the CONVENTION_TIER_DEFAULTS.feature 30-day TTL exceeded the
 // test workspace's maximum-expiration policy. The substrate detects the
 // underlying CLI error and rewraps with a typed, actionable message so

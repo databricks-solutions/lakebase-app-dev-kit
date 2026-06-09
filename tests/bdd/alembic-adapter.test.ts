@@ -1,4 +1,4 @@
-// FEIP-7210 slice 3: AlembicAdapter contract tests.
+// slice 3: AlembicAdapter contract tests.
 //
 // Tests assert the adapter's static surface (id, languages, detect,
 // list, optional-capability protocol) without invoking the live Alembic

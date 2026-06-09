@@ -1,4 +1,4 @@
-// Mutation primitives (P6h, FEIP-7340). Checkout / revert / cherry-
+// Mutation primitives (P6h). Checkout / revert / cherry-
 // pick lifted from the extension's GitService. Branch + tag mutations
 // (delete / rename / merge / tag CRUD) live in branch-tag.ts; commit
 // mutations live in commits.ts.

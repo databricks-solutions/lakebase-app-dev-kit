@@ -1,4 +1,4 @@
-// FEIP-7510 observability: each role agent emits structured log events; a
+// observability: each role agent emits structured log events; a
 // centralized logger appends them to .tdd/agent-log.jsonl (JSON Lines) so the
 // whole relay-of-agents run is reconstructable. emit validates against
 // agent-log-event.schema.json, stamps ts, and appends atomically.

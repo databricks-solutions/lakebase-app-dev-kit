@@ -1,4 +1,4 @@
-// FEIP-7213: substrate-enforced test-list immutability via mutateTestList.
+// substrate-enforced test-list immutability via mutateTestList.
 //
 // Exercises the four states the test_list gate can be in (open / approved
 // / withdrawn / superseded) + the refusal contract + the atomic

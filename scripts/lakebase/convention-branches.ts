@@ -116,9 +116,9 @@ export interface CreateConventionPairedBranchArgs extends CreateConventionBranch
  * fails, no git branch is left dangling.
  *
  * Feature branches are created NON-EXPIRING (noExpiry, no TTL). A feature branch
- * is the PARENT of the per-story experiment branches (FEIP-7566), and Lakebase
+ * is the PARENT of the per-story experiment branches, and Lakebase
  * forbids an expiring branch from having child branches ("Branches with an
- * expiration date cannot have child branches", surfaced by the live FEIP-7422
+ * expiration date cannot have child branches", surfaced by the live
  * smoke). Feature branches are reaped by the SCM workflow (abandon / merge /
  * doctor -> deleteBranch), not by TTL; deleting a no-expiry branch through the
  * substrate is confirmed. An explicit `ttl` still wins (mutually exclusive with

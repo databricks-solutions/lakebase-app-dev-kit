@@ -1,4 +1,4 @@
-// FEIP-7212 BDD coverage for the .claude/commands scaffold. Hermetic:
+// BDD coverage for the .claude/commands scaffold. Hermetic:
 // runs against a real kit templates tree + tmpdir; no shell-outs.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";

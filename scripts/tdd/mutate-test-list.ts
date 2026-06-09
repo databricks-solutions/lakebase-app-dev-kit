@@ -1,6 +1,6 @@
 // mutateTestList primitive: substrate-enforced test-list immutability.
 //
-// Tracker: FEIP-7213. Composes the FEIP-7357 gates state machine
+// Tracker:. Composes the gates state machine
 // (approveGate / verifyGateIntegrity / readGates / writeGates) with the
 // existing test-list IO so that once a test_list gate is approved the
 // test list cannot be silently rewritten.

@@ -1,4 +1,4 @@
-// FEIP-7510 observability: a centralized structured logger for the TDD-workflow
+// observability: a centralized structured logger for the TDD-workflow
 // role agents. The workflow is a relay of isolated-memory agents; each emits
 // what it is doing (and why, at debug level) so the whole run is
 // reconstructable from one file: .tdd/agent-log.jsonl (JSON Lines).

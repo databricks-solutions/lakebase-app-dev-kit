@@ -5,7 +5,7 @@ import { resolveGitHubToken } from "../../scripts/github/auth.js";
 
 // Live skip-when-no-auth: only fires when a real GitHub token can be
 // resolved. createRepo/deleteRepo are destructive and need a target test
-// org – those live in the equivalence test (FEIP-7071), not here. This
+// org – those live in the equivalence test, not here. This
 // suite only asserts that the read paths work end-to-end.
 
 const tokenAvailable = (() => {

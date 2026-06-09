@@ -1,4 +1,4 @@
-// Snapshot a Lakebase branch for rollback safety (FEIP-7096).
+// Snapshot a Lakebase branch for rollback safety.
 //
 // Used in the release-sprint flow's "cut prod-backup" phase before
 // migrating production. Wraps `createBranch` with an opinionated

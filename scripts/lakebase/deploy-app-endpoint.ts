@@ -1,6 +1,6 @@
 // Provision a Databricks Apps endpoint for a Lakebase-paired target.
 //
-// Slice 3 of FEIP-7130 (lakebase-apps-deploy). Uses the per-step deploy
+// Slice 3 of (lakebase-apps-deploy). Uses the per-step deploy
 // pattern (devhub platform-guide.md "Option B") because Lakebase Postgres
 // Projects are NOT compatible with the bundle config's `database:`
 // resource type (that block references the older Database Instances
@@ -169,7 +169,7 @@ export async function getAppEndpoint(args: GetAppEndpointArgs): Promise<GetAppEn
 
 /**
  * Tear down an app endpoint and (optionally) its uploaded workspace
- * files. Slice 4 of FEIP-7130. Pairs with `deletePairedBranch`
+ * files. Slice 4 of. Pairs with `deletePairedBranch`
  * (scripts/lakebase/paired-branch.ts): when the Lakebase branch is
  * removed, the matching app endpoint should be removed too.
  *
@@ -314,7 +314,7 @@ export async function ensureAppEndpoint(args: EnsureAppEndpointArgs): Promise<En
  *
  * Designed for pr.yml: after the (separate) CI app-deploy step, this
  * primitive resolves the public URL to export as `LAKEBASE_APP_ENDPOINT`
- * for the project-root Playwright step (FEIP-7094 Phase 2). When the
+ * for the project-root Playwright step (phase 2). When the
  * app does not exist yet (e.g. deploy step skipped due to missing
  * secrets, or no CI-deploy has been wired into the project), the
  * primitive resolves with `url: undefined` rather than throwing, so the

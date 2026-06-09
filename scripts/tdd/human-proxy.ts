@@ -18,7 +18,7 @@
 //   test_list  -> test-list.json and/or test-list.md (at least one required)
 //   promote    -> a caller-supplied promote_ref string (required)
 //
-// INTEGRITY RULE (FEIP-7508 / the 002 gate-integrity finding): a gate is
+// INTEGRITY RULE (the 002 gate-integrity finding): a gate is
 // only approved when its REAL artifact exists on disk. Previously a missing
 // artifact was hashed as a placeholder "MOCK_APPROVED" so the gate could
 // "close" anyway. That let the Human Proxy pre-approve plan / test_list / promote
@@ -28,7 +28,7 @@
 // `skipped[]` with a reason) instead of fabricating one. A real human approver
 // can only sign off on what exists; the Human Proxy must mirror that.
 //
-// CONFORMANCE RULE (FEIP-7508 Layer 2): existence is necessary but not
+// CONFORMANCE RULE (Layer 2): existence is necessary but not
 // sufficient. Every resolved artifact is checked against its declared format
 // via checkArtifactConformance (JSON against its schema; narrative MD against
 // its role-documented required sections). A non-conformant artifact is treated
@@ -206,7 +206,7 @@ function resolveArtifactInputs(
     }
     case "deploy": {
       // The deploy (working-software) gate locks the Release Engineer's
-      // deploy-evidence.json. Teeth (FEIP-7461): refuse unless the increment was
+      // deploy-evidence.json. Teeth: refuse unless the increment was
       // actually reachable AND its feature-verify passed against the running
       // app, not merely that the evidence file exists + conforms.
       const evidence = readIfPresent("deploy-evidence.json");

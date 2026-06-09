@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Advisory per-story pipeline assertion for the FEIP-7422 smoke (FEIP-7565).
+# Advisory per-story pipeline assertion for the TDD-workflow smoke.
 #
 # After /design + /build, if the orchestrator drove the streaming per-story
 # pipeline (.tdd/features/<F>/pipeline.json with one or more stories), confirm

@@ -87,7 +87,7 @@ describe("commandsForAction: invoke-role -> claude", () => {
   });
 
   it("scopes the spec-author per-story draft to ONE story (directive + inlined stub)", () => {
-    // Level-1 input scoping (FEIP-7461): the draft invocation is handed only the
+    // Level-1 input scoping: the draft invocation is handed only the
     // target story's stub + a single-story directive, so the agent can't batch
     // every story's ACs (which would delay the first story's gate + build).
     const tmp = mkdtempSync(join(tmpdir(), "effects-specauthor-"));

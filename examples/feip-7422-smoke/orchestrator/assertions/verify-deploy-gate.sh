@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FEIP-7422 generic deploy-gate verify (replaces the bespoke per-iteration
+# generic deploy-gate verify (replaces the bespoke per-iteration
 # verify-vN.sh scripts).
 #
 # Asserts, for ANY feature the smoke drives, that it reached its deploy gate

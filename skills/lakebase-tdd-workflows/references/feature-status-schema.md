@@ -25,7 +25,7 @@ interface FeatureStatusSnapshot {
 | `feature_id` | string | Echo of the queried feature id. |
 | `current_workflow_phase` | string \| null | Phase from `.tdd/workflow-state.json` (`discovery` / `architectural-review` / `test-list-construction` / `design-spec-gate` / `implementation` / `synthesis` / `review` / `shipped` / `abandoned`). `null` when `workflow-state.json` is missing. |
 | `current_workflow_pointer` | object \| null | Active workflow locus (feature/story/ac/cycle/experiment ids). `null` when `workflow-state.json` is missing. The pointer's `feature_id` may differ from the queried `feature_id` (the workflow may be focused elsewhere). |
-| `plans` | array | Per-story experiment plans (FEIP-7566), one entry `{story_id, plan}` per `.tdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
+| `plans` | array | Per-story experiment plans, one entry `{story_id, plan}` per `.tdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
 | `test_list` | object \| null | Aggregated counts from `.tdd/features/<F>/test-list.json`. `null` when the test list has not been authored yet. |
 | `experiments` | array | One entry per directory under `.tdd/experiments/<F>/`. Empty when no experiments have been cut. |
 | `selection_log_recent` | array | Up to the last 5 entries from `.tdd/selection-log.md`, oldest-first. |
@@ -187,7 +187,7 @@ interface SmellHit {
 
 ## N=1 vs N≥2
 
-The shape does not branch on `plan.mode`. An N=1 feature has `experiments.length === 1` (the feature branch); an N≥2 race has `experiments.length === N`. The same renderer surfaces both, with one row per experiment. Cross-experiment comparison rendering (`promote` vs `synthesize` decision aid) is intentionally out of scope here; that lives in the comparison-report renderer (FEIP-7208), which consumes the `experiments` array + per-experiment `outcomes.json` directly.
+The shape does not branch on `plan.mode`. An N=1 feature has `experiments.length === 1` (the feature branch); an N≥2 race has `experiments.length === N`. The same renderer surfaces both, with one row per experiment. Cross-experiment comparison rendering (`promote` vs `synthesize` decision aid) is intentionally out of scope here; that lives in the comparison-report renderer, which consumes the `experiments` array + per-experiment `outcomes.json` directly.
 
 ## Versioning
 

@@ -1,4 +1,4 @@
-// FEIP-7510: the role agent definitions are real, separately-invokable
+// the role agent definitions are real, separately-invokable
 // subagents. This conformance test keeps them well-formed + in sync with the
 // AgentRole enum and the RECOMMENDED_MODELS map. Pure filesystem; no live Lakebase.
 
@@ -93,7 +93,7 @@ describe("agent definitions: frontmatter conformance", () => {
       expect(body.trim().length, `${role}: empty system prompt`).toBeGreaterThan(0);
       expect(body, `${role}: missing relay header`).toMatch(/##\s*Relay/i);
 
-      // Every role carries the shared cross-cutting operating rules (FEIP-7566):
+      // Every role carries the shared cross-cutting operating rules:
       // cites the canonical doc + the in-prompt no-filesystem-scan hard rule.
       expect(body, `${role}: missing operating-rules citation`).toMatch(/agent-operating-rules\.md/);
       expect(body, `${role}: missing the no-filesystem-scan rule`).toMatch(/filesystem-wide scan/i);

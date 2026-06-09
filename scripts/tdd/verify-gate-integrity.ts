@@ -2,7 +2,7 @@
 // artifact hashes for a single gate. Pairs with approveGate (G3) on the
 // write side.
 //
-// Design: ADR-0004. Tracker: FEIP-7357 (G4 / FEIP-7361).
+// Design: ADR-0004. Tracker: (G4 /).
 //
 // The substrate is file-I/O-free for the artifact side: callers pass the
 // current artifact contents in `currentInputs` (same shape as approveGate's
@@ -13,7 +13,7 @@
 //
 // Does NOT mutate gates.json. The caller decides what to do with a drift
 // verdict (refuse a mutation, prompt the user, log a warning, ...). G8
-// (FEIP-7365) wires verify into the test-list-immutability + cycle-start
+// wires verify into the test-list-immutability + cycle-start
 // flows.
 
 import { hashArtifact } from "./gate-hash";

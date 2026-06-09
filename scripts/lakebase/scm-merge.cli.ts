@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: ci-green -> merged (FEIP-7458 phase B+).
+// CLI: ci-green -> merged (phase B+).
 
 import * as path from "node:path";
 import { isCliEntry } from "../util/cli-entry.js";
@@ -68,7 +68,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-merge (FEIP-7458 phase B+)
+const HELP = `lakebase-scm-merge (phase B+)
 
 Transition ci-green -> merged: GitHub merge (squash by default),
 remote branch delete, Lakebase feature branch delete, local HEAD

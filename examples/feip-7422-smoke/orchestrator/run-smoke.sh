@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FEIP-7422 TDD-workflow smoke.
+# TDD-workflow smoke.
 #
 # Drives a real bug-tracker project through 2 evolution iterations
 # (v1..v2), grouped into TWO SPRINTS, to exercise the TDD substrate:
@@ -406,7 +406,7 @@ run_iteration() {
   # (forked from main HEAD) already carries .tdd/features/<id>/feature-request.md.
   # /design's Spec Author reads it as input and produces feature-spec.{md,json}.
 
-  # 3. The deterministic orchestrator driver (FEIP-7461) drives the WHOLE
+  # 3. The deterministic orchestrator driver drives the WHOLE
   # feature in one process: it claims the feature branch (the /design Step 0
   # job, which the driver does not own, so we claim explicitly first), then
   # breaks the feature down + designs + builds + accepts each story + deploys.
@@ -420,7 +420,7 @@ run_iteration() {
     lakebase-scm-claim-feature-branch "${feature_id}" --project-dir "$PROJECT_DIR" --json \
     || { err "claim-feature-branch failed for ${feature_id}"; exit 2; }
 
-  # 3.5 (FEIP-7458 phase A+): assert the SCM workflow state advanced to
+  # 3.5 (phase A+): assert the SCM workflow state advanced to
   # feature-claimed, catching a silent claim failure before the driver runs.
   log "  step 3.5: verify-workflow-state feature-claimed ${feature_id}"
   "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$feature_id"
@@ -431,7 +431,7 @@ run_iteration() {
     lakebase-tdd-drive --feature "${feature_id}" --project-dir "$PROJECT_DIR" \
     || { err "lakebase-tdd-drive failed for ${feature_id}"; exit 2; }
 
-  # 4.5 (FEIP-7565): advisory per-story pipeline check. If the orchestrator
+  # 4.5: advisory per-story pipeline check. If the orchestrator
   # drove the streaming per-story pipeline (feature decomposed into >1 story),
   # confirm it ended clean: single build lane idle, ready queue drained, every
   # story done with an approved spec gate. Advisory (WARNINGs, never aborts):
@@ -467,7 +467,7 @@ run_iteration() {
   # next iteration (idempotent teardown).
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-deploy --target local --project-dir "$PROJECT_DIR" --stop >/dev/null 2>&1 || true
 
-  # 7. local commit on the feature branch. The FEIP-7422 smoke is a
+  # 7. local commit on the feature branch. The TDD-workflow smoke is a
   # TDD-workflow validation harness; the SCM-workflow CLIs
   # (prepare-pr / wait-ci / merge --wait-migrate) belong to the SCM
   # workflow live tests in tests/integration/scm-workflow-e2e-live.test.ts
@@ -627,7 +627,7 @@ run_plan_sprint() {
 
 # ─── main ─────────────────────────────────────────────────────
 
-log "FEIP-7422 smoke starting (project=$PROJECT_DIR)"
+log "TDD-workflow smoke starting (project=$PROJECT_DIR)"
 scaffold_project
 stage_project_intake
 
@@ -657,5 +657,5 @@ run_sprint() {
 run_sprint "sprint-1" "${SPRINT1_ITERS[@]}"
 run_sprint "sprint-2" "${SPRINT2_ITERS[@]}"
 
-log "FEIP-7422 smoke COMPLETED"
+log "TDD-workflow smoke COMPLETED"
 exit 0

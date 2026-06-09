@@ -129,7 +129,7 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
 
 /** What a story has produced in the build lane (its experiment build). */
 export interface StoryBuild {
-  /** The paired experiment branch was cut (FEIP-7566). */
+  /** The paired experiment branch was cut. */
   experimentCut: boolean;
   /** The Navigator wrote the (failing) tests for the story. */
   testsWritten: boolean;
@@ -145,7 +145,7 @@ export interface StoryBuild {
   awaitingAcceptance: boolean;
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch). The teeth on acceptance: a story cannot be accepted/merged unless
-   *  its deploy proved working software (FEIP-7461). */
+   *  its deploy proved working software. */
   deployVerified: boolean;
   /** The PO accepted: experiment merged into the feature branch, story done. */
   accepted: boolean;
@@ -266,7 +266,7 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
  *   deploy:    deploy -> approve-deploy-gate -> done.
  */
 export function nextTransition(state: DriveState): WorkflowAction {
-  // Escalation pre-empts everything (FEIP-7510 follow-up): any unresolved
+  // Escalation pre-empts everything (follow-up): any unresolved
   // blocking problem an agent surfaced (a failed honest-GREEN run, a blocking
   // bad-smell, a deploy verify-fail) routes to a single raise-to-hil halt rather
   // than advancing or re-issuing an action that never changes state (the

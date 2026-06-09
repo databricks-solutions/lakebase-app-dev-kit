@@ -167,7 +167,7 @@ export function runHumanProxyCli(argv: string[]): number {
     process.stdout.write(`${HELP}\n`);
     return 0;
   }
-  // Sprint-scoped plan gate (FEIP-7461): `--sprint <name> [--gate plan]`. The
+  // Sprint-scoped plan gate: `--sprint <name> [--gate plan]`. The
   // Human Proxy approves the sprint plan gate, the HITL checkpoint between
   // planning and execution. Teeth: refuses unless feature-proposals.md exists +
   // conforms. A refusal is a skip (exit 0), mirroring the per-feature drain.
