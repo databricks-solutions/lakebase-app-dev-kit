@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Claude Code plugin.** The kit installs as a plugin: `claude plugin
+  marketplace add databricks-solutions/lakebase-app-dev-kit` then `claude plugin
+  install lakebase-app-dev-kit@lakebase-app-dev-kit`. Launch the workflow with
+  `/lakebase-app-dev-kit:tdd` (resumes in a scaffolded project, guides creation
+  elsewhere).
+- **Per-role agent runtime.** Eight role agents (product-owner, spec-author,
+  ux-designer, architect-reviewer, test-strategist, navigator, driver,
+  release-engineer) scaffolded into a project's `.claude/agents/` and invoked by
+  the driver as `claude --agent <role>`.
+- **Per-story pipeline + experiments.** Stories stream through design -> build
+  with a ready queue; each story builds on its own experiment branch
+  (cut / accept=merge / discard), paired with a Lakebase branch.
+- **Deterministic deploy + Release Engineer handoff** at story acceptance, with
+  deploy-evidence as the backstop; **honest GREEN** (no GREEN without a passing
+  runner outcome) + **escalate-to-HIL** on any agent-surfaced error.
+
+### Changed
+
+- **Kit CLIs resolve through a project's `scripts/lk`** (ref-keyed cache or
+  `LAKEBASE_KIT_DIR`) instead of per-call `npx` git resolution.
+- The orchestrator is a **deterministic state-machine driver**
+  (`lakebase-tdd-drive`), not an LLM agent.
+
 ## [0.3.0-beta.0] - 2026-06-05
 
 First beta on the 0.3.0 line, graduating from the alpha series. Consume via

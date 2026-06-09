@@ -30,7 +30,7 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 ## Per-story streaming (pipelined design)
 
-In the per-story pipeline (FEIP-7565) you order **one story's** tests at a time (a per-story test list), handed off as soon as the Architect annotates that story, so the single build lane can start it while later stories are still being designed. Do not wait for the whole feature.
+In the per-story pipeline you order **one story's** tests at a time (a per-story test list), handed off as soon as the Architect annotates that story, so the single build lane can start it while later stories are still being designed. Do not wait for the whole feature.
 
 ## Inputs
 
