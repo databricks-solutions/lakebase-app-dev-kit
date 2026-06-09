@@ -54,6 +54,9 @@ replay_smoke() {
   done
 
   PROJECT_DIR="${PROJECT_DIR:-$HOME/code/tdd-workflow-smoke/${PROJECT_NAME}}"
+  # Ensure the scaffold root exists; the scaffolder clones into PROJECT_DIR and
+  # needs its parent present (a fresh checkout / renamed default may not have it).
+  mkdir -p "$(dirname "$PROJECT_DIR")"
   [[ -n "$TIERS" ]] || { echo "${SMOKE_NAME}: --tiers 2 is required (bug-tracker is prod+staging)." >&2; return 2; }
   [[ -d "$CORPUS_DIR/features/$FEATURE_ID" ]] || { echo "${SMOKE_NAME}: corpus missing $CORPUS_DIR/features/$FEATURE_ID" >&2; return 2; }
 

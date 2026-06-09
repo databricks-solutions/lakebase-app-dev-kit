@@ -139,6 +139,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
+# Ensure the scaffold root exists; the scaffolder clones into PROJECT_DIR and
+# needs its parent present (a fresh checkout / renamed default may not have it).
+mkdir -p "$(dirname "$PROJECT_DIR")"
 
 # The kit npx URL. When KIT_REF is set, suffix the GitHub ref so npx
 # clones that branch / tag / sha. Empty KIT_REF means "kit main" (the
