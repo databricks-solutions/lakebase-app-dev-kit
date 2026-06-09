@@ -1,6 +1,6 @@
 // hermetic guard rails on the smoke artifacts.
 //
-// The smoke itself (examples/feip-7422-smoke/orchestrator/run-smoke.sh)
+// The smoke itself (examples/tdd-workflow-smoke/orchestrator/run-smoke.sh)
 // drives a real scaffolded project through 2 iterations + CI; it's
 // expensive and not appropriate as a vitest. This test only asserts
 // the smoke's SHAPE and that its authored documents follow the kit's
@@ -18,7 +18,7 @@ import { checkArtifactConformance, parseRequiredNfrs } from "../../scripts/tdd/a
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
-const SMOKE_DIR = path.join(REPO_ROOT, "examples", "feip-7422-smoke", "orchestrator");
+const SMOKE_DIR = path.join(REPO_ROOT, "examples", "tdd-workflow-smoke", "orchestrator");
 
 const ITERATIONS = [
   "v1-file-bug",
@@ -26,7 +26,7 @@ const ITERATIONS = [
 ];
 
 describe("TDD-workflow smoke: directory structure", () => {
-  it("ships under examples/feip-7422-smoke/orchestrator/", () => {
+  it("ships under examples/tdd-workflow-smoke/orchestrator/", () => {
     expect(fs.existsSync(SMOKE_DIR)).toBe(true);
   });
 

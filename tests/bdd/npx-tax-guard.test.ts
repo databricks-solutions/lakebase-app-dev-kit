@@ -54,8 +54,8 @@ describe("npx-tax guard: the canonical logging doc + smoke use lk", () => {
   it("the smokes bootstrap create-project through the kit's lk (no npx --package), for determinism", () => {
     // run-smoke.sh bootstraps directly; the replay smokes share _replay-smoke.sh.
     for (const rel of [
-      "examples/feip-7422-smoke/orchestrator/run-smoke.sh",
-      "examples/feip-7422-smoke/orchestrator/_replay-smoke.sh",
+      "examples/tdd-workflow-smoke/orchestrator/run-smoke.sh",
+      "examples/tdd-workflow-smoke/orchestrator/_replay-smoke.sh",
     ]) {
       const smoke = read(rel);
       // Bootstrap routes through the committed lk resolver, pinned via KIT_LK.

@@ -207,7 +207,7 @@ sprint plan gate.
 
 - **Phase 9, smoke rewrite + final.** `run-smoke.sh` -> `/sprint` (driver
   `--sprint`); remove the dead `run_claude_with_gate_drain`; update
-  `feip-7422-smoke.test.ts`; rebuild + commit dist for the npx smoke; full suite;
+  `tdd-workflow-smoke.test.ts`; rebuild + commit dist for the npx smoke; full suite;
   (gated) live re-validate.
 
 ## What this subsumes / reconciles

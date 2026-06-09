@@ -63,7 +63,7 @@ state machine. Writes no spec / code / test / deploy.
 - **C , Per-project model overrides**: `scripts/tdd/agent-models.ts` (`readRecommendedModels()` parses def frontmatter = single source; `resolveModelForRole()` = override ?? recommended ?? inherit); `.lakebase/agent-config.json` + schema written by `scaffoldStaticAll`; `lakebase-create-project` asks the HIL (interactive prompt + `--agent-model <role>=<model>` flags + `--json-input`), defaulting to recommended.
 - **D , State machine**: add `planning` (before `discovery`) and `deploy` (after `implementation`/`review`, before `shipped`) to the TDD phase enum (`scripts/tdd/schemas/workflow-state.schema.json`); update helpers/guards/tests. SCM state machine unchanged (`/plan` is pre-claim, `/deploy` is within `feature-claimed`).
 - **E , Commands delegate to named subagents**: `/plan`, `/design`, `/build`, `/deploy` bodies hand each phase to the named role agent, read the resolved per-role model, record the state-machine transition, keep gates HITL. Update `SKILL.md`.
-- **F , Smoke parity**: drive `claude -p "/plan ..."` and `claude -p "/deploy ..."` through `run_claude_with_gate_drain` instead of emulating them; Human Proxy stays the headless supply/approve; update `feip-7422-smoke.test.ts`.
+- **F , Smoke parity**: drive `claude -p "/plan ..."` and `claude -p "/deploy ..."` through `run_claude_with_gate_drain` instead of emulating them; Human Proxy stays the headless supply/approve; update `tdd-workflow-smoke.test.ts`.
 - **G , Release substrate audit (gated)**: audit `lakebase-release-workflows` + `lakebase-scm-workflows` for Release Engineer gaps (local deploy/verify today; remote/release/rollback next); surface the list; file JIRA only after explicit go.
 - **H , Conformance + docs + suite**: a vitest asserting each role def has required frontmatter (name, description non-empty + <=1536 chars, recommended model), a relay header, a non-empty system prompt, and that the role set matches the `AgentRole` enum; update `spec-format.md` + smoke README; full typecheck + vitest.
 
@@ -73,7 +73,7 @@ state machine. Writes no spec / code / test / deploy.
 - State machine: `scripts/tdd/schemas/workflow-state.schema.json` (+ helpers/tests)
 - Model config: new `scripts/tdd/agent-models.ts` + `scripts/tdd/schemas/agent-models.schema.json`; `scripts/lakebase/create-project.ts` + `create-project.cli.ts` + `scripts/lakebase/scaffold.ts`
 - Commands: `templates/project/common/.claude/commands/{plan,design,build,deploy}.md`; `skills/lakebase-tdd-workflows/SKILL.md`
-- Smoke: `examples/feip-7422-smoke/orchestrator/run-smoke.sh`, `tests/bdd/feip-7422-smoke.test.ts`
+- Smoke: `examples/tdd-workflow-smoke/orchestrator/run-smoke.sh`, `tests/bdd/tdd-workflow-smoke.test.ts`
 - Release skill (compose + audit): `skills/lakebase-release-workflows/`
 
 ## Reuse (do not reinvent)

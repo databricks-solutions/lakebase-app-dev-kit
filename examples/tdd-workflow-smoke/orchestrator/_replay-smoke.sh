@@ -53,7 +53,7 @@ replay_smoke() {
     esac
   done
 
-  PROJECT_DIR="${PROJECT_DIR:-$HOME/code/feip-7422-smoke/${PROJECT_NAME}}"
+  PROJECT_DIR="${PROJECT_DIR:-$HOME/code/tdd-workflow-smoke/${PROJECT_NAME}}"
   [[ -n "$TIERS" ]] || { echo "${SMOKE_NAME}: --tiers 2 is required (bug-tracker is prod+staging)." >&2; return 2; }
   [[ -d "$CORPUS_DIR/features/$FEATURE_ID" ]] || { echo "${SMOKE_NAME}: corpus missing $CORPUS_DIR/features/$FEATURE_ID" >&2; return 2; }
 

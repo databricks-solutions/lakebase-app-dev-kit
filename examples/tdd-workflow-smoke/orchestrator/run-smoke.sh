@@ -86,7 +86,7 @@ set -o pipefail
 
 # ─── defaults + arg parse ────────────────────────────────────────
 
-SMOKE_ROOT_DEFAULT="${HOME}/code/feip-7422-smoke"
+SMOKE_ROOT_DEFAULT="${HOME}/code/tdd-workflow-smoke"
 RESUME_AT=""
 # Unique per-run project name so every smoke scaffolds a FRESH project and can
 # never silently reuse a stale dir / collide with a prior run's Lakebase project

@@ -8,7 +8,7 @@ end-to-end [E2E] cycle smoke against a scaffolded project").
 
 This directory ships with the kit so the smoke is versioned alongside the code
 it tests. The actual scaffold lives outside the kit repo (default:
-`~/code/feip-7422-smoke/bug-tracker/`).
+`~/code/tdd-workflow-smoke/bug-tracker/`).
 
 **Scope.** This smoke validates the TDD workflow. The SCM workflow CLIs
 (`lakebase-scm-prepare-pr` / `wait-ci` / `merge --wait-migrate`) are tested
@@ -113,7 +113,7 @@ hand-coded endpoint list.
 ### Run
 
 ```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --tiers 2
+bash examples/tdd-workflow-smoke/orchestrator/run-smoke.sh --tiers 2
 ```
 
 Scaffolds the project, stages project intake, then runs sprint-1 (`/plan` + v1)
@@ -125,7 +125,7 @@ and sprint-2 (`/plan` + v2). Headless throughout
 If an iteration fails and you've fixed it:
 
 ```bash
-bash examples/feip-7422-smoke/orchestrator/run-smoke.sh --resume v2 --skip-scaffold
+bash examples/tdd-workflow-smoke/orchestrator/run-smoke.sh --resume v2 --skip-scaffold
 ```
 
 Re-plans each sprint (idempotent) and starts the per-feature loop at v2.
@@ -166,7 +166,7 @@ auto-confirm in non-interactive / CI runs.
 
 ## Maintaining the smoke
 
-The smoke's structure is guarded by `tests/bdd/feip-7422-smoke.test.ts`, which
+The smoke's structure is guarded by `tests/bdd/tdd-workflow-smoke.test.ts`, which
 asserts (among others):
 
 - `product-overview.md` (Product Owner voice), `nfrs.md`, and `design-brief.md`

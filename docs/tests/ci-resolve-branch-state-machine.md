@@ -110,7 +110,7 @@ Architectural guard (hermetic):
 npx vitest run tests/bdd/shell-parity.test.ts
 ```
 
-Live (after env config from `~/code/feip-7422-smoke/.env.local.test.config`):
+Live (after env config from `~/code/tdd-workflow-smoke/.env.local.test.config`):
 
 ```
 LAKEBASE_TEST_E2E_GITHUB=1 npx vitest run \
