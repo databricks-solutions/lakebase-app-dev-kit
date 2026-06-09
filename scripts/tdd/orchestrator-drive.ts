@@ -355,21 +355,24 @@ export function nextDesignOnlyTransition(state: DriveState): WorkflowAction {
 }
 
 /**
- * A handoff the human can stop a driver run JUST BEFORE (a finer bound than the
- * Tier-2 lanes): "navigator" = the first build handoff (the Navigator kickoff,
- * before any code is written), "release-engineer" = the deploy/verify (the
- * Release Engineer takes the built + reviewed story and ships it). Backs the
- * run-to-navigator / run-to-release-engineer smokes (and `--stop-before`).
+ * A handoff the human can PAUSE a driver run just before (a HITL gate, not a
+ * bail-out): "navigator" = the first build handoff (the Navigator kickoff, before
+ * any code is written), "release-engineer" = the deploy/verify (the Release
+ * Engineer takes the built + reviewed story and ships it). The driver blocks at
+ * the gate, prompts the human [Y/n], and RESUMES the same run on Y , it never
+ * leaves the state machine. Backs run-to-navigator / run-to-release-engineer and
+ * the `--pause-before` flag.
  */
-export type StopMilestone = "navigator" | "release-engineer";
+export type PauseMilestone = "navigator" | "release-engineer";
 
-/** A `stopWhen` predicate that halts cleanly BEFORE the given handoff fires. */
-export function stopBeforeMilestone(m: StopMilestone): (action: WorkflowAction) => boolean {
+/** A predicate matching the action JUST BEFORE the given handoff fires (the
+ *  driver pauses for the human's Y/n the first time this matches). */
+export function pauseBeforeMilestone(m: PauseMilestone): (action: WorkflowAction) => boolean {
   switch (m) {
     case "navigator":
       // The initial Navigator handoff writes the first failing test (tests not
       // yet written). The per-AC REVIEW/REFACTOR turns also invoke the navigator
-      // but carry a buildMode, so exclude those , we stop at the build kickoff.
+      // but carry a buildMode, so exclude those , we pause at the build kickoff.
       return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === undefined;
     case "release-engineer":
       // The per-story deploy + verify (await-acceptance) and the feature-level

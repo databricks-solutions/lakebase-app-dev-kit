@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as readline from "node:readline";
 
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { restoreBuildTurn } from "./replay-build.js";
@@ -26,8 +27,8 @@ import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, typ
 import {
   isHitlGateAction,
   isHumanInputAction,
-  stopBeforeMilestone,
-  type StopMilestone,
+  pauseBeforeMilestone,
+  type PauseMilestone,
   type WorkflowAction,
 } from "./orchestrator-drive.js";
 import {
@@ -63,7 +64,7 @@ interface ParsedArgs {
   maxSteps?: number;
   planOnly?: boolean;
   only?: string;
-  stopBefore?: string;
+  pauseBefore?: string;
   gates?: string;
   noSizing?: boolean;
   help?: boolean;
@@ -84,7 +85,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--max-steps": out.maxSteps = Number(argv[++i]); break;
       case "--plan-only": out.planOnly = true; break;
       case "--only": out.only = argv[++i]; break;
-      case "--stop-before": out.stopBefore = argv[++i]; break;
+      case "--pause-before": out.pauseBefore = argv[++i]; break;
       case "--gates": out.gates = argv[++i]; break;
       // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
       // default. --no-sizing opts OUT: planning goes propose -> author-requests
@@ -116,8 +117,11 @@ Flags:
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
   --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
-  --stop-before <m>    Stop cleanly JUST BEFORE a handoff: navigator (the build
-                       kickoff) | release-engineer (the deploy/verify). Exit 0.
+  --pause-before <m>   PAUSE (not stop) just before a handoff: navigator (the
+                       build kickoff) | release-engineer (the deploy/verify). The
+                       driver blocks for a human [Y/n], then RESUMES the same run
+                       on Y , it never leaves the state machine. n re-asks. Set
+                       LAKEBASE_TDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
@@ -323,6 +327,54 @@ function composeOnAction(
   };
 }
 
+/**
+ * The PAUSE gate's human wait: block the state machine at the handoff and ask
+ * [Y/n] on the terminal. Y / Enter resolves (the run resumes); n re-asks (we
+ * never bail). Reads /dev/tty so the prompt reaches the human even when the
+ * driver's stdio is piped. LAKEBASE_TDD_AUTO_CONTINUE=1 auto-confirms (CI /
+ * non-interactive), and if no terminal is available it also auto-confirms with a
+ * warning rather than hanging a headless run forever.
+ */
+function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
+  const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
+  return (action) =>
+    new Promise((resolve) => {
+      const label = describeAction(action);
+      if (auto) {
+        process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}\n`);
+        return resolve();
+      }
+      let tty: fs.ReadStream | undefined;
+      try {
+        if (process.stdin.isTTY) {
+          tty = undefined; // use process.stdin directly below
+        } else {
+          tty = fs.createReadStream("/dev/tty");
+        }
+      } catch {
+        process.stderr.write(`[drive] PAUSE gate: no terminal to prompt , auto-continuing past ${label}.\n`);
+        return resolve();
+      }
+      const input = (tty as unknown as NodeJS.ReadableStream) ?? process.stdin;
+      const ask = (): void => {
+        const rl = readline.createInterface({ input, output: process.stderr, terminal: false });
+        rl.question(`\n[drive] PAUSED , continue past the ${label} handoff? [Y/n] `, (answer) => {
+          rl.close();
+          const a = answer.trim().toLowerCase();
+          if (a === "" || a === "y" || a === "yes") {
+            process.stderr.write(`[drive] resuming.\n`);
+            try { tty?.close(); } catch { /* ignore */ }
+            resolve();
+          } else {
+            process.stderr.write(`[drive] holding , answer Y when ready to continue.\n`);
+            ask();
+          }
+        });
+      };
+      ask();
+    });
+}
+
 /** Compose a phase bound's stopWhen with the interactive gate stop: in
  *  interactive mode the driver also halts at each HITL gate for the human. */
 function gatedStopWhen(
@@ -450,25 +502,21 @@ async function main(): Promise<number> {
   }
   const boundOpts = bound ? driverBoundOptions(bound) : {};
 
-  // --stop-before: a finer stop than the Tier-2 lanes. Halt JUST BEFORE a
-  // handoff (the Navigator build kickoff, or the Release Engineer deploy). Backs
-  // the run-to-navigator / run-to-release-engineer smokes.
-  let stopMilestone: StopMilestone | undefined;
-  if (args.stopBefore) {
-    if (!["navigator", "release-engineer"].includes(args.stopBefore)) {
+  // --pause-before: a HITL gate (NOT a stop) just before a handoff (the Navigator
+  // build kickoff, or the Release Engineer deploy). The driver blocks for a human
+  // [Y/n] then RESUMES the same run. Backs run-to-navigator / run-to-release.
+  let pauseMilestone: PauseMilestone | undefined;
+  if (args.pauseBefore) {
+    if (!["navigator", "release-engineer"].includes(args.pauseBefore)) {
       process.stderr.write(
-        `lakebase-tdd-drive: --stop-before must be navigator|release-engineer (got "${args.stopBefore}").\n`,
+        `lakebase-tdd-drive: --pause-before must be navigator|release-engineer (got "${args.pauseBefore}").\n`,
       );
       return 2;
     }
-    stopMilestone = args.stopBefore as StopMilestone;
+    pauseMilestone = args.pauseBefore as PauseMilestone;
   }
-  // Compose the (at most one) phase bound with the handoff stop: the run halts at
-  // whichever the next action satisfies first.
-  const stopFns = [boundOpts.stopWhen, stopMilestone ? stopBeforeMilestone(stopMilestone) : undefined].filter(
-    (f): f is (a: WorkflowAction) => boolean => Boolean(f),
-  );
-  const baseStopWhen = stopFns.length ? (a: WorkflowAction) => stopFns.some((f) => f(a)) : undefined;
+  const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : undefined;
+  const confirmContinue = pauseMilestone ? makeConfirmContinue() : undefined;
 
   const cfg = buildCfg(args, args.feature);
 
@@ -484,7 +532,9 @@ async function main(): Promise<number> {
     const result = await runDriver(buildDriveEffects(cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(baseStopWhen, interactive),
+      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
+      pauseBefore,
+      confirmContinue,
     });
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
@@ -502,11 +552,6 @@ async function main(): Promise<number> {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
       reportGate(pendingGate);
-    } else if (result.stoppedAtBound && stopMilestone && result.stoppedAt && stopBeforeMilestone(stopMilestone)(result.stoppedAt)) {
-      process.stderr.write(
-        `[drive] stopped JUST BEFORE the ${stopMilestone} handoff after ${result.iterations} actions ` +
-          `(next action: ${describeAction(result.stoppedAt)}). Review, then re-run without --stop-before to continue.\n`,
-      );
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)\n`);
     } else {

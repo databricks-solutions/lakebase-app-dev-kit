@@ -140,12 +140,13 @@ committed `lk` resolver, and the three smokes default to THIS checkout's built
 | Script | What it does |
 |--------|--------------|
 | `run-smoke.sh` | Full end-to-end: scaffold → plan → design → build → deploy, live, nothing replayed. |
-| `run-to-navigator.sh` | Replays the design lane, then STOPS just before the Navigator build handoff. A launch pad to inspect/take over the build. |
-| `run-to-release-engineer.sh` | Replays design + restores the recorded build, then STOPS just before the Release Engineer deploy handoff. |
+| `run-to-navigator.sh` | Replays the design lane, then PAUSES just before the Navigator build handoff (`[Y/n]` gate). Answer Y to resume into the live build. |
+| `run-to-release-engineer.sh` | Replays design + restores the recorded build, then PAUSES just before the Release Engineer deploy handoff (`[Y/n]` gate). Answer Y to resume into deploy + verify. |
 | `rebuild-push-warm.sh` | Publishes the current branch: rebuild + commit `dist/` + push + warm the lk cache. Run it when you want the pushed/published bits; the smokes don't need it. |
 
-`run-to-*` resume from where they stopped: `cd <project> && ./scripts/lk
-lakebase-tdd-drive --feature F1-file-bug`.
+`run-to-*` PAUSE at the handoff (a `[Y/n]` prompt) and RESUME the same run on Y ,
+they never bail out of the state machine. Set `LAKEBASE_TDD_AUTO_CONTINUE=1` to
+auto-confirm in non-interactive / CI runs.
 
 ### Other useful flags
 

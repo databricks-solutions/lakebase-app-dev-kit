@@ -83,6 +83,20 @@ export interface RunDriverOptions {
    * reaches `done` completes normally. See actionLane for the lane taxonomy.
    */
   stopWhen?: (action: WorkflowAction) => boolean;
+  /**
+   * A PAUSE gate (NOT a bail-out): the FIRST time the next action satisfies this,
+   * the loop awaits `confirmContinue` (a human Y/n prompt) BEFORE performing it,
+   * then carries on , the run never leaves the state machine. Distinct from
+   * stopWhen, which exits. Backs `--pause-before` (run-to-navigator / -release).
+   */
+  pauseBefore?: (action: WorkflowAction) => boolean;
+  /**
+   * The human-in-the-loop wait the pause gate awaits. Resolves when the human
+   * confirms (Y); a typical impl re-prompts on `n` and never rejects, so the
+   * driver simply waits for the go-ahead. Required for `pauseBefore` to pause;
+   * without it the gate is a no-op (the run proceeds, e.g. in pure unit tests).
+   */
+  confirmContinue?: (action: WorkflowAction) => Promise<void>;
 }
 
 // Backstop against a runaway loop (an effect that advances but never converges).
@@ -128,6 +142,7 @@ export async function runDriver(
   options: RunDriverOptions = {},
 ): Promise<RunDriverResult> {
   let previousSignature: string | undefined;
+  let pausedAlready = false;
   for (let i = 0; ; i++) {
     if (options.maxSteps !== undefined && i >= options.maxSteps) {
       return { iterations: i, stoppedAtMax: true };
@@ -159,6 +174,15 @@ export async function runDriver(
     // action (e.g. /design stops before the first build, /build before deploy).
     if (options.stopWhen?.(action)) {
       return { iterations: i, stoppedAtBound: true, stoppedAt: action };
+    }
+
+    // A PAUSE gate (NOT a stop): the FIRST time the next action reaches a chosen
+    // handoff, block for the human's Y/n, then CONTINUE the same run. The driver
+    // never leaves the state machine; it just waits for the go-ahead. Awaited
+    // before the stall check + perform, so the human reviews the pristine state.
+    if (!pausedAlready && options.pauseBefore?.(action) && options.confirmContinue) {
+      pausedAlready = true;
+      await options.confirmContinue(action);
     }
 
     const signature = JSON.stringify(action);

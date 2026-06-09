@@ -29,7 +29,7 @@ KIT_DIR="$(cd "$ORCH_DIR/../../.." && pwd)"   # examples/feip-7422-smoke/orchest
 PKG="@databricks-solutions/lakebase-app-dev-kit"
 GH="github:databricks-solutions/lakebase-app-dev-kit"
 GH_URL="https://github.com/databricks-solutions/lakebase-app-dev-kit.git"
-MARKER="stopBeforeMilestone"               # a string the NEW dist must contain
+MARKER="pauseBeforeMilestone"              # a string the NEW dist must contain
 DO_PUSH=1
 
 while [[ $# -gt 0 ]]; do

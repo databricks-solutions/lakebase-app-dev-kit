@@ -13,7 +13,12 @@ import {
   DriverStalledError,
   type DriveEffects,
 } from "../../scripts/tdd/orchestrator-run";
-import type { DriveState, StoryView, WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
+import {
+  pauseBeforeMilestone,
+  type DriveState,
+  type StoryView,
+  type WorkflowAction,
+} from "../../scripts/tdd/orchestrator-drive";
 
 function freshStory(): StoryView {
   return {
@@ -172,6 +177,36 @@ describe("runDriver: the per-story pipeline streams", () => {
     const s2Cut = firstIndex(log, (a) => a.kind === "cut-experiment" && a.story === "S2");
     expect(s1Complete).toBeGreaterThanOrEqual(0);
     expect(s2Cut).toBeGreaterThan(s1Complete);
+  });
+});
+
+describe("runDriver: --pause-before (HITL gate, not a stop)", () => {
+  it("awaits the human ONCE at the handoff, then resumes the SAME run to done", async () => {
+    const { state, effects } = makeFakeWorld(["S1"]);
+    const seen: WorkflowAction[] = [];
+    const result = await runDriver(effects, {
+      pauseBefore: pauseBeforeMilestone("release-engineer"),
+      // The human's Y/n: resolve immediately (confirm), recording each prompt.
+      confirmContinue: async (a) => {
+        seen.push(a);
+      },
+    });
+
+    // Paused exactly once, at the first await-acceptance (the RE handoff) ...
+    expect(seen).toHaveLength(1);
+    expect(seen[0].kind).toBe("await-acceptance");
+    // ... and did NOT bail: the run continued through to done.
+    expect(state.phase).toBe("done");
+    expect(state.stories.S1.build.accepted).toBe(true);
+    expect(result.stoppedAtBound).toBeUndefined();
+    expect(result.escalated).toBeUndefined();
+  });
+
+  it("is a no-op when no confirmContinue is provided (pure-loop safety)", async () => {
+    const { state, effects } = makeFakeWorld(["S1"]);
+    const result = await runDriver(effects, { pauseBefore: pauseBeforeMilestone("navigator") });
+    expect(state.phase).toBe("done");
+    expect(result.iterations).toBeGreaterThan(0);
   });
 });
 

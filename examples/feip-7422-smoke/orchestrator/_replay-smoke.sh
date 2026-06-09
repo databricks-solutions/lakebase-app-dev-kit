@@ -7,9 +7,13 @@
 #
 # The two entry scripts set three vars, then call `replay_smoke "$@"`:
 #   SMOKE_NAME    label for logs + the usage line (e.g. run-to-navigator.sh)
-#   STOP_BEFORE   navigator | release-engineer  (lakebase-tdd-drive --stop-before)
+#   PAUSE_BEFORE  navigator | release-engineer  (lakebase-tdd-drive --pause-before)
 #   REPLAY_BUILD  0 | 1  (1 also restores the recorded code tree + green cycles,
-#                 so the run skips the live build and lands at the RE handoff)
+#                 so the run skips the live build and reaches the RE handoff)
+#
+# At the handoff the driver PAUSES (a HITL [Y/n] gate), waits for the human, and
+# RESUMES the same run on Y , it never bails out of the state machine. Set
+# LAKEBASE_TDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive / CI).
 #
 # Determinism (in code): the create-project bootstrap, the scaffolded project's
 # scripts/lk, and every drive turn all resolve the kit through the SAME committed
@@ -74,7 +78,7 @@ replay_smoke() {
   lk()  { "$PROJECT_DIR/scripts/lk" "$@"; }
 
   # ─── 1. scaffold a REAL project via the committed lk resolver ──
-  log "kit = ${LAKEBASE_KIT_DIR:-ref ${KIT_REF:-main}}  (stop-before: ${STOP_BEFORE}, replay-build: ${REPLAY_BUILD})"
+  log "kit = ${LAKEBASE_KIT_DIR:-ref ${KIT_REF:-main}}  (pause-before: ${PAUSE_BEFORE}, replay-build: ${REPLAY_BUILD})"
   if [[ -d "$PROJECT_DIR/.git" ]]; then
     err "project dir already exists: $PROJECT_DIR (use a fresh --project-name)"; return 1
   fi
@@ -121,22 +125,22 @@ replay_smoke() {
     || { err "claim-feature-branch failed"; return 2; }
   "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$FEATURE_ID"
 
-  # ─── 4. drive in REPLAY mode, STOP just before the chosen handoff ─
+  # ─── 4. drive in REPLAY mode, PAUSE just before the chosen handoff ─
   # LAKEBASE_TDD_REPLAY_DIR replays each DESIGN-lane role turn from the corpus.
   # When REPLAY_BUILD=1 the recorded code tree + GREEN cycles are restored too
-  # (the build skips to the Release Engineer). --stop-before halts the driver
-  # cleanly just before the handoff so the human can review / take over.
+  # (the build skips to the Release Engineer). --pause-before makes the driver
+  # PAUSE at the handoff (a [Y/n] gate) so the human reviews, then RESUME the
+  # same run on Y , it does NOT bail out of the state machine.
   export LAKEBASE_TDD_REPLAY_DIR="${CORPUS_DIR}"
   if [[ "$REPLAY_BUILD" == "1" ]]; then
     [[ -d "$BUILD_CORPUS_DIR" ]] || { err "build corpus missing: $BUILD_CORPUS_DIR"; return 2; }
     export LAKEBASE_TDD_REPLAY_BUILD_DIR="$BUILD_CORPUS_DIR"
-    log "design REPLAYED + build RESTORED (corpus: ${BUILD_CORPUS_DIR}); driving to the ${STOP_BEFORE} handoff"
+    log "design REPLAYED + build RESTORED (corpus: ${BUILD_CORPUS_DIR}); pausing at the ${PAUSE_BEFORE} handoff"
   else
-    log "design REPLAYED (corpus: ${CORPUS_DIR}); driving to the ${STOP_BEFORE} handoff"
+    log "design REPLAYED (corpus: ${CORPUS_DIR}); pausing at the ${PAUSE_BEFORE} handoff"
   fi
-  lk lakebase-tdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --stop-before "$STOP_BEFORE" \
+  lk lakebase-tdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --pause-before "$PAUSE_BEFORE" \
     || { err "lakebase-tdd-drive failed for ${FEATURE_ID}"; return 2; }
 
-  log "✓ stopped just before the ${STOP_BEFORE} handoff. Project: ${PROJECT_DIR}"
-  log "  continue with: (cd '${PROJECT_DIR}' && ./scripts/lk lakebase-tdd-drive --feature ${FEATURE_ID})"
+  log "✓ ${SMOKE_NAME} complete (paused at the ${PAUSE_BEFORE} handoff, resumed on your Y). Project: ${PROJECT_DIR}"
 }

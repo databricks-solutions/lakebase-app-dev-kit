@@ -11,7 +11,7 @@ import { describe, it, expect } from "vitest";
 import {
   nextDesignAction,
   nextTransition,
-  stopBeforeMilestone,
+  pauseBeforeMilestone,
   type DesignDriveState,
   type DriveState,
   type StoryView,
@@ -256,7 +256,7 @@ describe("nextTransition: deploy + done", () => {
   });
 });
 
-describe("stopBeforeMilestone (run-to-navigator / run-to-release-engineer)", () => {
+describe("pauseBeforeMilestone (run-to-navigator / run-to-release-engineer)", () => {
   const navKickoff: WorkflowAction = { kind: "invoke-role", role: "navigator", story: "S1" };
   const navReview: WorkflowAction = { kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" };
   const driverTurn: WorkflowAction = { kind: "invoke-role", role: "driver", story: "S1" };
@@ -264,20 +264,20 @@ describe("stopBeforeMilestone (run-to-navigator / run-to-release-engineer)", () 
   const deploy: WorkflowAction = { kind: "deploy" };
   const cut: WorkflowAction = { kind: "cut-experiment", story: "S1" };
 
-  it("navigator: stops at the build kickoff, NOT the per-AC review/refactor or driver turns", () => {
-    const stop = stopBeforeMilestone("navigator");
-    expect(stop(navKickoff)).toBe(true);
-    expect(stop(navReview)).toBe(false); // carries buildMode , a later handoff
-    expect(stop(driverTurn)).toBe(false);
-    expect(stop(cut)).toBe(false);
-    expect(stop(awaitAccept)).toBe(false);
+  it("navigator: matches the build kickoff, NOT the per-AC review/refactor or driver turns", () => {
+    const at = pauseBeforeMilestone("navigator");
+    expect(at(navKickoff)).toBe(true);
+    expect(at(navReview)).toBe(false); // carries buildMode , a later handoff
+    expect(at(driverTurn)).toBe(false);
+    expect(at(cut)).toBe(false);
+    expect(at(awaitAccept)).toBe(false);
   });
 
-  it("release-engineer: stops at the per-story deploy/verify and the feature deploy", () => {
-    const stop = stopBeforeMilestone("release-engineer");
-    expect(stop(awaitAccept)).toBe(true);
-    expect(stop(deploy)).toBe(true);
-    expect(stop(navKickoff)).toBe(false);
-    expect(stop(cut)).toBe(false);
+  it("release-engineer: matches the per-story deploy/verify and the feature deploy", () => {
+    const at = pauseBeforeMilestone("release-engineer");
+    expect(at(awaitAccept)).toBe(true);
+    expect(at(deploy)).toBe(true);
+    expect(at(navKickoff)).toBe(false);
+    expect(at(cut)).toBe(false);
   });
 });

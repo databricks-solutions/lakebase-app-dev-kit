@@ -6647,6 +6647,7 @@ var import_node_child_process9 = require("child_process");
 var import_node_crypto = require("crypto");
 var fs10 = __toESM(require("fs"), 1);
 var path5 = __toESM(require("path"), 1);
+var readline = __toESM(require("readline"), 1);
 
 // scripts/tdd/replay-artifacts.ts
 init_cjs_shims();
@@ -7016,7 +7017,7 @@ function toDesignView(state) {
 function nextDesignOnlyTransition(state) {
   return nextDesignAction(toDesignView(state));
 }
-function stopBeforeMilestone(m) {
+function pauseBeforeMilestone(m) {
   switch (m) {
     case "navigator":
       return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === void 0;
@@ -7091,6 +7092,7 @@ function driverBoundOptions(bound) {
 }
 async function runDriver(effects, options = {}) {
   let previousSignature;
+  let pausedAlready = false;
   for (let i = 0; ; i++) {
     if (options.maxSteps !== void 0 && i >= options.maxSteps) {
       return { iterations: i, stoppedAtMax: true };
@@ -7113,6 +7115,10 @@ async function runDriver(effects, options = {}) {
     }
     if (options.stopWhen?.(action)) {
       return { iterations: i, stoppedAtBound: true, stoppedAt: action };
+    }
+    if (!pausedAlready && options.pauseBefore?.(action) && options.confirmContinue) {
+      pausedAlready = true;
+      await options.confirmContinue(action);
     }
     const signature = JSON.stringify(action);
     if (signature === previousSignature) {
@@ -8455,8 +8461,8 @@ function parseArgs(argv) {
       case "--only":
         out.only = argv[++i];
         break;
-      case "--stop-before":
-        out.stopBefore = argv[++i];
+      case "--pause-before":
+        out.pauseBefore = argv[++i];
         break;
       case "--gates":
         out.gates = argv[++i];
@@ -8496,8 +8502,11 @@ Flags:
   --max-steps <n>      Stop after n actions (incremental/live testing + safety)
   --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
   --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
-  --stop-before <m>    Stop cleanly JUST BEFORE a handoff: navigator (the build
-                       kickoff) | release-engineer (the deploy/verify). Exit 0.
+  --pause-before <m>   PAUSE (not stop) just before a handoff: navigator (the
+                       build kickoff) | release-engineer (the deploy/verify). The
+                       driver blocks for a human [Y/n], then RESUMES the same run
+                       on Y , it never leaves the state machine. n re-asks. Set
+                       LAKEBASE_TDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
@@ -8656,6 +8665,52 @@ function composeOnAction(...hooks) {
     for (const h of hooks) h(action, i);
   };
 }
+function makeConfirmContinue() {
+  const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
+  return (action) => new Promise((resolve2) => {
+    const label = describeAction(action);
+    if (auto) {
+      process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}
+`);
+      return resolve2();
+    }
+    let tty;
+    try {
+      if (process.stdin.isTTY) {
+        tty = void 0;
+      } else {
+        tty = fs10.createReadStream("/dev/tty");
+      }
+    } catch {
+      process.stderr.write(`[drive] PAUSE gate: no terminal to prompt , auto-continuing past ${label}.
+`);
+      return resolve2();
+    }
+    const input = tty ?? process.stdin;
+    const ask = () => {
+      const rl = readline.createInterface({ input, output: process.stderr, terminal: false });
+      rl.question(`
+[drive] PAUSED , continue past the ${label} handoff? [Y/n] `, (answer) => {
+        rl.close();
+        const a = answer.trim().toLowerCase();
+        if (a === "" || a === "y" || a === "yes") {
+          process.stderr.write(`[drive] resuming.
+`);
+          try {
+            tty?.close();
+          } catch {
+          }
+          resolve2();
+        } else {
+          process.stderr.write(`[drive] holding , answer Y when ready to continue.
+`);
+          ask();
+        }
+      });
+    };
+    ask();
+  });
+}
 function gatedStopWhen(base, interactive) {
   if (!interactive) return base;
   return (a) => (base?.(a) ?? false) || isHitlGateAction(a) || isHumanInputAction(a);
@@ -8762,21 +8817,19 @@ ${help()}`);
     bound = args.only;
   }
   const boundOpts = bound ? driverBoundOptions(bound) : {};
-  let stopMilestone;
-  if (args.stopBefore) {
-    if (!["navigator", "release-engineer"].includes(args.stopBefore)) {
+  let pauseMilestone;
+  if (args.pauseBefore) {
+    if (!["navigator", "release-engineer"].includes(args.pauseBefore)) {
       process.stderr.write(
-        `lakebase-tdd-drive: --stop-before must be navigator|release-engineer (got "${args.stopBefore}").
+        `lakebase-tdd-drive: --pause-before must be navigator|release-engineer (got "${args.pauseBefore}").
 `
       );
       return 2;
     }
-    stopMilestone = args.stopBefore;
+    pauseMilestone = args.pauseBefore;
   }
-  const stopFns = [boundOpts.stopWhen, stopMilestone ? stopBeforeMilestone(stopMilestone) : void 0].filter(
-    (f) => Boolean(f)
-  );
-  const baseStopWhen = stopFns.length ? (a) => stopFns.some((f) => f(a)) : void 0;
+  const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : void 0;
+  const confirmContinue = pauseMilestone ? makeConfirmContinue() : void 0;
   const cfg = buildCfg(args, args.feature);
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);
@@ -8789,7 +8842,9 @@ ${help()}`);
     const result = await runDriver(buildDriveEffects(cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(baseStopWhen, interactive)
+      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
+      pauseBefore,
+      confirmContinue
     });
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
@@ -8807,11 +8862,6 @@ ${help()}`);
 `);
     } else if (pendingGate) {
       reportGate(pendingGate);
-    } else if (result.stoppedAtBound && stopMilestone && result.stoppedAt && stopBeforeMilestone(stopMilestone)(result.stoppedAt)) {
-      process.stderr.write(
-        `[drive] stopped JUST BEFORE the ${stopMilestone} handoff after ${result.iterations} actions (next action: ${describeAction(result.stoppedAt)}). Review, then re-run without --stop-before to continue.
-`
-      );
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
 `);
