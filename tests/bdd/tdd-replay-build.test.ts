@@ -115,5 +115,7 @@ describe("replayBuildTurn (per-turn build replay)", () => {
     expect(f("/p/.venv/bin/python")).toBe(false);
     expect(f("/p/.env")).toBe(false); // secret
     expect(f("/p/.env.example")).toBe(true); // template kept
+    expect(f("/p/Makefile")).toBe(false); // scaffold config , corpus must not clobber
+    expect(f("/p/deploy-targets.yaml")).toBe(false); // scaffold config (run command)
   });
 });

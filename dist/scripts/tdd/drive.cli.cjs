@@ -6924,7 +6924,7 @@ var JUNK_DIRS = /* @__PURE__ */ new Set([
   ".git",
   "node_modules"
 ]);
-var JUNK_FILES = /* @__PURE__ */ new Set([".env", ".DS_Store"]);
+var JUNK_FILES = /* @__PURE__ */ new Set([".env", ".DS_Store", "Makefile", "deploy-targets.yaml"]);
 function codeTreeFilter(root) {
   return (src) => {
     const rel = src.slice(root.length).replace(/^[/\\]+/, "");

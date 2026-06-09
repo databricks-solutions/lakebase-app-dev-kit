@@ -32,8 +32,11 @@ export const SCAFFOLD_OWNED = new Set([
 const JUNK_DIRS = new Set([
   ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".git", "node_modules",
 ]);
-/** Files to never capture/overlay: secrets + OS cruft. (.env.example IS kept.) */
-const JUNK_FILES = new Set([".env", ".DS_Store"]);
+/** Files to never capture/overlay: secrets + OS cruft, plus scaffold-owned root
+ *  config the build never authors , the corpus must not clobber the fresh
+ *  scaffold's copy (e.g. Makefile/deploy-targets.yaml carry the run command; a
+ *  stale `--reload` copy would re-break the deploy teardown). (.env.example IS kept.) */
+const JUNK_FILES = new Set([".env", ".DS_Store", "Makefile", "deploy-targets.yaml"]);
 
 /** A cpSync filter that copies a code tree under `root` while skipping (a) the
  *  scaffold-owned top-level dirs (replay must not clobber the fresh scaffold's

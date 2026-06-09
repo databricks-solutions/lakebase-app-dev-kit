@@ -10,4 +10,4 @@ migrate:
 	uv run --env-file .env alembic upgrade head
 
 run:
-	uv run --env-file .env uvicorn app.main:app --reload
+	uv run --env-file .env uvicorn app.main:app
