@@ -363,6 +363,8 @@ export interface CycleVerifyArgs {
   startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
   reachable?: (url: string) => Promise<boolean>;
   runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
+  /** Stop the running local app (default stopLocal). Injectable for hermetic tests. */
+  stop?: (projectDir: string, targetName: string) => void;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
 }
@@ -398,30 +400,45 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   const reachable = args.reachable ?? probeReachable;
   const start = args.startProcess ?? defaultStart;
   const runVerify = args.runVerify ?? defaultRunVerify;
+  const stop = args.stop ?? ((pd, tn) => void stopLocal(pd, tn));
   const url = cfg.baseUrl + cfg.healthPath;
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     BASE_URL: cfg.baseUrl,
     ...(args.lakebaseBranch ? { LAKEBASE_BRANCH_ID: args.lakebaseBranch } : {}),
   };
-  // Idempotent: reuse a reachable app, else start it (deploy-during-build) + poll.
-  let up = await reachable(url);
-  if (!up) {
-    const pid = start(cfg.run, args.projectDir, env);
-    const pf = pidFile(args.projectDir, targetName);
-    mkdirSync(dirname(pf), { recursive: true });
-    writeFileSync(pf, String(pid));
-    const poll = await pollUntil<boolean>({
-      probe: async () => ((await reachable(url)) ? { done: true, value: true } : { done: false }),
-      timeoutMs: cfg.readyTimeoutSeconds * 1000,
-      intervalMs: 1000,
-      sleep: args.sleep,
-      now: args.now,
-    });
-    up = poll.outcome === "done";
+  // Deploy-during-build serves a FRESH app on THIS turn's code. Every build turn
+  // overlays new code, so we do NOT reuse a running app (it would serve stale
+  // code). Stop any prior instance first , that also frees the port, so a
+  // `uvicorn --reload` caught mid-reload can't cause a double-bind race , then
+  // start fresh, poll until reachable, run verify, and ALWAYS stop after, so
+  // nothing lingers on the port between turns or after the run.
+  stop(args.projectDir, targetName);
+  const pid = start(cfg.run, args.projectDir, env);
+  const pf = pidFile(args.projectDir, targetName);
+  mkdirSync(dirname(pf), { recursive: true });
+  writeFileSync(pf, String(pid));
+  const poll = await pollUntil<boolean>({
+    probe: async () => ((await reachable(url)) ? { done: true, value: true } : { done: false }),
+    timeoutMs: cfg.readyTimeoutSeconds * 1000,
+    intervalMs: 1000,
+    sleep: args.sleep,
+    now: args.now,
+  });
+  if (poll.outcome !== "done") {
+    stop(args.projectDir, targetName);
+    return {
+      passed: false,
+      reachable: false,
+      summary: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s; cannot run GREEN verify`,
+    };
   }
-  if (!up) return { passed: false, reachable: false, summary: `app not reachable at ${url}; cannot run GREEN verify` };
-  const passed = runVerify(cfg.verify, args.projectDir, env);
+  let passed: boolean;
+  try {
+    passed = runVerify(cfg.verify, args.projectDir, env);
+  } finally {
+    stop(args.projectDir, targetName); // never leave the app on the port
+  }
   return {
     passed,
     reachable: true,

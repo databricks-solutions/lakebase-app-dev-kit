@@ -6953,9 +6953,13 @@ function replayBuildTurn(args) {
   if (!(0, import_fs2.existsSync)(codeSrc)) return false;
   (0, import_fs2.cpSync)(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
   const cyclesSrc = (0, import_path2.join)(turnDir, "tdd", "cycles");
-  if ((0, import_fs2.existsSync)(cyclesSrc)) (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
-  const expSrc = (0, import_path2.join)(turnDir, "tdd", "experiments");
-  if ((0, import_fs2.existsSync)(expSrc)) (0, import_fs2.cpSync)(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
+  if ((0, import_fs2.existsSync)(cyclesSrc)) {
+    (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(tddDir), {
+      recursive: true,
+      force: true,
+      filter: (src) => (0, import_fs2.statSync)(src).isDirectory() || src.endsWith("review-verdict.json")
+    });
+  }
   return true;
 }
 

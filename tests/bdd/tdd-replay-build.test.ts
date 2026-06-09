@@ -88,6 +88,23 @@ describe("replayBuildTurn (per-turn build replay)", () => {
     expect(existsSync(join(proj, "app"))).toBe(false);
   });
 
+  it("a review turn delivers review-verdict.json (drives refactors) but NOT timestamped cycle-NNN.json", () => {
+    // Record turn 3 as a review turn: code + a verdict + a cycle timestamp file.
+    const c = join(corpus, "features", F, "stories", S, "turns", "003-navigator-review-AC1", "tdd", "cycles", F, S, "AC1");
+    mkdirSync(c, { recursive: true });
+    writeFileSync(join(c, "review-verdict.json"), JSON.stringify({ refactor: true, notes: "extract route" }));
+    writeFileSync(join(c, "cycle-001.json"), JSON.stringify({ red_at: "t", green_at: "t" }));
+    writeTurn("003-navigator-review-AC1", { "app/main.py": "# reviewed\n" });
+
+    const ok = replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 3 });
+    expect(ok).toBe(true);
+    // verdict delivered into .tdd/cycles (so the live review drives the refactor)
+    const dst = join(tdd, "cycles", F, S, "AC1");
+    expect(existsSync(join(dst, "review-verdict.json"))).toBe(true);
+    // the timestamped cycle file is NOT delivered (live cycle CLIs own RED/GREEN)
+    expect(existsSync(join(dst, "cycle-001.json"))).toBe(false);
+  });
+
   it("codeTreeFilter rejects scaffold/junk/secret paths, keeps real source", () => {
     const root = "/p";
     const f = codeTreeFilter(root);

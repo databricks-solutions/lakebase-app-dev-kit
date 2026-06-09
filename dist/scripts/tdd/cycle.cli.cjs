@@ -7335,34 +7335,61 @@ async function ensureDeployedAndVerify(args) {
   const reachable = args.reachable ?? probeReachable;
   const start = args.startProcess ?? defaultStart;
   const runVerify = args.runVerify ?? defaultRunVerify;
+  const stop = args.stop ?? ((pd, tn) => void stopLocal(pd, tn));
   const url = cfg.baseUrl + cfg.healthPath;
   const env = {
     ...process.env,
     BASE_URL: cfg.baseUrl,
     ...args.lakebaseBranch ? { LAKEBASE_BRANCH_ID: args.lakebaseBranch } : {}
   };
-  let up = await reachable(url);
-  if (!up) {
-    const pid = start(cfg.run, args.projectDir, env);
-    const pf = pidFile(args.projectDir, targetName);
-    (0, import_node_fs.mkdirSync)((0, import_node_path2.dirname)(pf), { recursive: true });
-    (0, import_node_fs.writeFileSync)(pf, String(pid));
-    const poll = await pollUntil({
-      probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
-      timeoutMs: cfg.readyTimeoutSeconds * 1e3,
-      intervalMs: 1e3,
-      sleep: args.sleep,
-      now: args.now
-    });
-    up = poll.outcome === "done";
+  stop(args.projectDir, targetName);
+  const pid = start(cfg.run, args.projectDir, env);
+  const pf = pidFile(args.projectDir, targetName);
+  (0, import_node_fs.mkdirSync)((0, import_node_path2.dirname)(pf), { recursive: true });
+  (0, import_node_fs.writeFileSync)(pf, String(pid));
+  const poll = await pollUntil({
+    probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
+    timeoutMs: cfg.readyTimeoutSeconds * 1e3,
+    intervalMs: 1e3,
+    sleep: args.sleep,
+    now: args.now
+  });
+  if (poll.outcome !== "done") {
+    stop(args.projectDir, targetName);
+    return {
+      passed: false,
+      reachable: false,
+      summary: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s; cannot run GREEN verify`
+    };
   }
-  if (!up) return { passed: false, reachable: false, summary: `app not reachable at ${url}; cannot run GREEN verify` };
-  const passed = runVerify(cfg.verify, args.projectDir, env);
+  let passed;
+  try {
+    passed = runVerify(cfg.verify, args.projectDir, env);
+  } finally {
+    stop(args.projectDir, targetName);
+  }
   return {
     passed,
     reachable: true,
     summary: passed ? "GREEN verify passed against the running app" : "GREEN verify FAILED against the running app"
   };
+}
+function stopLocal(projectDir, targetName) {
+  const pf = pidFile(projectDir, targetName);
+  if (!(0, import_node_fs.existsSync)(pf)) return { stopped: false };
+  const pid = Number((0, import_node_fs.readFileSync)(pf, "utf8").trim());
+  if (Number.isFinite(pid) && pid > 0) {
+    try {
+      process.kill(-pid);
+    } catch {
+      try {
+        process.kill(pid);
+      } catch {
+      }
+    }
+  }
+  (0, import_node_fs.rmSync)(pf, { force: true });
+  return { stopped: true };
 }
 
 // scripts/tdd/cycle-record.ts

@@ -15,9 +15,9 @@
 // tdd/{cycles,experiments}. Turns are ordinal-keyed; the Kth Navigator/Driver
 // turn of a deterministic drive maps to the Kth recorded turn dir (sorted).
 
-import { existsSync, cpSync, readdirSync } from "fs";
+import { existsSync, cpSync, readdirSync, statSync } from "fs";
 import { join } from "path";
-import { featuresDir, cyclesRootDir, experimentsRootDir } from "./tdd-paths.js";
+import { featuresDir, cyclesRootDir } from "./tdd-paths.js";
 
 /** Project paths the scaffold owns , never overwrite them from the snapshot, or
  *  the fresh run's kit resolver / pin / hooks break (on replay), and never
@@ -77,12 +77,20 @@ export interface ReplayBuildTurnArgs {
 }
 
 /**
- * Replay one build turn: overlay the turnIndex-th recorded turn's code + cycle +
- * experiment records onto the project, in place of spawning the Navigator/Driver.
- * Returns false (a miss) when the corpus lacks this story OR has fewer turns than
- * turnIndex, so the caller falls back to the live model for that turn. The code
- * overlay skips scaffold-owned + junk paths (codeTreeFilter); the .tdd records are
- * restored so the next readState + the live cycle-record CLIs see this turn's state.
+ * Replay one build turn: overlay the turnIndex-th recorded turn's CODE onto the
+ * project, in place of spawning the Navigator/Driver. Returns false (a miss) when
+ * the corpus lacks this story OR has fewer turns than turnIndex, so the caller
+ * falls back to the live model for that turn.
+ *
+ * Delivers the turn's CODE (the LLM's output) plus, for a REVIEW turn, the
+ * Navigator's `review-verdict.json` (its actual artifact: refactor true/false).
+ * The verdict is what drives the refactor turns , without it, the live review CLI
+ * defaults to "looks good", the Driver never refactors, and the tree freezes at
+ * the pre-refactor state instead of the corpus's FINAL state. We deliver ONLY
+ * review-verdict.json from .tdd, NEVER the timestamped cycle-NNN.json (overlaying
+ * those corrupts the live cycle state machine , mis-sequenced RED/GREEN). So the
+ * LIVE substrate still owns RED/GREEN + the experiment branch; we mock only the
+ * two artifacts a turn actually produces (code, and the review verdict).
  */
 export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
   const { replayBuildDir, projectDir, tddDir, featureId, story, turnIndex } = args;
@@ -94,10 +102,16 @@ export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
   if (!existsSync(codeSrc)) return false;
   cpSync(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
 
+  // Deliver the Navigator's review verdicts (refactor decisions) so the live
+  // review drives the recorded refactor turns. ONLY review-verdict.json , the
+  // live cycle-record CLIs own everything else in .tdd (RED/GREEN, review.json).
   const cyclesSrc = join(turnDir, "tdd", "cycles");
-  if (existsSync(cyclesSrc)) cpSync(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
-  const expSrc = join(turnDir, "tdd", "experiments");
-  if (existsSync(expSrc)) cpSync(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
-
+  if (existsSync(cyclesSrc)) {
+    cpSync(cyclesSrc, cyclesRootDir(tddDir), {
+      recursive: true,
+      force: true,
+      filter: (src) => statSync(src).isDirectory() || src.endsWith("review-verdict.json"),
+    });
+  }
   return true;
 }

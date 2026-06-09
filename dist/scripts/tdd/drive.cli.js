@@ -6908,7 +6908,7 @@ function replayDesignTurn(args) {
 
 // scripts/tdd/replay-build.ts
 init_esm_shims();
-import { existsSync as existsSync3, cpSync, readdirSync as readdirSync3 } from "fs";
+import { existsSync as existsSync3, cpSync, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
 import { join as join3 } from "path";
 var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([
   ".git",
@@ -6958,9 +6958,13 @@ function replayBuildTurn(args) {
   if (!existsSync3(codeSrc)) return false;
   cpSync(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
   const cyclesSrc = join3(turnDir, "tdd", "cycles");
-  if (existsSync3(cyclesSrc)) cpSync(cyclesSrc, cyclesRootDir(tddDir), { recursive: true, force: true });
-  const expSrc = join3(turnDir, "tdd", "experiments");
-  if (existsSync3(expSrc)) cpSync(expSrc, experimentsRootDir(tddDir), { recursive: true, force: true });
+  if (existsSync3(cyclesSrc)) {
+    cpSync(cyclesSrc, cyclesRootDir(tddDir), {
+      recursive: true,
+      force: true,
+      filter: (src) => statSync3(src).isDirectory() || src.endsWith("review-verdict.json")
+    });
+  }
   return true;
 }
 
@@ -7446,7 +7450,7 @@ function readAcLayer2(tddDir, featureId, acId) {
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync3, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
+import { existsSync as existsSync12, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync4, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
 import { join as join11, dirname as dirname4 } from "path";
 
 // scripts/tdd/test-list.ts
@@ -7558,7 +7562,7 @@ function storyCycles(tddDir, featureId, story) {
   for (const acDir of readdirSync6(base)) {
     const dir = join11(base, acDir);
     try {
-      if (!statSync3(dir).isDirectory()) continue;
+      if (!statSync4(dir).isDirectory()) continue;
     } catch {
       continue;
     }
@@ -7841,7 +7845,7 @@ function diskArtifactProbe(tddDir, featureId) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync14, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8, readdirSync as readdirSync9, statSync as statSync5 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync14, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8, readdirSync as readdirSync9, statSync as statSync6 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
