@@ -74,6 +74,24 @@ describe("computeTiming", () => {
     expect(r.byKind[0]).toMatchObject({ key: "test-strategist/artifact.written", seconds: 200 });
   });
 
+  it("derives a coarse phase for events that carry NO phase slot (the fix: no giant (none) bucket)", () => {
+    // These mirror the real gap: cycle.* are code-emitted with no phase; reasoning
+    // / artifact.written are agent-emitted with no phase. They must still attribute
+    // to build / design / deploy by role + event, not pile into "(none)".
+    const r = computeTiming([
+      ev("2026-06-09T00:00:00.000Z", "orchestrator", "phase.start", { phase: "design" }),
+      ev("2026-06-09T00:00:10.000Z", "test-strategist", "reasoning"), // no phase -> design
+      ev("2026-06-09T00:00:40.000Z", "navigator", "cycle.review", { ac: "AC1" }), // no phase -> build
+      ev("2026-06-09T00:01:40.000Z", "driver", "reasoning"), // no phase -> build
+      ev("2026-06-09T00:02:00.000Z", "release-engineer", "deploy.verified"), // -> deploy
+    ]);
+    const byKey = Object.fromEntries(r.byPhase.map((g) => [g.key, g.seconds]));
+    expect(byKey["(none)"]).toBeUndefined(); // nothing falls through
+    expect(byKey["design"]).toBe(10); // test-strategist reasoning span (10s after phase.start)
+    expect(byKey["build"]).toBe(90); // cycle.review (30s) + driver reasoning (60s)
+    expect(byKey["deploy"]).toBe(20); // deploy.verified (20s after driver reasoning)
+  });
+
   it("surfaces the slowest spans first, capped at topN", () => {
     const r = computeTiming(sampleEvents(), { topN: 2 });
     expect(r.slowest).toHaveLength(2);

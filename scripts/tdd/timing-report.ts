@@ -23,7 +23,15 @@ export interface TurnTiming {
   index: number;
   role: string;
   event: string;
+  /** The fine activity token the event carried (red/green/review/refactor/
+   *  design/breakdown/propose/...), if any. */
   phase?: string;
+  /** The coarse lifecycle phase this turn belongs to (design | planning | build
+   *  | deploy | gate | other), DERIVED from role + event + fine phase. Unlike the
+   *  raw `phase`, this is always set , so the rollup attributes every event
+   *  (incl. the agent-emitted reasoning / artifact.written / cycle.* that carry
+   *  no phase slot of their own). */
+  coarsePhase: string;
   story?: string;
   ac?: string;
   cycleId?: string;
@@ -57,7 +65,9 @@ export interface TimingReport {
   endedAt?: string;
   /** Per inter-event span (every event after the first). */
   turns: TurnTiming[];
-  /** Spans summed by `metadata.phase` (desc by total seconds). */
+  /** Spans summed by the DERIVED coarse lifecycle phase (design | planning |
+   *  build | deploy | gate | other), desc by total seconds. Every event is
+   *  attributed (unlike the raw `metadata.phase`, which most events omit). */
   byPhase: GroupRollup[];
   /** Spans summed by `role` (desc). */
   byRole: GroupRollup[];
@@ -75,6 +85,47 @@ export interface ComputeTimingOpts {
 function metaStr(ev: AgentLogEvent, key: string): string | undefined {
   const v = ev.metadata?.[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+/** Map a fine activity token (the orchestrator's handoff/phase.start `phase`
+ *  slot) to its coarse lifecycle phase. */
+const FINE_TO_COARSE: Record<string, string> = {
+  red: "build",
+  green: "build",
+  review: "build",
+  refactor: "build",
+  build: "build",
+  design: "design",
+  breakdown: "design",
+  propose: "planning",
+  estimate: "planning",
+  "author-requests": "planning",
+  plan: "planning",
+  deploy: "deploy",
+};
+
+/**
+ * Derive the coarse lifecycle phase for an event. Prefers the fine `phase` token
+ * when present (the orchestrator sets it on handoff/phase.start); otherwise falls
+ * back to role + event name, so the events that carry NO phase , the code-emitted
+ * cycle.* and the agent-emitted reasoning / artifact.written / smell.flagged ,
+ * are still attributed (the "(none)" bucket the raw phase rollup left as 80% of
+ * the wall-clock). Build vs deploy vs design/planning is what the rollup answers.
+ */
+function deriveCoarsePhase(role: string, event: string, finePhase?: string): string {
+  if (finePhase && FINE_TO_COARSE[finePhase]) return FINE_TO_COARSE[finePhase];
+  if (event.startsWith("deploy.") || event.startsWith("verify.") || event.startsWith("adherence.") || role === "release-engineer") {
+    return "deploy";
+  }
+  if (event.startsWith("cycle.") || event.startsWith("experiment.") || event.startsWith("smell.") || role === "navigator" || role === "driver") {
+    return "build";
+  }
+  if (role === "product-owner") return "planning";
+  if (role === "spec-author" || role === "architect-reviewer" || role === "test-strategist" || role === "ux-designer") {
+    return "design";
+  }
+  if (event.startsWith("gate.")) return "gate";
+  return "other";
 }
 
 function parseTs(ts: string): number {
@@ -130,11 +181,13 @@ export function computeTiming(events: AgentLogEvent[], opts: ComputeTimingOpts =
   for (let k = 1; k < stamped.length; k++) {
     const prev = stamped[k - 1];
     const cur = stamped[k];
+    const finePhase = metaStr(cur.ev, "phase");
     turns.push({
       index: k + 1,
       role: cur.ev.role,
       event: cur.ev.event,
-      phase: metaStr(cur.ev, "phase"),
+      phase: finePhase,
+      coarsePhase: deriveCoarsePhase(cur.ev.role, cur.ev.event, finePhase),
       story: metaStr(cur.ev, "story"),
       ac: metaStr(cur.ev, "ac"),
       cycleId: metaStr(cur.ev, "cycle_id"),
@@ -154,7 +207,7 @@ export function computeTiming(events: AgentLogEvent[], opts: ComputeTimingOpts =
     startedAt: first.ev.timestamp,
     endedAt: last.ev.timestamp,
     turns,
-    byPhase: rollup(turns, (t) => t.phase ?? "(none)"),
+    byPhase: rollup(turns, (t) => t.coarsePhase),
     byRole: rollup(turns, (t) => t.role),
     byKind: rollup(turns, (t) => `${t.role}/${t.event}`),
     slowest,
@@ -198,7 +251,7 @@ export function formatTimingReport(report: TimingReport): string {
       `(${report.startedAt} -> ${report.endedAt})`,
   );
   out.push("");
-  out.push(rollupBlock("by phase", report.byPhase));
+  out.push(rollupBlock("by phase (coarse lifecycle)", report.byPhase));
   out.push(rollupBlock("by role", report.byRole));
   out.push(rollupBlock("by kind (role/event)", report.byKind));
   out.push(`slowest ${report.slowest.length} spans`);
