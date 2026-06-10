@@ -7210,12 +7210,6 @@ function expectationFor(action) {
   if (responder === "driver" && buildMode === "refactor") {
     return { ...withAc, expected: `a completed REFACTOR for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.refactorAc !== ac };
   }
-  if (responder === "navigator") {
-    return { ...base, expected: "a failing (RED) test", satisfiedBy: (s) => storyView2(s)?.build.testsWritten === true };
-  }
-  if (responder === "driver") {
-    return { ...base, expected: "production code that GREENs the test", satisfiedBy: (s) => storyView2(s)?.build.codeWritten === true };
-  }
   return null;
 }
 function handbackMessage(h, attempt) {
