@@ -24,7 +24,7 @@ import * as readline from "node:readline";
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { replayBuildTurn } from "./replay-build.js";
 import { recordBuildTurn } from "./record-build.js";
-import { recordTurn } from "./turn-recorder.js";
+import { recordTurn, seedRecorderBaseline } from "./turn-recorder.js";
 import { runDriver, driverBoundOptions, ProtocolViolationError, UnexpectedCallbackError, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { writeEscalation } from "./escalation.js";
 import { emitAgentLogEvent } from "./agent-log.js";
@@ -460,6 +460,10 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
 function withTurnRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveEffects {
   const recordDir = process.env.LAKEBASE_TDD_RECORD_DIR?.trim();
   if (!recordDir) return inner;
+  // Seed the delta baseline with the current (post-scaffold/intake) state ONCE,
+  // so the first recorded turn reports only what it produced, not the pre-existing
+  // scaffold. A no-op once a baseline exists (later drive processes in the run).
+  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir });
   return {
     readState: () => inner.readState(),
     onAction: inner.onAction ? (a, i) => inner.onAction!(a, i) : undefined,

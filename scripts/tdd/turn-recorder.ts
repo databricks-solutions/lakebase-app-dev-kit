@@ -149,6 +149,26 @@ interface RecorderState {
   files: Record<string, string>;
 }
 
+function writeRecorderState(recordDir: string, cur: Map<string, ScannedFile>): void {
+  const files: Record<string, string> = {};
+  for (const [rel, f] of cur) files[rel] = f.sha;
+  mkdirSync(recordDir, { recursive: true });
+  writeFileSync(join(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+}
+
+/**
+ * Seed the delta baseline with the CURRENT project state, once, before the first
+ * turn is recorded , so turn 0's delta reports only what that turn produced, not
+ * the pre-existing scaffold + intake files. A no-op if a baseline already exists
+ * (e.g. a later drive process in the same run, which must keep the running state
+ * from the prior process). Call at recorder construction, after scaffold/intake.
+ */
+export function seedRecorderBaseline(args: { recordDir: string; projectDir: string; tddDir: string }): boolean {
+  if (existsSync(join(args.recordDir, ".recorder-state.json"))) return false;
+  writeRecorderState(args.recordDir, scan(args.projectDir, args.tddDir));
+  return true;
+}
+
 function readState(recordDir: string): RecorderState {
   const f = join(recordDir, ".recorder-state.json");
   if (!existsSync(f)) return { files: {} };
@@ -278,9 +298,7 @@ export function recordTurn(args: RecordTurnArgs): RecordedTurn {
   writeFileSync(join(recordDir, "turns", "index.json"), JSON.stringify({ turns: index }, null, 2) + "\n");
 
   // Persist the new file-state for the next turn's delta.
-  const files: Record<string, string> = {};
-  for (const [rel, f] of cur) files[rel] = f.sha;
-  writeFileSync(join(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+  writeRecorderState(recordDir, cur);
 
   return { ordinal, dir: dirName, produced, deleted };
 }

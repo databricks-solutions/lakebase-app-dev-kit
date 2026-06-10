@@ -9,7 +9,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordTurn, labelForAction } from "../../scripts/tdd/turn-recorder.js";
+import { recordTurn, labelForAction, seedRecorderBaseline } from "../../scripts/tdd/turn-recorder.js";
 import { replayDesignTurn } from "../../scripts/tdd/replay-artifacts.js";
 import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive.js";
 
@@ -102,6 +102,22 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
     const t = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 1, action: act({ kind: "invoke-role", role: "spec-author" }) });
     expect(t.deleted).toContain(".tdd/features/F1/stories/S1/story.json");
     expect(existsSync(join(record, "recorded-artifacts", "features/F1/stories/S1/story.json"))).toBe(false);
+  });
+
+  it("seedRecorderBaseline makes turn 0 report only what that turn produced (not pre-existing scaffold)", () => {
+    const { proj, tdd, record } = mkProject();
+    // Pre-existing scaffold + intake (present before any turn).
+    writeTdd(tdd, "product-overview.md", "# overview");
+    writeFileSync(join(proj, "pyproject.toml"), "[project]\n");
+    // Seed the baseline (what withTurnRecording does at construction).
+    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, tddDir: tdd })).toBe(true);
+    // Re-seed is a no-op once a baseline exists.
+    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, tddDir: tdd })).toBe(false);
+    // Turn 0 produces ONE new artifact.
+    writeTdd(tdd, "planning/feature-proposals.md", "# proposals");
+    const t = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author", mode: "propose" }) });
+    expect(t.produced).toEqual([".tdd/planning/feature-proposals.md"]); // ONLY the new file
+    expect(t.produced).not.toContain(".tdd/product-overview.md"); // pre-existing, not attributed
   });
 
   it("does not record the append-only agent-log as a produced artifact", () => {
