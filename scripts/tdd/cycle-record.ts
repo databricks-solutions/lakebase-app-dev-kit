@@ -26,6 +26,7 @@ import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
+import { commitAllIfChanged } from "../git/commits.js";
 import {
   beginCycle,
   recordRunnerOutcome,
@@ -33,6 +34,32 @@ import {
   type CycleArtifact,
   type CycleScope,
 } from "./run-cycle.js";
+
+/**
+ * Commit the working tree (production code + tests + cycle artifacts) on the
+ * current experiment branch after a GREEN or a completed REFACTOR, so each TDD
+ * transition is its own commit , the canonical "commit when green, commit the
+ * refactor" rhythm.
+ *
+ * This is what makes `accept`'s `git merge <experiment> into <feature>` carry
+ * real commits up to the feature branch, and leaves a clean tree for the
+ * promote phase's `prepare-pr` (which refuses an uncommitted working tree).
+ * Before this, the build wrote code but never committed it, so the experiment
+ * merge was vacuous and promote's prepare-pr aborted on a dirty tree.
+ *
+ * Best-effort: a missing git repo (hermetic unit runs) or a clean tree
+ * (nothing to commit) never breaks the cycle transition , mirroring this
+ * file's logging resilience. A genuine failure leaves the tree dirty, which
+ * prepare-pr catches downstream rather than the build stamping a false state.
+ */
+async function commitCycleWork(tddDir: string, message: string): Promise<void> {
+  try {
+    await commitAllIfChanged({ cwd: dirname(tddDir), message });
+  } catch {
+    // swallow: the commit is bookkeeping for the SCM/promote phase; a
+    // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
+  }
+}
 
 /**
  * Best-effort emit of a per-AC cycle event (cycle.review / cycle.refactored) to
@@ -259,6 +286,10 @@ export async function greenOpenCycle(
   } catch {
     /* status propagation is observability for downstream consumers, not a gate */
   }
+  // Commit the now-green increment on the experiment branch (working software
+  // at each passing test), so accept can merge real commits up + promote's
+  // prepare-pr sees a clean tree.
+  await commitCycleWork(tddDir, `green: ${open.test_id} (${open.ac_id})`);
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 
@@ -388,7 +419,7 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
 }
 
 /** Record that the Driver completed the requested REFACTOR for an AC. */
-export function refactorAc(tddDir: string, featureId: string, story: string, acId: string): void {
+export async function refactorAc(tddDir: string, featureId: string, story: string, acId: string): Promise<void> {
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
@@ -406,4 +437,7 @@ export function refactorAc(tddDir: string, featureId: string, story: string, acI
     feature_id: featureId,
     slots: { ac: acId, change, story },
   });
+  // Commit the behavior-preserving refactor as its own commit (the second half
+  // of the "commit when green, then commit the refactor" rhythm).
+  await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
 }

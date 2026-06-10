@@ -59,6 +59,23 @@ export async function commitAll(args: CommitArgs): Promise<void> {
   });
 }
 
+/**
+ * `git add -A`, then commit only if something is actually staged. Returns true
+ * when a commit was made, false when the tree was already clean (nothing to
+ * commit). Throws on a genuine git failure (not a repo, detached HEAD, hook
+ * rejection); callers that want best-effort behavior wrap it in try/catch.
+ */
+export async function commitAllIfChanged(args: CommitArgs): Promise<boolean> {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  await exec("git add -A", { cwd: args.cwd });
+  const staged = await exec("git diff --cached --name-only", { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
+}
+
 /** Commit with DCO sign-off. Throws when the message is empty. */
 export async function commitSignedOff(args: CommitArgs): Promise<void> {
   if (!args.message.trim()) {

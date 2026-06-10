@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "fs";
+import { execSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -136,7 +137,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(r.refactorRequested).toBe(true);
     expect(firstReviewPendingAc(tdd, F, S)).toBeNull(); // reviewed
     expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1"); // refactor pending
-    refactorAc(tdd, F, S, "AC1");
+    await refactorAc(tdd, F, S, "AC1");
     expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored , AC fully done
   });
 
@@ -149,7 +150,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
     reviewAc(tdd, F, S, "AC1");
-    refactorAc(tdd, F, S, "AC1");
+    await refactorAc(tdd, F, S, "AC1");
 
     const log = readAgentLog({ tddDir: tdd });
     const review = log.find((e) => e.event === "cycle.review");
@@ -190,5 +191,62 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(p.openRed.length).toBe(0);
     expect(p.allGreen).toBe(false); // NOT done , T2 unbuilt
     expect(p.pending.map((i) => i.id)).toEqual(["T2"]);
+  });
+});
+
+// Each GREEN and each completed REFACTOR commits the working tree on the
+// experiment branch, so accept's git-merge carries real commits up to the
+// feature branch and the promote phase's prepare-pr finds a clean tree. The
+// live smoke surfaced the gap: the build wrote code but never committed it, so
+// promote's prepare-pr aborted with dirty-working-tree.
+describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", () => {
+  let proj: string;
+  let ptdd: string;
+  const gitlog = (): string => execSync("git log --oneline", { cwd: proj }).toString();
+  const porcelain = (): string => execSync("git status --porcelain", { cwd: proj }).toString().trim();
+
+  beforeEach(() => {
+    proj = mkdtempSync(join(tmpdir(), "tdd-commit-proj-"));
+    ptdd = join(proj, ".tdd");
+    const acsDir = join(ptdd, "features", F, "stories", S, "acs");
+    mkdirSync(acsDir, { recursive: true });
+    writeJson(join(acsDir, "AC1.json"), { id: "AC1", layer: "API", text: "the API returns" });
+    const items = [{ id: "T1", description: "first thing fails", ac_id: "AC1", status: "pending" }];
+    writeJson(join(ptdd, "features", F, "stories", S, "test-list-per-story.json"), { feature_id: F, story_id: S, items });
+    writeJson(join(ptdd, "features", F, "test-list.json"), { feature_id: F, items });
+    const expDir = join(ptdd, "experiments", F, S, "exp1");
+    mkdirSync(expDir, { recursive: true });
+    writeFileSync(join(expDir, "branch.txt"), "experiment-s1-exp1");
+    writeJson(join(expDir, "outcomes.json"), { status: "running" });
+    // A real git repo on the experiment branch with a seed commit.
+    execSync("git init -q", { cwd: proj });
+    execSync("git config user.email t@example.com && git config user.name tester", { cwd: proj });
+    execSync("git checkout -q -b experiment-s1-exp1", { cwd: proj });
+    writeFileSync(join(proj, "README.md"), "seed\n");
+    execSync("git add -A && git commit -q -m seed", { cwd: proj });
+  });
+
+  afterEach(() => {
+    rmSync(proj, { recursive: true, force: true });
+  });
+
+  it("greenOpenCycle commits the green increment + leaves a clean tree", async () => {
+    beginNextPendingCycle({ tddDir: ptdd, featureId: F, story: S });
+    writeFileSync(join(proj, "app.py"), "x = 1\n"); // the Driver's production code
+    await greenOpenCycle({ tddDir: ptdd, featureId: F, story: S, verify: pass });
+    expect(gitlog()).toMatch(/green: T1 \(AC1\)/);
+    expect(porcelain()).toBe(""); // clean tree => prepare-pr would pass
+  });
+
+  it("refactorAc commits the behavior-preserving refactor as its own commit", async () => {
+    beginNextPendingCycle({ tddDir: ptdd, featureId: F, story: S });
+    writeFileSync(join(proj, "app.py"), "x = 1\n");
+    await greenOpenCycle({ tddDir: ptdd, featureId: F, story: S, verify: pass });
+    writeJson(join(ptdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract helper" });
+    reviewAc(ptdd, F, S, "AC1");
+    writeFileSync(join(proj, "app.py"), "x = 2  # extracted helper\n");
+    await refactorAc(ptdd, F, S, "AC1");
+    expect(gitlog()).toMatch(/refactor: AC1/);
+    expect(porcelain()).toBe("");
   });
 });

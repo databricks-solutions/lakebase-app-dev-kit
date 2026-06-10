@@ -97,7 +97,7 @@ async function main(): Promise<number> {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
         return 0;
       }
-      refactorAc(tddDir, a.feature, a.story, ac);
+      await refactorAc(tddDir, a.feature, a.story, ac);
       process.stdout.write(`cycle: REFACTORED ${ac}\n`);
       return 0;
     }
