@@ -46,6 +46,18 @@ describe("expectationFor: each role handoff declares its non-null return contrac
     expect(expectationFor({ kind: "done" } as WorkflowAction)).toBeNull();
   });
 
+  it("per-cycle RED (navigator) + GREEN (driver) build turns carry NO contract (coarse story booleans would false-abort mid-story)", () => {
+    // Regression: codeWritten/testsWritten are story-level (all-green / all-written),
+    // so a single GREEN turn while later tests are pending leaves codeWritten=false.
+    // Enforcing it false-aborted a healthy build right after the first GREEN. The
+    // per-cycle loop is covered by the stall detector instead.
+    expect(expectationFor({ kind: "invoke-role", role: "navigator", story: "S2-submit-create-bug" } as WorkflowAction)).toBeNull();
+    expect(expectationFor({ kind: "invoke-role", role: "driver", story: "S2-submit-create-bug" } as WorkflowAction)).toBeNull();
+    // ...but the per-AC review/refactor turns DO keep their precise contracts.
+    expect(expectationFor({ kind: "invoke-role", role: "navigator", story: "S2-submit-create-bug", buildMode: "review", ac: "AC1" } as unknown as WorkflowAction)).toBeTruthy();
+    expect(expectationFor({ kind: "invoke-role", role: "driver", story: "S2-submit-create-bug", buildMode: "refactor", ac: "AC1" } as unknown as WorkflowAction)).toBeTruthy();
+  });
+
   it("test-strategist owes a non-empty per-story test list (the S2 contract)", () => {
     const h = expectationFor({ kind: "invoke-role", role: "test-strategist", story: "S2-submit-create-bug" } as WorkflowAction);
     expect(h).toBeTruthy();

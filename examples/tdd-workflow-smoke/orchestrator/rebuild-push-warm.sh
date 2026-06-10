@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# rebuild-push-warm , publish the current kit branch + warm the shared lk cache.
+# rebuild-push-warm , the shared WARMING + INFRA-READINESS preflight: publish the
+# current kit branch, warm the shared lk cache, and ready the local env (free the
+# deploy port) for whichever smoke runs next.
 #
-# Run this when you want the PUBLISHED GitHub path to reflect your local changes
-# (to share the branch, let CI run it, or test a real `--kit-ref` resolution).
-# It does ONE thing: rebuild + commit dist + push + warm. It does NOT run a smoke
-# , the smokes (run-smoke / run-to-navigator / run-to-release-engineer) run
-# independently. By default those smokes use THIS checkout's built dist, so you
-# only need this script when you specifically want the pushed/published bits.
+# Run this before any of the three run types (run-smoke / run-to-navigator /
+# run-to-release-engineer) , they all sit behind it. It does NOT run a smoke
+# itself. By default those smokes use THIS checkout's built dist, so the kit
+# rebuild/push/warm is only needed when you want the pushed/published bits; the
+# infra-readiness step (free_deploy_port) runs UNCONDITIONALLY so even a no-op
+# "already warm" invocation still readies the env. Anything common to all three
+# run types belongs HERE, not duplicated in a single run script.
 #
 # It removes every way to validate against stale dist:
 #   1. build + commit dist (only if it changed),
@@ -47,6 +50,33 @@ cd "$KIT_DIR"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" != "HEAD" ] || die "detached HEAD , check out the branch you want to publish."
 log "kit=$KIT_DIR branch=$BRANCH"
+
+# ── infra readiness: free the local deploy port ──────────────────────────────
+# Shared by ALL three run types (run-smoke / run-to-navigator / run-to-release-
+# engineer), since each runs the per-story deploy + its foreign-port guard. A
+# PRIOR run that crashed before teardown leaves a uvicorn listening on the deploy
+# port; the next run's deploy then refuses to verify against that stale app and
+# raises to HIL (a real env failure, not a workflow bug). Reaping it here , the
+# one preflight every run sits behind , readies the env for whichever smoke runs
+# next. Runs UNCONDITIONALLY (before the currency check below), so even a no-op
+# "already warm" invocation still frees the port. Override the port with
+# SMOKE_DEPLOY_PORT (default 8000, matching the scaffolded deploy-targets.yaml).
+free_deploy_port() {
+  command -v lsof >/dev/null 2>&1 || return 0
+  local port="${SMOKE_DEPLOY_PORT:-8000}" pids
+  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+  [ -n "$pids" ] || return 0
+  # shellcheck disable=SC2086
+  log "infra-readiness: freeing deploy port :$port (stale listener(s): $(echo $pids | tr '\n' ' '))"
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+  sleep 1
+  pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
+  # shellcheck disable=SC2086
+  [ -n "$pids" ] && { kill -9 $pids 2>/dev/null || true; }
+  return 0
+}
+free_deploy_port
 
 HEAD_SHA="$(git rev-parse HEAD)"
 CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/lakebase-app-dev-kit"
