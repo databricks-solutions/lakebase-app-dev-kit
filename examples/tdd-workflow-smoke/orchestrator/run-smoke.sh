@@ -143,6 +143,25 @@ PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
 # needs its parent present (a fresh checkout / renamed default may not have it).
 mkdir -p "$(dirname "$PROJECT_DIR")"
 
+# Turn recording (code asset): the deterministic driver records EVERY state-
+# machine turn (design + build + gates + deploy + promote) into a replayable
+# corpus when LAKEBASE_TDD_RECORD_DIR is set. The test runner turns it on by
+# default , one corpus dir beside the project, surviving --keep-on-failure:
+#   <RECORD_DIR>/turns/<NNNN>-<label>/   per-turn manifest + the .tdd/code delta
+#   <RECORD_DIR>/turns/index.json        the ordered timeline of every step
+#   <RECORD_DIR>/recorded-artifacts/     cumulative .tdd mirror (replayDesignTurn)
+#   <RECORD_DIR>/recorded-build/         per-turn code corpus (replayBuildTurn)
+# Override LAKEBASE_TDD_RECORD_DIR to relocate, or set it empty to disable.
+if [[ -z "${LAKEBASE_TDD_RECORD_DIR+x}" ]]; then
+  export LAKEBASE_TDD_RECORD_DIR="$(dirname "$PROJECT_DIR")/_recorded-${PROJECT_NAME}"
+fi
+if [[ -n "${LAKEBASE_TDD_RECORD_DIR}" ]]; then
+  : "${LAKEBASE_TDD_RECORD_BUILD_DIR:=${LAKEBASE_TDD_RECORD_DIR}/recorded-build}"
+  export LAKEBASE_TDD_RECORD_BUILD_DIR
+  mkdir -p "$LAKEBASE_TDD_RECORD_DIR"
+  echo "smoke: recording every state-machine turn -> $LAKEBASE_TDD_RECORD_DIR" >&2
+fi
+
 # The kit npx URL. When KIT_REF is set, suffix the GitHub ref so npx
 # clones that branch / tag / sha. Empty KIT_REF means "kit main" (the
 # default-published-pin behavior). Exported so any subprocess + the
