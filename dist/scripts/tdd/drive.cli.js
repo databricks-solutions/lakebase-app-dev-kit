@@ -7075,6 +7075,17 @@ function scan(projectDir, tddDir) {
   }
   return map;
 }
+function writeRecorderState(recordDir, cur) {
+  const files = {};
+  for (const [rel, f] of cur) files[rel] = f.sha;
+  mkdirSync4(recordDir, { recursive: true });
+  writeFileSync3(join5(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+}
+function seedRecorderBaseline(args) {
+  if (existsSync5(join5(args.recordDir, ".recorder-state.json"))) return false;
+  writeRecorderState(args.recordDir, scan(args.projectDir, args.tddDir));
+  return true;
+}
 function readState(recordDir) {
   const f = join5(recordDir, ".recorder-state.json");
   if (!existsSync5(f)) return { files: {} };
@@ -7167,9 +7178,7 @@ function recordTurn(args) {
   index.push(entry);
   mkdirSync4(join5(recordDir, "turns"), { recursive: true });
   writeFileSync3(join5(recordDir, "turns", "index.json"), JSON.stringify({ turns: index }, null, 2) + "\n");
-  const files = {};
-  for (const [rel, f] of cur) files[rel] = f.sha;
-  writeFileSync3(join5(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+  writeRecorderState(recordDir, cur);
   return { ordinal, dir: dirName, produced, deleted };
 }
 
@@ -9441,6 +9450,7 @@ function withBuildRecording(inner, cfg) {
 function withTurnRecording(inner, cfg) {
   const recordDir = process.env.LAKEBASE_TDD_RECORD_DIR?.trim();
   if (!recordDir) return inner;
+  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir });
   return {
     readState: () => inner.readState(),
     onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
