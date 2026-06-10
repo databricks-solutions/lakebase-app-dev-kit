@@ -32,10 +32,13 @@ Context findings (what each turn pays for):
 
 Each: change / effort (S/M/L) / est. save / risk / **status**.
 
-### P1 , kill the test-strategist 200s outlier
+### P1 , kill the test-strategist 200s outlier , LANDED
 - **Change:** A/B test-strategist on `sonnet` (often converges faster than haiku thrashing on structured output) and/or tighten its prompt to pass the AC ids inline (it already has them) so it does not re-derive; cap output.
 - **Effort:** S. **Save:** ~150s/feature. **Risk:** low.
-- **Status:** _proposed_.
+- **Status:** **LANDED** (branch `perf/agent-loop-p0-p1-p7`). Two parts:
+  - **Inline the AC ids (kit code):** `roleTaskBody`'s test-strategist case now states the story's exact AC ids inline (`storyAcIds`) + pins the `ac_id`-mapping contract the response-formatter enforces, so the role no longer re-scans `acs/` to re-derive them. Falls back to the bare directive when no ACs are on disk yet. (`orchestrator-effects.ts`; test in `orchestrator-effects.test.ts`.)
+  - **Drop the haiku pin (smoke):** the root cause of the 200s was the smoke pinning ALL design roles to haiku, incl. `--agent-model test-strategist=haiku`; haiku thrashed on the structured test-list. The kit default is already `sonnet`. Removed the test-strategist pin from `run-smoke.sh` + `_replay-smoke.sh` (other prose roles stay haiku, still exercising the override path). Smoke test updated to assert it is NOT pinned.
+  - Output cap was already in place via `AGENT_TERSE_SUFFIX`.
 
 ### P2 , pre-digest the REVIEW rubric (stop re-reading 3 files per AC)
 - **Change:** orchestrator computes a compact, AC-scoped rubric once (design tokens + NFR ids + layer for THIS AC) and passes it inline; navigator stops re-reading `architecture.md`/`nfrs.md`/`design-guide.md` every review.
@@ -92,15 +95,22 @@ Each: change / effort (S/M/L) / est. save / risk / **status**.
 - **Effort:** L (8a/8b), M (8c , it is mostly batching the review). **Save:** ~1,000s/story (8a), ~700s (8b), ~375s (8c). **Risk:** as per the table; LOW for all if gated behind the mode.
 - **Status:** _proposed (user-requested); 3 variants on record, awaiting pick._
 
-### P7 , cut inter-phase shell overhead
-- **Change:** the ~44s plan->design gap is git commits + claim + `verify-workflow-state` + `lk` resolution. Batch the commits, drop redundant verifies, reuse a warm `lk`.
-- **Effort:** S. **Save:** ~40s/feature. **Risk:** low.
-- **Status:** _proposed_.
+### P7 , cut inter-phase shell overhead , LANDED (corrected: the 40s estimate was wrong)
+- **Original change (as drafted):** the ~44s plan->design gap is git commits + claim + `verify-workflow-state` + `lk` resolution. Batch the commits, drop redundant verifies, reuse a warm `lk`.
+- **Correction after reading the code (do not trust the original estimate):** three of the four assumed levers do not exist as overhead:
+  - **git commits are already batched.** `run_plan_sprint` commits the whole backlog in ONE `git commit` (`run-smoke.sh:621`); there is no per-artifact commit to fold.
+  - **`lk` is already warm.** The smoke runs `lk --warm` once up front (`run-smoke.sh:324`); per-bin resolution is then a ~0.09s cache hit, not a cold ~3.5s resolve.
+  - **the gap is dominated by the inherent Lakebase claim.** Step 3 (`lakebase-scm-claim-feature-branch`) creates a paired Lakebase branch + git branch + `.env` sync , a real network op of several seconds that is NOT removable without changing what the workflow does.
+  So the genuinely-removable overhead is small (~1 node boot/feature), not ~40s. The plan-doc estimate was built on assumptions the code does not bear out.
+- **What actually landed (the one safe, contract-respecting win):** the step-3.5 assertion `verify-workflow-state.sh feature-claimed` was spawning a SECOND CLI process (`lakebase-scm-feature-branch`) purely to re-derive the canonical branch for a string-compare, on top of the `lakebase-scm-state` boot it already does. `lakebase-scm-state --json` now emits an additive `canonical_branch` field (computed by the same `sanitizeFeatureSlug` + `featureBranchName` single source of truth), and the assertion reuses it from the JSON it already fetched , removing that second boot per claimed-state check (the verify runs at multiple checkpoints across a full run). Falls back to the dedicated CLI for older kits. In-kit, so live human runs benefit too, not just the smoke. (`scm-state.cli.ts`, `assertions/verify-workflow-state.sh`; test in `scm-state-cli.test.ts`.)
+- **Effort:** S. **Save:** ~1 node boot per claimed-state assertion (modest, real). **Risk:** low (additive field + fallback; no guard weakened).
+- **Status:** **LANDED** (branch `perf/agent-loop-p0-p1-p7`), with the estimate corrected. The big inter-phase cost (the claim) is inherent; left as-is.
 
-### P0 (enabler) , per-turn timing report
+### P0 (enabler) , per-turn timing report , LANDED
 - **Change:** small tool that reads the agent-log timestamps and prints per-turn durations (it already has the data), so every change above is A/B-measurable instead of guessed.
 - **Effort:** S. **Save:** none directly; de-risks all others. **Risk:** none.
-- **Status:** _proposed_.
+- **Status:** **LANDED** (branch `perf/agent-loop-p0-p1-p7`). `scripts/tdd/timing-report.ts` (`computeTiming` + `formatTimingReport`) + the `lakebase-tdd-timing` CLI (`--tdd-dir`/`--feature`/`--top`/`--json`). It reads `.tdd/agent-log.jsonl`, treats each gap between consecutive events as a span attributed to the ending event, and rolls up by phase / role / role-event kind with the slowest spans surfaced. Approximate by design (a cold `claude -p` boot before a turn's first emit is not separately visible) but enough to find the outliers. Test: `tdd-timing-report.test.ts`.
+- **Usage:** `./scripts/lk lakebase-tdd-timing --feature <F>` (text) or `--json` (machine API for A/B comparisons).
 
 ## Recommended sequencing
 
@@ -130,3 +140,4 @@ All P8 variants batch by `layer` (capped) , see P8 for the unit + runner-contrac
 
 - 2026-06-09: baseline measured; options P0-P7 drafted; awaiting selection.
 - 2026-06-09: added **P8 (story-level TDD loop)** at user request , reframed the build lane as a P8-vs-P4 fork (story-level batching vs per-AC parallelism); P8 subsumes P3.
+- 2026-06-09: **P0 + P1 + P7 LANDED** on branch `perf/agent-loop-p0-p1-p7` (full hermetic suite green). P0 = the `lakebase-tdd-timing` report. P1 = inline AC ids in the test-strategist prompt + drop its haiku pin in the smoke (kit default sonnet). P7 = `scm-state --json` now carries `canonical_branch` so `verify-workflow-state.sh` skips a second CLI boot. **P7's original ~40s estimate was corrected to ~1 boot/feature** after reading the code: commits are already batched, `lk` is already warm, and the gap is dominated by the inherent Lakebase claim (not removable). The build-lane fork (P4 vs P8a/8b/8c) + P2/P5/P6 remain open and now A/B-measurable via P0.

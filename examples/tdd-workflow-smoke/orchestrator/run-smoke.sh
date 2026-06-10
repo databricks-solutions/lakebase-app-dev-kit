@@ -334,15 +334,17 @@ scaffold_project() {
       --tiers "$TIERS" \
       `# Per-role model tiering for the smoke (speed): the smoke validates` \
       `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
-      `# models than the kit defaults and cuts per-turn generation latency. Only` \
-      `# the code-writers (navigator/driver, whose output must compile + pass` \
-      `# tests) stay on sonnet; every other role , including the architect , runs` \
-      `# haiku. This also exercises the per-project --agent-model override path.` \
-      `# (If haiku ACs/layering degrade the build, bump spec-author or the` \
-      `# architect back to sonnet.)` \
+      `# models than the kit defaults and cuts per-turn generation latency. The` \
+      `# code-writers (navigator/driver, whose output must compile + pass tests)` \
+      `# stay on sonnet; the prose roles run haiku, still exercising the` \
+      `# per-project --agent-model override path. The test-strategist is the` \
+      `# EXCEPTION: its output is a structured test-list (every item's ac_id must` \
+      `# map to an exact AC), and haiku thrashed on that shape , one list took` \
+      `# ~200s, the design lane's worst turn (P1 of the agent-loop optimization).` \
+      `# It runs on its sonnet default. (If haiku ACs/layering degrade the build,` \
+      `# bump spec-author or the architect back to sonnet too.)` \
       --agent-model spec-author=haiku \
       --agent-model architect-reviewer=haiku \
-      --agent-model test-strategist=haiku \
       --agent-model ux-designer=haiku \
       --agent-model product-owner=haiku \
       --agent-model release-engineer=haiku \

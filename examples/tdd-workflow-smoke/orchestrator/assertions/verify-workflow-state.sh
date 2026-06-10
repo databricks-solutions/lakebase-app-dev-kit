@@ -87,14 +87,22 @@ case "$EXPECTED_STATE" in
     fi
     # Verify the branch is the CANONICAL name the substrate sanitizer produces
     # for this feature, derived from the kit (single source of truth) rather
-    # than a hardcoded prefix. Compare against the feature_id we are checking.
+    # than a hardcoded prefix. The feature_id match above guarantees fid ==
+    # canon_id here, so the canonical branch the state report ALREADY carries
+    # (.canonical_branch, computed by the same sanitizer) is exactly what we
+    # would re-derive , reuse it instead of spawning a SECOND CLI process per
+    # check (the redundant inter-phase boot P7 removes). Fall back to the
+    # dedicated CLI when an older kit's report omits the field.
     canon_id="${EXPECTED_FEATURE_ID:-$fid}"
-    EXPECTED_BRANCH="$(
-      "$PROJECT_DIR/scripts/lk" \
-        lakebase-scm-feature-branch "$canon_id" 2>/dev/null
-    )"
+    EXPECTED_BRANCH="$(echo "$STATE_JSON" | jq -r '.canonical_branch // ""')"
     if [[ -z "$EXPECTED_BRANCH" ]]; then
-      fail "could not derive canonical branch for feature_id=$canon_id (lakebase-scm-feature-branch failed)"
+      EXPECTED_BRANCH="$(
+        "$PROJECT_DIR/scripts/lk" \
+          lakebase-scm-feature-branch "$canon_id" 2>/dev/null
+      )"
+    fi
+    if [[ -z "$EXPECTED_BRANCH" ]]; then
+      fail "could not derive canonical branch for feature_id=$canon_id (no .canonical_branch in state + lakebase-scm-feature-branch failed)"
     fi
     if [[ "$branch" != "$EXPECTED_BRANCH" ]]; then
       fail "branch=$branch does not match the canonical sanitized name=$EXPECTED_BRANCH for feature_id=$canon_id"

@@ -22,6 +22,7 @@ import {
   type GateStatus,
   type ScmWorkflowState,
 } from "./scm-workflow-state.js";
+import { featureBranchName, sanitizeFeatureSlug } from "./scm-claim-feature.js";
 
 interface ParsedArgs {
   projectDir?: string;
@@ -83,6 +84,11 @@ interface Report {
   found: boolean;
   state?: ScmWorkflowState;
   gates?: GateStatus[];
+  /** The canonical feature branch name for state.feature_id, when a feature is
+   *  claimed. Computed here (the single source of truth: sanitizeFeatureSlug +
+   *  featureBranchName) so callers/assertions reading this report do NOT spawn a
+   *  second `lakebase-scm-feature-branch` process to re-derive it. */
+  canonical_branch?: string;
   error?: string;
 }
 
@@ -93,12 +99,24 @@ function buildReport(projectDir: string): Report {
     if (!state) {
       return { projectDir, stateFile, found: false };
     }
+    // Surface the canonical branch alongside the state so an assertion that
+    // already has this JSON need not re-spawn the feature-branch CLI. Best-effort:
+    // an unset / malformed feature_id simply omits the field.
+    let canonical_branch: string | undefined;
+    if (state.feature_id) {
+      try {
+        canonical_branch = featureBranchName(sanitizeFeatureSlug(state.feature_id));
+      } catch {
+        /* invalid feature_id -> omit; the state report is still valid */
+      }
+    }
     return {
       projectDir,
       stateFile,
       found: true,
       state,
       gates: describeGates(state),
+      ...(canonical_branch !== undefined ? { canonical_branch } : {}),
     };
   } catch (e) {
     return {

@@ -135,6 +135,32 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect(task).not.toMatch(/The story:/);
   });
 
+  it("test-strategist task inlines the story's AC ids so it need not re-derive them (P1)", () => {
+    // P1 outlier fix: hand the strategist the exact AC ids up front (it re-scanned
+    // the acs/ dir to re-derive them, a slow step on a small model) and pin the
+    // ac_id mapping the response-formatter enforces.
+    const tmp = mkdtempSync(join(tmpdir(), "effects-strategist-"));
+    const tddDir = join(tmp, ".tdd");
+    mkdirSync(join(tddDir, "features", "F1", "stories", "S1"), { recursive: true });
+    writeFileSync(
+      join(tddDir, "features", "F1", "stories", "S1", "story.json"),
+      JSON.stringify({ id: "S1", acs: ["AC1-create-form", "AC2-validate-input"] }),
+    );
+    const task = (commandsForAction({ kind: "invoke-role", role: "test-strategist", story: "S1" }, cfg({ tddDir }))[0] as { task: string }).task;
+    expect(task).toMatch(/ordered test list for story S1/);
+    expect(task).toContain("AC1-create-form");
+    expect(task).toContain("AC2-validate-input");
+    expect(task).toMatch(/EXACT ids/);
+    expect(task).toMatch(/cover each AC at least once/);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("test-strategist task falls back to the bare directive when no ACs are on disk yet", () => {
+    const task = (commandsForAction({ kind: "invoke-role", role: "test-strategist", story: "S9" }, cfg())[0] as { task: string }).task;
+    expect(task).toMatch(/ordered test list for story S9/);
+    expect(task).not.toMatch(/The story's ACs are:/);
+  });
+
   it("author-requests supplies the PO's requests via the Human Proxy + sync-backlog (no LLM spawned)", () => {
     // author-requests is a human-input step: the state machine asks, and headless
     // the Human Proxy supplies the recorded feature-requests (logging each), then

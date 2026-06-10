@@ -115,16 +115,19 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model: only the code-writers on sonnet, rest haiku", () => {
+  it("tiers roles for the smoke via --agent-model: code-writers on sonnet, prose roles haiku, test-strategist NOT pinned (P1)", () => {
     // navigator/driver keep the kit-default sonnet (their output must compile +
-    // pass tests). Every other role , including the architect , runs haiku for
-    // speed (the smoke validates workflow mechanics, not prose quality).
+    // pass tests). The prose roles run haiku for speed (the smoke validates
+    // workflow mechanics, not prose quality).
     expect(runSmoke).toMatch(/--agent-model architect-reviewer=haiku/);
     expect(runSmoke).toMatch(/--agent-model spec-author=haiku/);
-    expect(runSmoke).toMatch(/--agent-model test-strategist=haiku/);
     expect(runSmoke).toMatch(/--agent-model ux-designer=haiku/);
     expect(runSmoke).toMatch(/--agent-model product-owner=haiku/);
     expect(runSmoke).toMatch(/--agent-model release-engineer=haiku/);
+    // P1 (agent-loop optimization): the test-strategist is NOT pinned to haiku ,
+    // haiku thrashed ~200s on its structured test-list, the design lane's worst
+    // turn. It runs on its sonnet kit default instead.
+    expect(runSmoke).not.toMatch(/--agent-model test-strategist=haiku/);
   });
 
   // Role observability is now structural inside the deterministic driver

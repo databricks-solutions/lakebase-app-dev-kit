@@ -109,6 +109,7 @@
     "lakebase-tdd-deploy": "./dist/scripts/tdd/deploy.cli.js",
     "lakebase-tdd-gate-conformance": "./dist/scripts/tdd/gate-conformance.cli.js",
     "lakebase-tdd-log": "./dist/scripts/tdd/agent-log.cli.js",
+    "lakebase-tdd-timing": "./dist/scripts/tdd/timing-report.cli.js",
     "lakebase-tdd-agent-model": "./dist/scripts/tdd/agent-models.cli.js",
     "lakebase-tdd-pipeline": "./dist/scripts/tdd/story-pipeline.cli.js",
     "lakebase-tdd-experiment": "./dist/scripts/tdd/story-experiment.cli.js",

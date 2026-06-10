@@ -94,8 +94,10 @@ replay_smoke() {
       --project-name "$PROJECT_NAME" --parent-dir "$(dirname "$PROJECT_DIR")" \
       --databricks-host "$DATABRICKS_HOST" --github-owner "$GITHUB_OWNER" \
       --language python --runner self-hosted --tiers "$TIERS" \
+      `# test-strategist stays on its sonnet default (P1): haiku thrashed ~200s on` \
+      `# its structured test-list. Other prose roles on haiku for speed.` \
       --agent-model spec-author=haiku --agent-model architect-reviewer=haiku \
-      --agent-model test-strategist=haiku --agent-model ux-designer=haiku \
+      --agent-model ux-designer=haiku \
       --agent-model product-owner=haiku --agent-model release-engineer=haiku \
       --enable-e2e
   ) || { err "scaffold failed"; return 1; }

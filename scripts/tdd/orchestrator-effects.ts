@@ -23,7 +23,7 @@ import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson, designGuideJson, handbackFile } from "./tdd-paths.js";
+import { storyJson, designGuideJson, handbackFile, storyAcIds } from "./tdd-paths.js";
 import { storyTestProgress } from "./cycle-record.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
@@ -230,8 +230,22 @@ function roleTaskBody(
       );
     case "architect-reviewer":
       return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
-    case "test-strategist":
-      return `Produce the ordered test list for story ${s}.`;
+    case "test-strategist": {
+      // Pass the story's AC ids INLINE so the strategist does not re-scan the
+      // acs/ dir to re-derive them (a slow, error-prone step that, on a small
+      // model, was the design lane's worst outlier , a single test-list took
+      // ~200s of haiku thrashing on the structured output). The ids are the
+      // EXACT contract the response-formatter + the per-story test-list scoping
+      // enforce, so stating them up front both speeds convergence and pins the
+      // ac_id mapping. Absent ids (no acs/ on disk yet) fall back to the bare
+      // directive , the role still reads them from disk as before.
+      const acIds = storyAcIds(tddDir, featureId, s);
+      const acScope = acIds.length
+        ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids` +
+          ` (verbatim, never a bare slug or an invented id), and cover each AC at least once.`
+        : "";
+      return `Produce the ordered test list for story ${s}.${acScope}`;
+    }
     case "navigator":
       if (action.buildMode === "review") {
         return (
