@@ -7552,8 +7552,16 @@ async function commitAllIfChanged(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
   }
-  await exec2("git add -A", { cwd: args.cwd });
-  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
+  const exclude = args.exclude ?? [];
+  let addCmd = "git add -A";
+  let diffCmd = "git diff --cached --name-only";
+  if (exclude.length > 0) {
+    const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+    addCmd = `git add -A -- . ${ex}`;
+    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+  }
+  await exec2(addCmd, { cwd: args.cwd });
+  const staged = await exec2(diffCmd, { cwd: args.cwd });
   if (!staged.trim()) return false;
   await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
   return true;
@@ -7562,7 +7570,7 @@ async function commitAllIfChanged(args) {
 // scripts/tdd/cycle-record.ts
 async function commitCycleWork(tddDir, message) {
   try {
-    await commitAllIfChanged({ cwd: dirname4(tddDir), message });
+    await commitAllIfChanged({ cwd: dirname4(tddDir), message, exclude: [".tdd", ".lakebase"] });
   } catch {
   }
 }

@@ -282,13 +282,25 @@ interface DiscardAllChangesArgs {
 declare function commit(args: CommitArgs): Promise<void>;
 /** `git add -A` + commit. Throws when the message is empty. */
 declare function commitAll(args: CommitArgs): Promise<void>;
+interface CommitAllArgs extends CommitArgs {
+    /**
+     * Repo-relative path prefixes to NOT stage, e.g. orchestration metadata that
+     * churns mid-run (`.tdd/`, `.lakebase/`). Excluded via a magic `:(exclude)`
+     * pathspec paired with an inclusive `.`, so the commit captures CODE only.
+     * Committing churny metadata onto a short-lived branch makes its committed
+     * copy diverge from the branch it merges into, which then breaks a later
+     * `git checkout` of that branch , scope to code to avoid it.
+     */
+    exclude?: string[];
+}
 /**
- * `git add -A`, then commit only if something is actually staged. Returns true
- * when a commit was made, false when the tree was already clean (nothing to
- * commit). Throws on a genuine git failure (not a repo, detached HEAD, hook
- * rejection); callers that want best-effort behavior wrap it in try/catch.
+ * `git add -A` (optionally excluding path prefixes), then commit only if
+ * something is actually staged. Returns true when a commit was made, false when
+ * nothing matched (clean tree, or only excluded paths changed). Throws on a
+ * genuine git failure (not a repo, detached HEAD, hook rejection); callers that
+ * want best-effort behavior wrap it in try/catch.
  */
-declare function commitAllIfChanged(args: CommitArgs): Promise<boolean>;
+declare function commitAllIfChanged(args: CommitAllArgs): Promise<boolean>;
 /** Commit with DCO sign-off. Throws when the message is empty. */
 declare function commitSignedOff(args: CommitArgs): Promise<void>;
 /** `git add -A` + commit with DCO sign-off. Throws when message is empty. */
@@ -688,4 +700,4 @@ declare function revert(args: ShaArgs): Promise<void>;
 /** `git cherry-pick <sha>`. */
 declare function cherryPick(args: ShaArgs): Promise<void>;
 
-export { type AddRemoteArgs, type AheadBehind, type AmendArgs, type BranchesAtCommitArgs, type CheckoutBranchArgs, type CloneRepoArgs, type CommitAndPushArgs, type CommitArgs, type CommitFilesArgs, type CreateTagArgs, type CreateWorktreeArgs, type CwdOnlyArgs, type DeleteLocalBranchArgs, type DeleteRemoteBranchArgs, type DeleteRemoteTagArgs, type DeleteTagArgs, type DiffFilesArgs, type DiscardAllChangesArgs, type FetchArgs, type FileChangeShort, type GetFileAtRefArgs, type GetMergeBaseArgs, type GitBranchInfo, type HasRemoteBranchArgs, type IsDirtyArgs, type ListLocalBranchesArgs, type ListMigrationsOnBranchArgs, type ListRemoteBranchesArgs, type LogRawArgs, type MergeBranchArgs, type MergeCommit, type NearestParent, type OutgoingIncomingArgs, ProtectedBranchError, type PublishBranchArgs, type PullFromArgs, type PushCurrentBranchForPrArgs, type PushToArgs, type RebaseBranchArgs, type RecentMergesArgs, type RemoveRemoteArgs, type RemoveWorktreeArgs, type RenameBranchArgs, type ResolveNearestParentArgs, type ShaArgs, type StashIndexArgs, type StashWithMessageArgs, type UndoLastCommitArgs, WorkflowScopeError, abortRebase, addRemote, checkoutBranch, checkoutDetached, cherryPick, cloneRepo, commit, commitAll, commitAllIfChanged, commitAllSignedOff, commitAmend, commitAndPush, commitSignedOff, createTag, createWorktree, deleteLocalBranch, deleteRemoteBranch, deleteRemoteTag, deleteTag, discardAllChanges, fetch, getAheadBehind, getBranchesAtCommit, getCommitFiles, getCurrentBranch, getDiffFiles, getFileAtRef, getGitHubUrl, getIncomingCommits, getLogRaw, getLogShortstat, getMergeBase, getNearestParentName, getOutgoingCommits, getOwnerRepo, getRecentMerges, getRepoRoot, gitInit, hasRemoteBranch, hasUpstream, isDirty, isRebasing, listLocalBranches, listMigrationsOnBranch, listRemoteBranches, listRemotes, listTags, listWorktrees, mergeBranch, publishBranch, pull, pullFrom, pullRebase, push, pushCurrentBranchForPr, pushTo, rebaseBranch, removeRemote, removeWorktree, renameBranch, resolveNearestParent, revert, stash, stashApply, stashDrop, stashDropAll, stashIncludeUntracked, stashList, stashPop, stashStaged, sync, undoLastCommit };
+export { type AddRemoteArgs, type AheadBehind, type AmendArgs, type BranchesAtCommitArgs, type CheckoutBranchArgs, type CloneRepoArgs, type CommitAllArgs, type CommitAndPushArgs, type CommitArgs, type CommitFilesArgs, type CreateTagArgs, type CreateWorktreeArgs, type CwdOnlyArgs, type DeleteLocalBranchArgs, type DeleteRemoteBranchArgs, type DeleteRemoteTagArgs, type DeleteTagArgs, type DiffFilesArgs, type DiscardAllChangesArgs, type FetchArgs, type FileChangeShort, type GetFileAtRefArgs, type GetMergeBaseArgs, type GitBranchInfo, type HasRemoteBranchArgs, type IsDirtyArgs, type ListLocalBranchesArgs, type ListMigrationsOnBranchArgs, type ListRemoteBranchesArgs, type LogRawArgs, type MergeBranchArgs, type MergeCommit, type NearestParent, type OutgoingIncomingArgs, ProtectedBranchError, type PublishBranchArgs, type PullFromArgs, type PushCurrentBranchForPrArgs, type PushToArgs, type RebaseBranchArgs, type RecentMergesArgs, type RemoveRemoteArgs, type RemoveWorktreeArgs, type RenameBranchArgs, type ResolveNearestParentArgs, type ShaArgs, type StashIndexArgs, type StashWithMessageArgs, type UndoLastCommitArgs, WorkflowScopeError, abortRebase, addRemote, checkoutBranch, checkoutDetached, cherryPick, cloneRepo, commit, commitAll, commitAllIfChanged, commitAllSignedOff, commitAmend, commitAndPush, commitSignedOff, createTag, createWorktree, deleteLocalBranch, deleteRemoteBranch, deleteRemoteTag, deleteTag, discardAllChanges, fetch, getAheadBehind, getBranchesAtCommit, getCommitFiles, getCurrentBranch, getDiffFiles, getFileAtRef, getGitHubUrl, getIncomingCommits, getLogRaw, getLogShortstat, getMergeBase, getNearestParentName, getOutgoingCommits, getOwnerRepo, getRecentMerges, getRepoRoot, gitInit, hasRemoteBranch, hasUpstream, isDirty, isRebasing, listLocalBranches, listMigrationsOnBranch, listRemoteBranches, listRemotes, listTags, listWorktrees, mergeBranch, publishBranch, pull, pullFrom, pullRebase, push, pushCurrentBranchForPr, pushTo, rebaseBranch, removeRemote, removeWorktree, renameBranch, resolveNearestParent, revert, stash, stashApply, stashDrop, stashDropAll, stashIncludeUntracked, stashList, stashPop, stashStaged, sync, undoLastCommit };
