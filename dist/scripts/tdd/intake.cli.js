@@ -6794,6 +6794,7 @@ var ARTIFACT_FORMATS = {
     kind: "md-sections",
     sections: [
       { label: "Design Philosophy", match: "philosophy" },
+      { label: "UI Framework", match: "framework" },
       { label: "Typography", match: "typography" },
       { label: "Color Palette", match: "color" },
       { label: "Spacing", match: "spacing" },

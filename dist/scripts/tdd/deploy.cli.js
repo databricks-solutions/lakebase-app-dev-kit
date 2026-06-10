@@ -4134,7 +4134,7 @@ var require_core = __commonJS({
         if (typeof this.opts.loadSchema != "function") {
           throw new Error("options.loadSchema should be a function");
         }
-        const { loadSchema } = this.opts;
+        const { loadSchema: loadSchema2 } = this.opts;
         return runCompileAsync.call(this, schema, meta);
         async function runCompileAsync(_schema, _meta) {
           await loadMetaSchema.call(this, _schema.$schema);
@@ -4174,7 +4174,7 @@ var require_core = __commonJS({
           if (p)
             return p;
           try {
-            return await (this._loading[ref] = loadSchema(ref));
+            return await (this._loading[ref] = loadSchema2(ref));
           } finally {
             delete this._loading[ref];
           }
@@ -6674,8 +6674,8 @@ function isCliEntry(importMetaUrl) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync7, rmSync, writeFileSync as writeFileSync6 } from "fs";
-import { dirname as dirname2, join as join6 } from "path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync4, readFileSync as readFileSync9, rmSync, writeFileSync as writeFileSync6 } from "fs";
+import { dirname as dirname2, join as join7 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -6892,13 +6892,144 @@ import * as cp from "child_process";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
+import { appendFileSync, existsSync as existsSync6, readFileSync as readFileSync7 } from "fs";
+import { join as join6 } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
+import { readFileSync as readFileSync6 } from "fs";
 import { join as join5 } from "path";
 var SCHEMA_DIR = join5(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse(readFileSync6(join5(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
+}
+
+// scripts/tdd/agent-log-events.ts
+init_esm_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
+// scripts/tdd/agent-log.ts
+function logFilePath(tddDir) {
+  return join6(tddDir, "agent-log.jsonl");
+}
+function emitAgentLogEvent(input, opts = {}) {
+  const tddDir = opts.tddDir ?? "./.tdd";
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
 
 // scripts/tdd/escalation.ts
 function escalationId(parts) {
@@ -6960,8 +7091,74 @@ async function probeReachable(url) {
     return false;
   }
 }
+function logReleaseEngineerDeployStart(ctx) {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  try {
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "deploy.start",
+        feature_id: ctx.featureId,
+        slots: { scope, target: ctx.target, ...ctx.storyId ? { story: ctx.storyId } : {} }
+      },
+      { tddDir: ctx.tddDir, now: ctx.now }
+    );
+  } catch {
+  }
+}
+function logReleaseEngineerDeployOutcome(ctx, result) {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  const storyData = ctx.storyId ? { story: ctx.storyId } : {};
+  const io = { tddDir: ctx.tddDir, now: ctx.now };
+  try {
+    if (result.ok) {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "info",
+          event: "deploy.verified",
+          feature_id: ctx.featureId,
+          slots: {
+            scope,
+            url: result.url,
+            verify_status: result.verify?.passed ? "passed" : "not run/failed",
+            target: ctx.target,
+            reachable: true,
+            verify_passed: result.verify?.passed ?? false,
+            ...storyData
+          }
+        },
+        io
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "error",
+          event: "deploy.failed",
+          feature_id: ctx.featureId,
+          slots: { scope, reason: result.reason ?? "unknown", target: ctx.target, verify_passed: result.verify?.passed ?? false, ...storyData }
+        },
+        io
+      );
+    }
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "phase.end",
+        feature_id: ctx.featureId,
+        phase: "deploy",
+        slots: { outcome: result.ok ? "verified" : "failed", ok: result.ok, ...storyData }
+      },
+      io
+    );
+  } catch {
+  }
+}
 function pidFile(projectDir, target) {
-  return join6(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join7(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -6974,9 +7171,9 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? join6(fdir, "stories", evidence.story_id) : fdir;
+  const dir = evidence.story_id ? join7(fdir, "stories", evidence.story_id) : fdir;
   mkdirSync4(dir, { recursive: true });
-  const file = join6(dir, "deploy-evidence.json");
+  const file = join7(dir, "deploy-evidence.json");
   writeFileSync6(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
@@ -6984,6 +7181,12 @@ function defaultStart(cmd, cwd, env) {
   const child = spawn("sh", ["-c", cmd], { cwd, detached: true, stdio: "ignore", env: env ?? process.env });
   child.unref();
   return child.pid ?? -1;
+}
+function logDeployEvent(tddDir, event, slots) {
+  try {
+    emitAgentLogEvent({ role: "release-engineer", level: "info", event, slots }, { tddDir });
+  } catch {
+  }
 }
 async function deployToTarget(args) {
   const resolved = resolveDeployTarget(args.projectDir, args.targetName);
@@ -7001,7 +7204,7 @@ async function deployToTarget(args) {
     const verify2 = { passed: false, summary: reason };
     let evidencePath2;
     if (args.featureId) {
-      const tddDir = args.tddDir ?? join6(args.projectDir, ".tdd");
+      const tddDir = args.tddDir ?? join7(args.projectDir, ".tdd");
       const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
       evidencePath2 = writeDeployEvidence(tddDir, {
         schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7050,7 +7253,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? join6(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? join7(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7063,6 +7266,24 @@ async function deployToTarget(args) {
       ...args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {},
       deployed_at: at
     });
+    const scope = args.storyId ? `story ${args.storyId}` : `feature ${args.featureId}`;
+    const stepSlots = { feature_id: args.featureId, ...args.storyId ? { story: args.storyId } : {} };
+    if (reachableNow) {
+      logDeployEvent(tddDir, "deploy.reachable", { url, pid, ...stepSlots });
+    } else {
+      logDeployEvent(tddDir, "deploy.unreachable", {
+        url,
+        reason: `not reachable after ${cfg.readyTimeoutSeconds}s`,
+        ...stepSlots
+      });
+    }
+    if (reachableNow && cfg.verify) {
+      logDeployEvent(
+        tddDir,
+        verify.passed ? "verify.passed" : "verify.failed",
+        verify.passed ? { scope, command: cfg.verify, ...stepSlots } : { scope, command: cfg.verify, summary: verify.summary ?? "feature-verify failed", ...stepSlots }
+      );
+    }
     if (!(reachableNow && verify.passed)) {
       writeEscalation(tddDir, {
         source: "deploy-verify",
@@ -7085,8 +7306,8 @@ async function deployToTarget(args) {
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
-  if (!existsSync7(pf)) return { stopped: false };
-  const pid = Number(readFileSync7(pf, "utf8").trim());
+  if (!existsSync8(pf)) return { stopped: false };
+  const pid = Number(readFileSync9(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);
@@ -7159,6 +7380,8 @@ async function runDeployCli(argv) {
 `);
     return 0;
   }
+  const reCtx = featureId ? { featureId, storyId, target, tddDir } : void 0;
+  if (reCtx) logReleaseEngineerDeployStart(reCtx);
   const result = await deployToTarget({
     projectDir,
     targetName: target,
@@ -7170,6 +7393,7 @@ async function runDeployCli(argv) {
     // port so we never verify against the wrong app, and record honest evidence.
     rejectForeignPort: gate
   });
+  if (reCtx) logReleaseEngineerDeployOutcome(reCtx, result);
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}
 `);

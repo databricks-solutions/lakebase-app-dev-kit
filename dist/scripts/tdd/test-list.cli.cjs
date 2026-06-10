@@ -70,6 +70,11 @@ function readMasterTestList(tddDir, featureId) {
   const parsed = JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
   return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
 }
+function writeMasterTestList(tddDir, list) {
+  requireFeatureDir(tddDir, list.feature_id);
+  const file = featureTestListJson(tddDir, list.feature_id);
+  (0, import_fs.writeFileSync)(file, JSON.stringify(list, null, 2) + "\n");
+}
 function viewsForAllAcs(list) {
   const out = {};
   for (const item of list.items) {
@@ -103,33 +108,70 @@ function mergeViews(existing, next) {
   return remaining;
 }
 function acIdsInStoryDir(storyDir2) {
-  const acsDir = (0, import_path.join)(storyDir2, "acs");
-  if (!(0, import_fs.existsSync)(acsDir)) return [];
-  return (0, import_fs.readdirSync)(acsDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length)).sort();
+  const dir = (0, import_path.join)(storyDir2, "acs");
+  if (!(0, import_fs.existsSync)(dir)) return [];
+  const out = [];
+  for (const f of (0, import_fs.readdirSync)(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const base = f.slice(0, -".json".length);
+    try {
+      const obj = JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(dir, f), "utf8"));
+      if (obj && typeof obj.id === "string" && obj.id === base) out.push(base);
+    } catch {
+    }
+  }
+  return out.sort();
 }
 function scopeToStory(list, storyId, acIds) {
   const want = new Set(acIds);
+  const scoped = list.items.filter((it) => want.has(it.ac_id));
+  const firstSeen = /* @__PURE__ */ new Map();
+  scoped.forEach((it, i) => {
+    if (!firstSeen.has(it.ac_id)) firstSeen.set(it.ac_id, i);
+  });
+  const grouped = scoped.map((it, i) => ({ it, i })).sort((a, b) => firstSeen.get(a.it.ac_id) - firstSeen.get(b.it.ac_id) || a.i - b.i).map((x) => x.it);
   return {
     feature_id: list.feature_id,
     story_id: storyId,
     ...list.ordered_for ? { ordered_for: list.ordered_for } : {},
-    items: list.items.filter((it) => want.has(it.ac_id))
+    items: grouped
   };
 }
 function writeStoryTestList(tddDir, featureId, storyId) {
   const storyDir2 = findStoryDir(tddDir, featureId, storyId);
   if (!storyDir2) return null;
-  let master;
+  const storyAcIds = acIdsInStoryDir(storyDir2);
+  let master = null;
   try {
     master = readMasterTestList(tddDir, featureId);
   } catch {
-    return null;
+    master = null;
   }
-  const scoped = scopeToStory(master, storyId, acIdsInStoryDir(storyDir2));
+  const authored = readStoryTestList(tddDir, featureId, storyId);
+  if (authored?.items?.length) {
+    const baseList = master ?? {
+      feature_id: featureId,
+      ...authored.ordered_for ? { ordered_for: authored.ordered_for } : {},
+      items: []
+    };
+    const haveIds = new Set(baseList.items.map((i) => i.id));
+    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
+    if (additions.length > 0 || master === null) {
+      master = { ...baseList, items: [...baseList.items, ...additions] };
+      writeMasterTestList(tddDir, master);
+    }
+  }
+  if (!master) return null;
+  const scoped = scopeToStory(master, storyId, storyAcIds);
   const file = storyTestListJson(tddDir, featureId, storyId);
   (0, import_fs.mkdirSync)((0, import_path.dirname)(file), { recursive: true });
   (0, import_fs.writeFileSync)(file, JSON.stringify(scoped, null, 2) + "\n");
   return file;
+}
+function readStoryTestList(tddDir, featureId, storyId) {
+  const file = storyTestListJson(tddDir, featureId, storyId);
+  if (!(0, import_fs.existsSync)(file)) return null;
+  return JSON.parse((0, import_fs.readFileSync)(file, "utf8"));
 }
 function locateStoryDirForAc(featureDir2, acId) {
   const storiesDir2 = (0, import_path.join)(featureDir2, "stories");

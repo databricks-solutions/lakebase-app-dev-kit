@@ -2796,7 +2796,7 @@ declare function deployClaudeAgents(targetDir: string, opts?: DeployClaudeComman
  * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
  *   compose on (`parent: databricks-lakebase`).
  */
-declare const PROJECT_SKILLS: readonly ["software-design-principles", "lakebase-tdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
+declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-tdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
 /**
  * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
  * so the scaffolded project is self-contained: the deployed agents + commands can

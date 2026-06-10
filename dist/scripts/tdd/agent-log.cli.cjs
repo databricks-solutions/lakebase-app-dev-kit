@@ -6711,6 +6711,75 @@ function formatSchemaErrors(validate) {
   });
 }
 
+// scripts/tdd/agent-log-events.ts
+init_cjs_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
 // scripts/tdd/agent-log.ts
 var LEVEL_ORDER = { debug: 0, info: 1, warn: 2, error: 3 };
 function logFilePath(tddDir) {
@@ -6719,7 +6788,30 @@ function logFilePath(tddDir) {
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
@@ -6743,7 +6835,7 @@ function readAgentLog(opts = {}) {
       continue;
     }
     if (opts.role !== void 0 && ev.role !== opts.role) continue;
-    if (opts.featureId !== void 0 && ev.feature_id !== opts.featureId) continue;
+    if (opts.featureId !== void 0 && ev.metadata?.feature_id !== opts.featureId) continue;
     if (minRank !== void 0 && LEVEL_ORDER[ev.level] < minRank) continue;
     out.push(ev);
   }
@@ -6818,7 +6910,7 @@ function discoverArtifacts(tddDir, featureId) {
 function alreadyLogged(events, relPath) {
   return events.some((e) => {
     if (e.event !== "artifact.written") return false;
-    const p = e.data?.path;
+    const p = e.metadata?.path;
     if (typeof p !== "string") return false;
     return p === relPath || p.endsWith(`/${relPath}`) || p.includes("/") && relPath.endsWith(p);
   });
@@ -6834,9 +6926,8 @@ function reconcileArtifactLog(opts) {
         role: art.role,
         level: "info",
         event: "artifact.written",
-        message: art.message,
         feature_id: opts.featureId,
-        data: { path: art.path, reconciled: true }
+        slots: { artifact: art.message, summary: "present on disk (reconciled)", path: art.path, reconciled: true }
       },
       { tddDir, now: opts.now }
     );
@@ -6869,9 +6960,12 @@ function parseArgs(argv) {
       case "--event":
         out.event = argv[++i];
         break;
-      case "--message":
-        out.message = argv[++i];
+      case "--slot": {
+        const kv = argv[++i] ?? "";
+        const eq = kv.indexOf("=");
+        if (eq > 0) (out.slots ??= {})[kv.slice(0, eq)] = kv.slice(eq + 1);
         break;
+      }
       case "--feature":
         out.feature = argv[++i];
         break;
@@ -6903,13 +6997,18 @@ var HELP = `lakebase-tdd-log
 Emit or read a structured TDD-workflow agent log event (.tdd/agent-log.jsonl).
 
 Emit:
-  lakebase-tdd-log --role <r> --level <l> --event <e> --message <m> [flags]
+  lakebase-tdd-log --role <r> --level <l> --event <e> --slot k=v [--slot k=v ...] [flags]
     --role     spec-author|ux-designer|architect-reviewer|test-strategist|
-               orchestrator|navigator|driver|product-owner
+               orchestrator|navigator|driver|product-owner|release-engineer
     --level    debug|info|warn|error
-    --event    dotted event name (e.g. phase.start, artifact.written, gate.surfaced)
-    --message  human-readable one-liner
-    --feature <id>   --phase <p>   --cycle <id>   --data '<json>'
+    --event    event name from the CLOSED vocabulary (agent-log-events.ts). An
+               off-vocabulary event is rejected (exit 3). The message is RENDERED
+               from the event's template; you fill its slots.
+    --slot k=v fill one template slot (repeatable). A missing required slot is
+               rejected (exit 3). The event NAME carries the phase; slots carry
+               the specifics. NOTE: cycle.* events are CODE-emitted by the
+               orchestration , agents do not emit them.
+    --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
 
 Read:
   lakebase-tdd-log --read [--role <r>] [--min-level <l>] [--feature <id>] [--json]
@@ -6944,7 +7043,7 @@ function runAgentLogCli(argv) {
       } else {
         process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}
 `);
-        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.data?.path}
+        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.metadata?.path}
 `);
       }
       return 0;
@@ -6966,23 +7065,23 @@ function runAgentLogCli(argv) {
 `);
     } else {
       for (const e of events) {
-        process.stdout.write(`${e.ts} ${e.level.toUpperCase().padEnd(5)} [${e.role}] ${e.event}: ${e.message}
+        process.stdout.write(`${e.timestamp} ${e.level.toUpperCase().padEnd(5)} [${e.role}] ${e.event}: ${e.message}
 `);
       }
     }
     return 0;
   }
-  if (!a.role || !a.level || !a.event || !a.message) {
-    process.stderr.write(`Error: emit requires --role --level --event --message.
+  if (!a.role || !a.level || !a.event) {
+    process.stderr.write(`Error: emit requires --role --level --event (+ the event's --slot values).
 
 ${HELP}
 `);
     return 2;
   }
-  let data;
+  const slots = { ...a.slots ?? {} };
   if (a.data !== void 0) {
     try {
-      data = JSON.parse(a.data);
+      Object.assign(slots, JSON.parse(a.data));
     } catch (e) {
       process.stderr.write(`Error: --data is not valid JSON: ${e.message}
 `);
@@ -6993,11 +7092,10 @@ ${HELP}
     role: a.role,
     level: a.level,
     event: a.event,
-    message: a.message,
     feature_id: a.feature,
     phase: a.phase,
     cycle_id: a.cycle,
-    data
+    slots
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });

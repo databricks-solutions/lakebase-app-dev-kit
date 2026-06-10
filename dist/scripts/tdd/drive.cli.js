@@ -6669,6 +6669,7 @@ var sprintsDir = (tdd) => join(tdd, "sprints");
 var cyclesRootDir = (tdd) => join(tdd, "cycles");
 var experimentsRootDir = (tdd) => join(tdd, "experiments");
 var escalationsDir = (tdd) => join(tdd, "escalations");
+var escalationFile = (tdd, id) => join(escalationsDir(tdd), `${id}.json`);
 var acReviewJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review.json");
 var workflowStateJson = (tdd) => join(tdd, "workflow-state.json");
 var designGuideJson = (tdd) => join(tdd, "design", "design-guide.json");
@@ -6694,6 +6695,7 @@ var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
 var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
 var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
 var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var handbackFile = (tdd, f, role, story) => join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
 var backlogJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "backlog.json");
@@ -6730,7 +6732,13 @@ function storyAcIds(tdd, f, s) {
     try {
       for (const file of fs.readdirSync(dir)) {
         const m = /^(.+)\.json$/.exec(file);
-        if (m) ids.add(m[1]);
+        if (!m) continue;
+        const base = m[1];
+        try {
+          const obj = JSON.parse(fs.readFileSync(join(dir, file), "utf8"));
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+        }
       }
     } catch {
     }
@@ -7028,10 +7036,10 @@ function nextDesignAction(state) {
 }
 function nextBuildAction(story, b) {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
-  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
-  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
   if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
+  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
   if (!b.deployVerified) return { kind: "await-acceptance", story };
   if (!b.accepted) return { kind: "accept", story };
@@ -7135,6 +7143,167 @@ function isHumanInputAction(action) {
   return action.kind === "invoke-role" && "mode" in action && action.mode === "author-requests";
 }
 
+// scripts/tdd/orchestrator-expect.ts
+init_esm_shims();
+var ProtocolViolationError = class extends Error {
+  constructor(handoff, detail) {
+    super(
+      `PROTOCOL VIOLATION: expected ${handoff.responder}${handoff.story ? ` (story ${handoff.story}${handoff.ac ? `/${handoff.ac}` : ""})` : ""} to return ${handoff.expected}, but ${detail}. Aborting workflow.`
+    );
+    this.handoff = handoff;
+    this.detail = detail;
+    this.name = "ProtocolViolationError";
+  }
+  handoff;
+  detail;
+};
+var UnexpectedCallbackError = class extends Error {
+  constructor(from, scope, expected) {
+    const where = scope.story ? ` (story ${scope.story}${scope.ac ? `/${scope.ac}` : ""})` : "";
+    super(
+      `PROTOCOL VIOLATION: unexpected callback from ${from}${where} , no outstanding handoff awaits it (awaiting: ${expected.length ? expected.join(", ") : "nothing"}). Aborting workflow.`
+    );
+    this.from = from;
+    this.scope = scope;
+    this.expected = expected;
+    this.name = "UnexpectedCallbackError";
+  }
+  from;
+  scope;
+  expected;
+};
+function sig(action) {
+  return JSON.stringify(action);
+}
+function storyOf(action) {
+  return "story" in action ? action.story : void 0;
+}
+function expectationFor(action) {
+  if (action.kind !== "invoke-role") return null;
+  const responder = action.role;
+  const story = storyOf(action);
+  const signature = sig(action);
+  const base = { signature, responder, ...story ? { story } : {} };
+  const storyView2 = (s) => story ? s.stories[story] : void 0;
+  if (responder === "spec-author" && "mode" in action && action.mode === "breakdown") {
+    return { ...base, expected: "a feature breakdown (\u22651 story)", satisfiedBy: (s) => s.breakdownDone === true };
+  }
+  if (responder === "spec-author" && "mode" in action && action.mode === "propose") {
+    return { ...base, expected: "feature proposals", satisfiedBy: (s) => s.planning?.proposed === true };
+  }
+  if (responder === "ux-designer") {
+    return { ...base, expected: "a design guide", satisfiedBy: (s) => s.designGuideReady === true };
+  }
+  if (responder === "spec-author") {
+    return { ...base, expected: "drafted acceptance criteria (non-empty)", satisfiedBy: (s) => storyView2(s)?.design.hasAcs === true };
+  }
+  if (responder === "architect-reviewer" && "mode" in action && action.mode === "estimate") {
+    return { ...base, expected: "a t-shirt size estimate", satisfiedBy: (s) => s.planning?.estimated === true };
+  }
+  if (responder === "architect-reviewer") {
+    return { ...base, expected: "layer/NFR-annotated ACs", satisfiedBy: (s) => storyView2(s)?.design.architectAnnotated === true };
+  }
+  if (responder === "test-strategist") {
+    return { ...base, expected: "a non-empty per-story test list mapped to the story's ACs", satisfiedBy: (s) => storyView2(s)?.design.testListReady === true };
+  }
+  const buildMode = "buildMode" in action ? action.buildMode : void 0;
+  const ac = "ac" in action ? action.ac : void 0;
+  const withAc = { ...base, ...ac ? { ac } : {} };
+  if (responder === "navigator" && buildMode === "review") {
+    return { ...withAc, expected: `a REVIEW verdict for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.reviewAc !== ac };
+  }
+  if (responder === "driver" && buildMode === "refactor") {
+    return { ...withAc, expected: `a completed REFACTOR for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.refactorAc !== ac };
+  }
+  if (responder === "navigator") {
+    return { ...base, expected: "a failing (RED) test", satisfiedBy: (s) => storyView2(s)?.build.testsWritten === true };
+  }
+  if (responder === "driver") {
+    return { ...base, expected: "production code that GREENs the test", satisfiedBy: (s) => storyView2(s)?.build.codeWritten === true };
+  }
+  return null;
+}
+function handbackMessage(h, attempt) {
+  return `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}. The expected artifact is absent / null / empty / nonconformant. Produce it now , this is a retry; the workflow aborts if it is still missing.`;
+}
+var ExpectationLedger = class {
+  constructor(maxRetries = 1) {
+    this.maxRetries = maxRetries;
+  }
+  maxRetries;
+  outstanding = [];
+  /** Unmet-callback count per outstanding handoff signature. */
+  attempts = /* @__PURE__ */ new Map();
+  /** Record a new outstanding handoff (the call we are waiting on). */
+  push(h) {
+    this.outstanding.push(h);
+  }
+  /** Whether anything is outstanding. */
+  get pending() {
+    return this.outstanding.length > 0;
+  }
+  /** The head expectation (next expected callback), or undefined. */
+  head() {
+    return this.outstanding[0];
+  }
+  /** The responders currently awaited (for diagnostics / wrong-caller messages). */
+  awaiting() {
+    return this.outstanding.map((h) => h.responder);
+  }
+  /**
+   * INTAKE PROCESSOR , process a callback from a SPECIFIC responder against the
+   * outstanding expectations (the caller-identity half of the protocol; the part
+   * that becomes load-bearing once dispatch is concurrent / multi-threaded):
+   *   - find the first outstanding handoff whose responder === `from` (and, when
+   *     given, whose story/ac match the callback's scope). NO match => the caller
+   *     is wrong / unexpected => throw UnexpectedCallbackError (abort).
+   *   - matched + contract met -> remove it (the right caller delivered).
+   *   - matched + unmet, retry budget remains -> `retry` (hand back + re-dispatch).
+   *   - matched + unmet, no budget -> throw ProtocolViolationError (abort).
+   * Matching the responder (not blindly the head) lets concurrent stories' build
+   * callbacks arrive interleaved while still rejecting a callback from a role we
+   * are not awaiting at all.
+   */
+  processCallback(from, state, scope = {}) {
+    const idx = this.outstanding.findIndex(
+      (h2) => h2.responder === from && (scope.story === void 0 || h2.story === scope.story) && (scope.ac === void 0 || h2.ac === scope.ac)
+    );
+    if (idx === -1) {
+      throw new UnexpectedCallbackError(from, scope, this.awaiting());
+    }
+    const h = this.outstanding[idx];
+    if (h.satisfiedBy(state)) {
+      this.outstanding.splice(idx, 1);
+      this.attempts.delete(h.signature);
+      return { kind: "met", handoff: h };
+    }
+    const attempt = (this.attempts.get(h.signature) ?? 0) + 1;
+    this.attempts.set(h.signature, attempt);
+    if (attempt > this.maxRetries) {
+      throw new ProtocolViolationError(
+        h,
+        `it returned nothing across ${attempt} attempts (the expected artifact is absent / null / empty)`
+      );
+    }
+    return { kind: "retry", handoff: h, detail: handbackMessage(h, attempt), attempt };
+  }
+  /**
+   * Reconcile the realized state against the HEAD expectation , the deterministic
+   * (single-outstanding, in-order) specialization of processCallback. The
+   * single-threaded driver dispatches one role at a time, so the only possible
+   * responder IS the head's, and reconcile delegates with that identity:
+   *   - met   -> pop it.
+   *   - unmet, retry budget remains -> `retry` (hand-back + re-dispatch).
+   *   - unmet, no budget -> throw ProtocolViolationError.
+   * A no-op (`idle`) when nothing is outstanding.
+   */
+  reconcile(state) {
+    const head = this.outstanding[0];
+    if (!head) return { kind: "idle" };
+    return this.processCallback(head.responder, state, { ...head.story ? { story: head.story } : {}, ...head.ac ? { ac: head.ac } : {} });
+  }
+};
+
 // scripts/tdd/orchestrator-run.ts
 var DriverStalledError = class extends Error {
   constructor(action, iteration) {
@@ -7164,6 +7333,8 @@ function driverBoundOptions(bound) {
 async function runDriver(effects, options = {}) {
   let previousSignature;
   let pausedAlready = false;
+  const enforceExpectations = options.enforceExpectations !== false;
+  const expectations = new ExpectationLedger();
   for (let i = 0; ; i++) {
     if (options.maxSteps !== void 0 && i >= options.maxSteps) {
       return { iterations: i, stoppedAtMax: true };
@@ -7172,6 +7343,14 @@ async function runDriver(effects, options = {}) {
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }
     const state = await effects.readState();
+    let retrying = false;
+    if (enforceExpectations) {
+      const rec = expectations.reconcile(state);
+      if (rec.kind === "retry") {
+        retrying = true;
+        effects.onHandback?.(rec.handoff, rec.detail);
+      }
+    }
     const transition = options.transition ?? nextTransition;
     const action = transition(state);
     if (action.kind === "done") {
@@ -7192,84 +7371,27 @@ async function runDriver(effects, options = {}) {
       await options.confirmContinue(action);
     }
     const signature = JSON.stringify(action);
-    if (signature === previousSignature) {
+    if (!retrying && signature === previousSignature) {
       throw new DriverStalledError(action, i);
     }
     previousSignature = signature;
+    if (enforceExpectations && !retrying) {
+      const handoff = expectationFor(action);
+      if (handoff) expectations.push(handoff);
+    }
     effects.onAction?.(action, i);
     await effects.perform(action);
   }
 }
 
-// scripts/tdd/orchestrator-effects.ts
+// scripts/tdd/escalation.ts
 init_esm_shims();
-import * as fs7 from "fs";
+import * as fs5 from "fs";
 
-// scripts/tdd/orchestrator-derive.ts
+// scripts/tdd/smells.ts
 init_esm_shims();
-function storyView(id, e, probe) {
-  const gateApproved = e.gate?.status === "approved";
-  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
-  return {
-    gateApproved,
-    // The gate record exists once the story has been surfaced for review;
-    // awaiting-gate is the pre-record surfaced state.
-    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
-    design: {
-      hasAcs: probe.hasAcs(id),
-      architectAnnotated: probe.architectAnnotated(id),
-      testListReady: probe.testListReady(id)
-    },
-    build: {
-      // An experiment that was discarded is no longer cut (a fresh one is cut
-      // on revise); merged/active both count as cut.
-      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
-      testsWritten: probe.testsWritten(id),
-      codeWritten: probe.codeWritten(id),
-      reviewAc: probe.reviewPendingAc(id),
-      refactorAc: probe.refactorPendingAc(id),
-      awaitingAcceptance: e.status === "awaiting-acceptance",
-      deployVerified: probe.storyDeployVerified(id),
-      accepted
-    }
-  };
-}
-function deriveDriveState(pipeline, probe, ctx) {
-  const stories = {};
-  for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe);
-  }
-  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
-  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
-  return {
-    phase: ctx.phase,
-    planning: ctx.planning,
-    deploy: ctx.deploy,
-    breakdownDone,
-    storyOrder,
-    stories,
-    buildActive: pipeline.build_active,
-    escalation: probe.pendingEscalation()
-  };
-}
-function driverPhaseForTdd(tddPhase) {
-  switch (tddPhase) {
-    case "planning":
-      return "planning";
-    case "deploy":
-      return "deploy";
-    case "shipped":
-    case "done":
-      return "done";
-    default:
-      return "feature";
-  }
-}
-
-// scripts/tdd/orchestrator-probe.ts
-init_esm_shims();
-import * as fs6 from "fs";
-import * as path4 from "path";
+import { existsSync as existsSync9, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "fs";
+import { join as join9 } from "path";
 
 // scripts/tdd/run-cycle.ts
 init_esm_shims();
@@ -7426,6 +7548,75 @@ function formatSchemaErrors(validate) {
   });
 }
 
+// scripts/tdd/agent-log-events.ts
+init_esm_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
   return join8(tddDir, "agent-log.jsonl");
@@ -7433,7 +7624,30 @@ function logFilePath(tddDir) {
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
@@ -7448,31 +7662,7 @@ function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
 
-// scripts/tdd/cycle-record.ts
-init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync4, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
-import { join as join11, dirname as dirname4 } from "path";
-
-// scripts/tdd/test-list.ts
-init_esm_shims();
-
-// scripts/tdd/deploy.ts
-init_esm_shims();
-import { execSync, spawn } from "child_process";
-import { existsSync as existsSync11, mkdirSync as mkdirSync6, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync7 } from "fs";
-import { dirname as dirname3, join as join10 } from "path";
-
-// scripts/lakebase/deploy-targets.ts
-init_esm_shims();
-
-// scripts/tdd/escalation.ts
-init_esm_shims();
-import * as fs5 from "fs";
-
 // scripts/tdd/smells.ts
-init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "fs";
-import { join as join9 } from "path";
 function readSmellsLog(tddDir) {
   const file = join9(tddDir, "smells.json");
   if (!existsSync9(file)) return { detected: [] };
@@ -7488,6 +7678,24 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
 ]);
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
+}
+function writeEscalation(tddDir, esc) {
+  const id = esc.id ?? escalationId(esc);
+  const file = escalationFile(tddDir, id);
+  const existing = readEscalationFile(file);
+  if (existing && !existing.resolved_at) return existing;
+  const full = {
+    id,
+    source: esc.source,
+    reason: esc.reason,
+    ...esc.feature_id ? { feature_id: esc.feature_id } : {},
+    ...esc.story_id ? { story_id: esc.story_id } : {},
+    ...esc.ac_id ? { ac_id: esc.ac_id } : {},
+    raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
+  };
+  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
+  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
+  return full;
 }
 function readEscalationFile(file) {
   if (!fs5.existsSync(file)) return void 0;
@@ -7527,6 +7735,94 @@ function firstPendingEscalation(tddDir, featureId) {
   const fromSmells = escalationsFromSmells(tddDir, featureId);
   return fromSmells.length > 0 ? fromSmells.sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0] : null;
 }
+
+// scripts/tdd/orchestrator-effects.ts
+init_esm_shims();
+import * as fs7 from "fs";
+import { dirname as dirname5 } from "path";
+
+// scripts/tdd/orchestrator-derive.ts
+init_esm_shims();
+function storyView(id, e, probe) {
+  const gateApproved = e.gate?.status === "approved";
+  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
+  return {
+    gateApproved,
+    // The gate record exists once the story has been surfaced for review;
+    // awaiting-gate is the pre-record surfaced state.
+    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
+    design: {
+      hasAcs: probe.hasAcs(id),
+      architectAnnotated: probe.architectAnnotated(id),
+      testListReady: probe.testListReady(id)
+    },
+    build: {
+      // An experiment that was discarded is no longer cut (a fresh one is cut
+      // on revise); merged/active both count as cut.
+      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
+      testsWritten: probe.testsWritten(id),
+      codeWritten: probe.codeWritten(id),
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
+      awaitingAcceptance: e.status === "awaiting-acceptance",
+      deployVerified: probe.storyDeployVerified(id),
+      accepted
+    }
+  };
+}
+function deriveDriveState(pipeline, probe, ctx) {
+  const stories = {};
+  for (const [id, entry] of Object.entries(pipeline.stories)) {
+    stories[id] = storyView(id, entry, probe);
+  }
+  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
+  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
+  return {
+    phase: ctx.phase,
+    planning: ctx.planning,
+    deploy: ctx.deploy,
+    breakdownDone,
+    storyOrder,
+    stories,
+    buildActive: pipeline.build_active,
+    escalation: probe.pendingEscalation()
+  };
+}
+function driverPhaseForTdd(tddPhase) {
+  switch (tddPhase) {
+    case "planning":
+      return "planning";
+    case "deploy":
+      return "deploy";
+    case "shipped":
+    case "done":
+      return "done";
+    default:
+      return "feature";
+  }
+}
+
+// scripts/tdd/orchestrator-probe.ts
+init_esm_shims();
+import * as fs6 from "fs";
+import * as path4 from "path";
+
+// scripts/tdd/cycle-record.ts
+init_esm_shims();
+import { existsSync as existsSync12, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync4, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
+import { join as join11, dirname as dirname4 } from "path";
+
+// scripts/tdd/test-list.ts
+init_esm_shims();
+
+// scripts/tdd/deploy.ts
+init_esm_shims();
+import { execSync, spawn } from "child_process";
+import { existsSync as existsSync11, mkdirSync as mkdirSync6, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync7 } from "fs";
+import { dirname as dirname3, join as join10 } from "path";
+
+// scripts/lakebase/deploy-targets.ts
+init_esm_shims();
 
 // scripts/tdd/deploy.ts
 function deployEvidencePasses(e) {
@@ -7876,7 +8172,37 @@ function storyStubScope(tddDir, featureId, storyId) {
     return "";
   }
 }
+function nextPendingTestDirective(tddDir, featureId, story) {
+  let next;
+  try {
+    next = storyTestProgress(tddDir, featureId, story).pending[0];
+  } catch {
+    next = void 0;
+  }
+  if (!next) {
+    return `Write the next failing test (RED) for story ${story}: the next un-cycled item in the test list.`;
+  }
+  return `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}". Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item , the orchestration stamps the RED cycle for ${next.id}, and a mismatch between the test you write and ${next.id} is a defect.`;
+}
+function consumeHandback(action, featureId, tddDir) {
+  const story = "story" in action ? action.story : void 0;
+  const file = handbackFile(tddDir, featureId, action.role, story);
+  if (!fs7.existsSync(file)) return "";
+  let note = "";
+  try {
+    note = fs7.readFileSync(file, "utf8").trim();
+    fs7.rmSync(file, { force: true });
+  } catch {
+    return "";
+  }
+  return note ? `${note}
+
+` : "";
+}
 function roleTask(action, featureId, uiTrack, tddDir) {
+  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir);
+}
+function roleTaskBody(action, featureId, uiTrack, tddDir) {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -7895,7 +8221,7 @@ function roleTask(action, featureId, uiTrack, tddDir) {
   const s = action.story;
   switch (action.role) {
     case "spec-author":
-      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
+      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files , the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
     case "architect-reviewer":
       return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
     case "test-strategist":
@@ -7904,7 +8230,7 @@ function roleTask(action, featureId, uiTrack, tddDir) {
       if (action.buildMode === "review") {
         return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green. Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
       }
-      return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
       if (action.buildMode === "refactor") {
         return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`;
@@ -7936,11 +8262,12 @@ function commandsForAction(action, cfg) {
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" }
         ];
       }
+      const FRESH_PER_CYCLE = /* @__PURE__ */ new Set(["navigator", "driver"]);
       const claude = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
-        resumeKey: action.role,
+        ...FRESH_PER_CYCLE.has(action.role) ? {} : { resumeKey: action.role },
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : void 0,
@@ -8103,7 +8430,19 @@ function buildDriveEffects(cfg) {
         await cfg.runner.run(cmd);
       }
     },
-    onAction: cfg.onAction
+    onAction: cfg.onAction,
+    // Hand-back delivery: when a role's prior turn failed its expectation
+    // contract, write the violation detail where THAT role's next prompt will
+    // consume it (consumeHandback in roleTask), so the retry is informed.
+    onHandback(handoff, detail) {
+      const file = handbackFile(cfg.tddDir, cfg.featureId, handoff.responder, handoff.story);
+      try {
+        fs7.mkdirSync(dirname5(file), { recursive: true });
+        fs7.writeFileSync(file, `${detail}
+`, "utf8");
+      } catch {
+      }
+    }
   };
 }
 
@@ -8112,7 +8451,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync17, mkdirSync as mkdirSync9, readFileSync as readFileSync16, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync11 } from "fs";
+import { existsSync as existsSync17, mkdirSync as mkdirSync10, readFileSync as readFileSync16, renameSync as renameSync2, unlinkSync as unlinkSync2, writeFileSync as writeFileSync12 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -8191,8 +8530,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync19, readFileSync as readFileSync17, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10 } from "fs";
-import { dirname as dirname5, join as join14 } from "path";
+import { existsSync as existsSync19, readFileSync as readFileSync17, writeFileSync as writeFileSync13, mkdirSync as mkdirSync11 } from "fs";
+import { dirname as dirname6, join as join14 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -8218,84 +8557,88 @@ function resolveModelForRole(role, projectDir) {
 
 // scripts/tdd/orchestrator-logging.ts
 init_esm_shims();
-function storyOf(action) {
+function storyOf2(action) {
   return "story" in action ? action.story : void 0;
 }
 function orchestratorLogEvents(action, ctx = {}) {
   const feature_id = ctx.featureId;
-  const story = storyOf(action);
+  const story = storyOf2(action);
   const base = { role: "orchestrator", level: "info", feature_id };
+  const withStory = story ? { story } : {};
   switch (action.kind) {
     case "invoke-role": {
       const role = action.role;
-      const detail = "mode" in action ? action.mode : story ? `story ${story}` : "";
+      const mode = "mode" in action ? action.mode : void 0;
+      const buildMode = "buildMode" in action ? action.buildMode : void 0;
+      const ac = "ac" in action ? action.ac : void 0;
+      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
+      const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
       return [
-        // The orchestrator's routing decision (who it dispatched + why).
-        {
-          ...base,
-          event: "handoff",
-          message: `dispatch ${role}${detail ? ` (${detail})` : ""}`,
-          data: { ...story ? { story } : {}, ..."mode" in action ? { mode: action.mode } : {} }
-        },
-        // The invoked role's phase boundary, stamped with THAT role, so its
-        // lifecycle is recorded even if the role's own model never logs.
-        {
-          role,
-          level: "info",
-          feature_id,
-          event: "phase.start",
-          message: `${role} starting${detail ? `: ${detail}` : ""}`,
-          ...story ? { data: { story } } : {}
-        }
+        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
+        { role, level: "info", feature_id, event: "phase.start", slots: { phase, ...detail } }
       ];
     }
     case "surface-gate":
-      return [{ ...base, event: "gate.surfaced", message: `surfacing spec gate for story ${story}`, data: { story } }];
+      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
     case "await-acceptance":
-      return [{ ...base, event: "gate.surfaced", message: `awaiting acceptance for story ${story}`, data: { story } }];
+      return [
+        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
+        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
+        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } }
+      ];
     case "approve-gate":
-      return [{ ...base, event: "gate.approved", message: `spec gate approved for story ${story}`, data: { story } }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
     case "approve-plan-gate":
-      return [{ ...base, event: "gate.approved", message: `sprint plan gate approved` }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
     case "approve-deploy-gate":
-      return [{ ...base, event: "gate.approved", message: `deploy gate approved` }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
     case "accept":
-      return [{ ...base, event: "experiment.accepted", message: `story ${story} accepted (merge)`, data: { story } }];
+      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
     case "cut-experiment":
-      return [{ ...base, event: "experiment.cut", message: `cut experiment for story ${story}`, data: { story } }];
+      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
     case "dispatch":
-      return [{ ...base, event: "handoff", message: `dispatch story ${story} to the build lane`, data: { story } }];
+      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
     case "deploy":
-      return [{ ...base, event: "deploy.start", message: `deploying the built increment to the target` }];
+      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
     case "complete":
-      return [{ ...base, event: "phase.end", message: `story ${story} complete`, data: { story } }];
+      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
     case "planning-complete":
-      return [{ ...base, event: "phase.end", message: `planning complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
     case "design-complete":
-      return [{ ...base, event: "phase.end", message: `design complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
     case "feature-complete":
-      return [{ ...base, event: "phase.end", message: `feature complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
     case "raise-to-hil":
       return [
         {
           ...base,
           level: "error",
           event: "escalation.raised",
-          message: `RAISED TO HIL (${action.source}): ${action.reason}`,
-          data: { source: action.source, ...story ? { story } : {} }
+          slots: { source: action.source, reason: action.reason, ...withStory }
         }
       ];
     case "done":
-      return [{ ...base, event: "phase.end", message: `workflow complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
     default: {
       const k = action.kind;
-      return [{ ...base, event: `action.${k}`, message: `orchestrator: ${k}` }];
+      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
     }
   }
 }
 function describeAction(action, ctx = {}) {
-  const events = orchestratorLogEvents(action, ctx);
-  return events[0]?.message ?? action.kind;
+  const ev = orchestratorLogEvents(action, ctx)[0];
+  if (!ev) return action.kind;
+  const renderCtx = {
+    role: ev.role,
+    ...ev.feature_id !== void 0 ? { feature_id: ev.feature_id } : {},
+    ...ev.phase !== void 0 ? { phase: ev.phase } : {},
+    ...ev.slots ?? {}
+  };
+  try {
+    return renderEventMessage(ev.event, renderCtx);
+  } catch {
+    return ev.event;
+  }
 }
 function makeOnAction(opts) {
   const { featureId, ...io } = opts;
@@ -8986,6 +9329,57 @@ ${help()}`);
     }
     return 0;
   } catch (err) {
+    if (err instanceof ProtocolViolationError) {
+      const h = err.handoff;
+      try {
+        writeEscalation(cfg.tddDir, {
+          source: `protocol:${h.responder}`,
+          reason: err.message,
+          feature_id: cfg.featureId,
+          ...h.story ? { story_id: h.story } : {}
+        });
+        emitAgentLogEvent(
+          {
+            role: "orchestrator",
+            level: "error",
+            event: "escalation.raised",
+            feature_id: cfg.featureId,
+            slots: { source: `protocol:${h.responder}`, reason: err.message, ...h.story ? { story: h.story } : {} }
+          },
+          { tddDir: cfg.tddDir }
+        );
+      } catch {
+      }
+      process.stderr.write(`[drive] ${err.message}
+        recorded under .tdd/escalations/ ; fix the responder, then re-run.
+`);
+      return 3;
+    }
+    if (err instanceof UnexpectedCallbackError) {
+      try {
+        writeEscalation(cfg.tddDir, {
+          source: `protocol:unexpected-caller:${err.from}`,
+          reason: err.message,
+          feature_id: cfg.featureId,
+          ...err.scope.story ? { story_id: err.scope.story } : {}
+        });
+        emitAgentLogEvent(
+          {
+            role: "orchestrator",
+            level: "error",
+            event: "escalation.raised",
+            feature_id: cfg.featureId,
+            slots: { source: `protocol:unexpected-caller:${err.from}`, reason: err.message, ...err.scope.story ? { story: err.scope.story } : {} }
+          },
+          { tddDir: cfg.tddDir }
+        );
+      } catch {
+      }
+      process.stderr.write(`[drive] ${err.message}
+        recorded under .tdd/escalations/ ; resolve it, then re-run.
+`);
+      return 3;
+    }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);
     return 1;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+"use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -28,34 +29,28 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tsup/assets/esm_shims.js
-import path from "path";
-import { fileURLToPath } from "url";
-var getFilename, getDirname, __dirname;
-var init_esm_shims = __esm({
-  "node_modules/tsup/assets/esm_shims.js"() {
+// node_modules/tsup/assets/cjs_shims.js
+var init_cjs_shims = __esm({
+  "node_modules/tsup/assets/cjs_shims.js"() {
     "use strict";
-    getFilename = () => fileURLToPath(import.meta.url);
-    getDirname = () => path.dirname(getFilename());
-    __dirname = /* @__PURE__ */ getDirname();
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/code.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/code.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.regexpCode = exports.getEsmExportName = exports.getProperty = exports.safeStringify = exports.stringify = exports.strConcat = exports.addCodeArg = exports.str = exports._ = exports.nil = exports._Code = exports.Name = exports.IDENTIFIER = exports._CodeOrName = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.regexpCode = exports2.getEsmExportName = exports2.getProperty = exports2.safeStringify = exports2.stringify = exports2.strConcat = exports2.addCodeArg = exports2.str = exports2._ = exports2.nil = exports2._Code = exports2.Name = exports2.IDENTIFIER = exports2._CodeOrName = void 0;
     var _CodeOrName = class {
     };
-    exports._CodeOrName = _CodeOrName;
-    exports.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
+    exports2._CodeOrName = _CodeOrName;
+    exports2.IDENTIFIER = /^[a-z$_][a-z$_0-9]*$/i;
     var Name = class extends _CodeOrName {
       constructor(s) {
         super();
-        if (!exports.IDENTIFIER.test(s))
+        if (!exports2.IDENTIFIER.test(s))
           throw new Error("CodeGen: name must be a valid identifier");
         this.str = s;
       }
@@ -69,7 +64,7 @@ var require_code = __commonJS({
         return { [this.str]: 1 };
       }
     };
-    exports.Name = Name;
+    exports2.Name = Name;
     var _Code = class extends _CodeOrName {
       constructor(code) {
         super();
@@ -97,8 +92,8 @@ var require_code = __commonJS({
         }, {});
       }
     };
-    exports._Code = _Code;
-    exports.nil = new _Code("");
+    exports2._Code = _Code;
+    exports2.nil = new _Code("");
     function _(strs, ...args) {
       const code = [strs[0]];
       let i = 0;
@@ -108,7 +103,7 @@ var require_code = __commonJS({
       }
       return new _Code(code);
     }
-    exports._ = _;
+    exports2._ = _;
     var plus = new _Code("+");
     function str(strs, ...args) {
       const expr = [safeStringify(strs[0])];
@@ -121,7 +116,7 @@ var require_code = __commonJS({
       optimize(expr);
       return new _Code(expr);
     }
-    exports.str = str;
+    exports2.str = str;
     function addCodeArg(code, arg) {
       if (arg instanceof _Code)
         code.push(...arg._items);
@@ -130,7 +125,7 @@ var require_code = __commonJS({
       else
         code.push(interpolate(arg));
     }
-    exports.addCodeArg = addCodeArg;
+    exports2.addCodeArg = addCodeArg;
     function optimize(expr) {
       let i = 1;
       while (i < expr.length - 1) {
@@ -166,43 +161,43 @@ var require_code = __commonJS({
     function strConcat(c1, c2) {
       return c2.emptyStr() ? c1 : c1.emptyStr() ? c2 : str`${c1}${c2}`;
     }
-    exports.strConcat = strConcat;
+    exports2.strConcat = strConcat;
     function interpolate(x) {
       return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
     }
     function stringify(x) {
       return new _Code(safeStringify(x));
     }
-    exports.stringify = stringify;
+    exports2.stringify = stringify;
     function safeStringify(x) {
       return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
-    exports.safeStringify = safeStringify;
+    exports2.safeStringify = safeStringify;
     function getProperty(key) {
-      return typeof key == "string" && exports.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
+      return typeof key == "string" && exports2.IDENTIFIER.test(key) ? new _Code(`.${key}`) : _`[${key}]`;
     }
-    exports.getProperty = getProperty;
+    exports2.getProperty = getProperty;
     function getEsmExportName(key) {
-      if (typeof key == "string" && exports.IDENTIFIER.test(key)) {
+      if (typeof key == "string" && exports2.IDENTIFIER.test(key)) {
         return new _Code(`${key}`);
       }
       throw new Error(`CodeGen: invalid export name: ${key}, use explicit $id name mapping`);
     }
-    exports.getEsmExportName = getEsmExportName;
+    exports2.getEsmExportName = getEsmExportName;
     function regexpCode(rx) {
       return new _Code(rx.toString());
     }
-    exports.regexpCode = regexpCode;
+    exports2.regexpCode = regexpCode;
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/scope.js
 var require_scope = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/scope.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/scope.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ValueScope = exports2.ValueScopeName = exports2.Scope = exports2.varKinds = exports2.UsedValueState = void 0;
     var code_1 = require_code();
     var ValueError = class extends Error {
       constructor(name) {
@@ -214,8 +209,8 @@ var require_scope = __commonJS({
     (function(UsedValueState2) {
       UsedValueState2[UsedValueState2["Started"] = 0] = "Started";
       UsedValueState2[UsedValueState2["Completed"] = 1] = "Completed";
-    })(UsedValueState || (exports.UsedValueState = UsedValueState = {}));
-    exports.varKinds = {
+    })(UsedValueState || (exports2.UsedValueState = UsedValueState = {}));
+    exports2.varKinds = {
       const: new code_1.Name("const"),
       let: new code_1.Name("let"),
       var: new code_1.Name("var")
@@ -244,7 +239,7 @@ var require_scope = __commonJS({
         return this._names[prefix] = { prefix, index: 0 };
       }
     };
-    exports.Scope = Scope;
+    exports2.Scope = Scope;
     var ValueScopeName = class extends code_1.Name {
       constructor(prefix, nameStr) {
         super(nameStr);
@@ -255,7 +250,7 @@ var require_scope = __commonJS({
         this.scopePath = (0, code_1._)`.${new code_1.Name(property)}[${itemIndex}]`;
       }
     };
-    exports.ValueScopeName = ValueScopeName;
+    exports2.ValueScopeName = ValueScopeName;
     var line = (0, code_1._)`\n`;
     var ValueScope = class extends Scope {
       constructor(opts) {
@@ -325,7 +320,7 @@ var require_scope = __commonJS({
             nameSet.set(name, UsedValueState.Started);
             let c = valueCode(name);
             if (c) {
-              const def = this.opts.es5 ? exports.varKinds.var : exports.varKinds.const;
+              const def = this.opts.es5 ? exports2.varKinds.var : exports2.varKinds.const;
               code = (0, code_1._)`${code}${def} ${name} = ${c};${this.opts._n}`;
             } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name)) {
               code = (0, code_1._)`${code}${c}${this.opts._n}`;
@@ -338,58 +333,58 @@ var require_scope = __commonJS({
         return code;
       }
     };
-    exports.ValueScope = ValueScope;
+    exports2.ValueScope = ValueScope;
   }
 });
 
 // node_modules/ajv/dist/compile/codegen/index.js
 var require_codegen = __commonJS({
-  "node_modules/ajv/dist/compile/codegen/index.js"(exports) {
+  "node_modules/ajv/dist/compile/codegen/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.or = exports.and = exports.not = exports.CodeGen = exports.operators = exports.varKinds = exports.ValueScopeName = exports.ValueScope = exports.Scope = exports.Name = exports.regexpCode = exports.stringify = exports.getProperty = exports.nil = exports.strConcat = exports.str = exports._ = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.or = exports2.and = exports2.not = exports2.CodeGen = exports2.operators = exports2.varKinds = exports2.ValueScopeName = exports2.ValueScope = exports2.Scope = exports2.Name = exports2.regexpCode = exports2.stringify = exports2.getProperty = exports2.nil = exports2.strConcat = exports2.str = exports2._ = void 0;
     var code_1 = require_code();
     var scope_1 = require_scope();
     var code_2 = require_code();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
       return code_2._;
     } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
       return code_2.str;
     } });
-    Object.defineProperty(exports, "strConcat", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "strConcat", { enumerable: true, get: function() {
       return code_2.strConcat;
     } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
       return code_2.nil;
     } });
-    Object.defineProperty(exports, "getProperty", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "getProperty", { enumerable: true, get: function() {
       return code_2.getProperty;
     } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
       return code_2.stringify;
     } });
-    Object.defineProperty(exports, "regexpCode", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "regexpCode", { enumerable: true, get: function() {
       return code_2.regexpCode;
     } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
       return code_2.Name;
     } });
     var scope_2 = require_scope();
-    Object.defineProperty(exports, "Scope", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "Scope", { enumerable: true, get: function() {
       return scope_2.Scope;
     } });
-    Object.defineProperty(exports, "ValueScope", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "ValueScope", { enumerable: true, get: function() {
       return scope_2.ValueScope;
     } });
-    Object.defineProperty(exports, "ValueScopeName", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "ValueScopeName", { enumerable: true, get: function() {
       return scope_2.ValueScopeName;
     } });
-    Object.defineProperty(exports, "varKinds", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "varKinds", { enumerable: true, get: function() {
       return scope_2.varKinds;
     } });
-    exports.operators = {
+    exports2.operators = {
       GT: new code_1._Code(">"),
       GTE: new code_1._Code(">="),
       LT: new code_1._Code("<"),
@@ -802,7 +797,7 @@ var require_codegen = __commonJS({
       }
       // `+=` code
       add(lhs, rhs) {
-        return this._leafNode(new AssignOp(lhs, exports.operators.ADD, rhs));
+        return this._leafNode(new AssignOp(lhs, exports2.operators.ADD, rhs));
       }
       // appends passed SafeExpr to code or executes Block
       code(c) {
@@ -1002,7 +997,7 @@ var require_codegen = __commonJS({
         ns[ns.length - 1] = node;
       }
     };
-    exports.CodeGen = CodeGen;
+    exports2.CodeGen = CodeGen;
     function addNames(names, from) {
       for (const n in from)
         names[n] = (names[n] || 0) + (from[n] || 0);
@@ -1043,17 +1038,17 @@ var require_codegen = __commonJS({
     function not(x) {
       return typeof x == "boolean" || typeof x == "number" || x === null ? !x : (0, code_1._)`!${par(x)}`;
     }
-    exports.not = not;
-    var andCode = mappend(exports.operators.AND);
+    exports2.not = not;
+    var andCode = mappend(exports2.operators.AND);
     function and(...args) {
       return args.reduce(andCode);
     }
-    exports.and = and;
-    var orCode = mappend(exports.operators.OR);
+    exports2.and = and;
+    var orCode = mappend(exports2.operators.OR);
     function or(...args) {
       return args.reduce(orCode);
     }
-    exports.or = or;
+    exports2.or = or;
     function mappend(op) {
       return (x, y) => x === code_1.nil ? y : y === code_1.nil ? x : (0, code_1._)`${par(x)} ${op} ${par(y)}`;
     }
@@ -1065,11 +1060,11 @@ var require_codegen = __commonJS({
 
 // node_modules/ajv/dist/compile/util.js
 var require_util = __commonJS({
-  "node_modules/ajv/dist/compile/util.js"(exports) {
+  "node_modules/ajv/dist/compile/util.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.checkStrictMode = exports.getErrorPath = exports.Type = exports.useFunc = exports.setEvaluated = exports.evaluatedPropsToName = exports.mergeEvaluated = exports.eachItem = exports.unescapeJsonPointer = exports.escapeJsonPointer = exports.escapeFragment = exports.unescapeFragment = exports.schemaRefOrVal = exports.schemaHasRulesButRef = exports.schemaHasRules = exports.checkUnknownRules = exports.alwaysValidSchema = exports.toHash = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.checkStrictMode = exports2.getErrorPath = exports2.Type = exports2.useFunc = exports2.setEvaluated = exports2.evaluatedPropsToName = exports2.mergeEvaluated = exports2.eachItem = exports2.unescapeJsonPointer = exports2.escapeJsonPointer = exports2.escapeFragment = exports2.unescapeFragment = exports2.schemaRefOrVal = exports2.schemaHasRulesButRef = exports2.schemaHasRules = exports2.checkUnknownRules = exports2.alwaysValidSchema = exports2.toHash = void 0;
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
@@ -1078,7 +1073,7 @@ var require_util = __commonJS({
         hash[item] = true;
       return hash;
     }
-    exports.toHash = toHash;
+    exports2.toHash = toHash;
     function alwaysValidSchema(it, schema) {
       if (typeof schema == "boolean")
         return schema;
@@ -1087,7 +1082,7 @@ var require_util = __commonJS({
       checkUnknownRules(it, schema);
       return !schemaHasRules(schema, it.self.RULES.all);
     }
-    exports.alwaysValidSchema = alwaysValidSchema;
+    exports2.alwaysValidSchema = alwaysValidSchema;
     function checkUnknownRules(it, schema = it.schema) {
       const { opts, self } = it;
       if (!opts.strictSchema)
@@ -1100,7 +1095,7 @@ var require_util = __commonJS({
           checkStrictMode(it, `unknown keyword: "${key}"`);
       }
     }
-    exports.checkUnknownRules = checkUnknownRules;
+    exports2.checkUnknownRules = checkUnknownRules;
     function schemaHasRules(schema, rules) {
       if (typeof schema == "boolean")
         return !schema;
@@ -1109,7 +1104,7 @@ var require_util = __commonJS({
           return true;
       return false;
     }
-    exports.schemaHasRules = schemaHasRules;
+    exports2.schemaHasRules = schemaHasRules;
     function schemaHasRulesButRef(schema, RULES) {
       if (typeof schema == "boolean")
         return !schema;
@@ -1118,7 +1113,7 @@ var require_util = __commonJS({
           return true;
       return false;
     }
-    exports.schemaHasRulesButRef = schemaHasRulesButRef;
+    exports2.schemaHasRulesButRef = schemaHasRulesButRef;
     function schemaRefOrVal({ topSchemaRef, schemaPath }, schema, keyword, $data) {
       if (!$data) {
         if (typeof schema == "number" || typeof schema == "boolean")
@@ -1128,25 +1123,25 @@ var require_util = __commonJS({
       }
       return (0, codegen_1._)`${topSchemaRef}${schemaPath}${(0, codegen_1.getProperty)(keyword)}`;
     }
-    exports.schemaRefOrVal = schemaRefOrVal;
+    exports2.schemaRefOrVal = schemaRefOrVal;
     function unescapeFragment(str) {
       return unescapeJsonPointer(decodeURIComponent(str));
     }
-    exports.unescapeFragment = unescapeFragment;
+    exports2.unescapeFragment = unescapeFragment;
     function escapeFragment(str) {
       return encodeURIComponent(escapeJsonPointer(str));
     }
-    exports.escapeFragment = escapeFragment;
+    exports2.escapeFragment = escapeFragment;
     function escapeJsonPointer(str) {
       if (typeof str == "number")
         return `${str}`;
       return str.replace(/~/g, "~0").replace(/\//g, "~1");
     }
-    exports.escapeJsonPointer = escapeJsonPointer;
+    exports2.escapeJsonPointer = escapeJsonPointer;
     function unescapeJsonPointer(str) {
       return str.replace(/~1/g, "/").replace(/~0/g, "~");
     }
-    exports.unescapeJsonPointer = unescapeJsonPointer;
+    exports2.unescapeJsonPointer = unescapeJsonPointer;
     function eachItem(xs, f) {
       if (Array.isArray(xs)) {
         for (const x of xs)
@@ -1155,14 +1150,14 @@ var require_util = __commonJS({
         f(xs);
       }
     }
-    exports.eachItem = eachItem;
+    exports2.eachItem = eachItem;
     function makeMergeEvaluated({ mergeNames, mergeToName, mergeValues, resultToName }) {
       return (gen, from, to, toName) => {
         const res = to === void 0 ? from : to instanceof codegen_1.Name ? (from instanceof codegen_1.Name ? mergeNames(gen, from, to) : mergeToName(gen, from, to), to) : from instanceof codegen_1.Name ? (mergeToName(gen, to, from), from) : mergeValues(from, to);
         return toName === codegen_1.Name && !(res instanceof codegen_1.Name) ? resultToName(gen, res) : res;
       };
     }
-    exports.mergeEvaluated = {
+    exports2.mergeEvaluated = {
       props: makeMergeEvaluated({
         mergeNames: (gen, from, to) => gen.if((0, codegen_1._)`${to} !== true && ${from} !== undefined`, () => {
           gen.if((0, codegen_1._)`${from} === true`, () => gen.assign(to, true), () => gen.assign(to, (0, codegen_1._)`${to} || {}`).code((0, codegen_1._)`Object.assign(${to}, ${from})`));
@@ -1193,11 +1188,11 @@ var require_util = __commonJS({
         setEvaluated(gen, props, ps);
       return props;
     }
-    exports.evaluatedPropsToName = evaluatedPropsToName;
+    exports2.evaluatedPropsToName = evaluatedPropsToName;
     function setEvaluated(gen, props, ps) {
       Object.keys(ps).forEach((p) => gen.assign((0, codegen_1._)`${props}${(0, codegen_1.getProperty)(p)}`, true));
     }
-    exports.setEvaluated = setEvaluated;
+    exports2.setEvaluated = setEvaluated;
     var snippets = {};
     function useFunc(gen, f) {
       return gen.scopeValue("func", {
@@ -1205,12 +1200,12 @@ var require_util = __commonJS({
         code: snippets[f.code] || (snippets[f.code] = new code_1._Code(f.code))
       });
     }
-    exports.useFunc = useFunc;
+    exports2.useFunc = useFunc;
     var Type;
     (function(Type2) {
       Type2[Type2["Num"] = 0] = "Num";
       Type2[Type2["Str"] = 1] = "Str";
-    })(Type || (exports.Type = Type = {}));
+    })(Type || (exports2.Type = Type = {}));
     function getErrorPath(dataProp, dataPropType, jsPropertySyntax) {
       if (dataProp instanceof codegen_1.Name) {
         const isNumber = dataPropType === Type.Num;
@@ -1218,7 +1213,7 @@ var require_util = __commonJS({
       }
       return jsPropertySyntax ? (0, codegen_1.getProperty)(dataProp).toString() : "/" + escapeJsonPointer(dataProp);
     }
-    exports.getErrorPath = getErrorPath;
+    exports2.getErrorPath = getErrorPath;
     function checkStrictMode(it, msg, mode = it.opts.strictSchema) {
       if (!mode)
         return;
@@ -1227,16 +1222,16 @@ var require_util = __commonJS({
         throw new Error(msg);
       it.self.logger.warn(msg);
     }
-    exports.checkStrictMode = checkStrictMode;
+    exports2.checkStrictMode = checkStrictMode;
   }
 });
 
 // node_modules/ajv/dist/compile/names.js
 var require_names = __commonJS({
-  "node_modules/ajv/dist/compile/names.js"(exports) {
+  "node_modules/ajv/dist/compile/names.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var names = {
       // validation function arguments
@@ -1267,27 +1262,27 @@ var require_names = __commonJS({
       jsonLen: new codegen_1.Name("jsonLen"),
       jsonPart: new codegen_1.Name("jsonPart")
     };
-    exports.default = names;
+    exports2.default = names;
   }
 });
 
 // node_modules/ajv/dist/compile/errors.js
 var require_errors = __commonJS({
-  "node_modules/ajv/dist/compile/errors.js"(exports) {
+  "node_modules/ajv/dist/compile/errors.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.extendErrors = exports.resetErrorsCount = exports.reportExtraError = exports.reportError = exports.keyword$DataError = exports.keywordError = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.extendErrors = exports2.resetErrorsCount = exports2.reportExtraError = exports2.reportError = exports2.keyword$DataError = exports2.keywordError = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var names_1 = require_names();
-    exports.keywordError = {
+    exports2.keywordError = {
       message: ({ keyword }) => (0, codegen_1.str)`must pass "${keyword}" keyword validation`
     };
-    exports.keyword$DataError = {
+    exports2.keyword$DataError = {
       message: ({ keyword, schemaType }) => schemaType ? (0, codegen_1.str)`"${keyword}" keyword must be ${schemaType} ($data)` : (0, codegen_1.str)`"${keyword}" keyword is invalid ($data)`
     };
-    function reportError(cxt, error = exports.keywordError, errorPaths, overrideAllErrors) {
+    function reportError(cxt, error = exports2.keywordError, errorPaths, overrideAllErrors) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
       const errObj = errorObjectCode(cxt, error, errorPaths);
@@ -1297,8 +1292,8 @@ var require_errors = __commonJS({
         returnErrors(it, (0, codegen_1._)`[${errObj}]`);
       }
     }
-    exports.reportError = reportError;
-    function reportExtraError(cxt, error = exports.keywordError, errorPaths) {
+    exports2.reportError = reportError;
+    function reportExtraError(cxt, error = exports2.keywordError, errorPaths) {
       const { it } = cxt;
       const { gen, compositeRule, allErrors } = it;
       const errObj = errorObjectCode(cxt, error, errorPaths);
@@ -1307,12 +1302,12 @@ var require_errors = __commonJS({
         returnErrors(it, names_1.default.vErrors);
       }
     }
-    exports.reportExtraError = reportExtraError;
+    exports2.reportExtraError = reportExtraError;
     function resetErrorsCount(gen, errsCount) {
       gen.assign(names_1.default.errors, errsCount);
       gen.if((0, codegen_1._)`${names_1.default.vErrors} !== null`, () => gen.if(errsCount, () => gen.assign((0, codegen_1._)`${names_1.default.vErrors}.length`, errsCount), () => gen.assign(names_1.default.vErrors, null)));
     }
-    exports.resetErrorsCount = resetErrorsCount;
+    exports2.resetErrorsCount = resetErrorsCount;
     function extendErrors({ gen, keyword, schemaValue, data, errsCount, it }) {
       if (errsCount === void 0)
         throw new Error("ajv implementation error");
@@ -1327,7 +1322,7 @@ var require_errors = __commonJS({
         }
       });
     }
-    exports.extendErrors = extendErrors;
+    exports2.extendErrors = extendErrors;
     function addError(gen, errObj) {
       const err = gen.const("err", errObj);
       gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err})`);
@@ -1396,11 +1391,11 @@ var require_errors = __commonJS({
 
 // node_modules/ajv/dist/compile/validate/boolSchema.js
 var require_boolSchema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/boolSchema.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.boolOrEmptySchema = exports.topBoolOrEmptySchema = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.boolOrEmptySchema = exports2.topBoolOrEmptySchema = void 0;
     var errors_1 = require_errors();
     var codegen_1 = require_codegen();
     var names_1 = require_names();
@@ -1418,7 +1413,7 @@ var require_boolSchema = __commonJS({
         gen.return(true);
       }
     }
-    exports.topBoolOrEmptySchema = topBoolOrEmptySchema;
+    exports2.topBoolOrEmptySchema = topBoolOrEmptySchema;
     function boolOrEmptySchema(it, valid) {
       const { gen, schema } = it;
       if (schema === false) {
@@ -1428,7 +1423,7 @@ var require_boolSchema = __commonJS({
         gen.var(valid, true);
       }
     }
-    exports.boolOrEmptySchema = boolOrEmptySchema;
+    exports2.boolOrEmptySchema = boolOrEmptySchema;
     function falseSchemaError(it, overrideAllErrors) {
       const { gen, data } = it;
       const cxt = {
@@ -1448,17 +1443,17 @@ var require_boolSchema = __commonJS({
 
 // node_modules/ajv/dist/compile/rules.js
 var require_rules = __commonJS({
-  "node_modules/ajv/dist/compile/rules.js"(exports) {
+  "node_modules/ajv/dist/compile/rules.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getRules = exports.isJSONType = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.getRules = exports2.isJSONType = void 0;
     var _jsonTypes = ["string", "number", "integer", "boolean", "null", "object", "array"];
     var jsonTypes = new Set(_jsonTypes);
     function isJSONType(x) {
       return typeof x == "string" && jsonTypes.has(x);
     }
-    exports.isJSONType = isJSONType;
+    exports2.isJSONType = isJSONType;
     function getRules() {
       const groups = {
         number: { type: "number", rules: [] },
@@ -1474,41 +1469,41 @@ var require_rules = __commonJS({
         keywords: {}
       };
     }
-    exports.getRules = getRules;
+    exports2.getRules = getRules;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/applicability.js
 var require_applicability = __commonJS({
-  "node_modules/ajv/dist/compile/validate/applicability.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/applicability.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.shouldUseRule = exports.shouldUseGroup = exports.schemaHasRulesForType = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.shouldUseRule = exports2.shouldUseGroup = exports2.schemaHasRulesForType = void 0;
     function schemaHasRulesForType({ schema, self }, type) {
       const group = self.RULES.types[type];
       return group && group !== true && shouldUseGroup(schema, group);
     }
-    exports.schemaHasRulesForType = schemaHasRulesForType;
+    exports2.schemaHasRulesForType = schemaHasRulesForType;
     function shouldUseGroup(schema, group) {
       return group.rules.some((rule) => shouldUseRule(schema, rule));
     }
-    exports.shouldUseGroup = shouldUseGroup;
+    exports2.shouldUseGroup = shouldUseGroup;
     function shouldUseRule(schema, rule) {
       var _a;
       return schema[rule.keyword] !== void 0 || ((_a = rule.definition.implements) === null || _a === void 0 ? void 0 : _a.some((kwd) => schema[kwd] !== void 0));
     }
-    exports.shouldUseRule = shouldUseRule;
+    exports2.shouldUseRule = shouldUseRule;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/dataType.js
 var require_dataType = __commonJS({
-  "node_modules/ajv/dist/compile/validate/dataType.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/dataType.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.reportTypeError = exports.checkDataTypes = exports.checkDataType = exports.coerceAndCheckDataType = exports.getJSONTypes = exports.getSchemaTypes = exports.DataType = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.reportTypeError = exports2.checkDataTypes = exports2.checkDataType = exports2.coerceAndCheckDataType = exports2.getJSONTypes = exports2.getSchemaTypes = exports2.DataType = void 0;
     var rules_1 = require_rules();
     var applicability_1 = require_applicability();
     var errors_1 = require_errors();
@@ -1518,7 +1513,7 @@ var require_dataType = __commonJS({
     (function(DataType2) {
       DataType2[DataType2["Correct"] = 0] = "Correct";
       DataType2[DataType2["Wrong"] = 1] = "Wrong";
-    })(DataType || (exports.DataType = DataType = {}));
+    })(DataType || (exports2.DataType = DataType = {}));
     function getSchemaTypes(schema) {
       const types = getJSONTypes(schema.type);
       const hasNull = types.includes("null");
@@ -1534,14 +1529,14 @@ var require_dataType = __commonJS({
       }
       return types;
     }
-    exports.getSchemaTypes = getSchemaTypes;
+    exports2.getSchemaTypes = getSchemaTypes;
     function getJSONTypes(ts) {
       const types = Array.isArray(ts) ? ts : ts ? [ts] : [];
       if (types.every(rules_1.isJSONType))
         return types;
       throw new Error("type must be JSONType or JSONType[]: " + types.join(","));
     }
-    exports.getJSONTypes = getJSONTypes;
+    exports2.getJSONTypes = getJSONTypes;
     function coerceAndCheckDataType(it, types) {
       const { gen, data, opts } = it;
       const coerceTo = coerceToTypes(types, opts.coerceTypes);
@@ -1557,7 +1552,7 @@ var require_dataType = __commonJS({
       }
       return checkTypes;
     }
-    exports.coerceAndCheckDataType = coerceAndCheckDataType;
+    exports2.coerceAndCheckDataType = coerceAndCheckDataType;
     var COERCIBLE = /* @__PURE__ */ new Set(["string", "number", "integer", "boolean", "null"]);
     function coerceToTypes(types, coerceTypes) {
       return coerceTypes ? types.filter((t) => COERCIBLE.has(t) || coerceTypes === "array" && t === "array") : [];
@@ -1637,7 +1632,7 @@ var require_dataType = __commonJS({
         return (0, codegen_1.and)((0, codegen_1._)`typeof ${data} == "number"`, _cond, strictNums ? (0, codegen_1._)`isFinite(${data})` : codegen_1.nil);
       }
     }
-    exports.checkDataType = checkDataType;
+    exports2.checkDataType = checkDataType;
     function checkDataTypes(dataTypes, data, strictNums, correct) {
       if (dataTypes.length === 1) {
         return checkDataType(dataTypes[0], data, strictNums, correct);
@@ -1659,7 +1654,7 @@ var require_dataType = __commonJS({
         cond = (0, codegen_1.and)(cond, checkDataType(t, data, strictNums, correct));
       return cond;
     }
-    exports.checkDataTypes = checkDataTypes;
+    exports2.checkDataTypes = checkDataTypes;
     var typeError = {
       message: ({ schema }) => `must be ${schema}`,
       params: ({ schema, schemaValue }) => typeof schema == "string" ? (0, codegen_1._)`{type: ${schema}}` : (0, codegen_1._)`{type: ${schemaValue}}`
@@ -1668,7 +1663,7 @@ var require_dataType = __commonJS({
       const cxt = getTypeErrorContext(it);
       (0, errors_1.reportError)(cxt, typeError);
     }
-    exports.reportTypeError = reportTypeError;
+    exports2.reportTypeError = reportTypeError;
     function getTypeErrorContext(it) {
       const { gen, data, schema } = it;
       const schemaCode = (0, util_1.schemaRefOrVal)(it, schema, "type");
@@ -1689,11 +1684,11 @@ var require_dataType = __commonJS({
 
 // node_modules/ajv/dist/compile/validate/defaults.js
 var require_defaults = __commonJS({
-  "node_modules/ajv/dist/compile/validate/defaults.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/defaults.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.assignDefaults = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.assignDefaults = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     function assignDefaults(it, ty) {
@@ -1706,7 +1701,7 @@ var require_defaults = __commonJS({
         items.forEach((sch, i) => assignDefault(it, i, sch.default));
       }
     }
-    exports.assignDefaults = assignDefaults;
+    exports2.assignDefaults = assignDefaults;
     function assignDefault(it, prop, defaultValue) {
       const { gen, compositeRule, data, opts } = it;
       if (defaultValue === void 0)
@@ -1727,11 +1722,11 @@ var require_defaults = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/code.js
 var require_code2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/code.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/code.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateUnion = exports.validateArray = exports.usePattern = exports.callValidateCode = exports.schemaProperties = exports.allSchemaProperties = exports.noPropertyInData = exports.propertyInData = exports.isOwnProperty = exports.hasPropFunc = exports.reportMissingProp = exports.checkMissingProp = exports.checkReportMissingProp = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.validateUnion = exports2.validateArray = exports2.usePattern = exports2.callValidateCode = exports2.schemaProperties = exports2.allSchemaProperties = exports2.noPropertyInData = exports2.propertyInData = exports2.isOwnProperty = exports2.hasPropFunc = exports2.reportMissingProp = exports2.checkMissingProp = exports2.checkReportMissingProp = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var names_1 = require_names();
@@ -1743,16 +1738,16 @@ var require_code2 = __commonJS({
         cxt.error();
       });
     }
-    exports.checkReportMissingProp = checkReportMissingProp;
+    exports2.checkReportMissingProp = checkReportMissingProp;
     function checkMissingProp({ gen, data, it: { opts } }, properties, missing) {
       return (0, codegen_1.or)(...properties.map((prop) => (0, codegen_1.and)(noPropertyInData(gen, data, prop, opts.ownProperties), (0, codegen_1._)`${missing} = ${prop}`)));
     }
-    exports.checkMissingProp = checkMissingProp;
+    exports2.checkMissingProp = checkMissingProp;
     function reportMissingProp(cxt, missing) {
       cxt.setParams({ missingProperty: missing }, true);
       cxt.error();
     }
-    exports.reportMissingProp = reportMissingProp;
+    exports2.reportMissingProp = reportMissingProp;
     function hasPropFunc(gen) {
       return gen.scopeValue("func", {
         // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -1760,29 +1755,29 @@ var require_code2 = __commonJS({
         code: (0, codegen_1._)`Object.prototype.hasOwnProperty`
       });
     }
-    exports.hasPropFunc = hasPropFunc;
+    exports2.hasPropFunc = hasPropFunc;
     function isOwnProperty(gen, data, property) {
       return (0, codegen_1._)`${hasPropFunc(gen)}.call(${data}, ${property})`;
     }
-    exports.isOwnProperty = isOwnProperty;
+    exports2.isOwnProperty = isOwnProperty;
     function propertyInData(gen, data, property, ownProperties) {
       const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} !== undefined`;
       return ownProperties ? (0, codegen_1._)`${cond} && ${isOwnProperty(gen, data, property)}` : cond;
     }
-    exports.propertyInData = propertyInData;
+    exports2.propertyInData = propertyInData;
     function noPropertyInData(gen, data, property, ownProperties) {
       const cond = (0, codegen_1._)`${data}${(0, codegen_1.getProperty)(property)} === undefined`;
       return ownProperties ? (0, codegen_1.or)(cond, (0, codegen_1.not)(isOwnProperty(gen, data, property))) : cond;
     }
-    exports.noPropertyInData = noPropertyInData;
+    exports2.noPropertyInData = noPropertyInData;
     function allSchemaProperties(schemaMap) {
       return schemaMap ? Object.keys(schemaMap).filter((p) => p !== "__proto__") : [];
     }
-    exports.allSchemaProperties = allSchemaProperties;
+    exports2.allSchemaProperties = allSchemaProperties;
     function schemaProperties(it, schemaMap) {
       return allSchemaProperties(schemaMap).filter((p) => !(0, util_1.alwaysValidSchema)(it, schemaMap[p]));
     }
-    exports.schemaProperties = schemaProperties;
+    exports2.schemaProperties = schemaProperties;
     function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func, context, passSchema) {
       const dataAndSchema = passSchema ? (0, codegen_1._)`${schemaCode}, ${data}, ${topSchemaRef}${schemaPath}` : data;
       const valCxt = [
@@ -1796,7 +1791,7 @@ var require_code2 = __commonJS({
       const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
       return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
     }
-    exports.callValidateCode = callValidateCode;
+    exports2.callValidateCode = callValidateCode;
     var newRegExp = (0, codegen_1._)`new RegExp`;
     function usePattern({ gen, it: { opts } }, pattern) {
       const u = opts.unicodeRegExp ? "u" : "";
@@ -1808,7 +1803,7 @@ var require_code2 = __commonJS({
         code: (0, codegen_1._)`${regExp.code === "new RegExp" ? newRegExp : (0, util_2.useFunc)(gen, regExp)}(${pattern}, ${u})`
       });
     }
-    exports.usePattern = usePattern;
+    exports2.usePattern = usePattern;
     function validateArray(cxt) {
       const { gen, data, keyword, it } = cxt;
       const valid = gen.name("valid");
@@ -1832,7 +1827,7 @@ var require_code2 = __commonJS({
         });
       }
     }
-    exports.validateArray = validateArray;
+    exports2.validateArray = validateArray;
     function validateUnion(cxt) {
       const { gen, schema, keyword, it } = cxt;
       if (!Array.isArray(schema))
@@ -1855,17 +1850,17 @@ var require_code2 = __commonJS({
       }));
       cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
     }
-    exports.validateUnion = validateUnion;
+    exports2.validateUnion = validateUnion;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/keyword.js
 var require_keyword = __commonJS({
-  "node_modules/ajv/dist/compile/validate/keyword.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/keyword.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateKeywordUsage = exports.validSchemaType = exports.funcKeywordCode = exports.macroKeywordCode = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.validateKeywordUsage = exports2.validSchemaType = exports2.funcKeywordCode = exports2.macroKeywordCode = void 0;
     var codegen_1 = require_codegen();
     var names_1 = require_names();
     var code_1 = require_code2();
@@ -1886,7 +1881,7 @@ var require_keyword = __commonJS({
       }, valid);
       cxt.pass(valid, () => cxt.error(true));
     }
-    exports.macroKeywordCode = macroKeywordCode;
+    exports2.macroKeywordCode = macroKeywordCode;
     function funcKeywordCode(cxt, def) {
       var _a;
       const { gen, keyword, schema, parentSchema, $data, it } = cxt;
@@ -1930,7 +1925,7 @@ var require_keyword = __commonJS({
         gen.if((0, codegen_1.not)((_a2 = def.valid) !== null && _a2 !== void 0 ? _a2 : valid), errors);
       }
     }
-    exports.funcKeywordCode = funcKeywordCode;
+    exports2.funcKeywordCode = funcKeywordCode;
     function modifyData(cxt) {
       const { gen, data, it } = cxt;
       gen.if(it.parentData, () => gen.assign(data, (0, codegen_1._)`${it.parentData}[${it.parentDataProperty}]`));
@@ -1954,7 +1949,7 @@ var require_keyword = __commonJS({
     function validSchemaType(schema, schemaType, allowUndefined = false) {
       return !schemaType.length || schemaType.some((st) => st === "array" ? Array.isArray(schema) : st === "object" ? schema && typeof schema == "object" && !Array.isArray(schema) : typeof schema == st || allowUndefined && typeof schema == "undefined");
     }
-    exports.validSchemaType = validSchemaType;
+    exports2.validSchemaType = validSchemaType;
     function validateKeywordUsage({ schema, opts, self, errSchemaPath }, def, keyword) {
       if (Array.isArray(def.keyword) ? !def.keyword.includes(keyword) : def.keyword !== keyword) {
         throw new Error("ajv implementation error");
@@ -1974,17 +1969,17 @@ var require_keyword = __commonJS({
         }
       }
     }
-    exports.validateKeywordUsage = validateKeywordUsage;
+    exports2.validateKeywordUsage = validateKeywordUsage;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/subschema.js
 var require_subschema = __commonJS({
-  "node_modules/ajv/dist/compile/validate/subschema.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/subschema.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.extendSubschemaMode = exports.extendSubschemaData = exports.getSubschema = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.extendSubschemaMode = exports2.extendSubschemaData = exports2.getSubschema = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     function getSubschema(it, { keyword, schemaProp, schema, schemaPath, errSchemaPath, topSchemaRef }) {
@@ -2016,7 +2011,7 @@ var require_subschema = __commonJS({
       }
       throw new Error('either "keyword" or "schema" must be passed');
     }
-    exports.getSubschema = getSubschema;
+    exports2.getSubschema = getSubschema;
     function extendSubschemaData(subschema, it, { dataProp, dataPropType: dpType, data, dataTypes, propertyName }) {
       if (data !== void 0 && dataProp !== void 0) {
         throw new Error('both "data" and "dataProp" passed, only one allowed');
@@ -2047,7 +2042,7 @@ var require_subschema = __commonJS({
         subschema.dataNames = [...it.dataNames, _nextData];
       }
     }
-    exports.extendSubschemaData = extendSubschemaData;
+    exports2.extendSubschemaData = extendSubschemaData;
     function extendSubschemaMode(subschema, { jtdDiscriminator, jtdMetadata, compositeRule, createErrors, allErrors }) {
       if (compositeRule !== void 0)
         subschema.compositeRule = compositeRule;
@@ -2058,16 +2053,16 @@ var require_subschema = __commonJS({
       subschema.jtdDiscriminator = jtdDiscriminator;
       subschema.jtdMetadata = jtdMetadata;
     }
-    exports.extendSubschemaMode = extendSubschemaMode;
+    exports2.extendSubschemaMode = extendSubschemaMode;
   }
 });
 
 // node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/index.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
-    module.exports = function equal(a, b) {
+    init_cjs_shims();
+    module2.exports = function equal(a, b) {
       if (a === b) return true;
       if (a && b && typeof a == "object" && typeof b == "object") {
         if (a.constructor !== b.constructor) return false;
@@ -2100,10 +2095,10 @@ var require_fast_deep_equal = __commonJS({
 
 // node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports, module) {
+  "node_modules/json-schema-traverse/index.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
-    var traverse = module.exports = function(schema, opts, cb) {
+    init_cjs_shims();
+    var traverse = module2.exports = function(schema, opts, cb) {
       if (typeof opts == "function") {
         cb = opts;
         opts = {};
@@ -2189,11 +2184,11 @@ var require_json_schema_traverse = __commonJS({
 
 // node_modules/ajv/dist/compile/resolve.js
 var require_resolve = __commonJS({
-  "node_modules/ajv/dist/compile/resolve.js"(exports) {
+  "node_modules/ajv/dist/compile/resolve.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getSchemaRefs = exports.resolveUrl = exports.normalizeId = exports._getFullPath = exports.getFullPath = exports.inlineRef = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.getSchemaRefs = exports2.resolveUrl = exports2.normalizeId = exports2._getFullPath = exports2.getFullPath = exports2.inlineRef = void 0;
     var util_1 = require_util();
     var equal = require_fast_deep_equal();
     var traverse = require_json_schema_traverse();
@@ -2224,7 +2219,7 @@ var require_resolve = __commonJS({
         return false;
       return countKeys(schema) <= limit;
     }
-    exports.inlineRef = inlineRef;
+    exports2.inlineRef = inlineRef;
     var REF_KEYWORDS = /* @__PURE__ */ new Set([
       "$ref",
       "$recursiveRef",
@@ -2266,22 +2261,22 @@ var require_resolve = __commonJS({
       const p = resolver.parse(id);
       return _getFullPath(resolver, p);
     }
-    exports.getFullPath = getFullPath;
+    exports2.getFullPath = getFullPath;
     function _getFullPath(resolver, p) {
       const serialized = resolver.serialize(p);
       return serialized.split("#")[0] + "#";
     }
-    exports._getFullPath = _getFullPath;
+    exports2._getFullPath = _getFullPath;
     var TRAILING_SLASH_HASH = /#\/?$/;
     function normalizeId(id) {
       return id ? id.replace(TRAILING_SLASH_HASH, "") : "";
     }
-    exports.normalizeId = normalizeId;
+    exports2.normalizeId = normalizeId;
     function resolveUrl(resolver, baseId, id) {
       id = normalizeId(id);
       return resolver.resolve(baseId, id);
     }
-    exports.resolveUrl = resolveUrl;
+    exports2.resolveUrl = resolveUrl;
     var ANCHOR = /^[a-z_][-a-z0-9._]*$/i;
     function getSchemaRefs(schema, baseId) {
       if (typeof schema == "boolean")
@@ -2340,17 +2335,17 @@ var require_resolve = __commonJS({
         return new Error(`reference "${ref}" resolves to more than one schema`);
       }
     }
-    exports.getSchemaRefs = getSchemaRefs;
+    exports2.getSchemaRefs = getSchemaRefs;
   }
 });
 
 // node_modules/ajv/dist/compile/validate/index.js
 var require_validate = __commonJS({
-  "node_modules/ajv/dist/compile/validate/index.js"(exports) {
+  "node_modules/ajv/dist/compile/validate/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.getData = exports.KeywordCxt = exports.validateFunctionCode = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.getData = exports2.KeywordCxt = exports2.validateFunctionCode = void 0;
     var boolSchema_1 = require_boolSchema();
     var dataType_1 = require_dataType();
     var applicability_1 = require_applicability();
@@ -2373,7 +2368,7 @@ var require_validate = __commonJS({
       }
       validateFunction(it, () => (0, boolSchema_1.topBoolOrEmptySchema)(it));
     }
-    exports.validateFunctionCode = validateFunctionCode;
+    exports2.validateFunctionCode = validateFunctionCode;
     function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body) {
       if (opts.code.es5) {
         gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${names_1.default.valCxt}`, schemaEnv.$async, () => {
@@ -2794,7 +2789,7 @@ var require_validate = __commonJS({
         }
       }
     };
-    exports.KeywordCxt = KeywordCxt;
+    exports2.KeywordCxt = KeywordCxt;
     function keywordCode(it, keyword, def, ruleType) {
       const cxt = new KeywordCxt(it, def, keyword);
       if ("code" in def) {
@@ -2849,16 +2844,16 @@ var require_validate = __commonJS({
         return `Cannot access ${pointerType} ${up} levels up, current level is ${dataLevel}`;
       }
     }
-    exports.getData = getData;
+    exports2.getData = getData;
   }
 });
 
 // node_modules/ajv/dist/runtime/validation_error.js
 var require_validation_error = __commonJS({
-  "node_modules/ajv/dist/runtime/validation_error.js"(exports) {
+  "node_modules/ajv/dist/runtime/validation_error.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var ValidationError = class extends Error {
       constructor(errors) {
         super("validation failed");
@@ -2866,16 +2861,16 @@ var require_validation_error = __commonJS({
         this.ajv = this.validation = true;
       }
     };
-    exports.default = ValidationError;
+    exports2.default = ValidationError;
   }
 });
 
 // node_modules/ajv/dist/compile/ref_error.js
 var require_ref_error = __commonJS({
-  "node_modules/ajv/dist/compile/ref_error.js"(exports) {
+  "node_modules/ajv/dist/compile/ref_error.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var resolve_1 = require_resolve();
     var MissingRefError = class extends Error {
       constructor(resolver, baseId, ref, msg) {
@@ -2884,17 +2879,17 @@ var require_ref_error = __commonJS({
         this.missingSchema = (0, resolve_1.normalizeId)((0, resolve_1.getFullPath)(resolver, this.missingRef));
       }
     };
-    exports.default = MissingRefError;
+    exports2.default = MissingRefError;
   }
 });
 
 // node_modules/ajv/dist/compile/index.js
 var require_compile = __commonJS({
-  "node_modules/ajv/dist/compile/index.js"(exports) {
+  "node_modules/ajv/dist/compile/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.resolveSchema = exports.getCompilingSchema = exports.resolveRef = exports.compileSchema = exports.SchemaEnv = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.resolveSchema = exports2.getCompilingSchema = exports2.resolveRef = exports2.compileSchema = exports2.SchemaEnv = void 0;
     var codegen_1 = require_codegen();
     var validation_error_1 = require_validation_error();
     var names_1 = require_names();
@@ -2920,7 +2915,7 @@ var require_compile = __commonJS({
         this.refs = {};
       }
     };
-    exports.SchemaEnv = SchemaEnv;
+    exports2.SchemaEnv = SchemaEnv;
     function compileSchema(sch) {
       const _sch = getCompilingSchema.call(this, sch);
       if (_sch)
@@ -3006,7 +3001,7 @@ var require_compile = __commonJS({
         this._compilations.delete(sch);
       }
     }
-    exports.compileSchema = compileSchema;
+    exports2.compileSchema = compileSchema;
     function resolveRef(root, baseId, ref) {
       var _a;
       ref = (0, resolve_1.resolveUrl)(this.opts.uriResolver, baseId, ref);
@@ -3024,7 +3019,7 @@ var require_compile = __commonJS({
         return;
       return root.refs[ref] = inlineOrCompile.call(this, _sch);
     }
-    exports.resolveRef = resolveRef;
+    exports2.resolveRef = resolveRef;
     function inlineOrCompile(sch) {
       if ((0, resolve_1.inlineRef)(sch.schema, this.opts.inlineRefs))
         return sch.schema;
@@ -3036,7 +3031,7 @@ var require_compile = __commonJS({
           return sch;
       }
     }
-    exports.getCompilingSchema = getCompilingSchema;
+    exports2.getCompilingSchema = getCompilingSchema;
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
@@ -3075,7 +3070,7 @@ var require_compile = __commonJS({
       }
       return getJsonPointer.call(this, p, schOrRef);
     }
-    exports.resolveSchema = resolveSchema;
+    exports2.resolveSchema = resolveSchema;
     var PREVENT_SCOPE_CHANGE = /* @__PURE__ */ new Set([
       "properties",
       "patternProperties",
@@ -3115,8 +3110,8 @@ var require_compile = __commonJS({
 
 // node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports, module) {
-    module.exports = {
+  "node_modules/ajv/dist/refs/data.json"(exports2, module2) {
+    module2.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
       type: "object",
@@ -3134,9 +3129,9 @@ var require_data = __commonJS({
 
 // node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/fast-uri/lib/utils.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
+    init_cjs_shims();
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
     var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
@@ -3259,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path2) {
-      let input = path2;
+    function removeDotSegments(path) {
+      let input = path;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3430,7 +3425,7 @@ var require_utils = __commonJS({
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
-    module.exports = {
+    module2.exports = {
       nonSimpleDomain,
       recomposeAuthority,
       reescapeHostDelimiters,
@@ -3448,9 +3443,9 @@ var require_utils = __commonJS({
 
 // node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/fast-uri/lib/schemes.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
+    init_cjs_shims();
     var { isUUID } = require_utils();
     var URN_REG = /([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-.:;=@]|%[\da-f]{2})+)/iu;
     var supportedSchemeNames = (
@@ -3513,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path2, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
+        const [path, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path && path !== "/" ? path : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3648,7 +3643,7 @@ var require_schemes = __commonJS({
         scheme.toLowerCase()
       ]) || void 0;
     }
-    module.exports = {
+    module2.exports = {
       wsIsSecure,
       SCHEMES,
       isValidSchemeName,
@@ -3659,9 +3654,9 @@ var require_schemes = __commonJS({
 
 // node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
+    init_cjs_shims();
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     function normalize(uri, options) {
@@ -3670,21 +3665,21 @@ var require_fast_uri = __commonJS({
         normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
-        parse(serialize(uri, options), options);
+        parse2(serialize(uri, options), options);
       }
       return uri;
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
+      const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
     function resolveComponent(base, relative, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
-        base = parse(serialize(base, options), options);
-        relative = parse(serialize(relative, options), options);
+        base = parse2(serialize(base, options), options);
+        relative = parse2(serialize(relative, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative.scheme) {
@@ -3907,7 +3902,7 @@ var require_fast_uri = __commonJS({
       }
       return { parsed, malformedAuthorityOrPort };
     }
-    function parse(uri, opts) {
+    function parse2(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
     }
     function normalizeString(uri, opts) {
@@ -3936,54 +3931,54 @@ var require_fast_uri = __commonJS({
       resolveComponent,
       equal,
       serialize,
-      parse
+      parse: parse2
     };
-    module.exports = fastUri;
-    module.exports.default = fastUri;
-    module.exports.fastUri = fastUri;
+    module2.exports = fastUri;
+    module2.exports.default = fastUri;
+    module2.exports.fastUri = fastUri;
   }
 });
 
 // node_modules/ajv/dist/runtime/uri.js
 var require_uri = __commonJS({
-  "node_modules/ajv/dist/runtime/uri.js"(exports) {
+  "node_modules/ajv/dist/runtime/uri.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var uri = require_fast_uri();
     uri.code = 'require("ajv/dist/runtime/uri").default';
-    exports.default = uri;
+    exports2.default = uri;
   }
 });
 
 // node_modules/ajv/dist/core.js
 var require_core = __commonJS({
-  "node_modules/ajv/dist/core.js"(exports) {
+  "node_modules/ajv/dist/core.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = void 0;
     var validate_1 = require_validate();
-    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "KeywordCxt", { enumerable: true, get: function() {
       return validate_1.KeywordCxt;
     } });
     var codegen_1 = require_codegen();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
       return codegen_1._;
     } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
       return codegen_1.str;
     } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
       return codegen_1.stringify;
     } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
       return codegen_1.nil;
     } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
       return codegen_1.Name;
     } });
-    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "CodeGen", { enumerable: true, get: function() {
       return codegen_1.CodeGen;
     } });
     var validation_error_1 = require_validation_error();
@@ -4437,7 +4432,7 @@ var require_core = __commonJS({
     };
     Ajv2.ValidationError = validation_error_1.default;
     Ajv2.MissingRefError = ref_error_1.default;
-    exports.default = Ajv2;
+    exports2.default = Ajv2;
     function checkOptions(checkOpts, options, msg, log = "error") {
       for (const key in checkOpts) {
         const opt = key;
@@ -4570,27 +4565,27 @@ var require_core = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/core/id.js
 var require_id = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/id.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/id.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var def = {
       keyword: "id",
       code() {
         throw new Error('NOT SUPPORTED: keyword "id", use "$id" for schema ID');
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/core/ref.js
 var require_ref = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/ref.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.callRef = exports.getValidate = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.callRef = exports2.getValidate = void 0;
     var ref_error_1 = require_ref_error();
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
@@ -4641,7 +4636,7 @@ var require_ref = __commonJS({
       const { gen } = cxt;
       return sch.validate ? gen.scopeValue("validate", { ref: sch.validate }) : (0, codegen_1._)`${gen.scopeValue("wrapper", { ref: sch })}.validate`;
     }
-    exports.getValidate = getValidate;
+    exports2.getValidate = getValidate;
     function callRef(cxt, v, sch, $async) {
       const { gen, it } = cxt;
       const { allErrors, schemaEnv: env, opts } = it;
@@ -4702,17 +4697,17 @@ var require_ref = __commonJS({
         }
       }
     }
-    exports.callRef = callRef;
-    exports.default = def;
+    exports2.callRef = callRef;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/core/index.js
 var require_core2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/core/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/core/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var id_1 = require_id();
     var ref_1 = require_ref();
     var core = [
@@ -4725,16 +4720,16 @@ var require_core2 = __commonJS({
       id_1.default,
       ref_1.default
     ];
-    exports.default = core;
+    exports2.default = core;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitNumber.js
 var require_limitNumber = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitNumber.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var ops = codegen_1.operators;
     var KWDs = {
@@ -4758,16 +4753,16 @@ var require_limitNumber = __commonJS({
         cxt.fail$data((0, codegen_1._)`${data} ${KWDs[keyword].fail} ${schemaCode} || isNaN(${data})`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/multipleOf.js
 var require_multipleOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/multipleOf.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must be multiple of ${schemaCode}`,
@@ -4787,16 +4782,16 @@ var require_multipleOf = __commonJS({
         cxt.fail$data((0, codegen_1._)`(${schemaCode} === 0 || (${res} = ${data}/${schemaCode}, ${invalid}))`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/runtime/ucs2length.js
 var require_ucs2length = __commonJS({
-  "node_modules/ajv/dist/runtime/ucs2length.js"(exports) {
+  "node_modules/ajv/dist/runtime/ucs2length.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     function ucs2length(str) {
       const len = str.length;
       let length = 0;
@@ -4813,17 +4808,17 @@ var require_ucs2length = __commonJS({
       }
       return length;
     }
-    exports.default = ucs2length;
+    exports2.default = ucs2length;
     ucs2length.code = 'require("ajv/dist/runtime/ucs2length").default';
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitLength.js
 var require_limitLength = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitLength.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var ucs2length_1 = require_ucs2length();
@@ -4847,16 +4842,16 @@ var require_limitLength = __commonJS({
         cxt.fail$data((0, codegen_1._)`${len} ${op} ${schemaCode}`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/pattern.js
 var require_pattern = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/pattern.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
     var util_1 = require_util();
     var codegen_1 = require_codegen();
@@ -4885,16 +4880,16 @@ var require_pattern = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitProperties.js
 var require_limitProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitProperties.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message({ keyword, schemaCode }) {
@@ -4915,16 +4910,16 @@ var require_limitProperties = __commonJS({
         cxt.fail$data((0, codegen_1._)`Object.keys(${data}).length ${op} ${schemaCode}`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/required.js
 var require_required = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/required.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -4998,16 +4993,16 @@ var require_required = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/limitItems.js
 var require_limitItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/limitItems.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message({ keyword, schemaCode }) {
@@ -5028,28 +5023,28 @@ var require_limitItems = __commonJS({
         cxt.fail$data((0, codegen_1._)`${data}.length ${op} ${schemaCode}`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/runtime/equal.js
 var require_equal = __commonJS({
-  "node_modules/ajv/dist/runtime/equal.js"(exports) {
+  "node_modules/ajv/dist/runtime/equal.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var equal = require_fast_deep_equal();
     equal.code = 'require("ajv/dist/runtime/equal").default';
-    exports.default = equal;
+    exports2.default = equal;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/uniqueItems.js
 var require_uniqueItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/uniqueItems.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var dataType_1 = require_dataType();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -5108,16 +5103,16 @@ var require_uniqueItems = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/const.js
 var require_const = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/const.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
@@ -5138,16 +5133,16 @@ var require_const = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/enum.js
 var require_enum = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/enum.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var equal_1 = require_equal();
@@ -5188,16 +5183,16 @@ var require_enum = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/validation/index.js
 var require_validation = __commonJS({
-  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/validation/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var limitNumber_1 = require_limitNumber();
     var multipleOf_1 = require_multipleOf();
     var limitLength_1 = require_limitLength();
@@ -5227,17 +5222,17 @@ var require_validation = __commonJS({
       const_1.default,
       enum_1.default
     ];
-    exports.default = validation;
+    exports2.default = validation;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/additionalItems.js
 var require_additionalItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalItems.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateAdditionalItems = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.validateAdditionalItems = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5280,18 +5275,18 @@ var require_additionalItems = __commonJS({
         });
       }
     }
-    exports.validateAdditionalItems = validateAdditionalItems;
-    exports.default = def;
+    exports2.validateAdditionalItems = validateAdditionalItems;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/items.js
 var require_items = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/items.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateTuple = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.validateTuple = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
@@ -5338,17 +5333,17 @@ var require_items = __commonJS({
         }
       }
     }
-    exports.validateTuple = validateTuple;
-    exports.default = def;
+    exports2.validateTuple = validateTuple;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/prefixItems.js
 var require_prefixItems = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/prefixItems.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var items_1 = require_items();
     var def = {
       keyword: "prefixItems",
@@ -5357,16 +5352,16 @@ var require_prefixItems = __commonJS({
       before: "uniqueItems",
       code: (cxt) => (0, items_1.validateTuple)(cxt, "items")
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/items2020.js
 var require_items2020 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/items2020.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
@@ -5393,16 +5388,16 @@ var require_items2020 = __commonJS({
           cxt.ok((0, code_1.validateArray)(cxt));
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/contains.js
 var require_contains = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/contains.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5488,21 +5483,21 @@ var require_contains = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/dependencies.js
 var require_dependencies = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/dependencies.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.validateSchemaDeps = exports.validatePropertyDeps = exports.error = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.validateSchemaDeps = exports2.validatePropertyDeps = exports2.error = void 0;
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var code_1 = require_code2();
-    exports.error = {
+    exports2.error = {
       message: ({ params: { property, depsCount, deps } }) => {
         const property_ies = depsCount === 1 ? "property" : "properties";
         return (0, codegen_1.str)`must have ${property_ies} ${deps} when property ${property} is present`;
@@ -5517,7 +5512,7 @@ var require_dependencies = __commonJS({
       keyword: "dependencies",
       type: "object",
       schemaType: "object",
-      error: exports.error,
+      error: exports2.error,
       code(cxt) {
         const [propDeps, schDeps] = splitDependencies(cxt);
         validatePropertyDeps(cxt, propDeps);
@@ -5563,7 +5558,7 @@ var require_dependencies = __commonJS({
         }
       }
     }
-    exports.validatePropertyDeps = validatePropertyDeps;
+    exports2.validatePropertyDeps = validatePropertyDeps;
     function validateSchemaDeps(cxt, schemaDeps = cxt.schema) {
       const { gen, data, keyword, it } = cxt;
       const valid = gen.name("valid");
@@ -5582,17 +5577,17 @@ var require_dependencies = __commonJS({
         cxt.ok(valid);
       }
     }
-    exports.validateSchemaDeps = validateSchemaDeps;
-    exports.default = def;
+    exports2.validateSchemaDeps = validateSchemaDeps;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/propertyNames.js
 var require_propertyNames = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/propertyNames.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5627,16 +5622,16 @@ var require_propertyNames = __commonJS({
         cxt.ok(valid);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js
 var require_additionalProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/additionalProperties.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var names_1 = require_names();
@@ -5734,16 +5729,16 @@ var require_additionalProperties = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/properties.js
 var require_properties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/properties.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var validate_1 = require_validate();
     var code_1 = require_code2();
     var util_1 = require_util();
@@ -5793,16 +5788,16 @@ var require_properties = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/patternProperties.js
 var require_patternProperties = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/patternProperties.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
     var codegen_1 = require_codegen();
     var util_1 = require_util();
@@ -5868,16 +5863,16 @@ var require_patternProperties = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/not.js
 var require_not = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/not.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: "not",
@@ -5900,16 +5895,16 @@ var require_not = __commonJS({
       },
       error: { message: "must NOT be valid" }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/anyOf.js
 var require_anyOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/anyOf.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var code_1 = require_code2();
     var def = {
       keyword: "anyOf",
@@ -5918,16 +5913,16 @@ var require_anyOf = __commonJS({
       code: code_1.validateUnion,
       error: { message: "must match a schema in anyOf" }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/oneOf.js
 var require_oneOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/oneOf.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -5977,16 +5972,16 @@ var require_oneOf = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/allOf.js
 var require_allOf = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/allOf.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: "allOf",
@@ -6005,16 +6000,16 @@ var require_allOf = __commonJS({
         });
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/if.js
 var require_if = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/if.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var util_1 = require_util();
     var error = {
@@ -6075,16 +6070,16 @@ var require_if = __commonJS({
       const schema = it.schema[keyword];
       return schema !== void 0 && !(0, util_1.alwaysValidSchema)(it, schema);
     }
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/thenElse.js
 var require_thenElse = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/thenElse.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var util_1 = require_util();
     var def = {
       keyword: ["then", "else"],
@@ -6094,16 +6089,16 @@ var require_thenElse = __commonJS({
           (0, util_1.checkStrictMode)(it, `"${keyword}" without "if" is ignored`);
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/applicator/index.js
 var require_applicator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/applicator/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var additionalItems_1 = require_additionalItems();
     var prefixItems_1 = require_prefixItems();
     var items_1 = require_items();
@@ -6143,16 +6138,16 @@ var require_applicator = __commonJS({
       applicator.push(contains_1.default);
       return applicator;
     }
-    exports.default = getApplicator;
+    exports2.default = getApplicator;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/format/format.js
 var require_format = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/format/format.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var error = {
       message: ({ schemaCode }) => (0, codegen_1.str)`must match format "${schemaCode}"`,
@@ -6234,30 +6229,30 @@ var require_format = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/format/index.js
 var require_format2 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/format/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var format_1 = require_format();
     var format = [format_1.default];
-    exports.default = format;
+    exports2.default = format;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/metadata.js
 var require_metadata = __commonJS({
-  "node_modules/ajv/dist/vocabularies/metadata.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/metadata.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.contentVocabulary = exports.metadataVocabulary = void 0;
-    exports.metadataVocabulary = [
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.contentVocabulary = exports2.metadataVocabulary = void 0;
+    exports2.metadataVocabulary = [
       "title",
       "description",
       "default",
@@ -6266,7 +6261,7 @@ var require_metadata = __commonJS({
       "writeOnly",
       "examples"
     ];
-    exports.contentVocabulary = [
+    exports2.contentVocabulary = [
       "contentMediaType",
       "contentEncoding",
       "contentSchema"
@@ -6276,10 +6271,10 @@ var require_metadata = __commonJS({
 
 // node_modules/ajv/dist/vocabularies/draft7.js
 var require_draft7 = __commonJS({
-  "node_modules/ajv/dist/vocabularies/draft7.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/draft7.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var core_1 = require_core2();
     var validation_1 = require_validation();
     var applicator_1 = require_applicator();
@@ -6293,31 +6288,31 @@ var require_draft7 = __commonJS({
       metadata_1.metadataVocabulary,
       metadata_1.contentVocabulary
     ];
-    exports.default = draft7Vocabularies;
+    exports2.default = draft7Vocabularies;
   }
 });
 
 // node_modules/ajv/dist/vocabularies/discriminator/types.js
 var require_types = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/discriminator/types.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DiscrError = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.DiscrError = void 0;
     var DiscrError;
     (function(DiscrError2) {
       DiscrError2["Tag"] = "tag";
       DiscrError2["Mapping"] = "mapping";
-    })(DiscrError || (exports.DiscrError = DiscrError = {}));
+    })(DiscrError || (exports2.DiscrError = DiscrError = {}));
   }
 });
 
 // node_modules/ajv/dist/vocabularies/discriminator/index.js
 var require_discriminator = __commonJS({
-  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports) {
+  "node_modules/ajv/dist/vocabularies/discriminator/index.js"(exports2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
     var codegen_1 = require_codegen();
     var types_1 = require_types();
     var compile_1 = require_compile();
@@ -6414,14 +6409,14 @@ var require_discriminator = __commonJS({
         }
       }
     };
-    exports.default = def;
+    exports2.default = def;
   }
 });
 
 // node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
-    module.exports = {
+  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports2, module2) {
+    module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
       title: "Core schema meta-schema",
@@ -6577,11 +6572,11 @@ var require_json_schema_draft_07 = __commonJS({
 
 // node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports, module) {
+  "node_modules/ajv/dist/ajv.js"(exports2, module2) {
     "use strict";
-    init_esm_shims();
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
+    init_cjs_shims();
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.MissingRefError = exports2.ValidationError = exports2.CodeGen = exports2.Name = exports2.nil = exports2.stringify = exports2.str = exports2._ = exports2.KeywordCxt = exports2.Ajv = void 0;
     var core_1 = require_core();
     var draft7_1 = require_draft7();
     var discriminator_1 = require_discriminator();
@@ -6607,420 +6602,145 @@ var require_ajv = __commonJS({
         return this.opts.defaultMeta = super.defaultMeta() || (this.getSchema(META_SCHEMA_ID) ? META_SCHEMA_ID : void 0);
       }
     };
-    exports.Ajv = Ajv2;
-    module.exports = exports = Ajv2;
-    module.exports.Ajv = Ajv2;
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.default = Ajv2;
+    exports2.Ajv = Ajv2;
+    module2.exports = exports2 = Ajv2;
+    module2.exports.Ajv = Ajv2;
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.default = Ajv2;
     var validate_1 = require_validate();
-    Object.defineProperty(exports, "KeywordCxt", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "KeywordCxt", { enumerable: true, get: function() {
       return validate_1.KeywordCxt;
     } });
     var codegen_1 = require_codegen();
-    Object.defineProperty(exports, "_", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "_", { enumerable: true, get: function() {
       return codegen_1._;
     } });
-    Object.defineProperty(exports, "str", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "str", { enumerable: true, get: function() {
       return codegen_1.str;
     } });
-    Object.defineProperty(exports, "stringify", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "stringify", { enumerable: true, get: function() {
       return codegen_1.stringify;
     } });
-    Object.defineProperty(exports, "nil", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "nil", { enumerable: true, get: function() {
       return codegen_1.nil;
     } });
-    Object.defineProperty(exports, "Name", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "Name", { enumerable: true, get: function() {
       return codegen_1.Name;
     } });
-    Object.defineProperty(exports, "CodeGen", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "CodeGen", { enumerable: true, get: function() {
       return codegen_1.CodeGen;
     } });
     var validation_error_1 = require_validation_error();
-    Object.defineProperty(exports, "ValidationError", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "ValidationError", { enumerable: true, get: function() {
       return validation_error_1.default;
     } });
     var ref_error_1 = require_ref_error();
-    Object.defineProperty(exports, "MissingRefError", { enumerable: true, get: function() {
+    Object.defineProperty(exports2, "MissingRefError", { enumerable: true, get: function() {
       return ref_error_1.default;
     } });
   }
 });
 
-// scripts/tdd/human-proxy.cli.ts
-init_esm_shims();
+// scripts/tdd/response-formatter.cli.ts
+init_cjs_shims();
+var import_path3 = require("path");
 
-// scripts/util/cli-entry.ts
-init_esm_shims();
-import { realpathSync } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-function isCliEntry(importMetaUrl) {
-  const invokedRaw = process.argv[1];
-  if (!invokedRaw) return false;
-  let invokedResolved;
-  let moduleResolved;
-  try {
-    invokedResolved = realpathSync(invokedRaw);
-  } catch {
-    return false;
-  }
-  try {
-    moduleResolved = realpathSync(fileURLToPath2(importMetaUrl));
-  } catch {
-    return false;
-  }
-  return invokedResolved === moduleResolved;
-}
-
-// scripts/tdd/human-proxy.ts
-init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync4 } from "fs";
-import { join as join8, dirname as dirname2, basename as basename2 } from "path";
-
-// scripts/tdd/approve-gate.ts
-init_esm_shims();
-import { existsSync as existsSync4, readFileSync as readFileSync4, writeFileSync as writeFileSync4 } from "fs";
-import { join as join4 } from "path";
-
-// scripts/tdd/gate-hash.ts
-init_esm_shims();
-import { createHash } from "crypto";
-function normalizeForHash(content) {
-  let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  normalized = normalized.split("\n").map((line) => line.replace(/[ \t]+$/, "")).join("\n");
-  normalized = normalized.replace(/\n{3,}/g, "\n\n");
-  return normalized;
-}
-function hashArtifact(content) {
-  return createHash("sha256").update(normalizeForHash(content), "utf8").digest("hex");
-}
-
-// scripts/tdd/gates-lock.ts
-init_esm_shims();
-import { closeSync, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2 } from "fs";
-import { join as join2 } from "path";
+// scripts/tdd/response-formatter.ts
+init_cjs_shims();
+var import_node_fs = require("fs");
 
 // scripts/tdd/tdd-paths.ts
-init_esm_shims();
-import * as fs from "fs";
-import { join } from "path";
-var featuresDir = (tdd) => join(tdd, "features");
-var planningDir = (tdd) => join(tdd, "planning");
-var sprintsDir = (tdd) => join(tdd, "sprints");
-var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
-var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
+init_cjs_shims();
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
-var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
-var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
+var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
-  const exact = join(root, featureId);
+  const exact = (0, import_node_path.join)(root, featureId);
   if (fs.existsSync(exact)) return exact;
   const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? join(root, matches[0]) : void 0;
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
 }
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-
-// scripts/tdd/gates-lock.ts
-var GatesLockBusyError = class extends Error {
-  constructor(featureId, heldByPid, retries) {
-    super(
-      `gates.json lock for ${featureId} is held by PID ${heldByPid ?? "unknown"} after ${retries} retries. If the holder has crashed, remove the lock file manually.`
-    );
-    this.featureId = featureId;
-    this.heldByPid = heldByPid;
-    this.retries = retries;
-    this.name = "GatesLockBusyError";
-  }
-  featureId;
-  heldByPid;
-  retries;
-};
-function withGatesLock(featureId, fn, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const maxRetries = opts.maxRetries ?? 5;
-  const initialBackoffMs = opts.initialBackoffMs ?? 20;
-  const sleep = opts.sleep ?? defaultSleep;
-  const lockPath = gatesLockFilePath(tddDir, featureId);
-  let acquired = false;
-  let attempts = 0;
-  while (!acquired && attempts <= maxRetries) {
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
     try {
-      const fd = openSync(lockPath, "wx");
-      writeFileSync2(fd, String(process.pid));
-      closeSync(fd);
-      acquired = true;
-    } catch (err) {
-      if (!isEexist(err)) throw err;
-      attempts += 1;
-      if (attempts > maxRetries) {
-        const heldByPid = readHeldByPid(lockPath);
-        throw new GatesLockBusyError(featureId, heldByPid, maxRetries);
-      }
-      sleep(initialBackoffMs * 2 ** (attempts - 1));
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    try {
-      unlinkSync(lockPath);
-    } catch {
-    }
-  }
-}
-function isEexist(err) {
-  return typeof err === "object" && err !== null && err.code === "EEXIST";
-}
-function readHeldByPid(lockPath) {
-  try {
-    const text = readFileSync2(lockPath, "utf8");
-    const n = Number(text.trim());
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
-}
-function gatesLockFilePath(tddDir, featureId) {
-  const dir = requireFeatureDir(tddDir, featureId);
-  mkdirSync2(dir, { recursive: true });
-  return join2(dir, ".gates.lock");
-}
-function defaultSleep(ms) {
-  const buf = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(buf, 0, 0, ms);
-}
-
-// scripts/tdd/gates.ts
-init_esm_shims();
-import { existsSync as existsSync3, readFileSync as readFileSync3, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3 } from "path";
-var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
-var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
-function defaultGatesState(featureId) {
-  return {
-    feature_id: featureId,
-    schema_version: GATES_SCHEMA_VERSION,
-    gates: {
-      spec: { status: "open", history: [] },
-      plan: { status: "open", history: [] },
-      test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] },
-      deploy: { status: "open", history: [] }
-    }
-  };
-}
-function readGates(featureId, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync3(file)) {
-    return defaultGatesState(featureId);
-  }
-  const raw = readFileSync3(file, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  return validateGatesState(parsed, file);
-}
-function writeGates(state, opts = {}) {
-  if (state.feature_id.length === 0) {
-    throw new Error("writeGates: state.feature_id must not be empty");
-  }
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, state.feature_id);
-  const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
-  const payload = JSON.stringify(state, null, 2) + "\n";
-  writeFileSync3(tempFile, payload, "utf8");
-  try {
-    renameSync(tempFile, file);
-  } catch (err) {
-    try {
-      unlinkSync2(tempFile);
-    } catch {
-    }
-    throw err;
-  }
-}
-function gatesFilePath(tddDir, featureId) {
-  return join3(requireFeatureDir(tddDir, featureId), "gates.json");
-}
-function validateGatesState(parsed, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file} is not an object`);
-  }
-  const obj = parsed;
-  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
-    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
-  }
-  if (typeof obj.schema_version !== "number") {
-    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
-  }
-  if (typeof obj.gates !== "object" || obj.gates === null) {
-    throw new Error(`gates.json at ${file}: missing or invalid gates`);
-  }
-  const gates = obj.gates;
-  const out = {
-    spec: validateGateRecord(gates.spec, "spec", file),
-    plan: validateGateRecord(gates.plan, "plan", file),
-    test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file),
-    // The deploy gate (working-software) was added after the original four.
-    // A gates.json written before it lacks the key, so backfill a default-open
-    // record rather than reject the file (forward-compatible read).
-    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
-  };
-  return {
-    feature_id: obj.feature_id,
-    schema_version: obj.schema_version,
-    gates: out
-  };
-}
-function validateGateRecord(parsed, gateName, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
-  }
-  const obj = parsed;
-  const status = obj.status;
-  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
-    throw new Error(
-      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
-    );
-  }
-  const history = obj.history;
-  if (history !== void 0 && !Array.isArray(history)) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
-  }
-  return {
-    status,
-    approver: typeof obj.approver === "string" ? obj.approver : void 0,
-    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
-    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
-    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
-    history: history ?? []
-  };
-}
-
-// scripts/tdd/approve-gate.ts
-var GateAlreadyClosedError = class extends Error {
-  constructor(gate, currentStatus) {
-    super(
-      `gate ${gate} is not open (current status: ${currentStatus}); withdraw or supersede before re-approving`
-    );
-    this.gate = gate;
-    this.currentStatus = currentStatus;
-    this.name = "GateAlreadyClosedError";
-  }
-  gate;
-  currentStatus;
-};
-function approveGate(args) {
-  if (!args.hitlApproved) {
-    throw new Error("approveGate requires hitlApproved: true (HITL Gate)");
-  }
-  if (args.approver.length === 0) {
-    throw new Error("approveGate: approver must not be empty");
-  }
-  const artifactNames = Object.keys(args.artifactInputs);
-  if (artifactNames.length === 0) {
-    throw new Error(
-      `approveGate: gate ${args.gate} must capture at least one artifact (got empty artifactInputs)`
-    );
-  }
-  const tddDir = args.tddDir ?? "./.tdd";
-  const now = args.now ?? (() => /* @__PURE__ */ new Date());
-  const writeLog = args.writeSelectionLog ?? true;
-  return withGatesLock(
-    args.featureId,
-    () => {
-      const state = readGates(args.featureId, { tddDir });
-      const record = state.gates[args.gate];
-      if (record.status !== "open") {
-        throw new GateAlreadyClosedError(args.gate, record.status);
-      }
-      const capturedHashes = {};
-      for (const name of artifactNames) {
-        capturedHashes[name] = hashArtifact(args.artifactInputs[name]);
-      }
-      const ts = now().toISOString();
-      const updatedState = {
-        ...state,
-        gates: {
-          ...state.gates,
-          [args.gate]: {
-            status: "approved",
-            approver: args.approver,
-            approved_at: ts,
-            artifact_hashes: capturedHashes,
-            history: [
-              ...record.history,
-              {
-                action: "approved",
-                at: ts,
-                approver: args.approver,
-                artifact_hashes: capturedHashes
-              }
-            ]
-          }
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
         }
-      };
-      writeGates(updatedState, { tddDir });
-      if (writeLog) {
-        appendSelectionLog(tddDir, {
-          ts,
-          gate: args.gate,
-          featureId: args.featureId,
-          approver: args.approver,
-          capturedHashes
-        });
       }
-      return { state: updatedState, capturedHashes };
-    },
-    { tddDir }
-  );
-}
-function appendSelectionLog(tddDir, entry) {
-  const logPath = join4(tddDir, "selection-log.md");
-  const hashList = Object.entries(entry.capturedHashes).map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``).join("\n");
-  const lines = [
-    "",
-    `## ${entry.ts} \u2013 Approve ${entry.gate} for ${entry.featureId}`,
-    `- **Approved by:** ${entry.approver}`,
-    `- **Artifact hashes:**`,
-    hashList,
-    ""
-  ];
-  const text = lines.join("\n");
-  if (existsSync4(logPath)) {
-    writeFileSync4(logPath, readFileSync4(logPath, "utf8") + text);
-  } else {
-    writeFileSync4(logPath, text);
+    } catch {
+    }
   }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (!m) continue;
+        const base = m[1];
+        try {
+          const obj = JSON.parse(fs.readFileSync((0, import_node_path.join)(dir, file), "utf8"));
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  return [...ids];
+}
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
+  }
+  return void 0;
 }
 
 // scripts/tdd/artifact-conformance.ts
-init_esm_shims();
-import { join as join6, basename, dirname } from "path";
+init_cjs_shims();
+var import_path2 = require("path");
 
 // scripts/tdd/schema-loader.ts
-init_esm_shims();
+init_cjs_shims();
+var import_fs = require("fs");
+var import_path = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync5 } from "fs";
-import { join as join5 } from "path";
-var SCHEMA_DIR = join5(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse(readFileSync5(join5(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7213,669 +6933,152 @@ function checkTestListMd(content) {
   }
   return violations;
 }
-function canonicalArtifactName(path2) {
-  const base = basename(path2);
-  if (basename(dirname(path2)) === "acs" && base.endsWith(".json")) return "ac.json";
+function canonicalArtifactName(path) {
+  const base = (0, import_path2.basename)(path);
+  if ((0, import_path2.basename)((0, import_path2.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
-// scripts/tdd/agent-log.ts
-init_esm_shims();
-import { appendFileSync, existsSync as existsSync5, readFileSync as readFileSync6 } from "fs";
-import { join as join7 } from "path";
-
-// scripts/tdd/agent-log-events.ts
-init_esm_shims();
-var EVENT_TEMPLATES = {
-  // Orchestration lifecycle (code-emitted)
-  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
-  "phase.start": { template: "{{role}} START {{phase}}" },
-  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
-  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
-  // Gates (code surfaces; HIL / Human Proxy decides)
-  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
-  "gate.approved": { template: "GATE {{gate}} APPROVED" },
-  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
-  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
-  // Intake & planning
-  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
-  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
-  // Artifacts & design (agent-emitted)
-  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
-  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
-  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
-  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
-  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
-  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
-  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
-  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
-  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
-  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
-  // Experiment lifecycle (code-emitted)
-  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
-  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
-  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
-  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
-  // Deploy / verify (code-emitted from the deploy CLI)
-  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
-  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
-  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
-  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
-  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
-  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
-  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
-  // UX adherence
-  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
-  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
-  // Generic (agent-emitted; debug / interim)
-  "reasoning": { template: "{{note}}" },
-  "progress": { template: "{{note}} , {{step}}" }
-};
-var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
-function isKnownEvent(name) {
-  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
-}
-var AgentLogEventError = class extends Error {
-};
-function renderEventMessage(event, slots = {}) {
-  if (!isKnownEvent(event)) {
-    throw new AgentLogEventError(
-      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
-    );
+// scripts/tdd/response-formatter.ts
+var FORMATTED_ROLES = /* @__PURE__ */ new Set([
+  "spec-author",
+  "architect-reviewer",
+  "test-strategist"
+]);
+function needStory(role, story, violations) {
+  if (!story) {
+    violations.push({ artifact: role, problem: `--story is required to validate ${role} output` });
+    return false;
   }
-  const tmpl = EVENT_TEMPLATES[event].template;
-  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
-    const v = slots[name];
-    if (v === void 0 || v === null || v === "") {
-      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
-    }
-    return String(v);
-  });
+  return true;
 }
-
-// scripts/tdd/agent-log.ts
-function logFilePath(tddDir) {
-  return join7(tddDir, "agent-log.jsonl");
-}
-function emitAgentLogEvent(input, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const slots = input.slots ?? {};
-  const renderCtx = {
-    role: input.role,
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots
-  };
-  const message = renderEventMessage(input.event, renderCtx);
-  const metadata = {
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots,
-    ...input.metadata ?? {}
-  };
-  const event = {
-    timestamp: input.timestamp ?? now().toISOString(),
-    level: input.level,
-    role: input.role,
-    event: input.event,
-    message,
-    ...Object.keys(metadata).length > 0 ? { metadata } : {}
-  };
-  const validate = getValidator("agent-log-event.schema.json");
-  if (!validate(event)) {
-    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+function checkSpecAuthor(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("spec-author", story, v)) return;
+  const dir = acsDir(tddDir, featureId, story);
+  const ids = storyAcIds(tddDir, featureId, story);
+  if (ids.length === 0) {
+    v.push({ artifact: `stories/${story}/acs`, problem: "no acceptance criteria written (expected >=1 AC<n>.json)" });
+    return;
   }
-  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
-`, "utf8");
-  return event;
-}
-
-// scripts/tdd/human-proxy.ts
-function logHitlDecision(tddDir, featureId, approver, decision) {
-  try {
-    if (decision.kind === "approved") {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "info",
-          event: "gate.approved",
-          feature_id: featureId,
-          slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
-        },
-        { tddDir }
-      );
-    } else {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "warn",
-          event: "gate.rejected",
-          feature_id: featureId,
-          slots: { gate: decision.gate, reason: decision.reason, approver, validated: false }
-        },
-        { tddDir }
-      );
-    }
-  } catch {
-  }
-}
-var HUMAN_PROXY = "human-proxy";
-function featureDir2(tddDir, featureId) {
-  return featureResolved(tddDir, featureId);
-}
-function conformanceReason(inputs) {
-  const problems = [];
-  for (const [name, content] of Object.entries(inputs)) {
-    const result = checkArtifactConformance(name, content);
-    if (!result.ok) problems.push(...result.violations);
-  }
-  return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
-}
-function acsConformanceReason(fdir) {
-  const stories = join8(fdir, "stories");
-  if (!existsSync6(stories)) return null;
-  const problems = [];
-  for (const s of readdirSync4(stories)) {
-    const acsDir = join8(stories, s, "acs");
-    if (!existsSync6(acsDir)) continue;
-    for (const f of readdirSync4(acsDir)) {
-      if (!f.endsWith(".json")) continue;
-      const p = join8(acsDir, f);
-      let content;
-      try {
-        content = readFileSync7(p, "utf8");
-      } catch {
-        continue;
-      }
-      const r = checkArtifactConformance(canonicalArtifactName(p), content);
-      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
-    }
-  }
-  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
-}
-function resolveArtifactInputs(gate, fdir, promoteRef) {
-  const readIfPresent = (name) => {
-    const p = join8(fdir, name);
+  if (!(0, import_node_fs.existsSync)(dir)) return;
+  for (const f of (0, import_node_fs.readdirSync)(dir)) {
+    if (!f.endsWith(".json")) continue;
+    let content;
     try {
-      return existsSync6(p) ? readFileSync7(p, "utf8") : void 0;
+      content = (0, import_node_fs.readFileSync)(`${dir}/${f}`, "utf8");
     } catch {
-      return void 0;
-    }
-  };
-  const withConformance = (inputs) => {
-    const reason = conformanceReason(inputs);
-    return reason === null ? { inputs } : { reason };
-  };
-  switch (gate) {
-    case "spec": {
-      const featureJson = readIfPresent("feature-spec.json");
-      if (featureJson === void 0) {
-        return { reason: "feature-spec.json not found (spec phase not complete)" };
-      }
-      const featureMd = readIfPresent("feature-spec.md");
-      if (featureMd === void 0) {
-        return { reason: "feature-spec.md not found (structured draft spec incomplete)" };
-      }
-      const inputs = {
-        "feature-spec.json": featureJson,
-        "feature-spec.md": featureMd
-      };
-      const conf = withConformance(inputs);
-      if ("reason" in conf) return conf;
-      const acReason = acsConformanceReason(fdir);
-      return acReason === null ? conf : { reason: acReason };
-    }
-    case "plan": {
-      const planJson = readIfPresent("plan.json");
-      if (planJson === void 0) {
-        return { reason: "plan.json not found (plan phase not produced)" };
-      }
-      return withConformance({ "plan.json": planJson });
-    }
-    case "test_list": {
-      const tlJson = readIfPresent("test-list.json");
-      const tlMd = readIfPresent("test-list.md");
-      if (tlJson === void 0 && tlMd === void 0) {
-        return { reason: "test-list.json/md not found (test-strategist phase not complete)" };
-      }
-      const inputs = {};
-      if (tlJson !== void 0) inputs["test-list.json"] = tlJson;
-      if (tlMd !== void 0) inputs["test-list.md"] = tlMd;
-      return withConformance(inputs);
-    }
-    case "promote": {
-      if (promoteRef === void 0 || promoteRef.length === 0) {
-        return { reason: "no promote_ref supplied (nothing to promote)" };
-      }
-      return withConformance({ promote_ref: promoteRef });
-    }
-    case "deploy": {
-      const evidence = readIfPresent("deploy-evidence.json");
-      if (evidence === void 0) {
-        return { reason: "deploy-evidence.json not found (feature not deployed + verified)" };
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(evidence);
-      } catch {
-        return { reason: "deploy-evidence.json is not valid JSON" };
-      }
-      if (parsed.reachable !== true) {
-        return { reason: "deploy-evidence records reachable=false (app not reachable on the target)" };
-      }
-      if (parsed.verify?.passed !== true) {
-        return { reason: "deploy-evidence records verify.passed=false (feature-verify did not pass against the running app)" };
-      }
-      return withConformance({ "deploy-evidence.json": evidence });
-    }
-  }
-}
-function drainGatesAsHumanProxy(args) {
-  const tddDir = args.tddDir ?? "./.tdd";
-  const approver = args.approver ?? HUMAN_PROXY;
-  const fdir = featureDir2(tddDir, args.featureId);
-  let state = readGates(args.featureId, { tddDir });
-  const approved = [];
-  const skipped = [];
-  const gates = args.onlyGate !== void 0 ? [args.onlyGate] : [...GATE_NAMES];
-  for (const gate of gates) {
-    const record = state.gates[gate];
-    if (record.status !== "open") {
-      skipped.push({ gate, reason: `status=${record.status}` });
       continue;
     }
-    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
-    if ("reason" in resolved) {
-      skipped.push({ gate, reason: resolved.reason });
-      logHitlDecision(tddDir, args.featureId, approver, {
-        kind: "refused",
-        gate,
-        reason: resolved.reason
-      });
-      continue;
+    const r = checkArtifactConformance(canonicalArtifactName(`${dir}/${f}`), content);
+    if (!r.ok) v.push({ artifact: `stories/${story}/acs/${f}`, problem: r.violations.join("; ") });
+  }
+}
+function checkArchitect(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("architect-reviewer", story, v)) return;
+  const ids = storyAcIds(tddDir, featureId, story);
+  if (ids.length === 0) {
+    v.push({ artifact: `stories/${story}/acs`, problem: "no ACs to annotate (spec-author output missing)" });
+    return;
+  }
+  for (const ac of ids) {
+    if (readAcLayer(tddDir, featureId, ac) === void 0) {
+      v.push({ artifact: `stories/${story}/acs/${ac}.json`, problem: "missing/invalid `layer` (expected API | E2E | Infra)" });
     }
-    const result = approveGate({
-      featureId: args.featureId,
-      gate,
-      approver,
-      hitlApproved: true,
-      artifactInputs: resolved.inputs,
-      tddDir
-    });
-    approved.push(gate);
-    state = result.state;
-    logHitlDecision(tddDir, args.featureId, approver, {
-      kind: "approved",
-      gate,
-      artifacts: Object.keys(resolved.inputs)
-    });
   }
-  return { approved, skipped, finalState: state };
 }
-function supplyArtifact(args) {
-  const approver = args.approver ?? HUMAN_PROXY;
-  const artifact = args.artifact ?? basename2(args.to);
-  const tddDir = args.tddDir ?? "./.tdd";
-  const refuse = (reason) => {
-    try {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "warn",
-          event: "intake.refused",
-          feature_id: args.featureId,
-          slots: { artifact, to: args.to, reason, approver, validated: false }
-        },
-        { tddDir }
-      );
-    } catch {
-    }
-    return { ok: false, artifact, to: args.to, reason };
-  };
-  if (!existsSync6(args.from)) {
-    return refuse(`recorded source not found: ${args.from}`);
+function checkTestStrategist(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("test-strategist", story, v)) return;
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!(0, import_node_fs.existsSync)(file)) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "per-story test list not written" });
+    return;
   }
-  const content = readFileSync7(args.from, "utf8");
-  const conformance = checkArtifactConformance(artifact, content);
-  if (!conformance.ok) {
-    return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
-  }
-  mkdirSync3(dirname2(args.to), { recursive: true });
-  writeFileSync5(args.to, content);
-  try {
-    emitAgentLogEvent(
-      {
-        role: "product-owner",
-        level: "info",
-        event: "intake.supplied",
-        feature_id: args.featureId,
-        slots: { artifact, from: args.from, to: args.to, approver, validated: true }
-      },
-      { tddDir }
-    );
-  } catch {
-  }
-  return { ok: true, artifact, to: args.to };
-}
-function recordedRequestPairs() {
-  const raw = process.env.LAKEBASE_TDD_SPRINT_REQUESTS ?? "";
-  return raw.split("\n").map((line) => line.trim()).filter(Boolean).flatMap((line) => {
-    const [featureId, ...rest] = line.split("	");
-    const from = rest.join("	").trim();
-    return featureId && from ? [{ featureId: featureId.trim(), from }] : [];
-  });
-}
-function supplyRequests(args = {}) {
-  const tddDir = args.tddDir ?? "./.tdd";
-  const pairs = args.pairs ?? recordedRequestPairs();
-  const supplied = [];
-  const skipped = [];
-  for (const { featureId, from } of pairs) {
-    const res = supplyArtifact({
-      from,
-      to: featureRequestMd(tddDir, featureId),
-      artifact: "feature-request.md",
-      tddDir,
-      featureId,
-      approver: args.approver
-    });
-    if (res.ok) supplied.push(featureId);
-    else skipped.push({ featureId, reason: res.reason ?? "unknown" });
-  }
-  return { supplied, skipped };
-}
-
-// scripts/tdd/sprint-gates.ts
-init_esm_shims();
-import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync8, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "fs";
-var SPRINT_GATES_SCHEMA_VERSION = 1;
-var PLAN_GATE_ARTIFACT = "feature-proposals.md";
-function defaultSprintGatesState(sprint) {
-  return {
-    sprint,
-    schema_version: SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: "open", history: [] } }
-  };
-}
-function sprintGatesFile(tddDir, sprint) {
-  return sprintGatesJson(tddDir, sprint);
-}
-function readSprintGates(sprint, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync7(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync8(file, "utf8"));
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
+    parsed = JSON.parse((0, import_node_fs.readFileSync)(file, "utf8"));
+  } catch (e) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` });
+    return;
   }
-  const plan = parsed.gates?.plan ?? { status: "open", history: [] };
-  return {
-    sprint,
-    schema_version: parsed.schema_version ?? SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
-  };
-}
-function writeSprintGates(state, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  mkdirSync4(sprintDir(tddDir, state.sprint), { recursive: true });
-  const file = sprintGatesJson(tddDir, state.sprint);
-  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync6(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
-  try {
-    renameSync2(tmp, file);
-  } catch (err) {
-    try {
-      unlinkSync3(tmp);
-    } catch {
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  if (items.length === 0) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "empty `items` (expected >=1 test mapped to the story's ACs)" });
+    return;
+  }
+  const acIds = new Set(storyAcIds(tddDir, featureId, story));
+  items.forEach((item, i) => {
+    const acId = item.ac_id;
+    if (typeof acId !== "string" || acId.length === 0) {
+      v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: `items[${i}] (${String(item.id)}) has null/empty ac_id` });
+    } else if (acIds.size > 0 && !acIds.has(acId)) {
+      v.push({
+        artifact: `stories/${story}/test-list-per-story.json`,
+        problem: `items[${i}] ac_id "${acId}" is not one of the story's ACs [${[...acIds].join(", ")}]`
+      });
     }
-    throw err;
-  }
+  });
 }
-function approveSprintPlanGate(args) {
-  if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
-  if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
-  const tddDir = args.tddDir ?? "./.tdd";
-  const file = featureProposalsMd(tddDir);
-  if (!existsSync7(file)) {
-    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
-  }
-  const content = readFileSync8(file, "utf8");
-  const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
-  if (!conf.ok) {
-    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };
-  }
-  const state = readSprintGates(args.sprint, { tddDir });
-  if (state.gates.plan.status !== "open") {
-    return { ok: true, state, alreadyApproved: true };
-  }
-  const ts = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
-  const hashes = { [PLAN_GATE_ARTIFACT]: hashArtifact(content) };
-  const updated = {
-    ...state,
-    gates: {
-      plan: {
-        status: "approved",
-        approver: args.approver,
-        approved_at: ts,
-        artifact_hashes: hashes,
-        history: [
-          ...state.gates.plan.history,
-          { action: "approved", at: ts, approver: args.approver, artifact_hashes: hashes }
-        ]
-      }
-    }
-  };
-  writeSprintGates(updated, { tddDir });
-  return { ok: true, state: updated, alreadyApproved: false };
+var CHECKERS = {
+  "spec-author": checkSpecAuthor,
+  "architect-reviewer": checkArchitect,
+  "test-strategist": checkTestStrategist
+};
+function formatRoleResponse(args) {
+  const violations = [];
+  const checker = CHECKERS[args.role];
+  if (checker) checker(args, violations);
+  return { role: args.role, ...args.story ? { story: args.story } : {}, ok: violations.length === 0, violations };
 }
 
-// scripts/tdd/human-proxy.cli.ts
-function runSupplyCli(argv) {
-  let from;
-  let to;
-  let artifact;
-  let tddDir;
-  let feature;
-  for (let i = 0; i < argv.length; i++) {
-    switch (argv[i]) {
-      case "--from":
-        from = argv[++i];
-        break;
-      case "--to":
-        to = argv[++i];
-        break;
-      case "--artifact":
-        artifact = argv[++i];
-        break;
-      case "--tdd-dir":
-        tddDir = argv[++i];
-        break;
-      case "--feature":
-        feature = argv[++i];
-        break;
-    }
-  }
-  if (!from || !to) {
-    process.stderr.write("Error: supply requires --from <recorded> and --to <path>.\n");
-    return 2;
-  }
-  const result = supplyArtifact({ from, to, artifact, tddDir, featureId: feature });
-  if (result.ok) {
-    process.stdout.write(`human-proxy: supplied ${result.artifact} -> ${result.to}
-`);
-    return 0;
-  }
-  process.stderr.write(`human-proxy: refused to supply ${result.artifact}: ${result.reason}
-`);
-  return 4;
-}
-function runSupplyRequestsCli(argv) {
-  let tddDir;
-  let approver;
-  for (let i = 0; i < argv.length; i++) {
-    switch (argv[i]) {
-      case "--tdd-dir":
-        tddDir = argv[++i];
-        break;
-      case "--approver":
-        approver = argv[++i];
-        break;
-    }
-  }
-  const result = supplyRequests({ tddDir, approver });
-  if (result.supplied.length > 0) {
-    process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}
-`);
-  } else {
-    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_TDD_SPRINT_REQUESTS unset/empty)
-`);
-  }
-  if (result.skipped.length > 0) {
-    process.stderr.write(
-      `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.featureId} (${s.reason})`).join(", ")}
-`
-    );
-  }
-  return 0;
-}
-function parseArgs(argv) {
+// scripts/tdd/response-formatter.cli.ts
+function parse(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    switch (a) {
+    switch (argv[i]) {
+      case "--role":
+        out.role = argv[++i];
+        break;
       case "--feature":
         out.feature = argv[++i];
         break;
-      case "--sprint":
-        out.sprint = argv[++i];
-        break;
-      case "--gate":
-        out.gate = argv[++i];
+      case "--story":
+        out.story = argv[++i];
         break;
       case "--tdd-dir":
         out.tddDir = argv[++i];
-        break;
-      case "--approver":
-        out.approver = argv[++i];
-        break;
-      case "--promote-ref":
-        out.promoteRef = argv[++i];
-        break;
-      case "--json":
-        out.json = true;
-        break;
-      case "--pretty":
-        out.pretty = true;
-        break;
-      case "--help":
-      case "-h":
-        out.help = true;
         break;
     }
   }
   return out;
 }
-var HELP = `lakebase-tdd-human-proxy
-
-Human Proxy for automated smoke / headless test runs. Calls
-approveGate on every open gate for a feature with hitlApproved=true,
-default approver "human-proxy". NOT for production use.
-
-Usage:
-  lakebase-tdd-human-proxy --feature <id> [flags]
-
-Flags:
-  --feature <id>          Feature id (required, e.g. F1-initial-domain)
-  --gate <name>           Approve only one gate (spec | plan | test_list | promote)
-  --tdd-dir <path>        .tdd/ root (default: ./.tdd)
-  --approver <name>       Approver identity (default: human-proxy)
-  --promote-ref <str>     promote gate ref string (promote gate is skipped if omitted)
-  --json                  Machine-readable JSON output
-  --pretty                Pretty-print JSON
-  -h, --help              Show this help
-`;
-function runHumanProxyCli(argv) {
-  if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
-  if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
-  if (argv[0] === "approve") argv = argv.slice(1);
-  const args = parseArgs(argv);
-  if (args.help) {
-    process.stdout.write(`${HELP}
-`);
-    return 0;
-  }
-  if (args.sprint) {
-    const res = approveSprintPlanGate({
-      sprint: args.sprint,
-      approver: args.approver ?? "human-proxy",
-      hitlApproved: true,
-      tddDir: args.tddDir
-    });
-    if (res.ok) {
-      process.stdout.write(
-        `human-proxy: sprint plan gate for ${args.sprint} ${res.alreadyApproved ? "already approved" : "approved"}
+function usage(msg) {
+  process.stderr.write(
+    `${msg}
+Usage: lakebase-tdd-response-formatter --role <role> --feature <F> [--story <S>] [--tdd-dir <D>]
+Type-checked roles: ${[...FORMATTED_ROLES].join(", ")} (others pass , no deterministic contract yet).
 `
-      );
-    } else {
-      process.stdout.write(`human-proxy: skipped sprint plan gate (${res.reason})
-`);
-    }
-    return 0;
-  }
-  if (!args.feature) {
-    process.stderr.write(`Error: --feature or --sprint is required.
-
-${HELP}
-`);
-    return 2;
-  }
-  try {
-    const result = drainGatesAsHumanProxy({
-      featureId: args.feature,
-      tddDir: args.tddDir,
-      approver: args.approver,
-      onlyGate: args.gate,
-      promoteRef: args.promoteRef
-    });
-    if (args.json) {
-      process.stdout.write(
-        `${JSON.stringify(
-          { ok: true, ...result },
-          null,
-          args.pretty ? 2 : 0
-        )}
-`
-      );
-    } else {
-      process.stdout.write(
-        `human-proxy: approved ${result.approved.length} gate(s)${result.approved.length ? ": " + result.approved.join(", ") : ""}
-`
-      );
-      if (result.skipped.length > 0) {
-        process.stdout.write(
-          `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.gate} (${s.reason})`).join(", ")}
-`
-        );
-      }
-    }
-    return 0;
-  } catch (e) {
-    const err = e;
-    process.stderr.write(`human-proxy: ${err.message}
-`);
-    return 3;
-  }
+  );
+  return 2;
 }
-if (isCliEntry(import.meta.url)) {
-  process.exit(runHumanProxyCli(process.argv.slice(2)));
+function main() {
+  const a = parse(process.argv.slice(2));
+  if (!a.role) return usage("Error: --role is required.");
+  if (!a.feature) return usage("Error: --feature is required.");
+  const tddDir = a.tddDir ?? (0, import_path3.join)(process.cwd(), ".tdd");
+  const result = formatRoleResponse({ role: a.role, tddDir, featureId: a.feature, story: a.story });
+  if (result.ok) {
+    process.stdout.write(`response-formatter: ${a.role}${a.story ? ` (${a.story})` : ""} output conforms.
+`);
+    return 0;
+  }
+  process.stderr.write(
+    `response-formatter: ${a.role}${a.story ? ` (${a.story})` : ""} output does NOT conform , fix it before returning:
+` + result.violations.map((v) => `  - ${v.artifact}: ${v.problem}`).join("\n") + "\n"
+  );
+  return 1;
 }
-export {
-  runHumanProxyCli
-};
-//# sourceMappingURL=human-proxy.cli.js.map
+process.exit(main());
+//# sourceMappingURL=response-formatter.cli.cjs.map

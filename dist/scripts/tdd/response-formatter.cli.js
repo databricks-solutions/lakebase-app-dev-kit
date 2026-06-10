@@ -3670,21 +3670,21 @@ var require_fast_uri = __commonJS({
         normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
-        parse(serialize(uri, options), options);
+        parse2(serialize(uri, options), options);
       }
       return uri;
     }
     function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
+      const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
     function resolveComponent(base, relative, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
-        base = parse(serialize(base, options), options);
-        relative = parse(serialize(relative, options), options);
+        base = parse2(serialize(base, options), options);
+        relative = parse2(serialize(relative, options), options);
       }
       options = options || {};
       if (!options.tolerant && relative.scheme) {
@@ -3907,7 +3907,7 @@ var require_fast_uri = __commonJS({
       }
       return { parsed, malformedAuthorityOrPort };
     }
-    function parse(uri, opts) {
+    function parse2(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
     }
     function normalizeString(uri, opts) {
@@ -3936,7 +3936,7 @@ var require_fast_uri = __commonJS({
       resolveComponent,
       equal,
       serialize,
-      parse
+      parse: parse2
     };
     module.exports = fastUri;
     module.exports.default = fastUri;
@@ -6646,72 +6646,36 @@ var require_ajv = __commonJS({
   }
 });
 
-// scripts/tdd/human-proxy.cli.ts
+// scripts/tdd/response-formatter.cli.ts
 init_esm_shims();
-
-// scripts/util/cli-entry.ts
-init_esm_shims();
-import { realpathSync } from "fs";
-import { fileURLToPath as fileURLToPath2 } from "url";
-function isCliEntry(importMetaUrl) {
-  const invokedRaw = process.argv[1];
-  if (!invokedRaw) return false;
-  let invokedResolved;
-  let moduleResolved;
-  try {
-    invokedResolved = realpathSync(invokedRaw);
-  } catch {
-    return false;
-  }
-  try {
-    moduleResolved = realpathSync(fileURLToPath2(importMetaUrl));
-  } catch {
-    return false;
-  }
-  return invokedResolved === moduleResolved;
-}
-
-// scripts/tdd/human-proxy.ts
-init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync4 } from "fs";
-import { join as join8, dirname as dirname2, basename as basename2 } from "path";
-
-// scripts/tdd/approve-gate.ts
-init_esm_shims();
-import { existsSync as existsSync4, readFileSync as readFileSync4, writeFileSync as writeFileSync4 } from "fs";
 import { join as join4 } from "path";
 
-// scripts/tdd/gate-hash.ts
+// scripts/tdd/response-formatter.ts
 init_esm_shims();
-import { createHash } from "crypto";
-function normalizeForHash(content) {
-  let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  normalized = normalized.split("\n").map((line) => line.replace(/[ \t]+$/, "")).join("\n");
-  normalized = normalized.replace(/\n{3,}/g, "\n\n");
-  return normalized;
-}
-function hashArtifact(content) {
-  return createHash("sha256").update(normalizeForHash(content), "utf8").digest("hex");
-}
-
-// scripts/tdd/gates-lock.ts
-init_esm_shims();
-import { closeSync, mkdirSync as mkdirSync2, openSync, readFileSync as readFileSync2, unlinkSync, writeFileSync as writeFileSync2 } from "fs";
-import { join as join2 } from "path";
+import { existsSync as existsSync2, readFileSync as readFileSync3, readdirSync as readdirSync2 } from "fs";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
 import * as fs from "fs";
 import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
-var planningDir = (tdd) => join(tdd, "planning");
-var sprintsDir = (tdd) => join(tdd, "sprints");
-var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
-var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
-var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
+var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
+var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -6720,307 +6684,68 @@ function findFeatureDir(tdd, featureId) {
   const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
   return matches.length === 1 ? join(root, matches[0]) : void 0;
 }
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-
-// scripts/tdd/gates-lock.ts
-var GatesLockBusyError = class extends Error {
-  constructor(featureId, heldByPid, retries) {
-    super(
-      `gates.json lock for ${featureId} is held by PID ${heldByPid ?? "unknown"} after ${retries} retries. If the holder has crashed, remove the lock file manually.`
-    );
-    this.featureId = featureId;
-    this.heldByPid = heldByPid;
-    this.retries = retries;
-    this.name = "GatesLockBusyError";
-  }
-  featureId;
-  heldByPid;
-  retries;
-};
-function withGatesLock(featureId, fn, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const maxRetries = opts.maxRetries ?? 5;
-  const initialBackoffMs = opts.initialBackoffMs ?? 20;
-  const sleep = opts.sleep ?? defaultSleep;
-  const lockPath = gatesLockFilePath(tddDir, featureId);
-  let acquired = false;
-  let attempts = 0;
-  while (!acquired && attempts <= maxRetries) {
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
     try {
-      const fd = openSync(lockPath, "wx");
-      writeFileSync2(fd, String(process.pid));
-      closeSync(fd);
-      acquired = true;
-    } catch (err) {
-      if (!isEexist(err)) throw err;
-      attempts += 1;
-      if (attempts > maxRetries) {
-        const heldByPid = readHeldByPid(lockPath);
-        throw new GatesLockBusyError(featureId, heldByPid, maxRetries);
-      }
-      sleep(initialBackoffMs * 2 ** (attempts - 1));
-    }
-  }
-  try {
-    return fn();
-  } finally {
-    try {
-      unlinkSync(lockPath);
-    } catch {
-    }
-  }
-}
-function isEexist(err) {
-  return typeof err === "object" && err !== null && err.code === "EEXIST";
-}
-function readHeldByPid(lockPath) {
-  try {
-    const text = readFileSync2(lockPath, "utf8");
-    const n = Number(text.trim());
-    return Number.isFinite(n) && n > 0 ? n : null;
-  } catch {
-    return null;
-  }
-}
-function gatesLockFilePath(tddDir, featureId) {
-  const dir = requireFeatureDir(tddDir, featureId);
-  mkdirSync2(dir, { recursive: true });
-  return join2(dir, ".gates.lock");
-}
-function defaultSleep(ms) {
-  const buf = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(buf, 0, 0, ms);
-}
-
-// scripts/tdd/gates.ts
-init_esm_shims();
-import { existsSync as existsSync3, readFileSync as readFileSync3, renameSync, unlinkSync as unlinkSync2, writeFileSync as writeFileSync3 } from "fs";
-import { join as join3 } from "path";
-var GATES_SCHEMA_VERSION = 1;
-var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
-var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
-function defaultGatesState(featureId) {
-  return {
-    feature_id: featureId,
-    schema_version: GATES_SCHEMA_VERSION,
-    gates: {
-      spec: { status: "open", history: [] },
-      plan: { status: "open", history: [] },
-      test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] },
-      deploy: { status: "open", history: [] }
-    }
-  };
-}
-function readGates(featureId, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync3(file)) {
-    return defaultGatesState(featureId);
-  }
-  const raw = readFileSync3(file, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  return validateGatesState(parsed, file);
-}
-function writeGates(state, opts = {}) {
-  if (state.feature_id.length === 0) {
-    throw new Error("writeGates: state.feature_id must not be empty");
-  }
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, state.feature_id);
-  const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
-  const payload = JSON.stringify(state, null, 2) + "\n";
-  writeFileSync3(tempFile, payload, "utf8");
-  try {
-    renameSync(tempFile, file);
-  } catch (err) {
-    try {
-      unlinkSync2(tempFile);
-    } catch {
-    }
-    throw err;
-  }
-}
-function gatesFilePath(tddDir, featureId) {
-  return join3(requireFeatureDir(tddDir, featureId), "gates.json");
-}
-function validateGatesState(parsed, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file} is not an object`);
-  }
-  const obj = parsed;
-  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
-    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
-  }
-  if (typeof obj.schema_version !== "number") {
-    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
-  }
-  if (typeof obj.gates !== "object" || obj.gates === null) {
-    throw new Error(`gates.json at ${file}: missing or invalid gates`);
-  }
-  const gates = obj.gates;
-  const out = {
-    spec: validateGateRecord(gates.spec, "spec", file),
-    plan: validateGateRecord(gates.plan, "plan", file),
-    test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file),
-    // The deploy gate (working-software) was added after the original four.
-    // A gates.json written before it lacks the key, so backfill a default-open
-    // record rather than reject the file (forward-compatible read).
-    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
-  };
-  return {
-    feature_id: obj.feature_id,
-    schema_version: obj.schema_version,
-    gates: out
-  };
-}
-function validateGateRecord(parsed, gateName, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
-  }
-  const obj = parsed;
-  const status = obj.status;
-  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
-    throw new Error(
-      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
-    );
-  }
-  const history = obj.history;
-  if (history !== void 0 && !Array.isArray(history)) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
-  }
-  return {
-    status,
-    approver: typeof obj.approver === "string" ? obj.approver : void 0,
-    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
-    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
-    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
-    history: history ?? []
-  };
-}
-
-// scripts/tdd/approve-gate.ts
-var GateAlreadyClosedError = class extends Error {
-  constructor(gate, currentStatus) {
-    super(
-      `gate ${gate} is not open (current status: ${currentStatus}); withdraw or supersede before re-approving`
-    );
-    this.gate = gate;
-    this.currentStatus = currentStatus;
-    this.name = "GateAlreadyClosedError";
-  }
-  gate;
-  currentStatus;
-};
-function approveGate(args) {
-  if (!args.hitlApproved) {
-    throw new Error("approveGate requires hitlApproved: true (HITL Gate)");
-  }
-  if (args.approver.length === 0) {
-    throw new Error("approveGate: approver must not be empty");
-  }
-  const artifactNames = Object.keys(args.artifactInputs);
-  if (artifactNames.length === 0) {
-    throw new Error(
-      `approveGate: gate ${args.gate} must capture at least one artifact (got empty artifactInputs)`
-    );
-  }
-  const tddDir = args.tddDir ?? "./.tdd";
-  const now = args.now ?? (() => /* @__PURE__ */ new Date());
-  const writeLog = args.writeSelectionLog ?? true;
-  return withGatesLock(
-    args.featureId,
-    () => {
-      const state = readGates(args.featureId, { tddDir });
-      const record = state.gates[args.gate];
-      if (record.status !== "open") {
-        throw new GateAlreadyClosedError(args.gate, record.status);
-      }
-      const capturedHashes = {};
-      for (const name of artifactNames) {
-        capturedHashes[name] = hashArtifact(args.artifactInputs[name]);
-      }
-      const ts = now().toISOString();
-      const updatedState = {
-        ...state,
-        gates: {
-          ...state.gates,
-          [args.gate]: {
-            status: "approved",
-            approver: args.approver,
-            approved_at: ts,
-            artifact_hashes: capturedHashes,
-            history: [
-              ...record.history,
-              {
-                action: "approved",
-                at: ts,
-                approver: args.approver,
-                artifact_hashes: capturedHashes
-              }
-            ]
-          }
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
         }
-      };
-      writeGates(updatedState, { tddDir });
-      if (writeLog) {
-        appendSelectionLog(tddDir, {
-          ts,
-          gate: args.gate,
-          featureId: args.featureId,
-          approver: args.approver,
-          capturedHashes
-        });
       }
-      return { state: updatedState, capturedHashes };
-    },
-    { tddDir }
-  );
-}
-function appendSelectionLog(tddDir, entry) {
-  const logPath = join4(tddDir, "selection-log.md");
-  const hashList = Object.entries(entry.capturedHashes).map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``).join("\n");
-  const lines = [
-    "",
-    `## ${entry.ts} \u2013 Approve ${entry.gate} for ${entry.featureId}`,
-    `- **Approved by:** ${entry.approver}`,
-    `- **Artifact hashes:**`,
-    hashList,
-    ""
-  ];
-  const text = lines.join("\n");
-  if (existsSync4(logPath)) {
-    writeFileSync4(logPath, readFileSync4(logPath, "utf8") + text);
-  } else {
-    writeFileSync4(logPath, text);
+    } catch {
+    }
   }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (!m) continue;
+        const base = m[1];
+        try {
+          const obj = JSON.parse(fs.readFileSync(join(dir, file), "utf8"));
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  return [...ids];
+}
+function readAcLayer(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
+  }
+  return void 0;
 }
 
 // scripts/tdd/artifact-conformance.ts
 init_esm_shims();
-import { join as join6, basename, dirname } from "path";
+import { join as join3, basename, dirname } from "path";
 
 // scripts/tdd/schema-loader.ts
 init_esm_shims();
 var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync5 } from "fs";
-import { join as join5 } from "path";
-var SCHEMA_DIR = join5(__dirname, "schemas");
+import { readFileSync as readFileSync2 } from "fs";
+import { join as join2 } from "path";
+var SCHEMA_DIR = join2(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 var validatorCache = /* @__PURE__ */ new Map();
 function loadSchema(name) {
-  return JSON.parse(readFileSync5(join5(SCHEMA_DIR, name), "utf8"));
+  return JSON.parse(readFileSync2(join2(SCHEMA_DIR, name), "utf8"));
 }
 function getValidator(name) {
   const cached = validatorCache.get(name);
@@ -7219,663 +6944,146 @@ function canonicalArtifactName(path2) {
   return base;
 }
 
-// scripts/tdd/agent-log.ts
-init_esm_shims();
-import { appendFileSync, existsSync as existsSync5, readFileSync as readFileSync6 } from "fs";
-import { join as join7 } from "path";
-
-// scripts/tdd/agent-log-events.ts
-init_esm_shims();
-var EVENT_TEMPLATES = {
-  // Orchestration lifecycle (code-emitted)
-  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
-  "phase.start": { template: "{{role}} START {{phase}}" },
-  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
-  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
-  // Gates (code surfaces; HIL / Human Proxy decides)
-  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
-  "gate.approved": { template: "GATE {{gate}} APPROVED" },
-  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
-  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
-  // Intake & planning
-  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
-  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
-  // Artifacts & design (agent-emitted)
-  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
-  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
-  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
-  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
-  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
-  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
-  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
-  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
-  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
-  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
-  // Experiment lifecycle (code-emitted)
-  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
-  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
-  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
-  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
-  // Deploy / verify (code-emitted from the deploy CLI)
-  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
-  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
-  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
-  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
-  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
-  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
-  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
-  // UX adherence
-  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
-  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
-  // Generic (agent-emitted; debug / interim)
-  "reasoning": { template: "{{note}}" },
-  "progress": { template: "{{note}} , {{step}}" }
-};
-var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
-function isKnownEvent(name) {
-  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
-}
-var AgentLogEventError = class extends Error {
-};
-function renderEventMessage(event, slots = {}) {
-  if (!isKnownEvent(event)) {
-    throw new AgentLogEventError(
-      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
-    );
+// scripts/tdd/response-formatter.ts
+var FORMATTED_ROLES = /* @__PURE__ */ new Set([
+  "spec-author",
+  "architect-reviewer",
+  "test-strategist"
+]);
+function needStory(role, story, violations) {
+  if (!story) {
+    violations.push({ artifact: role, problem: `--story is required to validate ${role} output` });
+    return false;
   }
-  const tmpl = EVENT_TEMPLATES[event].template;
-  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
-    const v = slots[name];
-    if (v === void 0 || v === null || v === "") {
-      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
-    }
-    return String(v);
-  });
+  return true;
 }
-
-// scripts/tdd/agent-log.ts
-function logFilePath(tddDir) {
-  return join7(tddDir, "agent-log.jsonl");
-}
-function emitAgentLogEvent(input, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const slots = input.slots ?? {};
-  const renderCtx = {
-    role: input.role,
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots
-  };
-  const message = renderEventMessage(input.event, renderCtx);
-  const metadata = {
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots,
-    ...input.metadata ?? {}
-  };
-  const event = {
-    timestamp: input.timestamp ?? now().toISOString(),
-    level: input.level,
-    role: input.role,
-    event: input.event,
-    message,
-    ...Object.keys(metadata).length > 0 ? { metadata } : {}
-  };
-  const validate = getValidator("agent-log-event.schema.json");
-  if (!validate(event)) {
-    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+function checkSpecAuthor(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("spec-author", story, v)) return;
+  const dir = acsDir(tddDir, featureId, story);
+  const ids = storyAcIds(tddDir, featureId, story);
+  if (ids.length === 0) {
+    v.push({ artifact: `stories/${story}/acs`, problem: "no acceptance criteria written (expected >=1 AC<n>.json)" });
+    return;
   }
-  appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}
-`, "utf8");
-  return event;
-}
-
-// scripts/tdd/human-proxy.ts
-function logHitlDecision(tddDir, featureId, approver, decision) {
-  try {
-    if (decision.kind === "approved") {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "info",
-          event: "gate.approved",
-          feature_id: featureId,
-          slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
-        },
-        { tddDir }
-      );
-    } else {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "warn",
-          event: "gate.rejected",
-          feature_id: featureId,
-          slots: { gate: decision.gate, reason: decision.reason, approver, validated: false }
-        },
-        { tddDir }
-      );
-    }
-  } catch {
-  }
-}
-var HUMAN_PROXY = "human-proxy";
-function featureDir2(tddDir, featureId) {
-  return featureResolved(tddDir, featureId);
-}
-function conformanceReason(inputs) {
-  const problems = [];
-  for (const [name, content] of Object.entries(inputs)) {
-    const result = checkArtifactConformance(name, content);
-    if (!result.ok) problems.push(...result.violations);
-  }
-  return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
-}
-function acsConformanceReason(fdir) {
-  const stories = join8(fdir, "stories");
-  if (!existsSync6(stories)) return null;
-  const problems = [];
-  for (const s of readdirSync4(stories)) {
-    const acsDir = join8(stories, s, "acs");
-    if (!existsSync6(acsDir)) continue;
-    for (const f of readdirSync4(acsDir)) {
-      if (!f.endsWith(".json")) continue;
-      const p = join8(acsDir, f);
-      let content;
-      try {
-        content = readFileSync7(p, "utf8");
-      } catch {
-        continue;
-      }
-      const r = checkArtifactConformance(canonicalArtifactName(p), content);
-      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
-    }
-  }
-  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
-}
-function resolveArtifactInputs(gate, fdir, promoteRef) {
-  const readIfPresent = (name) => {
-    const p = join8(fdir, name);
+  if (!existsSync2(dir)) return;
+  for (const f of readdirSync2(dir)) {
+    if (!f.endsWith(".json")) continue;
+    let content;
     try {
-      return existsSync6(p) ? readFileSync7(p, "utf8") : void 0;
+      content = readFileSync3(`${dir}/${f}`, "utf8");
     } catch {
-      return void 0;
-    }
-  };
-  const withConformance = (inputs) => {
-    const reason = conformanceReason(inputs);
-    return reason === null ? { inputs } : { reason };
-  };
-  switch (gate) {
-    case "spec": {
-      const featureJson = readIfPresent("feature-spec.json");
-      if (featureJson === void 0) {
-        return { reason: "feature-spec.json not found (spec phase not complete)" };
-      }
-      const featureMd = readIfPresent("feature-spec.md");
-      if (featureMd === void 0) {
-        return { reason: "feature-spec.md not found (structured draft spec incomplete)" };
-      }
-      const inputs = {
-        "feature-spec.json": featureJson,
-        "feature-spec.md": featureMd
-      };
-      const conf = withConformance(inputs);
-      if ("reason" in conf) return conf;
-      const acReason = acsConformanceReason(fdir);
-      return acReason === null ? conf : { reason: acReason };
-    }
-    case "plan": {
-      const planJson = readIfPresent("plan.json");
-      if (planJson === void 0) {
-        return { reason: "plan.json not found (plan phase not produced)" };
-      }
-      return withConformance({ "plan.json": planJson });
-    }
-    case "test_list": {
-      const tlJson = readIfPresent("test-list.json");
-      const tlMd = readIfPresent("test-list.md");
-      if (tlJson === void 0 && tlMd === void 0) {
-        return { reason: "test-list.json/md not found (test-strategist phase not complete)" };
-      }
-      const inputs = {};
-      if (tlJson !== void 0) inputs["test-list.json"] = tlJson;
-      if (tlMd !== void 0) inputs["test-list.md"] = tlMd;
-      return withConformance(inputs);
-    }
-    case "promote": {
-      if (promoteRef === void 0 || promoteRef.length === 0) {
-        return { reason: "no promote_ref supplied (nothing to promote)" };
-      }
-      return withConformance({ promote_ref: promoteRef });
-    }
-    case "deploy": {
-      const evidence = readIfPresent("deploy-evidence.json");
-      if (evidence === void 0) {
-        return { reason: "deploy-evidence.json not found (feature not deployed + verified)" };
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(evidence);
-      } catch {
-        return { reason: "deploy-evidence.json is not valid JSON" };
-      }
-      if (parsed.reachable !== true) {
-        return { reason: "deploy-evidence records reachable=false (app not reachable on the target)" };
-      }
-      if (parsed.verify?.passed !== true) {
-        return { reason: "deploy-evidence records verify.passed=false (feature-verify did not pass against the running app)" };
-      }
-      return withConformance({ "deploy-evidence.json": evidence });
-    }
-  }
-}
-function drainGatesAsHumanProxy(args) {
-  const tddDir = args.tddDir ?? "./.tdd";
-  const approver = args.approver ?? HUMAN_PROXY;
-  const fdir = featureDir2(tddDir, args.featureId);
-  let state = readGates(args.featureId, { tddDir });
-  const approved = [];
-  const skipped = [];
-  const gates = args.onlyGate !== void 0 ? [args.onlyGate] : [...GATE_NAMES];
-  for (const gate of gates) {
-    const record = state.gates[gate];
-    if (record.status !== "open") {
-      skipped.push({ gate, reason: `status=${record.status}` });
       continue;
     }
-    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
-    if ("reason" in resolved) {
-      skipped.push({ gate, reason: resolved.reason });
-      logHitlDecision(tddDir, args.featureId, approver, {
-        kind: "refused",
-        gate,
-        reason: resolved.reason
-      });
-      continue;
+    const r = checkArtifactConformance(canonicalArtifactName(`${dir}/${f}`), content);
+    if (!r.ok) v.push({ artifact: `stories/${story}/acs/${f}`, problem: r.violations.join("; ") });
+  }
+}
+function checkArchitect(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("architect-reviewer", story, v)) return;
+  const ids = storyAcIds(tddDir, featureId, story);
+  if (ids.length === 0) {
+    v.push({ artifact: `stories/${story}/acs`, problem: "no ACs to annotate (spec-author output missing)" });
+    return;
+  }
+  for (const ac of ids) {
+    if (readAcLayer(tddDir, featureId, ac) === void 0) {
+      v.push({ artifact: `stories/${story}/acs/${ac}.json`, problem: "missing/invalid `layer` (expected API | E2E | Infra)" });
     }
-    const result = approveGate({
-      featureId: args.featureId,
-      gate,
-      approver,
-      hitlApproved: true,
-      artifactInputs: resolved.inputs,
-      tddDir
-    });
-    approved.push(gate);
-    state = result.state;
-    logHitlDecision(tddDir, args.featureId, approver, {
-      kind: "approved",
-      gate,
-      artifacts: Object.keys(resolved.inputs)
-    });
   }
-  return { approved, skipped, finalState: state };
 }
-function supplyArtifact(args) {
-  const approver = args.approver ?? HUMAN_PROXY;
-  const artifact = args.artifact ?? basename2(args.to);
-  const tddDir = args.tddDir ?? "./.tdd";
-  const refuse = (reason) => {
-    try {
-      emitAgentLogEvent(
-        {
-          role: "product-owner",
-          level: "warn",
-          event: "intake.refused",
-          feature_id: args.featureId,
-          slots: { artifact, to: args.to, reason, approver, validated: false }
-        },
-        { tddDir }
-      );
-    } catch {
-    }
-    return { ok: false, artifact, to: args.to, reason };
-  };
-  if (!existsSync6(args.from)) {
-    return refuse(`recorded source not found: ${args.from}`);
+function checkTestStrategist(args, v) {
+  const { tddDir, featureId, story } = args;
+  if (!needStory("test-strategist", story, v)) return;
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!existsSync2(file)) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "per-story test list not written" });
+    return;
   }
-  const content = readFileSync7(args.from, "utf8");
-  const conformance = checkArtifactConformance(artifact, content);
-  if (!conformance.ok) {
-    return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
-  }
-  mkdirSync3(dirname2(args.to), { recursive: true });
-  writeFileSync5(args.to, content);
-  try {
-    emitAgentLogEvent(
-      {
-        role: "product-owner",
-        level: "info",
-        event: "intake.supplied",
-        feature_id: args.featureId,
-        slots: { artifact, from: args.from, to: args.to, approver, validated: true }
-      },
-      { tddDir }
-    );
-  } catch {
-  }
-  return { ok: true, artifact, to: args.to };
-}
-function recordedRequestPairs() {
-  const raw = process.env.LAKEBASE_TDD_SPRINT_REQUESTS ?? "";
-  return raw.split("\n").map((line) => line.trim()).filter(Boolean).flatMap((line) => {
-    const [featureId, ...rest] = line.split("	");
-    const from = rest.join("	").trim();
-    return featureId && from ? [{ featureId: featureId.trim(), from }] : [];
-  });
-}
-function supplyRequests(args = {}) {
-  const tddDir = args.tddDir ?? "./.tdd";
-  const pairs = args.pairs ?? recordedRequestPairs();
-  const supplied = [];
-  const skipped = [];
-  for (const { featureId, from } of pairs) {
-    const res = supplyArtifact({
-      from,
-      to: featureRequestMd(tddDir, featureId),
-      artifact: "feature-request.md",
-      tddDir,
-      featureId,
-      approver: args.approver
-    });
-    if (res.ok) supplied.push(featureId);
-    else skipped.push({ featureId, reason: res.reason ?? "unknown" });
-  }
-  return { supplied, skipped };
-}
-
-// scripts/tdd/sprint-gates.ts
-init_esm_shims();
-import { existsSync as existsSync7, mkdirSync as mkdirSync4, readFileSync as readFileSync8, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync6 } from "fs";
-var SPRINT_GATES_SCHEMA_VERSION = 1;
-var PLAN_GATE_ARTIFACT = "feature-proposals.md";
-function defaultSprintGatesState(sprint) {
-  return {
-    sprint,
-    schema_version: SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: "open", history: [] } }
-  };
-}
-function sprintGatesFile(tddDir, sprint) {
-  return sprintGatesJson(tddDir, sprint);
-}
-function readSprintGates(sprint, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync7(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync8(file, "utf8"));
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
+    parsed = JSON.parse(readFileSync3(file, "utf8"));
+  } catch (e) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: `invalid JSON: ${e instanceof Error ? e.message : String(e)}` });
+    return;
   }
-  const plan = parsed.gates?.plan ?? { status: "open", history: [] };
-  return {
-    sprint,
-    schema_version: parsed.schema_version ?? SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
-  };
-}
-function writeSprintGates(state, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  mkdirSync4(sprintDir(tddDir, state.sprint), { recursive: true });
-  const file = sprintGatesJson(tddDir, state.sprint);
-  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync6(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
-  try {
-    renameSync2(tmp, file);
-  } catch (err) {
-    try {
-      unlinkSync3(tmp);
-    } catch {
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  if (items.length === 0) {
+    v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "empty `items` (expected >=1 test mapped to the story's ACs)" });
+    return;
+  }
+  const acIds = new Set(storyAcIds(tddDir, featureId, story));
+  items.forEach((item, i) => {
+    const acId = item.ac_id;
+    if (typeof acId !== "string" || acId.length === 0) {
+      v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: `items[${i}] (${String(item.id)}) has null/empty ac_id` });
+    } else if (acIds.size > 0 && !acIds.has(acId)) {
+      v.push({
+        artifact: `stories/${story}/test-list-per-story.json`,
+        problem: `items[${i}] ac_id "${acId}" is not one of the story's ACs [${[...acIds].join(", ")}]`
+      });
     }
-    throw err;
-  }
+  });
 }
-function approveSprintPlanGate(args) {
-  if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
-  if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
-  const tddDir = args.tddDir ?? "./.tdd";
-  const file = featureProposalsMd(tddDir);
-  if (!existsSync7(file)) {
-    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
-  }
-  const content = readFileSync8(file, "utf8");
-  const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
-  if (!conf.ok) {
-    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };
-  }
-  const state = readSprintGates(args.sprint, { tddDir });
-  if (state.gates.plan.status !== "open") {
-    return { ok: true, state, alreadyApproved: true };
-  }
-  const ts = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
-  const hashes = { [PLAN_GATE_ARTIFACT]: hashArtifact(content) };
-  const updated = {
-    ...state,
-    gates: {
-      plan: {
-        status: "approved",
-        approver: args.approver,
-        approved_at: ts,
-        artifact_hashes: hashes,
-        history: [
-          ...state.gates.plan.history,
-          { action: "approved", at: ts, approver: args.approver, artifact_hashes: hashes }
-        ]
-      }
-    }
-  };
-  writeSprintGates(updated, { tddDir });
-  return { ok: true, state: updated, alreadyApproved: false };
+var CHECKERS = {
+  "spec-author": checkSpecAuthor,
+  "architect-reviewer": checkArchitect,
+  "test-strategist": checkTestStrategist
+};
+function formatRoleResponse(args) {
+  const violations = [];
+  const checker = CHECKERS[args.role];
+  if (checker) checker(args, violations);
+  return { role: args.role, ...args.story ? { story: args.story } : {}, ok: violations.length === 0, violations };
 }
 
-// scripts/tdd/human-proxy.cli.ts
-function runSupplyCli(argv) {
-  let from;
-  let to;
-  let artifact;
-  let tddDir;
-  let feature;
-  for (let i = 0; i < argv.length; i++) {
-    switch (argv[i]) {
-      case "--from":
-        from = argv[++i];
-        break;
-      case "--to":
-        to = argv[++i];
-        break;
-      case "--artifact":
-        artifact = argv[++i];
-        break;
-      case "--tdd-dir":
-        tddDir = argv[++i];
-        break;
-      case "--feature":
-        feature = argv[++i];
-        break;
-    }
-  }
-  if (!from || !to) {
-    process.stderr.write("Error: supply requires --from <recorded> and --to <path>.\n");
-    return 2;
-  }
-  const result = supplyArtifact({ from, to, artifact, tddDir, featureId: feature });
-  if (result.ok) {
-    process.stdout.write(`human-proxy: supplied ${result.artifact} -> ${result.to}
-`);
-    return 0;
-  }
-  process.stderr.write(`human-proxy: refused to supply ${result.artifact}: ${result.reason}
-`);
-  return 4;
-}
-function runSupplyRequestsCli(argv) {
-  let tddDir;
-  let approver;
-  for (let i = 0; i < argv.length; i++) {
-    switch (argv[i]) {
-      case "--tdd-dir":
-        tddDir = argv[++i];
-        break;
-      case "--approver":
-        approver = argv[++i];
-        break;
-    }
-  }
-  const result = supplyRequests({ tddDir, approver });
-  if (result.supplied.length > 0) {
-    process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}
-`);
-  } else {
-    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_TDD_SPRINT_REQUESTS unset/empty)
-`);
-  }
-  if (result.skipped.length > 0) {
-    process.stderr.write(
-      `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.featureId} (${s.reason})`).join(", ")}
-`
-    );
-  }
-  return 0;
-}
-function parseArgs(argv) {
+// scripts/tdd/response-formatter.cli.ts
+function parse(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    switch (a) {
+    switch (argv[i]) {
+      case "--role":
+        out.role = argv[++i];
+        break;
       case "--feature":
         out.feature = argv[++i];
         break;
-      case "--sprint":
-        out.sprint = argv[++i];
-        break;
-      case "--gate":
-        out.gate = argv[++i];
+      case "--story":
+        out.story = argv[++i];
         break;
       case "--tdd-dir":
         out.tddDir = argv[++i];
-        break;
-      case "--approver":
-        out.approver = argv[++i];
-        break;
-      case "--promote-ref":
-        out.promoteRef = argv[++i];
-        break;
-      case "--json":
-        out.json = true;
-        break;
-      case "--pretty":
-        out.pretty = true;
-        break;
-      case "--help":
-      case "-h":
-        out.help = true;
         break;
     }
   }
   return out;
 }
-var HELP = `lakebase-tdd-human-proxy
-
-Human Proxy for automated smoke / headless test runs. Calls
-approveGate on every open gate for a feature with hitlApproved=true,
-default approver "human-proxy". NOT for production use.
-
-Usage:
-  lakebase-tdd-human-proxy --feature <id> [flags]
-
-Flags:
-  --feature <id>          Feature id (required, e.g. F1-initial-domain)
-  --gate <name>           Approve only one gate (spec | plan | test_list | promote)
-  --tdd-dir <path>        .tdd/ root (default: ./.tdd)
-  --approver <name>       Approver identity (default: human-proxy)
-  --promote-ref <str>     promote gate ref string (promote gate is skipped if omitted)
-  --json                  Machine-readable JSON output
-  --pretty                Pretty-print JSON
-  -h, --help              Show this help
-`;
-function runHumanProxyCli(argv) {
-  if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
-  if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
-  if (argv[0] === "approve") argv = argv.slice(1);
-  const args = parseArgs(argv);
-  if (args.help) {
-    process.stdout.write(`${HELP}
-`);
-    return 0;
-  }
-  if (args.sprint) {
-    const res = approveSprintPlanGate({
-      sprint: args.sprint,
-      approver: args.approver ?? "human-proxy",
-      hitlApproved: true,
-      tddDir: args.tddDir
-    });
-    if (res.ok) {
-      process.stdout.write(
-        `human-proxy: sprint plan gate for ${args.sprint} ${res.alreadyApproved ? "already approved" : "approved"}
+function usage(msg) {
+  process.stderr.write(
+    `${msg}
+Usage: lakebase-tdd-response-formatter --role <role> --feature <F> [--story <S>] [--tdd-dir <D>]
+Type-checked roles: ${[...FORMATTED_ROLES].join(", ")} (others pass , no deterministic contract yet).
 `
-      );
-    } else {
-      process.stdout.write(`human-proxy: skipped sprint plan gate (${res.reason})
-`);
-    }
-    return 0;
-  }
-  if (!args.feature) {
-    process.stderr.write(`Error: --feature or --sprint is required.
-
-${HELP}
-`);
-    return 2;
-  }
-  try {
-    const result = drainGatesAsHumanProxy({
-      featureId: args.feature,
-      tddDir: args.tddDir,
-      approver: args.approver,
-      onlyGate: args.gate,
-      promoteRef: args.promoteRef
-    });
-    if (args.json) {
-      process.stdout.write(
-        `${JSON.stringify(
-          { ok: true, ...result },
-          null,
-          args.pretty ? 2 : 0
-        )}
-`
-      );
-    } else {
-      process.stdout.write(
-        `human-proxy: approved ${result.approved.length} gate(s)${result.approved.length ? ": " + result.approved.join(", ") : ""}
-`
-      );
-      if (result.skipped.length > 0) {
-        process.stdout.write(
-          `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.gate} (${s.reason})`).join(", ")}
-`
-        );
-      }
-    }
-    return 0;
-  } catch (e) {
-    const err = e;
-    process.stderr.write(`human-proxy: ${err.message}
-`);
-    return 3;
-  }
+  );
+  return 2;
 }
-if (isCliEntry(import.meta.url)) {
-  process.exit(runHumanProxyCli(process.argv.slice(2)));
+function main() {
+  const a = parse(process.argv.slice(2));
+  if (!a.role) return usage("Error: --role is required.");
+  if (!a.feature) return usage("Error: --feature is required.");
+  const tddDir = a.tddDir ?? join4(process.cwd(), ".tdd");
+  const result = formatRoleResponse({ role: a.role, tddDir, featureId: a.feature, story: a.story });
+  if (result.ok) {
+    process.stdout.write(`response-formatter: ${a.role}${a.story ? ` (${a.story})` : ""} output conforms.
+`);
+    return 0;
+  }
+  process.stderr.write(
+    `response-formatter: ${a.role}${a.story ? ` (${a.story})` : ""} output does NOT conform , fix it before returning:
+` + result.violations.map((v) => `  - ${v.artifact}: ${v.problem}`).join("\n") + "\n"
+  );
+  return 1;
 }
-export {
-  runHumanProxyCli
-};
-//# sourceMappingURL=human-proxy.cli.js.map
+process.exit(main());
+//# sourceMappingURL=response-formatter.cli.js.map
