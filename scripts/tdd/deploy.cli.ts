@@ -9,7 +9,12 @@
 // clear message. Exit codes: 0 ok, 2 bad args, 6 deploy failed.
 
 import { isCliEntry } from "../util/cli-entry.js";
-import { deployToTarget, stopLocal } from "./deploy.js";
+import {
+  deployToTarget,
+  stopLocal,
+  logReleaseEngineerDeployStart,
+  logReleaseEngineerDeployOutcome,
+} from "./deploy.js";
 
 export async function runDeployCli(argv: string[]): Promise<number> {
   let target: string | undefined;
@@ -55,6 +60,14 @@ export async function runDeployCli(argv: string[]): Promise<number> {
     return 0;
   }
 
+  // Code-emit the Release Engineer's deploy lifecycle into the ONE central agent
+  // log (.tdd/agent-log.jsonl). The RE role that invokes this CLI may stay silent;
+  // the deterministic deploy logs its own start + outcome so the RE's work is in
+  // the central stream, not only in deploy-evidence.json. Only for feature/story
+  // deploys (a bare port deploy/teardown stays silent).
+  const reCtx = featureId ? { featureId, storyId, target, tddDir } : undefined;
+  if (reCtx) logReleaseEngineerDeployStart(reCtx);
+
   const result = await deployToTarget({
     projectDir,
     targetName: target,
@@ -66,6 +79,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
     // port so we never verify against the wrong app, and record honest evidence.
     rejectForeignPort: gate,
   });
+  if (reCtx) logReleaseEngineerDeployOutcome(reCtx, result);
   if (json) {
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } else if (result.ok) {

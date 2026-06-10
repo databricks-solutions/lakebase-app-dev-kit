@@ -1,0 +1,9 @@
+{
+  "id": "redirect-to-detail-page",
+  "given": "A user submits the create bug form with title and description",
+  "when": "The bug is created successfully",
+  "then": "The user is redirected to the bug's detail page at a stable URL (e.g., /bugs/{id})",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Frontend client-side routing in BugCreateForm navigates to /bugs/{id} after API response. Exercises UI navigation layer and stable URL contract."
+}

@@ -138,6 +138,24 @@ describe("test-list: per-story scoping (phase 2c)", () => {
     expect(scoped.items.find((i) => i.id === "T2")?.status).toBe("green");
   });
 
+  it("scopeToStory GROUPS the build list by AC (per-AC RED-GREEN-REVIEW-REFACTOR), keeping master order within an AC", () => {
+    // Master interleaves AC1 and AC2 (design-momentum): AC1-Ta, AC2-Tb, AC1-Tc, AC2-Td.
+    // The per-story BUILD list must group by AC so each AC's tests are contiguous
+    // (AC1 first since it appears first): [Ta, Tc, Tb, Td], NOT the interleaved order.
+    const interleaved: TestList = {
+      feature_id: "F1",
+      ordered_for: "design-momentum",
+      items: [
+        { id: "Ta", description: "ac1 first", ac_id: "AC1", status: "pending" },
+        { id: "Tb", description: "ac2 first", ac_id: "AC2", status: "pending" },
+        { id: "Tc", description: "ac1 second", ac_id: "AC1", status: "pending" },
+        { id: "Td", description: "ac2 second", ac_id: "AC2", status: "pending" },
+      ],
+    };
+    const scoped = scopeToStory(interleaved, "S1", ["AC1", "AC2"]);
+    expect(scoped.items.map((i) => i.id)).toEqual(["Ta", "Tc", "Tb", "Td"]);
+  });
+
   it("writeStoryTestList writes stories/<story>/test-list-per-story.json scoped to that story", () => {
     writeMasterTestList(tdd, masterListBothStories());
     const file = writeStoryTestList(tdd, "F1", "S2");

@@ -18,6 +18,7 @@ import {
   type AgentRole,
   type AgentLogLevel,
   type AgentLogEventInput,
+  type AgentLogEventName,
 } from "./agent-log.js";
 import { reconcileArtifactLog } from "./log-reconcile.js";
 
@@ -28,11 +29,12 @@ interface ParsedArgs {
   level?: string;
   minLevel?: string;
   event?: string;
-  message?: string;
   feature?: string;
   phase?: string;
   cycle?: string;
   data?: string;
+  /** Template slot values from repeatable --slot key=value. */
+  slots?: Record<string, unknown>;
   tddDir?: string;
   json?: boolean;
   help?: boolean;
@@ -48,7 +50,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--level": out.level = argv[++i]; break;
       case "--min-level": out.minLevel = argv[++i]; break;
       case "--event": out.event = argv[++i]; break;
-      case "--message": out.message = argv[++i]; break;
+      case "--slot": {
+        const kv = argv[++i] ?? "";
+        const eq = kv.indexOf("=");
+        if (eq > 0) (out.slots ??= {})[kv.slice(0, eq)] = kv.slice(eq + 1);
+        break;
+      }
       case "--feature": out.feature = argv[++i]; break;
       case "--phase": out.phase = argv[++i]; break;
       case "--cycle": out.cycle = argv[++i]; break;
@@ -66,13 +73,18 @@ const HELP = `lakebase-tdd-log
 Emit or read a structured TDD-workflow agent log event (.tdd/agent-log.jsonl).
 
 Emit:
-  lakebase-tdd-log --role <r> --level <l> --event <e> --message <m> [flags]
+  lakebase-tdd-log --role <r> --level <l> --event <e> --slot k=v [--slot k=v ...] [flags]
     --role     spec-author|ux-designer|architect-reviewer|test-strategist|
-               orchestrator|navigator|driver|product-owner
+               orchestrator|navigator|driver|product-owner|release-engineer
     --level    debug|info|warn|error
-    --event    dotted event name (e.g. phase.start, artifact.written, gate.surfaced)
-    --message  human-readable one-liner
-    --feature <id>   --phase <p>   --cycle <id>   --data '<json>'
+    --event    event name from the CLOSED vocabulary (agent-log-events.ts). An
+               off-vocabulary event is rejected (exit 3). The message is RENDERED
+               from the event's template; you fill its slots.
+    --slot k=v fill one template slot (repeatable). A missing required slot is
+               rejected (exit 3). The event NAME carries the phase; slots carry
+               the specifics. NOTE: cycle.* events are CODE-emitted by the
+               orchestration , agents do not emit them.
+    --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
 
 Read:
   lakebase-tdd-log --read [--role <r>] [--min-level <l>] [--feature <id>] [--json]
@@ -133,14 +145,14 @@ export function runAgentLogCli(argv: string[]): number {
     return 0;
   }
 
-  if (!a.role || !a.level || !a.event || !a.message) {
-    process.stderr.write(`Error: emit requires --role --level --event --message.\n\n${HELP}\n`);
+  if (!a.role || !a.level || !a.event) {
+    process.stderr.write(`Error: emit requires --role --level --event (+ the event's --slot values).\n\n${HELP}\n`);
     return 2;
   }
-  let data: Record<string, unknown> | undefined;
+  const slots: Record<string, unknown> = { ...(a.slots ?? {}) };
   if (a.data !== undefined) {
     try {
-      data = JSON.parse(a.data);
+      Object.assign(slots, JSON.parse(a.data) as Record<string, unknown>);
     } catch (e) {
       process.stderr.write(`Error: --data is not valid JSON: ${(e as Error).message}\n`);
       return 2;
@@ -149,12 +161,11 @@ export function runAgentLogCli(argv: string[]): number {
   const input: AgentLogEventInput = {
     role: a.role as AgentRole,
     level: a.level as AgentLogLevel,
-    event: a.event,
-    message: a.message,
+    event: a.event as AgentLogEventName,
     feature_id: a.feature,
     phase: a.phase,
     cycle_id: a.cycle,
-    data,
+    slots,
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });

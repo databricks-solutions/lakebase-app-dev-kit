@@ -1,0 +1,13 @@
+{
+  "ac_id": "create-form-displays",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "tests": [
+    {
+      "id": "T1",
+      "description": "Create bug form is displayed with title and description input fields when app loads",
+      "ac_id": "create-form-displays",
+      "status": "pending"
+    }
+  ]
+}

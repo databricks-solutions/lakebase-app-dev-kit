@@ -7,6 +7,12 @@
 - **Explicit states, never silent**, every status is named (unowned, not blank; empty list shows a message, not a blank page). *[Source: design brief constraint]*
 - **Warm and professional**, navy + warm neutrals, consistent with the Databricks ecosystem. *[Source: Databricks-brand baseline]*
 
+## UI Framework and Templating
+
+- **Server-rendered with Jinja**, a modern, testable template engine: template inheritance, autoescaping, partials. No hand-assembled HTML strings.
+- **Stable test seams**, every interactive element carries a `data-testid` or a semantic role / ARIA label so the pytest-bdd behavior tests and the design-adherence check address it reliably, never a brittle CSS path.
+- **Rendering lives in the boundary layer**, templates render the domain data the service layer returns; no business logic in templates.
+
 ## Typography
 
 Font family: `"DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif`. Mono: `"DM Mono", ui-monospace, monospace`.

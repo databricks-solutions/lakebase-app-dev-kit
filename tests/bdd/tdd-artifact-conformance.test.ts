@@ -263,6 +263,8 @@ describe("checkArtifactConformance: UX Designer artifacts (UI projects)", () => 
     "# Style Guide",
     "## Design Philosophy",
     "Clarity over decoration.",
+    "## UI Framework and Templating",
+    "Jinja, testable, stable selectors.",
     "## Typography",
     "DM Sans.",
     "## Color Palette",

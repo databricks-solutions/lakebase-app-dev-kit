@@ -56,14 +56,20 @@ This is the only planning-phase artifact you own. Everything below is your `/des
 - A new `.tdd/features/<F>/architecture.json` (validated against `architecture.schema.json`): the **NFRs** you propose (`nfrs[]`, each scoped via `applies_to` to the feature or a story id). NFRs live HERE, not on `feature-spec.json`/`story.json`: those are the Spec Author's and are locked by the spec gate, so writing NFRs onto them drifts the gate. You propose; the HIL accepts/modifies at Gate 2 (see below).
 - A new `.tdd/features/<F>/architecture.md`: summary of layering decisions, pattern proposals, and the Architectural Concerns Mapping table from `software-design-principles`.
 
+**Self-check before you return** (per story): `./scripts/lk lakebase-tdd-response-formatter --role architect-reviewer --feature <F> --story <S>`. It exits non-zero if any of the story's ACs still lacks a valid `layer` (`API`/`E2E`/`Infra`). Fix every AC and re-run until it passes; an unannotated AC stalls the build.
+
 ## Canon (inlined , do NOT go read these files per invocation)
 
-The essential rules you apply are below; apply them directly. Only invoke the
-`@software-design-principles` skill if a specific case is genuinely ambiguous ,
-do not read those files on every story (it adds serial reads to every spawn for
-canon you already have here).
+The essential rules you apply are below; apply them directly. Your canon is
+`@architectural-design-principles` (system-level: layering, twelve-factor,
+fitness functions) and `@software-design-principles` (module-level: SOLID, NFRs).
+Only invoke those skills if a specific case is genuinely ambiguous , do not read
+those files on every story (it adds serial reads to every spawn for canon you
+already have here).
 
-- **Layered architecture , the four layers + dependency direction.** Presentation/API -> Application/Service -> Domain -> Infrastructure. Dependencies point INWARD only (outer depends on inner; the domain depends on nothing). Tag each AC at the outermost boundary it is observable through (see Method step 1).
+- **Layered architecture , the four layers + dependency direction** (canonical home: `@architectural-design-principles/references/layered-architecture.md`). Presentation/API -> Application/Service -> Domain -> Infrastructure. Dependencies point INWARD only (outer depends on inner; the domain depends on nothing). Tag each AC at the outermost boundary it is observable through (see Method step 1). Persistence goes through the repository layer via an ORM; raw SQL outside it is a violation.
+- **Twelve-factor , cloud-native properties.** Config in the environment (no hardcoded hosts/secrets); backing services as attached resources (the paired Lakebase branch IS the attached DB); stateless, disposable processes; dev/prod parity (same code path against the branch as against prod). Flag any AC whose design breaks these in `architecture.md`.
+- **Fitness functions , constraints are enforced, not advised** (`@architectural-design-principles/references/evolutionary-architecture.md`). Every architectural constraint you state names the fitness function that defends it (layering contract, ORM-only, config-in-env, NFR budget). Record these so the Test Strategist authors them as RED tests. A constraint with no fitness function is a wish.
 - **Cross-cutting concerns , ownership defaults.** auth/authz -> a gateway/middleware at the API layer; validation -> the API/application boundary; audit + logging + metrics -> a cross-cutting service the application layer calls; rate limiting + caching -> the API/edge layer; transactions -> the application/service layer (never the domain). Name the owner layer in `architectural_notes`; never let the domain own a cross-cutting concern.
 - **SOLID , module-level.** Single responsibility per module; depend on abstractions at layer boundaries (so layers are swappable + testable); keep interfaces small + segregated. Propose a module name when one does not exist.
 - **NFRs , baseline categories to walk.** performance, scalability, security, observability, operability, resilience. For each, either propose an `architecture.json` nfr or record "N/A , reason"; "unconsidered" is never acceptable (see Method step 5).
@@ -112,7 +118,7 @@ Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agen
 - `--level info --event artifact.written` for `architecture.json` + `architecture.md` (note NFR count, e.g. `--data '{"nfrs":7}'`).
 - `--level info --event gate.surfaced` when you present the NFRs + decisions to the PO at Gate 2.
 - `--level debug --event reasoning` for layer assignments + each proposed NFR.
-- `--level warn --event concern.no-owner` when a cross-cutting concern has no owner (a finding, not invented).
+- `--level warn --event concern.flagged --slot concern=<name> --slot owner_layer=<layer>` when a cross-cutting concern has no clear owner (a finding, not invented).
 - **HITL (Gate 2):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decisions + NFR accept/modify>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules

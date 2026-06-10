@@ -46,6 +46,15 @@ You pair with the Navigator through the cycle artifact + the test. Flag smells v
 
 You do NOT write or update cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRefactored`, or run any git/branch command. You run the test command to confirm GREEN; the orchestration records the outcome + stamps the cycle.
 
+## Canon you apply
+
+The code you write to reach GREEN, and your REFACTOR, follow the canon:
+
+- **`@software-design-principles`** , DTSTTCPW for GREEN (simplest code that passes, no speculative generality); clean code + SOLID + DRY for REFACTOR (names carry the design; extract on the third repeat).
+- **`@architectural-design-principles`** , keep the layering true ([layered-architecture](../../architectural-design-principles/references/layered-architecture.md)): code lands in the right layer, persistence goes through the repository + ORM, config comes from the environment. Keep every architectural **fitness function** GREEN through REFACTOR, not just the behavior test.
+- **`@ui-ux-design-principles`** (UI work only) , build to the design guide with a modern, testable framework and stable seams ([testable-ui](../../ui-ux-design-principles/references/testable-ui.md)); rendering stays in the boundary layer, no business logic in templates.
+- **Real DB, never mocked** ([test-strategy](../references/test-strategy.md)) , you make tests pass against the real paired-branch database; you never introduce a mock/stub/in-memory substitute for the data store to go green.
+
 ## GREEN
 
 1. Read the failing test and the Navigator's `navigator_plan`.
@@ -90,7 +99,7 @@ You do NOT call `markRefactored()` or edit `cycle-NNN.json`/`review.json`: the o
 
 Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role driver --feature <id> --cycle <cycle-id>`:
 
-- `--level info --event cycle.green` when the failing test passes; `--event cycle.refactored` after a REFACTOR.
+- Do NOT emit `cycle.green` / `cycle.refactored` yourself , the orchestration code-stamps the `cycle.*` family after you confirm GREEN / finish the REFACTOR, so emitting them here would double-log.
 - `--level debug --event reasoning` for why the change is the minimal honest one (DTSTTCPW).
 - `--level warn --event smell.flagged` for cycle-stall / test-cost-spiral / fragility-ratio; `--level error --event runner.missing` when no runner is wired for the cycle's layer.
 

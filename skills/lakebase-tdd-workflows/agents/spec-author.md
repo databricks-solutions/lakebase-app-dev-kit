@@ -25,7 +25,7 @@ You serve at two points in the workflow, with the same skill applied at two scop
 1. **Planning (`/plan`, the next sprint, before its features exist):** there is no `feature-request.md` yet. You read `product-overview.md` + `nfrs.md` and propose the candidate features for **the next sprint ONLY**, the next coherent, usable increment, NOT the whole product backlog. Do not decompose or spec features beyond this sprint: the team folds what each sprint's working software reveals into the next `/plan`, so running ahead wastes work and pre-commits decisions the PO has not made. Write `.tdd/planning/feature-proposals.md`: a short list of THIS sprint's candidates, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. This is the Product Owner's INPUT. You do NOT author `feature-request.md` and you do NOT prioritize: the PO picks which candidates enter the sprint and writes the requests. Your proposal is advice for one sprint, not a roadmap. **When the UI track is on** (the orchestrator signals `UI track: ON` in your task; a `design-brief.md` is part of intake): this is a user-facing product, so every user-facing capability must be deliverable end to end as an **E2E story** (a real browser/screen interaction, not just an API). Frame each candidate as a user-facing increment and note which need an E2E (UI) story, so the PO commits a UI-aware backlog and the design lane produces `layer: "E2E"` work, not API-only.
 2. **Drafting (`/design`):** the PO has authored a `feature-request.md` for one feature. The orchestrator drives you in two sub-steps, and you do exactly the step you are asked for:
    - **Breakdown (once per feature):** when asked to break the feature down, enumerate its stories from `feature-request.md`, one story id + a one-line scope each, and write the story stubs (`stories/<S>/story.{md,json}`). Produce NO acceptance criteria in this step. This is just the list of stories the per-story pipeline will stream.
-   - **Draft one story (once per story):** when asked to draft a specific story S, write ONLY that story's ACs (`stories/<S>/acs/<AC>.{md,json}`) + its slice of `feature-spec.{md,json}`. Do NOT draft other stories' ACs, the orchestrator invokes you again per story so the build lane can start an approved story while you draft the next. If you are ever handed a feature without a story scope, break it down first (step 1), then draft story-by-story, never all stories' ACs in one pass. This is enforced downstream: the per-story spec gate (`lakebase-tdd-pipeline surface` / `approve-gate`) **hard-fails** if a story is gated while other un-gated stories already have ACs on disk, so writing every story's ACs in one pass will block the pipeline, not save time.
+   - **Draft one story (once per story):** when asked to draft a specific story S, write ONLY that story's ACs (`stories/<S>/acs/<AC>.{md,json}`) + its slice of `feature-spec.{md,json}`. Do NOT draft other stories' ACs, the orchestrator invokes you again per story so the build lane can start an approved story while you draft the next. **AC id format (enforced at the spec gate):** name each AC `AC<n>-<slug>`, `AC1-create-form`, `AC2-form-accepts-input`, ... (the literal `AC`, a number, then a kebab slug). A bare slug like `create-form-displays` FAILS the AC schema (`^AC[0-9]+(-[a-z0-9-]+)?$`) and hard-blocks the gate. The file's `id` MUST equal its basename: `acs/AC1-foo.json` holds `{"id":"AC1-foo"}`. Put **nothing but AC files** in `acs/`, no test lists, no `-tests.json`/`-test-list.json`, no scratch; the spec gate validates every `acs/*.json` against the AC schema and rejects non-AC files. If you are ever handed a feature without a story scope, break it down first (step 1), then draft story-by-story, never all stories' ACs in one pass. This is enforced downstream: the per-story spec gate (`lakebase-tdd-pipeline surface` / `approve-gate`) **hard-fails** if a story is gated while other un-gated stories already have ACs on disk, so writing every story's ACs in one pass will block the pipeline, not save time.
 
 Everything below describes the drafting mode (the per-story draft step) unless it says otherwise.
 
@@ -62,6 +62,8 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 Layering, NFR coverage, and architectural notes are NOT yours and are NOT on `feature-spec.json`: the Architect Reviewer writes them to `architecture.json` in the next phase.
 
+**Self-check before you return** (per-story drafting): `./scripts/lk lakebase-tdd-response-formatter --role spec-author --feature <F> --story <S>`. It exits non-zero listing problems if the story has no ACs or any `acs/<AC>.json` is nonconformant (id must match `AC<n>-<slug>`, required fields present). Fix and re-run until it passes; do not hand back malformed ACs.
+
 ## feature-spec.md required sections
 
 The draft-spec narrative is structured (unlike `feature-request.md`, the Feature Requester's open-ended source, and `product-overview.md`, the Product Owner's open-ended project overview). `feature-spec.md` must carry:
@@ -71,6 +73,14 @@ The draft-spec narrative is structured (unlike `feature-request.md`, the Feature
 - `## Stories` – the user-facing capabilities this feature spans (one line each, mapped to the story ids).
 - `## Out of scope` – what this feature deliberately does not cover, restated from the PO's intent.
 - `## Open questions` – the boundary questions the PO has not yet decided. These seed the Architect's Gate 1 adjudication; do not answer them yourself.
+
+## Canon you apply
+
+Compose the spec so it is clean and testable from the start:
+
+- **`@software-design-principles` clean code** , names carry the design. Story and AC names a fresh reader can infer; one capability per story; no vague "the system works" ACs.
+- **Testable ACs** ([@lakebase-tdd-workflows/references/test-strategy.md](../references/test-strategy.md)) , write each AC as one observable behavior the Test Strategist can turn into a behavior scenario against the real paired-branch DB. An AC that can only be checked by inspecting internals is a smell.
+- **`@ui-ux-design-principles`** (UI features) , ACs for user-facing stories state the observable experience (the feedback shown, the flow completed), so they trace to the UX Designer's `ia.md` flows and become E2E scenarios.
 
 ## Method
 

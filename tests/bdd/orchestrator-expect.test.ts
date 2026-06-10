@@ -1,0 +1,187 @@
+// The handoff EXPECTATION protocol: every role handoff records the non-null
+// artifact its responder owes, and the queue aborts (ProtocolViolationError)
+// when that artifact is absent/null/empty , the precise, attributed failure
+// that replaces a silent re-dispatch / generic stall. The S2 live stall (a
+// test-strategist that left an EMPTY per-story test list) is the canonical case.
+
+import { describe, it, expect } from "vitest";
+import {
+  expectationFor,
+  ExpectationLedger,
+  ProtocolViolationError,
+  UnexpectedCallbackError,
+} from "../../scripts/tdd/orchestrator-expect";
+import type { DriveState, WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
+
+function baseState(over: Partial<DriveState> = {}): DriveState {
+  return {
+    phase: "feature",
+    breakdownDone: true,
+    storyOrder: ["S2-submit-create-bug"],
+    stories: {
+      "S2-submit-create-bug": {
+        gateApproved: false,
+        gateSurfaced: false,
+        design: { hasAcs: true, architectAnnotated: true, testListReady: false },
+        build: {
+          experimentCut: false,
+          testsWritten: false,
+          codeWritten: false,
+          awaitingAcceptance: false,
+          deployVerified: false,
+          accepted: false,
+        },
+      },
+    },
+    buildActive: null,
+    ...over,
+  };
+}
+
+describe("expectationFor: each role handoff declares its non-null return contract", () => {
+  it("non-role actions (the driver's own substrate) carry no expectation", () => {
+    expect(expectationFor({ kind: "cut-experiment", story: "S2-submit-create-bug" } as unknown as WorkflowAction)).toBeNull();
+    expect(expectationFor({ kind: "surface-gate", gate: "spec", story: "S2-submit-create-bug" } as unknown as WorkflowAction)).toBeNull();
+    expect(expectationFor({ kind: "await-acceptance", story: "S2-submit-create-bug" } as unknown as WorkflowAction)).toBeNull();
+    expect(expectationFor({ kind: "done" } as WorkflowAction)).toBeNull();
+  });
+
+  it("test-strategist owes a non-empty per-story test list (the S2 contract)", () => {
+    const h = expectationFor({ kind: "invoke-role", role: "test-strategist", story: "S2-submit-create-bug" } as WorkflowAction);
+    expect(h).toBeTruthy();
+    expect(h!.responder).toBe("test-strategist");
+    expect(h!.story).toBe("S2-submit-create-bug");
+    // Empty list -> testListReady false -> contract UNMET.
+    expect(h!.satisfiedBy(baseState())).toBe(false);
+    // A real list -> testListReady true -> contract met.
+    const ready = baseState();
+    ready.stories["S2-submit-create-bug"].design.testListReady = true;
+    expect(h!.satisfiedBy(ready)).toBe(true);
+  });
+
+  it("spec-author / architect-reviewer per-story contracts map to their DriveState advance", () => {
+    const noAcs = baseState();
+    noAcs.stories["S2-submit-create-bug"].design = { hasAcs: false, architectAnnotated: false, testListReady: false };
+    const spec = expectationFor({ kind: "invoke-role", role: "spec-author", story: "S2-submit-create-bug" } as WorkflowAction)!;
+    expect(spec.satisfiedBy(noAcs)).toBe(false);
+    expect(spec.satisfiedBy(baseState())).toBe(true); // hasAcs true in base
+
+    const arch = expectationFor({ kind: "invoke-role", role: "architect-reviewer", story: "S2-submit-create-bug" } as WorkflowAction)!;
+    const noLayer = baseState();
+    noLayer.stories["S2-submit-create-bug"].design.architectAnnotated = false;
+    expect(arch.satisfiedBy(noLayer)).toBe(false);
+    expect(arch.satisfiedBy(baseState())).toBe(true);
+  });
+
+  it("per-AC review/refactor contracts clear when the AC flag advances", () => {
+    const review = expectationFor({ kind: "invoke-role", role: "navigator", story: "S2-submit-create-bug", buildMode: "review", ac: "AC1" } as unknown as WorkflowAction)!;
+    const pending = baseState();
+    pending.stories["S2-submit-create-bug"].build.reviewAc = "AC1";
+    expect(review.satisfiedBy(pending)).toBe(false); // still awaiting AC1's review
+    const reviewed = baseState();
+    reviewed.stories["S2-submit-create-bug"].build.reviewAc = null;
+    expect(review.satisfiedBy(reviewed)).toBe(true);
+  });
+});
+
+describe("ExpectationLedger: pop on a met contract, abort on a null return", () => {
+  it("reconcile pops the head + reports `met` when the responder delivered", () => {
+    const q = new ExpectationLedger();
+    q.push(expectationFor({ kind: "invoke-role", role: "test-strategist", story: "S2-submit-create-bug" } as WorkflowAction)!);
+    expect(q.pending).toBe(true);
+    const ready = baseState();
+    ready.stories["S2-submit-create-bug"].design.testListReady = true;
+    expect(q.reconcile(ready).kind).toBe("met");
+    expect(q.pending).toBe(false);
+  });
+
+  it("reconcile RETRIES once (hand-back detail) then ABORTS naming the responder on a null/empty return", () => {
+    const q = new ExpectationLedger(); // default maxRetries = 1
+    q.push(expectationFor({ kind: "invoke-role", role: "test-strategist", story: "S2-submit-create-bug" } as WorkflowAction)!);
+    // testListReady stays false (the empty-list bug). First reconcile -> retry,
+    // with a hand-back describing exactly what is missing; head stays outstanding.
+    const first = q.reconcile(baseState());
+    expect(first.kind).toBe("retry");
+    if (first.kind === "retry") {
+      expect(first.detail).toMatch(/per-story test list/);
+      expect(first.detail).toMatch(/HANDBACK/);
+    }
+    expect(q.pending).toBe(true);
+    // Still unmet on the retry -> abort with the attributed ProtocolViolationError.
+    let thrown: unknown;
+    try {
+      q.reconcile(baseState());
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(ProtocolViolationError);
+    expect((thrown as Error).message).toMatch(/test-strategist/);
+    expect((thrown as Error).message).toMatch(/Aborting workflow/);
+  });
+
+  it("reconcile reports `idle` when nothing is outstanding", () => {
+    const q = new ExpectationLedger();
+    expect(q.reconcile(baseState()).kind).toBe("idle");
+  });
+});
+
+describe("ExpectationLedger.processCallback: caller-identity intake (multi-threaded-ready)", () => {
+  const ts = (story: string) =>
+    expectationFor({ kind: "invoke-role", role: "test-strategist", story } as WorkflowAction)!;
+  const spec = (story: string) =>
+    expectationFor({ kind: "invoke-role", role: "spec-author", story } as WorkflowAction)!;
+
+  /** Two stories outstanding at once (concurrent dispatch). */
+  function twoStoryState(over: { s1HasAcs?: boolean; s2ListReady?: boolean } = {}): DriveState {
+    const s = baseState();
+    s.storyOrder = ["S1", "S2-submit-create-bug"];
+    s.stories["S1"] = {
+      gateApproved: false,
+      gateSurfaced: false,
+      design: { hasAcs: over.s1HasAcs ?? false, architectAnnotated: false, testListReady: false },
+      build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, deployVerified: false, accepted: false },
+    };
+    s.stories["S2-submit-create-bug"].design.testListReady = over.s2ListReady ?? false;
+    return s;
+  }
+
+  it("matches the callback to the awaited responder + scope, and pops THAT one (not blindly the head)", () => {
+    const q = new ExpectationLedger();
+    q.push(spec("S1")); // head
+    q.push(ts("S2-submit-create-bug")); // second outstanding
+    const r = q.processCallback("test-strategist", twoStoryState({ s2ListReady: true }), { story: "S2-submit-create-bug" });
+    expect(r.kind).toBe("met");
+    expect(q.awaiting()).toEqual(["spec-author"]); // S1 still outstanding
+  });
+
+  it("ABORTS (UnexpectedCallbackError) on a callback from a role we are not awaiting", () => {
+    const q = new ExpectationLedger();
+    q.push(ts("S2-submit-create-bug"));
+    let thrown: unknown;
+    try {
+      q.processCallback("navigator", twoStoryState(), { story: "S2-submit-create-bug" });
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(UnexpectedCallbackError);
+    expect((thrown as Error).message).toMatch(/unexpected callback from navigator/);
+    expect((thrown as Error).message).toMatch(/awaiting: test-strategist/);
+  });
+
+  it("ABORTS on a callback whose scope (story) matches no outstanding handoff", () => {
+    const q = new ExpectationLedger();
+    q.push(ts("S2-submit-create-bug"));
+    expect(() => q.processCallback("test-strategist", twoStoryState(), { story: "S9-ghost" })).toThrow(UnexpectedCallbackError);
+  });
+
+  it("a matched-but-unmet callback retries-then-aborts (the contract path), keyed to that entry", () => {
+    const q = new ExpectationLedger();
+    q.push(spec("S1"));
+    q.push(ts("S2-submit-create-bug"));
+    const st = twoStoryState({ s2ListReady: false });
+    const first = q.processCallback("test-strategist", st, { story: "S2-submit-create-bug" });
+    expect(first.kind).toBe("retry");
+    expect(q.awaiting()).toEqual(["spec-author", "test-strategist"]); // still outstanding
+    expect(() => q.processCallback("test-strategist", st, { story: "S2-submit-create-bug" })).toThrow(ProtocolViolationError);
+  });
+});

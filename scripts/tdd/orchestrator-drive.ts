@@ -239,13 +239,24 @@ export type WorkflowAction =
 /** The next build-lane action for the story the lane is on. */
 function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
-  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
-  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
-  // Per-AC handoff (driver-navigator-tdd): once an AC's tests are green, the
-  // Navigator REVIEWs it (against architecture + design guide) and the Driver
-  // REFACTORs on request, before the story is accepted.
+  // Per-AC RED -> GREEN -> REVIEW -> REFACTOR: each AC completes its full cycle
+  // before the next AC's first test is written. The per-story BUILD list is
+  // grouped by AC (scopeToStory), so once an AC's tests are all green its REVIEW
+  // (Navigator, against architecture + design guide) and any REFACTOR (Driver)
+  // fire HERE, ABOVE the test-writing/greening steps below. That ordering is the
+  // whole point: were these checks below `testsWritten`, the Navigator would jump
+  // to the next AC's RED test before the just-greened AC was reviewed/refactored,
+  // batching all refactors to the end of the story. reviewAc/refactorAc are
+  // per-AC (firstReviewPendingAc / firstRefactorPendingAc): each only fires for
+  // an AC whose tests are ALL green, so a half-built AC is never reviewed.
   if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
   if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  // Test-list-driven RED/GREEN handoff for the current (un-reviewed) AC's tests:
+  // !testsWritten -> Navigator writes the next pending RED; !codeWritten ->
+  // Driver greens the open RED. With the AC-grouped list, "next pending" is
+  // always in the current AC until it is green (then the checks above pre-empt).
+  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
+  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
   // Teeth: a story cannot be accepted (merged) until its deploy verified
   // (reachable + verify.passed). Re-deploy until it does; a story that never

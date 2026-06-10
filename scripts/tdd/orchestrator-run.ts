@@ -22,6 +22,8 @@ import {
   type DriveState,
   type WorkflowAction,
 } from "./orchestrator-drive.js";
+import { ExpectationLedger, expectationFor } from "./orchestrator-expect.js";
+export { ProtocolViolationError, UnexpectedCallbackError } from "./orchestrator-expect.js";
 
 export interface DriveEffects {
   /**
@@ -36,6 +38,13 @@ export interface DriveEffects {
   perform(action: WorkflowAction): Promise<void>;
   /** Optional deterministic logging hook (code-emitted, fires before perform). */
   onAction?(action: WorkflowAction, iteration: number): void;
+  /**
+   * Optional hand-back hook: fires when a role's prior handoff contract was
+   * UNMET and a retry remains. The runner delivers `detail` (what the responder
+   * failed to return) so the imminent re-dispatch of that role is informed , the
+   * role reads the hand-back and fixes its output instead of blindly re-running.
+   */
+  onHandback?(handoff: import("./orchestrator-expect.js").Handoff, detail: string): void;
 }
 
 export class DriverStalledError extends Error {
@@ -97,6 +106,15 @@ export interface RunDriverOptions {
    * without it the gate is a no-op (the run proceeds, e.g. in pure unit tests).
    */
   confirmContinue?: (action: WorkflowAction) => Promise<void>;
+  /**
+   * Enforce the handoff EXPECTATION protocol (default true): every role handoff
+   * records the non-null artifact its responder owes; the next state read must
+   * discharge that contract or the run aborts with a ProtocolViolationError
+   * naming the role + the missing artifact (instead of silently re-dispatching /
+   * stalling). Set false only for unit tests that intentionally drive partial
+   * states without a responder delivering.
+   */
+  enforceExpectations?: boolean;
 }
 
 // Backstop against a runaway loop (an effect that advances but never converges).
@@ -143,6 +161,8 @@ export async function runDriver(
 ): Promise<RunDriverResult> {
   let previousSignature: string | undefined;
   let pausedAlready = false;
+  const enforceExpectations = options.enforceExpectations !== false;
+  const expectations = new ExpectationLedger();
   for (let i = 0; ; i++) {
     if (options.maxSteps !== undefined && i >= options.maxSteps) {
       return { iterations: i, stoppedAtMax: true };
@@ -151,6 +171,19 @@ export async function runDriver(
       throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
     }
     const state = await effects.readState();
+    // Reconcile the outstanding handoff FIRST: the state just read is the
+    // responder's "callback". If its contract is unmet, the responder gets ONE
+    // informed retry , we hand back exactly what it failed to return and
+    // re-dispatch it; a second failure throws ProtocolViolationError and the run
+    // aborts (a precise, attributed failure, not a silent re-dispatch / stall).
+    let retrying = false;
+    if (enforceExpectations) {
+      const rec = expectations.reconcile(state); // throws on exhausted retries
+      if (rec.kind === "retry") {
+        retrying = true;
+        effects.onHandback?.(rec.handoff, rec.detail);
+      }
+    }
     const transition = options.transition ?? nextTransition;
     const action = transition(state);
 
@@ -186,10 +219,22 @@ export async function runDriver(
     }
 
     const signature = JSON.stringify(action);
-    if (signature === previousSignature) {
+    // A sanctioned retry re-issues the SAME action by design (the responder's
+    // contract is still outstanding), so skip the generic stall check this pass.
+    if (!retrying && signature === previousSignature) {
       throw new DriverStalledError(action, i);
     }
     previousSignature = signature;
+
+    // Record the handoff we are about to make: who must respond + the non-null
+    // artifact they owe. The NEXT iteration's reconcile() discharges it (or
+    // retries / aborts). On a retry the head is still outstanding , do NOT
+    // re-push it. Non-role actions (gates, cut, deploy , the driver's own
+    // substrate) return null here and add nothing to the queue.
+    if (enforceExpectations && !retrying) {
+      const handoff = expectationFor(action);
+      if (handoff) expectations.push(handoff);
+    }
 
     effects.onAction?.(action, i);
     await effects.perform(action);

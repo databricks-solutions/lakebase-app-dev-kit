@@ -174,10 +174,9 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     role: "navigator",
     level: "info",
     event: "cycle.red",
-    message: `${args.test_id} RED: ${args.test_description}`,
     feature_id: args.feature_id,
     cycle_id,
-    data: { test_id: args.test_id, ac_id: args.ac_id, layer },
+    slots: { test_id: args.test_id, ac: args.ac_id, asserts: args.test_description, layer },
   });
   return artifact;
 }
@@ -275,10 +274,9 @@ export function markGreen(
     role: "driver",
     level: "info",
     event: "cycle.green",
-    message: `${a.test_id} GREEN${driverChanges ? ": " + driverChanges : ""}`,
     feature_id: scope.feature_id,
     cycle_id: cycleId,
-    data: { test_id: a.test_id },
+    slots: { test_id: a.test_id, ac: a.ac_id ?? "unknown", change: driverChanges ?? "minimal honest code" },
   });
   return a;
 }
@@ -293,10 +291,9 @@ export function markRefactored(scope: CycleScope, cycleId: string, refactorNotes
     role: "driver",
     level: "info",
     event: "cycle.refactored",
-    message: `${a.test_id} REFACTOR${refactorNotes ? ": " + refactorNotes : ""}`,
     feature_id: scope.feature_id,
     cycle_id: cycleId,
-    data: { test_id: a.test_id },
+    slots: { ac: a.ac_id ?? "unknown", change: refactorNotes ?? "structure improved", test_id: a.test_id },
   });
   return a;
 }

@@ -1,0 +1,9 @@
+{
+  "id": "bug-created-with-open-status",
+  "given": "A user submits the create bug form with title and description",
+  "when": "The submission is processed",
+  "then": "A bug record is created in the system with status open",
+  "status": "draft",
+  "layer": "API",
+  "architectural_notes": "POST /bugs endpoint in BugService creates Bug entity with status='open'. Transaction boundary (application layer). R2 enforces valid status at write time via domain validation."
+}

@@ -25,6 +25,7 @@ import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
+import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import {
   beginCycle,
   recordRunnerOutcome,
@@ -32,6 +33,22 @@ import {
   type CycleArtifact,
   type CycleScope,
 } from "./run-cycle.js";
+
+/**
+ * Best-effort emit of a per-AC cycle event (cycle.review / cycle.refactored) to
+ * the centralized agent log. The per-AC review/refactor lane is recorded here
+ * (reviewAc/refactorAc), NOT via run-cycle's per-test markRefactored, so the
+ * emit must live here too or the central log shows RED/GREEN with no REVIEW or
+ * REFACTOR (the gap that left cycle.review/cycle.refactored absent). Mirrors
+ * run-cycle's logCycleEvent: observability never breaks a cycle transition.
+ */
+function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
+  try {
+    emitAgentLogEvent(event, { tddDir });
+  } catch {
+    // swallow: never let logging break a review/refactor record
+  }
+}
 
 interface StoryTestItem {
   id: string;
@@ -353,6 +370,20 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
       2,
     ) + "\n",
   );
+  // The Navigator's review verdict is a first-class cycle transition: emit it so
+  // the central log shows REVIEW between GREEN and (optional) REFACTOR.
+  logCycleEvent(tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.review",
+    feature_id: featureId,
+    slots: {
+      ac: acId,
+      refactor: refactorRequested,
+      rationale: verdict.notes ?? (refactorRequested ? "refactor requested" : "looks good"),
+      story,
+    },
+  });
   return { reviewed: true, refactorRequested };
 }
 
@@ -362,4 +393,17 @@ export function refactorAc(tddDir: string, featureId: string, story: string, acI
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
+  // The Driver's refactor is a cycle transition: emit it so the central log
+  // closes the per-AC RED -> GREEN -> REVIEW -> REFACTOR sequence. The notes the
+  // Navigator requested are the closest signal to what changed.
+  const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
+    ? `addressed: ${prior.refactor_notes}`
+    : "structure improved";
+  logCycleEvent(tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    feature_id: featureId,
+    slots: { ac: acId, change, story },
+  });
 }

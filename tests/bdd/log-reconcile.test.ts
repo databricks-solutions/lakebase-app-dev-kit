@@ -72,8 +72,8 @@ describe("reconcileArtifactLog", () => {
     scaffoldFeature(tddDir);
     // The spec-author DID log AC1 itself.
     emitAgentLogEvent(
-      { role: "spec-author", level: "info", event: "artifact.written", message: "AC1",
-        feature_id: F, data: { path: `features/${F}/stories/S1/acs/AC1.json` } },
+      { role: "spec-author", level: "info", event: "artifact.written",
+        feature_id: F, slots: { artifact: "AC1", summary: "authored", path: `features/${F}/stories/S1/acs/AC1.json` } },
       { tddDir },
     );
     const emitted = reconcileArtifactLog({ tddDir, featureId: F });

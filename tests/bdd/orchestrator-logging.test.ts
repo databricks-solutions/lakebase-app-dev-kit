@@ -11,7 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { orchestratorLogEvents, makeOnAction } from "../../scripts/tdd/orchestrator-logging";
+import { renderEventMessage } from "../../scripts/tdd/agent-log-events";
 import { readAgentLog } from "../../scripts/tdd/agent-log";
+import { ALL_AGENT_ROLES } from "../../scripts/tdd/agent-models";
 import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
 
 describe("orchestratorLogEvents: pure action -> canonical log events", () => {
@@ -23,7 +25,8 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(handoff, "expected an orchestrator handoff").toBeTruthy();
     expect(handoff!.role).toBe("orchestrator");
     expect(handoff!.feature_id).toBe("F1-initial-domain");
-    expect(handoff!.message).toMatch(/spec-author/);
+    // The dispatched role is a SLOT (the message is rendered from it at emit).
+    expect(handoff!.slots?.to_role).toBe("spec-author");
     // ...and a phase.start STAMPED WITH THE INVOKED ROLE (so the role's
     // lifecycle is recorded even if the role's own model never logs).
     const start = events.find((e) => e.event === "phase.start");
@@ -40,7 +43,7 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     const events = orchestratorLogEvents(action, { featureId: "F1" });
     const handoff = events.find((e) => e.event === "handoff");
     expect(handoff, "expected a release-engineer handoff").toBeTruthy();
-    expect(handoff!.message).toMatch(/release-engineer/);
+    expect(handoff!.slots?.to_role).toBe("release-engineer");
     const start = events.find((e) => e.event === "phase.start" && e.role === "release-engineer");
     expect(start, "expected a release-engineer phase.start").toBeTruthy();
     // The acceptance gate is still surfaced.
@@ -55,6 +58,59 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(surfaced!.role).toBe("orchestrator");
   });
 
+  it("dispatch (build-lane entry) emits an orchestrator phase.start build, NOT a self-handoff", () => {
+    // Opening the per-story build lane is a phase entry, not an inter-agent
+    // handoff: the build lane is the orchestrator's own pipeline. A `handoff` here
+    // would be the orchestrator handing off to itself (to_role "build-lane", not a
+    // real agent). The first true handoff is the navigator dispatch that follows.
+    const action = { kind: "dispatch", story: "S1-create-bug-form" } as unknown as WorkflowAction;
+    const events = orchestratorLogEvents(action, { featureId: "F1-file-bug" });
+    expect(events.some((e) => e.event === "handoff"), "dispatch must NOT emit a handoff").toBe(false);
+    const start = events.find((e) => e.event === "phase.start");
+    expect(start, "expected an orchestrator phase.start").toBeTruthy();
+    expect(start!.role).toBe("orchestrator");
+    expect(start!.slots?.phase).toBe("build");
+    expect(start!.slots?.story).toBe("S1-create-bug-form");
+  });
+
+  it("GUARD: every handoff to_role is a real spawnable agent role (never a lane / self-handoff)", () => {
+    // A `handoff` denotes control crossing to a DIFFERENT agent. Its to_role must
+    // be a spawnable role with a <role>.md def + a model, never a pipeline lane
+    // ("build-lane") nor the orchestrator itself. This regresses the build-lane
+    // self-handoff and any future lane sneaking into a handoff slot.
+    const roles = new Set<string>(ALL_AGENT_ROLES);
+    // One representative action per switch arm, covering every kind that runs.
+    const actions: WorkflowAction[] = [
+      ...ALL_AGENT_ROLES.map((role) => ({ kind: "invoke-role", role, story: "S1" }) as unknown as WorkflowAction),
+      { kind: "surface-gate", gate: "spec", story: "S1" } as unknown as WorkflowAction,
+      { kind: "await-acceptance", story: "S1" } as unknown as WorkflowAction,
+      { kind: "approve-gate", story: "S1" } as unknown as WorkflowAction,
+      { kind: "approve-plan-gate" } as unknown as WorkflowAction,
+      { kind: "approve-deploy-gate" } as unknown as WorkflowAction,
+      { kind: "accept", story: "S1" } as unknown as WorkflowAction,
+      { kind: "cut-experiment", story: "S1" } as unknown as WorkflowAction,
+      { kind: "dispatch", story: "S1" } as unknown as WorkflowAction,
+      { kind: "deploy" } as unknown as WorkflowAction,
+      { kind: "complete", story: "S1" } as unknown as WorkflowAction,
+      { kind: "planning-complete" } as unknown as WorkflowAction,
+      { kind: "design-complete" } as unknown as WorkflowAction,
+      { kind: "feature-complete" } as unknown as WorkflowAction,
+      { kind: "raise-to-hil", source: "navigator", reason: "x", story: "S1" } as unknown as WorkflowAction,
+      { kind: "done" } as unknown as WorkflowAction,
+    ];
+    let handoffs = 0;
+    for (const action of actions) {
+      for (const e of orchestratorLogEvents(action, { featureId: "F1" })) {
+        if (e.event !== "handoff") continue;
+        handoffs += 1;
+        const to = e.slots?.to_role as string | undefined;
+        expect(roles.has(to ?? ""), `handoff to_role "${to}" must be a spawnable agent role`).toBe(true);
+      }
+    }
+    // Sanity: the sample DID exercise real handoffs (invoke-role + await-acceptance).
+    expect(handoffs).toBeGreaterThanOrEqual(ALL_AGENT_ROLES.length);
+  });
+
   it("cut-experiment emits an orchestrator experiment.cut", () => {
     const action = { kind: "cut-experiment", story: "S1", slug: "arr" } as unknown as WorkflowAction;
     const events = orchestratorLogEvents(action, { featureId: "F1" });
@@ -66,13 +122,16 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(events.some((e) => e.role === "orchestrator" && e.event === "phase.end")).toBe(true);
   });
 
-  it("every emitted event carries the required schema fields (role/level/event/message)", () => {
+  it("every emitted event has role/level/event AND renders from its template + slots (no missing slot)", () => {
     const action = { kind: "invoke-role", role: "driver", story: "S1" } as WorkflowAction;
     for (const e of orchestratorLogEvents(action, { featureId: "F1" })) {
       expect(e.role, "role required").toBeTruthy();
       expect(e.level, "level required").toBeTruthy();
       expect(e.event, "event required").toBeTruthy();
-      expect(e.message, "message required").toBeTruthy();
+      // The message is rendered at emit; rendering must succeed (all required
+      // slots supplied) for every event the orchestrator produces.
+      const ctx = { role: e.role, ...(e.feature_id ? { feature_id: e.feature_id } : {}), ...(e.phase ? { phase: e.phase } : {}), ...(e.slots ?? {}) };
+      expect(renderEventMessage(e.event, ctx).length, `event ${e.event} renders`).toBeGreaterThan(0);
     }
   });
 });

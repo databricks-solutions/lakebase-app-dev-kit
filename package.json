@@ -113,6 +113,7 @@
     "lakebase-tdd-pipeline": "./dist/scripts/tdd/story-pipeline.cli.js",
     "lakebase-tdd-experiment": "./dist/scripts/tdd/story-experiment.cli.js",
     "lakebase-tdd-cycle": "./dist/scripts/tdd/cycle.cli.js",
+    "lakebase-tdd-response-formatter": "./dist/scripts/tdd/response-formatter.cli.js",
     "lakebase-tdd-test-list": "./dist/scripts/tdd/test-list.cli.js",
     "lakebase-tdd-drive": "./dist/scripts/tdd/drive.cli.js",
     "lakebase-tdd-spike": "./dist/scripts/tdd/spike.cli.js",

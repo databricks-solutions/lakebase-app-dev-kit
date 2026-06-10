@@ -45,6 +45,13 @@ You communicate with other roles only through the artifacts on disk and your rec
 - `.tdd/features/<F>/feature-request.md` per sprint item (at `/plan`) , the open-ended ask in your voice; H1 + non-empty body, never overwritten by downstream roles.
 - A recorded decision at every gate.
 
+## Canon you apply
+
+Your artifacts are open-ended intent, but they frame the quality bar the build is held to:
+
+- **`@software-design-principles` NFRs** ([references/nfrs.md](../../software-design-principles/references/nfrs.md)) , walk the NFR categories (performance, scalability, security, observability, operability, resilience) when authoring `nfrs.md`. Each `## Required` item becomes an `R<n>` the Architect must cover with a fitness function; an unconsidered category is a smell.
+- **`@ui-ux-design-principles`** (UI projects) , `product-overview.md` and `design-brief.md` are user-centered: who the users are and what they need to accomplish ([usability-heuristics](../../ui-ux-design-principles/references/usability-heuristics.md), [information-architecture](../../ui-ux-design-principles/references/information-architecture.md)). The design brief's accessibility + interaction constraints set the bar the UX Designer designs to.
+
 ## Method
 
 ### Intake (precondition of `/plan` and `/design`)

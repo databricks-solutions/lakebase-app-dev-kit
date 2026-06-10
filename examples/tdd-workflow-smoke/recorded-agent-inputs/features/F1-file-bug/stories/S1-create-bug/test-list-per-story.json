@@ -1,0 +1,61 @@
+{
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T1",
+      "description": "Create bug form is displayed with title and description input fields when app loads",
+      "ac_id": "create-form-displays",
+      "status": "pending"
+    },
+    {
+      "id": "T2",
+      "description": "Bug record is created with status='open' when valid title and description are submitted to the API",
+      "ac_id": "bug-created-with-open-status",
+      "status": "pending"
+    },
+    {
+      "id": "T7",
+      "description": "API rejects attempt to create bug with invalid status value and does not persist the record",
+      "ac_id": "bug-created-with-open-status",
+      "status": "pending"
+    },
+    {
+      "id": "T3",
+      "description": "Title input field captures and displays text entered by the user",
+      "ac_id": "form-accepts-title",
+      "status": "pending"
+    },
+    {
+      "id": "T4",
+      "description": "Description input field captures and displays text entered by the user",
+      "ac_id": "form-accepts-description",
+      "status": "pending"
+    },
+    {
+      "id": "T5",
+      "description": "Form submission with valid title and description triggers API request and processes without validation errors",
+      "ac_id": "form-submission-succeeds",
+      "status": "pending"
+    },
+    {
+      "id": "T8",
+      "description": "Form submission with empty title returns validation error message that names the 'title' field",
+      "ac_id": "form-submission-succeeds",
+      "status": "pending"
+    },
+    {
+      "id": "T9",
+      "description": "Form submission with empty description returns validation error message that names the 'description' field",
+      "ac_id": "form-submission-succeeds",
+      "status": "pending"
+    },
+    {
+      "id": "T6",
+      "description": "User is redirected to bug detail page at /bugs/{id} after successful bug creation",
+      "ac_id": "redirect-to-detail-page",
+      "status": "pending"
+    }
+  ]
+}

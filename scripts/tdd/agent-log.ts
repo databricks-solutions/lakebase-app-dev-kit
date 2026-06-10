@@ -13,6 +13,9 @@
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getValidator, formatSchemaErrors } from "./schema-loader";
+import { renderEventMessage, type AgentLogEventName } from "./agent-log-events.js";
+
+export type { AgentLogEventName } from "./agent-log-events.js";
 
 export type AgentRole =
   | "spec-author"
@@ -61,12 +64,19 @@ export interface AgentLogEventInput {
   timestamp?: string;
   level: AgentLogLevel;
   role: AgentRole;
-  event: string;
-  message: string;
+  /** Must be one of the closed vocabulary (agent-log-events.ts). */
+  event: AgentLogEventName;
+  /**
+   * Values that fill the event's message template (its `{{ placeholders }}`).
+   * Every required slot must be present or the emit THROWS (nothing dropped).
+   * Slots are also folded into `metadata` so the structured payload carries them.
+   * `role` / `feature_id` / `phase` / `cycle_id` are available to the template too
+   * (from the fields below), so they do not need to be repeated here.
+   */
+  slots?: Record<string, unknown>;
   feature_id?: string;
   phase?: string;
   cycle_id?: string;
-  data?: Record<string, unknown>;
   metadata?: AgentLogMetadata;
 }
 
@@ -90,13 +100,26 @@ function logFilePath(tddDir: string): string {
 export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => new Date());
+  const slots = input.slots ?? {};
+  // The message is RENDERED from the event's template + the render context (the
+  // top-level fields the template may reference + the slots). renderEventMessage
+  // THROWS if `event` is off-vocabulary or any required slot is missing , the
+  // format is enforced at the source and nothing is dropped.
+  const renderCtx: Record<string, unknown> = {
+    role: input.role,
+    ...(input.feature_id !== undefined ? { feature_id: input.feature_id } : {}),
+    ...(input.phase !== undefined ? { phase: input.phase } : {}),
+    ...(input.cycle_id !== undefined ? { cycle_id: input.cycle_id } : {}),
+    ...slots,
+  };
+  const message = renderEventMessage(input.event, renderCtx);
   // Assemble metadata with feature_id first, then phase / cycle_id, then the
-  // free-form payload + any explicit metadata. Omit entirely when empty.
+  // slots + any explicit metadata. Omit entirely when empty.
   const metadata: AgentLogMetadata = {
     ...(input.feature_id !== undefined ? { feature_id: input.feature_id } : {}),
     ...(input.phase !== undefined ? { phase: input.phase } : {}),
     ...(input.cycle_id !== undefined ? { cycle_id: input.cycle_id } : {}),
-    ...(input.data ?? {}),
+    ...slots,
     ...(input.metadata ?? {}),
   };
   const event: AgentLogEvent = {
@@ -104,7 +127,7 @@ export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpt
     level: input.level,
     role: input.role,
     event: input.event,
-    message: input.message,
+    message,
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 

@@ -100,9 +100,8 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         role: art.role,
         level: "info",
         event: "artifact.written",
-        message: art.message,
         feature_id: opts.featureId,
-        data: { path: art.path, reconciled: true },
+        slots: { artifact: art.message, summary: "present on disk (reconciled)", path: art.path, reconciled: true },
       },
       { tddDir, now: opts.now },
     );

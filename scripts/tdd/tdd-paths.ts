@@ -108,6 +108,12 @@ export const acJson = (tdd: string, f: string, s: string, ac: string): string =>
 export const storyTestListJson = (tdd: string, f: string, s: string): string =>
   join(storyResolved(tdd, f, s), "test-list-per-story.json");
 export const storyPlanJson = (tdd: string, f: string, s: string): string => join(storyResolved(tdd, f, s), "plan.json");
+/** The hand-back note for a role's retry: the orchestrator writes it (what the
+ *  role's prior turn failed to return) and the role's next prompt CONSUMES it
+ *  (reads + deletes). Keyed by role (+ story when per-story) so concurrent
+ *  per-story retries don't collide. */
+export const handbackFile = (tdd: string, f: string, role: string, story?: string): string =>
+  join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 export const storyDeployEvidenceJson = (tdd: string, f: string, s: string): string =>
   join(storyResolved(tdd, f, s), "deploy-evidence.json");
 
@@ -175,7 +181,21 @@ export function storyAcIds(tdd: string, f: string, s: string): string[] {
     try {
       for (const file of fs.readdirSync(dir)) {
         const m = /^(.+)\.json$/.exec(file);
-        if (m) ids.add(m[1]);
+        if (!m) continue;
+        const base = m[1];
+        // Count a file as an AC only if it IS one: a conformant AC self-names
+        // (acs/<id>.json holds { id: "<id>" }). This rejects non-AC files an
+        // agent may drop into acs/ (e.g. <ac>-tests.json / <ac>-test-list.json,
+        // whose `id` is the AC they test, not their suffixed basename). Without
+        // this, those pollute the AC set: every "AC" must have a layer for
+        // architectAnnotated, the test files have none, and the design lane
+        // stalls re-dispatching the Architect forever.
+        try {
+          const obj = JSON.parse(fs.readFileSync(join(dir, file), "utf8")) as { id?: unknown };
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+          /* unparseable -> not a conformant AC file; skip */
+        }
       }
     } catch {
       /* ignore unreadable acs/ */

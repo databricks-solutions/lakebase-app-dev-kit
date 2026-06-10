@@ -24,7 +24,9 @@ import * as readline from "node:readline";
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { replayBuildTurn } from "./replay-build.js";
 import { recordBuildTurn } from "./record-build.js";
-import { runDriver, driverBoundOptions, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
+import { runDriver, driverBoundOptions, ProtocolViolationError, UnexpectedCallbackError, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
+import { writeEscalation } from "./escalation.js";
+import { emitAgentLogEvent } from "./agent-log.js";
 import {
   isHitlGateAction,
   isHumanInputAction,
@@ -615,6 +617,61 @@ async function main(): Promise<number> {
     }
     return 0;
   } catch (err) {
+    // A handoff EXPECTATION violation: a role returned nothing/null for the
+    // artifact it owed (or the workflow tried to advance past an unmet handoff).
+    // Record an escalation + emit escalation.raised (honor "escalate on any
+    // error"), then abort non-zero so the run fails loud , a human resolves it.
+    if (err instanceof ProtocolViolationError) {
+      const h = err.handoff;
+      try {
+        writeEscalation(cfg.tddDir, {
+          source: `protocol:${h.responder}`,
+          reason: err.message,
+          feature_id: cfg.featureId,
+          ...(h.story ? { story_id: h.story } : {}),
+        });
+        emitAgentLogEvent(
+          {
+            role: "orchestrator",
+            level: "error",
+            event: "escalation.raised",
+            feature_id: cfg.featureId,
+            slots: { source: `protocol:${h.responder}`, reason: err.message, ...(h.story ? { story: h.story } : {}) },
+          },
+          { tddDir: cfg.tddDir },
+        );
+      } catch {
+        /* logging/escalation is best-effort; the abort below is the real signal */
+      }
+      process.stderr.write(`[drive] ${err.message}\n        recorded under .tdd/escalations/ ; fix the responder, then re-run.\n`);
+      return 3;
+    }
+    // A wrong / unexpected caller (concurrent dispatch): a callback arrived from a
+    // role we are not awaiting. Record + abort, same as a contract violation.
+    if (err instanceof UnexpectedCallbackError) {
+      try {
+        writeEscalation(cfg.tddDir, {
+          source: `protocol:unexpected-caller:${err.from}`,
+          reason: err.message,
+          feature_id: cfg.featureId,
+          ...(err.scope.story ? { story_id: err.scope.story } : {}),
+        });
+        emitAgentLogEvent(
+          {
+            role: "orchestrator",
+            level: "error",
+            event: "escalation.raised",
+            feature_id: cfg.featureId,
+            slots: { source: `protocol:unexpected-caller:${err.from}`, reason: err.message, ...(err.scope.story ? { story: err.scope.story } : {}) },
+          },
+          { tddDir: cfg.tddDir },
+        );
+      } catch {
+        /* best-effort */
+      }
+      process.stderr.write(`[drive] ${err.message}\n        recorded under .tdd/escalations/ ; resolve it, then re-run.\n`);
+      return 3;
+    }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }

@@ -43,6 +43,13 @@ You do not reinvent deploy or release. You **compose** on the substrate: `lakeba
 - The feature-verify result run against the RUNNING app (not just unit tests), proving the increment works end to end.
 - The deploy-gate surface for the PO (running URL + verify result), and teardown when the increment no longer needs to stay up.
 
+## Canon you apply
+
+Deploy is where the twelve-factor properties are cashed in:
+
+- **`@architectural-design-principles` twelve-factor** ([references/twelve-factor.md](../../architectural-design-principles/references/twelve-factor.md)) , separate build / release / run; config from the environment (no hardcoded hosts/secrets in the deployed artifact); the database is an attached backing service addressed by config (the paired branch), so the deploy targets a branch by configuration, not a code change; processes are disposable (clean teardown between increments).
+- **`@software-design-principles` NFRs** ([references/nfrs.md](../../software-design-principles/references/nfrs.md)) , the NFR-budget fitness functions (latency, query-count) are part of the deploy/release verification, not just the unit suite. A deploy that does not prove the budgets is not done.
+
 ## Method
 
 > **The local deploy is run by the orchestration, not by you.** At `await-acceptance` and `/deploy` the deterministic driver runs `lakebase-tdd-deploy --gate` itself (deploy + poll-reachable + verify + write the deploy-evidence the gate reads), exactly as it records the GREEN runner outcome , so a deploy that does not prove working software becomes honest evidence + a raise-to-hil halt, never a prose claim. Do NOT "report a deploy" you did not run: the substrate, not your summary, is what the gate reads. You are invoked for **remote-target composition** (release-on-merge via `@lakebase-release-workflows`), where the judgment is yours; the steps below describe what the substrate does for local and what you compose for remote.
@@ -63,7 +70,9 @@ Via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../refere
 - `--event phase.start` / `phase.end` around the deploy.
 - `--event deploy.reachable --data '{"target":"local","base_url":"..."}'` on reachability; `--level error --event deploy.unreachable` when it never answers.
 - `--event verify.passed` / `--level error --event verify.failed` for the running-app verify.
-- `--event handoff` when the evidence is ready for the PO's deploy gate. The PO (or Human Proxy) records the `gate.approved` / `gate.refused`.
+- The PO (or Human Proxy) records the deploy-gate decision as `gate.approved` / `gate.rejected`. The `deploy.*` + `handoff` events are code-emitted by the deterministic deploy; you do not hand-emit them.
+
+The deterministic deploy code-emits your lifecycle for you: `lakebase-tdd-deploy` writes `release-engineer` `deploy.start`, then `deploy.verified` (or `deploy.failed`, carrying reachable + verify + url from the real outcome), then `phase.end` into the ONE central `.tdd/agent-log.jsonl`. So the central log shows your work even if your own model stays silent (the same orchestrator-as-code logging principle). Your hand-emitted events above are additive detail, not the load-bearing record.
 
 ## Rules
 

@@ -97,20 +97,30 @@ accepted by the CLI, it is not part of the schema.
 
 ## 4. Per-role emit points (instrumentation)
 
-The orchestrator code-emits the lifecycle skeleton below (phase boundaries,
-handoffs, gates, `artifact.written` via reconcile). The "info/debug/warn"
-columns are the JUDGMENT events each role adds on top, through the
-`lakebase-tdd-log` CLI:
+`event` is a CLOSED vocabulary (`scripts/tdd/agent-log-events.ts`); each event has
+a fixed message TEMPLATE with `{{ slot }}` placeholders. You do NOT write a
+message: you pass `--event <name>` + the template's slots as `--slot key=value`,
+and the logger renders the message and REJECTS (exit 3, nothing dropped) an
+off-vocabulary event or a missing required slot. The event NAME carries the phase;
+the slots carry the specifics you fill.
+
+The orchestration **code-emits** the lifecycle + cycle skeleton, and these are
+NOT yours to emit: `phase.start`/`phase.end`, `handoff`, `gate.*`, `experiment.*`,
+`deploy.*`/`verify.*`, `escalation.raised`, and the entire **`cycle.*` family
+(`cycle.red` / `cycle.green` / `cycle.review` / `cycle.refactored`)** plus
+`artifact.written` (via reconcile). The substrate stamps those with the right
+slots; emitting them yourself would double-log. The columns below are the
+JUDGMENT events each role adds ON TOP, via `lakebase-tdd-log`:
 
 | Role | info | debug | warn / error |
 |---|---|---|---|
-| **Spec Author** | `phase.start`/`phase.end`; `artifact.written` per feature/story/AC; `handoff` to Architect/UX | `reasoning` on scope calls | `warn` open-question left unresolved |
-| **UX Designer** | `artifact.written` design-guide/ia; `handoff` | `reasoning` on token/IA choices, reference provenance | `error` adherence check failed |
-| **Architect Reviewer** | `artifact.written` architecture.{md,json}; `gate.surfaced` (NFRs proposed to HIL) | `reasoning` on layer/NFR proposals | `warn` cross-cutting concern with no owner |
-| **Test Strategist** | `artifact.written` test-list; `gate.surfaced` | `reasoning` on ordering rationale | `warn` a test needing impl-first (smell) |
-| **Orchestrator** (the deterministic driver) | `phase.start`/`phase.end` per transition; `gate.approved`; `experiment.cut` | the chosen action + the state it was derived from | `warn` budget cap; `error` postcondition unmet |
-| **Navigator** | `cycle.red` (failing test written); `review.verdict` | `reasoning` on the design the test forces | `warn` smell flagged (`smell.flagged`) |
-| **Driver** | `cycle.green`; `cycle.refactored` | `reasoning` on the minimal change | `warn` cycle stall; `error` runner missing |
+| **Spec Author** | `artifact.written` (auto via reconcile) | `reasoning` on scope calls | `open.question` left unresolved |
+| **UX Designer** | (artifacts auto-logged) | `reasoning` on token/IA choices, reference provenance | `adherence.failed` |
+| **Architect Reviewer** | (architecture auto-logged) | `reasoning` on layer/NFR proposals | `concern.flagged` (cross-cutting concern with no owner) |
+| **Test Strategist** | (test-list auto-logged) | `reasoning` on ordering rationale | `smell.flagged` (a test needing impl-first) |
+| **Orchestrator** (deterministic driver) | code-emits `phase.*`, `handoff`, `gate.approved`, `experiment.*`, `cycle.*` | , | `escalation.raised` |
+| **Navigator** | (the `cycle.red` / `cycle.review` are code-stamped) | `reasoning` on the design the test forces | `smell.flagged` |
+| **Driver** | (the `cycle.green` / `cycle.refactored` are code-stamped) | `reasoning` on the minimal change | `runner.missing` |
 
 The orchestrator may also emit `handoff` events at each role boundary so the
 log reads as a clean relay timeline.
@@ -137,7 +147,7 @@ So a normal (human) run logs: `gate.surfaced` (transition) then the human's
 `gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then
 the next phase's `phase.start`. In **Human Proxy mode** the human is performed
 by `human-proxy`, which emits the SAME `product-owner` `gate.approved` /
-`gate.refused` events (it validated the artifact's expected elements first). The
+`gate.rejected` events (it validated the artifact's expected elements first). The
 log shape is identical; only the approver identity in `data.approver` differs,
 so an auditor sees exactly where a human was, or was not, in the loop.
 

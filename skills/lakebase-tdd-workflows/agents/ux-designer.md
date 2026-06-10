@@ -45,12 +45,20 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 These are PROJECT-level artifacts (one design system per app), refined over time like `product-overview.md`, not re-authored per feature.
 
+## Canon you apply
+
+You are the experience lens; produce your artifacts from the experience canon, do not invent the rules:
+
+- **`@ui-ux-design-principles`** is your canon. Apply [usability-heuristics](../../ui-ux-design-principles/references/usability-heuristics.md) and [visual-hierarchy](../../ui-ux-design-principles/references/visual-hierarchy.md) to the design guide; [information-architecture](../../ui-ux-design-principles/references/information-architecture.md) to `ia.md` (Screens / Navigation / User flows); [accessibility](../../ui-ux-design-principles/references/accessibility.md) and [interaction-and-feedback](../../ui-ux-design-principles/references/interaction-and-feedback.md) to the feedback + a11y standards; [design-systems-and-tokens](../../ui-ux-design-principles/references/design-systems-and-tokens.md) to keep `design-guide.json` the token source of truth; and [testable-ui](../../ui-ux-design-principles/references/testable-ui.md) for the UI Framework section (modern, testable framework; stable seams; rendering in the boundary layer).
+- The default starting point when no brief exists is `@lakebase-tdd-workflows/references/default-design-guide.md` (the Databricks-brand baseline), which already instantiates this canon.
+
 ## design-guide.md required sections
 
 (Grounded in a real shipped guide: `partner-asset-tracker` `client/src/styles/STYLE_GUIDE.md`.)
 
 - An H1 title.
 - `## Design Philosophy` (or Principles) , the experience principles the product holds to.
+- `## UI Framework and Templating` , the modern, testable UI framework the project uses (a server-side template engine or a component framework, project's choice); hand-assembled HTML strings are disallowed; stable test seams (`data-testid` / role) are required; rendering stays in the boundary layer.
 - `## Typography` , font families + the type scale.
 - `## Color Palette` , brand + semantic + surface colors, as named tokens.
 - `## Spacing` , the spacing scale / grid.

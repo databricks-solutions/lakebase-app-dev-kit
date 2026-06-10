@@ -15,6 +15,33 @@ machine-checkable tokens live alongside it as `design-guide.json`
 - **Consistent with the Databricks ecosystem** , a user moving between Databricks
   surfaces and this app should feel at home.
 
+## UI Framework and Templating
+
+The UI is built with a **modern, testable framework**, never hand-assembled HTML
+strings. The requirement is *modern and testable*, not a specific library: the
+rendered output must be deterministic and addressable by stable selectors so the
+behavior tests (BDD scenarios) and the design-adherence checks can drive it.
+Pick whichever of the two shapes below fits the project.
+
+- **A modern server-side template engine** with template inheritance,
+  autoescaping, and partials. Jinja is one example, not a mandate; the language's
+  equivalents (ERB, Handlebars, Razor, etc.) are equally fine. Hand-built string
+  concatenation of HTML is a smell , unescaped by default, untestable, and
+  impossible to keep consistent with this guide.
+- **A modern component framework** (React, Vue, Svelte) where the project is a
+  single-page app. The same rule applies: components render deterministically
+  and expose stable hooks.
+- **Stable test seams are mandatory.** Every interactive element and every
+  region a test or the design-adherence check targets carries a stable selector
+  (a `data-testid` or a semantic role / ARIA label), not a brittle CSS path. The
+  behavior test addresses the element by that seam.
+- **Rendering lives in the boundary layer.** Templates are an adapter at the
+  HTTP / boundary layer (see `architectural-design-principles` layered-architecture):
+  the service layer returns domain data, the boundary renders it. No business
+  logic in templates.
+- **Accessibility is part of testable.** Semantic HTML and ARIA roles make the
+  UI both usable and reliably selectable; the two goals reinforce each other.
+
 ## Typography
 
 - Font family: `"DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif`.

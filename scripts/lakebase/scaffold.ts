@@ -200,6 +200,8 @@ export async function deployClaudeAgents(
  */
 export const PROJECT_SKILLS = [
   "software-design-principles",
+  "architectural-design-principles",
+  "ui-ux-design-principles",
   "lakebase-tdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
@@ -602,7 +604,7 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
-    report("Deploying .claude/skills/ (software-design-principles)");
+    report(`Deploying .claude/skills/ (${PROJECT_SKILLS.length} skills: engineering + design canon + workflows)`);
     const skills = await deployClaudeSkills(args.targetDir, opts);
     claudeSkills = skills.written;
   }

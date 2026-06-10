@@ -19,6 +19,8 @@ import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
 import { findFeatureDir } from "./tdd-paths.js";
 import { writeEscalation } from "./escalation.js";
+import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
+import type { AgentLogEventName } from "./agent-log-events.js";
 
 export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -134,6 +136,99 @@ export interface DeployResult {
   evidencePath?: string;
 }
 
+/** Context for code-emitting the Release Engineer's deploy lifecycle. */
+export interface ReleaseEngineerLogCtx extends AgentLogIoOpts {
+  featureId: string;
+  storyId?: string;
+  target: string;
+}
+
+/**
+ * Code-emit the Release Engineer's deploy START into the central agent log.
+ *
+ * The deterministic deploy (`lakebase-tdd-deploy`) is what actually starts +
+ * verifies the app; the RE role model that invokes it may stay silent (a haiku
+ * RE wrote zero log events while the deploy ran). So the deploy emits the RE's
+ * own lifecycle , the same orchestrator-as-code logging principle , into the ONE
+ * central `.tdd/agent-log.jsonl`, so the RE's work is in the stream regardless of
+ * which model ran the role. Best-effort: a logging failure never blocks deploy.
+ */
+export function logReleaseEngineerDeployStart(ctx: ReleaseEngineerLogCtx): void {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  try {
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "deploy.start",
+        feature_id: ctx.featureId,
+        slots: { scope, target: ctx.target, ...(ctx.storyId ? { story: ctx.storyId } : {}) },
+      },
+      { tddDir: ctx.tddDir, now: ctx.now },
+    );
+  } catch {
+    /* observability is not load-bearing for the deploy */
+  }
+}
+
+/**
+ * Code-emit the Release Engineer's deploy OUTCOME (from the real DeployResult:
+ * reachable + verify + url) and a phase end into the central agent log, so the
+ * RE's finish is recorded, not just its start. Pairs with
+ * logReleaseEngineerDeployStart. Best-effort.
+ */
+export function logReleaseEngineerDeployOutcome(ctx: ReleaseEngineerLogCtx, result: DeployResult): void {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  const storyData = ctx.storyId ? { story: ctx.storyId } : {};
+  const io = { tddDir: ctx.tddDir, now: ctx.now };
+  try {
+    if (result.ok) {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "info",
+          event: "deploy.verified",
+          feature_id: ctx.featureId,
+          slots: {
+            scope,
+            url: result.url,
+            verify_status: result.verify?.passed ? "passed" : "not run/failed",
+            target: ctx.target,
+            reachable: true,
+            verify_passed: result.verify?.passed ?? false,
+            ...storyData,
+          },
+        },
+        io,
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "error",
+          event: "deploy.failed",
+          feature_id: ctx.featureId,
+          slots: { scope, reason: result.reason ?? "unknown", target: ctx.target, verify_passed: result.verify?.passed ?? false, ...storyData },
+        },
+        io,
+      );
+    }
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "phase.end",
+        feature_id: ctx.featureId,
+        phase: "deploy",
+        slots: { outcome: result.ok ? "verified" : "failed", ok: result.ok, ...storyData },
+      },
+      io,
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
 function pidFile(projectDir: string, target: string): string {
   return join(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
@@ -217,6 +312,21 @@ export interface DeployArgs {
    * per-cycle reuse path (ensureDeployedAndVerify) is unaffected.
    */
   rejectForeignPort?: boolean;
+}
+
+/**
+ * Best-effort emit of a deterministic deploy-step event (deploy.reachable /
+ * deploy.unreachable / verify.passed / verify.failed) from the SUBSTRATE. The
+ * deploy substrate computes reachability + the verify outcome itself, so it
+ * emits them itself rather than depending on the Release Engineer's prose to
+ * remember (the cycle.* fragility class). Observability never blocks a deploy.
+ */
+function logDeployEvent(tddDir: string, event: AgentLogEventName, slots: Record<string, unknown>): void {
+  try {
+    emitAgentLogEvent({ role: "release-engineer", level: "info", event, slots }, { tddDir });
+  } catch {
+    // swallow: logging is observability, never a reason to fail a deploy
+  }
 }
 
 /**
@@ -325,6 +435,30 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
       ...(args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {}),
       deployed_at: at,
     });
+    // Deterministic deploy-step events from the substrate (it computed these),
+    // so the central log records reachability + the verify outcome without
+    // relying on the Release Engineer's prose.
+    const scope = args.storyId ? `story ${args.storyId}` : `feature ${args.featureId}`;
+    const stepSlots = { feature_id: args.featureId, ...(args.storyId ? { story: args.storyId } : {}) };
+    if (reachableNow) {
+      logDeployEvent(tddDir, "deploy.reachable", { url, pid, ...stepSlots });
+    } else {
+      logDeployEvent(tddDir, "deploy.unreachable", {
+        url,
+        reason: `not reachable after ${cfg.readyTimeoutSeconds}s`,
+        ...stepSlots,
+      });
+    }
+    // verify.* only when a verify command actually ran (reachable + configured).
+    if (reachableNow && cfg.verify) {
+      logDeployEvent(
+        tddDir,
+        verify.passed ? "verify.passed" : "verify.failed",
+        verify.passed
+          ? { scope, command: cfg.verify, ...stepSlots }
+          : { scope, command: cfg.verify, summary: verify.summary ?? "feature-verify failed", ...stepSlots },
+      );
+    }
     // Raise to the HIL when the deploy could not prove working software
     // (unreachable, or reachable but verify FAILED). This is what turns the
     // Release Engineer's honest "1 of N ACs failed" into a clean raise-to-hil

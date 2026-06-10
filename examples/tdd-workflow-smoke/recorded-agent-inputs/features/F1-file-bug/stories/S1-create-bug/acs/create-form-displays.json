@@ -1,0 +1,9 @@
+{
+  "id": "create-form-displays",
+  "given": "A user opens the app in their browser",
+  "when": "The app loads",
+  "then": "A create bug form is displayed with input fields for title and description",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Frontend renders BugCreateForm component on app initialization. Exercise UI layer rendering on page load."
+}

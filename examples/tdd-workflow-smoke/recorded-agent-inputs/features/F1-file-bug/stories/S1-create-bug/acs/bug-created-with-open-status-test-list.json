@@ -1,0 +1,12 @@
+{
+  "id": "T2",
+  "description": "Bug record is created with status='open' when valid title and description are submitted to the API",
+  "ac_id": "bug-created-with-open-status",
+  "status": "pending"
+}
+{
+  "id": "T7",
+  "description": "API rejects attempt to create bug with invalid status value and does not persist the record",
+  "ac_id": "bug-created-with-open-status",
+  "status": "pending"
+}
