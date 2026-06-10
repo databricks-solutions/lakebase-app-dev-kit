@@ -12,6 +12,10 @@ var __esm = (fn, res) => function __init() {
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -28,11 +32,15 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/tsup/assets/cjs_shims.js
+var getImportMetaUrl, importMetaUrl;
 var init_cjs_shims = __esm({
   "node_modules/tsup/assets/cjs_shims.js"() {
     "use strict";
+    getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${__filename}`).href : document.currentScript && document.currentScript.tagName.toUpperCase() === "SCRIPT" ? document.currentScript.src : new URL("main.js", document.baseURI).href;
+    importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
   }
 });
 
@@ -3008,7 +3016,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3035,7 +3043,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3254,8 +3262,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path6) {
-      let input = path6;
+    function removeDotSegments(path) {
+      let input = path;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3516,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path6, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path6 && path6 !== "/" ? path6 : void 0;
+        const [path, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path && path !== "/" ? path : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3669,7 +3677,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3927,7 +3935,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve,
       resolveComponent,
       equal,
       serialize,
@@ -4129,7 +4137,7 @@ var require_core = __commonJS({
         if (typeof this.opts.loadSchema != "function") {
           throw new Error("options.loadSchema should be a function");
         }
-        const { loadSchema: loadSchema2 } = this.opts;
+        const { loadSchema } = this.opts;
         return runCompileAsync.call(this, schema, meta);
         async function runCompileAsync(_schema, _meta) {
           await loadMetaSchema.call(this, _schema.$schema);
@@ -4169,7 +4177,7 @@ var require_core = __commonJS({
           if (p)
             return p;
           try {
-            return await (this._loading[ref] = loadSchema2(ref));
+            return await (this._loading[ref] = loadSchema(ref));
           } finally {
             delete this._loading[ref];
           }
@@ -6641,902 +6649,50 @@ var require_ajv = __commonJS({
   }
 });
 
-// scripts/tdd/drive.cli.ts
+// scripts/tdd/timing-report.cli.ts
+var timing_report_cli_exports = {};
+__export(timing_report_cli_exports, {
+  runTimingCli: () => runTimingCli
+});
+module.exports = __toCommonJS(timing_report_cli_exports);
 init_cjs_shims();
-var import_node_child_process9 = require("child_process");
-var import_node_crypto = require("crypto");
-var fs10 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
-var readline = __toESM(require("readline"), 1);
 
-// scripts/tdd/replay-artifacts.ts
+// scripts/util/cli-entry.ts
 init_cjs_shims();
-var import_fs = require("fs");
-var import_path = require("path");
-
-// scripts/tdd/tdd-paths.ts
-init_cjs_shims();
-var fs = __toESM(require("fs"), 1);
-var import_node_path = require("path");
-var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
-var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
-var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
-var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
-var experimentsRootDir = (tdd) => (0, import_node_path.join)(tdd, "experiments");
-var escalationsDir = (tdd) => (0, import_node_path.join)(tdd, "escalations");
-var escalationFile = (tdd, id) => (0, import_node_path.join)(escalationsDir(tdd), `${id}.json`);
-var acReviewJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review.json");
-var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
-var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
-var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
-var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
-var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
-var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
-var architectureJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "architecture.json");
-var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
-var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
-var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
-var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
-function findStoryDir(tdd, f, s) {
-  const root = storiesDir(tdd, f);
-  if (!fs.existsSync(root)) return void 0;
-  const exact = (0, import_node_path.join)(root, s);
-  if (fs.existsSync(exact)) return exact;
-  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
-  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
-}
-var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
-var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
-var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
-var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
-var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
-var handbackFile = (tdd, f, role, story) => (0, import_node_path.join)(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
-var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
-var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
-var backlogJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "backlog.json");
-function findFeatureDir(tdd, featureId) {
-  const root = featuresDir(tdd);
-  if (!fs.existsSync(root)) return void 0;
-  const exact = (0, import_node_path.join)(root, featureId);
-  if (fs.existsSync(exact)) return exact;
-  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
-}
-function requireFeatureDir(tdd, featureId) {
-  const dir = findFeatureDir(tdd, featureId);
-  if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
-  return dir;
-}
-function storyAcIds(tdd, f, s) {
-  const ids = /* @__PURE__ */ new Set();
-  const sj = storyJson(tdd, f, s);
-  if (fs.existsSync(sj)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
-      if (Array.isArray(data.acs)) {
-        for (const a of data.acs) {
-          const id = typeof a === "string" ? a : a?.id;
-          if (typeof id === "string" && id.length > 0) ids.add(id);
-        }
-      }
-    } catch {
-    }
-  }
-  const dir = acsDir(tdd, f, s);
-  if (fs.existsSync(dir)) {
-    try {
-      for (const file of fs.readdirSync(dir)) {
-        const m = /^(.+)\.json$/.exec(file);
-        if (!m) continue;
-        const base = m[1];
-        try {
-          const obj = JSON.parse(fs.readFileSync((0, import_node_path.join)(dir, file), "utf8"));
-          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
-        } catch {
-        }
-      }
-    } catch {
-    }
-  }
-  return [...ids];
-}
-function readAcLayer(tdd, f, acId) {
-  const stories = storiesDir(tdd, f);
-  if (!fs.existsSync(stories)) return void 0;
-  for (const s of fs.readdirSync(stories)) {
-    const file = acJson(tdd, f, s, acId);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
-    } catch {
-    }
-  }
-  return void 0;
-}
-var hasFeatureRequest = (tdd, f) => fs.existsSync(featureRequestMd(tdd, f));
-var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
-var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
-var planningEstimatesJson = (tdd) => (0, import_node_path.join)(planningDir(tdd), "estimates.json");
-function readEstimates(tdd) {
-  const file = planningEstimatesJson(tdd);
-  if (!fs.existsSync(file)) return [];
+var import_node_fs = require("fs");
+var import_node_url = require("url");
+function isCliEntry(importMetaUrl2) {
+  const invokedRaw = process.argv[1];
+  if (!invokedRaw) return false;
+  let invokedResolved;
+  let moduleResolved;
   try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (!Array.isArray(data.estimates)) return [];
-    return data.estimates.flatMap((e) => {
-      const id = e?.feature_id;
-      const size = e?.size;
-      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
-      const rationale = e?.rationale;
-      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
-    });
+    invokedResolved = (0, import_node_fs.realpathSync)(invokedRaw);
   } catch {
-    return [];
+    return false;
   }
-}
-var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
-var backlogFeatureIds = (b) => b.features.map((f) => f.id);
-function readBacklog(tdd, sprint) {
-  const file = backlogJson(tdd, sprint);
-  if (!fs.existsSync(file)) return { sprint, features: [] };
   try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
-      if (typeof x === "string" && x.length > 0) return [{ id: x }];
-      const id = x?.id;
-      if (typeof id !== "string" || !id) return [];
-      const size = x?.size;
-      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
-    }) : [];
-    return { sprint, features };
+    moduleResolved = (0, import_node_fs.realpathSync)((0, import_node_url.fileURLToPath)(importMetaUrl2));
   } catch {
-    return { sprint, features: [] };
+    return false;
   }
-}
-function writeBacklog(tdd, backlog) {
-  fs.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
-  fs.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
-}
-function syncBacklog(tdd, sprint) {
-  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
-  const root = featuresDir(tdd);
-  const committed = fs.existsSync(root) ? fs.readdirSync(root).filter((d) => {
-    try {
-      return fs.statSync((0, import_node_path.join)(root, d)).isDirectory() && fs.existsSync((0, import_node_path.join)(root, d, "feature-request.md"));
-    } catch {
-      return false;
-    }
-  }).sort() : [];
-  const features = committed.map((id) => {
-    const size = sizeOf.get(id);
-    return { id, ...size ? { size } : {} };
-  });
-  const backlog = { sprint, features };
-  writeBacklog(tdd, backlog);
-  return backlog;
+  return invokedResolved === moduleResolved;
 }
 
-// scripts/tdd/replay-artifacts.ts
-var REPLAYABLE_DESIGN_ROLES = /* @__PURE__ */ new Set([
-  "spec-author",
-  "architect-reviewer",
-  "test-strategist",
-  "ux-designer",
-  "product-owner"
-]);
-function cp(src, dst) {
-  if (!(0, import_fs.existsSync)(src)) return false;
-  (0, import_fs.mkdirSync)((0, import_path.dirname)(dst), { recursive: true });
-  (0, import_fs.copyFileSync)(src, dst);
-  return true;
-}
-function cpDir(srcDir, dstDir, transform) {
-  if (!(0, import_fs.existsSync)(srcDir)) return false;
-  let copied = false;
-  (0, import_fs.mkdirSync)(dstDir, { recursive: true });
-  for (const name of (0, import_fs.readdirSync)(srcDir)) {
-    const s = (0, import_path.join)(srcDir, name);
-    if (!(0, import_fs.statSync)(s).isFile()) continue;
-    const text = (0, import_fs.readFileSync)(s, "utf8");
-    (0, import_fs.writeFileSync)((0, import_path.join)(dstDir, name), transform ? transform(name, text) : text);
-    copied = true;
-  }
-  return copied;
-}
-function stripLayer(name, text) {
-  if (!name.endsWith(".json")) return text;
-  try {
-    const ac = JSON.parse(text);
-    delete ac.layer;
-    return JSON.stringify(ac, null, 2) + "\n";
-  } catch {
-    return text;
-  }
-}
-function replayDesignTurn(args) {
-  const { turn, replayDir, tddDir, featureId } = args;
-  const cf = (0, import_path.join)(featuresDir(replayDir), featureId);
-  const tf = (0, import_path.join)(featuresDir(tddDir), featureId);
-  switch (turn.role) {
-    case "spec-author": {
-      if (turn.mode === "propose") {
-        return cp((0, import_path.join)(replayDir, "planning", "feature-proposals.md"), (0, import_path.join)(tddDir, "planning", "feature-proposals.md"));
-      }
-      if (turn.mode === "breakdown") {
-        let ok = cp((0, import_path.join)(cf, "feature-spec.json"), (0, import_path.join)(tf, "feature-spec.json"));
-        cp((0, import_path.join)(cf, "feature-spec.md"), (0, import_path.join)(tf, "feature-spec.md"));
-        const storiesSrc = (0, import_path.join)(cf, "stories");
-        if ((0, import_fs.existsSync)(storiesSrc)) {
-          for (const s of (0, import_fs.readdirSync)(storiesSrc)) {
-            cp((0, import_path.join)(storiesSrc, s, "story.json"), (0, import_path.join)(tf, "stories", s, "story.json"));
-            cp((0, import_path.join)(storiesSrc, s, "story.md"), (0, import_path.join)(tf, "stories", s, "story.md"));
-          }
-        }
-        return ok;
-      }
-      if (turn.story) {
-        return cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"), stripLayer);
-      }
-      return false;
-    }
-    case "architect-reviewer": {
-      let ok = cp((0, import_path.join)(cf, "architecture.json"), (0, import_path.join)(tf, "architecture.json"));
-      cp((0, import_path.join)(cf, "architecture.md"), (0, import_path.join)(tf, "architecture.md"));
-      if (turn.story) {
-        const acs = cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"));
-        ok = ok || acs;
-      }
-      return ok;
-    }
-    case "test-strategist": {
-      let ok = cp((0, import_path.join)(cf, "test-list.json"), (0, import_path.join)(tf, "test-list.json"));
-      cp((0, import_path.join)(cf, "test-list.md"), (0, import_path.join)(tf, "test-list.md"));
-      const story = turn.story;
-      if (story) {
-        cp((0, import_path.join)(cf, "stories", story, "test-list-per-ac.json"), (0, import_path.join)(tf, "stories", story, "test-list-per-ac.json"));
-      }
-      return ok;
-    }
-    case "ux-designer": {
-      let ok = cp((0, import_path.join)(replayDir, "design", "design-guide.json"), (0, import_path.join)(tddDir, "design", "design-guide.json"));
-      cp((0, import_path.join)(replayDir, "design", "design-guide.md"), (0, import_path.join)(tddDir, "design", "design-guide.md"));
-      cp((0, import_path.join)(replayDir, "design", "ia.md"), (0, import_path.join)(tddDir, "design", "ia.md"));
-      return ok;
-    }
-    default:
-      return false;
-  }
-}
-
-// scripts/tdd/replay-build.ts
+// scripts/tdd/timing-report.ts
 init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
-var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([
-  ".git",
-  ".tdd",
-  ".lakebase",
-  "scripts",
-  ".claude",
-  ".github",
-  "node_modules"
-]);
-var JUNK_DIRS = /* @__PURE__ */ new Set([
-  ".venv",
-  "venv",
-  "__pycache__",
-  ".pytest_cache",
-  ".mypy_cache",
-  ".ruff_cache",
-  ".git",
-  "node_modules"
-]);
-var JUNK_FILES = /* @__PURE__ */ new Set([".env", ".DS_Store", "Makefile", "deploy-targets.yaml"]);
-function codeTreeFilter(root) {
-  return (src) => {
-    const rel = src.slice(root.length).replace(/^[/\\]+/, "");
-    if (rel === "") return true;
-    const segs = rel.split(/[/\\]/);
-    if (SCAFFOLD_OWNED.has(segs[0])) return false;
-    if (segs.some((s) => JUNK_DIRS.has(s))) return false;
-    const base = segs[segs.length - 1];
-    return !(JUNK_FILES.has(base) || base.endsWith(".pyc"));
-  };
-}
-function storyTurnsDir(replayBuildDir, featureId, story) {
-  return (0, import_path2.join)(featuresDir(replayBuildDir), featureId, "stories", story, "turns");
-}
-function listBuildTurns(replayBuildDir, featureId, story) {
-  const dir = storyTurnsDir(replayBuildDir, featureId, story);
-  if (!(0, import_fs2.existsSync)(dir)) return [];
-  return (0, import_fs2.readdirSync)(dir).filter((n) => !n.startsWith(".")).sort();
-}
-function replayBuildTurn(args) {
-  const { replayBuildDir, projectDir, tddDir, featureId, story, turnIndex } = args;
-  const turns = listBuildTurns(replayBuildDir, featureId, story);
-  if (turnIndex < 1 || turnIndex > turns.length) return false;
-  const turnDir = (0, import_path2.join)(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
-  const codeSrc = (0, import_path2.join)(turnDir, "code");
-  if (!(0, import_fs2.existsSync)(codeSrc)) return false;
-  (0, import_fs2.cpSync)(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
-  const cyclesSrc = (0, import_path2.join)(turnDir, "tdd", "cycles");
-  if ((0, import_fs2.existsSync)(cyclesSrc)) {
-    (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(tddDir), {
-      recursive: true,
-      force: true,
-      filter: (src) => (0, import_fs2.statSync)(src).isDirectory() || src.endsWith("review-verdict.json")
-    });
-  }
-  return true;
-}
-
-// scripts/tdd/record-build.ts
-init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
-function turnSlug(turn, role, ac, mode) {
-  const n = String(turn).padStart(3, "0");
-  return [n, role, mode, ac].filter(Boolean).join("-");
-}
-function recordBuildTurn(args) {
-  const { recordBuildDir, projectDir, tddDir, featureId, story, turn, role, ac, mode } = args;
-  const turnDir = (0, import_path3.join)(
-    featuresDir(recordBuildDir),
-    featureId,
-    "stories",
-    story,
-    "turns",
-    turnSlug(turn, role, ac, mode)
-  );
-  (0, import_fs3.mkdirSync)(turnDir, { recursive: true });
-  (0, import_fs3.cpSync)(projectDir, (0, import_path3.join)(turnDir, "code"), {
-    recursive: true,
-    force: true,
-    filter: codeTreeFilter(projectDir)
-  });
-  const cyclesSrc = cyclesRootDir(tddDir);
-  if ((0, import_fs3.existsSync)(cyclesSrc)) (0, import_fs3.cpSync)(cyclesSrc, (0, import_path3.join)(turnDir, "tdd", "cycles"), { recursive: true, force: true });
-  const expSrc = experimentsRootDir(tddDir);
-  if ((0, import_fs3.existsSync)(expSrc)) (0, import_fs3.cpSync)(expSrc, (0, import_path3.join)(turnDir, "tdd", "experiments"), { recursive: true, force: true });
-  return turnDir;
-}
-
-// scripts/tdd/orchestrator-run.ts
-init_cjs_shims();
-
-// scripts/tdd/orchestrator-drive.ts
-init_cjs_shims();
-function uxDesignerPending(s) {
-  return !!s.uiTrack && s.breakdownDone && !s.designGuideReady;
-}
-function nextDesignAction(state) {
-  if (!state.breakdownDone) {
-    return { kind: "invoke-role", role: "spec-author", mode: "breakdown" };
-  }
-  if (uxDesignerPending(state)) {
-    return { kind: "invoke-role", role: "ux-designer" };
-  }
-  for (const story of state.storyOrder) {
-    const v = state.stories[story];
-    if (v?.gateApproved) continue;
-    const design = v?.design ?? { hasAcs: false, architectAnnotated: false, testListReady: false };
-    if (!design.hasAcs) return { kind: "invoke-role", role: "spec-author", story };
-    if (!design.architectAnnotated) return { kind: "invoke-role", role: "architect-reviewer", story };
-    if (!design.testListReady) return { kind: "invoke-role", role: "test-strategist", story };
-    if (!v?.gateSurfaced) return { kind: "surface-gate", story };
-    return { kind: "approve-gate", story };
-  }
-  return { kind: "design-complete" };
-}
-function nextBuildAction(story, b) {
-  if (!b.experimentCut) return { kind: "cut-experiment", story };
-  if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
-  if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
-  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
-  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
-  if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
-  if (!b.deployVerified) return { kind: "await-acceptance", story };
-  if (!b.accepted) return { kind: "accept", story };
-  return { kind: "complete", story };
-}
-function nextTransition(state) {
-  if (state.escalation) {
-    const e = state.escalation;
-    return { kind: "raise-to-hil", reason: e.reason, source: e.source, ...e.story_id ? { story: e.story_id } : {} };
-  }
-  if (state.phase === "planning") {
-    const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
-    if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
-    if (!p.skipSizing && !p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
-    if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
-    if (!p.gateApproved) return { kind: "approve-plan-gate" };
-    return { kind: "planning-complete" };
-  }
-  if (state.phase === "deploy") {
-    const d = state.deploy ?? { deployed: false, gateApproved: false };
-    if (!d.deployed) return { kind: "deploy" };
-    if (!d.gateApproved) return { kind: "approve-deploy-gate" };
-    return { kind: "done" };
-  }
-  if (state.phase === "done") return { kind: "done" };
-  if (uxDesignerPending(state)) {
-    return { kind: "invoke-role", role: "ux-designer" };
-  }
-  if (state.buildActive) {
-    return nextBuildAction(state.buildActive, state.stories[state.buildActive].build);
-  }
-  for (const story of state.storyOrder) {
-    const v = state.stories[story];
-    if (v?.gateApproved && !v.build.accepted) return { kind: "dispatch", story };
-  }
-  const design = nextDesignAction(toDesignView(state));
-  if (design.kind === "design-complete") return { kind: "feature-complete" };
-  return design;
-}
-function toDesignView(state) {
-  return {
-    breakdownDone: state.breakdownDone,
-    storyOrder: state.storyOrder,
-    uiTrack: state.uiTrack,
-    designGuideReady: state.designGuideReady,
-    stories: Object.fromEntries(
-      Object.entries(state.stories).map(([id, v]) => [
-        id,
-        { gateApproved: v.gateApproved, gateSurfaced: v.gateSurfaced, design: v.design }
-      ])
-    )
-  };
-}
-function nextDesignOnlyTransition(state) {
-  return nextDesignAction(toDesignView(state));
-}
-function pauseBeforeMilestone(m) {
-  switch (m) {
-    case "navigator":
-      return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === void 0;
-    case "release-engineer":
-      return (a) => a.kind === "await-acceptance" || a.kind === "deploy";
-  }
-}
-function actionLane(action) {
-  switch (action.kind) {
-    case "invoke-role": {
-      if ("mode" in action) {
-        return action.mode === "breakdown" ? "design" : "planning";
-      }
-      return action.role === "navigator" || action.role === "driver" ? "build" : "design";
-    }
-    case "approve-plan-gate":
-    case "planning-complete":
-      return "planning";
-    case "surface-gate":
-    case "approve-gate":
-    case "design-complete":
-      return "design";
-    case "dispatch":
-    case "cut-experiment":
-    case "await-acceptance":
-    case "accept":
-    case "complete":
-      return "build";
-    case "feature-complete":
-      return "coarse";
-    case "deploy":
-    case "approve-deploy-gate":
-      return "deploy";
-    case "raise-to-hil":
-      return "done";
-    case "done":
-      return "done";
-  }
-}
-function isHitlGateAction(action) {
-  return action.kind === "approve-gate" || action.kind === "approve-plan-gate" || action.kind === "approve-deploy-gate" || action.kind === "accept";
-}
-function isHumanInputAction(action) {
-  return action.kind === "invoke-role" && "mode" in action && action.mode === "author-requests";
-}
-
-// scripts/tdd/orchestrator-expect.ts
-init_cjs_shims();
-var ProtocolViolationError = class extends Error {
-  constructor(handoff, detail) {
-    super(
-      `PROTOCOL VIOLATION: expected ${handoff.responder}${handoff.story ? ` (story ${handoff.story}${handoff.ac ? `/${handoff.ac}` : ""})` : ""} to return ${handoff.expected}, but ${detail}. Aborting workflow.`
-    );
-    this.handoff = handoff;
-    this.detail = detail;
-    this.name = "ProtocolViolationError";
-  }
-  handoff;
-  detail;
-};
-var UnexpectedCallbackError = class extends Error {
-  constructor(from, scope, expected) {
-    const where = scope.story ? ` (story ${scope.story}${scope.ac ? `/${scope.ac}` : ""})` : "";
-    super(
-      `PROTOCOL VIOLATION: unexpected callback from ${from}${where} , no outstanding handoff awaits it (awaiting: ${expected.length ? expected.join(", ") : "nothing"}). Aborting workflow.`
-    );
-    this.from = from;
-    this.scope = scope;
-    this.expected = expected;
-    this.name = "UnexpectedCallbackError";
-  }
-  from;
-  scope;
-  expected;
-};
-function sig(action) {
-  return JSON.stringify(action);
-}
-function storyOf(action) {
-  return "story" in action ? action.story : void 0;
-}
-function expectationFor(action) {
-  if (action.kind !== "invoke-role") return null;
-  const responder = action.role;
-  const story = storyOf(action);
-  const signature = sig(action);
-  const base = { signature, responder, ...story ? { story } : {} };
-  const storyView2 = (s) => story ? s.stories[story] : void 0;
-  if (responder === "spec-author" && "mode" in action && action.mode === "breakdown") {
-    return { ...base, expected: "a feature breakdown (\u22651 story)", satisfiedBy: (s) => s.breakdownDone === true };
-  }
-  if (responder === "spec-author" && "mode" in action && action.mode === "propose") {
-    return { ...base, expected: "feature proposals", satisfiedBy: (s) => s.planning?.proposed === true };
-  }
-  if (responder === "ux-designer") {
-    return { ...base, expected: "a design guide", satisfiedBy: (s) => s.designGuideReady === true };
-  }
-  if (responder === "spec-author") {
-    return { ...base, expected: "drafted acceptance criteria (non-empty)", satisfiedBy: (s) => storyView2(s)?.design.hasAcs === true };
-  }
-  if (responder === "architect-reviewer" && "mode" in action && action.mode === "estimate") {
-    return { ...base, expected: "a t-shirt size estimate", satisfiedBy: (s) => s.planning?.estimated === true };
-  }
-  if (responder === "architect-reviewer") {
-    return { ...base, expected: "layer/NFR-annotated ACs", satisfiedBy: (s) => storyView2(s)?.design.architectAnnotated === true };
-  }
-  if (responder === "test-strategist") {
-    return { ...base, expected: "a non-empty per-story test list mapped to the story's ACs", satisfiedBy: (s) => storyView2(s)?.design.testListReady === true };
-  }
-  const buildMode = "buildMode" in action ? action.buildMode : void 0;
-  const ac = "ac" in action ? action.ac : void 0;
-  const withAc = { ...base, ...ac ? { ac } : {} };
-  if (responder === "navigator" && buildMode === "review") {
-    return { ...withAc, expected: `a REVIEW verdict for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.reviewAc !== ac };
-  }
-  if (responder === "driver" && buildMode === "refactor") {
-    return { ...withAc, expected: `a completed REFACTOR for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.refactorAc !== ac };
-  }
-  return null;
-}
-function handbackMessage(h, attempt) {
-  return `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}. The expected artifact is absent / null / empty / nonconformant. Produce it now , this is a retry; the workflow aborts if it is still missing.`;
-}
-var ExpectationLedger = class {
-  constructor(maxRetries = 1) {
-    this.maxRetries = maxRetries;
-  }
-  maxRetries;
-  outstanding = [];
-  /** Unmet-callback count per outstanding handoff signature. */
-  attempts = /* @__PURE__ */ new Map();
-  /** Record a new outstanding handoff (the call we are waiting on). */
-  push(h) {
-    this.outstanding.push(h);
-  }
-  /** Whether anything is outstanding. */
-  get pending() {
-    return this.outstanding.length > 0;
-  }
-  /** The head expectation (next expected callback), or undefined. */
-  head() {
-    return this.outstanding[0];
-  }
-  /** The responders currently awaited (for diagnostics / wrong-caller messages). */
-  awaiting() {
-    return this.outstanding.map((h) => h.responder);
-  }
-  /**
-   * INTAKE PROCESSOR , process a callback from a SPECIFIC responder against the
-   * outstanding expectations (the caller-identity half of the protocol; the part
-   * that becomes load-bearing once dispatch is concurrent / multi-threaded):
-   *   - find the first outstanding handoff whose responder === `from` (and, when
-   *     given, whose story/ac match the callback's scope). NO match => the caller
-   *     is wrong / unexpected => throw UnexpectedCallbackError (abort).
-   *   - matched + contract met -> remove it (the right caller delivered).
-   *   - matched + unmet, retry budget remains -> `retry` (hand back + re-dispatch).
-   *   - matched + unmet, no budget -> throw ProtocolViolationError (abort).
-   * Matching the responder (not blindly the head) lets concurrent stories' build
-   * callbacks arrive interleaved while still rejecting a callback from a role we
-   * are not awaiting at all.
-   */
-  processCallback(from, state, scope = {}) {
-    const idx = this.outstanding.findIndex(
-      (h2) => h2.responder === from && (scope.story === void 0 || h2.story === scope.story) && (scope.ac === void 0 || h2.ac === scope.ac)
-    );
-    if (idx === -1) {
-      throw new UnexpectedCallbackError(from, scope, this.awaiting());
-    }
-    const h = this.outstanding[idx];
-    if (h.satisfiedBy(state)) {
-      this.outstanding.splice(idx, 1);
-      this.attempts.delete(h.signature);
-      return { kind: "met", handoff: h };
-    }
-    const attempt = (this.attempts.get(h.signature) ?? 0) + 1;
-    this.attempts.set(h.signature, attempt);
-    if (attempt > this.maxRetries) {
-      throw new ProtocolViolationError(
-        h,
-        `it returned nothing across ${attempt} attempts (the expected artifact is absent / null / empty)`
-      );
-    }
-    return { kind: "retry", handoff: h, detail: handbackMessage(h, attempt), attempt };
-  }
-  /**
-   * Reconcile the realized state against the HEAD expectation , the deterministic
-   * (single-outstanding, in-order) specialization of processCallback. The
-   * single-threaded driver dispatches one role at a time, so the only possible
-   * responder IS the head's, and reconcile delegates with that identity:
-   *   - met   -> pop it.
-   *   - unmet, retry budget remains -> `retry` (hand-back + re-dispatch).
-   *   - unmet, no budget -> throw ProtocolViolationError.
-   * A no-op (`idle`) when nothing is outstanding.
-   */
-  reconcile(state) {
-    const head = this.outstanding[0];
-    if (!head) return { kind: "idle" };
-    return this.processCallback(head.responder, state, { ...head.story ? { story: head.story } : {}, ...head.ac ? { ac: head.ac } : {} });
-  }
-};
-
-// scripts/tdd/orchestrator-run.ts
-var DriverStalledError = class extends Error {
-  constructor(action, iteration) {
-    super(
-      `driver stalled at iteration ${iteration}: action ${JSON.stringify(action)} repeated without advancing state. The effect for this action did not change what readState() returns.`
-    );
-    this.action = action;
-    this.iteration = iteration;
-    this.name = "DriverStalledError";
-  }
-  action;
-  iteration;
-};
-var MAX_ITERATIONS = 1e4;
-function driverBoundOptions(bound) {
-  switch (bound) {
-    case "plan":
-      return { stopWhen: (a) => a.kind === "planning-complete" };
-    case "design":
-      return { transition: nextDesignOnlyTransition, stopWhen: (a) => a.kind === "design-complete" };
-    case "build":
-      return { stopWhen: (a) => actionLane(a) !== "build" };
-    case "deploy":
-      return { stopWhen: (a) => actionLane(a) !== "deploy" };
-  }
-}
-async function runDriver(effects, options = {}) {
-  let previousSignature;
-  let pausedAlready = false;
-  const enforceExpectations = options.enforceExpectations !== false;
-  const expectations = new ExpectationLedger();
-  for (let i = 0; ; i++) {
-    if (options.maxSteps !== void 0 && i >= options.maxSteps) {
-      return { iterations: i, stoppedAtMax: true };
-    }
-    if (i >= MAX_ITERATIONS) {
-      throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
-    }
-    const state = await effects.readState();
-    let retrying = false;
-    if (enforceExpectations) {
-      const rec = expectations.reconcile(state);
-      if (rec.kind === "retry") {
-        retrying = true;
-        effects.onHandback?.(rec.handoff, rec.detail);
-      }
-    }
-    const transition = options.transition ?? nextTransition;
-    const action = transition(state);
-    if (action.kind === "done") {
-      effects.onAction?.(action, i);
-      await effects.perform(action);
-      return { iterations: i + 1 };
-    }
-    if (action.kind === "raise-to-hil") {
-      effects.onAction?.(action, i);
-      await effects.perform(action);
-      return { iterations: i + 1, escalated: true, escalation: action };
-    }
-    if (options.stopWhen?.(action)) {
-      return { iterations: i, stoppedAtBound: true, stoppedAt: action };
-    }
-    if (!pausedAlready && options.pauseBefore?.(action) && options.confirmContinue) {
-      pausedAlready = true;
-      await options.confirmContinue(action);
-    }
-    const signature = JSON.stringify(action);
-    if (!retrying && signature === previousSignature) {
-      throw new DriverStalledError(action, i);
-    }
-    previousSignature = signature;
-    if (enforceExpectations && !retrying) {
-      const handoff = expectationFor(action);
-      if (handoff) expectations.push(handoff);
-    }
-    effects.onAction?.(action, i);
-    await effects.perform(action);
-  }
-}
-
-// scripts/tdd/escalation.ts
-init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
-
-// scripts/tdd/smells.ts
-init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path6 = require("path");
-
-// scripts/tdd/run-cycle.ts
-init_cjs_shims();
-
-// scripts/lakebase/get-connection.ts
-init_cjs_shims();
-var import_node_child_process2 = require("child_process");
-var import_lakebase = require("@databricks/lakebase");
-var import_pg = require("pg");
-
-// scripts/lakebase/branch-utils.ts
-init_cjs_shims();
-var import_node_child_process = require("child_process");
-var import_node_util = require("util");
-
-// scripts/lakebase/branch-id.ts
-init_cjs_shims();
-
-// scripts/lakebase/kit-config.ts
-init_cjs_shims();
-function intFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var KIT_TIMEOUTS = {
-  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
-  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
-  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
-  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
-  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
-  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
-  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
-  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
-  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
-  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
-  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
-  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
-  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
-  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
-  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
-  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
-  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
-  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
-};
-function urlFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return raw.replace(/\/+$/, "");
-}
-var KIT_REGISTRIES = {
-  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
-  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
-};
-
-// scripts/lakebase/branch-utils.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
-
-// scripts/lakebase/constants.ts
-init_cjs_shims();
-
-// scripts/tdd/experiment.ts
-init_cjs_shims();
-
-// scripts/lakebase/paired-branch.ts
-init_cjs_shims();
-var fs4 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
-
-// scripts/lakebase/branch-create.ts
-init_cjs_shims();
-var import_node_child_process4 = require("child_process");
-var import_node_util3 = require("util");
-
-// scripts/util/poll-until.ts
-init_cjs_shims();
-
-// scripts/util/delay.ts
-init_cjs_shims();
-
-// scripts/util/sanitize-branch-name.ts
-init_cjs_shims();
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
-  while (name.length < 3) name += "-x";
-  return name;
-}
-
-// scripts/lakebase/lakebase-project.ts
-init_cjs_shims();
-var import_node_child_process3 = require("child_process");
-var import_node_util2 = require("util");
-var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.execFile);
-
-// scripts/lakebase/branch-create.ts
-var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
-
-// scripts/lakebase/branch-delete.ts
-init_cjs_shims();
-var import_node_child_process5 = require("child_process");
-var import_node_util4 = require("util");
-var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process5.execFile);
-
-// scripts/lakebase/branch-endpoint.ts
-init_cjs_shims();
-var import_node_child_process6 = require("child_process");
-
-// scripts/lakebase/env-file.ts
-init_cjs_shims();
-var fs2 = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
-
-// scripts/lakebase/databricks-profile.ts
-init_cjs_shims();
-var fs3 = __toESM(require("fs"), 1);
-
-// scripts/util/exec.ts
-init_cjs_shims();
-var cp2 = __toESM(require("child_process"), 1);
 
 // scripts/tdd/agent-log.ts
 init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
+var import_fs = require("fs");
+var import_path2 = require("path");
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_path = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path4.join)(__dirname, "schemas");
+var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
-var validatorCache = /* @__PURE__ */ new Map();
-function loadSchema(name) {
-  return JSON.parse((0, import_fs4.readFileSync)((0, import_path4.join)(SCHEMA_DIR, name), "utf8"));
-}
-function getValidator(name) {
-  const cached = validatorCache.get(name);
-  if (cached) return cached;
-  const validate = ajv.compile(loadSchema(name));
-  validatorCache.set(name, validate);
-  return validate;
-}
-function formatSchemaErrors(validate) {
-  const errors = validate.errors ?? [];
-  if (errors.length === 0) return ["schema validation failed"];
-  return errors.map((e) => {
-    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
-    return `${where}: ${e.message ?? "invalid"}`;
-  });
-}
 
 // scripts/tdd/agent-log-events.ts
 init_cjs_shims();
@@ -7586,1849 +6742,224 @@ var EVENT_TEMPLATES = {
   "progress": { template: "{{note}} , {{step}}" }
 };
 var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
-function isKnownEvent(name) {
-  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
-}
-var AgentLogEventError = class extends Error {
-};
-function renderEventMessage(event, slots = {}) {
-  if (!isKnownEvent(event)) {
-    throw new AgentLogEventError(
-      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
-    );
-  }
-  const tmpl = EVENT_TEMPLATES[event].template;
-  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
-    const v = slots[name];
-    if (v === void 0 || v === null || v === "") {
-      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
-    }
-    return String(v);
-  });
-}
 
 // scripts/tdd/agent-log.ts
+var LEVEL_ORDER = { debug: 0, info: 1, warn: 2, error: 3 };
 function logFilePath(tddDir) {
-  return (0, import_path5.join)(tddDir, "agent-log.jsonl");
+  return (0, import_path2.join)(tddDir, "agent-log.jsonl");
 }
-function emitAgentLogEvent(input, opts = {}) {
+function readAgentLog(opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
-  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const slots = input.slots ?? {};
-  const renderCtx = {
-    role: input.role,
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots
-  };
-  const message = renderEventMessage(input.event, renderCtx);
-  const metadata = {
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots,
-    ...input.metadata ?? {}
-  };
-  const event = {
-    timestamp: input.timestamp ?? now().toISOString(),
-    level: input.level,
-    role: input.role,
-    event: input.event,
-    message,
-    ...Object.keys(metadata).length > 0 ? { metadata } : {}
-  };
-  const validate = getValidator("agent-log-event.schema.json");
-  if (!validate(event)) {
-    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
-  }
-  (0, import_fs5.appendFileSync)(logFilePath(tddDir), `${JSON.stringify(event)}
-`, "utf8");
-  return event;
-}
-
-// scripts/tdd/run-cycle.ts
-function readAcLayer2(tddDir, featureId, acId) {
-  return readAcLayer(tddDir, featureId, acId);
-}
-
-// scripts/tdd/smells.ts
-function readSmellsLog(tddDir) {
-  const file = (0, import_path6.join)(tddDir, "smells.json");
-  if (!(0, import_fs6.existsSync)(file)) return { detected: [] };
-  return JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
-}
-
-// scripts/tdd/escalation.ts
-var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
-  "test-list-drift",
-  "cycle-stall",
-  "boundary-violation",
-  "test-deletion-attempt"
-]);
-function escalationId(parts) {
-  return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
-}
-function writeEscalation(tddDir, esc) {
-  const id = esc.id ?? escalationId(esc);
-  const file = escalationFile(tddDir, id);
-  const existing = readEscalationFile(file);
-  if (existing && !existing.resolved_at) return existing;
-  const full = {
-    id,
-    source: esc.source,
-    reason: esc.reason,
-    ...esc.feature_id ? { feature_id: esc.feature_id } : {},
-    ...esc.story_id ? { story_id: esc.story_id } : {},
-    ...esc.ac_id ? { ac_id: esc.ac_id } : {},
-    raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
-  };
-  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
-  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
-  return full;
-}
-function readEscalationFile(file) {
-  if (!fs5.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs5.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function readEscalations(tddDir) {
-  const dir = escalationsDir(tddDir);
-  if (!fs5.existsSync(dir)) return [];
+  const file = logFilePath(tddDir);
+  if (!(0, import_fs.existsSync)(file)) return [];
+  const minRank = opts.minLevel !== void 0 ? LEVEL_ORDER[opts.minLevel] : void 0;
   const out = [];
-  for (const f of fs5.readdirSync(dir)) {
-    if (!f.endsWith(".json")) continue;
-    const e = readEscalationFile(`${dir}/${f}`);
-    if (e) out.push(e);
-  }
-  return out;
-}
-function escalationsFromSmells(tddDir, featureId) {
-  const log = readSmellsLog(tddDir);
-  return log.detected.filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell)).map((d) => ({
-    id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId }),
-    source: `smell:${d.smell}`,
-    reason: `blocking smell "${d.smell}": ${d.detail}`,
-    ...featureId ? { feature_id: featureId } : {},
-    raised_at: d.detected_at
-  }));
-}
-function firstPendingEscalation(tddDir, featureId) {
-  const explicit = readEscalations(tddDir).filter((e) => !e.resolved_at);
-  const scoped = featureId ? explicit.filter((e) => !e.feature_id || e.feature_id === featureId) : explicit;
-  if (scoped.length > 0) {
-    return [...scoped].sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0];
-  }
-  const fromSmells = escalationsFromSmells(tddDir, featureId);
-  return fromSmells.length > 0 ? fromSmells.sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0] : null;
-}
-
-// scripts/tdd/orchestrator-effects.ts
-init_cjs_shims();
-var fs7 = __toESM(require("fs"), 1);
-var import_node_path3 = require("path");
-
-// scripts/tdd/orchestrator-derive.ts
-init_cjs_shims();
-function storyView(id, e, probe) {
-  const gateApproved = e.gate?.status === "approved";
-  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
-  return {
-    gateApproved,
-    // The gate record exists once the story has been surfaced for review;
-    // awaiting-gate is the pre-record surfaced state.
-    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
-    design: {
-      hasAcs: probe.hasAcs(id),
-      architectAnnotated: probe.architectAnnotated(id),
-      testListReady: probe.testListReady(id)
-    },
-    build: {
-      // An experiment that was discarded is no longer cut (a fresh one is cut
-      // on revise); merged/active both count as cut.
-      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
-      testsWritten: probe.testsWritten(id),
-      codeWritten: probe.codeWritten(id),
-      reviewAc: probe.reviewPendingAc(id),
-      refactorAc: probe.refactorPendingAc(id),
-      awaitingAcceptance: e.status === "awaiting-acceptance",
-      deployVerified: probe.storyDeployVerified(id),
-      accepted
-    }
-  };
-}
-function deriveDriveState(pipeline, probe, ctx) {
-  const stories = {};
-  for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe);
-  }
-  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
-  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
-  return {
-    phase: ctx.phase,
-    planning: ctx.planning,
-    deploy: ctx.deploy,
-    breakdownDone,
-    storyOrder,
-    stories,
-    buildActive: pipeline.build_active,
-    escalation: probe.pendingEscalation()
-  };
-}
-function driverPhaseForTdd(tddPhase) {
-  switch (tddPhase) {
-    case "planning":
-      return "planning";
-    case "deploy":
-      return "deploy";
-    case "shipped":
-    case "done":
-      return "done";
-    default:
-      return "feature";
-  }
-}
-
-// scripts/tdd/orchestrator-probe.ts
-init_cjs_shims();
-var fs6 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
-
-// scripts/tdd/cycle-record.ts
-init_cjs_shims();
-var import_fs7 = require("fs");
-var import_path7 = require("path");
-
-// scripts/tdd/test-list.ts
-init_cjs_shims();
-
-// scripts/tdd/deploy.ts
-init_cjs_shims();
-var import_node_child_process8 = require("child_process");
-var import_node_fs = require("fs");
-var import_node_path2 = require("path");
-
-// scripts/lakebase/deploy-targets.ts
-init_cjs_shims();
-
-// scripts/tdd/deploy.ts
-function deployEvidencePasses(e) {
-  return e !== void 0 && e.reachable === true && e.verify?.passed === true;
-}
-function readDeployEvidence(file) {
-  if (!(0, import_node_fs.existsSync)(file)) return void 0;
-  try {
-    return JSON.parse((0, import_node_fs.readFileSync)(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function storyDeployVerified(tddDir, featureId, storyId) {
-  const fdir = findFeatureDir(tddDir, featureId);
-  if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence((0, import_node_path2.join)(fdir, "stories", storyId, "deploy-evidence.json")));
-}
-
-// scripts/tdd/cycle-record.ts
-function readStoryItems(tddDir, featureId, story) {
-  const file = storyTestListJson(tddDir, featureId, story);
-  if (!(0, import_fs7.existsSync)(file)) {
-    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
-  }
-  const data = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
-  return Array.isArray(data.items) ? data.items : [];
-}
-function storyCycles(tddDir, featureId, story) {
-  const base = (0, import_path7.join)(cyclesRootDir(tddDir), featureId, story);
-  if (!(0, import_fs7.existsSync)(base)) return [];
-  const out = [];
-  for (const acDir of (0, import_fs7.readdirSync)(base)) {
-    const dir = (0, import_path7.join)(base, acDir);
+  for (const line of (0, import_fs.readFileSync)(file, "utf8").split("\n")) {
+    if (line.trim().length === 0) continue;
+    let ev;
     try {
-      if (!(0, import_fs7.statSync)(dir).isDirectory()) continue;
+      ev = JSON.parse(line);
     } catch {
       continue;
     }
-    for (const f of (0, import_fs7.readdirSync)(dir)) {
-      if (!/^cycle-\d+\.json$/.test(f)) continue;
-      try {
-        out.push(JSON.parse((0, import_fs7.readFileSync)((0, import_path7.join)(dir, f), "utf8")));
-      } catch {
-      }
-    }
+    if (opts.role !== void 0 && ev.role !== opts.role) continue;
+    if (opts.featureId !== void 0 && ev.metadata?.feature_id !== opts.featureId) continue;
+    if (minRank !== void 0 && LEVEL_ORDER[ev.level] < minRank) continue;
+    out.push(ev);
   }
   return out;
 }
-function storyTestProgress(tddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(tddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const cycles = storyCycles(tddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
-  const pending = items.filter((i) => !cycledTestIds.has(i.id));
-  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
-  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
-  return { total: items.length, pending, openRed, allGreen };
-}
-function readReview(tddDir, featureId, story, acId) {
-  const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!(0, import_fs7.existsSync)(f)) return {};
-  try {
-    return JSON.parse((0, import_fs7.readFileSync)(f, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function acReviewStates(tddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(tddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
-  const acOrder = [];
-  const acTests = /* @__PURE__ */ new Map();
-  for (const it of items) {
-    if (!acTests.has(it.ac_id)) {
-      acTests.set(it.ac_id, []);
-      acOrder.push(it.ac_id);
-    }
-    acTests.get(it.ac_id).push(it.id);
-  }
-  return acOrder.map((acId) => {
-    const tests = acTests.get(acId);
-    const r = readReview(tddDir, featureId, story, acId);
-    return {
-      acId,
-      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
-      reviewed: Boolean(r.reviewed_at),
-      refactorRequested: Boolean(r.refactor_requested),
-      refactored: Boolean(r.refactored_at)
-    };
-  });
-}
-function firstReviewPendingAc(tddDir, featureId, story) {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
-}
-function firstRefactorPendingAc(tddDir, featureId, story) {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
-}
 
-// scripts/tdd/gates.ts
-init_cjs_shims();
-var import_fs8 = require("fs");
-var import_path8 = require("path");
-var GATES_SCHEMA_VERSION = 1;
-var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
-function defaultGatesState(featureId) {
+// scripts/tdd/timing-report.ts
+function metaStr(ev, key) {
+  const v = ev.metadata?.[key];
+  return typeof v === "string" && v.length > 0 ? v : void 0;
+}
+function parseTs(ts) {
+  const n = Date.parse(ts);
+  return Number.isNaN(n) ? NaN : n;
+}
+function rollup(turns, keyOf) {
+  const acc = /* @__PURE__ */ new Map();
+  for (const t of turns) {
+    const key = keyOf(t);
+    if (key === void 0) continue;
+    const cur = acc.get(key) ?? { seconds: 0, count: 0, max: 0 };
+    cur.seconds += t.seconds;
+    cur.count += 1;
+    cur.max = Math.max(cur.max, t.seconds);
+    acc.set(key, cur);
+  }
+  return [...acc.entries()].map(([key, v]) => ({
+    key,
+    seconds: round(v.seconds),
+    count: v.count,
+    avgSeconds: round(v.seconds / v.count),
+    maxSeconds: round(v.max)
+  })).sort((a, b) => b.seconds - a.seconds);
+}
+function round(n) {
+  return Math.round(n * 10) / 10;
+}
+function computeTiming(events, opts = {}) {
+  const topN = opts.topN ?? 10;
+  const stamped = events.map((ev, i) => ({ ev, i, t: parseTs(ev.timestamp) })).filter((x) => !Number.isNaN(x.t)).sort((a, b) => a.t - b.t || a.i - b.i);
+  if (stamped.length === 0) {
+    return { events: 0, totalSeconds: 0, turns: [], byPhase: [], byRole: [], byKind: [], slowest: [] };
+  }
+  const turns = [];
+  for (let k = 1; k < stamped.length; k++) {
+    const prev = stamped[k - 1];
+    const cur = stamped[k];
+    turns.push({
+      index: k + 1,
+      role: cur.ev.role,
+      event: cur.ev.event,
+      phase: metaStr(cur.ev, "phase"),
+      story: metaStr(cur.ev, "story"),
+      ac: metaStr(cur.ev, "ac"),
+      cycleId: metaStr(cur.ev, "cycle_id"),
+      startedAt: prev.ev.timestamp,
+      endedAt: cur.ev.timestamp,
+      seconds: round((cur.t - prev.t) / 1e3)
+    });
+  }
+  const first = stamped[0];
+  const last = stamped[stamped.length - 1];
+  const slowest = [...turns].sort((a, b) => b.seconds - a.seconds).slice(0, topN);
   return {
-    feature_id: featureId,
-    schema_version: GATES_SCHEMA_VERSION,
-    gates: {
-      spec: { status: "open", history: [] },
-      plan: { status: "open", history: [] },
-      test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] },
-      deploy: { status: "open", history: [] }
-    }
+    events: stamped.length,
+    totalSeconds: round((last.t - first.t) / 1e3),
+    startedAt: first.ev.timestamp,
+    endedAt: last.ev.timestamp,
+    turns,
+    byPhase: rollup(turns, (t) => t.phase ?? "(none)"),
+    byRole: rollup(turns, (t) => t.role),
+    byKind: rollup(turns, (t) => `${t.role}/${t.event}`),
+    slowest
   };
 }
-function readGates(featureId, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = gatesFilePath(tddDir, featureId);
-  if (!(0, import_fs8.existsSync)(file)) {
-    return defaultGatesState(featureId);
-  }
-  const raw = (0, import_fs8.readFileSync)(file, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  return validateGatesState(parsed, file);
+function timingReportFromLog(read = {}, opts = {}) {
+  return computeTiming(readAgentLog(read), opts);
 }
-function gatesFilePath(tddDir, featureId) {
-  return (0, import_path8.join)(requireFeatureDir(tddDir, featureId), "gates.json");
+function fmtSecs(n) {
+  if (n >= 60) {
+    const m = Math.floor(n / 60);
+    const s = Math.round(n % 60);
+    return `${m}m${String(s).padStart(2, "0")}s`;
+  }
+  return `${n.toFixed(1)}s`;
 }
-function validateGatesState(parsed, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file} is not an object`);
-  }
-  const obj = parsed;
-  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
-    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
-  }
-  if (typeof obj.schema_version !== "number") {
-    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
-  }
-  if (typeof obj.gates !== "object" || obj.gates === null) {
-    throw new Error(`gates.json at ${file}: missing or invalid gates`);
-  }
-  const gates = obj.gates;
-  const out = {
-    spec: validateGateRecord(gates.spec, "spec", file),
-    plan: validateGateRecord(gates.plan, "plan", file),
-    test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file),
-    // The deploy gate (working-software) was added after the original four.
-    // A gates.json written before it lacks the key, so backfill a default-open
-    // record rather than reject the file (forward-compatible read).
-    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
-  };
-  return {
-    feature_id: obj.feature_id,
-    schema_version: obj.schema_version,
-    gates: out
-  };
+function rollupBlock(title, rows) {
+  if (rows.length === 0) return `${title}
+  (none)
+`;
+  const keyW = Math.max(title.length, ...rows.map((r) => r.key.length));
+  const lines = rows.map(
+    (r) => `  ${r.key.padEnd(keyW)}  ${fmtSecs(r.seconds).padStart(8)}  (${r.count}x, avg ${fmtSecs(r.avgSeconds)}, max ${fmtSecs(r.maxSeconds)})`
+  );
+  return `${title}
+${lines.join("\n")}
+`;
 }
-function validateGateRecord(parsed, gateName, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
-  }
-  const obj = parsed;
-  const status = obj.status;
-  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
-    throw new Error(
-      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
-    );
-  }
-  const history = obj.history;
-  if (history !== void 0 && !Array.isArray(history)) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
-  }
-  return {
-    status,
-    approver: typeof obj.approver === "string" ? obj.approver : void 0,
-    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
-    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
-    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
-    history: history ?? []
-  };
-}
-
-// scripts/tdd/orchestrator-probe.ts
-function storyCycles2(tddDir, featureId, story) {
-  const base = path3.join(cyclesRootDir(tddDir), featureId, story);
-  if (!fs6.existsSync(base)) return [];
+function formatTimingReport(report) {
+  if (report.events === 0) return "agent-log timing: no timestamped events found.\n";
   const out = [];
-  for (const acDir of fs6.readdirSync(base)) {
-    const dir = path3.join(base, acDir);
-    let isDir = false;
-    try {
-      isDir = fs6.statSync(dir).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    if (!isDir) continue;
-    for (const f of fs6.readdirSync(dir)) {
-      if (!/^cycle-\d+\.json$/.test(f)) continue;
-      try {
-        out.push(JSON.parse(fs6.readFileSync(path3.join(dir, f), "utf8")));
-      } catch {
-      }
-    }
-  }
-  return out;
-}
-function readJson(file) {
-  if (!fs6.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs6.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function readDriveContext(tddDir, featureId) {
-  const ws = readJson(workflowStateJson(tddDir));
-  const tddPhase = typeof ws?.phase === "string" ? ws.phase : "feature";
-  const spec = readJson(featureSpecJson(tddDir, featureId));
-  const proposed = spec !== void 0;
-  const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs6.existsSync(featureRequestMd(tddDir, featureId));
-  const deployed = fs6.existsSync(featureDeployEvidenceJson(tddDir, featureId));
-  let gateApproved = false;
-  try {
-    gateApproved = readGates(featureId, { tddDir }).gates.deploy.status === "approved";
-  } catch {
-    gateApproved = false;
-  }
-  return {
-    phase: driverPhaseForTdd(tddPhase),
-    breakdownDone,
-    planning: { proposed, estimated: hasEstimates(tddDir), requestsAuthored },
-    deploy: { deployed, gateApproved }
-  };
-}
-function diskArtifactProbe(tddDir, featureId) {
-  return {
-    hasAcs(story) {
-      return storyAcIds(tddDir, featureId, story).length > 0;
-    },
-    architectAnnotated(story) {
-      const acs = storyAcIds(tddDir, featureId, story);
-      return acs.length > 0 && acs.every((ac) => readAcLayer2(tddDir, featureId, ac) !== void 0);
-    },
-    testListReady(story) {
-      const file = storyTestListJson(tddDir, featureId, story);
-      if (!fs6.existsSync(file)) return false;
-      try {
-        const data = JSON.parse(fs6.readFileSync(file, "utf8"));
-        return Array.isArray(data.items) && data.items.length > 0;
-      } catch {
-        return false;
-      }
-    },
-    // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test
-    // at a time (write RED -> make GREEN) until EVERY test-list item is green.
-    // `testsWritten` = "the Navigator has nothing to write right now" (a RED
-    // already awaits the Driver, OR all tests are green); `codeWritten` = "every
-    // test-list item has a GREEN cycle". With nextBuildAction's order
-    // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
-    // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
-    // it the loop advanced after a single test and stalled at await-acceptance
-    // with the rest of the list unbuilt (the live stall).
-    testsWritten(story) {
-      const p = storyTestProgress(tddDir, featureId, story);
-      if (p.total === 0) {
-        return storyCycles2(tddDir, featureId, story).some((c) => Boolean(c.red_at));
-      }
-      return p.openRed.length > 0 || p.allGreen;
-    },
-    codeWritten(story) {
-      const p = storyTestProgress(tddDir, featureId, story);
-      if (p.total === 0) {
-        const reds = storyCycles2(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
-        return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
-      }
-      return p.allGreen;
-    },
-    reviewPendingAc(story) {
-      return firstReviewPendingAc(tddDir, featureId, story);
-    },
-    refactorPendingAc(story) {
-      return firstRefactorPendingAc(tddDir, featureId, story);
-    },
-    storyDeployVerified(story) {
-      return storyDeployVerified(tddDir, featureId, story);
-    },
-    pendingEscalation() {
-      const e = firstPendingEscalation(tddDir, featureId);
-      if (!e) return null;
-      return { id: e.id, source: e.source, reason: e.reason, ...e.story_id ? { story_id: e.story_id } : {} };
-    }
-  };
-}
-
-// scripts/tdd/story-pipeline.ts
-init_cjs_shims();
-var import_fs9 = require("fs");
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(tddDir, featureId) {
-  return pipelineJson(tddDir, featureId);
-}
-function readPipeline(tddDir, featureId) {
-  const p = pipelinePath(tddDir, featureId);
-  if (!(0, import_fs9.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
-}
-
-// scripts/tdd/orchestrator-effects.ts
-var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
-var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-var UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
-var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
-function storyStubScope(tddDir, featureId, storyId) {
-  try {
-    const stub = JSON.parse(fs7.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
-    const parts = [
-      stub.asA ? `As a ${stub.asA}` : "",
-      stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
-      stub.soThat ? `so that ${stub.soThat}` : ""
-    ].filter(Boolean);
-    return parts.length ? ` The story: ${parts.join(", ")}.` : "";
-  } catch {
-    return "";
-  }
-}
-function reviewRubric(tddDir, featureId, story, ac) {
-  const parts = [];
-  const layer = readAcLayer(tddDir, featureId, ac);
-  if (layer) parts.push(`layer=${layer}`);
-  try {
-    const arch = JSON.parse(fs7.readFileSync(architectureJson(tddDir, featureId), "utf8"));
-    const nfrs = (arch.nfrs ?? []).filter(
-      (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
-    );
-    if (nfrs.length) {
-      parts.push(`required NFRs , ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
-    }
-  } catch {
-  }
-  if (layer === "E2E") {
-    try {
-      const dg = JSON.parse(fs7.readFileSync(designGuideJson(tddDir), "utf8"));
-      const groups = Object.keys(dg.tokens ?? dg);
-      if (groups.length) parts.push(`design-token groups , ${groups.join(", ")}`);
-    } catch {
-    }
-  }
-  return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
-}
-function nextPendingTestDirective(tddDir, featureId, story) {
-  let next;
-  try {
-    next = storyTestProgress(tddDir, featureId, story).pending[0];
-  } catch {
-    next = void 0;
-  }
-  if (!next) {
-    return `Write the next failing test (RED) for story ${story}: the next un-cycled item in the test list.`;
-  }
-  return `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}". Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item , the orchestration stamps the RED cycle for ${next.id}, and a mismatch between the test you write and ${next.id} is a defect.`;
-}
-function consumeHandback(action, featureId, tddDir) {
-  const story = "story" in action ? action.story : void 0;
-  const file = handbackFile(tddDir, featureId, action.role, story);
-  if (!fs7.existsSync(file)) return "";
-  let note = "";
-  try {
-    note = fs7.readFileSync(file, "utf8").trim();
-    fs7.rmSync(file, { force: true });
-  } catch {
-    return "";
-  }
-  return note ? `${note}
-
-` : "";
-}
-function roleTask(action, featureId, uiTrack, tddDir) {
-  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir);
-}
-function roleTaskBody(action, featureId, uiTrack, tddDir) {
-  if ("mode" in action) {
-    switch (action.mode) {
-      case "propose":
-        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).${uiTrack ? UI_TRACK_PROPOSE : ""}`;
-      case "estimate":
-        return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
-      case "author-requests":
-        return `Provide the sprint's feature-requests.`;
-      case "breakdown":
-        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
-    }
-  }
-  if (action.role === "ux-designer") {
-    return `Translate the HIL design brief (.tdd/design/design-brief.md) into the project design system: write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information architecture: screens, navigation, flows). This is the project-level style guide the Navigator and Driver build the UI against; author it once from the brief + product-overview.md.`;
-  }
-  const s = action.story;
-  switch (action.role) {
-    case "spec-author":
-      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files , the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
-    case "architect-reviewer":
-      return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
-    case "test-strategist": {
-      const acIds = storyAcIds(tddDir, featureId, s);
-      const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
-      return `Produce the ordered test list for story ${s}.${acScope}`;
-    }
-    case "navigator":
-      if (action.buildMode === "review") {
-        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` + reviewRubric(tddDir, featureId, s, action.ac ?? "") + ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md , open those full files ONLY if you need more detail than it carries (do not re-read them by default). Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
-      }
-      return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
-    case "driver":
-      if (action.buildMode === "refactor") {
-        return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`;
-      }
-      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
-    default:
-      return `Work story ${s}.`;
-  }
-}
-var PIPELINE_BIN = "lakebase-tdd-pipeline";
-var EXPERIMENT_BIN = "lakebase-tdd-experiment";
-var CYCLE_BIN = "lakebase-tdd-cycle";
-var HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
-var LOG_BIN = "lakebase-tdd-log";
-var TEST_LIST_BIN = "lakebase-tdd-test-list";
-var DEPLOY_BIN = "lakebase-tdd-deploy";
-var EXPERIMENT_SLUG = "exp1";
-var experimentBranchName = (storyId) => sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
-function commandsForAction(action, cfg) {
-  const f = cfg.featureId;
-  const tdd = ["--feature", f, "--tdd-dir", cfg.tddDir];
-  const approver = cfg.approver ?? "human-proxy";
-  const deployTarget = cfg.deployTarget ?? "local";
-  switch (action.kind) {
-    case "invoke-role": {
-      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
-        return [
-          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.tddDir, "--approver", approver] },
-          { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" }
-        ];
-      }
-      const BUILD_ROLES = /* @__PURE__ */ new Set(["navigator", "driver"]);
-      const buildScope = cfg.buildSessionScope ?? "story";
-      let resumeKey;
-      if (BUILD_ROLES.has(action.role)) {
-        if (buildScope === "story" && "story" in action && action.story) {
-          resumeKey = `${action.role}:${action.story}`;
-        }
-      } else {
-        resumeKey = action.role;
-      }
-      const isReviewTurn = action.role === "navigator" && "buildMode" in action && action.buildMode === "review";
-      const reviewEffort = cfg.reviewEffort ?? "low";
-      const claude = {
-        kind: "claude",
-        role: action.role,
-        model: cfg.modelForRole(action.role),
-        ...resumeKey !== void 0 ? { resumeKey } : {},
-        ...isReviewTurn && reviewEffort ? { effort: reviewEffort } : {},
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
-        replay: {
-          mode: "mode" in action ? action.mode : void 0,
-          story: "story" in action ? action.story : void 0
-        }
-      };
-      const cmds = [claude];
-      if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
-        cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
-      }
-      if (!("mode" in action) && action.role === "test-strategist") {
-        cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
-      }
-      if (!("mode" in action) && action.role === "navigator") {
-        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
-        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
-      }
-      if (!("mode" in action) && action.role === "driver") {
-        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
-        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
-      }
-      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
-      if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
-      return cmds;
-    }
-    case "surface-gate":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];
-    case "approve-gate":
-      return [
-        { kind: "cli", bin: PIPELINE_BIN, args: ["approve-gate", "--story", action.story, "--approver", approver, ...tdd] }
-      ];
-    case "dispatch":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["dispatch", ...tdd] }];
-    case "cut-experiment":
-      return [
-        {
-          kind: "cli",
-          bin: EXPERIMENT_BIN,
-          args: [
-            "cut",
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--branch",
-            experimentBranchName(action.story),
-            "--parent",
-            cfg.featureBranch ?? "",
-            "--instance",
-            cfg.instance ?? "",
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.tddDir
-          ]
-        }
-      ];
-    case "await-acceptance": {
-      const deployCmd = `./scripts/lk lakebase-tdd-deploy --target ${deployTarget} --feature ${f} --story ${action.story} --lakebase-branch ${experimentBranchName(action.story)} --tdd-dir ${cfg.tddDir} --gate`;
-      return [
-        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
-        {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task: `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget} target and verify it actually serves: from the project root run exactly
-  ${deployCmd}
-That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence the acceptance gate reads. Do NOT report success without running it , the orchestration checks the evidence on disk, not your word.` + AGENT_TERSE_SUFFIX
-        },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
-      ];
-    }
-    case "accept":
-      return [
-        {
-          kind: "cli",
-          bin: EXPERIMENT_BIN,
-          args: [
-            "merge",
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--experiment-branch",
-            experimentBranchName(action.story),
-            "--feature-branch",
-            cfg.featureBranch ?? "",
-            "--approver",
-            approver,
-            "--instance",
-            cfg.instance ?? "",
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.tddDir
-          ]
-        },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] }
-      ];
-    case "complete":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
-    case "approve-plan-gate":
-      return [
-        {
-          kind: "cli",
-          bin: HUMAN_PROXY_BIN,
-          args: ["--sprint", cfg.sprintName ?? "sprint", "--gate", "plan", "--approver", approver, "--tdd-dir", cfg.tddDir]
-        }
-      ];
-    case "planning-complete":
-      return [{ kind: "set-phase", phase: "discovery" }];
-    case "feature-complete":
-      return [{ kind: "set-phase", phase: "deploy" }];
-    case "deploy":
-      return [
-        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
-        {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: ["--target", deployTarget, "--feature", f, "--project-dir", cfg.projectDir, "--tdd-dir", cfg.tddDir, "--gate"]
-        }
-      ];
-    case "approve-deploy-gate":
-      return [
-        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "deploy", "--approver", approver, "--tdd-dir", cfg.tddDir] }
-      ];
-    case "done":
-      return [{ kind: "set-phase", phase: "shipped" }];
-    case "raise-to-hil":
-      return [];
-    case "design-complete":
-      return [];
-  }
-}
-async function planNextAction(cfg, transition = nextTransition) {
-  const state = await buildDriveEffects(cfg).readState();
-  const action = transition(state);
-  return { action, commands: commandsForAction(action, cfg) };
-}
-function buildDriveEffects(cfg) {
-  return {
-    async readState() {
-      const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
-      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
-      const ctx = readDriveContext(cfg.tddDir, cfg.featureId);
-      const state = deriveDriveState(pipeline, probe, ctx);
-      state.uiTrack = cfg.uiTrack ?? false;
-      state.designGuideReady = fs7.existsSync(designGuideJson(cfg.tddDir));
-      return state;
-    },
-    async perform(action) {
-      for (const cmd of commandsForAction(action, cfg)) {
-        await cfg.runner.run(cmd);
-      }
-    },
-    onAction: cfg.onAction,
-    // Hand-back delivery: when a role's prior turn failed its expectation
-    // contract, write the violation detail where THAT role's next prompt will
-    // consume it (consumeHandback in roleTask), so the retry is informed.
-    onHandback(handoff, detail) {
-      const file = handbackFile(cfg.tddDir, cfg.featureId, handoff.responder, handoff.story);
-      try {
-        fs7.mkdirSync((0, import_node_path3.dirname)(file), { recursive: true });
-        fs7.writeFileSync(file, `${detail}
-`, "utf8");
-      } catch {
-      }
-    }
-  };
-}
-
-// scripts/tdd/orchestrator-sprint.ts
-init_cjs_shims();
-
-// scripts/tdd/sprint-gates.ts
-init_cjs_shims();
-var import_node_fs2 = require("fs");
-
-// scripts/tdd/gate-hash.ts
-init_cjs_shims();
-
-// scripts/tdd/artifact-conformance.ts
-init_cjs_shims();
-
-// scripts/tdd/sprint-gates.ts
-var SPRINT_GATES_SCHEMA_VERSION = 1;
-function defaultSprintGatesState(sprint) {
-  return {
-    sprint,
-    schema_version: SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: "open", history: [] } }
-  };
-}
-function sprintGatesFile(tddDir, sprint) {
-  return sprintGatesJson(tddDir, sprint);
-}
-function readSprintGates(sprint, opts = {}) {
-  const tddDir = opts.tddDir ?? "./.tdd";
-  const file = sprintGatesFile(tddDir, sprint);
-  if (!(0, import_node_fs2.existsSync)(file)) return defaultSprintGatesState(sprint);
-  let parsed;
-  try {
-    parsed = JSON.parse((0, import_node_fs2.readFileSync)(file, "utf8"));
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  const plan = parsed.gates?.plan ?? { status: "open", history: [] };
-  return {
-    sprint,
-    schema_version: parsed.schema_version ?? SPRINT_GATES_SCHEMA_VERSION,
-    gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
-  };
-}
-
-// scripts/tdd/orchestrator-sprint.ts
-var fs8 = __toESM(require("fs"), 1);
-function deriveSprintPlanningState(tddDir, sprint, opts = {}) {
-  const proposed = fs8.existsSync(featureProposalsMd(tddDir));
-  const estimated = hasEstimates(tddDir);
-  const backlog = readBacklog(tddDir, sprint).features;
-  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
-  let gateApproved = false;
-  try {
-    gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";
-  } catch {
-    gateApproved = false;
-  }
-  return {
-    phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? false },
-    breakdownDone: false,
-    storyOrder: [],
-    stories: {},
-    buildActive: null
-  };
-}
-async function runSprint(effects) {
-  const planning = await effects.drivePlanning();
-  if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
-  const features = await effects.readBacklog();
-  for (let i = 0; i < features.length; i++) {
-    const featureId = features[i];
-    effects.onFeature?.(featureId, i);
-    await effects.claimFeature(featureId);
-    const driven = await effects.driveFeature(featureId);
-    if (driven.pendingGate) {
-      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
-    }
-  }
-  return { features };
-}
-
-// scripts/tdd/agent-models.ts
-init_cjs_shims();
-var import_fs10 = require("fs");
-var import_path9 = require("path");
-var RECOMMENDED_MODELS = {
-  "spec-author": "opus",
-  "architect-reviewer": "opus",
-  "test-strategist": "sonnet",
-  "ux-designer": "sonnet",
-  navigator: "sonnet",
-  driver: "sonnet",
-  "product-owner": "opus",
-  "release-engineer": "sonnet"
-};
-var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path9.join)(".lakebase", "agent-config.json");
-function readAgentConfig(projectDir) {
-  const p = (0, import_path9.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs10.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs10.readFileSync)(p, "utf8"));
-}
-function resolveModelForRole(role, projectDir) {
-  const spawnable = role;
-  const entry = readAgentConfig(projectDir)?.roles?.[spawnable];
-  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
-}
-
-// scripts/tdd/orchestrator-logging.ts
-init_cjs_shims();
-function storyOf2(action) {
-  return "story" in action ? action.story : void 0;
-}
-function orchestratorLogEvents(action, ctx = {}) {
-  const feature_id = ctx.featureId;
-  const story = storyOf2(action);
-  const base = { role: "orchestrator", level: "info", feature_id };
-  const withStory = story ? { story } : {};
-  switch (action.kind) {
-    case "invoke-role": {
-      const role = action.role;
-      const mode = "mode" in action ? action.mode : void 0;
-      const buildMode = "buildMode" in action ? action.buildMode : void 0;
-      const ac = "ac" in action ? action.ac : void 0;
-      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
-      const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
-      return [
-        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
-        { role, level: "info", feature_id, event: "phase.start", slots: { phase, ...detail } }
-      ];
-    }
-    case "surface-gate":
-      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
-    case "await-acceptance":
-      return [
-        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
-        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
-        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } }
-      ];
-    case "approve-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
-    case "approve-plan-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
-    case "approve-deploy-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
-    case "accept":
-      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
-    case "cut-experiment":
-      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
-    case "dispatch":
-      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
-    case "deploy":
-      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
-    case "complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
-    case "planning-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
-    case "design-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
-    case "feature-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
-    case "raise-to-hil":
-      return [
-        {
-          ...base,
-          level: "error",
-          event: "escalation.raised",
-          slots: { source: action.source, reason: action.reason, ...withStory }
-        }
-      ];
-    case "done":
-      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
-    default: {
-      const k = action.kind;
-      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
-    }
-  }
-}
-function describeAction(action, ctx = {}) {
-  const ev = orchestratorLogEvents(action, ctx)[0];
-  if (!ev) return action.kind;
-  const renderCtx = {
-    role: ev.role,
-    ...ev.feature_id !== void 0 ? { feature_id: ev.feature_id } : {},
-    ...ev.phase !== void 0 ? { phase: ev.phase } : {},
-    ...ev.slots ?? {}
-  };
-  try {
-    return renderEventMessage(ev.event, renderCtx);
-  } catch {
-    return ev.event;
-  }
-}
-function makeOnAction(opts) {
-  const { featureId, ...io } = opts;
-  return (action) => {
-    for (const event of orchestratorLogEvents(action, { featureId })) {
-      try {
-        emitAgentLogEvent(event, io);
-      } catch {
-      }
-    }
-  };
-}
-
-// scripts/lakebase/scm-workflow-state.ts
-init_cjs_shims();
-var fs9 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
-var SCM_STATES = [
-  "scaffold-complete",
-  "feature-claimed",
-  "pr-ready",
-  "ci-green",
-  "merged"
-];
-var STATE_INDEX = SCM_STATES.reduce(
-  (acc, s, i) => ({ ...acc, [s]: i }),
-  {}
-);
-var STATE_FILE_REL = ".lakebase/workflow-state.json";
-function stateFilePath(projectDir) {
-  return path4.join(projectDir, STATE_FILE_REL);
-}
-function readWorkflowState(projectDir) {
-  const p = stateFilePath(projectDir);
-  if (!fs9.existsSync(p)) return null;
-  const raw = fs9.readFileSync(p, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(
-      `Failed to parse ${STATE_FILE_REL}: ${e.message}`
+  out.push(
+    `agent-log timing , ${report.events} events over ${fmtSecs(report.totalSeconds)} (${report.startedAt} -> ${report.endedAt})`
+  );
+  out.push("");
+  out.push(rollupBlock("by phase", report.byPhase));
+  out.push(rollupBlock("by role", report.byRole));
+  out.push(rollupBlock("by kind (role/event)", report.byKind));
+  out.push(`slowest ${report.slowest.length} spans`);
+  for (const t of report.slowest) {
+    const scope = [t.story, t.ac].filter(Boolean).join("/");
+    out.push(
+      `  ${fmtSecs(t.seconds).padStart(8)}  ${t.role}/${t.event}${t.phase ? ` [${t.phase}]` : ""}${scope ? ` ${scope}` : ""}`
     );
   }
-  const result = validateWorkflowState(parsed);
-  if (!result.ok) {
-    const summary = result.errors.map((e) => `  - ${e.path}: ${e.message}`).join("\n");
-    throw new Error(
-      `Invalid ${STATE_FILE_REL}:
-${summary}
-
-Fix the file or delete it to re-init.`
-    );
-  }
-  return result.value;
-}
-function validateWorkflowState(value) {
-  const errors = [];
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {
-      ok: false,
-      errors: [{ path: "$", message: "must be an object" }]
-    };
-  }
-  const v = value;
-  if (v.version !== 1) {
-    errors.push({ path: "version", message: `must be 1, got ${String(v.version)}` });
-  }
-  if (typeof v.state !== "string" || !SCM_STATES.includes(v.state)) {
-    errors.push({
-      path: "state",
-      message: `must be one of ${SCM_STATES.join(" | ")}`
-    });
-  }
-  if (v.tier_topology !== 1 && v.tier_topology !== 2 && v.tier_topology !== 3) {
-    errors.push({
-      path: "tier_topology",
-      message: "must be 1, 2, or 3"
-    });
-  }
-  if (typeof v.project_id !== "string" || v.project_id.length === 0) {
-    errors.push({
-      path: "project_id",
-      message: "must be a non-empty string"
-    });
-  }
-  const stringFields = [
-    "feature_id",
-    "branch",
-    "parent_branch",
-    "lakebase_branch_uid",
-    "claimed_at",
-    "pr_url",
-    "pushed_at",
-    "ci_run_url",
-    "ci_green_at",
-    "merged_at",
-    "migrate_run_url",
-    "migrate_completed_at",
-    "$schema"
-  ];
-  for (const key of stringFields) {
-    if (v[key] === void 0) continue;
-    if (typeof v[key] !== "string" || v[key].length === 0) {
-      errors.push({
-        path: key,
-        message: "must be a non-empty string when present"
-      });
-    }
-  }
-  const requiredForState = {
-    "scaffold-complete": [],
-    "feature-claimed": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at"
-    ],
-    "pr-ready": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at"
-    ],
-    "ci-green": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at",
-      "ci_run_url",
-      "ci_green_at"
-    ],
-    merged: [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at",
-      "ci_run_url",
-      "ci_green_at",
-      "merged_at"
-    ]
-  };
-  if (typeof v.state === "string" && SCM_STATES.includes(v.state)) {
-    for (const key of requiredForState[v.state]) {
-      if (v[key] === void 0) {
-        errors.push({
-          path: key,
-          message: `required when state is "${v.state}"`
-        });
-      }
-    }
-  }
-  const allowedKeys = /* @__PURE__ */ new Set([
-    "$schema",
-    "version",
-    "state",
-    "tier_topology",
-    "project_id",
-    "feature_id",
-    "branch",
-    "parent_branch",
-    "lakebase_branch_uid",
-    "claimed_at",
-    "pr_url",
-    "pushed_at",
-    "ci_run_url",
-    "ci_green_at",
-    "merged_at",
-    "migrate_run_url",
-    "migrate_completed_at"
-  ]);
-  for (const key of Object.keys(v)) {
-    if (!allowedKeys.has(key)) {
-      errors.push({ path: key, message: "unknown property" });
-    }
-  }
-  if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: v };
+  out.push("");
+  out.push("(spans are gaps between consecutive log events, attributed to the ending event;");
+  out.push(" a cold agent spawn before a turn's first emit is not separately visible.)");
+  return `${out.join("\n")}
+`;
 }
 
-// scripts/tdd/drive.cli.ts
+// scripts/tdd/timing-report.cli.ts
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
-      case "--feature":
-        out.feature = argv[++i];
-        break;
-      case "--sprint":
-        out.sprint = argv[++i];
-        break;
-      case "--project-dir":
-        out.projectDir = argv[++i];
-        break;
       case "--tdd-dir":
         out.tddDir = argv[++i];
         break;
-      case "--instance":
-        out.instance = argv[++i];
+      case "--feature":
+        out.feature = argv[++i];
         break;
-      case "--deploy-target":
-        out.deployTarget = argv[++i];
+      case "--top": {
+        const n = Number(argv[++i]);
+        if (!Number.isFinite(n) || n < 0) return { error: "--top expects a non-negative number" };
+        out.top = Math.floor(n);
         break;
-      case "--approver":
-        out.approver = argv[++i];
-        break;
-      case "--dry-run":
-        out.dryRun = true;
-        break;
-      case "--max-steps":
-        out.maxSteps = Number(argv[++i]);
-        break;
-      case "--plan-only":
-        out.planOnly = true;
-        break;
-      case "--only":
-        out.only = argv[++i];
-        break;
-      case "--pause-before":
-        out.pauseBefore = argv[++i];
-        break;
-      case "--gates":
-        out.gates = argv[++i];
-        break;
-      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
-      // default. --no-sizing opts OUT: planning goes propose -> author-requests
-      // with no estimate, for a backlog small enough not to need capacity sizing.
-      case "--no-sizing":
-      case "--no-planning-poker":
-      case "--no-t-shirt-sizing":
-        out.noSizing = true;
+      }
+      case "--json":
+        out.json = true;
         break;
       case "--help":
       case "-h":
         out.help = true;
         break;
       default:
-        break;
+        return { error: `unknown arg: ${argv[i]}` };
     }
   }
   return out;
 }
-function help() {
-  return `lakebase-tdd-drive (deterministic orchestrator driver)
+var HELP = `lakebase-tdd-timing
 
-Usage:
-  lakebase-tdd-drive --feature <id> [flags]
+Per-turn timing report from the agent log (.tdd/agent-log.jsonl). Spans are the
+gaps between consecutive log events, attributed to the ending event, then rolled
+up by phase, role, and role/event kind, with the slowest spans surfaced.
 
-Flags:
-  --feature <id>       Feature to drive (required)
-  --project-dir <dir>  Project root (default: cwd)
-  --tdd-dir <dir>      .tdd dir (default: <project-dir>/.tdd)
-  --instance <id>      Lakebase instance id (threaded to experiment branch ops)
-  --deploy-target <t>  Deploy target for the deploy phase (default: local)
-  --approver <name>    Headless gate approver (default: human-proxy)
-  --dry-run            Print the single next action + its commands, then exit
-  --max-steps <n>      Stop after n actions (incremental/live testing + safety)
-  --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
-  --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
-  --pause-before <m>   PAUSE (not stop) just before a handoff: navigator (the
-                       build kickoff) | release-engineer (the deploy/verify). The
-                       driver blocks for a human [Y/n], then RESUMES the same run
-                       on Y , it never leaves the state machine. n re-asks. Set
-                       LAKEBASE_TDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
-  --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
-                       (stop AT each HITL gate so the human answers, then re-run)
-  --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
-                       planning goes propose -> author-requests, no estimate.
-                       Sizing is ON by default. Aliases: --no-planning-poker,
-                       --no-t-shirt-sizing.
+  lakebase-tdd-timing [flags]
+    --tdd-dir <path>  .tdd/ root (default ./.tdd)
+    --feature <id>    only this feature's events
+    --top <n>         how many slowest spans to surface (default 10)
+    --json            emit the TimingReport as JSON (the machine API)
+    -h, --help
 `;
-}
-function writeWorkflowPhase(tddDir, phase) {
-  const file = path5.join(tddDir, "workflow-state.json");
-  let state = {};
-  if (fs10.existsSync(file)) {
-    try {
-      state = JSON.parse(fs10.readFileSync(file, "utf8"));
-    } catch {
-      state = {};
-    }
-  }
-  state.phase = phase;
-  fs10.mkdirSync(tddDir, { recursive: true });
-  fs10.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
-function spawnCmd(bin, args, cwd) {
-  return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process9.spawn)(bin, args, { cwd, stdio: "inherit" });
-    child.on("error", (err) => reject(err));
-    child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
-  });
-}
-var KIT_ROOT = path5.resolve(__dirname, "..", "..", "..");
-var kitBinMap = null;
-function resolveKitBinJs(bin) {
-  if (kitBinMap === null) {
-    try {
-      const pkg = JSON.parse(fs10.readFileSync(path5.join(KIT_ROOT, "package.json"), "utf8"));
-      kitBinMap = pkg.bin ?? {};
-    } catch {
-      kitBinMap = {};
-    }
-  }
-  const rel = kitBinMap[bin];
-  return rel ? path5.join(KIT_ROOT, rel) : null;
-}
-function execRunner(cfg) {
-  const sessions = /* @__PURE__ */ new Map();
-  const buildTurns = /* @__PURE__ */ new Map();
-  return {
-    async run(cmd) {
-      if (cmd.kind === "set-phase") {
-        writeWorkflowPhase(cfg.tddDir, cmd.phase);
-        return;
-      }
-      if (cmd.kind === "sync-backlog") {
-        syncBacklog(cfg.tddDir, cmd.sprint);
-        return;
-      }
-      if (cmd.kind === "claude") {
-        const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
-        const story = cmd.replay?.story;
-        if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
-          const turnIndex = (buildTurns.get(story) ?? 0) + 1;
-          buildTurns.set(story, turnIndex);
-          const replayed = replayBuildTurn({
-            replayBuildDir,
-            projectDir: cfg.projectDir,
-            tddDir: cfg.tddDir,
-            featureId: cfg.featureId,
-            story,
-            turnIndex
-          });
-          if (replayed) {
-            process.stderr.write(
-              `[drive] replayed build turn ${turnIndex} (${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""} ${story}) from corpus (no model spawn)
-`
-            );
-            return;
-          }
-          process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent
-`);
-        }
-        const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
-        if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
-          const replayed = replayDesignTurn({
-            turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
-            replayDir,
-            tddDir: cfg.tddDir,
-            featureId: cfg.featureId
-          });
-          if (replayed) {
-            process.stderr.write(
-              `[drive] replayed ${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""} from corpus (no model spawn)
-`
-            );
-            return;
-          }
-          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent
-`);
-        }
-        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
-        if (cmd.effort) args.push("--effort", cmd.effort);
-        if (cmd.resumeKey) {
-          const existing = sessions.get(cmd.resumeKey);
-          if (existing) {
-            args.push("--resume", existing);
-          } else {
-            const id = (0, import_node_crypto.randomUUID)();
-            sessions.set(cmd.resumeKey, id);
-            args.push("--session-id", id);
-          }
-        }
-        await spawnCmd("claude", args, cfg.projectDir);
-        return;
-      }
-      const js = resolveKitBinJs(cmd.bin);
-      if (js) {
-        await spawnCmd("node", [js, ...cmd.args], cfg.projectDir);
-      } else {
-        await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
-      }
-    }
-  };
-}
-function buildCfg(args, featureId) {
-  const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
-  const scm = readWorkflowState(projectDir);
-  return {
-    projectDir,
-    tddDir,
-    featureId,
-    sprintName: args.sprint,
-    instance: args.instance ?? scm?.project_id,
-    featureBranch: scm?.branch,
-    deployTarget: args.deployTarget ?? "local",
-    approver: args.approver ?? "human-proxy",
-    // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
-    // Spec Author then proposes + breaks down user-facing capabilities as E2E
-    // (browser/screen) stories, not API-only.
-    uiTrack: process.env.LAKEBASE_TDD_UI === "1",
-    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
-    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
-    // turn (the safety valve if a long story overflows the context window).
-    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
-    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
-    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
-    // to drop the flag and use the model default.
-    reviewEffort: process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default" ? "" : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
-    modelForRole: (role) => resolveModelForRole(role, projectDir),
-    runner: { async run() {
-    } },
-    onAction: composeOnAction(
-      // Narrate each routing decision in plain language (DRY: the same message
-      // the structured log uses), then the raw action for machine-trace parity.
-      (action, i) => process.stderr.write(
-        `[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}  ${JSON.stringify(action)}
-`
-      ),
-      // Code-emit the orchestrator's lifecycle (handoff / phase.start /
-      // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
-      // so the structured trail is written every run with no LLM in the loop.
-      makeOnAction({ tddDir, featureId })
-    )
-  };
-}
-function composeOnAction(...hooks) {
-  return (action, i) => {
-    for (const h of hooks) h(action, i);
-  };
-}
-function makeConfirmContinue() {
-  const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
-  const answerFile = process.env.LAKEBASE_TDD_GATE_ANSWER_FILE?.trim();
-  const isYes = (a) => a === "" || a === "y" || a === "yes";
-  return (action) => new Promise((resolve2) => {
-    const label = describeAction(action);
-    const prompt = `
-[drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
-    if (auto) {
-      process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}
-`);
-      return resolve2();
-    }
-    if (answerFile) {
-      process.stderr.write(`${prompt}
-[drive] (awaiting answer in ${answerFile})
-`);
-      const poll = setInterval(() => {
-        let raw;
-        try {
-          raw = fs10.readFileSync(answerFile, "utf8");
-        } catch {
-          return;
-        }
-        const a = raw.trim().toLowerCase();
-        if (a === "") return;
-        try {
-          fs10.rmSync(answerFile, { force: true });
-        } catch {
-        }
-        if (a === "y" || a === "yes") {
-          clearInterval(poll);
-          process.stderr.write(`[drive] resuming.
-`);
-          resolve2();
-        } else process.stderr.write(`[drive] holding , write Y to ${answerFile} when ready.
-`);
-      }, 1e3);
-      return;
-    }
-    if (process.stdin.isTTY) {
-      const ask = () => {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stderr, terminal: false });
-        rl.question(prompt, (answer) => {
-          rl.close();
-          if (isYes(answer.trim().toLowerCase())) {
-            process.stderr.write(`[drive] resuming.
-`);
-            resolve2();
-          } else {
-            process.stderr.write(`[drive] holding , answer Y when ready.
-`);
-            ask();
-          }
-        });
-      };
-      return ask();
-    }
-    process.stderr.write(
-      `${prompt}
-[drive] no interactive terminal and no LAKEBASE_TDD_GATE_ANSWER_FILE , auto-continuing past ${label}.
-`
-    );
-    resolve2();
-  });
-}
-function withBuildRecording(inner, cfg) {
-  const recordBuildDir = process.env.LAKEBASE_TDD_RECORD_BUILD_DIR?.trim();
-  if (!recordBuildDir) return inner;
-  let turn = 0;
-  return {
-    readState: () => inner.readState(),
-    onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
-    async perform(action) {
-      await inner.perform(action);
-      if (action.kind === "invoke-role" && (action.role === "navigator" || action.role === "driver")) {
-        turn += 1;
-        const dir = recordBuildTurn({
-          recordBuildDir,
-          projectDir: cfg.projectDir,
-          tddDir: cfg.tddDir,
-          featureId: cfg.featureId,
-          story: action.story,
-          turn,
-          role: action.role,
-          ac: action.ac,
-          mode: action.buildMode
-        });
-        process.stderr.write(
-          `[record] turn ${turn}: ${action.role}${action.buildMode ? ` (${action.buildMode})` : ""}${action.ac ? ` ${action.ac}` : ""} -> ${dir}
-`
-        );
-      }
-    }
-  };
-}
-function gatedStopWhen(base, interactive) {
-  if (!interactive) return base;
-  return (a) => (base?.(a) ?? false) || isHitlGateAction(a) || isHumanInputAction(a);
-}
-function pendingGateOf(r) {
-  return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : void 0;
-}
-function reportGate(gate) {
-  process.stderr.write(
-    `[drive] GATE awaiting human approval: ${JSON.stringify(gate)}. Surface it to the human; on approval record their decision (the approver), then re-run to continue.
-`
-  );
-}
-async function runSprintMode(args) {
-  const sprint = args.sprint;
-  const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path5.join(projectDir, ".tdd");
-  const claimJs = path5.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  const interactive = args.gates === "interactive";
-  const effects = {
-    async drivePlanning() {
-      const cfg = buildCfg(args, "");
-      cfg.runner = execRunner(cfg);
-      const planning = {
-        // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
-        async perform(action) {
-          for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
-        },
-        onAction: cfg.onAction
-      };
-      const base = driverBoundOptions("plan");
-      const r = await runDriver(planning, { ...base, stopWhen: gatedStopWhen(base.stopWhen, interactive) });
-      return { pendingGate: pendingGateOf(r) };
-    },
-    async readBacklog() {
-      return backlogFeatureIds(readBacklog(tddDir, sprint));
-    },
-    async claimFeature(featureId) {
-      await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
-    },
-    async driveFeature(featureId) {
-      const cfg = buildCfg(args, featureId);
-      cfg.runner = execRunner(cfg);
-      const r = await runDriver(buildDriveEffects(cfg), { stopWhen: gatedStopWhen(void 0, interactive) });
-      return { pendingGate: pendingGateOf(r) };
-    },
-    onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}
-`)
-  };
-  if (args.planOnly) {
-    try {
-      const planning = await effects.drivePlanning();
-      if (planning.pendingGate) reportGate(planning.pendingGate);
-      else process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)
-`);
-      return 0;
-    } catch (err) {
-      process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-      return 1;
-    }
-  }
-  try {
-    const result = await runSprint(effects);
-    if (result.pendingGate) {
-      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
-`);
-      reportGate(result.pendingGate);
-    } else {
-      process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)
-`);
-    }
-    return 0;
-  } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    return 1;
-  }
-}
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.help) {
-    process.stdout.write(help());
-    return 0;
-  }
-  if (args.sprint && !args.feature) {
-    return runSprintMode(args);
-  }
-  if (!args.feature) {
-    process.stderr.write(`lakebase-tdd-drive: --feature is required.
+function runTimingCli(argv) {
+  const parsed = parseArgs(argv);
+  if ("error" in parsed) {
+    process.stderr.write(`Error: ${parsed.error}
 
-${help()}`);
+${HELP}
+`);
     return 2;
   }
-  let bound;
-  if (args.planOnly) bound = "plan";
-  if (args.only) {
-    if (!["design", "build", "deploy"].includes(args.only)) {
-      process.stderr.write(`lakebase-tdd-drive: --only must be design|build|deploy (got "${args.only}").
+  if (parsed.help) {
+    process.stdout.write(`${HELP}
 `);
-      return 2;
-    }
-    bound = args.only;
-  }
-  const boundOpts = bound ? driverBoundOptions(bound) : {};
-  let pauseMilestone;
-  if (args.pauseBefore) {
-    if (!["navigator", "release-engineer"].includes(args.pauseBefore)) {
-      process.stderr.write(
-        `lakebase-tdd-drive: --pause-before must be navigator|release-engineer (got "${args.pauseBefore}").
-`
-      );
-      return 2;
-    }
-    pauseMilestone = args.pauseBefore;
-  }
-  const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : void 0;
-  const confirmContinue = pauseMilestone ? makeConfirmContinue() : void 0;
-  const cfg = buildCfg(args, args.feature);
-  if (args.dryRun) {
-    const plan = await planNextAction(cfg, boundOpts.transition);
-    process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
     return 0;
   }
-  cfg.runner = execRunner(cfg);
-  const interactive = args.gates === "interactive";
-  try {
-    const result = await runDriver(withBuildRecording(buildDriveEffects(cfg), cfg), {
-      maxSteps: args.maxSteps,
-      transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
-      pauseBefore,
-      confirmContinue
-    });
-    const pendingGate = pendingGateOf(result);
-    if (result.escalated) {
-      const e = result.escalation;
-      process.stderr.write(
-        `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.
-        source: ${e?.source}
-        reason: ${e?.reason}
-        recorded under .tdd/escalations/ ; resolve it, then re-run to resume.
-`
-      );
-      return 3;
-    } else if (result.stoppedAtMax) {
-      process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
+  const report = timingReportFromLog(
+    { tddDir: parsed.tddDir, featureId: parsed.feature },
+    { topN: parsed.top }
+  );
+  if (parsed.json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}
 `);
-    } else if (pendingGate) {
-      reportGate(pendingGate);
-    } else if (result.stoppedAtBound) {
-      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
-`);
-    } else {
-      process.stderr.write(`[drive] done in ${result.iterations} actions
-`);
-    }
-    return 0;
-  } catch (err) {
-    if (err instanceof ProtocolViolationError) {
-      const h = err.handoff;
-      try {
-        writeEscalation(cfg.tddDir, {
-          source: `protocol:${h.responder}`,
-          reason: err.message,
-          feature_id: cfg.featureId,
-          ...h.story ? { story_id: h.story } : {}
-        });
-        emitAgentLogEvent(
-          {
-            role: "orchestrator",
-            level: "error",
-            event: "escalation.raised",
-            feature_id: cfg.featureId,
-            slots: { source: `protocol:${h.responder}`, reason: err.message, ...h.story ? { story: h.story } : {} }
-          },
-          { tddDir: cfg.tddDir }
-        );
-      } catch {
-      }
-      process.stderr.write(`[drive] ${err.message}
-        recorded under .tdd/escalations/ ; fix the responder, then re-run.
-`);
-      return 3;
-    }
-    if (err instanceof UnexpectedCallbackError) {
-      try {
-        writeEscalation(cfg.tddDir, {
-          source: `protocol:unexpected-caller:${err.from}`,
-          reason: err.message,
-          feature_id: cfg.featureId,
-          ...err.scope.story ? { story_id: err.scope.story } : {}
-        });
-        emitAgentLogEvent(
-          {
-            role: "orchestrator",
-            level: "error",
-            event: "escalation.raised",
-            feature_id: cfg.featureId,
-            slots: { source: `protocol:unexpected-caller:${err.from}`, reason: err.message, ...err.scope.story ? { story: err.scope.story } : {} }
-          },
-          { tddDir: cfg.tddDir }
-        );
-      } catch {
-      }
-      process.stderr.write(`[drive] ${err.message}
-        recorded under .tdd/escalations/ ; resolve it, then re-run.
-`);
-      return 3;
-    }
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    return 1;
+  } else {
+    process.stdout.write(formatTimingReport(report));
   }
+  return 0;
 }
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    process.exit(1);
-  }
-);
-//# sourceMappingURL=drive.cli.cjs.map
+if (isCliEntry(importMetaUrl)) {
+  process.exit(runTimingCli(process.argv.slice(2)));
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  runTimingCli
+});
+//# sourceMappingURL=timing-report.cli.cjs.map

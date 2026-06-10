@@ -6678,6 +6678,7 @@ var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureSpecJson = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.json");
 var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
+var architectureJson = (tdd, f) => join(featureResolved(tdd, f), "architecture.json");
 var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
 var featureDeployEvidenceJson = (tdd, f) => join(featureResolved(tdd, f), "deploy-evidence.json");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
@@ -8166,6 +8167,30 @@ function storyStubScope(tddDir, featureId, storyId) {
     return "";
   }
 }
+function reviewRubric(tddDir, featureId, story, ac) {
+  const parts = [];
+  const layer = readAcLayer(tddDir, featureId, ac);
+  if (layer) parts.push(`layer=${layer}`);
+  try {
+    const arch = JSON.parse(fs7.readFileSync(architectureJson(tddDir, featureId), "utf8"));
+    const nfrs = (arch.nfrs ?? []).filter(
+      (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
+    );
+    if (nfrs.length) {
+      parts.push(`required NFRs , ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
+    }
+  } catch {
+  }
+  if (layer === "E2E") {
+    try {
+      const dg = JSON.parse(fs7.readFileSync(designGuideJson(tddDir), "utf8"));
+      const groups = Object.keys(dg.tokens ?? dg);
+      if (groups.length) parts.push(`design-token groups , ${groups.join(", ")}`);
+    } catch {
+    }
+  }
+  return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
+}
 function nextPendingTestDirective(tddDir, featureId, story) {
   let next;
   try {
@@ -8218,11 +8243,14 @@ function roleTaskBody(action, featureId, uiTrack, tddDir) {
       return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files , the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
     case "architect-reviewer":
       return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
-    case "test-strategist":
-      return `Produce the ordered test list for story ${s}.`;
+    case "test-strategist": {
+      const acIds = storyAcIds(tddDir, featureId, s);
+      const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
+      return `Produce the ordered test list for story ${s}.${acScope}`;
+    }
     case "navigator":
       if (action.buildMode === "review") {
-        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green. Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
+        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` + reviewRubric(tddDir, featureId, s, action.ac ?? "") + ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md , open those full files ONLY if you need more detail than it carries (do not re-read them by default). Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
       }
       return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
@@ -8256,12 +8284,24 @@ function commandsForAction(action, cfg) {
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" }
         ];
       }
-      const FRESH_PER_CYCLE = /* @__PURE__ */ new Set(["navigator", "driver"]);
+      const BUILD_ROLES = /* @__PURE__ */ new Set(["navigator", "driver"]);
+      const buildScope = cfg.buildSessionScope ?? "story";
+      let resumeKey;
+      if (BUILD_ROLES.has(action.role)) {
+        if (buildScope === "story" && "story" in action && action.story) {
+          resumeKey = `${action.role}:${action.story}`;
+        }
+      } else {
+        resumeKey = action.role;
+      }
+      const isReviewTurn = action.role === "navigator" && "buildMode" in action && action.buildMode === "review";
+      const reviewEffort = cfg.reviewEffort ?? "low";
       const claude = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
-        ...FRESH_PER_CYCLE.has(action.role) ? {} : { resumeKey: action.role },
+        ...resumeKey !== void 0 ? { resumeKey } : {},
+        ...isReviewTurn && reviewEffort ? { effort: reviewEffort } : {},
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : void 0,
@@ -9006,6 +9046,7 @@ function execRunner(cfg) {
 `);
         }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        if (cmd.effort) args.push("--effort", cmd.effort);
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
           if (existing) {
@@ -9045,6 +9086,14 @@ function buildCfg(args, featureId) {
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.
     uiTrack: process.env.LAKEBASE_TDD_UI === "1",
+    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
+    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
+    // turn (the safety valve if a long story overflows the context window).
+    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
+    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
+    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
+    // to drop the flag and use the model default.
+    reviewEffort: process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default" ? "" : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
     modelForRole: (role) => resolveModelForRole(role, projectDir),
     runner: { async run() {
     } },
