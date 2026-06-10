@@ -6852,6 +6852,7 @@ init_cjs_shims();
 var fs = __toESM(require("fs"), 1);
 var import_node_path = require("path");
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
@@ -6886,8 +6887,10 @@ function discoverArtifacts(tddDir, featureId) {
   add((0, import_path3.join)(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
   add((0, import_path3.join)(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
   add((0, import_path3.join)(fdir, "test-list.json"), "test-strategist", "test-list.json");
-  add((0, import_path3.join)(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
-  add((0, import_path3.join)(fdir, "ia.md"), "ux-designer", "ia.md");
+  const designDir = (0, import_path3.dirname)(designGuideJson(tddDir));
+  add((0, import_path3.join)(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add((0, import_path3.join)(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
+  add((0, import_path3.join)(designDir, "ia.md"), "ux-designer", "ia.md");
   const sdir = (0, import_path3.join)(fdir, "stories");
   if ((0, import_fs3.existsSync)(sdir)) {
     for (const s of (0, import_fs3.readdirSync)(sdir).sort()) {

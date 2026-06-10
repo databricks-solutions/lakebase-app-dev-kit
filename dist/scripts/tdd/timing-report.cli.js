@@ -6767,6 +6767,35 @@ function metaStr(ev, key) {
   const v = ev.metadata?.[key];
   return typeof v === "string" && v.length > 0 ? v : void 0;
 }
+var FINE_TO_COARSE = {
+  red: "build",
+  green: "build",
+  review: "build",
+  refactor: "build",
+  build: "build",
+  design: "design",
+  breakdown: "design",
+  propose: "planning",
+  estimate: "planning",
+  "author-requests": "planning",
+  plan: "planning",
+  deploy: "deploy"
+};
+function deriveCoarsePhase(role, event, finePhase) {
+  if (finePhase && FINE_TO_COARSE[finePhase]) return FINE_TO_COARSE[finePhase];
+  if (event.startsWith("deploy.") || event.startsWith("verify.") || event.startsWith("adherence.") || role === "release-engineer") {
+    return "deploy";
+  }
+  if (event.startsWith("cycle.") || event.startsWith("experiment.") || event.startsWith("smell.") || role === "navigator" || role === "driver") {
+    return "build";
+  }
+  if (role === "product-owner") return "planning";
+  if (role === "spec-author" || role === "architect-reviewer" || role === "test-strategist" || role === "ux-designer") {
+    return "design";
+  }
+  if (event.startsWith("gate.")) return "gate";
+  return "other";
+}
 function parseTs(ts) {
   const n = Date.parse(ts);
   return Number.isNaN(n) ? NaN : n;
@@ -6803,11 +6832,13 @@ function computeTiming(events, opts = {}) {
   for (let k = 1; k < stamped.length; k++) {
     const prev = stamped[k - 1];
     const cur = stamped[k];
+    const finePhase = metaStr(cur.ev, "phase");
     turns.push({
       index: k + 1,
       role: cur.ev.role,
       event: cur.ev.event,
-      phase: metaStr(cur.ev, "phase"),
+      phase: finePhase,
+      coarsePhase: deriveCoarsePhase(cur.ev.role, cur.ev.event, finePhase),
       story: metaStr(cur.ev, "story"),
       ac: metaStr(cur.ev, "ac"),
       cycleId: metaStr(cur.ev, "cycle_id"),
@@ -6825,7 +6856,7 @@ function computeTiming(events, opts = {}) {
     startedAt: first.ev.timestamp,
     endedAt: last.ev.timestamp,
     turns,
-    byPhase: rollup(turns, (t) => t.phase ?? "(none)"),
+    byPhase: rollup(turns, (t) => t.coarsePhase),
     byRole: rollup(turns, (t) => t.role),
     byKind: rollup(turns, (t) => `${t.role}/${t.event}`),
     slowest
@@ -6861,7 +6892,7 @@ function formatTimingReport(report) {
     `agent-log timing , ${report.events} events over ${fmtSecs(report.totalSeconds)} (${report.startedAt} -> ${report.endedAt})`
   );
   out.push("");
-  out.push(rollupBlock("by phase", report.byPhase));
+  out.push(rollupBlock("by phase (coarse lifecycle)", report.byPhase));
   out.push(rollupBlock("by role", report.byRole));
   out.push(rollupBlock("by kind (role/event)", report.byKind));
   out.push(`slowest ${report.slowest.length} spans`);

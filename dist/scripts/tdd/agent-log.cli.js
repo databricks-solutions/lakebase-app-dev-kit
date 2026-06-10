@@ -6837,13 +6837,14 @@ function readAgentLog(opts = {}) {
 // scripts/tdd/log-reconcile.ts
 init_esm_shims();
 import { existsSync as existsSync3, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
-import { join as join4, relative } from "path";
+import { join as join4, relative, dirname } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
 import * as fs from "fs";
 import { join as join3 } from "path";
 var featuresDir = (tdd) => join3(tdd, "features");
+var designGuideJson = (tdd) => join3(tdd, "design", "design-guide.json");
 var featureDir = (tdd, featureId) => join3(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var storiesDir = (tdd, f) => join3(featureResolved(tdd, f), "stories");
@@ -6878,8 +6879,10 @@ function discoverArtifacts(tddDir, featureId) {
   add(join4(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
   add(join4(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
   add(join4(fdir, "test-list.json"), "test-strategist", "test-list.json");
-  add(join4(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
-  add(join4(fdir, "ia.md"), "ux-designer", "ia.md");
+  const designDir = dirname(designGuideJson(tddDir));
+  add(join4(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add(join4(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
+  add(join4(designDir, "ia.md"), "ux-designer", "ia.md");
   const sdir = join4(fdir, "stories");
   if (existsSync3(sdir)) {
     for (const s of readdirSync2(sdir).sort()) {
