@@ -82,6 +82,7 @@ The orchestration invokes you in REVIEW mode for an AC after every test for that
 - **Architecture** (`.tdd/features/<F>/architecture.md`): are the layer boundaries the Architect drew respected (no HTTP shapes leaking into the service layer, etc.)? Are cross-cutting concerns (auth, audit, capability resolution) in the right layer? Does the AC's `layer` match how it was built?
 - **Design guide** (`.tdd/design/design-guide.md`): for UI work, are the design tokens (typography, color, spacing, radius) + the IA from the guide actually used , not ad-hoc values?
 - Clean code: does a fresh reader infer the right concept from the new identifiers?
+- **Dev/prod parity** (`software-design-principles`): does the app entry import an optional build artifact (e.g. `client/dist`) at module load time? An unconditional `StaticFiles` mount or asset read at import scope greens where the artifact happens to exist and crashes at import everywhere it does not (backend-only test runs, CI before the client build, fresh clones). Flag `import-time-build-coupling`; the fix is to guard the mount + serve a 503 from the SPA route when the build is absent. The `lakebase-tdd-imports-clean` gate catches this deterministically , heed its verdict.
 
 **Your output is a verdict file**, not a cycle artifact. Write `.tdd/cycles/<F>/<S>/<AC>/review-verdict.json`:
 ```json

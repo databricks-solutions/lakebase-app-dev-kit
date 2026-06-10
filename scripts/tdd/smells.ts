@@ -13,6 +13,7 @@ export type SmellName =
   | "dead-requirement-signal"
   | "test-deletion-attempt"
   | "boundary-violation"
+  | "import-time-build-coupling"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -66,6 +67,20 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     name: "boundary-violation",
     description: "Test references a private method or internal helper.",
     proposed_remediation: "Refactor to public boundary or move to inner-loop list.",
+  },
+  {
+    name: "import-time-build-coupling",
+    description:
+      "The app entry module requires an optional build artifact (e.g. client/dist) at " +
+      "module load time , an unconditional StaticFiles mount / asset read at import scope. " +
+      "It greens where the artifact happens to exist and crashes at import everywhere it " +
+      "does not (backend-only test runs, CI before the client build, fresh clones). Caught " +
+      "deterministically by the `lakebase-tdd-imports-clean` gate; the Navigator may also " +
+      "flag it in REVIEW.",
+    proposed_remediation:
+      "Guard the coupling: mount the compiled client ONLY when its directory exists, and " +
+      "serve a clear 503 from the SPA route when index.html is absent, so the module imports " +
+      "without the artifact. See the dev/prod-parity rule in software-design-principles.",
   },
   {
     name: "e2e-row-perma-red",

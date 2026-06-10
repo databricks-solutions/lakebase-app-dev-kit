@@ -89,6 +89,19 @@ jobs:
             npm install
           fi
 
+      # Build the client into client/dist BEFORE any test step. Tests that serve
+      # the SPA (a Python/React app whose backend mounts client/dist, or Playwright
+      # E2E that drives the real UI) need the built client present in CI, exactly
+      # as it is when the build agent greened them locally , dev/CI environment
+      # parity. `--if-present` makes this a transparent no-op when client has no
+      # `build` script. Gated on client/package.json so non-frontend projects skip
+      # it. Without this, a guarded backend (see the imports-clean gate) serves a
+      # 503 "client not built" shell and every UI/E2E assertion fails.
+      - name: Build client
+        if: hashFiles('client/package.json') != ''
+        working-directory: client
+        run: npm run build --if-present
+
       # The official action installs to a user-writable path (no sudo). It's
       # a no-op if a compatible databricks CLI is already on PATH.
       - name: Install Databricks CLI

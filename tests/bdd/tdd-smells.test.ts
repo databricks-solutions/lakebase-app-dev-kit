@@ -54,6 +54,7 @@ describe("smells catalog", () => {
         "dead-requirement-signal",
         "e2e-row-perma-red",
         "fragility-ratio",
+        "import-time-build-coupling",
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",
