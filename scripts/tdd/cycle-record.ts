@@ -54,7 +54,12 @@ import {
  */
 async function commitCycleWork(tddDir: string, message: string): Promise<void> {
   try {
-    await commitAllIfChanged({ cwd: dirname(tddDir), message });
+    // Code only: exclude the orchestration metadata (.tdd churns every turn;
+    // .lakebase is SCM state). Committing those onto the experiment branch makes
+    // their committed copy diverge from the feature branch, which then breaks
+    // accept's `git checkout <feature>`. prepare-pr's dirty check ignores the
+    // same two prefixes, so a code-only commit leaves a clean CODE tree for promote.
+    await commitAllIfChanged({ cwd: dirname(tddDir), message, exclude: [".tdd", ".lakebase"] });
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.

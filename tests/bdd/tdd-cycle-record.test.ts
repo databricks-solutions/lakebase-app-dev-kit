@@ -203,7 +203,10 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
   let proj: string;
   let ptdd: string;
   const gitlog = (): string => execSync("git log --oneline", { cwd: proj }).toString();
-  const porcelain = (): string => execSync("git status --porcelain", { cwd: proj }).toString().trim();
+  // CODE cleanliness: the build commits code only, leaving .tdd/.lakebase churn
+  // uncommitted by design (committing it would break accept's branch checkout).
+  const codeDirty = (): string =>
+    execSync("git status --porcelain -- . ':(exclude).tdd' ':(exclude).lakebase'", { cwd: proj }).toString().trim();
 
   beforeEach(() => {
     proj = mkdtempSync(join(tmpdir(), "tdd-commit-proj-"));
@@ -235,7 +238,9 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     writeFileSync(join(proj, "app.py"), "x = 1\n"); // the Driver's production code
     await greenOpenCycle({ tddDir: ptdd, featureId: F, story: S, verify: pass });
     expect(gitlog()).toMatch(/green: T1 \(AC1\)/);
-    expect(porcelain()).toBe(""); // clean tree => prepare-pr would pass
+    expect(codeDirty()).toBe(""); // code committed => prepare-pr would pass
+    // .tdd is intentionally NOT committed by the build (avoids the accept-checkout divergence).
+    expect(execSync("git status --porcelain", { cwd: proj }).toString()).toMatch(/\.tdd\//);
   });
 
   it("refactorAc commits the behavior-preserving refactor as its own commit", async () => {
@@ -247,6 +252,6 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     writeFileSync(join(proj, "app.py"), "x = 2  # extracted helper\n");
     await refactorAc(ptdd, F, S, "AC1");
     expect(gitlog()).toMatch(/refactor: AC1/);
-    expect(porcelain()).toBe("");
+    expect(codeDirty()).toBe("");
   });
 });
