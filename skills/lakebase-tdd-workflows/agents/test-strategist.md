@@ -41,7 +41,7 @@ In the per-story pipeline you order **one story's** tests at a time (a per-story
 
 ## Outputs
 
-- `.tdd/features/<F>/test-list.json` – Beck's master ordered list at the **feature** level. This is the source of truth you author. Write EXACTLY this shape , the ordered tests go in a top-level `items` array (NOT `tests`), and do not add other top-level keys; a renamed/extra key fails the test_list conformance gate and the downstream per-story scoping:
+- `.tdd/features/<F>/test-list.json` – Beck's master ordered list at the **feature** level. This is the source of truth you author. **When the streaming pipeline invokes you for a single story, APPEND that story's tests to the existing master , preserve every other story's items, and never author a `test-list-per-story.json` yourself (the orchestration generates the per-story + per-AC views from this master; a per-story file you write is regenerated from the master and lost).** Write EXACTLY this shape , the ordered tests go in a top-level `items` array (NOT `tests`), and do not add other top-level keys; a renamed/extra key fails the test_list conformance gate and the downstream per-story scoping:
 
   ```json
   {

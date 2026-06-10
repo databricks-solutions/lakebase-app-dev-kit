@@ -146,7 +146,9 @@ describe("commandsForAction: invoke-role -> claude", () => {
       JSON.stringify({ id: "S1", acs: ["AC1-create-form", "AC2-validate-input"] }),
     );
     const task = (commandsForAction({ kind: "invoke-role", role: "test-strategist", story: "S1" }, cfg({ tddDir }))[0] as { task: string }).task;
-    expect(task).toMatch(/ordered test list for story S1/);
+    expect(task).toMatch(/story S1's ordered tests/);
+    expect(task).toMatch(/APPEND them to the feature master test list/);
+    expect(task).toMatch(/Do NOT author any test-list-per-story\.json/);
     expect(task).toContain("AC1-create-form");
     expect(task).toContain("AC2-validate-input");
     expect(task).toMatch(/EXACT ids/);
@@ -156,7 +158,8 @@ describe("commandsForAction: invoke-role -> claude", () => {
 
   it("test-strategist task falls back to the bare directive when no ACs are on disk yet", () => {
     const task = (commandsForAction({ kind: "invoke-role", role: "test-strategist", story: "S9" }, cfg())[0] as { task: string }).task;
-    expect(task).toMatch(/ordered test list for story S9/);
+    expect(task).toMatch(/story S9's ordered tests/);
+    expect(task).toMatch(/APPEND them to the feature master test list/);
     expect(task).not.toMatch(/The story's ACs are:/);
   });
 
