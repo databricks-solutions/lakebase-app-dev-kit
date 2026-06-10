@@ -11,14 +11,14 @@
 // Deterministic + idempotent.
 
 import { existsSync, readdirSync, statSync } from "fs";
-import { join, relative } from "path";
+import { join, relative, dirname } from "path";
 import {
   emitAgentLogEvent,
   readAgentLog,
   type AgentLogEvent,
   type AgentRole,
 } from "./agent-log.js";
-import { featureResolved, storyTestListJson } from "./tdd-paths.js";
+import { featureResolved, storyTestListJson, designGuideJson } from "./tdd-paths.js";
 
 export interface ReconcileOpts {
   /** Path to the .tdd/ root. Default: "./.tdd". */
@@ -48,8 +48,16 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
   add(join(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
   add(join(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
   add(join(fdir, "test-list.json"), "test-strategist", "test-list.json");
-  add(join(fdir, "design-guide.json"), "ux-designer", "design-guide.json");
-  add(join(fdir, "ia.md"), "ux-designer", "ia.md");
+
+  // UX design system , PROJECT-level, under .tdd/design/ (NOT the feature dir).
+  // The ux-designer writes design-guide.{md,json} + ia.md there (designGuideJson
+  // resolves tdd/design/design-guide.json); reconciling them at the feature dir
+  // found nothing, so a ux-designer turn logged a phase.start but no
+  // artifact.written for what it produced.
+  const designDir = dirname(designGuideJson(tddDir));
+  add(join(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add(join(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
+  add(join(designDir, "ia.md"), "ux-designer", "ia.md");
 
   // Per-story artifacts, in story order.
   const sdir = join(fdir, "stories");
