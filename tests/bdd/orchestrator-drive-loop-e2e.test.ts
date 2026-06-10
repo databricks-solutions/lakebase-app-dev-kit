@@ -243,14 +243,19 @@ function replayEffects(feature: string, stories: string[]) {
 }
 
 describe("driver full loop (hermetic, replay roles + real pipeline state)", () => {
-  it("drives a 2-story feature from breakdown to shipped without stalling", async () => {
+  it("drives a 2-story feature from breakdown through accept + deploy to the promote boundary", async () => {
     const feature = "F1";
     seedFeature(feature);
     const { eff, log } = replayEffects(feature, ["S1", "S2"]);
 
-    const result = await runDriver(eff);
+    // Stop the moment the feature enters the promote phase: that phase drives the
+    // SCM workflow (prepare-pr / wait-ci / merge), which needs a real git remote +
+    // PR and is covered by the fake-world full-loop test + scm-workflow-e2e-live.
+    // This e2e's value is the REAL pipeline/probe through the TDD + deploy loop.
+    const result = await runDriver(eff, { stopWhen: (a) => a.kind === "deploy-complete" });
 
-    // Reached the terminal state.
+    // Reached the promote boundary cleanly (no stall): the TDD loop + deploy ran.
+    expect(result.stoppedAtBound).toBe(true);
     expect(result.iterations).toBeGreaterThan(0);
     const finalPipeline = readPipeline(tddDir, feature);
     // Both stories built + accepted (done), lane idle.

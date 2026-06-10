@@ -347,6 +347,12 @@ const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
 const DEPLOY_BIN = "lakebase-tdd-deploy";
+// Promote phase , the SCM workflow CLIs (lakebase-scm-workflows). They read +
+// advance the SCM ladder in .lakebase/workflow-state.json, so they take
+// --project-dir (the project root), NOT --feature/--tdd-dir.
+const SCM_PREPARE_PR_BIN = "lakebase-scm-prepare-pr";
+const SCM_WAIT_CI_BIN = "lakebase-scm-wait-ci";
+const SCM_MERGE_BIN = "lakebase-scm-merge";
 
 // A story runs ONE experiment by default (N=1); these derive its slug + branch
 // name. `cut` and `accept` (merge) BOTH compute them from here, so the branch
@@ -631,6 +637,38 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "deploy", "--approver", approver, "--tdd-dir", cfg.tddDir] },
       ];
 
+    case "deploy-complete":
+      // Local working-software check done -> enter the promote phase (PR review +
+      // merge of the feature up to its parent tier).
+      return [{ kind: "set-phase", phase: "promote" }];
+
+    case "prepare-pr":
+      // PR review step 1: push the feature branch + open the PR (SCM
+      // feature-claimed -> pr-ready). The SCM CLIs operate on the SCM ladder in
+      // .lakebase/workflow-state.json, so they take --project-dir, not the feature.
+      return [{ kind: "cli", bin: SCM_PREPARE_PR_BIN, args: ["--project-dir", cfg.projectDir] }];
+
+    case "wait-ci":
+      // PR review step 2: wait for the PR's regression gate to go green (the
+      // pr.yml ci-pr-branch check; SCM pr-ready -> ci-green).
+      return [{ kind: "cli", bin: SCM_WAIT_CI_BIN, args: ["--project-dir", cfg.projectDir] }];
+
+    case "approve-promote-gate":
+      // The HITL `promote` gate: the human/PO accepts the PR. AFTER ci-green and
+      // BEFORE the merge. Headless, the Human Proxy approves it (teeth: the PR
+      // must exist + be ci-green, enforced by the merge precondition next).
+      return [
+        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.tddDir] },
+      ];
+
+    case "merge":
+      // The promotion: merge the PR (release the feature into the parent tier) and
+      // WAIT for the downstream migrate workflow to apply the migrations to the
+      // parent's Lakebase branch (SCM ci-green -> merged). --wait-migrate is the
+      // default; pass it explicitly so the merge is not "done" until staging has
+      // both the code (PR merge) and the schema (parent merge.yml migrate run).
+      return [{ kind: "cli", bin: SCM_MERGE_BIN, args: ["--project-dir", cfg.projectDir, "--wait-migrate"] }];
+
     case "done":
       return [{ kind: "set-phase", phase: "shipped" }];
 
@@ -669,7 +707,7 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
     async readState() {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
       const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
-      const ctx = readDriveContext(cfg.tddDir, cfg.featureId);
+      const ctx = readDriveContext(cfg.tddDir, cfg.featureId, cfg.projectDir);
       const state = deriveDriveState(pipeline, probe, ctx);
       // UI track: gate the UX Designer step. uiTrack is config (env); the design
       // guide's existence is disk truth (project-level, authored once + reused).

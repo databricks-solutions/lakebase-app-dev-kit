@@ -124,6 +124,23 @@ function makeFakeWorld(storyIds: string[]) {
         case "approve-deploy-gate":
           state.deploy!.gateApproved = true;
           break;
+        case "deploy-complete":
+          // Local deploy done -> enter the promote phase (PR review + merge).
+          state.phase = "promote";
+          state.promote = { prReady: false, ciGreen: false, prApproved: false, merged: false };
+          break;
+        case "prepare-pr":
+          state.promote!.prReady = true;
+          break;
+        case "wait-ci":
+          state.promote!.ciGreen = true;
+          break;
+        case "approve-promote-gate":
+          state.promote!.prApproved = true;
+          break;
+        case "merge":
+          state.promote!.merged = true;
+          break;
         case "done":
           // Terminal effect: mark the feature finished so a re-read settles.
           state.phase = "done";
@@ -305,12 +322,16 @@ describe("runDriver: Tier-2 phase bounds (driverBoundOptions)", () => {
     expect(log.length).toBe(0);
   });
 
-  it("--only deploy runs the deploy phase to done", async () => {
+  it("--only deploy ships the feature: local deploy THEN promote (PR + merge) to done", async () => {
     const { state, log, effects } = makeFakeWorld([]);
     state.phase = "deploy";
     const result = await runDriver(effects, driverBoundOptions("deploy"));
     expect(state.deploy).toEqual({ deployed: true, gateApproved: true });
+    // Promote ran too: PR review + merge up to the parent tier.
+    expect(state.promote).toEqual({ prReady: true, ciGreen: true, prApproved: true, merged: true });
     expect(log.some((a) => a.kind === "deploy")).toBe(true);
+    expect(log.some((a) => a.kind === "prepare-pr")).toBe(true);
+    expect(log.some((a) => a.kind === "merge")).toBe(true);
     expect(result.stoppedAtBound).toBeUndefined(); // completed at done, not a bound stop
   });
 });

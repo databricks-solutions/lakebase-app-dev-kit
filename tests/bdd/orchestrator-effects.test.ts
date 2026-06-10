@@ -490,3 +490,31 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
     expect(claudeCmd(review, { reviewEffort: "" }).effort).toBeUndefined();
   });
 });
+
+describe("commandsForAction: promote phase (PR review + merge to parent)", () => {
+  it("deploy-complete sets the coarse phase to promote", () => {
+    expect(commandsForAction({ kind: "deploy-complete" }, cfg())).toEqual([{ kind: "set-phase", phase: "promote" }]);
+  });
+
+  it("prepare-pr / wait-ci / merge invoke the SCM-workflow CLIs against --project-dir", () => {
+    expect(commandsForAction({ kind: "prepare-pr" }, cfg())).toEqual([
+      { kind: "cli", bin: "lakebase-scm-prepare-pr", args: ["--project-dir", "/p"] },
+    ]);
+    expect(commandsForAction({ kind: "wait-ci" }, cfg())).toEqual([
+      { kind: "cli", bin: "lakebase-scm-wait-ci", args: ["--project-dir", "/p"] },
+    ]);
+    // The merge waits for the downstream migrate so staging gets code + schema.
+    expect(commandsForAction({ kind: "merge" }, cfg())).toEqual([
+      { kind: "cli", bin: "lakebase-scm-merge", args: ["--project-dir", "/p", "--wait-migrate"] },
+    ]);
+  });
+
+  it("approve-promote-gate approves the `promote` gate via the Human Proxy", () => {
+    const cmds = commandsForAction({ kind: "approve-promote-gate" }, cfg());
+    expect(cmds).toHaveLength(1);
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-human-proxy" });
+    expect((cmds[0] as { args: string[] }).args).toEqual(
+      ["--feature", "F1", "--gate", "promote", "--approver", "human-proxy", "--tdd-dir", "/p/.tdd"],
+    );
+  });
+});

@@ -18,6 +18,7 @@ import type {
   DrivePhase,
   PlanningState,
   DeployState,
+  PromoteState,
   StoryView,
   DriveEscalation,
 } from "./orchestrator-drive.js";
@@ -57,6 +58,9 @@ export interface DriveContext {
   phase: DrivePhase;
   planning?: PlanningState;
   deploy?: DeployState;
+  /** The promote phase's progress (PR review + merge to parent), from the SCM
+   *  workflow-state + the `promote` HITL gate. */
+  promote?: PromoteState;
   /** The Spec Author has enumerated the feature's stories (breakdown done). */
   breakdownDone: boolean;
   /** Optional explicit story order; defaults to pipeline insertion order. */
@@ -123,6 +127,7 @@ export function deriveDriveState(
     phase: ctx.phase,
     planning: ctx.planning,
     deploy: ctx.deploy,
+    promote: ctx.promote,
     breakdownDone,
     storyOrder,
     stories,
@@ -144,6 +149,8 @@ export function driverPhaseForTdd(tddPhase: string): DrivePhase {
       return "planning";
     case "deploy":
       return "deploy";
+    case "promote":
+      return "promote";
     case "shipped":
     case "done":
       return "done";

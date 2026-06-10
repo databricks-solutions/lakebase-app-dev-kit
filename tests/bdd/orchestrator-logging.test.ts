@@ -122,6 +122,23 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(events.some((e) => e.role === "orchestrator" && e.event === "phase.end")).toBe(true);
   });
 
+  it("the promote phase emits a release-engineer phase.start + a promote gate.approved", () => {
+    // deploy-complete marks entry into the promote phase (release engineer owns it).
+    const entry = orchestratorLogEvents({ kind: "deploy-complete" } as WorkflowAction, { featureId: "F1" });
+    expect(entry).toEqual([
+      expect.objectContaining({ role: "release-engineer", event: "phase.start", slots: { phase: "promote" } }),
+    ]);
+    // The HITL promote gate (PR acceptance) logs gate.approved {gate: promote}.
+    const gate = orchestratorLogEvents({ kind: "approve-promote-gate" } as WorkflowAction, { featureId: "F1" });
+    expect(gate.some((e) => e.event === "gate.approved" && (e.slots as { gate?: string }).gate === "promote")).toBe(true);
+    // The SCM steps still emit an in-vocabulary, distinct marker (no throw, timing-visible).
+    for (const k of ["prepare-pr", "wait-ci", "merge"] as const) {
+      const evs = orchestratorLogEvents({ kind: k } as WorkflowAction, { featureId: "F1" });
+      expect(evs.length).toBeGreaterThan(0);
+      expect(evs[0].event).toBeTruthy();
+    }
+  });
+
   it("every emitted event has role/level/event AND renders from its template + slots (no missing slot)", () => {
     const action = { kind: "invoke-role", role: "driver", story: "S1" } as WorkflowAction;
     for (const e of orchestratorLogEvents(action, { featureId: "F1" })) {
