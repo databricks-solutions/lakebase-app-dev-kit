@@ -45,13 +45,10 @@ describe("commandsForAction: invoke-role -> claude", () => {
     // project's tests), then the ORCHESTRATION records the cycle (stamps GREEN
     // via the substrate, not the agent), then reconcile logs what landed.
     expect(cmds).toHaveLength(3);
-    // Driver runs a FRESH session every cycle: NO resumeKey, so the runner spawns
-    // a new ephemeral `claude -p` (neither --resume nor --session-id). Resuming
-    // would accumulate the whole story's transcript and overflow the context
-    // window across a long RED/GREEN loop; the on-disk artifact is its only
-    // context, so a fresh session is correct + bounded.
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus" });
-    expect((cmds[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
+    // P5: the Driver resumes PER STORY by default (story-scoped resumeKey), warm
+    // across the story's cycles and fresh at each new story. The on-disk artifact
+    // remains its only inter-role context, so correctness is unchanged.
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus", resumeKey: "driver:S1" });
     expect((cmds[0] as { task: string }).task).toMatch(/GREEN/);
     expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-cycle" });
     expect((cmds[1] as { args: string[] }).args[0]).toBe("green");
@@ -59,16 +56,18 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
   });
 
-  it("non-loop roles keep a warm resumeKey; only navigator + driver are fresh per cycle", () => {
-    // spec-author / architect-reviewer / etc. are invoked a handful of times per
-    // feature, so resuming their session (warm context + prompt cache) is the
-    // cheaper default. Only the tight RED/GREEN loop roles drop resume.
+  it("resume scoping: non-build roles warm across the feature; build roles warm PER STORY (P5)", () => {
+    // spec-author / architect-reviewer / etc. resume across the whole feature
+    // (keyed by role). The build roles (navigator/driver) resume per STORY , a
+    // fresh session each story bounds context growth (the per-story spec gate
+    // keeps stories small); the detailed scoping is covered in the build-lane
+    // perf describe below.
     const specAuthor = commandsForAction({ kind: "invoke-role", role: "spec-author", story: "S1" }, cfg());
     expect(specAuthor[0]).toMatchObject({ kind: "claude", role: "spec-author", resumeKey: "spec-author" });
     const navigator = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
     const driver = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, cfg());
-    expect((navigator[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
-    expect((driver[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
+    expect((navigator[0] as { resumeKey?: string }).resumeKey).toBe("navigator:S1");
+    expect((driver[0] as { resumeKey?: string }).resumeKey).toBe("driver:S1");
   });
 
   it("navigator: agent writes the test, orchestration stamps the RED cycle (agent records nothing)", () => {
@@ -77,8 +76,8 @@ describe("commandsForAction: invoke-role -> claude", () => {
     // (orchestration) records RED so the probe's red_at reading never depends
     // on the agent hand-writing a cycle artifact.
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "navigator" });
-    // Navigator also runs fresh per cycle (no resumeKey).
-    expect((cmds[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
+    // P5: Navigator resumes per story (story-scoped resumeKey).
+    expect((cmds[0] as { resumeKey?: string }).resumeKey).toBe("navigator:S1");
     const cycle = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-tdd-cycle") as { args: string[] } | undefined;
     expect(cycle).toBeTruthy();
     expect(cycle!.args[0]).toBe("begin");
@@ -415,5 +414,79 @@ describe("hand-back delivery: onHandback writes, roleTask consumes (informed ret
     expect(existsSync(handbackFile(tdd, "F1", "test-strategist", "S2"))).toBe(false);
     const again = commandsForAction(action, cfg({ tddDir: tdd, projectDir: tdd }));
     expect((again[0] as { task: string }).task).not.toMatch(/HANDBACK/);
+  });
+});
+
+describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scope / P6 effort)", () => {
+  const review = { kind: "invoke-role", role: "navigator", story: "S1", ac: "AC1-create", buildMode: "review" } as const;
+  const red = { kind: "invoke-role", role: "navigator", story: "S1" } as const;
+  const green = { kind: "invoke-role", role: "driver", story: "S1" } as const;
+  const claudeCmd = (a: Parameters<typeof commandsForAction>[0], over = {}) =>
+    commandsForAction(a, cfg(over))[0] as { task: string; resumeKey?: string; effort?: string };
+
+  // ── P2: pre-digested REVIEW rubric ─────────────────────────────────────────
+  it("inlines an AC-scoped rubric (layer + applicable NFRs) and tells the reviewer NOT to re-read the full files", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "effects-rubric-"));
+    const tdd = join(tmp, ".tdd");
+    mkdirSync(join(tdd, "features", "F1", "stories", "S1", "acs"), { recursive: true });
+    writeFileSync(
+      join(tdd, "features", "F1", "architecture.json"),
+      JSON.stringify({
+        nfrs: [
+          { id: "NFR-R2-status-validation", brief: "status is always a recognized state", applies_to: "S1" },
+          { id: "NFR-additive-migrations", brief: "migrations are additive", applies_to: "F1" },
+          { id: "NFR-other-story", brief: "n/a here", applies_to: "S2" },
+        ],
+      }),
+    );
+    writeFileSync(
+      join(tdd, "features", "F1", "stories", "S1", "acs", "AC1-create.json"),
+      JSON.stringify({ id: "AC1-create", layer: "API" }),
+    );
+    const task = claudeCmd(review, { tddDir: tdd }).task;
+    expect(task).toMatch(/RUBRIC \(pre-extracted/);
+    expect(task).toContain("layer=API");
+    expect(task).toContain("NFR-R2-status-validation"); // story-scoped NFR
+    expect(task).toContain("NFR-additive-migrations"); // feature-wide NFR
+    expect(task).not.toContain("NFR-other-story"); // a sibling story's NFR is excluded
+    expect(task).toMatch(/do not re-read them by default/);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("the review rubric degrades gracefully when architecture.json is absent", () => {
+    // cfg's tddDir does not exist -> no layer, no NFRs -> bare review prompt, no RUBRIC clause.
+    const task = claudeCmd(review).task;
+    expect(task).toMatch(/REVIEW the implementation of AC AC1-create/);
+    expect(task).not.toMatch(/RUBRIC \(pre-extracted/);
+  });
+
+  // ── P5: build session scope ────────────────────────────────────────────────
+  it("by default resumes Navigator/Driver PER STORY (story-scoped resumeKey), fresh at each new story", () => {
+    expect(claudeCmd(red).resumeKey).toBe("navigator:S1");
+    expect(claudeCmd(green).resumeKey).toBe("driver:S1");
+    expect(claudeCmd(review).resumeKey).toBe("navigator:S1"); // review shares the story session
+    // a different story is a different (fresh) session
+    expect(claudeCmd({ kind: "invoke-role", role: "navigator", story: "S2" }).resumeKey).toBe("navigator:S2");
+  });
+
+  it("buildSessionScope=cycle cold-spawns every build turn (no resumeKey) , the overflow safety valve", () => {
+    expect(claudeCmd(red, { buildSessionScope: "cycle" }).resumeKey).toBeUndefined();
+    expect(claudeCmd(green, { buildSessionScope: "cycle" }).resumeKey).toBeUndefined();
+  });
+
+  it("non-build roles still resume across the whole feature (keyed by role)", () => {
+    expect(claudeCmd({ kind: "invoke-role", role: "architect-reviewer", story: "S1" }).resumeKey).toBe("architect-reviewer");
+  });
+
+  // ── P6: fast review via --effort ───────────────────────────────────────────
+  it("sets effort=low on the REVIEW turn only (the headless 'fast' knob)", () => {
+    expect(claudeCmd(review).effort).toBe("low");
+    expect(claudeCmd(red).effort).toBeUndefined(); // RED authors a test
+    expect(claudeCmd(green).effort).toBeUndefined(); // GREEN authors code
+  });
+
+  it("reviewEffort is configurable; an empty reviewEffort drops the flag (model default)", () => {
+    expect(claudeCmd(review, { reviewEffort: "medium" }).effort).toBe("medium");
+    expect(claudeCmd(review, { reviewEffort: "" }).effort).toBeUndefined();
   });
 });

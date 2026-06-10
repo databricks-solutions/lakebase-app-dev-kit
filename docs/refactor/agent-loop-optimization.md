@@ -40,10 +40,10 @@ Each: change / effort (S/M/L) / est. save / risk / **status**.
   - **Drop the haiku pin (smoke):** the root cause of the 200s was the smoke pinning ALL design roles to haiku, incl. `--agent-model test-strategist=haiku`; haiku thrashed on the structured test-list. The kit default is already `sonnet`. Removed the test-strategist pin from `run-smoke.sh` + `_replay-smoke.sh` (other prose roles stay haiku, still exercising the override path). Smoke test updated to assert it is NOT pinned.
   - Output cap was already in place via `AGENT_TERSE_SUFFIX`.
 
-### P2 , pre-digest the REVIEW rubric (stop re-reading 3 files per AC)
+### P2 , pre-digest the REVIEW rubric (stop re-reading 3 files per AC) , LANDED
 - **Change:** orchestrator computes a compact, AC-scoped rubric once (design tokens + NFR ids + layer for THIS AC) and passes it inline; navigator stops re-reading `architecture.md`/`nfrs.md`/`design-guide.md` every review.
 - **Effort:** M. **Save:** ~20-40s x 6 reviews. **Risk:** low (same data, pre-extracted).
-- **Status:** _proposed_.
+- **Status:** **LANDED** (branch `perf/agent-loop-p0-p1-p7`). New `reviewRubric(tddDir, featureId, story, ac)` extracts the AC `layer` (via `readAcLayer`), the NFRs whose `applies_to` is this story or feature-wide (id + brief, from `architecture.json` , the canonical NFR home), and, for an E2E (UI) AC only, the design-token groups (from `design-guide.json`). The navigator REVIEW prompt now embeds this rubric inline and says to open the full files ONLY if more detail is needed (was: mandatory read of all 3 every AC). Best-effort: a missing source is simply omitted. Non-UI ACs (the majority) need NO design-guide read at all. Test in `orchestrator-effects.test.ts` (rubric content + scoping + graceful absence).
 
 ### P3 , batch or conditionally skip REVIEW
 - **Change:** most reviews return `refactor:false`. Either one review turn covering all just-greened ACs of a story (1 turn vs N), or a deterministic skip for trivial display-only ACs.
@@ -56,15 +56,15 @@ Each: change / effort (S/M/L) / est. save / risk / **status**.
 - **Effort:** L. **Save:** ~700-1,000s/story. **Risk:** medium-high (file contention).
 - **Status:** _proposed_.
 
-### P5 , warm the build session (or shrink its per-turn re-read)
+### P5 , warm the build session (fresh per STORY, not per cycle) , LANDED
 - **Change:** stop cold-spawning navigator/driver every cycle: keep a per-story warm `--resume` session with a small per-cycle delta, OR keep fresh but pass a digest so each cold turn re-reads less. Fresh-per-cycle exists to avoid "Prompt too long" on long stories, so this needs a measured cap.
 - **Effort:** M. **Save:** cold-boot + re-read x ~18 turns. **Risk:** medium (context growth).
-- **Status:** _proposed_.
+- **Status:** **LANDED as fresh-per-STORY** (branch `perf/agent-loop-p0-p1-p7`, user-chosen variant). `commandsForAction` now gives the build roles a STORY-scoped `resumeKey` (`${role}:${story}`): the navigator/driver `claude -p` session resumes across a story's RED/GREEN/REVIEW/REFACTOR cycles (warm context + prompt cache) and starts FRESH at each new story, so context growth is bounded to one story (the per-story spec gate keeps stories small). Config `buildSessionScope` (default `story`), with `LAKEBASE_TDD_BUILD_SESSION=cycle` as the cold-spawn-every-turn safety valve if a long story ever overflows the window. Other roles still resume across the whole feature. Tests in `orchestrator-effects.test.ts`.
 
-### P6 , model / fast-mode tiering
+### P6 , fast REVIEW turn (via `--effort`) , LANDED
 - **Change:** REVIEW is judgment, not code authoring , try it on a faster tier than the sonnet code-writers; consider fast-mode for the deterministic-ish turns.
 - **Effort:** S (config). **Save:** per-review. **Risk:** low, needs a quality check.
-- **Status:** _proposed_.
+- **Status:** **LANDED** (branch `perf/agent-loop-p0-p1-p7`). **Tooling note:** headless `claude -p` (v2.1.170) has NO `--fast` flag , fast-mode is an interactive-only toggle. The supported headless speed knob is `--effort <low|medium|high|xhigh|max>`. So P6 sets `--effort low` on the Navigator's REVIEW turn ONLY (the judgment turn); RED/GREEN/REFACTOR author code and keep the model default. Config `reviewEffort` (default `low`), overridable via `LAKEBASE_TDD_REVIEW_EFFORT` (e.g. `medium`, or `default` to drop the flag). The `effort` field threads through the `claude` DriveCommand to the runner (`--effort`). Tests in `orchestrator-effects.test.ts`. Quality of low-effort reviews is the thing to watch , now measurable via the P0 timing report + the review verdicts.
 
 ### P8 , run the TDD loop at the STORY level, not per AC
 - **Change:** today the build loop is **per AC**: navigator writes one failing test (RED) -> driver greens it (GREEN) -> navigator reviews that AC (REVIEW) -> driver refactors (REFACTOR). For a 6-AC story that is ~18-24 agent turns (6 RED + 6 GREEN + 6 REVIEW + N REFACTOR), each a cold spawn. **Story-level** collapses this to ~4 turns per story: navigator writes the story's WHOLE failing test suite once (RED, all ACs), driver implements until all green (GREEN), ONE holistic REVIEW, ONE REFACTOR.
@@ -140,4 +140,5 @@ All P8 variants batch by `layer` (capped) , see P8 for the unit + runner-contrac
 
 - 2026-06-09: baseline measured; options P0-P7 drafted; awaiting selection.
 - 2026-06-09: added **P8 (story-level TDD loop)** at user request , reframed the build lane as a P8-vs-P4 fork (story-level batching vs per-AC parallelism); P8 subsumes P3.
+- 2026-06-10: **P2 + P5 + P6 LANDED** on branch `perf/agent-loop-p0-p1-p7` (full hermetic suite green, 1981 passed). P2 = inline pre-extracted review rubric (`reviewRubric`), navigator no longer reloads 3 files per AC. P5 = build session is now fresh-per-STORY (story-scoped `resumeKey`; `buildSessionScope` config + `LAKEBASE_TDD_BUILD_SESSION=cycle` valve), the user-chosen variant. P6 = `--effort low` on the REVIEW turn (`reviewEffort` config), since headless `claude -p` has no `--fast` flag. Build-lane fork (P4 vs P8) still the only big open item; P3 subsumed by a future P8.
 - 2026-06-09: **P0 + P1 + P7 LANDED** on branch `perf/agent-loop-p0-p1-p7` (full hermetic suite green). P0 = the `lakebase-tdd-timing` report. P1 = inline AC ids in the test-strategist prompt + drop its haiku pin in the smoke (kit default sonnet). P7 = `scm-state --json` now carries `canonical_branch` so `verify-workflow-state.sh` skips a second CLI boot. **P7's original ~40s estimate was corrected to ~1 boot/feature** after reading the code: commits are already batched, `lk` is already warm, and the gap is dominated by the inherent Lakebase claim (not removable). The build-lane fork (P4 vs P8a/8b/8c) + P2/P5/P6 remain open and now A/B-measurable via P0.

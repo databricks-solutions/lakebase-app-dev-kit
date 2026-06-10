@@ -23,7 +23,7 @@ import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson, designGuideJson, handbackFile, storyAcIds } from "./tdd-paths.js";
+import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
 import { storyTestProgress } from "./cycle-record.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
@@ -34,7 +34,11 @@ export type DriveCommand =
   // `replay` carries the turn identity (sprint mode / story) so the runner can,
   // in fast-forward replay mode, copy this design turn's recorded artifact
   // instead of spawning the model. Ignored by the normal (live) runner.
-  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; replay?: { mode?: string; story?: string } }
+  // `effort` (P6): the `claude -p --effort <level>` knob for THIS turn. Set on the
+  // judgment turns (REVIEW) to run them fast (low reasoning effort) , the headless
+  // realization of "fast mode", since `claude -p` has no `--fast` flag. Omitted =>
+  // the model's default effort.
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; replay?: { mode?: string; story?: string } }
   | { kind: "cli"; bin: string; args: string[] }
   | { kind: "set-phase"; phase: string }
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
@@ -70,6 +74,16 @@ export interface DriveEffectsConfig {
    *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
    *  stories, not API-only, when proposing + breaking down. */
   uiTrack?: boolean;
+  /** P5: build-session scope for the Navigator/Driver. "story" (default) resumes
+   *  their `claude -p` session across a story's cycles (warm context + prompt
+   *  cache) and starts FRESH at each new story, so context growth is bounded to
+   *  one story. "cycle" cold-spawns every RED/GREEN/REVIEW/REFACTOR (the prior
+   *  behavior), the safety valve if a long story overflows the window. */
+  buildSessionScope?: "cycle" | "story";
+  /** P6: `--effort` level for the Navigator's REVIEW turn (judgment, not code
+   *  authoring), so it runs fast. Default "low"; set "" / undefined-via-env to
+   *  use the model default. */
+  reviewEffort?: string;
   onAction?(action: WorkflowAction, iteration: number): void;
 }
 
@@ -112,6 +126,56 @@ function storyStubScope(tddDir: string, featureId: string, storyId: string): str
   } catch {
     return "";
   }
+}
+
+/**
+ * P2: a compact, AC-scoped REVIEW rubric the orchestrator extracts ONCE from the
+ * design artifacts and passes inline, so the Navigator's review turn does not
+ * reload `architecture.md` + `nfrs.md` + `design-guide.md` IN FULL for every AC
+ * (the same 3 files, re-read 6x across a 6-AC story). Same data, pre-extracted:
+ *   - the AC's `layer` (boundary the diff must respect),
+ *   - the NFRs that apply to this story or feature-wide (id + brief), from
+ *     architecture.json (the canonical NFR home), and
+ *   - for a UI (E2E) AC, the design-token groups to check, from design-guide.json.
+ * Best-effort: any unreadable / absent source is simply omitted (the review
+ * prompt still names the full files for when more detail than the rubric is
+ * needed). Returns "" when nothing could be extracted.
+ */
+function reviewRubric(tddDir: string, featureId: string, story: string, ac: string): string {
+  const parts: string[] = [];
+  const layer = readAcLayer(tddDir, featureId, ac);
+  if (layer) parts.push(`layer=${layer}`);
+
+  // NFRs scoped to this story or applied feature-wide (applies_to === featureId).
+  try {
+    const arch = JSON.parse(fs.readFileSync(architectureJson(tddDir, featureId), "utf8")) as {
+      nfrs?: Array<{ id?: string; brief?: string; applies_to?: string }>;
+    };
+    const nfrs = (arch.nfrs ?? []).filter(
+      (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId),
+    );
+    if (nfrs.length) {
+      parts.push(`required NFRs , ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
+    }
+  } catch {
+    /* no architecture.json -> omit; prompt still names nfrs.md */
+  }
+
+  // Design-token groups to check, for a UI (E2E) AC only , the non-UI majority
+  // need NO design-guide read at all.
+  if (layer === "E2E") {
+    try {
+      const dg = JSON.parse(fs.readFileSync(designGuideJson(tddDir), "utf8")) as {
+        tokens?: Record<string, unknown>;
+      };
+      const groups = Object.keys(dg.tokens ?? (dg as Record<string, unknown>));
+      if (groups.length) parts.push(`design-token groups , ${groups.join(", ")}`);
+    } catch {
+      /* omit */
+    }
+  }
+
+  return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
 }
 
 /** Short task directive handed to a role subagent for an invoke-role action. */
@@ -250,10 +314,12 @@ function roleTaskBody(
       if (action.buildMode === "review") {
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
-          ` Read the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md),` +
-          ` and the design guide (.tdd/design/design-guide.md) and judge the diff against them: layer` +
-          ` boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA` +
-          ` adherence. Write your verdict to` +
+          reviewRubric(tddDir, featureId, s, action.ac ?? "") +
+          ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
+          ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
+          ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md , open` +
+          ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
+          ` Write your verdict to` +
           ` .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
           ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
@@ -326,22 +392,40 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
         ];
       }
-      // Navigator + Driver run a FRESH session every cycle (no resumeKey, so the
-      // runner spawns a new ephemeral `claude -p` with neither --resume nor
-      // --session-id). They hand off once per RED/GREEN/REVIEW/REFACTOR cycle in a
-      // tight loop, and the artifact on disk is their only inter-role channel, so a
-      // resumed session would accumulate the entire story's transcript and
-      // eventually overflow the context window ("Prompt is too long", the live
-      // smoke's S2 death). The other roles are invoked a handful of times per
-      // feature, so resuming their session (warm context + prompt cache) is the
-      // cheaper, safe default. Correctness never depends on the retained session
-      // for any role, only speed.
-      const FRESH_PER_CYCLE = new Set(["navigator", "driver"]);
+      // Navigator + Driver are the BUILD roles, invoked in a tight RED/GREEN/
+      // REVIEW/REFACTOR loop per AC; the artifact on disk is their only inter-role
+      // channel, so correctness never depends on a retained session , only speed.
+      // P5 (`buildSessionScope`): resume their `claude -p` session PER STORY by
+      // default (`story`) , warm context + prompt cache across a story's cycles,
+      // and a FRESH session at each new story so growth is bounded to one story
+      // (the per-story spec gate keeps stories small). `cycle` is the safety valve
+      // (cold-spawn every turn, the prior behavior) if a long story ever overflows
+      // the window ("Prompt is too long", the live smoke's S2 death). Other roles
+      // resume across the whole feature (keyed by role); they are invoked a handful
+      // of times so accumulation is bounded.
+      const BUILD_ROLES = new Set(["navigator", "driver"]);
+      const buildScope = cfg.buildSessionScope ?? "story";
+      let resumeKey: string | undefined;
+      if (BUILD_ROLES.has(action.role)) {
+        if (buildScope === "story" && "story" in action && action.story) {
+          resumeKey = `${action.role}:${action.story}`;
+        } // else "cycle" -> undefined (cold per turn)
+      } else {
+        resumeKey = action.role;
+      }
+      // P6: run the Navigator's REVIEW turn fast (judgment, not code authoring) via
+      // the `--effort` knob , the headless realization of "fast mode" (`claude -p`
+      // has no `--fast` flag). Only the review turn; RED/GREEN/REFACTOR author code
+      // and keep the model's default effort.
+      const isReviewTurn =
+        action.role === "navigator" && "buildMode" in action && action.buildMode === "review";
+      const reviewEffort = cfg.reviewEffort ?? "low";
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
-        ...(FRESH_PER_CYCLE.has(action.role) ? {} : { resumeKey: action.role }),
+        ...(resumeKey !== undefined ? { resumeKey } : {}),
+        ...(isReviewTurn && reviewEffort ? { effort: reviewEffort } : {}),
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : undefined,

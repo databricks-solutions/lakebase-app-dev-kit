@@ -262,6 +262,8 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
         }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        // P6: per-turn effort (set on the REVIEW judgment turn to run it fast).
+        if (cmd.effort) args.push("--effort", cmd.effort);
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
           if (existing) {
@@ -311,6 +313,17 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.
     uiTrack: process.env.LAKEBASE_TDD_UI === "1",
+    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
+    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
+    // turn (the safety valve if a long story overflows the context window).
+    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
+    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
+    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
+    // to drop the flag and use the model default.
+    reviewEffort:
+      process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default"
+        ? ""
+        : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
