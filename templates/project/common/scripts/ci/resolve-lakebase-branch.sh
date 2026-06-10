@@ -29,5 +29,13 @@ ALT="$WORK_TREE/node_modules/@databricks-solutions/lakebase-app-dev-kit/dist/scr
 if [ -f "$ALT" ]; then
   exec node "$ALT" "$@"
 fi
-echo "resolve-lakebase-branch: lakebase-app-dev-kit not installed (no node_modules/.bin/lakebase-ci-resolve-branch and no on-disk dist). Run 'npm install'." >&2
+# Fall back to the lk resolver shim (the canonical, npm-install-free path the rest
+# of the scaffold uses post-npx-kill). CI checks out the project , which has
+# scripts/lk + .lakebase/kit-ref , but does NOT `npm install` the kit, so the
+# node_modules lookups above miss and this is the path that actually fires in CI.
+LK="$WORK_TREE/scripts/lk"
+if [ -x "$LK" ]; then
+  exec "$LK" lakebase-ci-resolve-branch "$@"
+fi
+echo "resolve-lakebase-branch: lakebase-app-dev-kit not resolvable (no node_modules/.bin/lakebase-ci-resolve-branch, no on-disk dist, and no scripts/lk shim)." >&2
 exit 1
