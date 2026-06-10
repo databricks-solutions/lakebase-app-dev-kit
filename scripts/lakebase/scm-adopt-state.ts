@@ -1,4 +1,4 @@
-// SCM workflow adoption (FEIP-7458 phase B+): seed .lakebase/workflow-state.json
+// SCM workflow adoption (phase B+): seed .lakebase/workflow-state.json
 // for projects that pre-date phase A.
 //
 // Inspects the current working-tree state (LAKEBASE_PROJECT_ID from .env,

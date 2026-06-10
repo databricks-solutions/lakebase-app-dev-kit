@@ -13,7 +13,7 @@ import {
 // `databricks` CLI presence gates most assertions. Project CRUD is
 // destructive, so this suite only exercises the read path
 // (getDefaultBranchId against an existing test project) and shape-only
-// error checks. The create/delete equivalence test lives in FEIP-7071.
+// error checks. The create/delete equivalence test lives in.
 
 const cliAvailable = (() => {
   try {
@@ -55,7 +55,7 @@ describe("lakebase-project – error wrapping", () => {
 });
 
 // Hermetic regression test for the BranchUid-in-source_branch bug surfaced
-// during the FEIP-7092 live exercise. CLI returns BOTH uid (br-…) and
+// during the live exercise. CLI returns BOTH uid (br-…) and
 // name (.../branches/production) on each branch entry. The old
 // getDefaultBranchId preferred uid, which then failed downstream as a
 // source_branch reference ("branch id not found"). The new

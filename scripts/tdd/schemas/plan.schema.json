@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/plan.schema.json",
   "title": "ExperimentPlan",
-  "description": "The Architect Reviewer's experiment plan for a STORY (FEIP-7566), persisted as features/<F>/stories/<story>/plan.json. Produced at the design-spec gate (phase 1.5) and consumed by the orchestrator. Mirrors the ExperimentPlan interface in scripts/tdd/design-spec-gate.ts.",
+  "description": "The Architect Reviewer's experiment plan for a STORY, persisted as features/<F>/stories/<story>/plan.json. Produced at the design-spec gate (phase 1.5) and consumed by the orchestrator. Mirrors the ExperimentPlan interface in scripts/tdd/design-spec-gate.ts.",
   "type": "object",
   "required": ["feature_id", "story_id", "N", "mode", "strategies", "budget", "rationale"],
   "properties": {

@@ -14,7 +14,7 @@ beforeEach(() => {
   mkdirSync(join(tdd, FEATURE_DIR), { recursive: true });
 });
 
-// Experiments + plans are story-scoped (FEIP-7566): the analyzer scopes the
+// Experiments + plans are story-scoped: the analyzer scopes the
 // master test list to the story's ACs, so a test must seed those AC files.
 function seedAcs(...acIds: string[]): void {
   const acsDir = join(tdd, FEATURE_DIR, "stories", STORY, "acs");

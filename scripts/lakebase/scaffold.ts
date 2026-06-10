@@ -1,6 +1,6 @@
 // Static scaffold operations – port of ScaffoldService's template-copy
 // methods. Spring Initializr (Java/Kotlin starter download) is a separate
-// concern, ported in FEIP-7073.
+// concern, ported in.
 //
 // All methods read from the bundled templates/project/ tree. By default the
 // module locates it relative to its own source by walking up looking for
@@ -148,7 +148,7 @@ export async function deployClaudeCommands(
 
 /**
  * Deploy the TDD-workflow role agent definitions into the project's
- * `.claude/agents/` so Claude Code can discover + spawn them (FEIP-7510). The
+ * `.claude/agents/` so Claude Code can discover + spawn them. The
  * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
  * this copies each `<role>.md` verbatim (the bodies are the system prompts).
  * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
@@ -200,6 +200,8 @@ export async function deployClaudeAgents(
  */
 export const PROJECT_SKILLS = [
   "software-design-principles",
+  "architectural-design-principles",
+  "ui-ux-design-principles",
   "lakebase-tdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
@@ -498,7 +500,7 @@ export async function patchWorkflowsForRunnerType(targetDir: string, runnerType:
     // (Bug-fix from ScaffoldService: allow optional `if:` / other directives
     // between "- name: Set up JDK" and "uses: actions/setup-java@v4". The
     // extension's regex required them adjacent and silently no-op'd against
-    // current templates – surface this back via FEIP-7065 when the extension
+    // current templates – surface this back via when the extension
     // re-routes to this module.)
     content = content.replace(
       /- name: Set up JDK\n(?:\s+[\w-]+:.*\n)*\s+uses: actions\/setup-java@v4\n\s+with:\n(?:\s+#[^\n]*\n)*(?:\s+[\w-]+:.*\n)+/g,
@@ -546,7 +548,7 @@ export interface ScaffoldStaticAllResult {
 /**
  * Orchestrate the static (non-language-project) portion of scaffolding.
  * Language-specific files (Spring Initializr for Java/Kotlin, static
- * templates for Python/Node) ship in FEIP-7073.
+ * templates for Python/Node) ship in.
  *
  * Caller must have already created targetDir and run `git init` there
  * (installHooks requires .git/).
@@ -602,7 +604,7 @@ export async function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<Sc
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
-    report("Deploying .claude/skills/ (software-design-principles)");
+    report(`Deploying .claude/skills/ (${PROJECT_SKILLS.length} skills: engineering + design canon + workflows)`);
     const skills = await deployClaudeSkills(args.targetDir, opts);
     claudeSkills = skills.written;
   }

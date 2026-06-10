@@ -537,7 +537,7 @@ export interface CheckoutPairedResult {
  *
  * Mirrors the hook's three-mode logic and parent fallback chain. Tier
  * discovery is auto from the Lakebase branch list – no per-tier alias
- * is needed (this is the post-alpha.9 model, see FEIP-7098):
+ * is needed (this is the post-alpha.9 model, see):
  *
  *   1. **trunk** – current branch == `trunkAlias` (or main/master if no
  *      alias). Pairs .env with the project's default Lakebase branch.

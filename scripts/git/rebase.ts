@@ -1,4 +1,4 @@
-// Rebase primitives (P6b, FEIP-7334). Lifted from extension's
+// Rebase primitives (P6b). Lifted from extension's
 // GitService rebase methods. isRebasing() detects in-progress rebase
 // state by checking .git/rebase-merge and .git/rebase-apply paths
 // (same heuristic the extension uses).

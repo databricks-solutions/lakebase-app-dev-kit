@@ -1,4 +1,4 @@
-// Live BDD for the lakebase-branch CLI (FEIP-7331).
+// Live BDD for the lakebase-branch CLI.
 //
 // Spawns the built `dist/scripts/lakebase/branch.cli.js` against a
 // freshly-provisioned Lakebase project. Exercises every read + create
@@ -80,7 +80,7 @@ function runCli(args: string[]): CliResult {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "lakebase-branch CLI – live E2E (FEIP-7331)",
+  "lakebase-branch CLI – live E2E",
   () => {
     let projectId: string;
     let defaultBranchName: string;
@@ -140,7 +140,7 @@ describe.skipIf(!RUN_SUITE)(
     it("`--help` exits 0 and prints usage", () => {
       const r = runCli(["--help"]);
       expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(/lakebase-branch \(FEIP-7331\)/);
+      expect(r.stdout).toMatch(/lakebase-branch/);
       expect(r.stdout).toMatch(/Subcommands:/);
     });
 

@@ -1,4 +1,4 @@
-// Unit BDD tests for the migrate primitives (FEIP-7091).
+// Unit BDD tests for the migrate primitives.
 //
 // These tests cover the dispatch logic and the file-scan implementation
 // of listSchemaMigrations() for all three languages, using temp project
@@ -231,8 +231,8 @@ describe("flyway rollback + knex apply: error paths", () => {
   // Flyway: apply + status are implemented (live test covers them).
   // Rollback intentionally throws because Flyway Community Edition has
   // no `undo`.
-  // Knex: runner is fully implemented as of FEIP-7210 slice 3 (the
-  // original FEIP-7091 primitives lift shipped it as a stub). Live
+  // Knex: runner is fully implemented as of slice 3 (the
+  // original primitives lift shipped it as a stub). Live
   // behavior is exercised by env-gated suites; here we only lock the
   // pre-shell-out validation (no knexfile at root).
 

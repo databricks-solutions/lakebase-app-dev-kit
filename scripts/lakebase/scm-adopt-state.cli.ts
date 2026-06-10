@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: adopt the SCM workflow state for an existing project (FEIP-7458 phase B+).
+// CLI: adopt the SCM workflow state for an existing project (phase B+).
 //
 // For projects scaffolded before phase A landed, or projects that were
 // hand-paired without going through lakebase-create-project. Reads the
@@ -64,7 +64,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-adopt-state (FEIP-7458 phase B+)
+const HELP = `lakebase-scm-adopt-state (phase B+)
 
 Seed .lakebase/workflow-state.json for a project that pre-dates the
 SCM workflow state machine. Reads the current git branch + the

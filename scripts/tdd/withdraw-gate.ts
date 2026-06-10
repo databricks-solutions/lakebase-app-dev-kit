@@ -1,7 +1,7 @@
 // withdrawGate primitive: retract an approved gate + cascade to downstream
 // gates per ADR-0004's open question #3 (strict cascade).
 //
-// Tracker: FEIP-7357 (G5 / FEIP-7362).
+// Tracker: (G5 /).
 //
 // Cascade rules (named gates, not numbered):
 //   spec      withdraw -> plan + test_list also withdraw (if currently approved)
@@ -80,7 +80,7 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
   const writeLog = args.writeSelectionLog ?? true;
 
   // Lock the gates.json read-modify-write critical section so concurrent
-  // withdrawGate + approveGate calls do not race (G7 / FEIP-7364).
+  // withdrawGate + approveGate calls do not race (G7 /).
   return withGatesLock(
     args.featureId,
     (): WithdrawGateResult => {

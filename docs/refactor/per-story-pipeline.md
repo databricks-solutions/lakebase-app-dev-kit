@@ -1,9 +1,9 @@
 # Per-story design->build pipeline (streaming, single build lane + ready queue)
 
 **Status**: Design proposal, 2026-06-07
-**Umbrella FEIP**: FEIP-7461 (workflows as executable state machines)
-**Primary FEIP**: FEIP-7565 (per-story pipelined design->build)
-**Builds on**: FEIP-7510 (per-role agent runtime), the /plan -> /design -> /build -> /deploy loop.
+**Umbrella FEIP**: (workflows as executable state machines)
+**Primary FEIP**: (per-story pipelined design->build)
+**Builds on**: (per-role agent runtime), the /plan -> /design -> /build -> /deploy loop.
 
 ---
 
@@ -55,7 +55,7 @@ deploy:                    per the working-software gate once the feature's stor
    - 2b formal per-story spec gate (surface -> approve-gate -> ready; withdraw-gate rescinds), recorded per story alongside its status.
    - 2c per-story test-list scoping (`scopeToStory` / `writeStoryTestList` -> `stories/<story>/test-list-per-story.json`, the build lane's per-story input).
    Each with unit tests.
-3. **[done, hermetic; live run pending] Smoke + re-validate.** A hermetic end-to-end vitest (`tdd-per-story-pipeline-e2e`) drives a 3-story feature through all three layers together, proving design runs ahead and gates later stories while the single build lane drains the FIFO queue one story at a time. An advisory `verify-story-pipeline.sh` is wired into the smoke (step 4.5) to confirm a clean terminal pipeline state on a live run. The live FEIP-7422 smoke run against a real workspace is the final confirmation.
+3. **[done, hermetic; live run pending] Smoke + re-validate.** A hermetic end-to-end vitest (`tdd-per-story-pipeline-e2e`) drives a 3-story feature through all three layers together, proving design runs ahead and gates later stories while the single build lane drains the FIFO queue one story at a time. An advisory `verify-story-pipeline.sh` is wired into the smoke (step 4.5) to confirm a clean terminal pipeline state on a live run. The live TDD-workflow smoke run against a real workspace is the final confirmation.
 
 ## Open questions (resolve during phase 1)
 

@@ -2,7 +2,7 @@
 // against the kit's current templates. Sibling to `updateWorkflows`;
 // consumes the same drift vocabulary `detectCommandDrift` reports.
 //
-// The "fixer" half of the FEIP-7212 update story. `detectCommandDrift`
+// The "fixer" half of the update story. `detectCommandDrift`
 // surfaces the gap; `updateCommands` closes it by writing the current
 // kit templates with `${KIT_VERSION_AT_SCAFFOLD}` substituted to the
 // running kit version. Hook files (`<name>.{pre,post}-hook.md`) are

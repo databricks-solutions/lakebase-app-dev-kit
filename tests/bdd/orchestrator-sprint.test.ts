@@ -1,4 +1,4 @@
-// Sprint mode (FEIP-7461): the Tier-1 /sprint orchestrator. runSprint is pure
+// Sprint mode: the Tier-1 /sprint orchestrator. runSprint is pure
 // over SprintEffects (order assertions); the backlog manifest + sprint planning
 // readState are the I/O helpers the CLI uses to build the real effects.
 

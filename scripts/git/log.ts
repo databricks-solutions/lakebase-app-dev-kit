@@ -1,4 +1,4 @@
-// History / log primitives (P6f, FEIP-7338). Lifted from extension's
+// History / log primitives (P6f). Lifted from extension's
 // GitService log methods: getLogRaw, getLogShortstat, getOutgoingCommits,
 // getIncomingCommits, getRecentMerges, plus getBranchesAtCommit,
 // getCommitFiles, getDiffFiles which logically belong here too.

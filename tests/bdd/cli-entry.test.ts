@@ -1,6 +1,6 @@
-// Regression test for the isCliEntry helper (FEIP-7458 phase C++).
+// Regression test for the isCliEntry helper (phase C++).
 //
-// Backstop for the FEIP-7422 smoke finding: every SCM CLI shipped a
+// Backstop for the TDD-workflow smoke finding: every SCM CLI shipped a
 // naive `endsWith("<file>.cli.js")` guard that npx (which invokes via
 // the `.bin/<name>` symlink) silently broke. isCliEntry resolves
 // symlinks on both sides so the comparison survives.

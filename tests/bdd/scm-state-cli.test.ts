@@ -1,4 +1,4 @@
-// CLI surface tests for lakebase-scm-state (FEIP-7458, phase A).
+// CLI surface tests for lakebase-scm-state (phase A).
 //
 // Runs the exported runScmStateCli function in-process against tempdir
 // project roots so we don't need to build the bundle. Captures stdout

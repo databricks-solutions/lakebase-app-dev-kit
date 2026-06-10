@@ -226,7 +226,7 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
   });
 
   it("scaffolded merge.yml substitutes the kit version and substrate-routes its migrate + snapshot steps", async () => {
-    // FEIP-7096 PR3: same substrate-routing pattern as pr.yml, applied
+    // PR3: same substrate-routing pattern as pr.yml, applied
     // to merge.yml's migrate-target job. Locks down all four lessons
     // learned during the ecom + python-devloop integration loop:
     //   - kit version substitution at scaffold time
@@ -329,7 +329,7 @@ describe("installHooks", () => {
 });
 
 describe("patchWorkflowsForRunnerType", () => {
-  // Templates ship with `runs-on: self-hosted` (per FEIP-7121). The patch
+  // Templates ship with `runs-on: self-hosted` (per). The patch
   // function rewrites `runs-on: self-hosted` -> `runs-on: ubuntu-latest`
   // for github-hosted, and swaps the setup-java block for self-hosted.
   it("swaps runs-on to ubuntu-latest for github-hosted", async () => {

@@ -1,0 +1,9 @@
+{
+  "id": "form-accepts-title",
+  "given": "The create bug form is displayed",
+  "when": "A user types text into the title input field",
+  "then": "The text is captured and displayed in the title field",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Frontend state management in BugCreateForm captures input via onChange handler. Exercises UI component state binding."
+}

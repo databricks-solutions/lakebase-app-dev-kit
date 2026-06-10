@@ -1,9 +1,9 @@
 // Orchestrator for `lakebase create-project` – bootstrap a fresh
 // Lakebase-paired project.
 //
-// Wired in FEIP-7071. All NotYetPortedError stubs are now real calls to
+// Wired in. All NotYetPortedError stubs are now real calls to
 // the modules under scripts/. Mirrors ProjectCreationService.createProject
-// from the extension; sync back to the extension via FEIP-7065.
+// from the extension; sync back to the extension via.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -81,7 +81,7 @@ export interface CreateProjectArgs {
    * opt-in via `--enable-e2e`; the package.json patch is a no-op when
    * there is no package.json so the wire-up is partial (templates +
    * run-tests.sh only) until the project hand-rolls its own runner.
-   * FEIP-7094 Phase 2.
+   * Phase 2.
    */
   enableE2e?: boolean;
   /**
@@ -103,7 +103,7 @@ export interface CreateProjectArgs {
    */
   skipCommands?: boolean;
   /**
-   * Per-role model overrides for the TDD-workflow agents (FEIP-7510). Each role
+   * Per-role model overrides for the TDD-workflow agents. Each role
    * carries a strongly-recommended model in its definition; this is where the
    * HIL overrides it for THIS project, asked at setup. Keyed by role name
    * (e.g. { "driver": "haiku", "spec-author": "opus" }). Omitted/empty means
@@ -151,7 +151,7 @@ export async function createProject(
   const language = input.language ?? "java";
   const runnerType = input.runnerType ?? "self-hosted";
   const enableTdd = input.enableTdd !== false;
-  // FEIP-7094 Phase 2: default-on for Node/React templates only. Java/
+  // Phase 2: default-on for Node/React templates only. Java/
   // Kotlin/Python backends opt in explicitly. An undefined input.enableE2e
   // means "fall back to the language default"; an explicit boolean
   // overrides regardless of language.
@@ -253,7 +253,7 @@ export async function createProject(
     layDownTddScaffold(projectDir);
   }
 
-  // ── Step 5c: Playwright E2E wire-up (FEIP-7094 Phase 2) ────────
+  // ── Step 5c: Playwright E2E wire-up (phase 2) ────────
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
     const e2e = enableE2eForProject({ projectDir });
@@ -330,7 +330,7 @@ export async function createProject(
     report("Skipping runner setup (no GitHub repository).");
   }
 
-  // ── Step 7c: SCM workflow-state seed (FEIP-7458 phase A) ──────
+  // ── Step 7c: SCM workflow-state seed (phase A) ──────
   // Stamp the scaffold-complete row so .lakebase/workflow-state.json
   // exists BEFORE the initial commit. The state file is intentionally
   // tracked in git (it is the gate surface phase B's transition CLIs
@@ -353,7 +353,7 @@ export async function createProject(
     );
   }
 
-  // ── Step 7d: per-role agent model config (FEIP-7510) ──────────
+  // ── Step 7d: per-role agent model config ──────────
   // Seed .lakebase/agent-config.json with each TDD-workflow role's
   // strongly-recommended model (from its definition) plus any HIL overrides
   // chosen at setup. Written before the initial commit so it is tracked, like

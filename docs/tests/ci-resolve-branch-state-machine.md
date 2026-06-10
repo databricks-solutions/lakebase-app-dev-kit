@@ -1,11 +1,16 @@
 # `lakebase-ci-resolve-branch` test plan
 
-Coverage plan for the new standalone CLI bin (FEIP-7494). Two layers:
+Coverage plan for the standalone `lakebase-ci-resolve-branch` CLI bin. Two layers:
 
-- **Hermetic** at `tests/bdd/ci-resolve-branch.test.ts` for pure-function
-  behavior (DSN encoding, sanitize-name, `--github-env` file format).
-- **Live** at `tests/integration/scm-ci-resolve-branch-live.test.ts` for
-  the full state machine against a real Lakebase workspace.
+- **Live** at `tests/integration/scm-ci-resolve-branch-live.test.ts` , the
+  full state machine against a real Lakebase workspace (the authoritative
+  coverage today).
+- **Architectural guard** at `tests/bdd/shell-parity.test.ts` , asserts shells
+  route Lakebase path construction through this bin rather than inlining it.
+
+The pure-function hermetic cases below (DSN encoding, sanitize-name,
+`--github-env` file format) are a coverage plan, not yet authored as a
+standalone `tests/bdd/ci-resolve-branch.test.ts` suite.
 
 ## State machine under test
 
@@ -36,9 +41,9 @@ Hard errors (exit 1):
 - `--ensure-endpoint` not set AND no endpoint exists
 - credential mint failed
 
-## Hermetic test cases (`tests/bdd/ci-resolve-branch.test.ts`)
+## Hermetic test cases (planned , `tests/bdd/ci-resolve-branch.test.ts`, not yet authored)
 
-These tests do NOT call the real Lakebase API. They cover deterministic
+These cases would NOT call the real Lakebase API. They cover deterministic
 local behavior so a regression in encoding or output shape fails CI
 without needing a workspace.
 
@@ -99,13 +104,13 @@ Teardown (in `afterAll`, gated on all scenarios passing):
 
 ## How to run
 
-Hermetic:
+Architectural guard (hermetic):
 
 ```
-npx vitest run tests/bdd/ci-resolve-branch.test.ts
+npx vitest run tests/bdd/shell-parity.test.ts
 ```
 
-Live (after env config from `~/code/feip-7422-smoke/.env.local.test.config`):
+Live (after env config from `~/code/tdd-workflow-smoke/.env.local.test.config`):
 
 ```
 LAKEBASE_TEST_E2E_GITHUB=1 npx vitest run \

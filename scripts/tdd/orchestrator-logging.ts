@@ -15,6 +15,7 @@
 
 import type { WorkflowAction } from "./orchestrator-drive.js";
 import { emitAgentLogEvent, type AgentLogEventInput, type AgentLogIoOpts } from "./agent-log.js";
+import { renderEventMessage } from "./agent-log-events.js";
 
 export interface OrchestratorLogContext {
   featureId?: string;
@@ -39,72 +40,81 @@ export function orchestratorLogEvents(
   const story = storyOf(action);
   const base = { role: "orchestrator" as const, level: "info" as const, feature_id };
 
+  // Every emit names an event from the CLOSED vocabulary (agent-log-events.ts)
+  // and supplies that event's required SLOTS. The logger renders the message from
+  // the template + slots and THROWS on an off-vocabulary event or a missing slot,
+  // so the orchestrator trail conforms by construction. The event NAME carries
+  // the phase; slots carry the specifics (story / ac / gate / ...).
+  const withStory = story ? { story } : {};
+
   switch (action.kind) {
     case "invoke-role": {
       const role = action.role;
-      const detail = "mode" in action ? action.mode : story ? `story ${story}` : "";
+      const mode = "mode" in action ? action.mode : undefined;
+      const buildMode = "buildMode" in action ? action.buildMode : undefined;
+      const ac = "ac" in action ? action.ac : undefined;
+      // `phase` slot = the concrete activity token (NOT prose): the planning mode,
+      // the buildMode (review/refactor), or the cycle half (red/green), else design.
+      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
+      const detail = { ...withStory, ...(mode ? { mode } : {}), ...(buildMode ? { buildMode } : {}), ...(ac ? { ac } : {}) };
       return [
-        // The orchestrator's routing decision (who it dispatched + why).
-        {
-          ...base,
-          event: "handoff",
-          message: `dispatch ${role}${detail ? ` (${detail})` : ""}`,
-          data: { ...(story ? { story } : {}), ...("mode" in action ? { mode: action.mode } : {}) },
-        },
-        // The invoked role's phase boundary, stamped with THAT role, so its
-        // lifecycle is recorded even if the role's own model never logs.
-        {
-          role,
-          level: "info",
-          feature_id,
-          event: "phase.start",
-          message: `${role} starting${detail ? `: ${detail}` : ""}`,
-          ...(story ? { data: { story } } : {}),
-        },
+        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
+        { role, level: "info", feature_id, event: "phase.start", slots: { phase, ...detail } },
       ];
     }
     case "surface-gate":
-      return [{ ...base, event: "gate.surfaced", message: `surfacing spec gate for story ${story}`, data: { story } }];
+      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
     case "await-acceptance":
-      return [{ ...base, event: "gate.surfaced", message: `awaiting acceptance for story ${story}`, data: { story } }];
+      // The Release Engineer takes over here to run the deterministic deploy +
+      // verify; the deploy CLI emits the deploy.* events with the real outcome.
+      // The orchestrator records the RE dispatch + the acceptance gate.
+      return [
+        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
+        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
+        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } },
+      ];
     case "approve-gate":
-      return [{ ...base, event: "gate.approved", message: `spec gate approved for story ${story}`, data: { story } }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
     case "approve-plan-gate":
-      return [{ ...base, event: "gate.approved", message: `sprint plan gate approved` }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
     case "approve-deploy-gate":
-      return [{ ...base, event: "gate.approved", message: `deploy gate approved` }];
+      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
     case "accept":
-      return [{ ...base, event: "experiment.accepted", message: `story ${story} accepted (merge)`, data: { story } }];
+      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
     case "cut-experiment":
-      return [{ ...base, event: "experiment.cut", message: `cut experiment for story ${story}`, data: { story } }];
+      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
     case "dispatch":
-      return [{ ...base, event: "handoff", message: `dispatch story ${story} to the build lane`, data: { story } }];
+      // Opening the per-story build lane is a PHASE ENTRY, not an inter-agent
+      // handoff: the build lane is the orchestrator's own pipeline, not a
+      // spawnable agent. (The first real handoff is the navigator dispatch that
+      // follows, via invoke-role.) Emitting a `handoff to build-lane` would be
+      // the orchestrator handing off to itself; model it as phase.start instead.
+      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
     case "deploy":
-      return [{ ...base, event: "deploy.start", message: `deploying the built increment to the target` }];
+      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
     case "complete":
-      return [{ ...base, event: "phase.end", message: `story ${story} complete`, data: { story } }];
+      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
     case "planning-complete":
-      return [{ ...base, event: "phase.end", message: `planning complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
     case "design-complete":
-      return [{ ...base, event: "phase.end", message: `design complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
     case "feature-complete":
-      return [{ ...base, event: "phase.end", message: `feature complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
     case "raise-to-hil":
       return [
         {
           ...base,
           level: "error",
           event: "escalation.raised",
-          message: `RAISED TO HIL (${action.source}): ${action.reason}`,
-          data: { source: action.source, ...(story ? { story } : {}) },
+          slots: { source: action.source, reason: action.reason, ...withStory },
         },
       ];
     case "done":
-      return [{ ...base, event: "phase.end", message: `workflow complete` }];
+      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
     default: {
-      // Total over the union: any future action still gets a code-emitted event.
+      // Total over the union: any future action still gets an in-vocabulary event.
       const k = (action as { kind: string }).kind;
-      return [{ ...base, event: `action.${k}`, message: `orchestrator: ${k}` }];
+      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
     }
   }
 }
@@ -116,8 +126,20 @@ export function orchestratorLogEvents(
  * "dispatch driver (story S1)" / "RAISED TO HIL (...)" instead of raw JSON.
  */
 export function describeAction(action: WorkflowAction, ctx: OrchestratorLogContext = {}): string {
-  const events = orchestratorLogEvents(action, ctx);
-  return events[0]?.message ?? (action as { kind: string }).kind;
+  const ev = orchestratorLogEvents(action, ctx)[0];
+  if (!ev) return (action as { kind: string }).kind;
+  // Render the same template the logger will, so the console trace matches the log.
+  const renderCtx: Record<string, unknown> = {
+    role: ev.role,
+    ...(ev.feature_id !== undefined ? { feature_id: ev.feature_id } : {}),
+    ...(ev.phase !== undefined ? { phase: ev.phase } : {}),
+    ...(ev.slots ?? {}),
+  };
+  try {
+    return renderEventMessage(ev.event, renderCtx);
+  } catch {
+    return ev.event;
+  }
 }
 
 /**

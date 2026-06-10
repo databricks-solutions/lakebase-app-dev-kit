@@ -1,4 +1,4 @@
-// Unit tests for scm-prepare-pr (FEIP-7458 phase B+).
+// Unit tests for scm-prepare-pr (phase B+).
 //
 // Mocks the substrate's PR helpers + git status + remote lookups so we
 // can drive the helper without touching GitHub. Pins precondition

@@ -1,4 +1,4 @@
-// FEIP-7565 phase 2a: per-story pipeline state + single-lane FIFO ready queue.
+// phase 2a: per-story pipeline state + single-lane FIFO ready queue.
 // Hermetic (in-memory + tmpdir); no live Lakebase.
 
 import { describe, it, expect, afterEach } from "vitest";
@@ -153,7 +153,7 @@ describe("story-pipeline: ready queue + single build lane", () => {
   });
 });
 
-describe("story-pipeline: per-story spec gate (FEIP-7565 phase 2b)", () => {
+describe("story-pipeline: per-story spec gate (phase 2b)", () => {
   const AT = "2026-06-07T12:00:00.000Z";
 
   it("surfaceForGate moves the story to awaiting-gate + opens the gate", () => {
@@ -264,7 +264,7 @@ describe("story-pipeline: per-story spec gate (FEIP-7565 phase 2b)", () => {
   });
 });
 
-describe("story-pipeline: per-story experiment + PO acceptance (FEIP-7566)", () => {
+describe("story-pipeline: per-story experiment + PO acceptance", () => {
   const AT = "2026-06-07T13:00:00.000Z";
 
   // Set up a story dispatched to the build lane, on its experiment branch.

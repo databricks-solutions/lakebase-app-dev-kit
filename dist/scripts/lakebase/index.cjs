@@ -942,6 +942,8 @@ async function deployClaudeAgents(targetDir, opts) {
 }
 var PROJECT_SKILLS = [
   "software-design-principles",
+  "architectural-design-principles",
+  "ui-ux-design-principles",
   "lakebase-tdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
@@ -1161,7 +1163,7 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
-    report("Deploying .claude/skills/ (software-design-principles)");
+    report(`Deploying .claude/skills/ (${PROJECT_SKILLS.length} skills: engineering + design canon + workflows)`);
     const skills = await deployClaudeSkills(args.targetDir, opts);
     claudeSkills = skills.written;
   }
@@ -1424,7 +1426,7 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-var RUN_TESTS_E2E_MARKER = "# FEIP-7094: run Playwright E2E suite when configured";
+var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path8.join(args.projectDir, "scripts", "run-tests.sh");
   if (!fs9.existsSync(scriptPath)) {
@@ -7064,7 +7066,7 @@ function defaultBody(featureId, parentBranch) {
     "",
     `Forks from \`${parentBranch}\`.`,
     "",
-    "PR opened by `lakebase-scm-prepare-pr` (FEIP-7458 phase B+)."
+    "PR opened by `lakebase-scm-prepare-pr` (phase B+)."
   ].join("\n");
 }
 function shellEscape(s) {

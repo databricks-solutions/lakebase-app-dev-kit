@@ -1,4 +1,4 @@
-// Coverage for the workflow drift detector (FEIP-7140). Pure
+// Coverage for the workflow drift detector. Pure
 // filesystem; no live Lakebase, runs in the standard non-live suite.
 
 import { describe, it, expect, afterEach } from "vitest";

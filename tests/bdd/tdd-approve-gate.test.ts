@@ -1,4 +1,4 @@
-// G3 (FEIP-7360): approveGate primitive.
+// G3: approveGate primitive.
 //
 // Covers ADR-0004 test plan scenarios S2 (spec approve), S3 (plan approve),
 // S4 (test_list approve), plus promote-gate approval, HITL refusal,

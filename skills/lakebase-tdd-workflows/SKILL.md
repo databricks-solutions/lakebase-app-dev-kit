@@ -28,15 +28,17 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 ## Phases and gates
 
-| Phase | Output | HITL gate |
-|---|---|---|
-| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
-| 1 Architectural review | `layer` + `architectural_notes` populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
-| 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
-| 3 Design-spec gate | Experiment plan in `selection-log.md` + `features/<F>/plan.json` | **Gate 4 – Experiment plan** |
-| 4 Implementation | Per-experiment cycles producing tests + code | Continuous: smells; final: promote / synthesize choice |
+Gates are keyed (not numbered): `spec` / `plan` / `test_list` / `promote` / `deploy`. The design lane runs PER STORY (it streams), and experiments + plans are per-story.
 
-Refuse to transition if prior-phase artifacts are missing or invalid.
+| Step (per story unless noted) | Output | HITL gate |
+|---|---|---|
+| Spec drafting | `feature-spec.{md,json}` (feature) + per-story `story.{md,json}` + `acs/<AC>.{md,json}` | **`spec` gate** |
+| Architectural review | `layer` + `architectural_notes` on each AC; `architecture.{md,json}` (holds the NFRs) | folds into the `spec` gate |
+| Test-list construction | per-story `test-list-per-story.json` (scoped from the feature `test-list.{md,json}`) | **`test_list` gate** |
+| Build (per AC) | cut a per-story experiment; RED -> GREEN -> REVIEW -> REFACTOR cycles producing tests + code | Continuous: smells; per story: **accept (merge) / discard / revise** |
+| Deploy | working software on the experiment branch (reachable + verify) | **`deploy` gate** |
+
+Sprint planning has its own **`plan` gate**. For N>=2 experiments within a story, the menu-pick promote/synthesize decision is recorded under `synthesis/<F>/`. Refuse to transition if prior-step artifacts are missing or invalid.
 
 The phases + gates above are the PER-FEATURE pipeline that `/design` (phases 0 to 2 + gates 1 to 4) and `/build` (phase 4) run. They sit inside a larger orchestrated loop:
 
@@ -64,7 +66,7 @@ The same orchestrated path runs for real and headless; headless, the Human Proxy
 ## Headless / Human Proxy mode
 
 By default every gate is HITL: the workflow halts for the Product Owner. When
-`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the FEIP-7422 smoke), the human
+`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the TDD-workflow smoke), the human
 approver role is **performed by** the `human-proxy` identity. This does not
 skip the gate or rubber-stamp it, the Human Proxy stands in as a diligent reviewer and
 does exactly what a careful human would:
@@ -434,7 +436,7 @@ writePerAcViews(".tdd", "F1", list);
 
 ### Gates state machine (structured HITL approvals)
 
-Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md). Implementation: FEIP-7357.
+Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md).
 
 `.tdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
 

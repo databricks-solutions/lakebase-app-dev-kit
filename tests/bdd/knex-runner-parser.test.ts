@@ -1,6 +1,6 @@
 // Unit tests for the Knex runner's `migrate:status` parser. The runner
-// was a stub in the original primitives lift (FEIP-7091); slice 3 of
-// FEIP-7210 promoted it to a real shell-out implementation.
+// was a stub in the original primitives lift; slice 3 of
+// promoted it to a real shell-out implementation.
 //
 // The runner derives apply/rollback results from before/after status
 // diffs. That makes parseKnexStatus the hinge: if it breaks on a Knex

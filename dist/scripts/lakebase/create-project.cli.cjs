@@ -976,6 +976,8 @@ async function deployClaudeAgents(targetDir, opts) {
 }
 var PROJECT_SKILLS = [
   "software-design-principles",
+  "architectural-design-principles",
+  "ui-ux-design-principles",
   "lakebase-tdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
@@ -1195,7 +1197,7 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
-    report("Deploying .claude/skills/ (software-design-principles)");
+    report(`Deploying .claude/skills/ (${PROJECT_SKILLS.length} skills: engineering + design canon + workflows)`);
     const skills = await deployClaudeSkills(args.targetDir, opts);
     claudeSkills = skills.written;
   }
@@ -1676,7 +1678,7 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-var RUN_TESTS_E2E_MARKER = "# FEIP-7094: run Playwright E2E suite when configured";
+var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path9.join(args.projectDir, "scripts", "run-tests.sh");
   if (!fs10.existsSync(scriptPath)) {
@@ -2819,7 +2821,7 @@ Flags:
                       When omitted, defaults to 1 (prod only, no extra tiers
                       cut). Architectural choice; surface this in your wizard
                       rather than picking silently.
-  --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
+  --enable-e2e        Force-enable Playwright E2E wire-up
   --no-e2e            Force-disable Playwright E2E wire-up
                       (default: on for --language nodejs, off otherwise)
   --enable-infra      Force-enable [Infra]-tag runner wire-up

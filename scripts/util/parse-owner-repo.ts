@@ -1,6 +1,6 @@
 // Parse `owner/repo` from a slug, HTTPS URL, or git SSH URL.
 // Ported from src/utils/parseRepo.ts in the extension; same shape so the
-// extension's call sites can swap to this import once published (FEIP-7065).
+// extension's call sites can swap to this import once published.
 
 export interface OwnerRepo {
   owner: string;

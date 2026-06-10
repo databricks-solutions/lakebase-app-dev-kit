@@ -1,4 +1,4 @@
-// FEIP-7210 slice 1: SchemaMigrationAdapter interface + registry contract.
+// slice 1: SchemaMigrationAdapter interface + registry contract.
 //
 // Types-only PR. Tests assert the registry shape + resolution logic so
 // later slices that register concrete adapters (Flyway / Alembic / Knex)

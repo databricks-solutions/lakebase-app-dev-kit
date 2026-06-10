@@ -167,7 +167,7 @@ describe("smells detectors", () => {
     expect(readSmellsLog(tdd)).toEqual({ detected: [] });
   });
 
-  // ---- FEIP-7206: the 3 detectors that were catalog-only before ----
+  // ---- the 3 detectors that were catalog-only before ----
 
   it("detectApiCoherenceDrift passes through Navigator's flag", () => {
     const cycles = [

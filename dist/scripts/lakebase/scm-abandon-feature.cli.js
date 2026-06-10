@@ -736,7 +736,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-abandon-feature (FEIP-7458 phase B+)
+var HELP = `lakebase-scm-abandon-feature (phase B+)
 
 Unwind a feature claim: switch HEAD to the parent branch, delete the
 paired Lakebase + git branch, reset workflow-state to scaffold-complete.

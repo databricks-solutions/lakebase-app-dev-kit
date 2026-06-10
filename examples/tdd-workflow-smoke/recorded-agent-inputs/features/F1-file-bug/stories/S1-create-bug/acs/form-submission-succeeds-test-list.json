@@ -1,0 +1,18 @@
+{
+  "id": "T5",
+  "description": "Form submission with valid title and description triggers API request and processes without validation errors",
+  "ac_id": "form-submission-succeeds",
+  "status": "pending"
+}
+{
+  "id": "T8",
+  "description": "Form submission with empty title returns validation error message that names the 'title' field",
+  "ac_id": "form-submission-succeeds",
+  "status": "pending"
+}
+{
+  "id": "T9",
+  "description": "Form submission with empty description returns validation error message that names the 'description' field",
+  "ac_id": "form-submission-succeeds",
+  "status": "pending"
+}

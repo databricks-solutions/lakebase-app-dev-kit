@@ -2,14 +2,19 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/agent-log-event.schema.json",
   "title": "AgentLogEvent",
-  "description": "One structured log line emitted by a TDD-workflow role agent. The workflow is a relay of isolated-memory agents (FEIP-7510); each agent emits what it is doing so a centralized log (.tdd/agent-log.jsonl) reconstructs the whole run. Persisted as JSON Lines: one object per line.",
+  "description": "One structured log line emitted by a TDD-workflow role agent. The workflow is a relay of isolated-memory agents; each agent emits what it is doing so a centralized log (.tdd/agent-log.jsonl) reconstructs the whole run. Persisted as JSON Lines: one object per line, fields in order timestamp, level, role, event, message, metadata.",
   "type": "object",
-  "required": ["ts", "role", "level", "event", "message"],
+  "required": ["timestamp", "level", "role", "event", "message"],
   "properties": {
-    "ts": {
+    "timestamp": {
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 timestamp of the emit (UTC)."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"],
+      "description": "debug = reasoning considerations; info = outputs/decisions; warn = smells/ambiguity surfaced; error = gate refusal/substrate failure."
     },
     "role": {
       "type": "string",
@@ -26,36 +31,69 @@
       ],
       "description": "The role performing the work."
     },
-    "level": {
-      "type": "string",
-      "enum": ["debug", "info", "warn", "error"],
-      "description": "debug = reasoning considerations; info = outputs/decisions; warn = smells/ambiguity surfaced; error = gate refusal/substrate failure."
-    },
     "event": {
       "type": "string",
-      "minLength": 1,
-      "description": "Short machine-readable event name, dotted (e.g. phase.start, artifact.written, gate.surfaced, gate.approved, handoff, reasoning, smell.flagged)."
+      "description": "Event name from the CLOSED vocabulary (scripts/tdd/agent-log-events.ts). An off-vocabulary event is rejected at emit (the message template + required slots live there). Keep this enum in sync with that module (guarded by a test).",
+      "enum": [
+        "handoff",
+        "phase.start",
+        "phase.end",
+        "escalation.raised",
+        "gate.surfaced",
+        "gate.approved",
+        "gate.rejected",
+        "gate.modified",
+        "intake.supplied",
+        "intake.refused",
+        "artifact.written",
+        "open.question",
+        "concern.flagged",
+        "cycle.red",
+        "cycle.green",
+        "cycle.review",
+        "cycle.refactored",
+        "smell.flagged",
+        "runner.missing",
+        "experiment.cut",
+        "experiment.accepted",
+        "experiment.discarded",
+        "experiment.revised",
+        "deploy.start",
+        "deploy.reachable",
+        "deploy.unreachable",
+        "deploy.verified",
+        "deploy.failed",
+        "verify.passed",
+        "verify.failed",
+        "adherence.passed",
+        "adherence.failed",
+        "reasoning",
+        "progress"
+      ]
     },
     "message": {
       "type": "string",
       "minLength": 1,
       "description": "Human-readable one-line description."
     },
-    "feature_id": {
-      "type": "string",
-      "description": "The feature this event scopes to (e.g. F1-initial-domain)."
-    },
-    "phase": {
-      "type": "string",
-      "description": "Workflow phase, e.g. discovery, architectural-review, test-list-construction, implementation."
-    },
-    "cycle_id": {
-      "type": "string",
-      "description": "RED/GREEN/REFACTOR cycle id, when the event is cycle-scoped (navigator/driver)."
-    },
-    "data": {
+    "metadata": {
       "type": "object",
-      "description": "Optional structured payload (artifact path, gate name, conformance violations, etc.)."
+      "description": "Structured payload. feature_id is the top-level attribute (primary scope key); phase / cycle_id and any event-specific keys (artifact path, gate name, conformance violations, ...) follow.",
+      "properties": {
+        "feature_id": {
+          "type": "string",
+          "description": "The feature this event scopes to (e.g. F1-initial-domain)."
+        },
+        "phase": {
+          "type": "string",
+          "description": "Workflow phase, e.g. discovery, architectural-review, test-list-construction, implementation."
+        },
+        "cycle_id": {
+          "type": "string",
+          "description": "RED/GREEN/REFACTOR cycle id, when the event is cycle-scoped (navigator/driver)."
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

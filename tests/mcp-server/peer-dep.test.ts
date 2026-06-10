@@ -35,7 +35,7 @@ function readPkg(): PackageJson {
   return JSON.parse(readFileSync(PKG_PATH, "utf8"));
 }
 
-describe("MCP SDK dep shape (FEIP-7079)", () => {
+describe("MCP SDK dep shape", () => {
   it("MCP SDK is NOT in regular dependencies", () => {
     const pkg = readPkg();
     expect(pkg.dependencies?.[MCP_SDK_NAME]).toBeUndefined();

@@ -1,4 +1,4 @@
-// FEIP-7510 / UX adherence: the design guide is a contract, and "ensures
+// / UX adherence: the design guide is a contract, and "ensures
 // adherence" must be machine-enforced, not eyeballed. The running app defines
 // its design tokens as CSS custom properties on :root (per the real
 // partner-asset-tracker STYLE_GUIDE: tokens in theme.css :root are readable in

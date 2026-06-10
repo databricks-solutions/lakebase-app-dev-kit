@@ -1372,7 +1372,7 @@ function parseArgs(argv) {
   return out;
 }
 function helpFor(binName) {
-  return `${binName} (FEIP-7210 schema migration adapter)
+  return `${binName} (schema migration adapter)
 
 Subcommands:
   apply     Apply pending forward migrations against a branch

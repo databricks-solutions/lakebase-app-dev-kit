@@ -341,7 +341,7 @@ BRANCH_EXISTS="$(databricks postgres list-branches "$PROJ_PATH" -o json 2>/dev/n
   | jq -r --arg uid "$LAKEBASE_BRANCH" '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select((.name | type == "string" and (endswith("/branches/" + $uid) or (split("/") | last == $uid))) or (.uid == $uid) or (.id == $uid)) | (.name // .uid // .id)' | head -1)"
 
 if [ -z "$BRANCH_EXISTS" ]; then
-  # Phase C (FEIP-7458): the hook used to create Lakebase branches as a
+  # Phase C: the hook used to create Lakebase branches as a
   # fallback for orphan git branches. That fallback let agents and humans
   # bypass the SCM workflow's claim CLI (and the substrate-only-path
   # invariant), so it has been removed. The hook now REFUSES to create

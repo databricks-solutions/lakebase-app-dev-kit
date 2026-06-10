@@ -1,4 +1,4 @@
-// Sprint plan gate (FEIP-7461): sprint-scoped HITL gate that locks the backlog
+// Sprint plan gate: sprint-scoped HITL gate that locks the backlog
 // (feature-proposals.md) before the per-feature work. Mirrors the per-feature
 // gate model with teeth: approves only when the proposal exists + conforms.
 

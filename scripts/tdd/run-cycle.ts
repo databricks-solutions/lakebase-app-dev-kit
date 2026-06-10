@@ -51,7 +51,7 @@ export interface CycleArtifact {
   refactored_at?: string;
   smell_flags?: string[];
   /**
-   * AC layer the Driver dispatched on (FEIP-7094). Stamped at beginCycle
+   * AC layer the Driver dispatched on. Stamped at beginCycle
    * time: caller may pass it explicitly, otherwise the substrate looks
    * up the AC file under stories and lifts AC.layer. When set,
    * markGreen enforces the runner contract: outcomes.json must record
@@ -145,7 +145,7 @@ export interface BeginCycleArgs extends CycleScope {
   test_description: string;
   navigator_plan?: string;
   /**
-   * AC layer for this cycle (FEIP-7094). Explicit value wins; otherwise
+   * AC layer for this cycle. Explicit value wins; otherwise
    * the substrate derives it from the AC file under the story dir. When
    * resolved, the cycle artifact carries it and markGreen enforces the
    * runner contract (at least one recorded run for the matching tag).
@@ -174,10 +174,9 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     role: "navigator",
     level: "info",
     event: "cycle.red",
-    message: `${args.test_id} RED: ${args.test_description}`,
     feature_id: args.feature_id,
     cycle_id,
-    data: { test_id: args.test_id, ac_id: args.ac_id, layer },
+    slots: { test_id: args.test_id, ac: args.ac_id, asserts: args.test_description, layer },
   });
   return artifact;
 }
@@ -205,7 +204,7 @@ export interface RecordRunnerOutcomeResult {
 }
 
 /**
- * Record a runner outcome for the current cycle (FEIP-7094 Phase 3).
+ * Record a runner outcome for the current cycle (phase 3).
  * Drivers call this after invoking the runner mapped to the current
  * cycle's layer (the tagToRunner table in SKILL.md), passing
  * `passed: true` on green and `passed: false` on red-with-real-failure
@@ -248,7 +247,7 @@ export function markGreen(
   const a = readCycleArtifact(scope, cycleId);
   if (!a) throw new Error(`cycle ${cycleId} not found`);
 
-  // FEIP-7094 Phase 3 runner contract: when the cycle is tagged with a
+  // Phase 3 runner contract: when the cycle is tagged with a
   // layer, the Driver MUST have invoked a runner (recordRunnerOutcome)
   // before calling markGreen. Zero runs for the matching tag almost
   // always means the runner-dispatch map was wrong (npm test invoked
@@ -275,10 +274,9 @@ export function markGreen(
     role: "driver",
     level: "info",
     event: "cycle.green",
-    message: `${a.test_id} GREEN${driverChanges ? ": " + driverChanges : ""}`,
     feature_id: scope.feature_id,
     cycle_id: cycleId,
-    data: { test_id: a.test_id },
+    slots: { test_id: a.test_id, ac: a.ac_id ?? "unknown", change: driverChanges ?? "minimal honest code" },
   });
   return a;
 }
@@ -293,10 +291,9 @@ export function markRefactored(scope: CycleScope, cycleId: string, refactorNotes
     role: "driver",
     level: "info",
     event: "cycle.refactored",
-    message: `${a.test_id} REFACTOR${refactorNotes ? ": " + refactorNotes : ""}`,
     feature_id: scope.feature_id,
     cycle_id: cycleId,
-    data: { test_id: a.test_id },
+    slots: { ac: a.ac_id ?? "unknown", change: refactorNotes ?? "structure improved", test_id: a.test_id },
   });
   return a;
 }

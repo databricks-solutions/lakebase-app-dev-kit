@@ -138,7 +138,7 @@ function mergeViews(existing: PerAcView[], next: PerAcView): PerAcView[] {
   return remaining;
 }
 
-// --- Per-story scoping (FEIP-7565 phase 2c) -------------------------------
+// --- Per-story scoping (phase 2c) -------------------------------
 //
 // The master test-list.json is feature-level; its items each carry an ac_id.
 // The streaming build lane builds one story at a time, so it needs the subset
@@ -155,14 +155,26 @@ export interface StoryTestList {
   items: TestListItem[];
 }
 
-/** AC ids declared under a story dir's acs/ (filenames minus .json), sorted. */
+/** AC ids declared under a story dir's acs/, sorted. Only REAL AC files count:
+ *  a conformant AC self-names (acs/<id>.json holds { id: "<id>" }), so non-AC
+ *  files an agent may drop in (e.g. <ac>-tests.json / <ac>-test-list.json, whose
+ *  `id` is the AC they test, not the suffixed basename) are excluded , the same
+ *  pollution that stalls the design lane via storyAcIds (see tdd-paths.ts). */
 function acIdsInStoryDir(storyDir: string): string[] {
-  const acsDir = join(storyDir, "acs");
-  if (!existsSync(acsDir)) return [];
-  return readdirSync(acsDir)
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => f.slice(0, -".json".length))
-    .sort();
+  const dir = join(storyDir, "acs");
+  if (!existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const base = f.slice(0, -".json".length);
+    try {
+      const obj = JSON.parse(readFileSync(join(dir, f), "utf8")) as { id?: unknown };
+      if (obj && typeof obj.id === "string" && obj.id === base) out.push(base);
+    } catch {
+      /* unparseable -> not a conformant AC file; skip */
+    }
+  }
+  return out.sort();
 }
 
 /** AC ids declared for a story, read from stories/<story>/acs/*.json. */
@@ -172,16 +184,33 @@ export function acsForStory(tddDir: string, featureId: string, storyId: string):
 }
 
 /**
- * Scope a master test list to the given AC ids, preserving the master's order.
- * Pure: no filesystem access.
+ * Scope a master test list to the given AC ids, GROUPED BY AC.
+ *
+ * The per-story BUILD list is the build lane's input, and the build lane runs
+ * RED -> GREEN -> REVIEW -> REFACTOR per AC: an AC's tests must be contiguous so
+ * each AC fully completes (incl. refactor) before the next AC's first test. So
+ * the scoped list is grouped by AC in the AC's first-occurrence order in the
+ * master, and the master's order is preserved WITHIN each AC. (The feature-level
+ * master test-list keeps its design-momentum order; only this per-story build
+ * projection is regrouped.) Pure: no filesystem access.
  */
 export function scopeToStory(list: TestList, storyId: string, acIds: string[]): StoryTestList {
   const want = new Set(acIds);
+  const scoped = list.items.filter((it) => want.has(it.ac_id));
+  // Group by AC, ordered by each AC's first appearance; stable within an AC.
+  const firstSeen = new Map<string, number>();
+  scoped.forEach((it, i) => {
+    if (!firstSeen.has(it.ac_id)) firstSeen.set(it.ac_id, i);
+  });
+  const grouped = scoped
+    .map((it, i) => ({ it, i }))
+    .sort((a, b) => firstSeen.get(a.it.ac_id)! - firstSeen.get(b.it.ac_id)! || a.i - b.i)
+    .map((x) => x.it);
   return {
     feature_id: list.feature_id,
     story_id: storyId,
     ...(list.ordered_for ? { ordered_for: list.ordered_for } : {}),
-    items: list.items.filter((it) => want.has(it.ac_id)),
+    items: grouped,
   };
 }
 
@@ -199,13 +228,39 @@ export function writeStoryTestList(
 ): string | null {
   const storyDir = findStoryDirOf(tddDir, featureId, storyId);
   if (!storyDir) return null;
-  let master: TestList;
+  const storyAcIds = acIdsInStoryDir(storyDir);
+
+  let master: TestList | null = null;
   try {
     master = readMasterTestList(tddDir, featureId);
   } catch {
-    return null; // master not authored yet; nothing to scope
+    master = null; // master not authored yet
   }
-  const scoped = scopeToStory(master, storyId, acIdsInStoryDir(storyDir));
+
+  // The streaming pipeline hands the Test Strategist ONE story at a time; it
+  // writes that story's per-story list. Accumulate those items into the feature
+  // master, which otherwise only ever holds the FIRST story's tests. Both
+  // scopeToStory (here) and markTestItemGreen read the master, so a later story
+  // whose tests never reach the master scopes to an EMPTY per-story list, which
+  // leaves testListReady false and stalls the design lane re-issuing the role.
+  const authored = readStoryTestList(tddDir, featureId, storyId);
+  if (authored?.items?.length) {
+    const baseList: TestList =
+      master ?? {
+        feature_id: featureId,
+        ...(authored.ordered_for ? { ordered_for: authored.ordered_for } : {}),
+        items: [],
+      };
+    const haveIds = new Set(baseList.items.map((i) => i.id));
+    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
+    if (additions.length > 0 || master === null) {
+      master = { ...baseList, items: [...baseList.items, ...additions] };
+      writeMasterTestList(tddDir, master);
+    }
+  }
+  if (!master) return null; // no master and no authored per-story list , nothing to scope
+
+  const scoped = scopeToStory(master, storyId, storyAcIds);
   const file = storyTestListJson(tddDir, featureId, storyId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(scoped, null, 2) + "\n");

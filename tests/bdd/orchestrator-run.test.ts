@@ -11,6 +11,7 @@ import {
   runDriver,
   driverBoundOptions,
   DriverStalledError,
+  ProtocolViolationError,
   type DriveEffects,
 } from "../../scripts/tdd/orchestrator-run";
 import {
@@ -230,7 +231,7 @@ describe("runDriver: stall detection", () => {
       buildActive: null,
     };
     // perform() is a no-op: the first action (invoke spec-author propose) never
-    // records, so nextTransition keeps returning it -> stall on the 2nd pass.
+    // records, so the responder owes "feature proposals" and never delivers.
     const effects: DriveEffects = {
       async readState() {
         return state;
@@ -239,11 +240,19 @@ describe("runDriver: stall detection", () => {
         /* intentionally does nothing */
       },
     };
-    await expect(runDriver(effects)).rejects.toBeInstanceOf(DriverStalledError);
+    // With the expectation protocol ON (default), the unmet handoff aborts with a
+    // PRECISE, attributed ProtocolViolationError (the spec-author returned null),
+    // BEFORE the generic stall backstop.
+    await expect(runDriver(effects)).rejects.toBeInstanceOf(ProtocolViolationError);
+    await expect(runDriver(effects)).rejects.toThrow(/spec-author.*feature proposals/);
+
+    // With the protocol OFF, the generic stall backstop still fires (an effect
+    // that never advances state is caught even for non-handoff actions).
+    await expect(runDriver(effects, { enforceExpectations: false })).rejects.toBeInstanceOf(DriverStalledError);
   });
 });
 
-describe("runDriver: Tier-2 phase bounds (driverBoundOptions, FEIP-7461)", () => {
+describe("runDriver: Tier-2 phase bounds (driverBoundOptions)", () => {
   it("--plan-only runs planning to the approved plan gate, then stops (gate is the terminal)", async () => {
     const { state, log, effects } = makeFakeWorld(["S1", "S2"]);
     const result = await runDriver(effects, driverBoundOptions("plan"));

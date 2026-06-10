@@ -1,6 +1,6 @@
 // Hermetic coverage for createBranch's parentBranch-existence fallback.
 //
-// Surfaced during the FEIP-7092 live exercise: CONVENTION_TIER_DEFAULTS
+// Surfaced during the live exercise: CONVENTION_TIER_DEFAULTS
 // declares parentBranch="staging" for the four short-tier flavors, but
 // bare-provisioned Lakebase projects ship with only `production` – no
 // `staging`. The substrate previously interpolated the named parent into

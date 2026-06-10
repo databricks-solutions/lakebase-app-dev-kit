@@ -36,3 +36,21 @@ job; these apply to everyone and exist so no role flails the workflow at runtime
   (see [agent-logging.md](agent-logging.md)), including interim `--event progress`
   during a long sub-step, so the orchestrator + a watching human can tell work is
   advancing and not mistake a long generation for a hang.
+
+## 5. Narrate your work in your reply (start and finish)
+
+Your message body is part of the relay the orchestrator and the human read. Do
+not reply with a bare acknowledgement or a one-word "done". Bookend every turn:
+
+- **When you start**, open with one line stating what you are about to do: the
+  task you were handed and the artifact or outcome you will produce. For example:
+  "Driver: making the RED test for AC3 (form submission redirects) pass with the
+  minimal route + redirect."
+- **When you finish**, close with one line stating what you actually did: the
+  concrete change and where it landed. For example: "Driver: added the
+  `POST /bugs` route + 303 redirect in `app/routes/bugs.py`; cycle-001 for T3 is
+  now GREEN."
+
+State the substance, not just that you finished. This is in addition to the
+structured `lakebase-tdd-log` events (rule 4): the log is the machine trail,
+your reply is the human-readable bookend.

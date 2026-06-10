@@ -1,4 +1,4 @@
-// FEIP-7508: the mock HITL approver must NOT fabricate approvals, and must
+// the mock HITL approver must NOT fabricate approvals, and must
 // NOT approve a gate whose artifacts exist but do not conform to their
 // declared format.
 //
@@ -69,7 +69,7 @@ function assertNoFabricatedHashes(tddDir: string): void {
   }
 }
 
-describe("drainGatesAsHumanProxy: never fabricates (Layer 1, FEIP-7508)", () => {
+describe("drainGatesAsHumanProxy: never fabricates (Layer 1)", () => {
   it("approves ONLY spec when the structured draft spec exists; skips the rest", () => {
     writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
@@ -137,6 +137,39 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     assertNoFabricatedHashes(tdd);
   });
 
+  it("hard-blocks spec when a per-AC file uses a slug id; approves once it is AC<n>", () => {
+    // feature-spec.{json,md} both conform; only the AC id is wrong. The spec
+    // gate previously validated only feature-spec.* and let slug-id acs through.
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    const acsDir = join(fdir, "stories", "S1-file-bug", "acs");
+    mkdirSync(acsDir, { recursive: true });
+    const ac = (id: string) =>
+      JSON.stringify({
+        id,
+        layer: "API",
+        given: "a reporter on the new-bug form",
+        when: "they submit a title and description",
+        then: "the bug is persisted and listed",
+        status: "draft",
+      });
+
+    // slug id violates ac.schema's ^AC[0-9]+ pattern -> spec gate skipped
+    writeFileSync(join(acsDir, "create-form-displays.json"), ac("create-form-displays"));
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(blocked.approved).not.toContain("spec");
+    const reason = blocked.skipped.find((s) => s.gate === "spec")?.reason ?? "";
+    expect(reason).toMatch(/AC conformance/i);
+    expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.status).toBe("open");
+    assertNoFabricatedHashes(tdd);
+
+    // rename to a conformant AC<n> id -> spec gate approves
+    rmSync(join(acsDir, "create-form-displays.json"));
+    writeFileSync(join(acsDir, "AC1-create-form-displays.json"), ac("AC1-create-form-displays"));
+    const ok = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(ok.approved).toContain("spec");
+  });
+
   it("approves test_list only with a schema-valid test-list.json", () => {
     writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
@@ -160,19 +193,19 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
 
     const log = readAgentLog({ tddDir: tdd, role: "product-owner" });
-    const approved = log.find((e) => e.event === "gate.approved" && (e.data as { gate?: string })?.gate === "spec");
+    const approved = log.find((e) => e.event === "gate.approved" && (e.metadata as { gate?: string })?.gate === "spec");
     expect(approved).toBeDefined();
-    expect((approved?.data as { validated?: boolean })?.validated).toBe(true);
-    expect((approved?.data as { approver?: string })?.approver).toBe("human-proxy");
+    expect((approved?.metadata as { validated?: boolean })?.validated).toBe(true);
+    expect((approved?.metadata as { approver?: string })?.approver).toBe("human-proxy");
   });
 
-  it("records the HITL decision: product-owner gate.refused (warn) when an artifact is non-conformant", () => {
+  it("records the HITL decision: product-owner gate.rejected (warn) when an artifact is non-conformant", () => {
     writeFileSync(join(fdir, "feature-spec.json"), "{}"); // schema-invalid
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
     drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
 
     const refused = readAgentLog({ tddDir: tdd, role: "product-owner" }).find(
-      (e) => e.event === "gate.refused" && (e.data as { gate?: string })?.gate === "spec",
+      (e) => e.event === "gate.rejected" && (e.metadata as { gate?: string })?.gate === "spec",
     );
     expect(refused).toBeDefined();
     expect(refused?.level).toBe("warn");
@@ -208,7 +241,7 @@ describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-
     expect(readFileSync(to, "utf8")).toBe(PRODUCT_OVERVIEW);
     const supplied = readAgentLog({ tddDir: tdd, role: "product-owner" }).find((e) => e.event === "intake.supplied");
     expect(supplied).toBeDefined();
-    expect((supplied?.data as { validated?: boolean })?.validated).toBe(true);
+    expect((supplied?.metadata as { validated?: boolean })?.validated).toBe(true);
   });
 
   it("refuses (does not place) a non-conformant recording", () => {
@@ -237,7 +270,7 @@ describe("supplyArtifact: Human Proxy supplies recorded intake artifacts (stage-
   });
 });
 
-describe("drainGatesAsHumanProxy: deploy gate teeth (FEIP-7461)", () => {
+describe("drainGatesAsHumanProxy: deploy gate teeth", () => {
   // The deploy (working-software) gate approves ONLY when deploy-evidence.json
   // exists, conforms, AND records reachable=true + verify.passed=true.
   function writeEvidence(over: Record<string, unknown> = {}): void {
@@ -305,7 +338,7 @@ describe("Human Proxy supplyRequests (the PO's artifacts, given when the state m
     expect(readFileSync(target, "utf8")).toBe(CONFORMANT_REQUEST);
     // The interaction is logged (gives, then logs what it gave).
     const supplied = readAgentLog({ tddDir: tdd }).filter((e) => e.event === "intake.supplied");
-    expect(supplied.some((e) => e.data?.artifact === "feature-request.md")).toBe(true);
+    expect(supplied.some((e) => e.metadata?.artifact === "feature-request.md")).toBe(true);
   });
 
   it("reads the (feature_id, source) pairs from $LAKEBASE_TDD_SPRINT_REQUESTS when pairs are not passed", () => {

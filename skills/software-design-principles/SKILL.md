@@ -37,15 +37,21 @@ If a row is unfilled or a concern doesn't have a clear owner, that's a design sm
 
 ## References
 
-The canon is organized into seven focused references. Each is a short, opinionated document – not a textbook.
+This skill is the **code-level** canon. Its two siblings cover the larger scopes:
+
+- **`architectural-design-principles`** – system-level: layered architecture (the canonical home), the twelve-factor app, evolutionary architecture and fitness functions.
+- **`ui-ux-design-principles`** – experience-level: usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems, testable UI.
+
+The code-level canon is organized into six focused references. Each is a short, opinionated document – not a textbook.
 
 - [SOLID](references/solid.md) – Single Responsibility, Open-Closed, Liskov Substitution, Interface Segregation, Dependency Inversion. The grammar of object-oriented design.
 - [DRY](references/dry.md) – Don't Repeat Yourself, with the rule-of-three guardrail against premature abstraction.
 - [DTSTTCPW](references/dtsttcpw.md) – Do The Simplest Thing That Could Possibly Work. The TDD-aligned counter-balance to speculative generality.
 - [Clean code](references/clean-code.md) – Naming, function shape, comment policy, error-handling boundaries. Condensed from Uncle Bob.
-- [Layered architecture](references/layered-architecture.md) – Infrastructure / service / HTTP / policy layers, dependency direction rules.
 - [Cross-cutting concerns](references/cross-cutting-concerns.md) – Which layer owns auth, authz, capability resolution, audit, rate limiting, schema, policy config.
 - [NFRs](references/nfrs.md) – Performance, scalability, security, observability, operability, resilience. The baseline checklist.
+
+Layering moved to the architectural skill ([its layered-architecture reference](../architectural-design-principles/references/layered-architecture.md)); a one-line pointer remains at [references/layered-architecture.md](references/layered-architecture.md).
 
 ## Hard rules
 
@@ -61,7 +67,7 @@ These rules apply across all references. Workflow skills that import this canon 
 
 ## Composition with workflow skills
 
-- **`lakebase-tdd-workflows`** – Architect Reviewer imports this canon during phase 7.1 (architectural review). Navigator imports during PLAN. Driver imports during REFACTOR.
+- **`lakebase-tdd-workflows`** – Architect Reviewer imports this canon during its per-story architectural-review step. Navigator imports during PLAN. Driver imports during REFACTOR.
 - **`lakebase-scm-workflows`** – Branch PRs are reviewed against the layered-architecture + cross-cutting-concerns checks.
 - **`lakebase-release-workflows`** – NFR baseline checklist is the release gate.
 

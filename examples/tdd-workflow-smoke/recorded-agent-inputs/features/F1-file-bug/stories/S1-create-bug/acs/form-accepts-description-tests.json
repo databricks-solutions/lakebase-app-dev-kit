@@ -1,0 +1,13 @@
+{
+  "ac_id": "form-accepts-description",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "tests": [
+    {
+      "id": "T4",
+      "description": "Description input field captures and displays text entered by the user",
+      "ac_id": "form-accepts-description",
+      "status": "pending"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "F1-file-bug-arch",
+  "feature_id": "F1-file-bug",
+  "nfrs": [
+    {
+      "id": "nfr-data-migration-preservation",
+      "brief": "Existing bugs and their data survive every schema migration with no loss. Each iteration's model change preserves bugs filed before it.",
+      "brief_ref": "R1",
+      "applies_to": "F1-file-bug",
+      "hil_status": "proposed"
+    },
+    {
+      "id": "nfr-valid-status-enforcement",
+      "brief": "A bug's status is always one of the recognized states. Unrecognized status is rejected at write time, never stored.",
+      "brief_ref": "R2",
+      "applies_to": "S1-create-bug",
+      "hil_status": "proposed"
+    },
+    {
+      "id": "nfr-clear-error-messages",
+      "brief": "Error messages are clear and specific, naming the offending value rather than generic 'bad request'.",
+      "applies_to": "S1-create-bug",
+      "hil_status": "proposed"
+    },
+    {
+      "id": "nfr-additive-migrations",
+      "brief": "New tables introduced by a migration are additive where possible, allowing old reads to keep working during rollout.",
+      "applies_to": "F1-file-bug",
+      "hil_status": "proposed"
+    }
+  ]
+}

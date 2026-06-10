@@ -69,9 +69,9 @@ describe("run-cycle (hermetic)", () => {
     const red = log.find((e) => e.event === "cycle.red");
     const green = log.find((e) => e.event === "cycle.green");
     expect(red?.role).toBe("navigator");
-    expect(red?.message).toContain("T1 RED");
+    expect(red?.message).toContain("RED T1");
     expect(green?.role).toBe("driver");
-    expect(green?.message).toContain("T1 GREEN");
+    expect(green?.message).toContain("GREEN T1");
   });
 
   it("markRefactored sets refactored_at and notes", () => {

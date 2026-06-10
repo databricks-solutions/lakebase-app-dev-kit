@@ -626,7 +626,7 @@ interface CheckoutPairedResult {
  *
  * Mirrors the hook's three-mode logic and parent fallback chain. Tier
  * discovery is auto from the Lakebase branch list – no per-tier alias
- * is needed (this is the post-alpha.9 model, see FEIP-7098):
+ * is needed (this is the post-alpha.9 model, see):
  *
  *   1. **trunk** – current branch == `trunkAlias` (or main/master if no
  *      alias). Pairs .env with the project's default Lakebase branch.
@@ -780,9 +780,9 @@ interface CreateConventionPairedBranchArgs extends CreateConventionBranchArgs {
  * fails, no git branch is left dangling.
  *
  * Feature branches are created NON-EXPIRING (noExpiry, no TTL). A feature branch
- * is the PARENT of the per-story experiment branches (FEIP-7566), and Lakebase
+ * is the PARENT of the per-story experiment branches, and Lakebase
  * forbids an expiring branch from having child branches ("Branches with an
- * expiration date cannot have child branches", surfaced by the live FEIP-7422
+ * expiration date cannot have child branches", surfaced by the live
  * smoke). Feature branches are reaped by the SCM workflow (abandon / merge /
  * doctor -> deleteBranch), not by TTL; deleting a no-expiry branch through the
  * substrate is confirmed. An explicit `ttl` still wins (mutually exclusive with
@@ -1059,7 +1059,7 @@ interface GetCiAppEndpointResult {
 declare function getAppEndpoint(args: GetAppEndpointArgs): Promise<GetAppEndpointResult>;
 /**
  * Tear down an app endpoint and (optionally) its uploaded workspace
- * files. Slice 4 of FEIP-7130. Pairs with `deletePairedBranch`
+ * files. Slice 4 of. Pairs with `deletePairedBranch`
  * (scripts/lakebase/paired-branch.ts): when the Lakebase branch is
  * removed, the matching app endpoint should be removed too.
  *
@@ -1099,7 +1099,7 @@ declare function ensureAppEndpoint(args: EnsureAppEndpointArgs): Promise<EnsureA
  *
  * Designed for pr.yml: after the (separate) CI app-deploy step, this
  * primitive resolves the public URL to export as `LAKEBASE_APP_ENDPOINT`
- * for the project-root Playwright step (FEIP-7094 Phase 2). When the
+ * for the project-root Playwright step (phase 2). When the
  * app does not exist yet (e.g. deploy step skipped due to missing
  * secrets, or no CI-deploy has been wired into the project), the
  * primitive resolves with `url: undefined` rather than throwing, so the
@@ -1718,7 +1718,7 @@ interface CreateProjectArgs {
      * opt-in via `--enable-e2e`; the package.json patch is a no-op when
      * there is no package.json so the wire-up is partial (templates +
      * run-tests.sh only) until the project hand-rolls its own runner.
-     * FEIP-7094 Phase 2.
+     * Phase 2.
      */
     enableE2e?: boolean;
     /**
@@ -1740,7 +1740,7 @@ interface CreateProjectArgs {
      */
     skipCommands?: boolean;
     /**
-     * Per-role model overrides for the TDD-workflow agents (FEIP-7510). Each role
+     * Per-role model overrides for the TDD-workflow agents. Each role
      * carries a strongly-recommended model in its definition; this is where the
      * HIL overrides it for THIS project, asked at setup. Keyed by role name
      * (e.g. { "driver": "haiku", "spec-author": "opus" }). Omitted/empty means
@@ -1837,7 +1837,7 @@ interface InstallPlaywrightResult {
 }
 /**
  * End-to-end bootstrap: drop templates, install the npm package, install
- * chromium, verify. The scaffolder (FEIP-7094 Phase 2) calls this once
+ * chromium, verify. The scaffolder (phase 2) calls this once
  * when --enable-e2e is set; the human-facing path is `npx
  * @databricks-solutions/lakebase-app-dev-kit install-playwright`.
  */
@@ -2772,7 +2772,7 @@ interface DeployClaudeCommandsOptions extends ScaffoldOptions {
 declare function deployClaudeCommands(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
 /**
  * Deploy the TDD-workflow role agent definitions into the project's
- * `.claude/agents/` so Claude Code can discover + spawn them (FEIP-7510). The
+ * `.claude/agents/` so Claude Code can discover + spawn them. The
  * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
  * this copies each `<role>.md` verbatim (the bodies are the system prompts).
  * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
@@ -2796,7 +2796,7 @@ declare function deployClaudeAgents(targetDir: string, opts?: DeployClaudeComman
  * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
  *   compose on (`parent: databricks-lakebase`).
  */
-declare const PROJECT_SKILLS: readonly ["software-design-principles", "lakebase-tdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
+declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-tdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
 /**
  * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
  * so the scaffolded project is self-contained: the deployed agents + commands can
@@ -2885,7 +2885,7 @@ interface ScaffoldStaticAllResult {
 /**
  * Orchestrate the static (non-language-project) portion of scaffolding.
  * Language-specific files (Spring Initializr for Java/Kotlin, static
- * templates for Python/Node) ship in FEIP-7073.
+ * templates for Python/Node) ship in.
  *
  * Caller must have already created targetDir and run `git init` there
  * (installHooks requires .git/).
@@ -3044,7 +3044,7 @@ declare function getSchemaDiff(args: GetSchemaDiffArgs): Promise<SchemaDiffResul
  * GH Actions PR comment, the extension's commit-detail view) parse this
  * shape. Keep the surface stable; if you need new fields, add them as
  * additional sections rather than altering the established prefixes.
- * (Pre-FEIP-7494 the same format was emitted by the now-removed shell
+ * (Previously the same format was emitted by the now-removed shell
  * formatter templates/.../scripts/format-schema-diff.sh.)
  *
  * Output shape (per object, blank line between objects):

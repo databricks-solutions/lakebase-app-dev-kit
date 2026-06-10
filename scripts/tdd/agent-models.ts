@@ -1,4 +1,4 @@
-// FEIP-7510 per-role model selection. Each TDD-workflow role agent carries a
+// per-role model selection. Each TDD-workflow role agent carries a
 // strongly-recommended model in its definition's frontmatter
 // (skills/lakebase-tdd-workflows/agents/<role>.md `model:`). The HIL overrides
 // per project, asked at `lakebase-create-project` setup and persisted to

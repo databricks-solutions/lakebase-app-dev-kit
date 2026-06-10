@@ -35,7 +35,7 @@ const HAS_DATABRICKS =
 const RUN_SUITE = E2E && HAS_DATABRICKS;
 
 describe.skipIf(!RUN_SUITE)(
-  "SCM workflow CLIs - live e2e with Knex/Nodejs (FEIP-7458)",
+  "SCM workflow CLIs - live e2e with Knex/Nodejs",
   () => {
     let ctx: ScmWorkflowMigrationE2EContext | undefined;
     let allPassed = false;

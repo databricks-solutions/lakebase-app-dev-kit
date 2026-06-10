@@ -1,5 +1,5 @@
 // FlywayAdapter: SchemaMigrationAdapter implementation for Java/Kotlin projects
-// using flyway-maven-plugin. FEIP-7210 slice 2.
+// using flyway-maven-plugin. slice 2.
 //
 // Wraps the existing scripts/lakebase/schema-migrate-runners/flyway.ts runner
 // in the cross-tool adapter contract from ADR-0005. The runner's

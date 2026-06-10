@@ -1,16 +1,16 @@
 # Per-story experiments (build isolation + throw-away) with PO acceptance
 
 **Status**: Design proposal, 2026-06-07
-**Primary FEIP**: FEIP-7566 (per-story experiments: build isolation + PO accept/discard/revise)
-**Umbrella FEIP**: FEIP-7461 (workflows as executable state machines)
-**Builds on**: FEIP-7565 (per-story pipelined design->build), FEIP-7510 (per-role agent runtime)
-**Cross-ref**: FEIP-7058 (Lakebase SCM workflows epic), the paired-branch + tier substrate.
+**Primary FEIP**: (per-story experiments: build isolation + PO accept/discard/revise)
+**Umbrella FEIP**: (workflows as executable state machines)
+**Builds on**: (per-story pipelined design->build) (per-role agent runtime)
+**Cross-ref**: (Lakebase SCM workflows epic), the paired-branch + tier substrate.
 
 ---
 
 ## Why this exists
 
-The per-story pipeline (FEIP-7565) lets the design lane run ahead and a single build lane drain a gated queue one story at a time, but every story is built on the one paired feature branch. A story the Product Owner does not like after seeing it built cannot be thrown away cleanly: its code and (worse) its schema migrations are already on the feature branch.
+The per-story pipeline lets the design lane run ahead and a single build lane drain a gated queue one story at a time, but every story is built on the one paired feature branch. A story the Product Owner does not like after seeing it built cannot be thrown away cleanly: its code and (worse) its schema migrations are already on the feature branch.
 
 The PO wants to review each story as **working software** and then keep it or throw it away with no residue. That needs **build isolation per story**: build each story on its own branch, deploy it for the PO to use, then either merge it into the feature or discard it whole.
 
@@ -32,7 +32,7 @@ So: a story is built by one or more **experiments**; the PO **accepts** (-> **me
 
 ## The model
 
-The single build lane (FEIP-7565) keeps this clean. Builds are serialized, so each story's experiment forks from the **current feature-branch HEAD**, which already contains every previously-merged story. No inter-story chaining: a merged story advances feature HEAD for the next experiment; a discarded or revised story leaves feature HEAD untouched.
+The single build lane keeps this clean. Builds are serialized, so each story's experiment forks from the **current feature-branch HEAD**, which already contains every previously-merged story. No inter-story chaining: a merged story advances feature HEAD for the next experiment; a discarded or revised story leaves feature HEAD untouched.
 
 Per story, inside the build lane (N=1 shown; N>=2 cuts >1 experiment + a promote/synthesize step before the merge):
 
@@ -55,7 +55,7 @@ The feature branch stays the **single durable unit** the SCM machine claims / PR
 
 ## What it touches (substrate)
 
-- **Story state machine.** New per-story statuses `awaiting-acceptance` (built + deployed, PO reviewing) and `discarded` (terminal reject); `done` now means accepted-and-merged; `revise` routes back to `designing`. (pipeline.json, isolated, as in FEIP-7565 phase 2b.)
+- **Story state machine.** New per-story statuses `awaiting-acceptance` (built + deployed, PO reviewing) and `discarded` (terminal reject); `done` now means accepted-and-merged; `revise` routes back to `designing`. (pipeline.json, isolated, as in phase 2b.)
 - **Per-story acceptance record.** Distinct from the spec gate (approve/withdraw): a three-way decision `accepted | discarded | revise` with approver + reason + history.
 - **Per-story experiment ref.** `{ slug, branch, lakebase_branch_uid, parent (feature branch), parent_sha, n (1 or >=2), status: active|merged|discarded, cut_at, closed_at }` on each story. Reuses the existing experiment substrate (cutExperiment / listExperiments / deleteExperiment, outcomes.json, cycles) re-scoped from feature to story.
 - **Experiment lifecycle for a story.** cut (fork a paired Lakebase branch off feature HEAD, short TTL), merge (git-merge the experiment's code into the feature branch AND run the experiment's migration scripts against the feature branch's Lakebase branch DB, then tear down the experiment branch), discard (tear down git + Lakebase branch, no trace). Composes the existing paired-branch + git-merge substrate and the migration runner (same pattern as `scm-merge --wait-migrate`).
@@ -68,13 +68,13 @@ The current substrate keys experiments at the feature level: `.tdd/experiments/<
 
 ## Phased plan (each phase: a commit, full suite green)
 
-0. **Design + FEIP.** This doc (repo + ~/docs/specs); file the FEIP under FEIP-7461, cross-ref FEIP-7058. (Ticket filing gated on explicit go.)
+0. **Design + FEIP.** This doc (repo + ~/docs/specs); file the FEIP under, cross-ref. (Ticket filing gated on explicit go.)
 1. **Acceptance + experiment-ref substrate (pipeline.json).** StoryStatus adds `awaiting-acceptance` + `discarded`; `StoryAcceptance` (accepted/discarded/revise + history); per-story `experiment` ref; functions `cutStoryExperiment` / `awaitAcceptance` / `acceptStory` (merge + done) / `discardStory` (withdraw spec gate + discarded) / `reviseStory` (-> designing); each frees the lane. Schema + unit tests. Isolated in pipeline.json. NOTE: the existing feature-level `experiment.ts` on-disk layout (`.tdd/experiments/<feature>/<slug>/`, cutExperiment, comparison report) is NOT re-scoped here, it is only needed for N>=2 story-level racing (a later concern); `run-cycle.ts` is already story-scoped (`cycles/<feature>/<story>/<ac>/`). The N=1 build-isolation + throw-away path needs only this pipeline-state substrate + the experiment-branch lifecycle CLI (phase 2).
 2. **Experiment branch lifecycle CLI.** `lakebase-tdd-experiment cut|merge|discard` composing the paired-branch fork + git merge + teardown; short TTL; scm-doctor / recover-orphans label stale spikes vs experiments. Tests.
 3. **Per-story deploy from an experiment.** Extend the deploy substrate to target an experiment's branch/DSN; release-engineer wiring. Tests.
 4. **Orchestration docs.** scrum-master.md build lane (dispatch -> cut experiment -> TDD -> deploy -> PO acceptance gate -> merge/discard/revise -> free lane); build.md; lexicon update in README.md + SKILL.md (experiment is story-level; merge is the accept verb); Human Proxy supplies accept/discard/revise headless.
 5. **Hermetic e2e + advisory smoke assert + dist.** Extend tdd-per-story-pipeline-e2e: a 3-story feature where one story is accepted (merged), one discarded, one revised-then-accepted; assert feature HEAD reflects only merged stories and discarded experiments leave no trace. Advisory smoke assert (stale-experiment label) + dist rebuild.
-6. **Live re-validate.** Drive the FEIP-7422 smoke with a feature whose PO discards a story; confirm the discard leaves the feature branch + its Lakebase branch clean.
+6. **Live re-validate.** Drive the TDD-workflow smoke with a feature whose PO discards a story; confirm the discard leaves the feature branch + its Lakebase branch clean.
 
 ## Decisions locked (2026-06-07)
 - Build isolation per story via a per-story **experiment** branch (the experiment concept moves to the story level; feature-level whole-feature racing retires).

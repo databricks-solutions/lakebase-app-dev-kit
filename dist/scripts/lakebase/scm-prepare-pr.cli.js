@@ -701,7 +701,7 @@ function defaultBody(featureId, parentBranch) {
     "",
     `Forks from \`${parentBranch}\`.`,
     "",
-    "PR opened by `lakebase-scm-prepare-pr` (FEIP-7458 phase B+)."
+    "PR opened by `lakebase-scm-prepare-pr` (phase B+)."
   ].join("\n");
 }
 function shellEscape(s) {
@@ -747,7 +747,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-prepare-pr (FEIP-7458 phase B+)
+var HELP = `lakebase-scm-prepare-pr (phase B+)
 
 Transition feature-claimed -> pr-ready: push the feature branch and
 open a GitHub PR against the parent branch. Re-runs reuse an existing

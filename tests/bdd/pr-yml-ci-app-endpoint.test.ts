@@ -1,9 +1,9 @@
-// FEIP-7423: content-sanity check for the pr.yml step that resolves
+// content-sanity check for the pr.yml step that resolves
 // the deployed CI app URL and exports LAKEBASE_APP_ENDPOINT.
 //
 // This is NOT an integration test; it asserts the wiring exists in the
 // scaffolded pr.yml template so the downstream Playwright step (added
-// in FEIP-7094 Phase 2) actually receives a BASE_URL when a CI app is
+// in Phase 2) actually receives a BASE_URL when a CI app is
 // deployed for the paired branch.
 
 import { describe, it, expect } from "vitest";
@@ -18,7 +18,7 @@ const PR_YML = path.join(
   "templates/project/common/.github/workflows/pr.yml",
 );
 
-describe("pr.yml: Resolve CI app endpoint (FEIP-7423)", () => {
+describe("pr.yml: Resolve CI app endpoint", () => {
   const yaml = fs.readFileSync(PR_YML, "utf8");
 
   it("declares a step named 'Resolve CI app endpoint'", () => {
@@ -41,7 +41,7 @@ describe("pr.yml: Resolve CI app endpoint (FEIP-7423)", () => {
 
   it("exports LAKEBASE_APP_ENDPOINT to $GITHUB_ENV only when a URL was resolved", () => {
     // The step must (a) gate the export on a non-empty URL and
-    // (b) write to $GITHUB_ENV (which is what the FEIP-7094 Phase 2
+    // (b) write to $GITHUB_ENV (which is what the Phase 2
     // Playwright step reads via env.LAKEBASE_APP_ENDPOINT).
     expect(yaml).toMatch(/echo\s+"LAKEBASE_APP_ENDPOINT=\$URL"\s+>>\s+\$GITHUB_ENV/);
     expect(yaml).toMatch(/if\s+\[\s+-n\s+"\$URL"\s+\]/);
@@ -81,7 +81,7 @@ describe("pr.yml: Resolve CI app endpoint (FEIP-7423)", () => {
   });
 });
 
-describe("playwright.config.ts (project-root template): conditional webServer (FEIP-7423)", () => {
+describe("playwright.config.ts (project-root template): conditional webServer", () => {
   const TEMPLATE = path.join(
     REPO_ROOT,
     "templates/project/common/playwright.config.ts",

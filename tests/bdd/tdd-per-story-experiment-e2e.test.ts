@@ -1,4 +1,4 @@
-// FEIP-7566 phase 5: hermetic end-to-end of the per-story experiment workflow.
+// phase 5: hermetic end-to-end of the per-story experiment workflow.
 // Drives a 3-story feature through the full pipeline (spec gate -> dispatch ->
 // cut experiment -> build -> await acceptance) and the lifecycle (accept = merge,
 // discard, revise), with the branch ops faked. Asserts the headline guarantees:

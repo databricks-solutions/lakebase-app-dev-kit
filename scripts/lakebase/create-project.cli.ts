@@ -92,7 +92,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--agent-model": {
         // --agent-model <role>=<model>, repeatable. The HIL's per-project
-        // override of a role's recommended model (FEIP-7510).
+        // override of a role's recommended model.
         const pair = argv[++i] ?? "";
         const eq = pair.indexOf("=");
         const role = eq >= 0 ? pair.slice(0, eq) : "";
@@ -141,7 +141,7 @@ Flags:
                       When omitted, defaults to 1 (prod only, no extra tiers
                       cut). Architectural choice; surface this in your wizard
                       rather than picking silently.
-  --enable-e2e        Force-enable Playwright E2E wire-up (FEIP-7094)
+  --enable-e2e        Force-enable Playwright E2E wire-up
   --no-e2e            Force-disable Playwright E2E wire-up
                       (default: on for --language nodejs, off otherwise)
   --enable-infra      Force-enable [Infra]-tag runner wire-up

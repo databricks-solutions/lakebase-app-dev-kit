@@ -1,4 +1,4 @@
-// FEIP-7510/7422: per-role logging is prose-instructed, so a role model can do
+///7422: per-role logging is prose-instructed, so a role model can do
 // the substantive work (write story stubs + ACs) while emitting no
 // `artifact.written` events. We saw exactly that when the spec-author was tiered
 // to sonnet: 5 ACs on disk, zero log events. reconcileArtifactLog makes
@@ -43,7 +43,7 @@ describe("reconcileArtifactLog", () => {
 
     const emitted = reconcileArtifactLog({ tddDir, featureId: F });
 
-    const paths = emitted.map((e) => e.data?.path).sort();
+    const paths = emitted.map((e) => e.metadata?.path).sort();
     expect(paths).toEqual([
       `features/${F}/feature-spec.json`,
       `features/${F}/stories/S1/acs/AC1.json`,
@@ -54,7 +54,7 @@ describe("reconcileArtifactLog", () => {
     // All attributed to the spec-author (the owner of spec/story/AC artifacts),
     // tagged reconciled so they are distinguishable from a role's own emits.
     expect(emitted.every((e) => e.role === "spec-author")).toBe(true);
-    expect(emitted.every((e) => e.event === "artifact.written" && e.data?.reconciled === true)).toBe(true);
+    expect(emitted.every((e) => e.event === "artifact.written" && e.metadata?.reconciled === true)).toBe(true);
     // The events are actually on disk in the log.
     expect(readAgentLog({ tddDir, featureId: F }).length).toBe(5);
   });
@@ -72,12 +72,12 @@ describe("reconcileArtifactLog", () => {
     scaffoldFeature(tddDir);
     // The spec-author DID log AC1 itself.
     emitAgentLogEvent(
-      { role: "spec-author", level: "info", event: "artifact.written", message: "AC1",
-        feature_id: F, data: { path: `features/${F}/stories/S1/acs/AC1.json` } },
+      { role: "spec-author", level: "info", event: "artifact.written",
+        feature_id: F, slots: { artifact: "AC1", summary: "authored", path: `features/${F}/stories/S1/acs/AC1.json` } },
       { tddDir },
     );
     const emitted = reconcileArtifactLog({ tddDir, featureId: F });
-    expect(emitted.map((e) => e.data?.path)).not.toContain(`features/${F}/stories/S1/acs/AC1.json`);
+    expect(emitted.map((e) => e.metadata?.path)).not.toContain(`features/${F}/stories/S1/acs/AC1.json`);
     expect(emitted.length).toBe(4); // the other four artifacts
   });
 
@@ -87,7 +87,7 @@ describe("reconcileArtifactLog", () => {
     write(path.join(f, "architecture.json"));
     write(path.join(f, "test-list.json"));
     const emitted = reconcileArtifactLog({ tddDir, featureId: F });
-    const byPath = Object.fromEntries(emitted.map((e) => [e.data?.path, e.role]));
+    const byPath = Object.fromEntries(emitted.map((e) => [e.metadata?.path, e.role]));
     expect(byPath[`features/${F}/architecture.json`]).toBe("architect-reviewer");
     expect(byPath[`features/${F}/test-list.json`]).toBe("test-strategist");
   });

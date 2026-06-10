@@ -2816,7 +2816,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-doctor (FEIP-7458 phase C)
+var HELP = `lakebase-scm-doctor (phase C)
 
 Read-only diagnostic. Cross-checks .lakebase/workflow-state.json,
 .env, the current git branch, and the Lakebase tier inventory.

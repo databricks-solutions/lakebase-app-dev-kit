@@ -1,5 +1,5 @@
 // Live integration test for the SCM workflow side-path CLIs
-// (FEIP-7458 phase C).
+// (phase C).
 //
 // The "happy linear pipeline" (claim -> prepare-pr -> wait-ci -> merge)
 // is covered by scm-workflow-e2e-live.test.ts. This file covers the
@@ -116,7 +116,7 @@ function readState(projectDir: string): ScmWorkflowState {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "SCM workflow side-path CLIs - live e2e (FEIP-7458 phase C)",
+  "SCM workflow side-path CLIs - live e2e (phase C)",
   () => {
     let owner: string;
     let projectName: string;

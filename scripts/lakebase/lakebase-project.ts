@@ -1,7 +1,7 @@
 // Lakebase project CRUD – the create / delete / default-branch-lookup
 // subset of LakebaseService that create-project needs. Other LakebaseService
 // concerns (endpoints, credential minting, schema querying) live in
-// scripts/lakebase/get-connection.ts (FEIP-7061) and other verbs.
+// scripts/lakebase/get-connection.ts and other verbs.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

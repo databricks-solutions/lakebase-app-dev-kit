@@ -13,7 +13,7 @@ export interface ExperimentRow {
   schema_diff_summary?: string;
   code_diff_lines?: number;
   signal: "winning" | "stalled" | "abandoned" | "running" | "unknown" | "capped";
-  // Structured-payload fields (FEIP-7092 slice 4). Backwards compatible:
+  // Structured-payload fields (slice 4). Backwards compatible:
   // older callers reading the prior shape ignore these.
   by_tag?: Partial<Record<ExperimentTag, TagOutcome>>;
   /** Set when checkPerExperimentCap has stopped this experiment. */
@@ -38,7 +38,7 @@ export interface ComparisonReport {
    * Tag × experiment matrix. One row per tag any experiment reported.
    * Empty when no experiment recorded per-tag outcomes yet (early-stage
    * race or projects that don't use the tag-aware runner).
-   * Consumed by the comparison-report renderer (FEIP-7208).
+   * Consumed by the comparison-report renderer.
    */
   matrix: TagMatrixRow[];
   recommendation: "promote" | "synthesize" | "continue" | "abandon-all";

@@ -228,6 +228,28 @@ describe("nextTransition: build lane (after a story is gated)", () => {
     expect(nextTransition(st)).toEqual({ kind: "complete", story: "S1" });
   });
 
+  it("does a pending AC's REVIEW before writing the next AC's tests (per-AC RED-GREEN-REVIEW-REFACTOR)", () => {
+    // AC1's tests are all green (reviewAc=AC1) but the story is not all-green yet
+    // (AC2's tests are still pending -> testsWritten false). The lane must REVIEW
+    // AC1 now, NOT jump to writing AC2's next RED test. This is the per-AC cycle:
+    // refactoring is not batched until every AC is green.
+    const v = gatedUnbuilt();
+    v.build.experimentCut = true;
+    v.build.testsWritten = false; // AC2 still has a pending test
+    v.build.codeWritten = false;
+    v.build.reviewAc = "AC1"; // AC1's tests are all green, not yet reviewed
+    const st = ws({ stories: { S1: v }, buildActive: "S1" });
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" });
+    // After REVIEW asks for a refactor, the Driver REFACTORs that AC before any
+    // further test-writing, too.
+    v.build.reviewAc = null;
+    v.build.refactorAc = "AC1";
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor", ac: "AC1" });
+    // Only once AC1 is reviewed + refactored does the Navigator write AC2's tests.
+    v.build.refactorAc = null;
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1" });
+  });
+
   it("builds a gated story before designing the next (per-story flow on a single lane)", () => {
     // S1 gated+unbuilt, S2 fresh, lane idle -> dispatch S1 (build precedes designing S2).
     const st = ws({ storyOrder: ["S1", "S2"], stories: { S1: gatedUnbuilt(), S2: freshStory() }, buildActive: null });

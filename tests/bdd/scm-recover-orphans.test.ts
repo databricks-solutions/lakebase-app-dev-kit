@@ -1,4 +1,4 @@
-// Unit tests for scm-recover-orphans (FEIP-7458 phase C).
+// Unit tests for scm-recover-orphans (phase C).
 //
 // Mocks listBranches + listLocalBranches + createFeaturePairedBranch
 // so we drive the detection + claim paths without touching the real

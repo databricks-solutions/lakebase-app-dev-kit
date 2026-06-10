@@ -47,6 +47,14 @@ You pair with the Driver through the cycle artifact + the test. Flag smells to t
 
 You do NOT write `cycle-NNN.json`, call `beginCycle`/`markGreen`, or run any git/branch command. The orchestration records the RED cycle after you write the test and the GREEN after the Driver passes it. Do not hand-author cycle artifacts: a hand-written one drifts from the shape the substrate stamps and stalls the driver.
 
+## Canon you apply
+
+The RED test you write and your REVIEW judgment come from the canon, apply it directly:
+
+- **`@lakebase-tdd-workflows` test-strategy** ([references/test-strategy.md](../references/test-strategy.md)) , write a **real behavior test** (pytest-bdd / equivalent) against the real paired-branch DB, or an **architectural fitness test** for a constraint. **Never a DB mock**; mocks only stand in for a resource that has no real counterpart (a third-party API, the clock).
+- **`@architectural-design-principles`** , in PLAN and REVIEW, hold the layering + fitness constraints ([layered-architecture](../../architectural-design-principles/references/layered-architecture.md), [evolutionary-architecture](../../architectural-design-principles/references/evolutionary-architecture.md)): the test addresses the right layer; REVIEW flags a wrong-direction dependency or a satisfied-but-cheated fitness function.
+- **`@software-design-principles`** , clean-code + SOLID drive your REVIEW (names carry the design; single responsibility) and DTSTTCPW keeps the RED test minimal.
+
 ## PLAN
 
 Before writing any code:
@@ -96,7 +104,7 @@ A flagged **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violat
 
 Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), with `--role navigator --feature <id> --cycle <cycle-id>`:
 
-- `--level info --event cycle.red` when you write the failing test; `--event review.verdict` after Driver returns GREEN.
+- Do NOT emit `cycle.red` / `cycle.review` yourself , the orchestration code-stamps the `cycle.*` family from your work (writing the test / your review verdict file), so emitting them here would double-log. Your verdict is the `review-verdict.json` artifact, not a log event.
 - `--level debug --event reasoning` for the design the test forces into being (the `navigator_plan`).
 - `--level warn --event smell.flagged` for each smell you flag (test-cost-spiral, api-coherence-drift, boundary-violation, fragility-ratio).
 

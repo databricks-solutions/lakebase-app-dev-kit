@@ -1,4 +1,4 @@
-// G4 (FEIP-7361): verifyGateIntegrity primitive.
+// G4: verifyGateIntegrity primitive.
 //
 // Covers ADR-0004 test plan scenarios S5 (no-drift after prettier run on
 // test-list.json) + S5b (drift detected on semantic AC text change), plus

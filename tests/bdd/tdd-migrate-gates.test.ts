@@ -1,4 +1,4 @@
-// G6 (FEIP-7363): migration backfill from selection-log.
+// G6: migration backfill from selection-log.
 //
 // Covers ADR-0004 test plan scenario S7 (migrate existing feature with
 // full selection-log) plus partial-approval, refusal-when-gates-exists,

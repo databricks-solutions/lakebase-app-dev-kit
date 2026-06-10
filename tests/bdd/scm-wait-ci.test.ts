@@ -1,4 +1,4 @@
-// Unit tests for scm-wait-ci (FEIP-7458 phase B+).
+// Unit tests for scm-wait-ci (phase B+).
 //
 // Drives the poll loop in-process by injecting a fetchPr stub + a
 // sleep stub. The clock advances via a controllable now() so timeout

@@ -1,12 +1,12 @@
 // Drift detector + in-place refresh for a scaffolded project's
 // .github/workflows/*.yml against the kit's current templates
-// (FEIP-7140 + FEIP-7139).
+//.
 //
 // Scaffolded projects ship copies of pr.yml, merge.yml, cleanup-orphans.yml
 // at scaffold time. The kit's templates evolve (new lint steps, schema-
 // diff gates, bug fixes) but existing projects never auto-pick those
 // changes up. `detectWorkflowDrift` surfaces the gap; `updateWorkflows`
-// (FEIP-7139) closes it by writing the current kit templates into the
+// closes it by writing the current kit templates into the
 // project's .github/workflows/, with the same {{LAKEBASE_KIT_VERSION}}
 // substitution the scaffolder does.
 //
@@ -179,7 +179,7 @@ export function detectWorkflowDrift(
   };
 }
 
-// ─── updateWorkflows: FEIP-7139 in-place refresh ────────────────
+// ─── updateWorkflows: in-place refresh ────────────────
 
 export type WorkflowUpdateOutcome = "added" | "updated" | "unchanged" | "removed";
 
@@ -261,7 +261,7 @@ function applyCommandPlaceholders(content: string, version: string): string {
   return content.replace(/\$\{KIT_VERSION_AT_SCAFFOLD\}/g, version);
 }
 
-// ─── detectCommandDrift: FEIP-7424 .claude/commands/*.md walker ──
+// ─── detectCommandDrift: .claude/commands/*.md walker ──
 
 /** Files the kit ships under `.claude/commands/`. Sub-set of the dir's
  *  contents: hook files are project-owned and never reported as drift. */
@@ -457,7 +457,7 @@ function readKitVersionFromCommandsDir(kitCommandsDir: string): string {
   }
 }
 
-// ─── detectScaffoldedDrift: FEIP-7424 umbrella ───────────────────
+// ─── detectScaffoldedDrift: umbrella ───────────────────
 
 export interface ScaffoldedDriftReport {
   /** Aggregate across every scaffolded surface. */

@@ -1,4 +1,4 @@
-// G5 (FEIP-7362): withdrawGate + cascade-on-withdrawal.
+// G5: withdrawGate + cascade-on-withdrawal.
 //
 // Covers ADR-0004 test plan scenarios S6 (cascade on spec withdraw) +
 // S6b (cascade on plan withdraw), plus the leaf-gate (test_list, promote)

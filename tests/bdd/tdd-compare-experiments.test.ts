@@ -59,8 +59,8 @@ describe("compareExperiments", () => {
   });
 });
 
-// Structured-payload tests (FEIP-7092 slice 4): downstream comparison-report
-// renderer (FEIP-7208) consumes per-tag matrix, cycle counts, artifact counts.
+// Structured-payload tests (slice 4): downstream comparison-report
+// renderer consumes per-tag matrix, cycle counts, artifact counts.
 
 import { writeArtifact } from "../../scripts/tdd/artifacts";
 
@@ -102,7 +102,7 @@ function seedExperimentRich(
   }
 }
 
-describe("compareExperiments structured payload (FEIP-7092 slice 4)", () => {
+describe("compareExperiments structured payload (slice 4)", () => {
   it("each row carries cycle_count from timeline.json (0 when timeline missing)", () => {
     seedExperimentRich("exp-with-cycles", { status: "running", tests_passed: 1 }, { cycles: 4 });
     seedExperimentRich("exp-no-timeline", { status: "running", tests_passed: 0 });

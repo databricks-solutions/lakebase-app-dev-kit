@@ -1,4 +1,4 @@
-// FEIP-7565/7566: the per-story design pipeline streams ONE story's acceptance
+///7566: the per-story design pipeline streams ONE story's acceptance
 // criteria at a time. Nothing structural used to enforce that, so the Spec
 // Author could (and repeatedly did) batch every story's ACs in a single pass,
 // defeating the pipeline. findBatchedDraftStories is the forcing function: at

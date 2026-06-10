@@ -1,4 +1,4 @@
-// FEIP-7565: per-story pipeline state for the streaming design->build workflow.
+// per-story pipeline state for the streaming design->build workflow.
 // The design lane moves each story designing -> awaiting-gate -> ready; the single
 // build lane consumes the FIFO build_queue (build_active) -> done. Persisted as
 // .tdd/features/<F>/pipeline.json. Exactly one story builds at a time; the
@@ -19,7 +19,7 @@ export const STORY_STATUSES = [
 ] as const;
 export type StoryStatus = (typeof STORY_STATUSES)[number];
 
-// Per-story spec gate (FEIP-7565 phase 2b). Mirrors the per-feature gates.ts
+// Per-story spec gate (phase 2b). Mirrors the per-feature gates.ts
 // conventions (status enum + approver/approved_at + decision history) but is
 // scoped to one story and lives INSIDE pipeline.json, deliberately isolated
 // from the per-feature gates.json so its heavily-tested suite is untouched.
@@ -48,7 +48,7 @@ export interface StoryGateRecord {
   history: StoryGateHistoryEntry[];
 }
 
-// Per-story experiment (FEIP-7566): build isolation. The story is built on an
+// Per-story experiment: build isolation. The story is built on an
 // ephemeral paired Lakebase branch forked from feature HEAD; on accept it is
 // MERGED into the feature branch (code + migrations), on discard/revise it is
 // torn down. N=1 (default) = one experiment = the story's build; N>=2 races
@@ -72,7 +72,7 @@ export interface StoryExperiment {
   closed_at?: string;
 }
 
-// PO acceptance of a built story (FEIP-7566), distinct from the pre-build spec
+// PO acceptance of a built story, distinct from the pre-build spec
 // gate. A three-way decision recorded after the PO reviews the running story.
 export const STORY_ACCEPTANCE_DECISIONS = ["accepted", "discarded", "revise"] as const;
 export type StoryAcceptanceDecision = (typeof STORY_ACCEPTANCE_DECISIONS)[number];
@@ -97,9 +97,9 @@ export interface StoryEntry {
   status: StoryStatus;
   /** The per-story spec gate; present once the story has been surfaced for review. */
   gate?: StoryGateRecord;
-  /** The experiment branch the story is built on (FEIP-7566). */
+  /** The experiment branch the story is built on. */
   experiment?: StoryExperiment;
-  /** The PO's post-build accept/discard/revise decision (FEIP-7566). */
+  /** The PO's post-build accept/discard/revise decision. */
   acceptance?: StoryAcceptance;
 }
 
@@ -235,7 +235,7 @@ export function completeActive(pipeline: StoryPipeline): string | null {
   return done;
 }
 
-// --- Per-story draft guard (FEIP-7565/7566) -------------------------------
+// --- Per-story draft guard -------------------------------
 //
 // The design lane streams ONE story's acceptance criteria at a time: draft S's
 // ACs, surface S's gate, get it approved, THEN draft S+1. Nothing structural
@@ -284,7 +284,7 @@ export function findBatchedDraftStories(
   return offenders.sort();
 }
 
-// --- Per-story spec gate (FEIP-7565 phase 2b) -----------------------------
+// --- Per-story spec gate (phase 2b) -----------------------------
 
 /** The story's gate, or a default-open record when the story is ungated. */
 export function getStoryGate(pipeline: StoryPipeline, storyId: string): StoryGateRecord {
@@ -370,7 +370,7 @@ function markGateWithdrawn(
   });
 }
 
-// --- Per-story experiment + PO acceptance (FEIP-7566) ----------------------
+// --- Per-story experiment + PO acceptance ----------------------
 
 export interface CutExperimentArgs {
   slug: string;

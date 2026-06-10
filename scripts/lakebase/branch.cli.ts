@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for Lakebase branch lifecycle (FEIP-7331, P0.1).
+// CLI for Lakebase branch lifecycle (P0.1).
 //
 // Wraps the existing branch primitives (branch-utils, branch-create,
 // branch-delete, convention-branches, long-running-branch,
@@ -136,7 +136,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-branch (FEIP-7331)
+const HELP = `lakebase-branch
 
 Subcommands:
   list             List branches on a project

@@ -273,7 +273,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-state (FEIP-7458, phase A)
+var HELP = `lakebase-scm-state (phase A)
 
 Inspect the SCM workflow state for a paired project. Reads
 \`.lakebase/workflow-state.json\` and prints the current state plus the

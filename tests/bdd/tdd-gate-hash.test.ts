@@ -1,4 +1,4 @@
-// G2 (FEIP-7359): hash normalization helper for gate artifacts.
+// G2: hash normalization helper for gate artifacts.
 //
 // Test-FIRST per the ADR-0004 design rationale: this is the riskiest piece
 // of the gates state machine. Wrong normalization causes false drift (a

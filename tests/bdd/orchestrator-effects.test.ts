@@ -15,6 +15,8 @@ import {
   type DriveEffectsConfig,
   type CommandRunner,
 } from "../../scripts/tdd/orchestrator-effects";
+import { existsSync, readFileSync } from "node:fs";
+import { handbackFile } from "../../scripts/tdd/tdd-paths";
 
 function recordingRunner(): { runner: CommandRunner; calls: DriveCommand[] } {
   const calls: DriveCommand[] = [];
@@ -43,14 +45,30 @@ describe("commandsForAction: invoke-role -> claude", () => {
     // project's tests), then the ORCHESTRATION records the cycle (stamps GREEN
     // via the substrate, not the agent), then reconcile logs what landed.
     expect(cmds).toHaveLength(3);
-    // resumeKey = the role: the runner resumes this role's warm Claude session
-    // across its invocations instead of a cold respawn per story/cycle.
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus", resumeKey: "driver" });
+    // Driver runs a FRESH session every cycle: NO resumeKey, so the runner spawns
+    // a new ephemeral `claude -p` (neither --resume nor --session-id). Resuming
+    // would accumulate the whole story's transcript and overflow the context
+    // window across a long RED/GREEN loop; the on-disk artifact is its only
+    // context, so a fresh session is correct + bounded.
+    expect(cmds[0]).toMatchObject({ kind: "claude", role: "driver", model: "opus" });
+    expect((cmds[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
     expect((cmds[0] as { task: string }).task).toMatch(/GREEN/);
     expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-cycle" });
     expect((cmds[1] as { args: string[] }).args[0]).toBe("green");
     expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-log" });
     expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
+  });
+
+  it("non-loop roles keep a warm resumeKey; only navigator + driver are fresh per cycle", () => {
+    // spec-author / architect-reviewer / etc. are invoked a handful of times per
+    // feature, so resuming their session (warm context + prompt cache) is the
+    // cheaper default. Only the tight RED/GREEN loop roles drop resume.
+    const specAuthor = commandsForAction({ kind: "invoke-role", role: "spec-author", story: "S1" }, cfg());
+    expect(specAuthor[0]).toMatchObject({ kind: "claude", role: "spec-author", resumeKey: "spec-author" });
+    const navigator = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
+    const driver = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, cfg());
+    expect((navigator[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
+    expect((driver[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
   });
 
   it("navigator: agent writes the test, orchestration stamps the RED cycle (agent records nothing)", () => {
@@ -59,6 +77,8 @@ describe("commandsForAction: invoke-role -> claude", () => {
     // (orchestration) records RED so the probe's red_at reading never depends
     // on the agent hand-writing a cycle artifact.
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "navigator" });
+    // Navigator also runs fresh per cycle (no resumeKey).
+    expect((cmds[0] as { resumeKey?: string }).resumeKey).toBeUndefined();
     const cycle = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-tdd-cycle") as { args: string[] } | undefined;
     expect(cycle).toBeTruthy();
     expect(cycle!.args[0]).toBe("begin");
@@ -87,7 +107,7 @@ describe("commandsForAction: invoke-role -> claude", () => {
   });
 
   it("scopes the spec-author per-story draft to ONE story (directive + inlined stub)", () => {
-    // Level-1 input scoping (FEIP-7461): the draft invocation is handed only the
+    // Level-1 input scoping: the draft invocation is handed only the
     // target story's stub + a single-story directive, so the agent can't batch
     // every story's ACs (which would delay the first story's gate + build).
     const tmp = mkdtempSync(join(tmpdir(), "effects-specauthor-"));
@@ -333,5 +353,41 @@ describe("buildDriveEffects", () => {
     // recorded feature-requests when asked, then sync-backlog. No LLM.
     expect(plan.commands[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-human-proxy" });
     expect((plan.commands[0] as { args: string[] }).args[0]).toBe("supply-requests");
+  });
+});
+
+describe("hand-back delivery: onHandback writes, roleTask consumes (informed retry)", () => {
+  let tdd: string;
+  beforeEach(() => {
+    tdd = mkdtempSync(join(tmpdir(), "hb-eff-"));
+    mkdirSync(join(tdd, "features", "F1", "stories", "S2", "acs"), { recursive: true });
+  });
+  afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+
+  it("buildDriveEffects.onHandback writes the hand-back note where the role's prompt will read it", () => {
+    const eff = buildDriveEffects(cfg({ tddDir: tdd, projectDir: tdd }));
+    eff.onHandback!(
+      { signature: "x", responder: "test-strategist", story: "S2", expected: "a per-story test list", satisfiedBy: () => false },
+      "HANDBACK (attempt 1): your previous turn did not return a per-story test list for story S2.",
+    );
+    const file = handbackFile(tdd, "F1", "test-strategist", "S2");
+    expect(existsSync(file)).toBe(true);
+    expect(readFileSync(file, "utf8")).toMatch(/HANDBACK \(attempt 1\)/);
+  });
+
+  it("commandsForAction CONSUMES the hand-back: it prefixes the role task once, then deletes the note", () => {
+    const eff = buildDriveEffects(cfg({ tddDir: tdd, projectDir: tdd }));
+    eff.onHandback!(
+      { signature: "x", responder: "test-strategist", story: "S2", expected: "a per-story test list", satisfiedBy: () => false },
+      "HANDBACK: fix the empty test list for S2.",
+    );
+    const action = { kind: "invoke-role", role: "test-strategist", story: "S2" } as const;
+    const cmds = commandsForAction(action, cfg({ tddDir: tdd, projectDir: tdd }));
+    const task = (cmds[0] as { task: string }).task;
+    expect(task).toMatch(/HANDBACK: fix the empty test list for S2\./);
+    // Consume-once: the note is deleted so it is not re-injected on later turns.
+    expect(existsSync(handbackFile(tdd, "F1", "test-strategist", "S2"))).toBe(false);
+    const again = commandsForAction(action, cfg({ tddDir: tdd, projectDir: tdd }));
+    expect((again[0] as { task: string }).task).not.toMatch(/HANDBACK/);
   });
 });

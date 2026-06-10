@@ -7017,6 +7017,7 @@ function appendSelectionLog(tddDir, entry) {
 
 // scripts/tdd/artifact-conformance.ts
 init_cjs_shims();
+var import_path5 = require("path");
 
 // scripts/tdd/schema-loader.ts
 init_cjs_shims();
@@ -7083,7 +7084,7 @@ var ARTIFACT_FORMATS = {
   // narrative; only H1 + non-empty body required. Never overwritten.
   "feature-request.md": { kind: "md-narrative" },
   // Spec Author's sprint backlog proposal: the artifact the sprint PLAN gate
-  // locks (FEIP-7461). Free-form narrative; H1 + non-empty body required.
+  // locks. Free-form narrative; H1 + non-empty body required.
   "feature-proposals.md": { kind: "md-narrative" },
   // Product Owner's project-level overview (replaces the old spec.md).
   "product-overview.md": { kind: "md-narrative" },
@@ -7116,6 +7117,7 @@ var ARTIFACT_FORMATS = {
     kind: "md-sections",
     sections: [
       { label: "Design Philosophy", match: "philosophy" },
+      { label: "UI Framework", match: "framework" },
       { label: "Typography", match: "typography" },
       { label: "Color Palette", match: "color" },
       { label: "Spacing", match: "spacing" },
@@ -7219,18 +7221,117 @@ function checkTestListMd(content) {
   }
   return violations;
 }
+function canonicalArtifactName(path) {
+  const base = (0, import_path5.basename)(path);
+  if ((0, import_path5.basename)((0, import_path5.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
+  return base;
+}
 
 // scripts/tdd/agent-log.ts
 init_cjs_shims();
 var import_fs5 = require("fs");
-var import_path5 = require("path");
+var import_path6 = require("path");
+
+// scripts/tdd/agent-log-events.ts
+init_cjs_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
+// scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
-  return (0, import_path5.join)(tddDir, "agent-log.jsonl");
+  return (0, import_path6.join)(tddDir, "agent-log.jsonl");
 }
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
@@ -7249,9 +7350,8 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
           role: "product-owner",
           level: "info",
           event: "gate.approved",
-          message: `${approver} validated ${decision.gate} artifacts (${decision.artifacts.join(", ")}): expected elements present + conformant; approved`,
           feature_id: featureId,
-          data: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
+          slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
         },
         { tddDir }
       );
@@ -7260,10 +7360,9 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
         {
           role: "product-owner",
           level: "warn",
-          event: "gate.refused",
-          message: `${approver} refused ${decision.gate}: ${decision.reason}`,
+          event: "gate.rejected",
           feature_id: featureId,
-          data: { gate: decision.gate, reason: decision.reason, approver, validated: false }
+          slots: { gate: decision.gate, reason: decision.reason, approver, validated: false }
         },
         { tddDir }
       );
@@ -7282,6 +7381,28 @@ function conformanceReason(inputs) {
     if (!result.ok) problems.push(...result.violations);
   }
   return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
+}
+function acsConformanceReason(fdir) {
+  const stories = (0, import_node_path2.join)(fdir, "stories");
+  if (!(0, import_node_fs2.existsSync)(stories)) return null;
+  const problems = [];
+  for (const s of (0, import_node_fs2.readdirSync)(stories)) {
+    const acsDir = (0, import_node_path2.join)(stories, s, "acs");
+    if (!(0, import_node_fs2.existsSync)(acsDir)) continue;
+    for (const f of (0, import_node_fs2.readdirSync)(acsDir)) {
+      if (!f.endsWith(".json")) continue;
+      const p = (0, import_node_path2.join)(acsDir, f);
+      let content;
+      try {
+        content = (0, import_node_fs2.readFileSync)(p, "utf8");
+      } catch {
+        continue;
+      }
+      const r = checkArtifactConformance(canonicalArtifactName(p), content);
+      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
+    }
+  }
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
 }
 function resolveArtifactInputs(gate, fdir, promoteRef) {
   const readIfPresent = (name) => {
@@ -7310,7 +7431,10 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
         "feature-spec.json": featureJson,
         "feature-spec.md": featureMd
       };
-      return withConformance(inputs);
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      const acReason = acsConformanceReason(fdir);
+      return acReason === null ? conf : { reason: acReason };
     }
     case "plan": {
       const planJson = readIfPresent("plan.json");
@@ -7410,9 +7534,8 @@ function supplyArtifact(args) {
           role: "product-owner",
           level: "warn",
           event: "intake.refused",
-          message: `${approver} could not supply ${artifact}: ${reason}`,
           feature_id: args.featureId,
-          data: { artifact, to: args.to, reason, approver, validated: false }
+          slots: { artifact, to: args.to, reason, approver, validated: false }
         },
         { tddDir }
       );
@@ -7436,9 +7559,8 @@ function supplyArtifact(args) {
         role: "product-owner",
         level: "info",
         event: "intake.supplied",
-        message: `${approver} supplied ${artifact} (recorded HIL answer, format-conformant) -> ${args.to}`,
         feature_id: args.featureId,
-        data: { artifact, from: args.from, to: args.to, approver, validated: true }
+        slots: { artifact, from: args.from, to: args.to, approver, validated: true }
       },
       { tddDir }
     );

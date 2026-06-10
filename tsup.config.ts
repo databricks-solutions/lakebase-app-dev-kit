@@ -53,6 +53,7 @@ export default defineConfig({
     "scripts/tdd/agent-models.cli": "scripts/tdd/agent-models.cli.ts",
     "scripts/tdd/story-pipeline.cli": "scripts/tdd/story-pipeline.cli.ts",
     "scripts/tdd/cycle.cli": "scripts/tdd/cycle.cli.ts",
+    "scripts/tdd/response-formatter.cli": "scripts/tdd/response-formatter.cli.ts",
     "scripts/tdd/story-experiment.cli": "scripts/tdd/story-experiment.cli.ts",
     "scripts/tdd/drive.cli": "scripts/tdd/drive.cli.ts",
     "scripts/tdd/spike.cli": "scripts/tdd/spike.cli.ts",

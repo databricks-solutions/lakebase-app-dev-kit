@@ -8,7 +8,7 @@
 //
 // Returns a structured SchemaDiffResult that matches the data contract the
 // VS Code extension's per-table-diff modal consumes – same field names, same
-// semantics, so once the extension re-routes (FEIP-7065 publish_and_consume),
+// semantics, so once the extension re-routes (publish_and_consume),
 // the modal can read identical JSON from either call site.
 
 import { execFileSync } from "node:child_process";
@@ -228,7 +228,7 @@ const colKey = (c: SchemaColumn): string => `${c.name}:${c.dataType}`;
  * GH Actions PR comment, the extension's commit-detail view) parse this
  * shape. Keep the surface stable; if you need new fields, add them as
  * additional sections rather than altering the established prefixes.
- * (Pre-FEIP-7494 the same format was emitted by the now-removed shell
+ * (Previously the same format was emitted by the now-removed shell
  * formatter templates/.../scripts/format-schema-diff.sh.)
  *
  * Output shape (per object, blank line between objects):

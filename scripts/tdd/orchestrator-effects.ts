@@ -17,12 +17,14 @@
 // code, plus deterministic per-action logging via the loop's onAction hook.
 
 import * as fs from "node:fs";
+import { dirname } from "node:path";
 import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
 import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson, designGuideJson } from "./tdd-paths.js";
+import { storyJson, designGuideJson, handbackFile } from "./tdd-paths.js";
+import { storyTestProgress } from "./cycle-record.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
 export type DriveCommand =
@@ -90,7 +92,7 @@ const AGENT_TERSE_SUFFIX =
 
 /**
  * The target story's stub (asA/iWantTo/soThat) as one inline sentence, to scope
- * the Spec Author's per-story draft prompt to exactly that story (FEIP-7461: an
+ * the Spec Author's per-story draft prompt to exactly that story (an
  * agent can only batch stories it is handed; we hand it just this one). Returns
  * "" when the stub is absent/unreadable, the directive alone still scopes it.
  */
@@ -113,7 +115,68 @@ function storyStubScope(tddDir: string, featureId: string, storyId: string): str
 }
 
 /** Short task directive handed to a role subagent for an invoke-role action. */
+/**
+ * Pin the Navigator to the EXACT next-pending test , the same item the cycle
+ * stamp (beginNextPendingCycle -> storyTestProgress.pending[0]) will record. The
+ * Navigator must write THAT test, not pick its own: when the prompt only said
+ * "write the next test", the model wandered (authored a later AC's test) while
+ * the substrate stamped pending[0], so the recorded cycle test_id diverged from
+ * the test actually written. Naming the test makes the agent obey the order.
+ */
+function nextPendingTestDirective(tddDir: string, featureId: string, story: string): string {
+  let next: { id: string; ac_id: string; description: string } | undefined;
+  try {
+    next = storyTestProgress(tddDir, featureId, story).pending[0];
+  } catch {
+    next = undefined;
+  }
+  if (!next) {
+    return `Write the next failing test (RED) for story ${story}: the next un-cycled item in the test list.`;
+  }
+  return (
+    `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}".` +
+    ` Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item , the orchestration stamps the RED cycle for ${next.id},` +
+    ` and a mismatch between the test you write and ${next.id} is a defect.`
+  );
+}
+
+/**
+ * Consume a pending hand-back note for this role's retry: read it, delete it
+ * (consume-once), and return it as a prompt PREFIX. Empty when none is pending.
+ * The orchestrator wrote it (via DriveEffects.onHandback) when the role's prior
+ * turn failed its expectation contract, so the retry is informed , the role sees
+ * exactly what it failed to return before it runs again.
+ */
+function consumeHandback(
+  action: Extract<WorkflowAction, { kind: "invoke-role" }>,
+  featureId: string,
+  tddDir: string,
+): string {
+  const story = "story" in action ? action.story : undefined;
+  const file = handbackFile(tddDir, featureId, action.role, story);
+  if (!fs.existsSync(file)) return "";
+  let note = "";
+  try {
+    note = fs.readFileSync(file, "utf8").trim();
+    fs.rmSync(file, { force: true });
+  } catch {
+    return "";
+  }
+  return note ? `${note}\n\n` : "";
+}
+
+/** The role's task prompt, with any pending hand-back note prepended (the
+ *  informed-retry feedback). */
 function roleTask(
+  action: Extract<WorkflowAction, { kind: "invoke-role" }>,
+  featureId: string,
+  uiTrack: boolean,
+  tddDir: string,
+): string {
+  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir);
+}
+
+function roleTaskBody(
   action: Extract<WorkflowAction, { kind: "invoke-role" }>,
   featureId: string,
   uiTrack: boolean,
@@ -154,6 +217,12 @@ function roleTask(
       // siblings here delays that and is rejected at the per-story spec gate.
       return (
         `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)}` +
+        ` Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/` +
+        ` (no test lists, no -tests.json / -test-list.json, no scratch files , the spec gate validates every` +
+        ` acs/*.json against the AC schema and rejects non-AC files).` +
+        ` The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a` +
+        ` number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks` +
+        ` the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}).` +
         ` Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any` +
         ` other story in this feature, each other story is drafted in its own separate step that you are not` +
         ` performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here` +
@@ -175,7 +244,7 @@ function roleTask(
           ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
       }
-      return `Write the next RED test for story ${s}.${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
       if (action.buildMode === "refactor") {
         return (
@@ -243,11 +312,22 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
         ];
       }
+      // Navigator + Driver run a FRESH session every cycle (no resumeKey, so the
+      // runner spawns a new ephemeral `claude -p` with neither --resume nor
+      // --session-id). They hand off once per RED/GREEN/REVIEW/REFACTOR cycle in a
+      // tight loop, and the artifact on disk is their only inter-role channel, so a
+      // resumed session would accumulate the entire story's transcript and
+      // eventually overflow the context window ("Prompt is too long", the live
+      // smoke's S2 death). The other roles are invoked a handful of times per
+      // feature, so resuming their session (warm context + prompt cache) is the
+      // cheaper, safe default. Correctness never depends on the retained session
+      // for any role, only speed.
+      const FRESH_PER_CYCLE = new Set(["navigator", "driver"]);
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
-        resumeKey: action.role,
+        ...(FRESH_PER_CYCLE.has(action.role) ? {} : { resumeKey: action.role }),
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : undefined,
@@ -505,5 +585,17 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
       }
     },
     onAction: cfg.onAction,
+    // Hand-back delivery: when a role's prior turn failed its expectation
+    // contract, write the violation detail where THAT role's next prompt will
+    // consume it (consumeHandback in roleTask), so the retry is informed.
+    onHandback(handoff, detail) {
+      const file = handbackFile(cfg.tddDir, cfg.featureId, handoff.responder, handoff.story);
+      try {
+        fs.mkdirSync(dirname(file), { recursive: true });
+        fs.writeFileSync(file, `${detail}\n`, "utf8");
+      } catch {
+        /* best-effort: a failed hand-back just yields a blind retry, still bounded by the queue */
+      }
+    },
   };
 }

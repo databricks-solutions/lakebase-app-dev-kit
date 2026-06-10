@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lakebase-tdd-spike: cut / list / delete throwaway spike branches (FEIP-7461).
+// lakebase-tdd-spike: cut / list / delete throwaway spike branches.
 //
 //   lakebase-tdd-spike cut --slug <s> --instance <i> [--for <feature>]
 //                          [--parent <branch>] [--ttl <t>] [--project-dir <d>] [--json]

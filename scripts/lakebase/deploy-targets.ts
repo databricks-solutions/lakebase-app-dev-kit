@@ -5,9 +5,9 @@
 // profile, app name, Lakebase project/branch, optional UC + secret config).
 //
 // The substrate consumes the config in three places:
-//   1. `lakebase-deploy` (FEIP-7130 slice 2) — picks the active target and
+//   1. `lakebase-deploy` (slice 2) – picks the active target and
 //      drives the build → upload → deploy pipeline.
-//   2. `provisionAppEndpoint` (FEIP-7130 slice 3) — uses lakebase_project /
+//   2. `provisionAppEndpoint` (slice 3) – uses lakebase_project /
 //      lakebase_branch to mint the per-branch app URL.
 //   3. The lakebase-scm-extension consumes the same parser via the kit's
 //      package exports, after the slice 6 import flip.

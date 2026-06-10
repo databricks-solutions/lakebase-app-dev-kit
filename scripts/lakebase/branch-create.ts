@@ -256,7 +256,7 @@ function leafOf(pathOrName: string | undefined): string | undefined {
 
 /**
  * Run `databricks postgres create-branch` with workspace-TTL auto-recovery
- * (FEIP-7436). When the workspace rejects the requested TTL as exceeding
+ *. When the workspace rejects the requested TTL as exceeding
  * its maximum branch-expiration policy, this helper:
  *
  *   1. Probes `databricks postgres get-project` for the project's

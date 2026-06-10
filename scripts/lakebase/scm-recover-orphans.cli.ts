@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // CLI: detect orphan git branches + (optionally) retroactively claim them
-// via the substrate primitive. FEIP-7458 phase C.
+// via the substrate primitive. phase C.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -54,7 +54,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-recover-orphans (FEIP-7458 phase C)
+const HELP = `lakebase-scm-recover-orphans (phase C)
 
 Detect (and optionally claim) git branches that lack a paired Lakebase
 branch. Migration path for projects with orphans created by the pre-

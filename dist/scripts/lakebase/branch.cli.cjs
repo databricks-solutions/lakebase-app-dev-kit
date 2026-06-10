@@ -1326,7 +1326,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-branch (FEIP-7331)
+var HELP = `lakebase-branch
 
 Subcommands:
   list             List branches on a project

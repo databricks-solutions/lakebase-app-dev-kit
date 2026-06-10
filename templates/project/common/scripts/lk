@@ -6,7 +6,7 @@
 # the kit ONCE per ref into a shared cache and runs the bin via `node dist/...`
 # (~0.09s). Use it everywhere a kit CLI is invoked from a scaffolded project:
 #
-#   ./scripts/lk lakebase-tdd-log --role spec-author --event progress --message "…"
+#   ./scripts/lk lakebase-tdd-log --role spec-author --event progress --slot note="…" --slot step=drafting
 #   "$(git rev-parse --show-toplevel)/scripts/lk" lakebase-tdd-intake --feature F1
 #
 # Ref resolution (so it works inside a `claude -p` agent's Bash tool, which does

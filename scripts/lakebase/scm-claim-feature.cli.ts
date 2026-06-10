@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for the SCM workflow's claim-feature-branch transition (FEIP-7458 phase B).
+// CLI for the SCM workflow's claim-feature-branch transition (phase B).
 //
 //   scaffold-complete | merged --[claim]--> feature-claimed
 //
@@ -76,7 +76,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-claim-feature-branch (FEIP-7458, phase B)
+const HELP = `lakebase-scm-claim-feature-branch (phase B)
 
 Claim a new feature branch through the SCM workflow. Cuts the paired
 Lakebase + git branch via createFeaturePairedBranch (30-day TTL),

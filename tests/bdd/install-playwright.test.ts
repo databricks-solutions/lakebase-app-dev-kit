@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 1 BDD coverage. Hermetic: the file-copy half runs
+// Phase 1 BDD coverage. Hermetic: the file-copy half runs
 // against a tmpdir + a real on-disk templates tree; the npm/npx install
 // half is gated on a live env var so CI doesn't pay the chromium-download
 // cost on every PR. The shape assertion (exports + signatures) runs
@@ -125,7 +125,7 @@ describe("bundled templates: content sanity", () => {
     expect(content).toMatch(/process\.env\.BASE_URL/);
     expect(content).toMatch(/chromium/);
     expect(content).toMatch(/@playwright\/test/);
-    // FEIP-7094 v1 out-of-scope: assert we did NOT add cross-browser
+    // v1 out-of-scope: assert we did NOT add cross-browser
     // project entries. Match only on the `name: "..."` line so this
     // guard ignores commentary mentioning other engines.
     expect(content).not.toMatch(/name:\s*["'](firefox|webkit)["']/i);

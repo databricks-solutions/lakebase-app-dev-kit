@@ -10,7 +10,7 @@ function branchIdOf(info: LakebaseBranchInfo): string {
 }
 
 // Tag flavors mirror the AC layer values from the spec format. The Driver's
-// tag-to-runner map keys off these (FEIP-7094): [API] → vitest, [E2E] →
+// tag-to-runner map keys off these: [API] → vitest, [E2E] →
 // Playwright, [Infra] → migration / schema-diff smoke. The substrate keeps
 // the names lowercase here; the spec format capitalises them ("API" / "E2E"
 // / "Infra") for display.
@@ -95,7 +95,7 @@ export interface ExperimentOutcomes {
   // every flavor). When present, `tests_passed` + `tests_failed` remain
   // authoritative totals; `by_tag` is a breakdown for downstream renderers
   // (comparison report, feature-status) and the per-tag smell detectors
-  // (e.g. e2e-row-perma-red in FEIP-7094). Sum across tags is not enforced
+  // (e.g. e2e-row-perma-red in). Sum across tags is not enforced
   // to match the totals – mid-cycle reporting and untagged tests are valid.
   by_tag?: Partial<Record<ExperimentTag, TagOutcome>>;
   /**
@@ -108,7 +108,7 @@ export interface ExperimentOutcomes {
   capped?: ExperimentCap;
 }
 
-// Experiments are scoped to a STORY (FEIP-7566): the on-disk layout is
+// Experiments are scoped to a STORY: the on-disk layout is
 // .tdd/experiments/<feature>/<story>/<slug>/. These two helpers are the single
 // source of truth for that path, so every reader/writer (here + archive +
 // artifacts + cap) stays in lockstep.

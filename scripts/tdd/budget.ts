@@ -21,7 +21,7 @@ export interface BudgetViolation {
 export function snapshotBudget(tddDir: string, featureId: string, storyId: string): BudgetSnapshot | null {
   const plan = readPlan(tddDir, featureId, storyId);
   if (!plan) return null;
-  // Experiments + their budget are story-scoped (FEIP-7566): the race budget
+  // Experiments + their budget are story-scoped: the race budget
   // bounds this story's competing experiments.
   const experiments = listExperiments(tddDir, featureId, storyId);
   const inUse = experiments.filter((e) => {

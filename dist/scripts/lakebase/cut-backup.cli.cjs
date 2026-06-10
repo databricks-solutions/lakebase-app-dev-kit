@@ -526,7 +526,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-cut-backup (FEIP-7096)
+var HELP = `lakebase-cut-backup
 
 Snapshot a Lakebase branch by forking a new branch off it. Use for
 "cut prod-backup" before a release migrates production.

@@ -1,4 +1,4 @@
-// FEIP-7143: hermetic coverage for devhub.lock parsing.
+// hermetic coverage for devhub.lock parsing.
 //
 // The lockfile is the single source of truth for which devhub commit
 // the substrate pins to. The parser enforces:
@@ -6,9 +6,9 @@
 //   * `ref` must be a 40-char commit SHA (no branch names, no tags)
 //
 // These invariants are what make install-time fetches reproducible
-// and what FEIP-7144's drift detector relies on. If either invariant
+// and what's drift detector relies on. If either invariant
 // silently weakens, drift goes silent again and we re-enter the world
-// FEIP-7143 was created to leave.
+// was created to leave.
 
 import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
@@ -35,7 +35,7 @@ function writeLock(content: unknown): string {
   return p;
 }
 
-describe("devhub.lock parser (FEIP-7143)", () => {
+describe("devhub.lock parser", () => {
   it("accepts a well-formed lock with a 40-char SHA ref", () => {
     const p = writeLock({
       repo: "databricks/devhub",

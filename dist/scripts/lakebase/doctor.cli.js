@@ -1671,7 +1671,7 @@ function checkWorkflowDrift(projectDir) {
       status: "warn",
       message: `Scaffolded workflows drift from kit: ${drifted} drifted, ${missing} missing`,
       detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
-      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until FEIP-7139 updateWorkflows lands."
+      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until updateWorkflows lands."
     };
   } catch (err) {
     return {
@@ -1774,7 +1774,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-doctor (FEIP-7330)
+var HELP = `lakebase-doctor
 
 Run health checks on a Lakebase project: Databricks CLI presence + auth,
 .env shape, Lakebase project reachability, git remote, detected

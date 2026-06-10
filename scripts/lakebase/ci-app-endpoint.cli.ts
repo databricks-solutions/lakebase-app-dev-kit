@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLI for substrate's CI app endpoint lookup. Used by the scaffolded
 // pr.yml to populate LAKEBASE_APP_ENDPOINT in $GITHUB_ENV so the
-// project-root Playwright step (FEIP-7094 Phase 2) targets the
+// project-root Playwright step (phase 2) targets the
 // paired-branch deployment instead of a webServer-booted local app.
 //
 // Output: prints the resolved URL to stdout on success. Exits 0 with

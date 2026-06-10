@@ -6,8 +6,17 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveDeployTarget, deployToTarget, stopLocal, storyDeployVerified } from "../../scripts/tdd/deploy";
+import {
+  resolveDeployTarget,
+  deployToTarget,
+  stopLocal,
+  storyDeployVerified,
+  logReleaseEngineerDeployStart,
+  logReleaseEngineerDeployOutcome,
+  type DeployResult,
+} from "../../scripts/tdd/deploy";
 import { readEscalations } from "../../scripts/tdd/escalation";
+import { readAgentLog } from "../../scripts/tdd/agent-log";
 
 const TARGETS = [
   "targets:",
@@ -222,7 +231,7 @@ describe("stopLocal", () => {
   });
 });
 
-describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)", () => {
+describe("deployToTarget: deploy-evidence.json (deploy gate artifact)", () => {
   const FEATURE = "F1-initial-domain";
   function fastClock() {
     let t = 0;
@@ -296,7 +305,7 @@ describe("deployToTarget: deploy-evidence.json (deploy gate artifact, FEIP-7461)
   });
 });
 
-describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified (FEIP-7461)", () => {
+describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified", () => {
   const FEATURE = "F1-initial-domain";
   const STORY = "S1-submit";
   function fastClock() {
@@ -337,5 +346,45 @@ describe("deployToTarget: STORY-scoped deploy evidence + storyDeployVerified (FE
 
   it("storyDeployVerified is false when no story evidence exists", () => {
     expect(storyDeployVerified(join(dir, ".tdd"), FEATURE, STORY)).toBe(false);
+  });
+});
+
+describe("Release Engineer deploy lifecycle -> central agent log", () => {
+  let tdd: string;
+  const FEATURE = "F1-file-bug";
+  const STORY = "S1-create-bug";
+  const clock = () => new Date("2026-06-09T19:38:20.000Z");
+  beforeEach(() => {
+    tdd = mkdtempSync(join(tmpdir(), "re-deploylog-"));
+  });
+  afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+
+  it("emits release-engineer deploy.start + deploy.verified + phase.end for a successful deploy", () => {
+    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", tddDir: tdd, now: clock };
+    logReleaseEngineerDeployStart(ctx);
+    const ok: DeployResult = { ok: true, url: "http://localhost:8000/", pid: 123, verify: { passed: true, summary: "feature-verify passed" } };
+    logReleaseEngineerDeployOutcome(ctx, ok);
+
+    const re = readAgentLog({ tddDir: tdd }).filter((e) => e.role === "release-engineer");
+    expect(re.map((e) => e.event)).toEqual(["deploy.start", "deploy.verified", "phase.end"]);
+    const verified = re.find((e) => e.event === "deploy.verified")!;
+    expect(verified.metadata?.feature_id).toBe(FEATURE);
+    expect(verified.metadata?.story).toBe(STORY);
+    expect(verified.metadata?.url).toBe("http://localhost:8000/");
+    expect(verified.metadata?.reachable).toBe(true);
+    expect(verified.metadata?.verify_passed).toBe(true);
+    expect(re.every((e) => e.role === "release-engineer")).toBe(true);
+  });
+
+  it("emits a deploy.failed (error) + phase.end for a failed deploy, carrying the reason", () => {
+    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", tddDir: tdd, now: clock };
+    const bad: DeployResult = { ok: false, reason: "not reachable within timeout", verify: { passed: false, summary: "n/a" } };
+    logReleaseEngineerDeployOutcome(ctx, bad);
+
+    const re = readAgentLog({ tddDir: tdd }).filter((e) => e.role === "release-engineer");
+    expect(re.map((e) => e.event)).toEqual(["deploy.failed", "phase.end"]);
+    const failed = re.find((e) => e.event === "deploy.failed")!;
+    expect(failed.level).toBe("error");
+    expect(String(failed.metadata?.reason)).toMatch(/not reachable/);
   });
 });

@@ -1,6 +1,6 @@
 // Self-hosted runner Octokit calls. Narrow surface – only the methods
 // scripts/lakebase/runner-setup.ts needs. Routes auth through
-// resolveGitHubToken (FEIP-7068).
+// resolveGitHubToken.
 
 import { Octokit, RequestError } from "octokit";
 import { resolveGitHubToken } from "./auth.js";

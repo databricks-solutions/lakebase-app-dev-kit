@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: pr-ready -> ci-green (FEIP-7458 phase B+).
+// CLI: pr-ready -> ci-green (phase B+).
 
 import * as path from "node:path";
 import { isCliEntry } from "../util/cli-entry.js";
@@ -48,7 +48,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-wait-ci (FEIP-7458 phase B+)
+const HELP = `lakebase-scm-wait-ci (phase B+)
 
 Block until the PR's CI checks turn green, then transition
 pr-ready -> ci-green. On CI failure or timeout, exits non-zero

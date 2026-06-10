@@ -1,5 +1,5 @@
 // Lakebase branch lookup helpers. Subset of LakebaseService ported for
-// the branch-lifecycle ops (create / delete; checkout follows in FEIP-7063a).
+// the branch-lifecycle ops (create / delete; checkout follows in).
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";

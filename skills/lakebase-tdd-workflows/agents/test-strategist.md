@@ -30,7 +30,7 @@ You communicate with other roles only through the artifacts on disk. Assume the 
 
 ## Per-story streaming (pipelined design)
 
-In the per-story pipeline (FEIP-7565) you order **one story's** tests at a time (a per-story test list), handed off as soon as the Architect annotates that story, so the single build lane can start it while later stories are still being designed. Do not wait for the whole feature.
+In the per-story pipeline you order **one story's** tests at a time (a per-story test list), handed off as soon as the Architect annotates that story, so the single build lane can start it while later stories are still being designed. Do not wait for the whole feature.
 
 ## Inputs
 
@@ -48,13 +48,32 @@ In the per-story pipeline (FEIP-7565) you order **one story's** tests at a time 
     "feature_id": "<F>",
     "ordered_for": "design-momentum",
     "items": [
-      { "id": "T1", "description": "<one behavioral scenario>", "ac_id": "AC1", "status": "pending" }
+      { "id": "T1", "description": "<one behavioral scenario>", "ac_id": "AC1-create-form-displayed", "status": "pending" }
     ]
   }
   ```
+  **`ac_id` MUST be the EXACT id of an existing AC file** in this story (`acs/<id>.json`, whatever the Spec Author named it , e.g. `AC1-create-form-displayed` or a bare `AC1`; copy it verbatim, do not invent or re-slug it), and EVERY item needs one (never null). An item whose `ac_id` is null or does not match a real AC in the story is dropped by the deterministic per-story scope, leaving an empty list and stalling the build. Every AC in the story must have ≥1 item.
+
+## Self-check before you return (response-formatter)
+
+Before you finish, type-check your own output , do not hand back a malformed list:
+
+```bash
+./scripts/lk lakebase-tdd-response-formatter --role test-strategist --feature <F> --story <S>
+```
+
+It exits 0 when your per-story test list conforms (≥1 item, every `ac_id` maps to one of the story's ACs) and exits non-zero listing the exact problems otherwise. If it fails, FIX the list and re-run until it passes. This is your contract; the orchestrator hands the work back to you if you skip it and the list is wrong.
 - `.tdd/features/<F>/test-list.md` – the human-readable Beck list, **rendered from the JSON** via `writeTestListMarkdown()` in `scripts/tdd/test-list.ts`. Do **not** hand-author it: a hand-typed list is a second source of truth that drifts. Rendering guarantees every item traces to its AC and the file passes the test_list conformance gate by construction.
 - For each AC: `.tdd/features/<F>/stories/<S>/test-list-per-ac.json` – generated transform by `scripts/tdd/test-list.ts`.
 - Optional: scaffolded scenario files under `.tdd/features/<F>/stories/<S>/scenarios/` as `.feature` (Gherkin) or `.test.ts` stubs.
+
+## Canon you apply
+
+You author the test-list against the kit's testing model. Apply these to produce it; do not re-derive them:
+
+- **`@lakebase-tdd-workflows` test-strategy** ([references/test-strategy.md](../references/test-strategy.md)) , the test surface is **BDD behavior tests plus architectural fitness tests**. Every AC gets one or more behavior scenarios (pytest-bdd / equivalent) AND the story's architectural constraints get fitness functions. **Mocks only where no real backing resource exists; never the database** (the paired Lakebase branch is a real isolated DB). A test-list item that proposes a DB mock is a defect.
+- **`@architectural-design-principles` evolutionary-architecture** ([references/evolutionary-architecture.md](../../architectural-design-principles/references/evolutionary-architecture.md)) , the fitness-function catalog (layering contract, ORM-only, config-in-env, NFR budgets). Turn each architectural constraint the story touches into a test-list item.
+- **`@ui-ux-design-principles`** (UI stories only) , the user flows in `ia.md` seed E2E behavior scenarios, and accessibility ([references/accessibility.md](../../ui-ux-design-principles/references/accessibility.md)) + feedback rules become assertable E2E checks (a11y, visible success/failure).
 
 ## Method
 
@@ -90,7 +109,7 @@ Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agen
 - `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.
 - `--level debug --event reasoning` for the ordering rationale (`ordered_for`).
 - `--level warn --event smell.flagged` for any test that cannot be defined without writing implementation first.
-- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their call on the ordering>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=test_list` (add `--slot change="…"` for modified, `--slot reason="…"` for rejected)) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

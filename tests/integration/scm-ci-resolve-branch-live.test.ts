@@ -1,4 +1,4 @@
-// Live integration test for lakebase-ci-resolve-branch (FEIP-7494).
+// Live integration test for lakebase-ci-resolve-branch.
 //
 // Drives the new standalone bin through every state-machine transition
 // against a real Lakebase project. Single createProject in beforeAll,
@@ -98,7 +98,7 @@ function parseEvalLines(stdout: string): Record<string, string> {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "lakebase-ci-resolve-branch - live state machine (FEIP-7494)",
+  "lakebase-ci-resolve-branch - live state machine",
   () => {
     let owner: string;
     let projectName: string;

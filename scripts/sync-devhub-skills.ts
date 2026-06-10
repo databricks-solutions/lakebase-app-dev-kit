@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FEIP-7143: install-time fetch of the devhub-published agent skills.
+// install-time fetch of the devhub-published agent skills.
 //
 // Replaces the prior `scripts/sync-devhub-skills.sh` which both
 // (a) hardcoded `databricks/devhub@main` (no pin -> silent drift) and
@@ -19,7 +19,7 @@
 //   tsx scripts/sync-devhub-skills.ts          # fetch (default)
 //   tsx scripts/sync-devhub-skills.ts --check  # compare on-disk vs devhub@pin, exit 1 on drift
 //
-// `--check` is the building block FEIP-7144 (drift detector) will use
+// `--check` is the building block (drift detector) will use
 // to know when devhub HEAD has advanced past the pin.
 
 import * as fs from "node:fs";

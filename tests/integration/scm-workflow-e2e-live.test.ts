@@ -1,4 +1,4 @@
-// Live integration test for the SCM workflow CLIs (FEIP-7458 phase B/C+).
+// Live integration test for the SCM workflow CLIs (phase B/C+).
 //
 // Exercises the happy path of the SCM state machine end-to-end against
 // a real Lakebase project + real GitHub repo + real self-hosted runner.
@@ -170,7 +170,7 @@ async function assertTableExists(args: {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "SCM workflow CLIs - live e2e (FEIP-7458)",
+  "SCM workflow CLIs - live e2e",
   () => {
     let owner: string;
     let projectName: string;

@@ -1,4 +1,4 @@
-// Unit tests for scm-adopt-state (FEIP-7458 phase B+).
+// Unit tests for scm-adopt-state (phase B+).
 //
 // Mocks listBranches + getBranchByName + getCurrentBranch. Pins the
 // adoption decision tree: tier-topology inference, scaffold-complete vs

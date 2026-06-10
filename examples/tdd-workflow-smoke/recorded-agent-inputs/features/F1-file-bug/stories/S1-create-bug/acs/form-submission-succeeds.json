@@ -1,0 +1,9 @@
+{
+  "id": "form-submission-succeeds",
+  "given": "The create bug form is displayed with title and description filled in",
+  "when": "A user clicks the submit button",
+  "then": "The form is submitted without validation errors and the request is processed",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Form submission triggers API call from BugCreateForm (UI) to POST /bugs endpoint. Exercises validation at API boundary and application-layer processing."
+}

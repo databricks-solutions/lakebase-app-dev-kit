@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/agent-config.schema.json",
   "title": "AgentConfig",
-  "description": "Per-project model selection for the TDD-workflow role agents (FEIP-7510). Each role carries a strongly-recommended model in its definition; the HIL overrides per project, asked at lakebase-create-project setup. Written to .lakebase/agent-config.json. The orchestrator resolves: override -> recommended -> inherit.",
+  "description": "Per-project model selection for the TDD-workflow role agents. Each role carries a strongly-recommended model in its definition; the HIL overrides per project, asked at lakebase-create-project setup. Written to .lakebase/agent-config.json. The orchestrator resolves: override -> recommended -> inherit.",
   "type": "object",
   "required": ["version", "roles"],
   "properties": {

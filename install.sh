@@ -122,6 +122,17 @@ if [ ! -d "$REPO_ROOT/dist" ] || [ ! -d "$REPO_ROOT/node_modules" ]; then
   }
 fi
 
+# Always pull the latest vendored (devhub) skills to their pinned revision via
+# the kit's npm script, so the install includes them and they are current. The
+# databricks-core / databricks-lakebase trees are gitignored and only exist
+# after this runs, so a fresh clone needs it to install those two skills.
+# Best-effort: the kit-authored skills install fine even if this is skipped
+# (offline, or no GitHub token for the devhub fetch).
+echo -e "${BLUE}Pulling latest vendored skills (npm run sync:devhub)...${NC}"
+( cd "$REPO_ROOT" && npm run --silent sync:devhub ) || {
+  echo -e "${YELLOW}sync:devhub skipped (offline or no GitHub token); installing the skills already present.${NC}"
+}
+
 # Discover every skill in the tree (any skills/<dir>/SKILL.md). Sorted
 # alphabetically so install order is deterministic. Today this covers
 # both kit-authored workflows (lakebase-scm-workflows, ...) and

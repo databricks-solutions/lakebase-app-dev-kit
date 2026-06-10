@@ -1,4 +1,4 @@
-// FEIP-7566 phase 2: orchestration of the experiment branch lifecycle
+// phase 2: orchestration of the experiment branch lifecycle
 // (merge = git-merge + migrate + teardown; discard = teardown only). Hermetic:
 // the side-effectful ops are faked so we assert ORDER + fail-closed semantics
 // without touching git or Lakebase.

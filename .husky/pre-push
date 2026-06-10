@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # OSS-friendly pre-push gate: runs typecheck + hermetic test before allowing
 # push. Travels with every fork (committed to repo). GitHub Actions is
-# disabled at the databricks-solutions org level (see FEIP-7137), so this
+# disabled at the databricks-solutions org level (see), so this
 # hook is the only automated gate today; once Actions is enabled, the
 # existing ci.yml provides the server-side equivalent.
 #

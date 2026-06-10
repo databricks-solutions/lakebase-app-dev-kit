@@ -8084,6 +8084,8 @@ async function deployClaudeAgents(targetDir, opts) {
 }
 var PROJECT_SKILLS = [
   "software-design-principles",
+  "architectural-design-principles",
+  "ui-ux-design-principles",
   "lakebase-tdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
@@ -8303,7 +8305,7 @@ async function scaffoldStaticAll(args) {
     report("Deploying .claude/agents/");
     const agents = await deployClaudeAgents(args.targetDir, opts);
     claudeAgents = agents.written;
-    report("Deploying .claude/skills/ (software-design-principles)");
+    report(`Deploying .claude/skills/ (${PROJECT_SKILLS.length} skills: engineering + design canon + workflows)`);
     const skills = await deployClaudeSkills(args.targetDir, opts);
     claudeSkills = skills.written;
   }
@@ -8674,7 +8676,7 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-var RUN_TESTS_E2E_MARKER = "# FEIP-7094: run Playwright E2E suite when configured";
+var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path10.join(args.projectDir, "scripts", "run-tests.sh");
   if (!fs10.existsSync(scriptPath)) {
@@ -11447,6 +11449,55 @@ import { join as join25 } from "path";
 var SCHEMA_DIR = join25(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 
+// scripts/tdd/agent-log-events.ts
+init_esm_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+
 // scripts/tdd/spike-carryforward.ts
 init_esm_shims();
 
@@ -12343,7 +12394,7 @@ function checkWorkflowDrift(projectDir) {
       status: "warn",
       message: `Scaffolded workflows drift from kit: ${drifted} drifted, ${missing} missing`,
       detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
-      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until FEIP-7139 updateWorkflows lands."
+      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until updateWorkflows lands."
     };
   } catch (err) {
     return {
@@ -12693,7 +12744,7 @@ var TOOLS = [
       );
     }
   },
-  // ------------------------- FEIP-7328 P0.2 PR tools -------------------------
+  // ------------------------- PR tools -------------------------
   {
     name: "lakebase_pr_open",
     description: "Create a GitHub pull request via the REST API. Returns the PR html_url.",
@@ -12849,7 +12900,7 @@ var TOOLS = [
       return getPullRequestComments(requireString(args, "ownerRepo"), num);
     }
   },
-  // ------------------------- FEIP-7330 P0.4 doctor -------------------------
+  // ------------------------- doctor -------------------------
   {
     name: "lakebase_doctor",
     description: "Run health checks on a Lakebase project: CLI version + auth, .env shape, project reachability, git remote, language, git hooks. Returns a structured report with per-check status + remediation hints.",
@@ -12870,7 +12921,7 @@ var TOOLS = [
       });
     }
   },
-  // ------------------------- FEIP-7140 workflow drift ----------------------
+  // ------------------------- workflow drift ----------------------
   {
     name: "lakebase_workflow_drift",
     description: "Detect drift between a scaffolded project's .github/workflows/*.yml and the kit's current templates. Returns per-file status (unchanged / drifted / missing / extra) and a unified diff for drifted files. Use when a maintainer wants to know if a project's CI templates are stale vs the kit it pins.",
@@ -12890,7 +12941,7 @@ var TOOLS = [
       });
     }
   },
-  // ------------------------- FEIP-7331 P0.1 branch read tools -------------
+  // ------------------------- branch read tools -------------
   {
     name: "lakebase_branch_list",
     description: "List branches on a Lakebase project (name, uid, parent, expiration, state).",

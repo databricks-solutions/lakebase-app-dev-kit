@@ -1,6 +1,6 @@
 // Guard: the knowledge of WHERE .tdd artifacts live is defined in ONE place
 // (scripts/tdd/tdd-paths.ts), not spread across the codebase. This is the
-// enforcement behind the single-source-of-truth refactor (FEIP-7461): the
+// enforcement behind the single-source-of-truth refactor: the
 // deterministic driver kept stalling because a producer and its consumer built
 // the same path/format knowledge in different spots and silently drifted.
 //

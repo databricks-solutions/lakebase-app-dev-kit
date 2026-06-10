@@ -1,5 +1,5 @@
-// Knex runner for Node.js projects. Completed alongside FEIP-7210
-// slice 3; the original primitives lift (FEIP-7091) shipped this file
+// Knex runner for Node.js projects. Completed alongside
+// slice 3; the original primitives lift shipped this file
 // as a stub that threw "not yet implemented".
 //
 // Mirrors the alembic.ts approach: shell out to `npx knex`, derive the

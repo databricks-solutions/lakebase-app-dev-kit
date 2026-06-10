@@ -18,7 +18,7 @@ pure function of priors:
 - `gates.json`: structured HITL gate state.
 
 The LLM was only narrating a state machine that already exists in the substrate.
-Making it an LLM cost us three things, all observed live in the FEIP-7422 smoke:
+Making it an LLM cost us three things, all observed live in the TDD-workflow smoke:
 
 1. Latency. The orchestrator is the busiest actor (every handoff, gate, log).
    Its first turn ran ~99s on the inherited opus model; even sonnet/haiku pay
@@ -207,8 +207,8 @@ sprint plan gate.
 
 - **Phase 9, smoke rewrite + final.** `run-smoke.sh` -> `/sprint` (driver
   `--sprint`); remove the dead `run_claude_with_gate_drain`; update
-  `feip-7422-smoke.test.ts`; rebuild + commit dist for the npx smoke; full suite;
-  (gated) live FEIP-7422 re-validate.
+  `tdd-workflow-smoke.test.ts`; rebuild + commit dist for the npx smoke; full suite;
+  (gated) live re-validate.
 
 ## What this subsumes / reconciles
 

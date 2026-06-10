@@ -1,4 +1,4 @@
-// Live BDD for the lakebase-pr CLI (FEIP-7328).
+// Live BDD for the lakebase-pr CLI.
 //
 // Exercises the actual PR flow end-to-end against a throwaway GitHub
 // repo on the caller's authenticated account. The repo is created via
@@ -89,7 +89,7 @@ function run(cmd: string, args: string[], cwd?: string): {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "lakebase-pr CLI – live E2E (FEIP-7328)",
+  "lakebase-pr CLI – live E2E",
   () => {
     let repoName: string;
     let ownerRepo: string;
@@ -192,7 +192,7 @@ describe.skipIf(!RUN_SUITE)(
     it("`--help` exits 0 and prints usage", () => {
       const r = runPrCli(["--help"]);
       expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(/lakebase-pr \(FEIP-7328\)/);
+      expect(r.stdout).toMatch(/lakebase-pr/);
     });
 
     it("`open` creates a real PR and returns its URL", () => {

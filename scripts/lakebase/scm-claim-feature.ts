@@ -1,5 +1,5 @@
 // SCM workflow phase B: claim a feature branch through the canonical path
-// (FEIP-7458). The transition is `scaffold-complete | merged -> feature-claimed`.
+//. The transition is `scaffold-complete | merged -> feature-claimed`.
 //
 // This module is the workflow-aware wrapper around the substrate primitive
 // `createFeaturePairedBranch`. The phase B contract is:

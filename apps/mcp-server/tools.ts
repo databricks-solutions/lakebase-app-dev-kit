@@ -22,7 +22,7 @@ import {
   type SchemaMigrationLanguage,
 } from "../../scripts/lakebase/schema-migrate.js";
 import { getFeatureStatus } from "../../scripts/tdd/feature-status.js";
-// FEIP-7328 P0.2: PR-flow MCP tools.
+// PR-flow MCP tools.
 import {
   createPullRequest,
   getPullRequest,
@@ -32,11 +32,11 @@ import {
   mergePullRequest,
   mergePairedPullRequest,
 } from "../../scripts/github/pr.js";
-// FEIP-7330 P0.4: doctor MCP tool.
+// doctor MCP tool.
 import { runDoctor } from "../../scripts/lakebase/doctor.js";
-// FEIP-7140: workflow drift MCP tool.
+// workflow drift MCP tool.
 import { detectWorkflowDrift } from "../../scripts/lakebase/workflow-drift.js";
-// FEIP-7331 P0.1: branch MCP tools (full parity with the CLI).
+// branch MCP tools (full parity with the CLI).
 import {
   listBranches,
   getBranchByName,
@@ -348,7 +348,7 @@ export const TOOLS: ToolDefinition[] = [
       );
     },
   },
-  // ------------------------- FEIP-7328 P0.2 PR tools -------------------------
+  // ------------------------- PR tools -------------------------
   {
     name: "lakebase_pr_open",
     description: "Create a GitHub pull request via the REST API. Returns the PR html_url.",
@@ -504,7 +504,7 @@ export const TOOLS: ToolDefinition[] = [
       return getPullRequestComments(requireString(args, "ownerRepo"), num);
     },
   },
-  // ------------------------- FEIP-7330 P0.4 doctor -------------------------
+  // ------------------------- doctor -------------------------
   {
     name: "lakebase_doctor",
     description: "Run health checks on a Lakebase project: CLI version + auth, .env shape, project reachability, git remote, language, git hooks. Returns a structured report with per-check status + remediation hints.",
@@ -525,7 +525,7 @@ export const TOOLS: ToolDefinition[] = [
       });
     },
   },
-  // ------------------------- FEIP-7140 workflow drift ----------------------
+  // ------------------------- workflow drift ----------------------
   {
     name: "lakebase_workflow_drift",
     description: "Detect drift between a scaffolded project's .github/workflows/*.yml and the kit's current templates. Returns per-file status (unchanged / drifted / missing / extra) and a unified diff for drifted files. Use when a maintainer wants to know if a project's CI templates are stale vs the kit it pins.",
@@ -545,7 +545,7 @@ export const TOOLS: ToolDefinition[] = [
       });
     },
   },
-  // ------------------------- FEIP-7331 P0.1 branch read tools -------------
+  // ------------------------- branch read tools -------------
   {
     name: "lakebase_branch_list",
     description: "List branches on a Lakebase project (name, uid, parent, expiration, state).",

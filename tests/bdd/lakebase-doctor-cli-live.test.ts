@@ -1,4 +1,4 @@
-// Live BDD for the lakebase-doctor CLI (FEIP-7330).
+// Live BDD for the lakebase-doctor CLI.
 //
 // Doctor inspects the LOCAL environment (Databricks CLI, auth, .env,
 // git remote, hooks) plus the REMOTE Lakebase project. We exercise it
@@ -86,7 +86,7 @@ interface DoctorReport {
 }
 
 describe.skipIf(!RUN_SUITE)(
-  "lakebase-doctor CLI – live E2E (FEIP-7330)",
+  "lakebase-doctor CLI – live E2E",
   () => {
     let projectId: string;
     let paired: string;     // a "good" project dir (env + git + hooks)
@@ -151,7 +151,7 @@ describe.skipIf(!RUN_SUITE)(
     it("`--help` exits 0 and prints usage", () => {
       const r = runDoctor(["--help"]);
       expect(r.status).toBe(0);
-      expect(r.stdout).toMatch(/lakebase-doctor \(FEIP-7330\)/);
+      expect(r.stdout).toMatch(/lakebase-doctor/);
     });
 
     it("--json against a paired project: overall is OK or WARN, all 8 checks present", () => {

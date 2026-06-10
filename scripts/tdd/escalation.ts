@@ -1,4 +1,4 @@
-// Escalations: the single "raise to the HIL" channel (FEIP-7510 follow-up).
+// Escalations: the single "raise to the HIL" channel (follow-up).
 //
 // WHY: a live smoke shipped a false-GREEN on a self-contradictory test , the
 // orchestration stamped green without a real run, ignored the Navigator's

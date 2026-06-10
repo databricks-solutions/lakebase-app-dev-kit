@@ -1,4 +1,4 @@
-// Unit tests for the SCM phase B claim-feature helper (FEIP-7458).
+// Unit tests for the SCM phase B claim-feature helper.
 //
 // claimFeatureBranch is the workflow-aware wrapper around
 // createFeaturePairedBranch. These tests pin its precondition gate +
@@ -180,7 +180,7 @@ describe("claimFeatureBranch precondition", () => {
     expect(mockCreateFeaturePairedBranch).not.toHaveBeenCalled();
   });
 
-  // FEIP-7508 smoke findings: the stored branch is the substrate's sanitized
+  // smoke findings: the stored branch is the substrate's sanitized
   // hyphen form ("feature-f1-initial-domain") and the canonical feature id
   // carries case ("F1-..."). Idempotency must compare by slug so neither the
   // slash-vs-hyphen nor the case difference mislabels a same-feature re-claim.

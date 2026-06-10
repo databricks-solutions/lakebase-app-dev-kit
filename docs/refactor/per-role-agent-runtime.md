@@ -1,9 +1,9 @@
 # Per-role agent runtime + /plan & /deploy parity + state-machine phases
 
 **Status**: Design proposal, 2026-06-06
-**Umbrella FEIP**: FEIP-7461 (workflows as executable state machines)
-**Primary FEIP**: FEIP-7510 (per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check). Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
-**Related**: FEIP-7508 (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).
+**Umbrella FEIP**: (workflows as executable state machines)
+**Primary FEIP**: (per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check). Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
+**Related**: (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).
 
 ---
 
@@ -63,7 +63,7 @@ state machine. Writes no spec / code / test / deploy.
 - **C , Per-project model overrides**: `scripts/tdd/agent-models.ts` (`readRecommendedModels()` parses def frontmatter = single source; `resolveModelForRole()` = override ?? recommended ?? inherit); `.lakebase/agent-config.json` + schema written by `scaffoldStaticAll`; `lakebase-create-project` asks the HIL (interactive prompt + `--agent-model <role>=<model>` flags + `--json-input`), defaulting to recommended.
 - **D , State machine**: add `planning` (before `discovery`) and `deploy` (after `implementation`/`review`, before `shipped`) to the TDD phase enum (`scripts/tdd/schemas/workflow-state.schema.json`); update helpers/guards/tests. SCM state machine unchanged (`/plan` is pre-claim, `/deploy` is within `feature-claimed`).
 - **E , Commands delegate to named subagents**: `/plan`, `/design`, `/build`, `/deploy` bodies hand each phase to the named role agent, read the resolved per-role model, record the state-machine transition, keep gates HITL. Update `SKILL.md`.
-- **F , Smoke parity**: drive `claude -p "/plan ..."` and `claude -p "/deploy ..."` through `run_claude_with_gate_drain` instead of emulating them; Human Proxy stays the headless supply/approve; update `feip-7422-smoke.test.ts`.
+- **F , Smoke parity**: drive `claude -p "/plan ..."` and `claude -p "/deploy ..."` through `run_claude_with_gate_drain` instead of emulating them; Human Proxy stays the headless supply/approve; update `tdd-workflow-smoke.test.ts`.
 - **G , Release substrate audit (gated)**: audit `lakebase-release-workflows` + `lakebase-scm-workflows` for Release Engineer gaps (local deploy/verify today; remote/release/rollback next); surface the list; file JIRA only after explicit go.
 - **H , Conformance + docs + suite**: a vitest asserting each role def has required frontmatter (name, description non-empty + <=1536 chars, recommended model), a relay header, a non-empty system prompt, and that the role set matches the `AgentRole` enum; update `spec-format.md` + smoke README; full typecheck + vitest.
 
@@ -73,7 +73,7 @@ state machine. Writes no spec / code / test / deploy.
 - State machine: `scripts/tdd/schemas/workflow-state.schema.json` (+ helpers/tests)
 - Model config: new `scripts/tdd/agent-models.ts` + `scripts/tdd/schemas/agent-models.schema.json`; `scripts/lakebase/create-project.ts` + `create-project.cli.ts` + `scripts/lakebase/scaffold.ts`
 - Commands: `templates/project/common/.claude/commands/{plan,design,build,deploy}.md`; `skills/lakebase-tdd-workflows/SKILL.md`
-- Smoke: `examples/feip-7422-smoke/orchestrator/run-smoke.sh`, `tests/bdd/feip-7422-smoke.test.ts`
+- Smoke: `examples/tdd-workflow-smoke/orchestrator/run-smoke.sh`, `tests/bdd/tdd-workflow-smoke.test.ts`
 - Release skill (compose + audit): `skills/lakebase-release-workflows/`
 
 ## Reuse (do not reinvent)
@@ -108,13 +108,13 @@ What the Release Engineer needs, vs what the substrate ships today:
 **Gaps (the Release Engineer cannot yet ship to a remote target end to end)**
 1. `lakebase-tdd-deploy` implements only `type: local`; `databricks-app` is recognized but refused. No routing from a `databricks-app` deploy-target to the existing `deploy-app-*` primitives.
 2. The `deploy-app-*` + `deploy-rollback` modules are not exposed as bins / not composed into a single "deploy this feature to its remote target" surface the Release Engineer can call.
-3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (FEIP-7059 roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
+3. The release-orchestrator primitives the methodology expects (`cutRC`, `regressionTest`, `migrate`, `release`) are documented as future work (roadmap), not shipped. So a full RC -> regression -> backup -> migrate -> app-deploy release is still the manual procedure + `cut-backup` + `merge.yml`.
 4. No rollback command surface wired for the Release Engineer (the module exists; no `/deploy --rollback` or bin).
 
-**Filed tickets (children of FEIP-7059):**
-- **FEIP-7560** , route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives (remote-deploy surface for the Release Engineer).
-- **FEIP-7561** , expose `deploy-rollback` as a Release Engineer rollback surface.
-- **FEIP-7562** , ship the release orchestrator primitives (`cutRC` / `regressionTest` / `migrate` / `release`).
+**Filed tickets (children of):**
+- route `lakebase-tdd-deploy --target <databricks-app>` to the existing deploy-app-* primitives (remote-deploy surface for the Release Engineer).
+- expose `deploy-rollback` as a Release Engineer rollback surface.
+- ship the release orchestrator primitives (`cutRC` / `regressionTest` / `migrate` / `release`).
 
 ## Gates
 - No version bump / push / PR unless explicitly asked.

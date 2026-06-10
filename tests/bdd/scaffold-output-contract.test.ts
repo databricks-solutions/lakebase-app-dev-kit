@@ -34,7 +34,7 @@ describe("scaffold output contract: alembic env.py", () => {
 
 describe("scaffold output contract: connect-main-branch.sh", () => {
   it("delegates to the kit's lakebase-branch sync-env CLI (no inline substrate logic)", () => {
-    // FEIP-7494: scaffolded shells that previously duplicated substrate
+    // scaffolded shells that previously duplicated substrate
     // logic now thin-wrap the kit's TS bins. connect-main-branch.sh
     // must invoke lakebase-branch sync-env --branch main; the leaf
     // resolution lives in the TS sync-env handler so the shell cannot

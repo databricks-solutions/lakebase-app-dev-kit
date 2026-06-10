@@ -1,5 +1,5 @@
 // AlembicAdapter: SchemaMigrationAdapter implementation for Python projects
-// using Alembic. FEIP-7210 slice 3.
+// using Alembic. slice 3.
 //
 // Wraps the existing scripts/lakebase/schema-migrate-runners/alembic.ts runner
 // in the cross-tool adapter contract from ADR-0005. The runner's

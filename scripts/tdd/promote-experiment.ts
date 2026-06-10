@@ -15,7 +15,7 @@ export interface PromoteArgs {
   /**
    * Forwarded to archiveExperiment for each loser. When omitted, the
    * loser's Lakebase branch is left in place (dir + outcomes marker
-   * still get applied). FEIP-7214: callers that want full branch
+   * still get applied). callers that want full branch
    * teardown wire this; promote stays pure-substrate when the callback
    * is absent.
    */
@@ -63,7 +63,7 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
   const winnerOutcome = readOutcomes(tddDir, featureId, storyId, winnerSlug);
   writeOutcomes(tddDir, featureId, storyId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
 
-  // Archive each loser via the lifecycle primitive (FEIP-7214). Each
+  // Archive each loser via the lifecycle primitive. Each
   // archive is atomic + HITL-gated; promote inherits the HITL approval
   // for the whole flow by passing hitlApproved: true to each call.
   const archivedSlugs: string[] = [];

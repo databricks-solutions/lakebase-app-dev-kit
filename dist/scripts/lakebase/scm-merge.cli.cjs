@@ -1022,7 +1022,7 @@ function parseArgs(argv) {
   }
   return out;
 }
-var HELP = `lakebase-scm-merge (FEIP-7458 phase B+)
+var HELP = `lakebase-scm-merge (phase B+)
 
 Transition ci-green -> merged: GitHub merge (squash by default),
 remote branch delete, Lakebase feature branch delete, local HEAD

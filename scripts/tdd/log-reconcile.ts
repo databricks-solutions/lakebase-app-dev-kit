@@ -1,4 +1,4 @@
-// FEIP-7510/7422: make design-phase observability STRUCTURAL, not dependent on
+///7422: make design-phase observability STRUCTURAL, not dependent on
 // each role model remembering to emit `lakebase-tdd-log` events.
 //
 // Per-role logging is prose-instructed, so a role can do the substantive work
@@ -78,7 +78,7 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
 function alreadyLogged(events: AgentLogEvent[], relPath: string): boolean {
   return events.some((e) => {
     if (e.event !== "artifact.written") return false;
-    const p = e.data?.path;
+    const p = e.metadata?.path;
     if (typeof p !== "string") return false;
     return p === relPath || p.endsWith(`/${relPath}`) || (p.includes("/") && relPath.endsWith(p));
   });
@@ -100,9 +100,8 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         role: art.role,
         level: "info",
         event: "artifact.written",
-        message: art.message,
         feature_id: opts.featureId,
-        data: { path: art.path, reconciled: true },
+        slots: { artifact: art.message, summary: "present on disk (reconciled)", path: art.path, reconciled: true },
       },
       { tddDir, now: opts.now },
     );

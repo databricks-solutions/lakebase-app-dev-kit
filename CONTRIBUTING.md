@@ -13,7 +13,7 @@ Thanks for your interest in contributing to `lakebase-app-dev-kit`. This is a [D
 
 ### Additional tooling unlocked by live tiers
 
-- **GitHub CLI (`gh`)** authenticated to your GitHub account, for the FEIP-7138 self-hosted-runner suite. The live driver defaults to running it; pass `--no-github-runner` to opt out (see "Live testing" below).
+- **GitHub CLI (`gh`)** authenticated to your GitHub account, for the self-hosted-runner suite. The live driver defaults to running it; pass `--no-github-runner` to opt out (see "Live testing" below).
 - **JDK 17+ and the Flyway CLI** for `migrate-live-flyway.test.ts`. The live driver downloads Flyway Community CLI from `${LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL}` on first run if `flyway` is not already on PATH; pre-installing via `brew install flyway` is fine.
 - A Python venv with **alembic + sqlalchemy + psycopg2-binary** for `migrate-live.test.ts`. The live driver auto-provisions `.venv-live-tests/` on first run.
 - **Node.js** with `npm` and `npx` on PATH for `migrate-live-knex.test.ts`. The suite self-installs `knex` + `pg` into a scratch project directory in its `beforeAll()`; no script-level provisioning needed.
@@ -101,7 +101,7 @@ Runs all of `tests/bdd/` with the live-gated suites self-skipping when their `LA
 
 ### Tier 2 – Live integration (requires your own Databricks workspace)
 
-The live tier hits a real Databricks workspace, creates real Lakebase projects, exercises Alembic + Flyway, optionally creates a real GitHub repo + self-hosted runner (FEIP-7138), and optionally deploys a real Databricks App. Two runners with different scope:
+The live tier hits a real Databricks workspace, creates real Lakebase projects, exercises Alembic + Flyway, optionally creates a real GitHub repo + self-hosted runner, and optionally deploys a real Databricks App. Two runners with different scope:
 
 #### `scripts/run-all-live-tests.sh` (recommended, full suite)
 
@@ -115,7 +115,7 @@ Defaults to enabled coverage for every live-gated suite. Opt-out flags:
 
 | Flag | Disables |
 |---|---|
-| `--no-github-runner` | FEIP-7138 self-hosted-runner suite (skip if no `gh` auth) |
+| `--no-github-runner` | self-hosted-runner suite (skip if no `gh` auth) |
 | `--no-migrate-tools` | Auto-provisioning of `.venv-live-tests/` (alembic) + Flyway CLI download |
 
 Configuration flags (defaults shown in `--help`):
@@ -154,12 +154,49 @@ If your network blocks Maven Central (where the Flyway CLI is hosted), install F
 ```bash
 databricks postgres delete-project <projectId>
 databricks apps delete <appName>     # if a slice 3 deploy test was interrupted
-gh repo delete <owner>/detect-language-verify-<ts> --yes   # if FEIP-7138 was interrupted
+gh repo delete <owner>/detect-language-verify-<ts> --yes   # if the self-hosted-runner suite was interrupted
 ```
 
 Project names always have a timestamp suffix so re-runs and concurrent runs do not collide.
 
-Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTANCE` + `LAKEBASE_TEST_BRANCH` activates the read-only live tests in any `vitest run` invocation; `LAKEBASE_TEST_INITIALIZR=1` enables the Spring Initializr live fetch; `LAKEBASE_TEST_PARENT` configures the parent for diff suites; `LAKEBASE_TEST_E2E_GITHUB=1` enables the FEIP-7138 self-hosted-runner suite.
+Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTANCE` + `LAKEBASE_TEST_BRANCH` activates the read-only live tests in any `vitest run` invocation; `LAKEBASE_TEST_INITIALIZR=1` enables the Spring Initializr live fetch; `LAKEBASE_TEST_PARENT` configures the parent for diff suites; `LAKEBASE_TEST_E2E_GITHUB=1` enables the self-hosted-runner suite.
+
+### TDD-workflow smoke
+
+The end-to-end TDD-workflow smoke lives in `examples/tdd-workflow-smoke/`. It scaffolds a real bug-tracker project and drives it through two sprints (`/plan` -> `/design` -> `/build` -> `/deploy` with the HITL gates played by the Human Proxy). It runs against **your own** Databricks workspace and GitHub owner, not anyone else's.
+
+**Configure** , copy the template and fill in your values:
+
+```bash
+cp examples/tdd-workflow-smoke/.env.example ~/lakebase-smoke.env
+# edit ~/lakebase-smoke.env
+set -a; source ~/lakebase-smoke.env; set +a
+```
+
+Required env vars:
+
+| Var | Purpose |
+|---|---|
+| `DATABRICKS_HOST` | Your workspace URL (or set `DATABRICKS_CONFIG_PROFILE` + have `~/.databrickscfg`). |
+| `GITHUB_OWNER` | Your sandbox GitHub user or org; the smoke creates + uses a repo under it. |
+
+Optional: `LAKEBASE_KIT_REF` (pin the kit to a branch/tag/sha instead of this checkout's built `dist/`), `LAKEBASE_KIT_DIR` (point `lk` at a specific kit install), `LAKEBASE_TDD_AUTO_CONTINUE=1` (auto-answer the pause-at-handoff gates in CI).
+
+**Run** , the orchestrator has four scripts in `examples/tdd-workflow-smoke/orchestrator/`:
+
+```bash
+# 1. (maintainers) rebuild + push + warm the kit cache; only needed to validate a published ref
+examples/tdd-workflow-smoke/orchestrator/rebuild-push-warm.sh
+
+# 2. end-to-end against your workspace (--tiers 2 is required)
+examples/tdd-workflow-smoke/orchestrator/run-smoke.sh --tiers 2
+
+# pause just before the Navigator / Release Engineer handoffs (replay-fed)
+examples/tdd-workflow-smoke/orchestrator/run-to-navigator.sh --tiers 2
+examples/tdd-workflow-smoke/orchestrator/run-to-release-engineer.sh --tiers 2
+```
+
+By default the smoke runs your local working tree's `dist/`. Pass `--kit-ref <ref>` to validate a published branch/tag instead. The scaffold target defaults to `~/code/tdd-workflow-smoke/`; override with `--project-dir <dir>`. See `examples/tdd-workflow-smoke/README.md` for the full script reference.
 
 ### When to run which tier
 
@@ -171,6 +208,7 @@ Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTAN
 | `scripts/lakebase/*` (branch lifecycle, endpoints, migrate) | **Tier 2 mandatory** |
 | MCP / Foundry tool definitions | Tier 1 + `python3 scripts/openai-foundry.py validate` |
 | Vendored skills (`skills/databricks-*`) | Pull via `npm run sync:devhub` only; do not hand-edit |
+| TDD orchestrator / role agents / scaffolded commands | Tier 1 + the [TDD-workflow smoke](#tdd-workflow-smoke) (Tier 2) |
 
 ## Pull requests
 
@@ -187,8 +225,8 @@ Individual gating env vars also light up subsets directly: `LAKEBASE_TEST_INSTAN
 The package is consumed via git URL (`github:databricks-solutions/lakebase-app-dev-kit#<tag>`); npm publish is intentionally deferred (org/scope/runner questions). Cuts are tag-based:
 
 1. Land the change on `main` via PR.
-2. Bump `package.json` version (alpha series for the v0.3.0 line: `0.3.0-alpha.<N+1>`).
-3. Tag the bump commit: `git tag v0.3.0-alpha.<N> && git push origin v0.3.0-alpha.<N>`.
+2. Bump `package.json` version on the current pre-release line (the v0.3.0 line graduated from alpha to beta: `0.3.0-beta.<N+1>`; see `CHANGELOG.md` for the active series).
+3. Tag the bump commit: `git tag v0.3.0-beta.<N> && git push origin v0.3.0-beta.<N>`.
 4. Consumers update their git URL pin to the new tag.
 
 Tags are append-only by default; only force-move a tag when you've just merged a follow-up that should clearly ship under the same version (rare).

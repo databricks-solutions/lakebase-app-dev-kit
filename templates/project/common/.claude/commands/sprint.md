@@ -45,7 +45,7 @@ for that gate), then re-run `/sprint <name>` to RESUME: planning and already-don
 features are idempotent no-ops, and the in-progress feature continues past the
 now-approved gate. Headless (`--gates proxy`, `LAKEBASE_TDD_HUMAN_PROXY=1`): the
 Human Proxy answers every gate and the whole sprint runs end to end (what the
-FEIP-7422 smoke exercises).
+TDD-workflow smoke exercises).
 
 ## Re-invoking each cycle
 

@@ -1,7 +1,7 @@
-// FEIP-7142: regression check for the bin/tsup-entry drift that landed
+// regression check for the bin/tsup-entry drift that landed
 // PR #34's broken alpha.20 cut.
 //
-// PR #34 (FEIP-7096 PR3) added the `lakebase-detect-language` entry to
+// PR #34 (PR3) added the `lakebase-detect-language` entry to
 // package.json's `bin` map and the source file at
 // `scripts/lakebase/detect-language.cli.ts`, but did NOT add the
 // matching entry to `tsup.config.ts`. Build emitted nothing for that
@@ -46,7 +46,7 @@ function parseTsupEntries(): Map<string, string> {
   return entries;
 }
 
-describe("build/bin coverage (FEIP-7142)", () => {
+describe("build/bin coverage", () => {
   const pkg = readJson<{ bin?: Record<string, string> }>(
     path.join(REPO_ROOT, "package.json"),
   );

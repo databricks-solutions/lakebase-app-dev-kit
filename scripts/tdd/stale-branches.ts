@@ -1,4 +1,4 @@
-// FEIP-7566: surface stale spikes and experiments as such (the PO asked that
+// surface stale spikes and experiments as such (the PO asked that
 // scm-doctor name them distinctly). Hermetic: classifies from the .tdd records
 // alone, no live Lakebase calls.
 //

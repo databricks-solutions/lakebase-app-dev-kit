@@ -1,4 +1,4 @@
-// lakebase-doctor health checks (FEIP-7330, P0.4). Mirrors the
+// lakebase-doctor health checks (P0.4). Mirrors the
 // extension's Health Check at the CLI / agent boundary so headless
 // users can run a single "what's wrong?" command before tail-chasing
 // .env drift / token-scope issues by hand.
@@ -364,7 +364,7 @@ function checkWorkflowDrift(projectDir: string): CheckResult {
       status: "warn",
       message: `Scaffolded workflows drift from kit: ${drifted} drifted, ${missing} missing`,
       detail: { files: report.files.map((f) => ({ name: f.name, status: f.status })) },
-      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until FEIP-7139 updateWorkflows lands.",
+      hint: "Inspect via the lakebase_workflow_drift MCP tool (or detectWorkflowDrift import). Refresh manually until updateWorkflows lands.",
     };
   } catch (err) {
     return {

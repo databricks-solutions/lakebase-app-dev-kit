@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FEIP-7565: the orchestrator's interface to the per-story build queue +
+// the orchestrator's interface to the per-story build queue +
 // per-story status (.tdd/features/<F>/pipeline.json). The design lane sets
 // status as it streams; on a per-story gate approval the orchestrator enqueues
 // the story; the single build lane dispatches the head and completes it.

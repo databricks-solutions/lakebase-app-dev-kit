@@ -1,4 +1,4 @@
-// FEIP-7436: TTL auto-recovery for createBranch. Workspaces cap branch
+// TTL auto-recovery for createBranch. Workspaces cap branch
 // expiration policy below the kit's 30-day default; the kit now catches
 // the cap rejection, probes the project's history_retention_duration,
 // and retries with a clamped TTL.
@@ -23,7 +23,7 @@ import {
 } from "../../scripts/lakebase/branch-utils.js";
 import { findHistoryRetentionDuration } from "../../scripts/lakebase/lakebase-project.js";
 
-describe("parseLakebaseTtl (FEIP-7436)", () => {
+describe("parseLakebaseTtl", () => {
   it("parses '<seconds>s' to integer seconds", () => {
     expect(parseLakebaseTtl("604800s")).toBe(604800);
     expect(parseLakebaseTtl("2592000s")).toBe(2592000);
@@ -43,7 +43,7 @@ describe("parseLakebaseTtl (FEIP-7436)", () => {
   });
 });
 
-describe("minLakebaseTtl (FEIP-7436)", () => {
+describe("minLakebaseTtl", () => {
   it("returns the smaller of two parseable TTLs", () => {
     expect(minLakebaseTtl("2592000s", "604800s")).toBe("604800s");
     expect(minLakebaseTtl("604800s", "2592000s")).toBe("604800s");
@@ -60,7 +60,7 @@ describe("minLakebaseTtl (FEIP-7436)", () => {
   });
 });
 
-describe("findHistoryRetentionDuration (FEIP-7436)", () => {
+describe("findHistoryRetentionDuration", () => {
   it("reads protobuf-style snake_case history_retention_duration", () => {
     expect(findHistoryRetentionDuration({ history_retention_duration: "604800s" })).toBe(
       "604800s",
@@ -191,7 +191,7 @@ afterEach(() => {
   stderrSpy.mockRestore();
 });
 
-describe("createBranch – TTL auto-recovery (FEIP-7436)", () => {
+describe("createBranch – TTL auto-recovery", () => {
   it("retries with a retention-clamped TTL when workspace rejects the original", async () => {
     // Parent lookup: 'staging' exists. Target lookup: returns undefined
     // on the idempotency check (pre-create), then a READY branch on the

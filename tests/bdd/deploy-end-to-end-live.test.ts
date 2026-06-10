@@ -1,4 +1,4 @@
-// End-to-end live test for FEIP-7130 slice 2's generateAppYaml +
+// End-to-end live test for slice 2's generateAppYaml +
 // validateApp primitives.
 //
 // Composes the slice 2 primitives against a real Databricks workspace.
@@ -77,7 +77,7 @@ afterAll(() => {
 });
 
 describe.skipIf(!RUN_LIVE)(
-  "deploy slice 2 end-to-end (live, FEIP-7130)",
+  "deploy slice 2 end-to-end (live)",
   () => {
     it("generated app.yaml passes `databricks apps validate`", async () => {
       const target: DeployTarget = {

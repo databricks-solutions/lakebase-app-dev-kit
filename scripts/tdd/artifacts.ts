@@ -8,13 +8,13 @@
 //
 // The orchestrator writes here after every cycle (Playwright traces, vitest
 // junit output, screenshots, repro scripts). The comparison-report renderer
-// (FEIP-7208) reads listings via listArtifacts to surface what's available
+// reads listings via listArtifacts to surface what's available
 // when the PO is deciding promote vs synthesize.
 //
 // Gitignored by default in scaffolded projects: artifacts can be large and
 // rebuilding them from logs is cheap. The scaffold step that writes the
 // project's .gitignore is owned by lakebase-create-project + slice 4 of
-// FEIP-7092 (orchestration), not this module.
+// (orchestration), not this module.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { dirname, join, relative } from "path";

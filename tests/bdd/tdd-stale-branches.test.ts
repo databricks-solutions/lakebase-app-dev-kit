@@ -1,4 +1,4 @@
-// FEIP-7566: stale spike vs experiment classification for scm-doctor. Hermetic
+// stale spike vs experiment classification for scm-doctor. Hermetic
 // (.tdd records only).
 
 import { describe, it, expect, afterEach } from "vitest";

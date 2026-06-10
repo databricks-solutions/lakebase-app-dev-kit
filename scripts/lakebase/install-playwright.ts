@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 1 primitive: bootstrap Playwright in a project so
+// Phase 1 primitive: bootstrap Playwright in a project so
 // [E2E]-tagged test-list rows have a runner. Three responsibilities:
 //
 //   - writePlaywrightTemplates: drop playwright.config.ts +
@@ -159,7 +159,7 @@ export interface InstallPlaywrightResult {
 
 /**
  * End-to-end bootstrap: drop templates, install the npm package, install
- * chromium, verify. The scaffolder (FEIP-7094 Phase 2) calls this once
+ * chromium, verify. The scaffolder (phase 2) calls this once
  * when --enable-e2e is set; the human-facing path is `npx
  * @databricks-solutions/lakebase-app-dev-kit install-playwright`.
  */

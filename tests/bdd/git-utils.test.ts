@@ -41,7 +41,7 @@ describe("gitInit", () => {
 });
 
 // The standalone `commit` export from commit-push.ts was removed in
-// FEIP-7324 in favor of the more general primitives in scripts/git/commits.ts.
+// in favor of the more general primitives in scripts/git/commits.ts.
 // commitAll covers the "stage everything + commit" behavior these tests
 // previously exercised via the old commit-push.commit shim.
 describe("commitAll (project-scaffold stage-and-commit equivalent)", () => {

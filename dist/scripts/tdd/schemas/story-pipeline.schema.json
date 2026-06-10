@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/story-pipeline.schema.json",
   "title": "StoryPipeline",
-  "description": "Per-feature per-story pipeline state for the streaming design->build workflow (FEIP-7565). The design lane runs ahead, moving each story designing -> awaiting-gate -> ready; the single build lane consumes the FIFO build_queue one story at a time (build_active), then -> done. The orchestrator owns this; persisted as .tdd/features/<F>/pipeline.json. Exactly one story builds at a time.",
+  "description": "Per-feature per-story pipeline state for the streaming design->build workflow. The design lane runs ahead, moving each story designing -> awaiting-gate -> ready; the single build lane consumes the FIFO build_queue one story at a time (build_active), then -> done. The orchestrator owns this; persisted as .tdd/features/<F>/pipeline.json. Exactly one story builds at a time.",
   "type": "object",
   "required": ["version", "feature_id", "stories", "build_queue", "build_active"],
   "properties": {
@@ -25,7 +25,7 @@
           },
           "gate": {
             "type": "object",
-            "description": "The per-story spec gate (FEIP-7565 phase 2b). Isolated here in pipeline.json, NOT in the per-feature gates.json. Present once the story has been surfaced for review; an approved gate is what authorizes the awaiting-gate -> ready transition.",
+            "description": "The per-story spec gate (phase 2b). Isolated here in pipeline.json, NOT in the per-feature gates.json. Present once the story has been surfaced for review; an approved gate is what authorizes the awaiting-gate -> ready transition.",
             "required": ["status", "history"],
             "properties": {
               "status": {
@@ -59,7 +59,7 @@
           },
           "experiment": {
             "type": "object",
-            "description": "The experiment branch the story is built on (FEIP-7566): an ephemeral paired Lakebase branch forked from feature HEAD. On accept it is merged into the feature branch; on discard/revise it is torn down.",
+            "description": "The experiment branch the story is built on: an ephemeral paired Lakebase branch forked from feature HEAD. On accept it is merged into the feature branch; on discard/revise it is torn down.",
             "required": ["slug", "branch", "parent", "n", "status"],
             "properties": {
               "slug": { "type": "string" },
@@ -79,7 +79,7 @@
           },
           "acceptance": {
             "type": "object",
-            "description": "The PO's post-build accept/discard/revise decision (FEIP-7566), distinct from the pre-build spec gate.",
+            "description": "The PO's post-build accept/discard/revise decision, distinct from the pre-build spec gate.",
             "required": ["decision", "history"],
             "properties": {
               "decision": {

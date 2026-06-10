@@ -3,7 +3,7 @@ import { execFileSync, type SpawnSyncReturns } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-// Hermetic shell-syntax check (FEIP-7494 layer A): every scaffolded
+// Hermetic shell-syntax check (layer A): every scaffolded
 // .sh file under templates/project/common/scripts/ must parse cleanly
 // under `bash -n`. Catches typos, broken substitutions, unclosed
 // heredocs, and copy-paste errors in thin-wrapped shells without

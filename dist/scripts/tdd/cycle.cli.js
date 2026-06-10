@@ -6761,29 +6761,61 @@ function writeTestListMarkdown(tddDir, featureId) {
   return file;
 }
 function acIdsInStoryDir(storyDir2) {
-  const acsDir2 = join2(storyDir2, "acs");
-  if (!existsSync2(acsDir2)) return [];
-  return readdirSync2(acsDir2).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length)).sort();
+  const dir = join2(storyDir2, "acs");
+  if (!existsSync2(dir)) return [];
+  const out = [];
+  for (const f of readdirSync2(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const base = f.slice(0, -".json".length);
+    try {
+      const obj = JSON.parse(readFileSync2(join2(dir, f), "utf8"));
+      if (obj && typeof obj.id === "string" && obj.id === base) out.push(base);
+    } catch {
+    }
+  }
+  return out.sort();
 }
 function scopeToStory(list, storyId, acIds) {
   const want = new Set(acIds);
+  const scoped = list.items.filter((it) => want.has(it.ac_id));
+  const firstSeen = /* @__PURE__ */ new Map();
+  scoped.forEach((it, i) => {
+    if (!firstSeen.has(it.ac_id)) firstSeen.set(it.ac_id, i);
+  });
+  const grouped = scoped.map((it, i) => ({ it, i })).sort((a, b) => firstSeen.get(a.it.ac_id) - firstSeen.get(b.it.ac_id) || a.i - b.i).map((x) => x.it);
   return {
     feature_id: list.feature_id,
     story_id: storyId,
     ...list.ordered_for ? { ordered_for: list.ordered_for } : {},
-    items: list.items.filter((it) => want.has(it.ac_id))
+    items: grouped
   };
 }
 function writeStoryTestList(tddDir, featureId, storyId) {
   const storyDir2 = findStoryDir(tddDir, featureId, storyId);
   if (!storyDir2) return null;
-  let master;
+  const storyAcIds = acIdsInStoryDir(storyDir2);
+  let master = null;
   try {
     master = readMasterTestList(tddDir, featureId);
   } catch {
-    return null;
+    master = null;
   }
-  const scoped = scopeToStory(master, storyId, acIdsInStoryDir(storyDir2));
+  const authored = readStoryTestList(tddDir, featureId, storyId);
+  if (authored?.items?.length) {
+    const baseList = master ?? {
+      feature_id: featureId,
+      ...authored.ordered_for ? { ordered_for: authored.ordered_for } : {},
+      items: []
+    };
+    const haveIds = new Set(baseList.items.map((i) => i.id));
+    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
+    if (additions.length > 0 || master === null) {
+      master = { ...baseList, items: [...baseList.items, ...additions] };
+      writeMasterTestList(tddDir, master);
+    }
+  }
+  if (!master) return null;
+  const scoped = scopeToStory(master, storyId, storyAcIds);
   const file = storyTestListJson(tddDir, featureId, storyId);
   mkdirSync2(dirname(file), { recursive: true });
   writeFileSync2(file, JSON.stringify(scoped, null, 2) + "\n");
@@ -6820,6 +6852,11 @@ function markTestItemGreen(tddDir, featureId, storyId, testId) {
     }
   }
   return { found: true, acId, acPassing };
+}
+function readStoryTestList(tddDir, featureId, storyId) {
+  const file = storyTestListJson(tddDir, featureId, storyId);
+  if (!existsSync2(file)) return null;
+  return JSON.parse(readFileSync2(file, "utf8"));
 }
 
 // scripts/tdd/experiment.ts
@@ -7124,6 +7161,75 @@ function formatSchemaErrors(validate) {
   });
 }
 
+// scripts/tdd/agent-log-events.ts
+init_esm_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{test_id}} [{{ac}}]: {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
 // scripts/tdd/agent-log.ts
 function logFilePath(tddDir) {
   return join8(tddDir, "agent-log.jsonl");
@@ -7131,7 +7237,30 @@ function logFilePath(tddDir) {
 function emitAgentLogEvent(input, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const event = { ...input, ts: input.ts ?? now().toISOString() };
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
@@ -7194,10 +7323,9 @@ function beginCycle(args) {
     role: "navigator",
     level: "info",
     event: "cycle.red",
-    message: `${args.test_id} RED: ${args.test_description}`,
     feature_id: args.feature_id,
     cycle_id,
-    data: { test_id: args.test_id, ac_id: args.ac_id, layer }
+    slots: { test_id: args.test_id, ac: args.ac_id, asserts: args.test_description, layer }
   });
   return artifact;
 }
@@ -7243,10 +7371,9 @@ function markGreen(scope, cycleId, driverChanges) {
     role: "driver",
     level: "info",
     event: "cycle.green",
-    message: `${a.test_id} GREEN${driverChanges ? ": " + driverChanges : ""}`,
     feature_id: scope.feature_id,
     cycle_id: cycleId,
-    data: { test_id: a.test_id }
+    slots: { test_id: a.test_id, ac: a.ac_id ?? "unknown", change: driverChanges ?? "minimal honest code" }
   });
   return a;
 }
@@ -7398,6 +7525,12 @@ function stopLocal(projectDir, targetName) {
 }
 
 // scripts/tdd/cycle-record.ts
+function logCycleEvent2(tddDir, event) {
+  try {
+    emitAgentLogEvent(event, { tddDir });
+  } catch {
+  }
+}
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
   if (!existsSync12(file)) {
@@ -7570,6 +7703,18 @@ function reviewAc(tddDir, featureId, story, acId) {
       2
     ) + "\n"
   );
+  logCycleEvent2(tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.review",
+    feature_id: featureId,
+    slots: {
+      ac: acId,
+      refactor: refactorRequested,
+      rationale: verdict.notes ?? (refactorRequested ? "refactor requested" : "looks good"),
+      story
+    }
+  });
   return { reviewed: true, refactorRequested };
 }
 function refactorAc(tddDir, featureId, story, acId) {
@@ -7577,6 +7722,14 @@ function refactorAc(tddDir, featureId, story, acId) {
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync8(dirname4(file), { recursive: true });
   writeFileSync10(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0 ? `addressed: ${prior.refactor_notes}` : "structure improved";
+  logCycleEvent2(tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    feature_id: featureId,
+    slots: { ac: acId, change, story }
+  });
 }
 
 // scripts/tdd/cycle.cli.ts

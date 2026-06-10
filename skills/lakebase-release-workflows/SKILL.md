@@ -1,7 +1,7 @@
 ---
 name: lakebase-release-workflows
 description: "Opinionated branching + release methodology for Lakebase-paired projects. Use when designing a project's branch layout, cutting a release candidate, promoting between long-running tiers, rolling back, or asking 'where should this work happen?' Encodes the prod / staging / {feature,test,uat,perf} default and the N-tier-capable cut-RC / regression-test / cut-backup / migrate release flow."
-compatibility: Requires the substrate's [lakebase-scm-workflows](../lakebase-scm-workflows/SKILL.md) skill for branch-pairing primitives, plus the substrate's migrate primitives (FEIP-7091).
+compatibility: Requires the substrate's [lakebase-scm-workflows](../lakebase-scm-workflows/SKILL.md) skill for branch-pairing primitives, plus the substrate's migrate primitives.
 metadata:
   version: "0.2.0"
 parent: databricks-lakebase
@@ -94,7 +94,7 @@ Load [references/branching-and-release-methodology.md](references/branching-and-
 
 ## Primitives this skill expects (future work)
 
-The substrate doesn't yet ship the release orchestrator. These primitives are planned (FEIP-7059 roadmap). All of them are parameterized over the from/to tier pair so the same primitive serves every adjacent pair in any chain length:
+The substrate doesn't yet ship the release orchestrator. These primitives are planned (roadmap). All of them are parameterized over the from/to tier pair so the same primitive serves every adjacent pair in any chain length:
 
 - `bootstrap-branch-convention({chain, workingTypeTargets})` - given a fresh project, creates the configured long-running chain (default `[staging, prod]`) plus the working-branch types, all from prod, and writes parent-pair metadata + the type → target-tier mapping.
 - `cutRC({from, to, releaseId})` - branches the release candidate off current `to` and merges `from` in.

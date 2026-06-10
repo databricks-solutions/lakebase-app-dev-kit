@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// FEIP-7566: the experiment-branch lifecycle CLI for a per-story experiment.
+// the experiment-branch lifecycle CLI for a per-story experiment.
 // Wires the real substrate (git merge, schema migrate, paired-branch teardown)
 // into the tested orchestration (experiment-lifecycle.ts) and records the
 // pipeline-state transition (story-pipeline.ts).
@@ -37,7 +37,20 @@ import {
 import { mergePaired } from "../lakebase/paired-branch";
 import { applySchemaMigrations } from "../lakebase/schema-migrate";
 import { parseExperimentArgs, validateExperimentArgs } from "./experiment-args";
+import { emitAgentLogEvent } from "./agent-log";
 import { join } from "path";
+
+/** Best-effort experiment-lifecycle event to the central log. The discard/revise
+ *  verbs have no deterministic driver action (they are HIL acceptance decisions
+ *  applied via this CLI), so this is the substrate home for their events , the
+ *  sibling of experiment.cut/accepted, which the orchestrator emits. */
+function logExperimentEvent(tddDir: string, event: "experiment.discarded" | "experiment.revised", story: string, reason: string): void {
+  try {
+    emitAgentLogEvent({ role: "orchestrator", level: "info", event, slots: { story, reason } }, { tddDir });
+  } catch {
+    // swallow: logging never blocks the lifecycle transition
+  }
+}
 
 function usage(msg: string): number {
   process.stderr.write(
@@ -138,6 +151,7 @@ async function main(): Promise<number> {
         discardStory(p, story, { approver, at, reason });
       }
       writePipeline(tddDir, p);
+      logExperimentEvent(tddDir, args.revise ? "experiment.revised" : "experiment.discarded", story, reason);
       process.stdout.write(
         `${args.revise ? "revised" : "discarded"} ${slug}; experiment torn down; story ${story} ${args.revise ? "-> designing" : "out of sprint"}\n`,
       );

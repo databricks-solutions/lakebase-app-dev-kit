@@ -1,4 +1,4 @@
-// FEIP-7510: the role agent definitions are scaffolded into the project's
+// the role agent definitions are scaffolded into the project's
 // .claude/agents/ so Claude Code can discover + spawn them (the deterministic
 // driver spawns them; there is no scrum-master agent). Hermetic: real kit
 // skills tree + tmpdir; no shell-outs.

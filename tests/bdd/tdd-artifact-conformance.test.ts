@@ -1,4 +1,4 @@
-// FEIP-7508 Layer 2 (conformance): "did this artifact adhere to the format
+// Layer 2 (conformance): "did this artifact adhere to the format
 // expected?" Layer 1 (existence) is the human-proxy no-fabrication fix;
 // Layer 3 (signoff) is approveGate. This is the missing middle: a gate must
 // not approve an artifact that exists but does not conform to its declared
@@ -263,6 +263,8 @@ describe("checkArtifactConformance: UX Designer artifacts (UI projects)", () => 
     "# Style Guide",
     "## Design Philosophy",
     "Clarity over decoration.",
+    "## UI Framework and Templating",
+    "Jinja, testable, stable selectors.",
     "## Typography",
     "DM Sans.",
     "## Color Palette",

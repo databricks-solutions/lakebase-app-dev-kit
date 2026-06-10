@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
-// FEIP-7494 parity guard: scaffolded shells under templates/project/
+// parity guard: scaffolded shells under templates/project/
 // must NOT duplicate substrate logic. The shells that need to talk to
 // Lakebase delegate to the kit's TS CLI bins (`lakebase-branch`,
 // `lakebase-schema-diff`, `lakebase-ci-resolve-branch`, etc.). Any shell
@@ -29,10 +29,10 @@ const SCRIPTS_ROOT = path.resolve(
 // entry must have a comment in the shell explaining why parity does
 // not apply, so a future reviewer can audit.
 //
-// post-checkout.sh: FEIP-7458 Phase C orphan-refusal logic. The TS
+// post-checkout.sh: Phase C orphan-refusal logic. The TS
 //   substrate's `checkout-paired` CLI does not yet expose
 //   `--no-auto-create`, so the hook keeps its current shape until that
-//   flag lands. Tracked as a follow-up in the FEIP-7494 PR.
+//   flag lands. Tracked as a follow-up in the PR.
 const PARITY_ALLOWLIST = new Set<string>([
   "common/scripts/post-checkout.sh",
 ]);
@@ -76,7 +76,7 @@ const FORBIDDEN: ParityCheck[] = [
   },
 ];
 
-describe("scaffolded shells: FEIP-7494 substrate parity", () => {
+describe("scaffolded shells: substrate parity", () => {
   for (const shell of shells) {
     const rel = path.relative(SCRIPTS_ROOT, shell);
     const isAllowlisted = PARITY_ALLOWLIST.has(rel);
@@ -103,7 +103,7 @@ describe("scaffolded shells: FEIP-7494 substrate parity", () => {
       }
       if (violations.length > 0) {
         throw new Error(
-          `${rel} violates substrate parity (FEIP-7494):\n${violations.join("\n")}\n` +
+          `${rel} violates substrate parity:\n${violations.join("\n")}\n` +
             `Fix: replace inline logic with an exec to the corresponding kit CLI bin.\n` +
             `If this shell genuinely cannot delegate (rare), add it to PARITY_ALLOWLIST` +
             ` with a comment explaining why.`,

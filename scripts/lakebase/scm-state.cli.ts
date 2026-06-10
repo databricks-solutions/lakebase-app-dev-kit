@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for inspecting the SCM workflow state (FEIP-7458, phase A).
+// CLI for inspecting the SCM workflow state (phase A).
 //
 // Read-only: prints the current state, tier topology, feature
 // identifiers, and a ladder of gates with pass/pending status. The
@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-state (FEIP-7458, phase A)
+const HELP = `lakebase-scm-state (phase A)
 
 Inspect the SCM workflow state for a paired project. Reads
 \`.lakebase/workflow-state.json\` and prints the current state plus the

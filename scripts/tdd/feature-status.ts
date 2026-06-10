@@ -61,7 +61,7 @@ export interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
   current_workflow_pointer: WorkflowPointer | null;
-  /** Per-story experiment plans (FEIP-7566): one entry per story that has a plan.json. */
+  /** Per-story experiment plans: one entry per story that has a plan.json. */
   plans: PlanStatusEntry[];
   test_list: TestListSummary | null;
   experiments: ExperimentStatusEntry[];
@@ -192,7 +192,7 @@ export function getFeatureStatus(
   tddDir: string,
   featureId: string
 ): FeatureStatusSnapshot {
-  // Plans live per story now (FEIP-7566): one plan.json under each
+  // Plans live per story now: one plan.json under each
   // features/<F>/stories/<story>/. Collect every story that has one.
   const plans: PlanStatusEntry[] = [];
   for (const storyId of listFeatureStories(tddDir, featureId)) {
@@ -200,7 +200,7 @@ export function getFeatureStatus(
     if (p) plans.push({ story_id: storyId, plan: p });
   }
 
-  // Experiments live under stories now (FEIP-7566): collect across every
+  // Experiments live under stories now: collect across every
   // story that has an experiments subtree.
   const experiments: ExperimentStatusEntry[] = [];
   for (const storyId of listExperimentStories(tddDir, featureId)) {

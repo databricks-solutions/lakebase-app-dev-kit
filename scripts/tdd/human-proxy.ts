@@ -18,7 +18,7 @@
 //   test_list  -> test-list.json and/or test-list.md (at least one required)
 //   promote    -> a caller-supplied promote_ref string (required)
 //
-// INTEGRITY RULE (FEIP-7508 / the 002 gate-integrity finding): a gate is
+// INTEGRITY RULE (the 002 gate-integrity finding): a gate is
 // only approved when its REAL artifact exists on disk. Previously a missing
 // artifact was hashed as a placeholder "MOCK_APPROVED" so the gate could
 // "close" anyway. That let the Human Proxy pre-approve plan / test_list / promote
@@ -28,7 +28,7 @@
 // `skipped[]` with a reason) instead of fabricating one. A real human approver
 // can only sign off on what exists; the Human Proxy must mirror that.
 //
-// CONFORMANCE RULE (FEIP-7508 Layer 2): existence is necessary but not
+// CONFORMANCE RULE (Layer 2): existence is necessary but not
 // sufficient. Every resolved artifact is checked against its declared format
 // via checkArtifactConformance (JSON against its schema; narrative MD against
 // its role-documented required sections). A non-conformant artifact is treated
@@ -41,11 +41,11 @@
 // /design path produces no plan.json, so a rigid chain would stall. Sequencing
 // belongs in the orchestrator once the phase<->gate<->mode mapping is settled.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
-import { checkArtifactConformance } from "./artifact-conformance.js";
+import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
 import { featureResolved, featureRequestMd } from "./tdd-paths.js";
 
@@ -70,9 +70,8 @@ function logHitlDecision(
           role: "product-owner",
           level: "info",
           event: "gate.approved",
-          message: `${approver} validated ${decision.gate} artifacts (${decision.artifacts.join(", ")}): expected elements present + conformant; approved`,
           feature_id: featureId,
-          data: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true },
+          slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true },
         },
         { tddDir },
       );
@@ -81,10 +80,9 @@ function logHitlDecision(
         {
           role: "product-owner",
           level: "warn",
-          event: "gate.refused",
-          message: `${approver} refused ${decision.gate}: ${decision.reason}`,
+          event: "gate.rejected",
           feature_id: featureId,
-          data: { gate: decision.gate, reason: decision.reason, approver, validated: false },
+          slots: { gate: decision.gate, reason: decision.reason, approver, validated: false },
         },
         { tddDir },
       );
@@ -133,6 +131,39 @@ function conformanceReason(inputs: Record<string, string>): string | null {
 }
 
 /**
+ * Every per-AC file under the feature's stories must conform to ac.schema (which
+ * enforces the AC<n>-<slug> id pattern + the given/when/then shape). The spec
+ * gate previously validated only feature-spec.{json,md}, so a Spec Author that
+ * named ACs as bare slugs (create-form-displays) or dropped malformed junk into
+ * acs/ passed the gate, then broke the Test Strategist (ac_id pattern) or stalled
+ * the design lane. This makes acs/ conformance a hard spec-gate condition: every
+ * acs/<X>.json (canonicalized to ac.json) is validated. Returns a reason listing
+ * violations, or null when all ACs conform (or none exist yet).
+ */
+function acsConformanceReason(fdir: string): string | null {
+  const stories = join(fdir, "stories");
+  if (!existsSync(stories)) return null;
+  const problems: string[] = [];
+  for (const s of readdirSync(stories)) {
+    const acsDir = join(stories, s, "acs");
+    if (!existsSync(acsDir)) continue;
+    for (const f of readdirSync(acsDir)) {
+      if (!f.endsWith(".json")) continue;
+      const p = join(acsDir, f);
+      let content: string;
+      try {
+        content = readFileSync(p, "utf8");
+      } catch {
+        continue;
+      }
+      const r = checkArtifactConformance(canonicalArtifactName(p), content);
+      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
+    }
+  }
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
+
+/**
  * Resolve the artifact inputs for a gate from files that ACTUALLY exist AND
  * conform to their declared format. Returns a `reason` (so the caller skips
  * rather than fabricates) when a required artifact is absent or any present
@@ -177,7 +208,12 @@ function resolveArtifactInputs(
         "feature-spec.json": featureJson,
         "feature-spec.md": featureMd,
       };
-      return withConformance(inputs);
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      // Also enforce per-AC conformance (AC<n> id pattern + shape); the gate
+      // previously skipped the acs/ files, letting slug ids + junk through.
+      const acReason = acsConformanceReason(fdir);
+      return acReason === null ? conf : { reason: acReason };
     }
     case "plan": {
       const planJson = readIfPresent("plan.json");
@@ -206,7 +242,7 @@ function resolveArtifactInputs(
     }
     case "deploy": {
       // The deploy (working-software) gate locks the Release Engineer's
-      // deploy-evidence.json. Teeth (FEIP-7461): refuse unless the increment was
+      // deploy-evidence.json. Teeth: refuse unless the increment was
       // actually reachable AND its feature-verify passed against the running
       // app, not merely that the evidence file exists + conforms.
       const evidence = readIfPresent("deploy-evidence.json");
@@ -327,9 +363,8 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
           role: "product-owner",
           level: "warn",
           event: "intake.refused",
-          message: `${approver} could not supply ${artifact}: ${reason}`,
           feature_id: args.featureId,
-          data: { artifact, to: args.to, reason, approver, validated: false },
+          slots: { artifact, to: args.to, reason, approver, validated: false },
         },
         { tddDir },
       );
@@ -357,9 +392,8 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
         role: "product-owner",
         level: "info",
         event: "intake.supplied",
-        message: `${approver} supplied ${artifact} (recorded HIL answer, format-conformant) -> ${args.to}`,
         feature_id: args.featureId,
-        data: { artifact, from: args.from, to: args.to, approver, validated: true },
+        slots: { artifact, from: args.from, to: args.to, approver, validated: true },
       },
       { tddDir },
     );

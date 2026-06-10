@@ -19,6 +19,7 @@ import {
   refactorAc,
   type GreenVerifier,
 } from "../../scripts/tdd/cycle-record.js";
+import { readAgentLog } from "../../scripts/tdd/agent-log.js";
 
 // greenOpenCycle now runs an HONEST verify (deploy-during-build) before stamping
 // green. These cycle-record unit tests inject a passing verifier so they exercise
@@ -93,7 +94,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(g.testId).toBe("T1");
     const cycles = cyclesFor("AC1");
     expect(cycles[0].green_at).toBeTruthy();
-    // markGreen's FEIP-7094 runner contract was satisfied: an outcome was recorded.
+    // markGreen's runner contract was satisfied: an outcome was recorded.
     const outcomes = JSON.parse(readFileSync(join(tdd, "experiments", F, S, "exp1", "outcomes.json"), "utf8"));
     expect(outcomes.by_tag).toBeTruthy();
   });
@@ -137,6 +138,30 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1"); // refactor pending
     refactorAc(tdd, F, S, "AC1");
     expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored , AC fully done
+  });
+
+  it("REVIEW + REFACTOR emit cycle.review + cycle.refactored to the central log (closes the RED->GREEN->REVIEW->REFACTOR trail)", async () => {
+    // Regression: the per-AC review/refactor lane (reviewAc/refactorAc) wrote
+    // review.json but emitted NO agent-log event, so a live run's central log
+    // showed cycle.red + cycle.green per AC and then went silent through review
+    // + refactor. Both transitions must emit their closed-vocabulary event.
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
+    reviewAc(tdd, F, S, "AC1");
+    refactorAc(tdd, F, S, "AC1");
+
+    const log = readAgentLog({ tddDir: tdd });
+    const review = log.find((e) => e.event === "cycle.review");
+    expect(review, "expected a cycle.review event").toBeTruthy();
+    expect(review!.role).toBe("navigator");
+    expect((review!.metadata as { ac?: string })?.ac).toBe("AC1");
+    expect((review!.metadata as { refactor?: boolean })?.refactor).toBe(true);
+
+    const refactored = log.find((e) => e.event === "cycle.refactored");
+    expect(refactored, "expected a cycle.refactored event").toBeTruthy();
+    expect(refactored!.role).toBe("driver");
+    expect((refactored!.metadata as { ac?: string })?.ac).toBe("AC1");
   });
 
   it("per-AC REVIEW with no refactor verdict (looks good) does not request a refactor", async () => {

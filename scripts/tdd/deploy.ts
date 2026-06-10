@@ -19,6 +19,8 @@ import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
 import { findFeatureDir } from "./tdd-paths.js";
 import { writeEscalation } from "./escalation.js";
+import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
+import type { AgentLogEventName } from "./agent-log-events.js";
 
 export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -29,7 +31,7 @@ export interface VerifyResult {
   summary?: string;
 }
 
-/** The deploy-gate evidence the Release Engineer produces (FEIP-7461):
+/** The deploy-gate evidence the Release Engineer produces:
  *  features/<F>/deploy-evidence.json. The deploy gate approves only when this
  *  exists, conforms, and records reachable=true AND verify.passed=true. */
 export interface DeployEvidence {
@@ -48,7 +50,7 @@ export interface DeployEvidence {
 
 /** True when deploy evidence proves working software: reachable AND verify
  *  passed. The shared teeth predicate for both the feature deploy gate and the
- *  per-story acceptance (FEIP-7461). */
+ *  per-story acceptance. */
 export function deployEvidencePasses(e: DeployEvidence | undefined): boolean {
   return e !== undefined && e.reachable === true && e.verify?.passed === true;
 }
@@ -79,7 +81,7 @@ export interface LocalTargetConfig {
   readyTimeoutSeconds: number;
   /**
    * Feature-verify command run against the RUNNING app after it is reachable
-   * (FEIP-7461 deploy gate). Its exit code becomes deploy-evidence.json
+   * (deploy gate). Its exit code becomes deploy-evidence.json
    * verify.passed, which the deploy gate requires to be true. Optional: a target
    * with no verify produces verify.passed=false, which the (strict) deploy gate
    * refuses, so a shippable target must declare one.
@@ -134,6 +136,99 @@ export interface DeployResult {
   evidencePath?: string;
 }
 
+/** Context for code-emitting the Release Engineer's deploy lifecycle. */
+export interface ReleaseEngineerLogCtx extends AgentLogIoOpts {
+  featureId: string;
+  storyId?: string;
+  target: string;
+}
+
+/**
+ * Code-emit the Release Engineer's deploy START into the central agent log.
+ *
+ * The deterministic deploy (`lakebase-tdd-deploy`) is what actually starts +
+ * verifies the app; the RE role model that invokes it may stay silent (a haiku
+ * RE wrote zero log events while the deploy ran). So the deploy emits the RE's
+ * own lifecycle , the same orchestrator-as-code logging principle , into the ONE
+ * central `.tdd/agent-log.jsonl`, so the RE's work is in the stream regardless of
+ * which model ran the role. Best-effort: a logging failure never blocks deploy.
+ */
+export function logReleaseEngineerDeployStart(ctx: ReleaseEngineerLogCtx): void {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  try {
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "deploy.start",
+        feature_id: ctx.featureId,
+        slots: { scope, target: ctx.target, ...(ctx.storyId ? { story: ctx.storyId } : {}) },
+      },
+      { tddDir: ctx.tddDir, now: ctx.now },
+    );
+  } catch {
+    /* observability is not load-bearing for the deploy */
+  }
+}
+
+/**
+ * Code-emit the Release Engineer's deploy OUTCOME (from the real DeployResult:
+ * reachable + verify + url) and a phase end into the central agent log, so the
+ * RE's finish is recorded, not just its start. Pairs with
+ * logReleaseEngineerDeployStart. Best-effort.
+ */
+export function logReleaseEngineerDeployOutcome(ctx: ReleaseEngineerLogCtx, result: DeployResult): void {
+  const scope = ctx.storyId ? `story ${ctx.storyId}` : `feature ${ctx.featureId}`;
+  const storyData = ctx.storyId ? { story: ctx.storyId } : {};
+  const io = { tddDir: ctx.tddDir, now: ctx.now };
+  try {
+    if (result.ok) {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "info",
+          event: "deploy.verified",
+          feature_id: ctx.featureId,
+          slots: {
+            scope,
+            url: result.url,
+            verify_status: result.verify?.passed ? "passed" : "not run/failed",
+            target: ctx.target,
+            reachable: true,
+            verify_passed: result.verify?.passed ?? false,
+            ...storyData,
+          },
+        },
+        io,
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "release-engineer",
+          level: "error",
+          event: "deploy.failed",
+          feature_id: ctx.featureId,
+          slots: { scope, reason: result.reason ?? "unknown", target: ctx.target, verify_passed: result.verify?.passed ?? false, ...storyData },
+        },
+        io,
+      );
+    }
+    emitAgentLogEvent(
+      {
+        role: "release-engineer",
+        level: "info",
+        event: "phase.end",
+        feature_id: ctx.featureId,
+        phase: "deploy",
+        slots: { outcome: result.ok ? "verified" : "failed", ok: result.ok, ...storyData },
+      },
+      io,
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
 function pidFile(projectDir: string, target: string): string {
   return join(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
@@ -180,7 +275,7 @@ export interface DeployArgs {
   targetName: string;
   /**
    * When set, the run command is started with LAKEBASE_BRANCH_ID bound to this
-   * branch (FEIP-7566), so a per-story deploy runs the app against the story's
+   * branch, so a per-story deploy runs the app against the story's
    * EXPERIMENT branch DB, the working software the PO reviews before accept.
    * Unset = the ambient env (the feature branch), the per-sprint deploy.
    */
@@ -191,7 +286,7 @@ export interface DeployArgs {
    */
   featureId?: string;
   /**
-   * Story this deploy belongs to (FEIP-7461). When set (with featureId), the
+   * Story this deploy belongs to. When set (with featureId), the
    * evidence is written at story scope: features/<F>/stories/<S>/, and gates
    * the per-story acceptance. Pair with lakebaseBranch = the story's experiment
    * branch so the PO reviews the story on its own DB.
@@ -217,6 +312,21 @@ export interface DeployArgs {
    * per-cycle reuse path (ensureDeployedAndVerify) is unaffected.
    */
   rejectForeignPort?: boolean;
+}
+
+/**
+ * Best-effort emit of a deterministic deploy-step event (deploy.reachable /
+ * deploy.unreachable / verify.passed / verify.failed) from the SUBSTRATE. The
+ * deploy substrate computes reachability + the verify outcome itself, so it
+ * emits them itself rather than depending on the Release Engineer's prose to
+ * remember (the cycle.* fragility class). Observability never blocks a deploy.
+ */
+function logDeployEvent(tddDir: string, event: AgentLogEventName, slots: Record<string, unknown>): void {
+  try {
+    emitAgentLogEvent({ role: "release-engineer", level: "info", event, slots }, { tddDir });
+  } catch {
+    // swallow: logging is observability, never a reason to fail a deploy
+  }
 }
 
 /**
@@ -268,7 +378,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     return { ok: false, reason, verify, evidencePath };
   }
 
-  // Per-story deploy (FEIP-7566): bind the run command to the experiment
+  // Per-story deploy: bind the run command to the experiment
   // branch's Lakebase DB so the PO reviews the story on its own branch. Unset
   // = the ambient env (the feature branch's per-sprint deploy).
   const env = args.lakebaseBranch
@@ -325,10 +435,34 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
       ...(args.lakebaseBranch ? { lakebase_branch: args.lakebaseBranch } : {}),
       deployed_at: at,
     });
+    // Deterministic deploy-step events from the substrate (it computed these),
+    // so the central log records reachability + the verify outcome without
+    // relying on the Release Engineer's prose.
+    const scope = args.storyId ? `story ${args.storyId}` : `feature ${args.featureId}`;
+    const stepSlots = { feature_id: args.featureId, ...(args.storyId ? { story: args.storyId } : {}) };
+    if (reachableNow) {
+      logDeployEvent(tddDir, "deploy.reachable", { url, pid, ...stepSlots });
+    } else {
+      logDeployEvent(tddDir, "deploy.unreachable", {
+        url,
+        reason: `not reachable after ${cfg.readyTimeoutSeconds}s`,
+        ...stepSlots,
+      });
+    }
+    // verify.* only when a verify command actually ran (reachable + configured).
+    if (reachableNow && cfg.verify) {
+      logDeployEvent(
+        tddDir,
+        verify.passed ? "verify.passed" : "verify.failed",
+        verify.passed
+          ? { scope, command: cfg.verify, ...stepSlots }
+          : { scope, command: cfg.verify, summary: verify.summary ?? "feature-verify failed", ...stepSlots },
+      );
+    }
     // Raise to the HIL when the deploy could not prove working software
     // (unreachable, or reachable but verify FAILED). This is what turns the
     // Release Engineer's honest "1 of N ACs failed" into a clean raise-to-hil
-    // halt instead of the await-acceptance spin (the live FEIP-7422 stall): the
+    // halt instead of the await-acceptance spin (the live stall): the
     // deployVerified teeth stay false, so without this the driver re-issues
     // await-acceptance forever. Surface + halt; a human resolves it.
     if (!(reachableNow && verify.passed)) {
@@ -377,7 +511,7 @@ export interface CycleVerifyResult {
 
 /**
  * Honestly confirm a cycle is GREEN by running the project's verify suite against
- * the running app , deploy-during-build (FEIP-7510 follow-up): the per-cycle GREEN
+ * the running app , deploy-during-build (follow-up): the per-cycle GREEN
  * used to be FAKED (`recordRunnerOutcome({passed:true})`), which shipped a
  * false-green to the deploy gate. This ensures the local app is up (idempotent:
  * reuses a reachable one, else starts it + polls), then runs the SAME verify

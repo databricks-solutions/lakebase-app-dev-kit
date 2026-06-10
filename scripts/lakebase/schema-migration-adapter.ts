@@ -1,4 +1,4 @@
-// Migration adapter interface + registry skeleton (FEIP-7210 slice 1).
+// Migration adapter interface + registry skeleton (slice 1).
 //
 // Design: ADR-0005 (~/code/docs/adr/ADR-0005-schema-migrate-adapter.md).
 //

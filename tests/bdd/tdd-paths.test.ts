@@ -62,8 +62,22 @@ describe("storyAcIds: disk truth (union of story.json + acs/ files)", () => {
   it("reads ids from acs/<AC>.json files even when story.json acs is null", () => {
     story("S2", null);
     mkdirSync(P.acsDir(tdd, "F1", "S2"), { recursive: true });
-    writeFileSync(P.acJson(tdd, "F1", "S2", "AC1-file"), "{}");
+    // A real AC file self-names: acs/<id>.json holds { id: "<id>" }.
+    writeFileSync(P.acJson(tdd, "F1", "S2", "AC1-file"), JSON.stringify({ id: "AC1-file" }));
     expect(P.storyAcIds(tdd, "F1", "S2")).toEqual(["AC1-file"]);
+  });
+  it("ignores non-AC files an agent drops into acs/ (e.g. <ac>-tests.json), no AC-set pollution", () => {
+    // Live design-lane stall: the Spec Author wrote acs/<ac>-tests.json +
+    // <ac>-test-list.json alongside the real <ac>.json. They are NOT ACs (their
+    // `id` is the AC they test, not the suffixed basename), so storyAcIds must
+    // exclude them; else every "AC" must have a layer for architectAnnotated,
+    // the test files have none, and the Architect is re-dispatched forever.
+    story("S3", null);
+    mkdirSync(P.acsDir(tdd, "F1", "S3"), { recursive: true });
+    writeFileSync(P.acJson(tdd, "F1", "S3", "ac-one"), JSON.stringify({ id: "ac-one", given: "g", when: "w", then: "t" }));
+    writeFileSync(P.acJson(tdd, "F1", "S3", "ac-one-tests"), JSON.stringify({ id: "ac-one", tests: [{ id: "T1" }] }));
+    writeFileSync(P.acJson(tdd, "F1", "S3", "ac-one-test-list"), JSON.stringify({ id: "ac-one", items: [{ id: "T1" }] }));
+    expect(P.storyAcIds(tdd, "F1", "S3")).toEqual(["ac-one"]);
   });
 });
 

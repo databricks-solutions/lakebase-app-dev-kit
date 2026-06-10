@@ -1,7 +1,7 @@
 # Cross-branch migration collisions: one timestamp scheme + Alembic head-collapse
 
 **Status**: Design proposal, 2026-06-07 (supersedes the rebase-resolver draft)
-**Primary FEIP**: FEIP-7566 (per-story experiments + tier merge correctness)
+**Primary FEIP**: (per-story experiments + tier merge correctness)
 **Builds on**: the schema-migration adapter (ADR-0005), the create-adapter
 (`lakebase-tdd-new-migration`), `scm-merge` (feature -> tier).
 **Cross-ref**: per-story-experiments.md, orchestrator-deterministic-driver.md
@@ -158,7 +158,7 @@ have no equivalent failure mode.
    the feature branch (so the PR carries a single head) or a parent-branch CI
    pre-apply step; both touch live PR/CI mechanics that need a real workspace to
    validate. Until then, collapse is invoked explicitly (CLI / scm-doctor
-   `--fix`). The FEIP-7422 smoke's two-sibling-feature scenario (tier ends with
+   `--fix`). The TDD-workflow smoke's two-sibling-feature scenario (tier ends with
    one head, all migrations applied) is the live gate for both the auto-wiring
    and the Alembic `merge heads` path.
 

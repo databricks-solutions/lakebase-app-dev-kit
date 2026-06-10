@@ -25,6 +25,7 @@ import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
+import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import {
   beginCycle,
   recordRunnerOutcome,
@@ -32,6 +33,22 @@ import {
   type CycleArtifact,
   type CycleScope,
 } from "./run-cycle.js";
+
+/**
+ * Best-effort emit of a per-AC cycle event (cycle.review / cycle.refactored) to
+ * the centralized agent log. The per-AC review/refactor lane is recorded here
+ * (reviewAc/refactorAc), NOT via run-cycle's per-test markRefactored, so the
+ * emit must live here too or the central log shows RED/GREEN with no REVIEW or
+ * REFACTOR (the gap that left cycle.review/cycle.refactored absent). Mirrors
+ * run-cycle's logCycleEvent: observability never breaks a cycle transition.
+ */
+function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
+  try {
+    emitAgentLogEvent(event, { tddDir });
+  } catch {
+    // swallow: never let logging break a review/refactor record
+  }
+}
 
 interface StoryTestItem {
   id: string;
@@ -189,7 +206,7 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
  * Record the runner outcome + stamp GREEN on the story's open RED cycle (red_at
  * set, green_at not). Per the "driver runs, orchestration records" contract the
  * Driver already ran the project's test command in its loop; this records that
- * run (recordRunnerOutcome unlocks markGreen's FEIP-7094 runner contract for
+ * run (recordRunnerOutcome unlocks markGreen's runner contract for
  * layer-tagged cycles) and marks the cycle green. Throws when there is no open
  * RED cycle (the Driver was dispatched with nothing to green , a real defect).
  */
@@ -210,9 +227,9 @@ export async function greenOpenCycle(
     experiment_slug: open.experiment_slug,
     branch_id: open.branch_id,
   };
-  // HONEST GREEN (FEIP-7510 follow-up): run the project's verify suite against
+  // HONEST GREEN (follow-up): run the project's verify suite against
   // the running app and record the REAL outcome. The old code hardcoded
-  // passed:true , which faked the FEIP-7094 runner contract and shipped a
+  // passed:true , which faked the runner contract and shipped a
   // false-green (a test that broke a sibling test was stamped green). A failure
   // here leaves the cycle RED and raises an escalation to the HIL; the
   // orchestration then routes to raise-to-hil rather than advancing.
@@ -353,6 +370,20 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
       2,
     ) + "\n",
   );
+  // The Navigator's review verdict is a first-class cycle transition: emit it so
+  // the central log shows REVIEW between GREEN and (optional) REFACTOR.
+  logCycleEvent(tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.review",
+    feature_id: featureId,
+    slots: {
+      ac: acId,
+      refactor: refactorRequested,
+      rationale: verdict.notes ?? (refactorRequested ? "refactor requested" : "looks good"),
+      story,
+    },
+  });
   return { reviewed: true, refactorRequested };
 }
 
@@ -362,4 +393,17 @@ export function refactorAc(tddDir: string, featureId: string, story: string, acI
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
+  // The Driver's refactor is a cycle transition: emit it so the central log
+  // closes the per-AC RED -> GREEN -> REVIEW -> REFACTOR sequence. The notes the
+  // Navigator requested are the closest signal to what changed.
+  const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
+    ? `addressed: ${prior.refactor_notes}`
+    : "structure improved";
+  logCycleEvent(tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    feature_id: featureId,
+    slots: { ac: acId, change, story },
+  });
 }

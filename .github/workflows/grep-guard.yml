@@ -3,7 +3,7 @@ name: Grep guard – single credential seam
 # CI invariant: only scripts/lakebase/get-connection.ts is allowed to call
 # `databricks postgres generate-database-credential`. Every other call site
 # must go through the get-connection helper. This guard exists because the
-# whole point of the credential-handoff helper (FEIP-7061) is that there's
+# whole point of the credential-handoff helper is that there's
 # exactly one place credentials get minted – and CI proves it.
 
 on:

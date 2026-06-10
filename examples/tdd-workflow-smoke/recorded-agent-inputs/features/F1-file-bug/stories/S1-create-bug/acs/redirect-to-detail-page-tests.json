@@ -1,0 +1,13 @@
+{
+  "ac_id": "redirect-to-detail-page",
+  "feature_id": "F1-file-bug",
+  "story_id": "S1-create-bug",
+  "tests": [
+    {
+      "id": "T6",
+      "description": "User is redirected to bug detail page at /bugs/{id} after successful bug creation",
+      "ac_id": "redirect-to-detail-page",
+      "status": "pending"
+    }
+  ]
+}

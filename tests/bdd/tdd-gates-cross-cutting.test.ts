@@ -1,5 +1,5 @@
-// G10 (FEIP-7367): cross-cutting acceptance tests for the gates state
-// machine track (FEIP-7357 / ADR-0004).
+// G10: cross-cutting acceptance tests for the gates state
+// machine track (ADR-0004).
 //
 // ADR-0004 test plan defines TWO acceptance tiers beyond the gate
 // machine's own unit tests:

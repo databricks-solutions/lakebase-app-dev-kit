@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI for the GitHub PR primitives (FEIP-7328, P0.2). Subcommands:
+// CLI for the GitHub PR primitives (P0.2). Subcommands:
 //   lakebase-pr open --owner-repo o/r --head h --title t --body b [--base b]
 //   lakebase-pr merge --owner-repo o/r --pull-number N [--method merge|squash|rebase] [--keep-remote]
 //   lakebase-pr merge-paired --owner-repo o/r --pull-number N --instance proj-x [...]
@@ -93,7 +93,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-pr (FEIP-7328)
+const HELP = `lakebase-pr
 
 Subcommands:
   open          Create a new PR (returns html_url)

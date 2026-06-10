@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // CLI: abandon the in-flight feature claim and reset to scaffold-complete.
-// FEIP-7458 phase B+.
+// phase B+.
 
 import * as path from "node:path";
 import { isCliEntry } from "../util/cli-entry.js";
@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-abandon-feature (FEIP-7458 phase B+)
+const HELP = `lakebase-scm-abandon-feature (phase B+)
 
 Unwind a feature claim: switch HEAD to the parent branch, delete the
 paired Lakebase + git branch, reset workflow-state to scaffold-complete.

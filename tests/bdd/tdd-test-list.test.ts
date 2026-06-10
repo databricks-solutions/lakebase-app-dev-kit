@@ -118,7 +118,7 @@ function masterListBothStories(): TestList {
   };
 }
 
-describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
+describe("test-list: per-story scoping (phase 2c)", () => {
   it("acsForStory reads a story's AC ids from its acs/ dir", () => {
     expect(acsForStory(tdd, "F1", "S1")).toEqual(["AC1", "AC2"]);
     expect(acsForStory(tdd, "F1", "S2")).toEqual(["AC3"]);
@@ -136,6 +136,24 @@ describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
     // T1 (AC1) then T2 (AC2): master order kept, T3/T4 (AC3) excluded.
     expect(scoped.items.map((i) => i.id)).toEqual(["T1", "T2"]);
     expect(scoped.items.find((i) => i.id === "T2")?.status).toBe("green");
+  });
+
+  it("scopeToStory GROUPS the build list by AC (per-AC RED-GREEN-REVIEW-REFACTOR), keeping master order within an AC", () => {
+    // Master interleaves AC1 and AC2 (design-momentum): AC1-Ta, AC2-Tb, AC1-Tc, AC2-Td.
+    // The per-story BUILD list must group by AC so each AC's tests are contiguous
+    // (AC1 first since it appears first): [Ta, Tc, Tb, Td], NOT the interleaved order.
+    const interleaved: TestList = {
+      feature_id: "F1",
+      ordered_for: "design-momentum",
+      items: [
+        { id: "Ta", description: "ac1 first", ac_id: "AC1", status: "pending" },
+        { id: "Tb", description: "ac2 first", ac_id: "AC2", status: "pending" },
+        { id: "Tc", description: "ac1 second", ac_id: "AC1", status: "pending" },
+        { id: "Td", description: "ac2 second", ac_id: "AC2", status: "pending" },
+      ],
+    };
+    const scoped = scopeToStory(interleaved, "S1", ["AC1", "AC2"]);
+    expect(scoped.items.map((i) => i.id)).toEqual(["Ta", "Tc", "Tb", "Td"]);
   });
 
   it("writeStoryTestList writes stories/<story>/test-list-per-story.json scoped to that story", () => {
@@ -182,5 +200,32 @@ describe("test-list: per-story scoping (FEIP-7565 phase 2c)", () => {
     const file = writeStoryTestList(tdd, "F1", "S1");
     expect(file).toBeTruthy();
     expect(readStoryTestList(tdd, "F1", "S1")!.items).toEqual([]);
+  });
+
+  it("accumulates a later story's authored tests into the master (no empty-scope stall)", () => {
+    // Live two-story stall: the master held only the FIRST story's tests
+    // (AC1/AC2). S2 owns AC3; its Test Strategist wrote S2's own per-story list.
+    // Without accumulation, scoping the S1-only master to S2 is empty, so
+    // testListReady(S2) stays false and the design lane re-issues test-strategist
+    // forever. writeStoryTestList must fold the story's authored items into the
+    // master, then scope.
+    writeMasterTestList(tdd, masterList()); // T1/T2 (AC1), T3 (AC2) , story 1 only
+    writeFileSync(
+      join(tdd, STORY2_DIR, "test-list-per-story.json"),
+      JSON.stringify({
+        feature_id: "F1",
+        story_id: "S2",
+        ordered_for: "design-momentum",
+        items: [{ id: "T9", description: "detail page loads", ac_id: "AC3", status: "pending" }],
+      }) + "\n",
+    );
+    expect(writeStoryTestList(tdd, "F1", "S2")).toBeTruthy();
+    // S2's per-story list is now non-empty (the fix).
+    expect(readStoryTestList(tdd, "F1", "S2")!.items.map((i) => i.id)).toEqual(["T9"]);
+    // The master accumulated S2's test, so markTestItemGreen can find it later.
+    expect(readMasterTestList(tdd, "F1").items.map((i) => i.id).sort()).toEqual(["T1", "T2", "T3", "T9"]);
+    // S1 still scopes to exactly its own ACs (no regression).
+    expect(writeStoryTestList(tdd, "F1", "S1")).toBeTruthy();
+    expect(readStoryTestList(tdd, "F1", "S1")!.items.map((i) => i.id).sort()).toEqual(["T1", "T2", "T3"]);
   });
 });

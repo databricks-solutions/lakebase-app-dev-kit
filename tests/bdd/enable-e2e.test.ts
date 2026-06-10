@@ -1,4 +1,4 @@
-// FEIP-7094 Phase 2 BDD coverage. Hermetic: every test runs against a
+// Phase 2 BDD coverage. Hermetic: every test runs against a
 // tmpdir built from in-repo fixtures so we never shell out to npm. The
 // pr.yml template gets a content-sanity test so a future edit that drops
 // the project-root E2E step fails this suite, not silently in CI.
@@ -211,6 +211,6 @@ describe("pr.yml template: project-root E2E step", () => {
     // The project-root step honors LAKEBASE_APP_ENDPOINT for BASE_URL.
     expect(yml).toMatch(/BASE_URL:\s*\$\{\{\s*env\.LAKEBASE_APP_ENDPOINT\s*\}\}/);
     // FEIP marker is present so a sloppy revert is easy to flag.
-    expect(yml).toMatch(/FEIP-7094 Phase 2/);
+    expect(yml).toMatch(/Phase 2/);
   });
 });

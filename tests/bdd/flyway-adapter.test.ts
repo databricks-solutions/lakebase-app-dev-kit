@@ -1,4 +1,4 @@
-// FEIP-7210 slice 2: FlywayAdapter contract tests.
+// slice 2: FlywayAdapter contract tests.
 //
 // Tests assert the adapter's static surface (id, languages, detect, list,
 // optional-capability protocol) without invoking the live Maven runner.

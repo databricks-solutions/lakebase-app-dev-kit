@@ -1,4 +1,4 @@
-// FEIP-7510 observability: a centralized structured logger for the TDD-workflow
+// observability: a centralized structured logger for the TDD-workflow
 // role agents. The workflow is a relay of isolated-memory agents; each emits
 // what it is doing (and why, at debug level) so the whole run is
 // reconstructable from one file: .tdd/agent-log.jsonl (JSON Lines).
@@ -13,6 +13,9 @@
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getValidator, formatSchemaErrors } from "./schema-loader";
+import { renderEventMessage, type AgentLogEventName } from "./agent-log-events.js";
+
+export type { AgentLogEventName } from "./agent-log-events.js";
 
 export type AgentRole =
   | "spec-author"
@@ -30,20 +33,52 @@ export type AgentLogLevel = "debug" | "info" | "warn" | "error";
 /** Severity ordering for minLevel filtering. */
 const LEVEL_ORDER: Record<AgentLogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
-export interface AgentLogEvent {
-  ts: string;
-  role: AgentRole;
-  level: AgentLogLevel;
-  event: string;
-  message: string;
+/**
+ * Structured payload. `feature_id` is the top-level metadata attribute (the
+ * primary scope key); `phase` / `cycle_id` and any event-specific keys
+ * (artifact path, gate name, conformance violations, ...) follow.
+ */
+export interface AgentLogMetadata {
   feature_id?: string;
   phase?: string;
   cycle_id?: string;
-  data?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
-/** Input to emit: everything but the timestamp (which the logger stamps). */
-export type AgentLogEventInput = Omit<AgentLogEvent, "ts"> & { ts?: string };
+/** One persisted log line. Field order: timestamp, level, role, event, message, metadata. */
+export interface AgentLogEvent {
+  timestamp: string;
+  level: AgentLogLevel;
+  role: AgentRole;
+  event: string;
+  message: string;
+  metadata?: AgentLogMetadata;
+}
+
+/**
+ * Input to emit. The logger stamps `timestamp` if omitted and assembles
+ * `metadata` from the convenience fields (`feature_id` / `phase` / `cycle_id` /
+ * `data`) plus any explicit `metadata`, with `feature_id` first.
+ */
+export interface AgentLogEventInput {
+  timestamp?: string;
+  level: AgentLogLevel;
+  role: AgentRole;
+  /** Must be one of the closed vocabulary (agent-log-events.ts). */
+  event: AgentLogEventName;
+  /**
+   * Values that fill the event's message template (its `{{ placeholders }}`).
+   * Every required slot must be present or the emit THROWS (nothing dropped).
+   * Slots are also folded into `metadata` so the structured payload carries them.
+   * `role` / `feature_id` / `phase` / `cycle_id` are available to the template too
+   * (from the fields below), so they do not need to be repeated here.
+   */
+  slots?: Record<string, unknown>;
+  feature_id?: string;
+  phase?: string;
+  cycle_id?: string;
+  metadata?: AgentLogMetadata;
+}
 
 export interface AgentLogIoOpts {
   /** Path to the .tdd/ root. Default: "./.tdd". */
@@ -65,7 +100,36 @@ function logFilePath(tddDir: string): string {
 export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
   const tddDir = opts.tddDir ?? "./.tdd";
   const now = opts.now ?? (() => new Date());
-  const event: AgentLogEvent = { ...input, ts: input.ts ?? now().toISOString() } as AgentLogEvent;
+  const slots = input.slots ?? {};
+  // The message is RENDERED from the event's template + the render context (the
+  // top-level fields the template may reference + the slots). renderEventMessage
+  // THROWS if `event` is off-vocabulary or any required slot is missing , the
+  // format is enforced at the source and nothing is dropped.
+  const renderCtx: Record<string, unknown> = {
+    role: input.role,
+    ...(input.feature_id !== undefined ? { feature_id: input.feature_id } : {}),
+    ...(input.phase !== undefined ? { phase: input.phase } : {}),
+    ...(input.cycle_id !== undefined ? { cycle_id: input.cycle_id } : {}),
+    ...slots,
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  // Assemble metadata with feature_id first, then phase / cycle_id, then the
+  // slots + any explicit metadata. Omit entirely when empty.
+  const metadata: AgentLogMetadata = {
+    ...(input.feature_id !== undefined ? { feature_id: input.feature_id } : {}),
+    ...(input.phase !== undefined ? { phase: input.phase } : {}),
+    ...(input.cycle_id !== undefined ? { cycle_id: input.cycle_id } : {}),
+    ...slots,
+    ...(input.metadata ?? {}),
+  };
+  const event: AgentLogEvent = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    event: input.event,
+    message,
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
 
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
@@ -103,7 +167,7 @@ export function readAgentLog(opts: ReadAgentLogOpts = {}): AgentLogEvent[] {
       continue; // skip a malformed / partially-written line
     }
     if (opts.role !== undefined && ev.role !== opts.role) continue;
-    if (opts.featureId !== undefined && ev.feature_id !== opts.featureId) continue;
+    if (opts.featureId !== undefined && ev.metadata?.feature_id !== opts.featureId) continue;
     if (minRank !== undefined && LEVEL_ORDER[ev.level] < minRank) continue;
     out.push(ev);
   }

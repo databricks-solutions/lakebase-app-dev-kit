@@ -48,7 +48,7 @@ export interface BudgetProposal {
 
 export interface ExperimentPlan {
   feature_id: string;
-  /** The story this plan is for (FEIP-7566): experiments are story-scoped. */
+  /** The story this plan is for: experiments are story-scoped. */
   story_id: string;
   N: number;
   mode: "N=1" | "N>=2";
@@ -118,7 +118,7 @@ export function analyzeForGate(
   storyId: string,
   opts?: AnalyzeForGateOptions
 ): GateAnalysis {
-  // Experiments are story-scoped (FEIP-7566): analyze only this story's slice
+  // Experiments are story-scoped: analyze only this story's slice
   // of the master test list, so N (one experiment vs a race) is decided per
   // story, not per whole feature.
   const master = readMasterTestList(tddDir, featureId);
@@ -240,7 +240,7 @@ export function readPlan(tddDir: string, featureId: string, storyId: string): Ex
 }
 
 export function writePlan(tddDir: string, plan: ExperimentPlan): void {
-  // Plan persists per story (FEIP-7566) as features/<F>/stories/<story>/plan.json
+  // Plan persists per story as features/<F>/stories/<story>/plan.json
   // for downstream readers (orchestrator). Conformance keys plan.json by
   // basename, so the per-story location still validates against plan.schema.json.
   const planPath = storyPlanJson(tddDir, plan.feature_id, plan.story_id);

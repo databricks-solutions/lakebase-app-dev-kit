@@ -8,7 +8,7 @@
 // `npx lakebase-scm-state`): Node sets `process.argv[1]` to the
 // symlink path, which ends in `lakebase-scm-state`, NOT `foo.cli.js`,
 // so the guard is false and the bin exits 0 with no output (a silent
-// no-op). FEIP-7422 smoke caught this; all phase B/C bins shipped with
+// no-op). TDD-workflow smoke caught this; all phase B/C bins shipped with
 // the broken guard.
 //
 // `isCliEntry(import.meta.url)` resolves the invoking script's path

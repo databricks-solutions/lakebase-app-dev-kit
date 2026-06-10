@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI: feature-claimed -> pr-ready (FEIP-7458 phase B+).
+// CLI: feature-claimed -> pr-ready (phase B+).
 
 import * as path from "node:path";
 import { isCliEntry } from "../util/cli-entry.js";
@@ -60,7 +60,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-scm-prepare-pr (FEIP-7458 phase B+)
+const HELP = `lakebase-scm-prepare-pr (phase B+)
 
 Transition feature-claimed -> pr-ready: push the feature branch and
 open a GitHub PR against the parent branch. Re-runs reuse an existing
