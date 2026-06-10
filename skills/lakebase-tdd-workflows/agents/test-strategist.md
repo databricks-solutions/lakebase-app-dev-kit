@@ -52,7 +52,7 @@ In the per-story pipeline you order **one story's** tests at a time (a per-story
     ]
   }
   ```
-  **`ac_id` MUST be the EXACT id of an existing AC file** (`acs/<id>.json` , e.g. `AC1-create-form-displayed`, not bare `AC1`), and EVERY item needs one (never null). An item whose `ac_id` is null or does not match a real AC is dropped by the deterministic per-story scope, leaving an empty list and stalling the build. Every AC in the story must have ≥1 item.
+  **`ac_id` MUST be the EXACT id of an existing AC file** in this story (`acs/<id>.json`, whatever the Spec Author named it , e.g. `AC1-create-form-displayed` or a bare `AC1`; copy it verbatim, do not invent or re-slug it), and EVERY item needs one (never null). An item whose `ac_id` is null or does not match a real AC in the story is dropped by the deterministic per-story scope, leaving an empty list and stalling the build. Every AC in the story must have ≥1 item.
 
 ## Self-check before you return (response-formatter)
 
@@ -109,7 +109,7 @@ Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agen
 - `--level info --event gate.surfaced` when you present the ordered list to the PO at Gate 3.
 - `--level debug --event reasoning` for the ordering rationale (`ordered_for`).
 - `--level warn --event smell.flagged` for any test that cannot be defined without writing implementation first.
-- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their call on the ordering>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 3):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=test_list` (add `--slot change="…"` for modified, `--slot reason="…"` for rejected)) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

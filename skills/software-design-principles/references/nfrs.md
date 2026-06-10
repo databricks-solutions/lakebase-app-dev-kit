@@ -98,6 +98,6 @@ That's not bureaucracy. It's the audit trail when something breaks in production
 
 ## NFRs and feature-level work
 
-In `lakebase-tdd-workflows`, every feature's `feature-spec.json` carries an `nfrs[]` array. The Architect Reviewer is required to populate it during phase 7.1. Empty is allowed; unaddressed is not.
+In `lakebase-tdd-workflows`, the NFRs live in the feature's `architecture.json` (`nfrs[]`, each scoped via `applies_to` to the feature or a story), NOT on `feature-spec.json`/`story.json`. The Architect Reviewer populates them during its architectural-review step, covering every Required item in `nfrs.md` via `brief_ref`. Empty is allowed; unaddressed is not.
 
 The principle: design intent is captured before the test list, not bolted on at the end.

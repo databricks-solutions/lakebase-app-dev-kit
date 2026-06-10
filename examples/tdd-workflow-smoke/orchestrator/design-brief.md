@@ -6,8 +6,9 @@ author: Product Owner
 
 The HIL's design intent for the bug-tracker UI, the UX Designer's intake.
 Recorded ahead of time so the Human Proxy can supply it in the headless smoke
-(the same brief a human would author at the `/design` UX interview). The only
-UI in this product is v5's bug-list view; this brief is deliberately small.
+(the same brief a human would author at the `/design` UX interview). The UI in
+this product is small: a bug create form + a bug detail page (v1) and a status
+control (v2); this brief is deliberately small.
 
 ## References
 
@@ -25,7 +26,7 @@ extracts tokens from them and cites which decision came from which.
 ## Interaction and feedback
 
 - Every state is shown explicitly: an unowned bug reads "unowned", never a blank cell; an empty list shows an explicit empty-state message, never a blank page.
-- No action in the list view (it is read-only for v5), so no success/failure toasts are needed yet; the no-silent-failure principle applies when actions arrive later.
+- No action in the bug-list view (it is read-only), so no success/failure toasts are needed there yet; the no-silent-failure principle applies to the create form (v1) + status control (v2).
 
 ## Accessibility
 

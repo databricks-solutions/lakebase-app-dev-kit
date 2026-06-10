@@ -11,7 +11,7 @@ interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
   current_workflow_pointer: WorkflowPointer | null;
-  plan: ExperimentPlan | null;
+  plans: PlanStatusEntry[]; // per-story: one { story_id, plan } per stories/<S>/plan.json
   test_list: TestListSummary | null;
   experiments: ExperimentStatusEntry[];
   selection_log_recent: SelectionLogEntry[];

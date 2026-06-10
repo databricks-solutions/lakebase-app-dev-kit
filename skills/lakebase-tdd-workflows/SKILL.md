@@ -28,15 +28,17 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 ## Phases and gates
 
-| Phase | Output | HITL gate |
-|---|---|---|
-| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
-| 1 Architectural review | `layer` + `architectural_notes` populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
-| 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
-| 3 Design-spec gate | Experiment plan in `selection-log.md` + `features/<F>/plan.json` | **Gate 4 – Experiment plan** |
-| 4 Implementation | Per-experiment cycles producing tests + code | Continuous: smells; final: promote / synthesize choice |
+Gates are keyed (not numbered): `spec` / `plan` / `test_list` / `promote` / `deploy`. The design lane runs PER STORY (it streams), and experiments + plans are per-story.
 
-Refuse to transition if prior-phase artifacts are missing or invalid.
+| Step (per story unless noted) | Output | HITL gate |
+|---|---|---|
+| Spec drafting | `feature-spec.{md,json}` (feature) + per-story `story.{md,json}` + `acs/<AC>.{md,json}` | **`spec` gate** |
+| Architectural review | `layer` + `architectural_notes` on each AC; `architecture.{md,json}` (holds the NFRs) | folds into the `spec` gate |
+| Test-list construction | per-story `test-list-per-story.json` (scoped from the feature `test-list.{md,json}`) | **`test_list` gate** |
+| Build (per AC) | cut a per-story experiment; RED -> GREEN -> REVIEW -> REFACTOR cycles producing tests + code | Continuous: smells; per story: **accept (merge) / discard / revise** |
+| Deploy | working software on the experiment branch (reachable + verify) | **`deploy` gate** |
+
+Sprint planning has its own **`plan` gate**. For N>=2 experiments within a story, the menu-pick promote/synthesize decision is recorded under `synthesis/<F>/`. Refuse to transition if prior-step artifacts are missing or invalid.
 
 The phases + gates above are the PER-FEATURE pipeline that `/design` (phases 0 to 2 + gates 1 to 4) and `/build` (phase 4) run. They sit inside a larger orchestrated loop:
 

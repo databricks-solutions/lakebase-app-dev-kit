@@ -66,11 +66,7 @@ Remote types (`databricks-app`, ...) are NOT implemented by `lakebase-tdd-deploy
 
 ## Logging
 
-Via `./scripts/lk lakebase-tdd-log` (see [references/agent-logging.md](../references/agent-logging.md)), `--role release-engineer --feature <id>`:
-- `--event phase.start` / `phase.end` around the deploy.
-- `--event deploy.reachable --data '{"target":"local","base_url":"..."}'` on reachability; `--level error --event deploy.unreachable` when it never answers.
-- `--event verify.passed` / `--level error --event verify.failed` for the running-app verify.
-- The PO (or Human Proxy) records the deploy-gate decision as `gate.approved` / `gate.rejected`. The `deploy.*` + `handoff` events are code-emitted by the deterministic deploy; you do not hand-emit them.
+The entire deploy lifecycle is CODE-emitted for you, so you do NOT hand-emit it: `lakebase-tdd-deploy` writes (under `--role release-engineer`) `deploy.start`, `deploy.reachable` / `deploy.unreachable`, `verify.passed` / `verify.failed`, `deploy.verified` / `deploy.failed`, and `phase.end` from the real outcome. The PO (or Human Proxy) records the deploy-gate decision as `gate.approved` / `gate.rejected`. You do not call `lakebase-tdd-log` for any of these , the substrate already did.
 
 The deterministic deploy code-emits your lifecycle for you: `lakebase-tdd-deploy` writes `release-engineer` `deploy.start`, then `deploy.verified` (or `deploy.failed`, carrying reachable + verify + url from the real outcome), then `phase.end` into the ONE central `.tdd/agent-log.jsonl`. So the central log shows your work even if your own model stays silent (the same orchestrator-as-code logging principle). Your hand-emitted events above are additive detail, not the load-bearing record.
 

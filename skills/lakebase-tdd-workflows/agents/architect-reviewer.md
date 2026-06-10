@@ -119,7 +119,7 @@ Emit structured events via `./scripts/lk lakebase-tdd-log` (see [references/agen
 - `--level info --event gate.surfaced` when you present the NFRs + decisions to the PO at Gate 2.
 - `--level debug --event reasoning` for layer assignments + each proposed NFR.
 - `--level warn --event concern.flagged --slot concern=<name> --slot owner_layer=<layer>` when a cross-cutting concern has no clear owner (a finding, not invented).
-- **HITL (Gate 2):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --message "<their decisions + NFR accept/modify>"`) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
+- **HITL (Gate 2):** after `gate.surfaced`, record the human's ACTUAL response (`--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=plan` (add `--slot change="…"` for modified, `--slot reason="…"` for rejected)) BEFORE proceeding; the proceed is gated by it. Auto-approve mode has `human-proxy` record it. See `references/agent-logging.md` section 4.5.
 
 ## Rules
 

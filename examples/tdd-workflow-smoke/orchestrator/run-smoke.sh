@@ -624,8 +624,8 @@ run_plan_sprint() {
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-log \
     --role orchestrator --level info --event phase.end \
     --tdd-dir "$PROJECT_DIR/.tdd" \
-    --message "/plan ${sprint_name}: ${#iters[@]} feature-request(s) authored for the sprint" \
-    --data "{\"phase\":\"plan\",\"sprint\":\"${sprint_name}\"}" >/dev/null 2>&1 || true
+    --slot phase=plan --slot outcome=complete \
+    --data "{\"sprint\":\"${sprint_name}\",\"requests\":${#iters[@]}}" >/dev/null 2>&1 || true
 }
 
 # ─── main ─────────────────────────────────────────────────────

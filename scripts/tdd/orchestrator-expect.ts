@@ -131,8 +131,16 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
     return { ...base, expected: "a non-empty per-story test list mapped to the story's ACs", satisfiedBy: (s) => storyView(s)?.design.testListReady === true };
   }
 
-  // Build-lane roles (navigator / driver): the contract is the per-turn build
-  // advance for the dispatched mode. The buildMode/ac on the action say which.
+  // Build-lane roles (navigator / driver). ONLY the per-AC review/refactor turns
+  // get a contract here , their predicates (reviewAc / refactorAc) are precise
+  // per-AC DriveState fields. The per-CYCLE RED (navigator) + GREEN (driver) turns
+  // are deliberately NOT enforced by the ledger: DriveState only carries the
+  // coarse, story-level booleans testsWritten / codeWritten (true once the WHOLE
+  // story is written / all-green), so a single RED/GREEN turn mid-story cannot be
+  // expressed , codeWritten stays false while T2..Tn are pending, which would
+  // false-abort a healthy build right after the first GREEN. The tight RED/GREEN
+  // loop is covered by the generic stall detector (a truly stuck turn repeats its
+  // signature) + the honest-green runner contract; the ledger stays precise.
   const buildMode = "buildMode" in action ? (action as { buildMode?: string }).buildMode : undefined;
   const ac = "ac" in action ? (action as { ac?: string }).ac : undefined;
   const withAc = { ...base, ...(ac ? { ac } : {}) };
@@ -142,12 +150,7 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
   if (responder === "driver" && buildMode === "refactor") {
     return { ...withAc, expected: `a completed REFACTOR for ${ac}`, satisfiedBy: (s) => storyView(s)?.build.refactorAc !== ac };
   }
-  if (responder === "navigator") {
-    return { ...base, expected: "a failing (RED) test", satisfiedBy: (s) => storyView(s)?.build.testsWritten === true };
-  }
-  if (responder === "driver") {
-    return { ...base, expected: "production code that GREENs the test", satisfiedBy: (s) => storyView(s)?.build.codeWritten === true };
-  }
+  // navigator (RED) / driver (GREEN) per-cycle turns: not ledger-enforced (see above).
   return null;
 }
 

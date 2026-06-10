@@ -67,7 +67,7 @@ These rules apply across all references. Workflow skills that import this canon 
 
 ## Composition with workflow skills
 
-- **`lakebase-tdd-workflows`** – Architect Reviewer imports this canon during phase 7.1 (architectural review). Navigator imports during PLAN. Driver imports during REFACTOR.
+- **`lakebase-tdd-workflows`** – Architect Reviewer imports this canon during its per-story architectural-review step. Navigator imports during PLAN. Driver imports during REFACTOR.
 - **`lakebase-scm-workflows`** – Branch PRs are reviewed against the layered-architecture + cross-cutting-concerns checks.
 - **`lakebase-release-workflows`** – NFR baseline checklist is the release gate.
 

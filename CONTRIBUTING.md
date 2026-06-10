@@ -225,8 +225,8 @@ By default the smoke runs your local working tree's `dist/`. Pass `--kit-ref <re
 The package is consumed via git URL (`github:databricks-solutions/lakebase-app-dev-kit#<tag>`); npm publish is intentionally deferred (org/scope/runner questions). Cuts are tag-based:
 
 1. Land the change on `main` via PR.
-2. Bump `package.json` version (alpha series for the v0.3.0 line: `0.3.0-alpha.<N+1>`).
-3. Tag the bump commit: `git tag v0.3.0-alpha.<N> && git push origin v0.3.0-alpha.<N>`.
+2. Bump `package.json` version on the current pre-release line (the v0.3.0 line graduated from alpha to beta: `0.3.0-beta.<N+1>`; see `CHANGELOG.md` for the active series).
+3. Tag the bump commit: `git tag v0.3.0-beta.<N> && git push origin v0.3.0-beta.<N>`.
 4. Consumers update their git URL pin to the new tag.
 
 Tags are append-only by default; only force-move a tag when you've just merged a follow-up that should clearly ship under the same version (rare).

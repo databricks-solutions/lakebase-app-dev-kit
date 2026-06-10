@@ -40,8 +40,11 @@ A role's work between phase boundaries can take many minutes (an LLM drafting a 
 
 ```bash
 ./scripts/lk lakebase-tdd-log --role spec-author --level debug --event progress \
-  --message "AC 4/11 drafted: bug is reachable by identifier after filing" --feature F1-initial-domain
+  --slot note="AC 4/11 drafted: bug is reachable by identifier after filing" --slot step=drafting \
+  --feature F1-initial-domain
 ```
+
+The message is RENDERED from the event's template by filling its `{{ slot }}`s , you pass `--slot key=value` (repeatable), never a free-text `--message` (there is no such flag). A missing required slot is rejected.
 
 Use `debug` for sub-step progress (so `info` stays the outputs/decisions stream). The rule is cadence: roughly one line per sub-step, so a gap in the log reliably means stuck, not working.
 
@@ -51,7 +54,7 @@ Shell out to the kit CLI (works from a headless `claude -p` agent). Roles invoke
 
 ```bash
 ./scripts/lk lakebase-tdd-log --role spec-author --level info \
-  --event artifact.written --message "wrote feature-spec.json + 3 stories" \
+  --event artifact.written --slot artifact=feature-spec.json --slot summary="+ 3 stories" \
   --feature F1-initial-domain --data '{"path":"feature-spec.json","conformant":true}'
 ```
 
@@ -132,16 +135,19 @@ TO the human, and the proceed is GATED BY their response. Both sides are
 recorded, the audit trail must show who was asked and what they decided.
 
 1. **Transition to the human** (the surfacing role, `info`):
-   `--event gate.surfaced --message "Gate N surfaced to PO: <what they must decide>"`.
+   `--event gate.surfaced --slot gate=<spec|plan|test_list|promote|deploy> --slot subject="<what they must decide>"`.
    This marks that the workflow handed control to the human and is now waiting.
 
 2. **The human's response** (`--role product-owner`), recorded BEFORE the
    workflow advances, the transition past the gate is gated by it:
-   - `--event gate.approved --message "<what they approved + any decisions>"`
-   - `--event gate.modified --message "<what they changed>"` (with the change)
-   - `--event gate.rejected --message "<why, what to revise>"`
-   Capture the human's ACTUAL decision verbatim in the message + `metadata`, not a
+   - `--event gate.approved --slot gate=<gate>`
+   - `--event gate.modified --slot gate=<gate> --slot change="<what they changed>"`
+   - `--event gate.rejected --slot gate=<gate> --slot reason="<why, what to revise>"`
+   Capture the human's ACTUAL decision in the slots (+ extra `--data` metadata), not a
    paraphrase. If the human answered open questions, record their answers.
+   NOTE: in practice these gate events are emitted by the Human Proxy / the
+   deterministic driver, not hand-written by a role; the forms above are the
+   contract they follow.
 
 So a normal (human) run logs: `gate.surfaced` (transition) then the human's
 `gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then

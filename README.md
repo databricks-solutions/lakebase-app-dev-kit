@@ -121,7 +121,7 @@ The root barrel `@databricks-solutions/lakebase-app-dev-kit` re-exports everythi
 
 ## CLIs
 
-The package exposes eleven bins (resolved relative to `node_modules/.bin/` when installed). Run any of them with `--help` for full subcommand + flag reference.
+The package exposes many bins (the full set is the `bin` map in `package.json`; the groups below are representative, not exhaustive , the `lakebase-scm-*` SCM-workflow and `lakebase-tdd-*` TDD-workflow families are bins too). Run any of them with `--help` for full subcommand + flag reference.
 
 **Project + connection**
 - `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap (10-step QuickPick equivalent)
@@ -144,7 +144,7 @@ The package exposes eleven bins (resolved relative to `node_modules/.bin/` when 
 - `lakebase-github-token` – print / diagnose the resolved GitHub token (single-seam GitHub auth)
 
 **Agents**
-- `lakebase-mcp-server` – stdio MCP server exposing 25 tools to MCP-capable agents (Claude Desktop, OpenAI Codex, Cursor-via-MCP, Genie Code)
+- `lakebase-mcp-server` – stdio MCP server exposing 24 tools to MCP-capable agents (Claude Desktop, OpenAI Codex, Cursor-via-MCP, Genie Code)
 
 ## Contributing
 
