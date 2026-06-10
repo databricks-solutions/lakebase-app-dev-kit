@@ -400,7 +400,13 @@ async function getAheadBehind(args) {
 }
 async function isDirty(args) {
   try {
-    const out = await exec2("git status --porcelain", { cwd: args.cwd });
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
   } catch {
     return false;

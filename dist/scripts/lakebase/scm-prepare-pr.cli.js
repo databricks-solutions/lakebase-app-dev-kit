@@ -26,6 +26,9 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/util/exec.ts
 import * as cp from "child_process";
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
 function exec2(command, opts = {}) {
   return new Promise((resolve2, reject) => {
     const options = {
@@ -78,7 +81,13 @@ async function getAheadBehind(args) {
 }
 async function isDirty(args) {
   try {
-    const out = await exec2("git status --porcelain", { cwd: args.cwd });
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
   } catch {
     return false;
@@ -602,10 +611,10 @@ async function preparePr(args) {
     );
   }
   if (!args.force) {
-    const dirty = await isDirty({ cwd: args.projectDir });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
     if (dirty) {
       throw new ScmPreparePrError(
-        "Working tree has uncommitted changes; commit them before opening the PR (or pass --force).",
+        "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",
         "dirty-working-tree"
       );
     }

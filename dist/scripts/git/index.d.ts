@@ -207,12 +207,24 @@ declare function hasUpstream(args: CwdOnlyArgs): Promise<boolean>;
  * "no remote sync state to show".
  */
 declare function getAheadBehind(args: CwdOnlyArgs): Promise<AheadBehind>;
+interface IsDirtyArgs extends CwdOnlyArgs {
+    /**
+     * Repo-relative path prefixes to NOT count as dirty, e.g. orchestration
+     * metadata the deterministic driver writes mid-run (`.tdd/` log + phase
+     * pointer, `.lakebase/` state). A porcelain line is excluded iff its path
+     * equals or starts with one of these. With none set, ANY change is dirty
+     * (the original behavior).
+     */
+    ignore?: string[];
+}
 /**
  * True iff the working tree has staged or unstaged changes (including
  * untracked files reported by porcelain status). Returns false on
- * non-git cwd or when `git status` fails.
+ * non-git cwd or when `git status` fails. When `ignore` is given, changes
+ * confined to those path prefixes do not count , so a caller can ask "is
+ * there uncommitted CODE?" while tolerating expected workflow-metadata churn.
  */
-declare function isDirty(args: CwdOnlyArgs): Promise<boolean>;
+declare function isDirty(args: IsDirtyArgs): Promise<boolean>;
 
 interface ListMigrationsOnBranchArgs {
     cwd: string;
@@ -669,4 +681,4 @@ declare function revert(args: ShaArgs): Promise<void>;
 /** `git cherry-pick <sha>`. */
 declare function cherryPick(args: ShaArgs): Promise<void>;
 
-export { type AddRemoteArgs, type AheadBehind, type AmendArgs, type BranchesAtCommitArgs, type CheckoutBranchArgs, type CloneRepoArgs, type CommitAndPushArgs, type CommitArgs, type CommitFilesArgs, type CreateTagArgs, type CreateWorktreeArgs, type CwdOnlyArgs, type DeleteLocalBranchArgs, type DeleteRemoteBranchArgs, type DeleteRemoteTagArgs, type DeleteTagArgs, type DiffFilesArgs, type DiscardAllChangesArgs, type FetchArgs, type FileChangeShort, type GetFileAtRefArgs, type GetMergeBaseArgs, type GitBranchInfo, type HasRemoteBranchArgs, type ListLocalBranchesArgs, type ListMigrationsOnBranchArgs, type ListRemoteBranchesArgs, type LogRawArgs, type MergeBranchArgs, type MergeCommit, type NearestParent, type OutgoingIncomingArgs, ProtectedBranchError, type PublishBranchArgs, type PullFromArgs, type PushCurrentBranchForPrArgs, type PushToArgs, type RebaseBranchArgs, type RecentMergesArgs, type RemoveRemoteArgs, type RemoveWorktreeArgs, type RenameBranchArgs, type ResolveNearestParentArgs, type ShaArgs, type StashIndexArgs, type StashWithMessageArgs, type UndoLastCommitArgs, WorkflowScopeError, abortRebase, addRemote, checkoutBranch, checkoutDetached, cherryPick, cloneRepo, commit, commitAll, commitAllSignedOff, commitAmend, commitAndPush, commitSignedOff, createTag, createWorktree, deleteLocalBranch, deleteRemoteBranch, deleteRemoteTag, deleteTag, discardAllChanges, fetch, getAheadBehind, getBranchesAtCommit, getCommitFiles, getCurrentBranch, getDiffFiles, getFileAtRef, getGitHubUrl, getIncomingCommits, getLogRaw, getLogShortstat, getMergeBase, getNearestParentName, getOutgoingCommits, getOwnerRepo, getRecentMerges, getRepoRoot, gitInit, hasRemoteBranch, hasUpstream, isDirty, isRebasing, listLocalBranches, listMigrationsOnBranch, listRemoteBranches, listRemotes, listTags, listWorktrees, mergeBranch, publishBranch, pull, pullFrom, pullRebase, push, pushCurrentBranchForPr, pushTo, rebaseBranch, removeRemote, removeWorktree, renameBranch, resolveNearestParent, revert, stash, stashApply, stashDrop, stashDropAll, stashIncludeUntracked, stashList, stashPop, stashStaged, sync, undoLastCommit };
+export { type AddRemoteArgs, type AheadBehind, type AmendArgs, type BranchesAtCommitArgs, type CheckoutBranchArgs, type CloneRepoArgs, type CommitAndPushArgs, type CommitArgs, type CommitFilesArgs, type CreateTagArgs, type CreateWorktreeArgs, type CwdOnlyArgs, type DeleteLocalBranchArgs, type DeleteRemoteBranchArgs, type DeleteRemoteTagArgs, type DeleteTagArgs, type DiffFilesArgs, type DiscardAllChangesArgs, type FetchArgs, type FileChangeShort, type GetFileAtRefArgs, type GetMergeBaseArgs, type GitBranchInfo, type HasRemoteBranchArgs, type IsDirtyArgs, type ListLocalBranchesArgs, type ListMigrationsOnBranchArgs, type ListRemoteBranchesArgs, type LogRawArgs, type MergeBranchArgs, type MergeCommit, type NearestParent, type OutgoingIncomingArgs, ProtectedBranchError, type PublishBranchArgs, type PullFromArgs, type PushCurrentBranchForPrArgs, type PushToArgs, type RebaseBranchArgs, type RecentMergesArgs, type RemoveRemoteArgs, type RemoveWorktreeArgs, type RenameBranchArgs, type ResolveNearestParentArgs, type ShaArgs, type StashIndexArgs, type StashWithMessageArgs, type UndoLastCommitArgs, WorkflowScopeError, abortRebase, addRemote, checkoutBranch, checkoutDetached, cherryPick, cloneRepo, commit, commitAll, commitAllSignedOff, commitAmend, commitAndPush, commitSignedOff, createTag, createWorktree, deleteLocalBranch, deleteRemoteBranch, deleteRemoteTag, deleteTag, discardAllChanges, fetch, getAheadBehind, getBranchesAtCommit, getCommitFiles, getCurrentBranch, getDiffFiles, getFileAtRef, getGitHubUrl, getIncomingCommits, getLogRaw, getLogShortstat, getMergeBase, getNearestParentName, getOutgoingCommits, getOwnerRepo, getRecentMerges, getRepoRoot, gitInit, hasRemoteBranch, hasUpstream, isDirty, isRebasing, listLocalBranches, listMigrationsOnBranch, listRemoteBranches, listRemotes, listTags, listWorktrees, mergeBranch, publishBranch, pull, pullFrom, pullRebase, push, pushCurrentBranchForPr, pushTo, rebaseBranch, removeRemote, removeWorktree, renameBranch, resolveNearestParent, revert, stash, stashApply, stashDrop, stashDropAll, stashIncludeUntracked, stashList, stashPop, stashStaged, sync, undoLastCommit };
