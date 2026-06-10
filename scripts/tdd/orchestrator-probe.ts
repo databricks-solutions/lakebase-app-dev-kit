@@ -18,6 +18,7 @@ import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from ".
 import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
+import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js";
 import { firstPendingEscalation } from "./escalation.js";
 import {
   cyclesRootDir,
@@ -77,7 +78,7 @@ function readJson(file: string): Record<string, unknown> | undefined {
  * Best-effort + tolerant: a missing/malformed file yields the conservative
  * (not-yet-done) reading, so the driver re-derives a safe DriveState.
  */
-export function readDriveContext(tddDir: string, featureId: string): DriveContext {
+export function readDriveContext(tddDir: string, featureId: string, projectDir?: string): DriveContext {
   const ws = readJson(workflowStateJson(tddDir));
   const tddPhase = typeof ws?.phase === "string" ? (ws.phase as string) : "feature";
 
@@ -90,19 +91,50 @@ export function readDriveContext(tddDir: string, featureId: string): DriveContex
   // (the deploy actually ran). The deploy gate's approval is read strictly via
   // readGates (the authoritative gate model), tolerant of a missing/legacy file.
   const deployed = fs.existsSync(featureDeployEvidenceJson(tddDir, featureId));
-  let gateApproved = false;
+  const gateApproved = readGateApproved(featureId, tddDir, "deploy");
+
+  // Promote: the SCM workflow-state (.lakebase/workflow-state.json, project root)
+  // is the source of truth for prepare-pr / wait-ci / merge (the SCM ladder
+  // feature-claimed -> pr-ready -> ci-green -> merged). The `promote` HITL gate
+  // (the PR acceptance, BEFORE the merge) lives in the TDD gate model. projectDir
+  // defaults to the parent of .tdd.
+  const proj = projectDir ?? path.dirname(tddDir);
+  let scmState: string | undefined;
   try {
-    gateApproved = readGates(featureId, { tddDir }).gates.deploy.status === "approved";
+    scmState = readWorkflowState(proj)?.state;
   } catch {
-    gateApproved = false;
+    scmState = undefined;
   }
+  const atOrPast = (target: string): boolean => {
+    if (!scmState) return false;
+    const i = (SCM_STATES as readonly string[]).indexOf(scmState);
+    const t = (SCM_STATES as readonly string[]).indexOf(target);
+    return i >= 0 && t >= 0 && i >= t;
+  };
+  const promote = {
+    prReady: atOrPast("pr-ready"),
+    ciGreen: atOrPast("ci-green"),
+    prApproved: readGateApproved(featureId, tddDir, "promote"),
+    merged: scmState === "merged",
+  };
 
   return {
     phase: driverPhaseForTdd(tddPhase),
     breakdownDone,
     planning: { proposed, estimated: hasEstimates(tddDir), requestsAuthored },
     deploy: { deployed, gateApproved },
+    promote,
   };
+}
+
+/** Read one gate's approved-ness from the authoritative gate model, tolerant of
+ *  a missing/legacy gates.json (conservative false). */
+function readGateApproved(featureId: string, tddDir: string, gate: "deploy" | "promote"): boolean {
+  try {
+    return readGates(featureId, { tddDir }).gates[gate].status === "approved";
+  } catch {
+    return false;
+  }
 }
 
 /** Construct a probe bound to a project's .tdd dir + feature. */

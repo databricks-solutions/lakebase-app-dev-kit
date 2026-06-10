@@ -85,6 +85,7 @@ __export(scripts_exports, {
   cloneRepo: () => cloneRepo,
   commit: () => commit,
   commitAll: () => commitAll,
+  commitAllIfChanged: () => commitAllIfChanged,
   commitAllSignedOff: () => commitAllSignedOff,
   commitAmend: () => commitAmend,
   commitAndPush: () => commitAndPush,
@@ -7136,7 +7137,13 @@ async function getAheadBehind(args) {
 }
 async function isDirty(args) {
   try {
-    const out = await exec2("git status --porcelain", { cwd: args.cwd });
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
   } catch {
     return false;
@@ -7257,10 +7264,10 @@ async function preparePr(args) {
     );
   }
   if (!args.force) {
-    const dirty = await isDirty({ cwd: args.projectDir });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
     if (dirty) {
       throw new ScmPreparePrError(
-        "Working tree has uncommitted changes; commit them before opening the PR (or pass --force).",
+        "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",
         "dirty-working-tree"
       );
     }
@@ -8916,6 +8923,24 @@ async function commitAll(args) {
     cwd: args.cwd
   });
 }
+async function commitAllIfChanged(args) {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  const exclude = args.exclude ?? [];
+  let addCmd = "git add -A";
+  let diffCmd = "git diff --cached --name-only";
+  if (exclude.length > 0) {
+    const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+    addCmd = `git add -A -- . ${ex}`;
+    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+  }
+  await exec2(addCmd, { cwd: args.cwd });
+  const staged = await exec2(diffCmd, { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
+}
 async function commitSignedOff(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -9373,6 +9398,7 @@ function withProxyEnv(base = {}) {
   cloneRepo,
   commit,
   commitAll,
+  commitAllIfChanged,
   commitAllSignedOff,
   commitAmend,
   commitAndPush,

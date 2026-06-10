@@ -346,6 +346,24 @@ describe("isDirty", () => {
     fs.writeFileSync(path.join(dir, "new.txt"), "x");
     expect(await isDirty({ cwd: dir })).toBe(true);
   });
+
+  it("ignore: churn confined to ignored prefixes is not dirty, but code changes still are", async () => {
+    const dir = mkTmp();
+    await gitInit(dir);
+    await configIdentity(dir);
+    await commitFile(dir, "a.txt", "a", "seed");
+    fs.mkdirSync(path.join(dir, ".tdd"), { recursive: true });
+    fs.mkdirSync(path.join(dir, ".lakebase"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".tdd", "agent-log.jsonl"), "{}\n");
+    fs.writeFileSync(path.join(dir, ".lakebase", "workflow-state.json"), "{}\n");
+    const ignore = [".tdd/", ".lakebase/"];
+    // Only orchestration-metadata churn -> not dirty when ignored, dirty otherwise.
+    expect(await isDirty({ cwd: dir, ignore })).toBe(false);
+    expect(await isDirty({ cwd: dir })).toBe(true);
+    // A real code change is dirty even with the ignore set.
+    fs.writeFileSync(path.join(dir, "a.txt"), "changed");
+    expect(await isDirty({ cwd: dir, ignore })).toBe(true);
+  });
 });
 
 // ---------- migrations.ts ----------

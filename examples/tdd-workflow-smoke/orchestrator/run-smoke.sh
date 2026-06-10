@@ -143,6 +143,25 @@ PROJECT_DIR="${PROJECT_DIR:-${SMOKE_ROOT_DEFAULT}/${PROJECT_NAME}}"
 # needs its parent present (a fresh checkout / renamed default may not have it).
 mkdir -p "$(dirname "$PROJECT_DIR")"
 
+# Turn recording (code asset): the deterministic driver records EVERY state-
+# machine turn (design + build + gates + deploy + promote) into a replayable
+# corpus when LAKEBASE_TDD_RECORD_DIR is set. The test runner turns it on by
+# default , one corpus dir beside the project, surviving --keep-on-failure:
+#   <RECORD_DIR>/turns/<NNNN>-<label>/   per-turn manifest + the .tdd/code delta
+#   <RECORD_DIR>/turns/index.json        the ordered timeline of every step
+#   <RECORD_DIR>/recorded-artifacts/     cumulative .tdd mirror (replayDesignTurn)
+#   <RECORD_DIR>/recorded-build/         per-turn code corpus (replayBuildTurn)
+# Override LAKEBASE_TDD_RECORD_DIR to relocate, or set it empty to disable.
+if [[ -z "${LAKEBASE_TDD_RECORD_DIR+x}" ]]; then
+  export LAKEBASE_TDD_RECORD_DIR="$(dirname "$PROJECT_DIR")/_recorded-${PROJECT_NAME}"
+fi
+if [[ -n "${LAKEBASE_TDD_RECORD_DIR}" ]]; then
+  : "${LAKEBASE_TDD_RECORD_BUILD_DIR:=${LAKEBASE_TDD_RECORD_DIR}/recorded-build}"
+  export LAKEBASE_TDD_RECORD_BUILD_DIR
+  mkdir -p "$LAKEBASE_TDD_RECORD_DIR"
+  echo "smoke: recording every state-machine turn -> $LAKEBASE_TDD_RECORD_DIR" >&2
+fi
+
 # The kit npx URL. When KIT_REF is set, suffix the GitHub ref so npx
 # clones that branch / tag / sha. Empty KIT_REF means "kit main" (the
 # default-published-pin behavior). Exported so any subprocess + the
@@ -334,15 +353,17 @@ scaffold_project() {
       --tiers "$TIERS" \
       `# Per-role model tiering for the smoke (speed): the smoke validates` \
       `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
-      `# models than the kit defaults and cuts per-turn generation latency. Only` \
-      `# the code-writers (navigator/driver, whose output must compile + pass` \
-      `# tests) stay on sonnet; every other role , including the architect , runs` \
-      `# haiku. This also exercises the per-project --agent-model override path.` \
-      `# (If haiku ACs/layering degrade the build, bump spec-author or the` \
-      `# architect back to sonnet.)` \
+      `# models than the kit defaults and cuts per-turn generation latency. The` \
+      `# code-writers (navigator/driver, whose output must compile + pass tests)` \
+      `# stay on sonnet; the prose roles run haiku, still exercising the` \
+      `# per-project --agent-model override path. The test-strategist is the` \
+      `# EXCEPTION: its output is a structured test-list (every item's ac_id must` \
+      `# map to an exact AC), and haiku thrashed on that shape , one list took` \
+      `# ~200s, the design lane's worst turn (P1 of the agent-loop optimization).` \
+      `# It runs on its sonnet default. (If haiku ACs/layering degrade the build,` \
+      `# bump spec-author or the architect back to sonnet too.)` \
       --agent-model spec-author=haiku \
       --agent-model architect-reviewer=haiku \
-      --agent-model test-strategist=haiku \
       --agent-model ux-designer=haiku \
       --agent-model product-owner=haiku \
       --agent-model release-engineer=haiku \

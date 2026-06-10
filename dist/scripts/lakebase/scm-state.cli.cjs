@@ -40,7 +40,7 @@ var getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${_
 var importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
 
 // scripts/lakebase/scm-state.cli.ts
-var path2 = __toESM(require("path"), 1);
+var path5 = __toESM(require("path"), 1);
 
 // scripts/util/cli-entry.ts
 var import_node_fs = require("fs");
@@ -286,6 +286,139 @@ function invariantsForState(state, forState) {
   return inv;
 }
 
+// scripts/lakebase/scm-claim-feature.ts
+var fs5 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
+
+// scripts/lakebase/kit-config.ts
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function formatLakebaseTtl(ms) {
+  return `${Math.floor(ms / 1e3)}s`;
+}
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/paired-branch.ts
+var fs4 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
+
+// scripts/lakebase/branch-create.ts
+var import_node_child_process3 = require("child_process");
+var import_node_util3 = require("util");
+
+// scripts/util/sanitize-branch-name.ts
+function sanitizeBranchName(gitBranch) {
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  while (name.length < 3) name += "-x";
+  return name;
+}
+
+// scripts/lakebase/branch-utils.ts
+var import_node_child_process = require("child_process");
+var import_node_util = require("util");
+var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
+
+// scripts/lakebase/lakebase-project.ts
+var import_node_child_process2 = require("child_process");
+var import_node_util2 = require("util");
+var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process2.execFile);
+
+// scripts/lakebase/branch-create.ts
+var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process3.execFile);
+
+// scripts/lakebase/branch-delete.ts
+var import_node_child_process4 = require("child_process");
+var import_node_util4 = require("util");
+var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process4.execFile);
+
+// scripts/lakebase/branch-endpoint.ts
+var import_node_child_process6 = require("child_process");
+
+// scripts/lakebase/get-connection.ts
+var import_node_child_process5 = require("child_process");
+var import_lakebase = require("@databricks/lakebase");
+var import_pg = require("pg");
+
+// scripts/lakebase/env-file.ts
+var fs2 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+var fs3 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+
+// scripts/lakebase/convention-branches.ts
+var CONVENTION_TIER_DEFAULTS = {
+  feature: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.featureBranchTtlMs), parentBranch: "staging" },
+  test: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.testBranchTtlMs), parentBranch: "staging" },
+  uat: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.uatBranchTtlMs), parentBranch: "staging" },
+  perf: { ttl: formatLakebaseTtl(KIT_TIMEOUTS.perfBranchTtlMs), parentBranch: "staging" }
+};
+
+// scripts/lakebase/scm-claim-feature.ts
+var ScmClaimError = class extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+    this.name = "ScmClaimError";
+  }
+  code;
+};
+function sanitizeFeatureSlug(featureId) {
+  const trimmed = featureId.trim();
+  if (trimmed.length === 0) {
+    throw new ScmClaimError("feature-id is empty", "invalid-feature-id");
+  }
+  const sanitized = sanitizeBranchName(trimmed);
+  if (!/[a-z0-9]/.test(sanitized)) {
+    throw new ScmClaimError(
+      `feature-id ${JSON.stringify(featureId)} contains no letters/digits; choose an identifier with at least one alphanumeric.`,
+      "invalid-feature-id"
+    );
+  }
+  return sanitized;
+}
+function featureBranchName(slug) {
+  return sanitizeBranchName(`feature/${slug}`);
+}
+
 // scripts/lakebase/scm-state.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -333,18 +466,26 @@ Exit codes:
   2 = state file present but invalid
 `;
 function buildReport(projectDir) {
-  const stateFile = path2.join(projectDir, ".lakebase/workflow-state.json");
+  const stateFile = path5.join(projectDir, ".lakebase/workflow-state.json");
   try {
     const state = readWorkflowState(projectDir);
     if (!state) {
       return { projectDir, stateFile, found: false };
+    }
+    let canonical_branch;
+    if (state.feature_id) {
+      try {
+        canonical_branch = featureBranchName(sanitizeFeatureSlug(state.feature_id));
+      } catch {
+      }
     }
     return {
       projectDir,
       stateFile,
       found: true,
       state,
-      gates: describeGates(state)
+      gates: describeGates(state),
+      ...canonical_branch !== void 0 ? { canonical_branch } : {}
     };
   } catch (e) {
     return {
@@ -448,7 +589,7 @@ function main(argv) {
 `);
     return 0;
   }
-  const projectDir = path2.resolve(args.projectDir ?? process.cwd());
+  const projectDir = path5.resolve(args.projectDir ?? process.cwd());
   const report = buildReport(projectDir);
   if (args.json) {
     const indent = args.pretty ? 2 : 0;

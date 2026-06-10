@@ -128,6 +128,18 @@ describe("preparePr precondition", () => {
     ).rejects.toMatchObject({ code: "dirty-working-tree" });
   });
 
+  it("scopes the dirty-tree check to CODE: asks isDirty to ignore .tdd/ + .lakebase/", async () => {
+    // The driver writes .tdd log + phase pointer and .lakebase state mid-run, on
+    // the very step that opens the PR; the guard must tolerate that, refusing only
+    // on uncommitted code. Assert prepare-pr passes the ignore prefixes.
+    seedClaim();
+    mockIsDirty.mockResolvedValue(false); // no CODE changes once metadata is ignored
+    await prep.preparePr({ projectDir: tmpDir });
+    expect(mockIsDirty).toHaveBeenCalledWith(
+      expect.objectContaining({ ignore: [".tdd/", ".lakebase/"] }),
+    );
+  });
+
   it("refuses when 0 commits ahead of parent without --allow-no-commits", async () => {
     seedClaim();
     mockExec.mockImplementation((cmd: string) => {

@@ -13,6 +13,7 @@ import {
   type ScmWorkflowState,
 } from "../../scripts/lakebase/scm-workflow-state";
 import { runScmStateCli } from "../../scripts/lakebase/scm-state.cli";
+import { featureBranchName, sanitizeFeatureSlug } from "../../scripts/lakebase/scm-claim-feature";
 
 let tmpDir: string;
 let originalCwd: string;
@@ -92,6 +93,32 @@ describe("lakebase-scm-state CLI", () => {
     expect(out).toContain("branch         : feature/initial-domain");
     expect(out).toContain("parent_branch  : staging");
     expect(out).toContain("lakebase_uid   : br-broad-sky-d2k5gewt");
+  });
+
+  it("--json carries the canonical_branch for a claimed feature (P7: assertions reuse it, no second CLI boot)", () => {
+    const s: ScmWorkflowState = {
+      version: 1,
+      state: "feature-claimed",
+      tier_topology: 2,
+      project_id: "demo-app",
+      feature_id: "F1-initial-domain",
+      branch: "feature-f1-initial-domain",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-broad-sky-d2k5gewt",
+      claimed_at: "2026-06-03T05:00:00Z",
+    };
+    writeWorkflowState(tmpDir, s);
+    const code = runScmStateCli(["--project-dir", tmpDir, "--json"]);
+    expect(code).toBe(0);
+    const parsed = JSON.parse(stdout());
+    // The same single source of truth the dedicated CLI uses.
+    expect(parsed.canonical_branch).toBe(featureBranchName(sanitizeFeatureSlug("F1-initial-domain")));
+  });
+
+  it("--json omits canonical_branch when no feature is claimed", () => {
+    writeWorkflowState(tmpDir, { version: 1, state: "scaffold-complete", tier_topology: 1, project_id: "tiny" });
+    expect(runScmStateCli(["--project-dir", tmpDir, "--json"])).toBe(0);
+    expect(JSON.parse(stdout()).canonical_branch).toBeUndefined();
   });
 
   it("--json emits a structured report and pretty-prints with --pretty", () => {

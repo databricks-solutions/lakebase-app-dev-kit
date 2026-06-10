@@ -157,9 +157,10 @@ export interface StoryView extends DriveStoryView {
 }
 
 /** The driver's coarse phase: sprint planning, the per-feature streaming, the
- *  per-feature deploy, or done. (The fine-grained TDD phases live in the
- *  pipeline state the lane sub-machines read.) */
-export type DrivePhase = "planning" | "feature" | "deploy" | "done";
+ *  per-feature deploy (local working-software check), the promote (PR review +
+ *  merge of the feature up to its parent tier), or done. (The fine-grained TDD
+ *  phases live in the pipeline state the lane sub-machines read.) */
+export type DrivePhase = "planning" | "feature" | "deploy" | "promote" | "done";
 
 export interface PlanningState {
   /** The Spec Author proposed the sprint's candidate feature breakdown. */
@@ -188,6 +189,25 @@ export interface DeployState {
   gateApproved: boolean;
 }
 
+/** The promote phase: take the accepted feature through its PR review (the
+ *  lakebase-scm-workflows ladder) and MERGE it up into its parent tier (e.g.
+ *  staging) in git + Lakebase, so the next sprint forks from a populated parent.
+ *  A "release into a long-running branch" per lakebase-release-workflows. The
+ *  SCM ladder (feature-claimed -> pr-ready -> ci-green -> merged) backs the first
+ *  three; the `promote` HITL gate is the human's PR acceptance, BEFORE the merge. */
+export interface PromoteState {
+  /** prepare-pr done: the feature branch is pushed + a PR is open (scm pr-ready). */
+  prReady: boolean;
+  /** wait-ci done: the PR's regression gate is green (scm ci-green). */
+  ciGreen: boolean;
+  /** The HITL `promote` gate is approved: the human/PO accepted the PR. The
+   *  approval comes AFTER ci-green and BEFORE the merge. */
+  prApproved: boolean;
+  /** merge done: the feature was merged (released) into the parent tier in git +
+   *  Lakebase and the downstream migrate ran (scm merged). */
+  merged: boolean;
+}
+
 /** A blocking problem an agent/step surfaced, derived from disk (escalation
  *  files + blocking smells). Structural copy of escalation.ts's Escalation so the
  *  pure state machine stays fs-free. While one is unresolved the driver routes to
@@ -208,6 +228,8 @@ export interface DriveState {
   /** The story the single build lane is on, or null when idle. */
   buildActive: string | null;
   deploy?: DeployState;
+  /** The promote phase's progress (PR review + merge to parent). */
+  promote?: PromoteState;
   /** UI track on (set from cfg.uiTrack at readState): gates the UX Designer step. */
   uiTrack?: boolean;
   /** The project design guide exists (design-guide.json on disk). */
@@ -233,6 +255,14 @@ export type WorkflowAction =
   | { kind: "feature-complete" }
   | { kind: "deploy" }
   | { kind: "approve-deploy-gate" }
+  // Promote phase (after the deploy gate): take the accepted feature through PR
+  // review (prepare-pr -> wait-ci -> the HITL `promote` gate) and MERGE it up to
+  // the parent tier. deploy-complete flips the coarse phase deploy -> promote.
+  | { kind: "deploy-complete" }
+  | { kind: "prepare-pr" }
+  | { kind: "wait-ci" }
+  | { kind: "approve-promote-gate" }
+  | { kind: "merge" }
   | { kind: "raise-to-hil"; reason: string; source: string; story?: string }
   | { kind: "done" };
 
@@ -308,6 +338,22 @@ export function nextTransition(state: DriveState): WorkflowAction {
     const d = state.deploy ?? { deployed: false, gateApproved: false };
     if (!d.deployed) return { kind: "deploy" };
     if (!d.gateApproved) return { kind: "approve-deploy-gate" };
+    // Deploy (local working-software check) done -> enter the promote phase.
+    return { kind: "deploy-complete" };
+  }
+
+  if (state.phase === "promote") {
+    // Take the accepted feature through PR review, then merge it up to the parent
+    // tier. PR review (prepare-pr -> wait-ci) comes BEFORE the human's `promote`
+    // gate, which comes BEFORE the merge (the actual promotion). The SCM CLIs
+    // advance the SCM ladder (pr-ready -> ci-green -> merged); the merge releases
+    // the feature into staging in git + Lakebase, so the next sprint forks from a
+    // populated parent.
+    const pr = state.promote ?? { prReady: false, ciGreen: false, prApproved: false, merged: false };
+    if (!pr.prReady) return { kind: "prepare-pr" };
+    if (!pr.ciGreen) return { kind: "wait-ci" };
+    if (!pr.prApproved) return { kind: "approve-promote-gate" };
+    if (!pr.merged) return { kind: "merge" };
     return { kind: "done" };
   }
 
@@ -394,7 +440,7 @@ export function pauseBeforeMilestone(m: PauseMilestone): (action: WorkflowAction
 
 /** The lane a WorkflowAction belongs to, for the driver's Tier-2 phase bounds.
  *  "coarse" is the feature->deploy boundary (feature-complete). */
-export type ActionLane = "planning" | "design" | "build" | "deploy" | "coarse" | "done";
+export type ActionLane = "planning" | "design" | "build" | "deploy" | "promote" | "coarse" | "done";
 
 export function actionLane(action: WorkflowAction): ActionLane {
   switch (action.kind) {
@@ -423,6 +469,12 @@ export function actionLane(action: WorkflowAction): ActionLane {
     case "deploy":
     case "approve-deploy-gate":
       return "deploy";
+    case "deploy-complete":
+    case "prepare-pr":
+    case "wait-ci":
+    case "approve-promote-gate":
+    case "merge":
+      return "promote";
     case "raise-to-hil":
       // Terminal halt: surfaced to the HIL, the run stops here for a human.
       return "done";
@@ -444,6 +496,7 @@ export function isHitlGateAction(action: WorkflowAction): boolean {
     action.kind === "approve-gate" ||
     action.kind === "approve-plan-gate" ||
     action.kind === "approve-deploy-gate" ||
+    action.kind === "approve-promote-gate" ||
     action.kind === "accept"
   );
 }

@@ -92,6 +92,23 @@ describe("reconcileArtifactLog", () => {
     expect(byPath[`features/${F}/test-list.json`]).toBe("test-strategist");
   });
 
+  it("reconciles the ux-designer's PROJECT-level design system (.tdd/design/), not the feature dir", () => {
+    // Regression: the ux-designer writes design-guide.{md,json} + ia.md to
+    // .tdd/design/ (project-level; designGuideReady probes there too), but
+    // reconcile looked under .tdd/features/<F>/ , so a ux-designer turn logged a
+    // phase.start with NO artifact.written for what it produced.
+    const tddDir = mkTdd();
+    write(path.join(tddDir, "features", F, "feature-spec.json")); // the drive's feature dir exists
+    write(path.join(tddDir, "design", "design-guide.json"));
+    write(path.join(tddDir, "design", "design-guide.md"), "# guide");
+    write(path.join(tddDir, "design", "ia.md"), "# ia");
+    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const byPath = Object.fromEntries(emitted.map((e) => [e.metadata?.path, e.role]));
+    expect(byPath["design/design-guide.json"]).toBe("ux-designer");
+    expect(byPath["design/design-guide.md"]).toBe("ux-designer");
+    expect(byPath["design/ia.md"]).toBe("ux-designer");
+  });
+
   it("returns [] for a feature with no artifacts yet", () => {
     const tddDir = mkTdd();
     expect(reconcileArtifactLog({ tddDir, featureId: F })).toEqual([]);

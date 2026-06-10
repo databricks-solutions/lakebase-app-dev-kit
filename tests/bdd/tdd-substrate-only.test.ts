@@ -12,6 +12,12 @@
 //   - raw git helpers (scripts/git/*) , git is a substrate concern, the paired
 //     primitives own checkout/merge so .env follows the branch.
 //
+// EXEMPT: scripts/git/commits.ts (commit / add). Committing the working tree is
+// not a branch operation , it switches no branch, so it cannot desync the
+// Lakebase pair or .env. The TDD build commits each GREEN + REFACTOR on the
+// already-checked-out experiment branch (cycle-record.ts) via this primitive;
+// the paired substrate still owns every create/delete/checkout/merge.
+//
 // Every branch a TDD agent cuts gets a Lakebase branch AND a git branch AND an
 // .env sync, because the only path it can call does all three. This test fails
 // loudly if anyone re-introduces an unpaired path.
@@ -38,7 +44,11 @@ function sourceFiles(dir: string): string[] {
 
 // Forbidden import specifiers (the unpaired branch-lifecycle + raw git modules).
 // Matches with or without a `.js` extension and at any relative depth.
-const FORBIDDEN_IMPORT = /from\s+["'][^"']*\/(?:lakebase\/branch-create|lakebase\/branch-delete|git\/[a-z-]+)(?:\.js)?["']/;
+// `git/(?!commits)` exempts the commit/add primitives (not a branch op; see the
+// header note) while still forbidding every other raw git module , including
+// `git/commit-push` (which pushes), since the negative lookahead only matches
+// the exact module name "commits".
+const FORBIDDEN_IMPORT = /from\s+["'][^"']*\/(?:lakebase\/branch-create|lakebase\/branch-delete|git\/(?!commits["'.])[a-z-]+)(?:\.js)?["']/;
 // Forbidden symbols (the deleted unpaired convention creators), even if someone
 // re-adds and re-exports them elsewhere.
 const FORBIDDEN_SYMBOL = /\b(createFeatureBranch|createTestBranch|createUatBranch|createPerfBranch)\b/;

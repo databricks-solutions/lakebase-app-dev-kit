@@ -40,6 +40,7 @@ __export(git_exports, {
   cloneRepo: () => cloneRepo,
   commit: () => commit,
   commitAll: () => commitAll,
+  commitAllIfChanged: () => commitAllIfChanged,
   commitAllSignedOff: () => commitAllSignedOff,
   commitAmend: () => commitAmend,
   commitAndPush: () => commitAndPush,
@@ -400,7 +401,13 @@ async function getAheadBehind(args) {
 }
 async function isDirty(args) {
   try {
-    const out = await exec2("git status --porcelain", { cwd: args.cwd });
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
   } catch {
     return false;
@@ -441,6 +448,24 @@ async function commitAll(args) {
   await exec2(`git commit -m ${shq(args.message)}`, {
     cwd: args.cwd
   });
+}
+async function commitAllIfChanged(args) {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  const exclude = args.exclude ?? [];
+  let addCmd = "git add -A";
+  let diffCmd = "git diff --cached --name-only";
+  if (exclude.length > 0) {
+    const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+    addCmd = `git add -A -- . ${ex}`;
+    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+  }
+  await exec2(addCmd, { cwd: args.cwd });
+  const staged = await exec2(diffCmd, { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
 }
 async function commitSignedOff(args) {
   if (!args.message.trim()) {
@@ -835,6 +860,7 @@ async function cherryPick(args) {
   cloneRepo,
   commit,
   commitAll,
+  commitAllIfChanged,
   commitAllSignedOff,
   commitAmend,
   commitAndPush,

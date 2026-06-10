@@ -128,10 +128,11 @@ export type DriverBound = "plan" | "design" | "build" | "deploy";
  * The transition + stopWhen for a Tier-2 bound. `plan` runs the planning
  * sub-machine; `design` runs the design lane to design-complete (all stories
  * designed, none built); `build` builds gate-approved stories then stops before
- * deploy; `deploy` runs only the deploy phase. A bound also GUARDS: a `build`
- * run whose design is not done, or a `deploy` run whose feature is not built,
- * stops immediately (its first action is out of lane) rather than doing the
- * upstream work.
+ * deploy; `deploy` ships the feature , the local deploy phase THEN the promote
+ * phase (PR review + merge up to the parent tier), to done. A bound also GUARDS:
+ * a `build` run whose design is not done, or a `deploy` run whose feature is not
+ * built, stops immediately (its first action is out of lane) rather than doing
+ * the upstream work.
  */
 export function driverBoundOptions(bound: DriverBound): Pick<RunDriverOptions, "transition" | "stopWhen"> {
   switch (bound) {
@@ -145,7 +146,10 @@ export function driverBoundOptions(bound: DriverBound): Pick<RunDriverOptions, "
     case "build":
       return { stopWhen: (a) => actionLane(a) !== "build" };
     case "deploy":
-      return { stopWhen: (a) => actionLane(a) !== "deploy" };
+      // Ship = deploy (local working-software) + promote (PR review + merge up to
+      // the parent). Both lanes are in scope so /deploy carries the feature all
+      // the way to merged/done, not just the local deploy.
+      return { stopWhen: (a) => actionLane(a) !== "deploy" && actionLane(a) !== "promote" };
   }
 }
 

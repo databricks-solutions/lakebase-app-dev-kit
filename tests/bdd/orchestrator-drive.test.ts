@@ -12,6 +12,8 @@ import {
   nextDesignAction,
   nextTransition,
   pauseBeforeMilestone,
+  actionLane,
+  isHitlGateAction,
   type DesignDriveState,
   type DriveState,
   type StoryView,
@@ -268,13 +270,57 @@ describe("nextTransition: deploy + done", () => {
     expect(nextTransition(ws({ stories: { S1: builtAccepted() } }))).toEqual({ kind: "feature-complete" });
   });
 
-  it("deploys, surfaces the deploy gate, then is done", () => {
+  it("deploys, surfaces the deploy gate, then enters the promote phase", () => {
     expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: false, gateApproved: false } })))
       .toEqual({ kind: "deploy" });
     expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: true, gateApproved: false } })))
       .toEqual({ kind: "approve-deploy-gate" });
+    // Deploy gate done -> promote (no longer terminal at done).
     expect(nextTransition(ws({ phase: "deploy", deploy: { deployed: true, gateApproved: true } })))
-      .toEqual({ kind: "done" });
+      .toEqual({ kind: "deploy-complete" });
+  });
+});
+
+describe("nextTransition: promote phase (PR review then merge to parent)", () => {
+  const promoteAt = (over: Partial<{ prReady: boolean; ciGreen: boolean; prApproved: boolean; merged: boolean }>) =>
+    nextTransition(ws({ phase: "promote", promote: { prReady: false, ciGreen: false, prApproved: false, merged: false, ...over } }));
+
+  it("walks prepare-pr -> wait-ci -> approve-promote-gate -> merge -> done, in that order", () => {
+    // Fresh into promote: PR review begins.
+    expect(promoteAt({})).toEqual({ kind: "prepare-pr" });
+    // PR open -> wait for CI.
+    expect(promoteAt({ prReady: true })).toEqual({ kind: "wait-ci" });
+    // CI green -> the HITL promote gate (PR acceptance), BEFORE the merge.
+    expect(promoteAt({ prReady: true, ciGreen: true })).toEqual({ kind: "approve-promote-gate" });
+    // PR accepted -> merge (the promotion to the parent tier).
+    expect(promoteAt({ prReady: true, ciGreen: true, prApproved: true })).toEqual({ kind: "merge" });
+    // Merged -> done (feature released to the parent; next sprint forks from it).
+    expect(promoteAt({ prReady: true, ciGreen: true, prApproved: true, merged: true })).toEqual({ kind: "done" });
+  });
+
+  it("defaults a missing promote sub-state to the start of PR review", () => {
+    expect(nextTransition(ws({ phase: "promote" }))).toEqual({ kind: "prepare-pr" });
+  });
+
+  it("the merge gate has teeth: it never merges before the PR is CI-green AND approved", () => {
+    // Not ci-green yet -> never reaches merge even if (spuriously) prApproved.
+    expect(promoteAt({ prReady: true, prApproved: true })).toEqual({ kind: "wait-ci" });
+    // ci-green but not approved -> the gate, not the merge.
+    expect(promoteAt({ prReady: true, ciGreen: true })).toEqual({ kind: "approve-promote-gate" });
+  });
+});
+
+describe("promote actions: lane + HITL classification", () => {
+  it("classifies the promote actions into the promote lane", () => {
+    for (const k of ["deploy-complete", "prepare-pr", "wait-ci", "approve-promote-gate", "merge"] as const) {
+      expect(actionLane({ kind: k } as WorkflowAction)).toBe("promote");
+    }
+  });
+  it("the promote gate is a HITL gate action; the SCM steps are not", () => {
+    expect(isHitlGateAction({ kind: "approve-promote-gate" })).toBe(true);
+    expect(isHitlGateAction({ kind: "prepare-pr" })).toBe(false);
+    expect(isHitlGateAction({ kind: "wait-ci" })).toBe(false);
+    expect(isHitlGateAction({ kind: "merge" })).toBe(false);
   });
 });
 

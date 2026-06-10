@@ -64,6 +64,7 @@ These rules apply across all references. Workflow skills that import this canon 
 5. **DTSTTCPW beats speculative generality.** Add the abstraction when the third caller appears, not when you imagine it.
 6. **NFR baseline check before declaring done.** Performance / scalability / security / observability / operability / resilience – at least skim the checklist.
 7. **Public boundary tests, private implementation refactors.** A correct refactor never changes the outer-boundary tests.
+8. **Dev/prod parity: no import-time coupling to an optional build artifact.** A module must import in every environment it ships to, not only the one it was written in. Requiring a compiled artifact (e.g. `client/dist`) at module load time , an unconditional `StaticFiles` mount / asset read at import scope , greens where the artifact happens to exist and crashes at import everywhere it does not (backend-only test runs, CI before the client build, fresh clones). Guard the coupling: mount/read the artifact only when it exists, and degrade clearly (a 503 "not built" from the SPA route) when it does not. This is the `import-time-build-coupling` smell; the `lakebase-tdd-imports-clean` gate enforces it.
 
 ## Composition with workflow skills
 

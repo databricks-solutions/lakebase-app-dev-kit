@@ -79,6 +79,15 @@ export function orchestratorLogEvents(
       return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
     case "approve-deploy-gate":
       return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
+    case "approve-promote-gate":
+      // The HITL PR acceptance (the `promote` gate), before the merge.
+      return [{ ...base, event: "gate.approved", slots: { gate: "promote" } }];
+    case "deploy-complete":
+      // Entering the promote phase: the Release Engineer takes the accepted
+      // feature through PR review + merge up to the parent tier. (prepare-pr /
+      // wait-ci / merge fall through to the default reasoning marker, which keeps
+      // each a distinct, timestamped span for the timing report.)
+      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "promote" } }];
     case "accept":
       return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
     case "cut-experiment":

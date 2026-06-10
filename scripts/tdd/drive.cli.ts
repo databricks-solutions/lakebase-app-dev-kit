@@ -24,6 +24,7 @@ import * as readline from "node:readline";
 import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
 import { replayBuildTurn } from "./replay-build.js";
 import { recordBuildTurn } from "./record-build.js";
+import { recordTurn, seedRecorderBaseline } from "./turn-recorder.js";
 import { runDriver, driverBoundOptions, ProtocolViolationError, UnexpectedCallbackError, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { writeEscalation } from "./escalation.js";
 import { emitAgentLogEvent } from "./agent-log.js";
@@ -262,6 +263,8 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
         }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        // P6: per-turn effort (set on the REVIEW judgment turn to run it fast).
+        if (cmd.effort) args.push("--effort", cmd.effort);
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
           if (existing) {
@@ -311,6 +314,17 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     // Spec Author then proposes + breaks down user-facing capabilities as E2E
     // (browser/screen) stories, not API-only.
     uiTrack: process.env.LAKEBASE_TDD_UI === "1",
+    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
+    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
+    // turn (the safety valve if a long story overflows the context window).
+    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
+    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
+    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
+    // to drop the flag and use the model default.
+    reviewEffort:
+      process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default"
+        ? ""
+        : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
@@ -433,6 +447,39 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
   };
 }
 
+/**
+ * Wrap effects so that, when LAKEBASE_TDD_RECORD_DIR is set, the driver records
+ * EVERY state-machine turn AFTER its effect lands , the universal per-turn
+ * timeline (design, gates, build, deploy, accept, promote), not just the build
+ * lane. Each turn writes turns/<NNNN>-<label>/ (manifest + the .tdd/code delta it
+ * produced) + refreshes the cumulative recorded-artifacts mirror that
+ * replayDesignTurn consumes. Composes with withBuildRecording (which populates
+ * recorded-build for replayBuildTurn), so one recordDir holds the whole
+ * record/replay corpus. A no-op when unset, so a normal run is unaffected.
+ */
+function withTurnRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveEffects {
+  const recordDir = process.env.LAKEBASE_TDD_RECORD_DIR?.trim();
+  if (!recordDir) return inner;
+  // Seed the delta baseline with the current (post-scaffold/intake) state ONCE,
+  // so the first recorded turn reports only what it produced, not the pre-existing
+  // scaffold. A no-op once a baseline exists (later drive processes in the run).
+  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir });
+  return {
+    readState: () => inner.readState(),
+    onAction: inner.onAction ? (a, i) => inner.onAction!(a, i) : undefined,
+    onHandback: inner.onHandback ? (h, d) => inner.onHandback!(h, d) : undefined,
+    async perform(action) {
+      await inner.perform(action);
+      if (action.kind === "done") return; // terminal no-op, produces nothing
+      const rec = recordTurn({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir, action, step: 0 });
+      process.stderr.write(
+        `[record] turn ${rec.ordinal} (${rec.dir}): ${rec.produced.length} produced` +
+          `${rec.deleted.length ? `, ${rec.deleted.length} deleted` : ""}\n`,
+      );
+    },
+  };
+}
+
 /** Compose a phase bound's stopWhen with the interactive gate stop: in
  *  interactive mode the driver also halts at each HITL gate for the human. */
 function gatedStopWhen(
@@ -486,7 +533,10 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
         onAction: cfg.onAction,
       };
       const base = driverBoundOptions("plan");
-      const r = await runDriver(planning, { ...base, stopWhen: gatedStopWhen(base.stopWhen, interactive) });
+      const r = await runDriver(withTurnRecording(planning, cfg), {
+        ...base,
+        stopWhen: gatedStopWhen(base.stopWhen, interactive),
+      });
       return { pendingGate: pendingGateOf(r) };
     },
     async readBacklog() {
@@ -498,7 +548,9 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
       cfg.runner = execRunner(cfg);
-      const r = await runDriver(buildDriveEffects(cfg), { stopWhen: gatedStopWhen(undefined, interactive) });
+      const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
+        stopWhen: gatedStopWhen(undefined, interactive),
+      });
       return { pendingGate: pendingGateOf(r) };
     },
     onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}\n`),
@@ -587,7 +639,7 @@ async function main(): Promise<number> {
   cfg.runner = execRunner(cfg);
   const interactive = args.gates === "interactive";
   try {
-    const result = await runDriver(withBuildRecording(buildDriveEffects(cfg), cfg), {
+    const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,
       transition: boundOpts.transition,
       stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),

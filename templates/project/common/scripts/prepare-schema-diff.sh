@@ -40,11 +40,17 @@ fi
 BIN="$WORK_TREE/node_modules/.bin/lakebase-schema-diff"
 if [ ! -x "$BIN" ]; then
   ALT="$WORK_TREE/node_modules/@databricks-solutions/lakebase-app-dev-kit/dist/scripts/lakebase/schema-diff.cli.js"
-  if [ ! -f "$ALT" ]; then
-    echo "prepare-schema-diff: lakebase-app-dev-kit not installed. Run 'npm install'." >&2
+  if [ -f "$ALT" ]; then
+    BIN="node $ALT"
+  elif [ -x "$WORK_TREE/scripts/lk" ]; then
+    # lk resolver shim , the npm-install-free path the scaffold uses post-npx-kill.
+    # CI checks out the project (scripts/lk + .lakebase/kit-ref) but does not
+    # npm-install the kit, so this is the path that fires there.
+    BIN="$WORK_TREE/scripts/lk lakebase-schema-diff"
+  else
+    echo "prepare-schema-diff: lakebase-app-dev-kit not resolvable (no node_modules, dist, or scripts/lk shim)." >&2
     exit 1
   fi
-  BIN="node $ALT"
 fi
 
 BRANCH="${1:-$(git branch --show-current 2>/dev/null)}"
