@@ -85,6 +85,7 @@ __export(scripts_exports, {
   cloneRepo: () => cloneRepo,
   commit: () => commit,
   commitAll: () => commitAll,
+  commitAllIfChanged: () => commitAllIfChanged,
   commitAllSignedOff: () => commitAllSignedOff,
   commitAmend: () => commitAmend,
   commitAndPush: () => commitAndPush,
@@ -8922,6 +8923,16 @@ async function commitAll(args) {
     cwd: args.cwd
   });
 }
+async function commitAllIfChanged(args) {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  await exec2("git add -A", { cwd: args.cwd });
+  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
+}
 async function commitSignedOff(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -9379,6 +9390,7 @@ function withProxyEnv(base = {}) {
   cloneRepo,
   commit,
   commitAll,
+  commitAllIfChanged,
   commitAllSignedOff,
   commitAmend,
   commitAndPush,

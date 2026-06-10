@@ -340,6 +340,16 @@ async function commitAll(args) {
     cwd: args.cwd
   });
 }
+async function commitAllIfChanged(args) {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  await exec2("git add -A", { cwd: args.cwd });
+  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
+}
 async function commitSignedOff(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -732,6 +742,7 @@ export {
   cloneRepo,
   commit,
   commitAll,
+  commitAllIfChanged,
   commitAllSignedOff,
   commitAmend,
   commitAndPush,

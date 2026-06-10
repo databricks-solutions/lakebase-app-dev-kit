@@ -7854,6 +7854,9 @@ function storyDeployVerified(tddDir, featureId, storyId) {
   return deployEvidencePasses(readDeployEvidence(join10(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
+// scripts/git/commits.ts
+init_esm_shims();
+
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);

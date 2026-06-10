@@ -7010,6 +7010,28 @@ var fs3 = __toESM(require("fs"), 1);
 // scripts/util/exec.ts
 init_cjs_shims();
 var cp = __toESM(require("child_process"), 1);
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+function exec2(command, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve(String(stdout).trim());
+    });
+  });
+}
 
 // scripts/tdd/experiment.ts
 function acLayerToTag(layer) {
@@ -7519,7 +7541,26 @@ function stopLocal(projectDir, targetName) {
   return { stopped: true };
 }
 
+// scripts/git/commits.ts
+init_cjs_shims();
+async function commitAllIfChanged(args) {
+  if (!args.message.trim()) {
+    throw new Error("Commit message is required");
+  }
+  await exec2("git add -A", { cwd: args.cwd });
+  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
+  if (!staged.trim()) return false;
+  await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
+  return true;
+}
+
 // scripts/tdd/cycle-record.ts
+async function commitCycleWork(tddDir, message) {
+  try {
+    await commitAllIfChanged({ cwd: (0, import_path7.dirname)(tddDir), message });
+  } catch {
+  }
+}
 function logCycleEvent2(tddDir, event) {
   try {
     emitAgentLogEvent(event, { tddDir });
@@ -7630,6 +7671,7 @@ async function greenOpenCycle(args) {
     markTestItemGreen(tddDir, featureId, story, open.test_id);
   } catch {
   }
+  await commitCycleWork(tddDir, `green: ${open.test_id} (${open.ac_id})`);
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 function readReview(tddDir, featureId, story, acId) {
@@ -7712,7 +7754,7 @@ function reviewAc(tddDir, featureId, story, acId) {
   });
   return { reviewed: true, refactorRequested };
 }
-function refactorAc(tddDir, featureId, story, acId) {
+async function refactorAc(tddDir, featureId, story, acId) {
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
   (0, import_fs7.mkdirSync)((0, import_path7.dirname)(file), { recursive: true });
@@ -7725,6 +7767,7 @@ function refactorAc(tddDir, featureId, story, acId) {
     feature_id: featureId,
     slots: { ac: acId, change, story }
   });
+  await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
 }
 
 // scripts/tdd/cycle.cli.ts
@@ -7801,7 +7844,7 @@ async function main() {
 `);
         return 0;
       }
-      refactorAc(tddDir, a.feature, a.story, ac);
+      await refactorAc(tddDir, a.feature, a.story, ac);
       process.stdout.write(`cycle: REFACTORED ${ac}
 `);
       return 0;

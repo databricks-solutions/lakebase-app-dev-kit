@@ -7849,6 +7849,9 @@ function storyDeployVerified(tddDir, featureId, storyId) {
   return deployEvidencePasses(readDeployEvidence((0, import_node_path2.join)(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
+// scripts/git/commits.ts
+init_cjs_shims();
+
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
