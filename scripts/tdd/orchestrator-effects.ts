@@ -24,7 +24,7 @@ import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
-import { storyTestProgress } from "./cycle-record.js";
+import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
 export type DriveCommand =
@@ -84,6 +84,14 @@ export interface DriveEffectsConfig {
    *  authoring), so it runs fast. Default "low"; set "" / undefined-via-env to
    *  use the model default. */
   reviewEffort?: string;
+  /** P8b: build loop granularity. "ac" (default) writes + greens one test at a
+   *  time (strict per-AC TDD). "hybrid-a" batches RED+GREEN by layer (the
+   *  Navigator writes a layer's failing tests in one turn, the Driver greens them
+   *  together), keeping the per-AC REVIEW. Cuts turn count on multi-AC same-layer
+   *  stories; gated so a rigorous run keeps strict per-AC. */
+  loopGranularity?: "ac" | "hybrid-a";
+  /** P8b: max test-list items per layer-batch (hybrid-a). Default 3. */
+  batchCap?: number;
   onAction?(action: WorkflowAction, iteration: number): void;
 }
 
@@ -187,7 +195,35 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
  * the substrate stamped pending[0], so the recorded cycle test_id diverged from
  * the test actually written. Naming the test makes the agent obey the order.
  */
-function nextPendingTestDirective(tddDir: string, featureId: string, story: string): string {
+function nextPendingTestDirective(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  loop?: "ac" | "hybrid-a",
+  cap?: number,
+): string {
+  // P8b (hybrid-a): the Navigator writes the first pending LAYER's tests in ONE
+  // turn (a layer-batch), matching the batch RED cycle the orchestration stamps
+  // for those exact ids. Same single source (nextPendingBatch) the begin reads,
+  // so the tests written and the stamped test_ids cannot drift.
+  if (loop === "hybrid-a") {
+    let batch: { id: string; ac_id: string; description: string }[] = [];
+    try {
+      batch = nextPendingBatch(tddDir, featureId, story, cap ?? DEFAULT_BATCH_CAP);
+    } catch {
+      batch = [];
+    }
+    if (batch.length === 0) {
+      return `Write the next failing tests (RED) for story ${story}: the next un-cycled layer-batch in the test list.`;
+    }
+    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
+    return (
+      `Write the failing tests (RED) for story ${story}'s next layer-batch , EXACTLY these ${batch.length} item(s),` +
+      ` in order: ${list}. Write ALL of them this turn and ONLY these (they share one layer/runner); do NOT skip ahead to` +
+      ` another layer, do NOT add or drop items , the orchestration stamps ONE batch RED cycle for exactly these ids,` +
+      ` and any mismatch is a defect.`
+    );
+  }
   let next: { id: string; ac_id: string; description: string } | undefined;
   try {
     next = storyTestProgress(tddDir, featureId, story).pending[0];
@@ -231,13 +267,19 @@ function consumeHandback(
 
 /** The role's task prompt, with any pending hand-back note prepended (the
  *  informed-retry feedback). */
+interface BuildLoopOpts {
+  loop?: "ac" | "hybrid-a";
+  cap?: number;
+}
+
 function roleTask(
   action: Extract<WorkflowAction, { kind: "invoke-role" }>,
   featureId: string,
   uiTrack: boolean,
   tddDir: string,
+  build?: BuildLoopOpts,
 ): string {
-  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir);
+  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir, build);
 }
 
 function roleTaskBody(
@@ -245,6 +287,7 @@ function roleTaskBody(
   featureId: string,
   uiTrack: boolean,
   tddDir: string,
+  build?: BuildLoopOpts,
 ): string {
   if ("mode" in action) {
     switch (action.mode) {
@@ -333,7 +376,7 @@ function roleTaskBody(
           ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
       }
-      return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
       if (action.buildMode === "refactor") {
         return (
@@ -343,7 +386,11 @@ function roleTaskBody(
           ` Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`
         );
       }
-      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return (
+        (build?.loop === "hybrid-a"
+          ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
+          : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? UI_TRACK_BUILD : "")
+      );
     default:
       return `Work story ${s}.`;
   }
@@ -441,7 +488,11 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         model: cfg.modelForRole(action.role),
         ...(resumeKey !== undefined ? { resumeKey } : {}),
         ...(isReviewTurn && reviewEffort ? { effort: reviewEffort } : {}),
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        task:
+          roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir, {
+            loop: cfg.loopGranularity,
+            cap: cfg.batchCap,
+          }) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : undefined,
           story: "story" in action ? action.story : undefined,
@@ -474,7 +525,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+        // P8b: a `begin` (RED) under hybrid-a stamps a layer-batch cycle; pass the
+        // mode + cap so the substrate batches exactly what the Navigator was told
+        // to write. The review verb is unaffected (still per-AC).
+        const loopFlag =
+          verb === "begin" && cfg.loopGranularity === "hybrid-a"
+            ? ["--loop", "hybrid-a", ...(cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : [])]
+            : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...loopFlag] });
       }
       if (!("mode" in action) && action.role === "driver") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];

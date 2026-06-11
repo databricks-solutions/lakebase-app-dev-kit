@@ -194,6 +194,52 @@ describe("commandsForAction: invoke-role -> claude", () => {
   });
 });
 
+describe("commandsForAction: P8b loop granularity (hybrid-a layer-batched build)", () => {
+  const cycleArgs = (cmds: ReturnType<typeof commandsForAction>): string[] =>
+    (cmds.find((c) => (c as { bin?: string }).bin === "lakebase-tdd-cycle") as { args: string[] }).args;
+  const navTask = (cmds: ReturnType<typeof commandsForAction>): string => (cmds[0] as { task: string }).task;
+
+  it("default (ac): the navigator begin command carries NO --loop flag", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("begin");
+    expect(args).not.toContain("--loop");
+  });
+
+  it("hybrid-a: the navigator begin command appends --loop hybrid-a + --batch-cap", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "navigator", story: "S1" },
+      cfg({ loopGranularity: "hybrid-a", batchCap: 3 }),
+    );
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("begin");
+    expect(args).toContain("--loop");
+    expect(args[args.indexOf("--loop") + 1]).toBe("hybrid-a");
+    expect(args).toContain("--batch-cap");
+    expect(args[args.indexOf("--batch-cap") + 1]).toBe("3");
+    // The RED prompt tells the Navigator to write the layer-batch, not one test.
+    expect(navTask(cmds)).toMatch(/layer-batch/i);
+  });
+
+  it("hybrid-a does NOT add --loop to the REVIEW verb (review stays per-AC)", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" },
+      cfg({ loopGranularity: "hybrid-a", batchCap: 3 }),
+    );
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("review");
+    expect(args).not.toContain("--loop");
+  });
+
+  it("hybrid-a: the driver GREEN prompt asks to green the whole batch in one pass", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "driver", story: "S1" },
+      cfg({ loopGranularity: "hybrid-a" }),
+    );
+    expect(navTask(cmds)).toMatch(/layer-batch|ALL GREEN/i);
+  });
+});
+
 describe("commandsForAction: state transitions -> kit CLIs", () => {
   it("dispatch / surface / approve-gate / complete route to lakebase-tdd-pipeline", () => {
     expect(commandsForAction({ kind: "dispatch", story: "S1" }, cfg())).toEqual([

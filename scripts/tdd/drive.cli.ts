@@ -52,6 +52,7 @@ import {
   type SprintEffects,
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
+import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
@@ -325,6 +326,14 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
       process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default"
         ? ""
         : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
+    // P8b: build loop granularity. Default "ac" (strict per-AC TDD); set
+    // LAKEBASE_TDD_LOOP=hybrid-a to batch RED+GREEN by layer. LAKEBASE_TDD_BATCH_CAP
+    // caps items per batch (default 3 in the substrate).
+    loopGranularity: process.env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : "ac",
+    batchCap: ((): number | undefined => {
+      const n = Number(process.env.LAKEBASE_TDD_BATCH_CAP);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+    })(),
     modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
@@ -524,6 +533,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
+      snapshotRunConfig(cfg, args, "plan");
       const planning: DriveEffects = {
         // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
         readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
@@ -548,6 +558,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
       cfg.runner = execRunner(cfg);
+      snapshotRunConfig(cfg, args, "full");
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(undefined, interactive),
       });
@@ -582,6 +593,24 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
+}
+
+/** P0.1: snapshot the resolved model + option matrix to .tdd/run-config.json (and
+ *  the corpus root when recording) at the start of an ACTUAL run (not --dry-run),
+ *  so a timing report is self-describing and two runs are A/B-comparable.
+ *  Best-effort: writeRunConfig swallows its own IO errors. */
+function snapshotRunConfig(cfg: DriveEffectsConfig, args: ParsedArgs, bound: string): void {
+  writeRunConfig({
+    projectDir: cfg.projectDir,
+    tddDir: cfg.tddDir,
+    bound,
+    gates: args.gates ?? "proxy",
+    uiTrack: cfg.uiTrack,
+    buildSessionScope: cfg.buildSessionScope,
+    reviewEffort: cfg.reviewEffort,
+    deployTarget: cfg.deployTarget,
+    modelForRole: cfg.modelForRole ?? (() => "inherit"),
+  });
 }
 
 async function main(): Promise<number> {
@@ -637,6 +666,7 @@ async function main(): Promise<number> {
   }
 
   cfg.runner = execRunner(cfg);
+  snapshotRunConfig(cfg, args, bound ?? "full");
   const interactive = args.gates === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
