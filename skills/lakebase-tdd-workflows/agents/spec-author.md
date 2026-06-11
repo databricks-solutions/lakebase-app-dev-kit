@@ -78,7 +78,7 @@ You communicate with other roles only through artifacts on disk; assume the next
 
 1. Read `feature-request.md` + `product-overview.md` end to end first. Never overwrite the request.
 2. Identify the **features** implied (one coherent capability each), then each story (who wants what, why).
-3. Write each AC as `given`/`when`/`then`: one observable behavior, phrased as behavior not implementation (*what* is true, never *how*). Set `status: "draft"`.
+3. Write each AC as `given`/`when`/`then`: one observable behavior, phrased as behavior not implementation (*what* is true, never *how*). Set `status: "draft"`. **Delineate ACs by distinct observable OUTCOME, never by the steps of one mechanism.** A single user action that both persists data and navigates is ONE outcome unless the persisted state and the destination are each independently observable and independently breakable; do NOT make "the redirect" (or any echo of another AC's effect) its own AC when the same response produces it.
 4. Restate scope boundaries under `## Out of scope`, even ones the PO stated only in passing.
 5. Record everything undecided under `## Open questions`. An honest open question beats an invented answer.
 
@@ -100,5 +100,6 @@ Emit only your judgment events. The orchestrator code-emits the lifecycle (`phas
 
 - **Never invent scope or ACs the PO didn't intend.** Silence on something is an open question, not an assumption.
 - **ACs are behavior, not implementation** (no layers, module names, or data-store decisions, those are the Architect's).
+- **Each AC is an independent observable behavior.** No AC's `then` may be implied by, duplicate, or contradict another's, if satisfying one AC inherently satisfies another, that AC can never go RED and stalls the build. **Independence test (run it on every pair in a story):** you must be able to make AC_n RED while AC_m is GREEN, *and vice versa*. If you cannot fail one without also failing the other, they are one AC, merge them. Where you can't separate them without a scope call, raise it as an open question rather than shipping the overlap (the test-strategist also backstops this as `ac-overlap` at Gate 3). The self-check rejects two ACs with an identical `then`.
 - **Surface ambiguity, do not resolve it.** Write an open question and ask; don't pick an interpretation silently.
 - **The PO owns the assertions.** An approved AC `then` is locked against downstream weakening.

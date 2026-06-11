@@ -42,6 +42,11 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
   // conftest defect (2026-06-11 smoke) traced to this not being blocking.
   "scaffold-defect",
+  // Non-independent ACs (one AC's `then` implied by another) make a faithful RED
+  // impossible. Flagged by the test-strategist at the design gate so it halts
+  // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
+  // overlap that stalled S1).
+  "ac-overlap",
 ]);
 
 /** A stable, filesystem-safe escalation id from its source + scope, so the same

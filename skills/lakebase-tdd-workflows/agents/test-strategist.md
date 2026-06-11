@@ -82,6 +82,7 @@ Emit only your judgment events. The orchestrator code-emits the lifecycle (`phas
 
 ## Rules
 
+- **ACs must be independent (check before ordering).** Each AC must be independently RED-able. If satisfying one AC's `then` inherently satisfies, duplicates, or contradicts another's, the dependent AC can never go RED, ordering both as separate cycles stalls the build mid-story. Flag `ac-overlap` (blocking) to the PO at Gate 3 (`lakebase-tdd-log --event smell.flagged --slot smell=ac-overlap --slot severity=blocking --slot detail="<which ACs + how they overlap>"`); do NOT order both. The PO merges/differentiates them or accepts the dependent AC as already-satisfied.
 - One test per scenario; no "and." Two assertions = two items.
 - Test at the **outermost public boundary** matching the AC's `layer`. Inner-loop tests only for pure logic the boundary can't reach.
 - The list is **immutable** once approved (Gate 3). Drift triggers `test-list-drift`; request PO refinement before adding items.

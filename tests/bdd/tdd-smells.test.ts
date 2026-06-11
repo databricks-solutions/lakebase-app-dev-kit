@@ -47,6 +47,7 @@ describe("smells catalog", () => {
     const names = SMELL_CATALOG.map((s) => s.name).sort();
     expect(names).toEqual(
       [
+        "ac-overlap",
         "api-coherence-drift",
         "boundary-violation",
         "cross-experiment-divergence",

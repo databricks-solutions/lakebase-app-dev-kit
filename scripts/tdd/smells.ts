@@ -15,6 +15,7 @@ export type SmellName =
   | "boundary-violation"
   | "import-time-build-coupling"
   | "scaffold-defect"
+  | "ac-overlap"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -94,6 +95,19 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     proposed_remediation:
       "Halt + surface to the HIL. Fix the scaffold (re-run the kit's wiring, e.g. " +
       "--enable-e2e for the project's language), never hand-author the missing piece in the build.",
+  },
+  {
+    name: "ac-overlap",
+    description:
+      "Two acceptance criteria in a story are not independent: satisfying one's `then` " +
+      "inherently satisfies (or contradicts) another, so the dependent AC's test can never " +
+      "go RED without deleting shipped code. A spec/test-list decomposition defect. Blocking, " +
+      "and flagged at the design gate (Gate 3) so it halts BEFORE a build cycle is wasted, " +
+      "rather than surfacing mid-build as a cycle-stall.",
+    proposed_remediation:
+      "Surface to the PO at the gate. Merge the overlapping ACs, differentiate their observable " +
+      "behavior, or (PO decision) accept the dependent AC as already-satisfied. Do not order both " +
+      "as separate cycles.",
   },
   {
     name: "e2e-row-perma-red",

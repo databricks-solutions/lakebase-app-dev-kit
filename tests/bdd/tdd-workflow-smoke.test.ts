@@ -115,7 +115,7 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model + effort: navigator + test-strategist + ux-designer pinned to opus, rest default, effort=low for all", () => {
+  it("tiers roles for the smoke via --agent-model + effort: navigator + test-strategist + ux-designer pinned to opus, rest default, effort=low for all EXCEPT the two AC-independence gatekeepers (spec-author + test-strategist run at default effort)", () => {
     // Perf-experiment matrix: pin the capability-critical roles to opus, the
     // navigator (writes the RED tests + reviews the design), the test-strategist
     // (the structured test-list whose every ac_id must map to a real AC), and the
@@ -132,9 +132,14 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     }
     // No role is on haiku now.
     expect(runSmoke).not.toMatch(/--agent-model \S+=haiku/);
-    // create-project takes only --agent-model (model), so effort=low is patched
-    // into the seeded tdd-config.json right after scaffold (scalar per role).
-    expect(runSmoke).toMatch(/\.roles \|= with_entries\(\.value\.effort = "low"\)/);
+    // create-project takes only --agent-model (model), so effort is patched into
+    // the seeded tdd-config.json right after scaffold: effort=low on every role
+    // EXCEPT the two design-gate AC-independence gatekeepers (spec-author +
+    // test-strategist), left unset -> default effort, because their semantic
+    // judgment (independence test / ac-overlap detection) is undercut by low effort.
+    expect(runSmoke).toMatch(
+      /\.roles \|= with_entries\(if \(\.key == "spec-author" or \.key == "test-strategist"\) then \. else \.value\.effort = "low" end\)/,
+    );
   });
 
   // Role observability is now structural inside the deterministic driver

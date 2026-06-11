@@ -69,6 +69,11 @@ function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
     return;
   }
   if (!existsSync(dir)) return;
+  // Collect normalized `then` clauses to backstop the AC-independence contract:
+  // two ACs in a story with an identical `then` are a literal overlap (the
+  // semantic case , one AC's `then` implied by another's , is the test-strategist's
+  // ac-overlap judgment, this only catches the exact-duplicate defect).
+  const thenById = new Map<string, string>();
   for (const f of readdirSync(dir)) {
     if (!f.endsWith(".json")) continue;
     let content: string;
@@ -79,6 +84,26 @@ function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
     }
     const r = checkArtifactConformance(canonicalArtifactName(`${dir}/${f}`), content);
     if (!r.ok) v.push({ artifact: `stories/${story}/acs/${f}`, problem: r.violations.join("; ") });
+    try {
+      const ac = JSON.parse(content) as { id?: string; then?: string };
+      if (typeof ac.id === "string" && typeof ac.then === "string") {
+        const norm = ac.then.trim().replace(/\s+/g, " ").toLowerCase();
+        if (norm) thenById.set(ac.id, norm);
+      }
+    } catch {
+      /* conformance above already flags unparseable JSON */
+    }
+  }
+  // Flag exact-duplicate `then` clauses: each pair is a non-independent AC.
+  const byThen = new Map<string, string[]>();
+  for (const [id, norm] of thenById) (byThen.get(norm) ?? byThen.set(norm, []).get(norm)!).push(id);
+  for (const ids of byThen.values()) {
+    if (ids.length > 1) {
+      v.push({
+        artifact: `stories/${story}/acs`,
+        problem: `ACs ${ids.sort().join(", ")} share an identical \`then\` , each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`,
+      });
+    }
   }
 }
 

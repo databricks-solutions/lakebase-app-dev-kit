@@ -365,15 +365,19 @@ scaffold_project() {
   ) || { err "scaffold failed"; exit 1; }
 
   # create-project seeds .lakebase/tdd-config.json with models but no effort
-  # (it takes only --agent-model). The smoke wants effort=low for every role/turn,
-  # so set a scalar effort "low" on each role (overrides the default navigator-
-  # review-only map). Models from --agent-model + the kit defaults are preserved.
+  # (it takes only --agent-model). The smoke wants effort=low for speed/cost on
+  # MOST roles, but the two DESIGN-GATE gatekeepers for AC independence, the
+  # spec-author (runs the per-pair independence test + outcome-vs-mechanism
+  # delineation) and the test-strategist (flags ac-overlap semantically at Gate 3),
+  # need full default effort: their judgment is subtle and effort=low undercuts it.
+  # So patch effort=low on every role EXCEPT those two (left unset -> default
+  # effort). Models from --agent-model + the kit defaults are preserved.
   local _tdc="$PROJECT_DIR/.lakebase/tdd-config.json"
   if [[ -f "$_tdc" ]]; then
     local _tmp; _tmp="$(mktemp)"
-    if jq '.roles |= with_entries(.value.effort = "low")' "$_tdc" > "$_tmp" 2>/dev/null; then
+    if jq '.roles |= with_entries(if (.key == "spec-author" or .key == "test-strategist") then . else .value.effort = "low" end)' "$_tdc" > "$_tmp" 2>/dev/null; then
       mv "$_tmp" "$_tdc"
-      log "patched tdd-config.json: effort=low for all roles (models: kit defaults, opus for navigator + test-strategist)"
+      log "patched tdd-config.json: effort=low for all roles except spec-author + test-strategist (default effort; models: kit defaults, opus for navigator + test-strategist + ux-designer)"
     else
       rm -f "$_tmp"; log "WARNING: could not patch effort into $_tdc (jq failed); using config defaults"
     fi
