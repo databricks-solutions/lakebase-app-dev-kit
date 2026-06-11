@@ -6648,6 +6648,7 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/timing-report.cli.ts
 init_esm_shims();
+import { join as join5 } from "path";
 
 // scripts/util/cli-entry.ts
 init_esm_shims();
@@ -6909,6 +6910,68 @@ function formatTimingReport(report) {
 `;
 }
 
+// scripts/tdd/run-config.ts
+init_esm_shims();
+import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, writeFileSync } from "fs";
+import { join as join4 } from "path";
+
+// scripts/tdd/agent-models.ts
+init_esm_shims();
+import { dirname, join as join3 } from "path";
+var RECOMMENDED_MODELS = {
+  "spec-author": "opus",
+  "architect-reviewer": "opus",
+  "test-strategist": "sonnet",
+  "ux-designer": "sonnet",
+  navigator: "sonnet",
+  driver: "sonnet",
+  "product-owner": "opus",
+  "release-engineer": "sonnet"
+};
+var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
+var AGENT_CONFIG_REL = join3(".lakebase", "agent-config.json");
+
+// scripts/tdd/run-config.ts
+var RUN_CONFIG_REL = join4(".tdd", "run-config.json");
+function readRunConfig(tddDir) {
+  const f = join4(tddDir, "run-config.json");
+  if (!existsSync2(f)) return void 0;
+  try {
+    return JSON.parse(readFileSync2(f, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function formatRunConfig(cfg) {
+  const byModel = /* @__PURE__ */ new Map();
+  for (const [role, model] of Object.entries(cfg.models)) {
+    const list = byModel.get(model) ?? [];
+    list.push(role);
+    byModel.set(model, list);
+  }
+  const models = [...byModel.entries()].sort((a, b) => b[1].length - a[1].length).map(([m, roles]) => `${m}: ${roles.sort().join(", ")}`).join("  |  ");
+  const opts = [
+    `bound=${cfg.bound}`,
+    `gates=${cfg.gates}`,
+    `loop=${cfg.loop_granularity}`,
+    `build-session=${cfg.build_session_scope}`,
+    `review-effort=${cfg.review_effort || "default"}`,
+    `ui=${cfg.ui_track ? "on" : "off"}`,
+    `deploy=${cfg.deploy_target}`,
+    ...cfg.batch_cap !== void 0 ? [`batch-cap=${cfg.batch_cap}`] : [],
+    ...cfg.batch_fallback ? [`batch-fallback=${cfg.batch_fallback}`] : [],
+    ...cfg.kit_ref ? [`kit=${cfg.kit_ref}`] : [],
+    ...cfg.run_label ? [`label=${cfg.run_label}`] : []
+  ].join("  ");
+  const out = [
+    "config:",
+    `  models   ${models}`,
+    `  options  ${opts}`,
+    `  started  ${cfg.started_at}`
+  ];
+  return out.join("\n") + "\n";
+}
+
 // scripts/tdd/timing-report.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -6970,10 +7033,13 @@ ${HELP}
     { tddDir: parsed.tddDir, featureId: parsed.feature },
     { topN: parsed.top }
   );
+  const tddDir = parsed.tddDir ?? join5(process.cwd(), ".tdd");
+  const config = readRunConfig(tddDir) ?? null;
   if (parsed.json) {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}
+    process.stdout.write(`${JSON.stringify({ config, timing: report }, null, 2)}
 `);
   } else {
+    if (config) process.stdout.write(formatRunConfig(config) + "\n");
     process.stdout.write(formatTimingReport(report));
   }
   return 0;

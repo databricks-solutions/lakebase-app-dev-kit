@@ -7788,7 +7788,20 @@ function reviewAc(tddDir, featureId, story, acId) {
   });
   return { reviewed: true, refactorRequested };
 }
-async function refactorAc(tddDir, featureId, story, acId) {
+async function refactorAc(tddDir, featureId, story, acId, opts) {
+  const exp = storyExperiment(tddDir, featureId, story);
+  const verify = opts?.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname4(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-refactor",
+      reason: `REFACTOR verify failed for ${acId} in ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+      ac_id: acId
+    });
+    return { refactored: false, escalated: true, escalation, summary: result.summary };
+  }
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync8(dirname4(file), { recursive: true });
@@ -7802,6 +7815,7 @@ async function refactorAc(tddDir, featureId, story, acId) {
     slots: { ac: acId, change, story }
   });
   await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
+  return { refactored: true, summary: result.summary };
 }
 
 // scripts/tdd/cycle.cli.ts
@@ -7878,9 +7892,14 @@ async function main() {
 `);
         return 0;
       }
-      await refactorAc(tddDir, a.feature, a.story, ac);
-      process.stdout.write(`cycle: REFACTORED ${ac}
+      const r = await refactorAc(tddDir, a.feature, a.story, ac);
+      if (r.escalated) {
+        process.stdout.write(`cycle: REFACTOR BLOCKED for ${ac} -> raised to HIL: ${r.summary}
 `);
+      } else {
+        process.stdout.write(`cycle: REFACTORED ${ac}
+`);
+      }
       return 0;
     }
     default:
