@@ -40,6 +40,16 @@ export interface CycleArtifact {
   ac_id: string;
   test_id: string;
   test_description: string;
+  /**
+   * P8b (hybrid-a, layer-batched build): when a single RED cycle covers a BATCH
+   * of test-list items (one layer's tests written + greened together), this lists
+   * ALL covered test ids; `test_id` stays the first for back-compat. A per-test
+   * (loopGranularity=ac) cycle omits it. Read via coveredTestIds(), never raw, so
+   * an empty array can never silently mean "covers nothing".
+   */
+  test_ids?: string[];
+  /** The batch key `(layer, n)` a batch cycle belongs to (P8b); absent per-test. */
+  chunk?: string;
   experiment_slug?: string;
   branch_id?: string;
   navigator_plan?: string;
@@ -73,6 +83,19 @@ export function readAcLayer(tddDir: string, featureId: string, acId: string): Ac
   // Single source of truth: delegate to tdd-paths so the AC-layer read lives in
   // exactly one place. Re-exported under this name for the existing importers.
   return readAcLayerFromPaths(tddDir, featureId, acId);
+}
+
+/**
+ * The test-list items a cycle covers. A batch cycle (P8b) lists them in
+ * `test_ids`; a per-test cycle has the single `test_id`. EMPTY-ARRAY GUARD (a
+ * known test-strategist defect class): a present-but-empty `test_ids: []` falls
+ * back to `test_id`, NEVER to "covers nothing" , else a batch cycle with an
+ * empty list would silently green/stall zero tests and the story never
+ * completes. Returns [] only when there is genuinely no test id at all.
+ */
+export function coveredTestIds(c: Pick<CycleArtifact, "test_id" | "test_ids">): string[] {
+  if (c.test_ids && c.test_ids.length > 0) return c.test_ids;
+  return c.test_id ? [c.test_id] : [];
 }
 
 export interface CycleScope {
@@ -151,6 +174,11 @@ export interface BeginCycleArgs extends CycleScope {
    * runner contract (at least one recorded run for the matching tag).
    */
   layer?: AcLayer;
+  /** P8b: the batch's covered test ids (when this RED cycle covers a layer-batch
+   *  of items). `test_id` should be the first of these for back-compat. */
+  test_ids?: string[];
+  /** P8b: the batch key `(layer, n)` this cycle belongs to. */
+  chunk?: string;
 }
 
 export function beginCycle(args: BeginCycleArgs): CycleArtifact {
@@ -168,6 +196,8 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     navigator_plan: args.navigator_plan,
     red_at: new Date().toISOString(),
     layer,
+    ...(args.test_ids && args.test_ids.length > 0 ? { test_ids: args.test_ids } : {}),
+    ...(args.chunk ? { chunk: args.chunk } : {}),
   };
   writeCycleArtifact(args, artifact);
   logCycleEvent(args.tddDir, {
@@ -176,7 +206,13 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     event: "cycle.red",
     feature_id: args.feature_id,
     cycle_id,
-    slots: { test_id: args.test_id, ac: args.ac_id, asserts: args.test_description, layer },
+    slots: {
+      test_id: args.test_id,
+      ac: args.ac_id,
+      asserts: args.test_description,
+      layer,
+      ...(args.test_ids && args.test_ids.length > 1 ? { batch: args.test_ids.length } : {}),
+    },
   });
   return artifact;
 }

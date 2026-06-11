@@ -31,9 +31,12 @@ import {
   beginCycle,
   recordRunnerOutcome,
   markGreen,
+  coveredTestIds,
+  readAcLayer,
   type CycleArtifact,
   type CycleScope,
 } from "./run-cycle.js";
+import type { AcLayer } from "./experiment.js";
 
 /**
  * Commit the working tree (production code + tests + cycle artifacts) on the
@@ -82,7 +85,7 @@ function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
   }
 }
 
-interface StoryTestItem {
+export interface StoryTestItem {
   id: string;
   description: string;
   ac_id: string;
@@ -160,8 +163,10 @@ export function storyTestProgress(tddDir: string, featureId: string, story: stri
     items = [];
   }
   const cycles = storyCycles(tddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  // A cycle covers one (per-test) or several (P8b batch) test ids; coveredTestIds
+  // reads either shape, so progress is correct in both loop-granularity modes.
+  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
   const pending = items.filter((i) => !cycledTestIds.has(i.id));
   const openRed = cycles.filter((c) => c.red_at && !c.green_at);
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
@@ -204,6 +209,70 @@ export function beginNextPendingCycle(args: CycleRecordArgs): BeginResult {
     branch_id: exp.branch,
   });
   return { recorded: true, cycleId: art.cycle_id, testId: pending.id, acId: pending.ac_id };
+}
+
+/** Default layer-batch cap (P8b): at most this many test-list items per batch
+ *  cycle, so a big homogeneous story does not make one giant GREEN turn. */
+export const DEFAULT_BATCH_CAP = 3;
+
+/**
+ * P8b (loopGranularity=hybrid-a): stamp ONE RED cycle covering the first pending
+ * LAYER's test-list items, capped at `cap` (default 3). The batch unit is the
+ * layer because the runner contract is per layer-tag (recordRunnerOutcome ->
+ * markGreen): one GREEN turn can only cleanly all-green tests sharing one runner.
+ * Items are grouped by their AC's `layer`; the batch is the first pending item's
+ * layer, all pending items of that layer (in test-list order), capped.
+ *
+ * Returns recorded:false when nothing is pending. NEVER stamps an empty batch
+ * (the empty-test_ids guard): if a layer somehow yields no ids we do not write a
+ * cycle that would green nothing.
+ */
+/** The test-list items the NEXT layer-batch will cover (P8b): the first pending
+ *  layer's pending items, in order, capped. Empty when nothing is pending. The
+ *  SINGLE source both beginNextPendingBatch (what it stamps) and the Navigator's
+ *  RED directive (what tests to write) read, so they cannot drift. */
+export function nextPendingBatch(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  cap: number = DEFAULT_BATCH_CAP,
+): StoryTestItem[] {
+  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
+  const pending = storyTestProgress(tddDir, featureId, story).pending;
+  if (pending.length === 0) return [];
+  const layerOf = (acId: string): string => readAcLayer(tddDir, featureId, acId) ?? "_nolayer";
+  const headLayer = layerOf(pending[0].ac_id);
+  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
+}
+
+export function beginNextPendingBatch(args: CycleRecordArgs, opts?: { cap?: number }): BeginResult {
+  const { tddDir, featureId, story } = args;
+  const cap = opts?.cap && opts.cap > 0 ? opts.cap : DEFAULT_BATCH_CAP;
+  const batch = nextPendingBatch(tddDir, featureId, story, cap);
+  if (batch.length === 0) return { recorded: false }; // nothing pending / empty-batch guard
+
+  const headLayer = readAcLayer(tddDir, featureId, batch[0].ac_id) ?? "_nolayer";
+  const head = batch[0];
+  const exp = storyExperiment(tddDir, featureId, story);
+  // chunk index: how many cycles already exist for this layer in the story, + 1.
+  const priorForLayer = storyCycles(tddDir, featureId, story).filter(
+    (c) => (c.layer ?? "_nolayer") === headLayer,
+  ).length;
+  const explicitLayer = headLayer === "_nolayer" ? undefined : (headLayer as AcLayer);
+  const art = beginCycle({
+    tddDir,
+    feature_id: featureId,
+    story_id: story,
+    ac_id: head.ac_id,
+    test_id: head.id,
+    test_description: head.description,
+    experiment_slug: exp.slug,
+    branch_id: exp.branch,
+    layer: explicitLayer,
+    test_ids: batch.map((b) => b.id),
+    chunk: `${headLayer}-${priorForLayer + 1}`,
+  });
+  return { recorded: true, cycleId: art.cycle_id, testId: head.id, acId: head.ac_id };
 }
 
 export interface GreenResult {
@@ -285,16 +354,22 @@ export async function greenOpenCycle(
   // test-list item (master + per-story) and the AC (-> passing when all its
   // tests are green). Without this the cycle is green but the Release Engineer
   // sees the test-list item still `pending` + the AC `draft` and refuses to
-  // deploy (the await-acceptance stall). Best-effort: never fail a green here.
-  try {
-    markTestItemGreen(tddDir, featureId, story, open.test_id);
-  } catch {
-    /* status propagation is observability for downstream consumers, not a gate */
+  // deploy (the await-acceptance stall). A P8b batch cycle covers SEVERAL test
+  // ids; propagate to EACH so every batched item flips green together (a per-test
+  // cycle is just the single-element case). Best-effort: never fail a green here.
+  for (const tid of coveredTestIds(open)) {
+    try {
+      markTestItemGreen(tddDir, featureId, story, tid);
+    } catch {
+      /* status propagation is observability for downstream consumers, not a gate */
+    }
   }
   // Commit the now-green increment on the experiment branch (working software
   // at each passing test), so accept can merge real commits up + promote's
   // prepare-pr sees a clean tree.
-  await commitCycleWork(tddDir, `green: ${open.test_id} (${open.ac_id})`);
+  const greened = coveredTestIds(open);
+  const greenedLabel = greened.length > 1 ? `${greened.join(", ")} (${open.ac_id} batch)` : `${open.test_id} (${open.ac_id})`;
+  await commitCycleWork(tddDir, `green: ${greenedLabel}`);
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 
@@ -345,7 +420,9 @@ export function acReviewStates(tddDir: string, featureId: string, story: string)
   } catch {
     items = [];
   }
-  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const greenTestIds = new Set(
+    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)),
+  );
   const acOrder: string[] = [];
   const acTests = new Map<string, string[]>();
   for (const it of items) {

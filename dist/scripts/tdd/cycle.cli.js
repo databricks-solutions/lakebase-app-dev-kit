@@ -7323,6 +7323,10 @@ function logCycleEvent(tddDir, event) {
 function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
+function coveredTestIds(c) {
+  if (c.test_ids && c.test_ids.length > 0) return c.test_ids;
+  return c.test_id ? [c.test_id] : [];
+}
 function cyclesDir(scope) {
   return join9(scope.tddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
 }
@@ -7359,7 +7363,9 @@ function beginCycle(args) {
     branch_id: args.branch_id,
     navigator_plan: args.navigator_plan,
     red_at: (/* @__PURE__ */ new Date()).toISOString(),
-    layer
+    layer,
+    ...args.test_ids && args.test_ids.length > 0 ? { test_ids: args.test_ids } : {},
+    ...args.chunk ? { chunk: args.chunk } : {}
   };
   writeCycleArtifact(args, artifact);
   logCycleEvent(args.tddDir, {
@@ -7368,7 +7374,13 @@ function beginCycle(args) {
     event: "cycle.red",
     feature_id: args.feature_id,
     cycle_id,
-    slots: { test_id: args.test_id, ac: args.ac_id, asserts: args.test_description, layer }
+    slots: {
+      test_id: args.test_id,
+      ac: args.ac_id,
+      asserts: args.test_description,
+      layer,
+      ...args.test_ids && args.test_ids.length > 1 ? { batch: args.test_ids.length } : {}
+    }
   });
   return artifact;
 }
@@ -7643,8 +7655,8 @@ function storyTestProgress(tddDir, featureId, story) {
     items = [];
   }
   const cycles = storyCycles(tddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
   const pending = items.filter((i) => !cycledTestIds.has(i.id));
   const openRed = cycles.filter((c) => c.red_at && !c.green_at);
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
@@ -7666,6 +7678,42 @@ function beginNextPendingCycle(args) {
     branch_id: exp.branch
   });
   return { recorded: true, cycleId: art.cycle_id, testId: pending.id, acId: pending.ac_id };
+}
+var DEFAULT_BATCH_CAP = 3;
+function nextPendingBatch(tddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
+  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
+  const pending = storyTestProgress(tddDir, featureId, story).pending;
+  if (pending.length === 0) return [];
+  const layerOf = (acId) => readAcLayer2(tddDir, featureId, acId) ?? "_nolayer";
+  const headLayer = layerOf(pending[0].ac_id);
+  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
+}
+function beginNextPendingBatch(args, opts) {
+  const { tddDir, featureId, story } = args;
+  const cap = opts?.cap && opts.cap > 0 ? opts.cap : DEFAULT_BATCH_CAP;
+  const batch = nextPendingBatch(tddDir, featureId, story, cap);
+  if (batch.length === 0) return { recorded: false };
+  const headLayer = readAcLayer2(tddDir, featureId, batch[0].ac_id) ?? "_nolayer";
+  const head = batch[0];
+  const exp = storyExperiment(tddDir, featureId, story);
+  const priorForLayer = storyCycles(tddDir, featureId, story).filter(
+    (c) => (c.layer ?? "_nolayer") === headLayer
+  ).length;
+  const explicitLayer = headLayer === "_nolayer" ? void 0 : headLayer;
+  const art = beginCycle({
+    tddDir,
+    feature_id: featureId,
+    story_id: story,
+    ac_id: head.ac_id,
+    test_id: head.id,
+    test_description: head.description,
+    experiment_slug: exp.slug,
+    branch_id: exp.branch,
+    layer: explicitLayer,
+    test_ids: batch.map((b) => b.id),
+    chunk: `${headLayer}-${priorForLayer + 1}`
+  });
+  return { recorded: true, cycleId: art.cycle_id, testId: head.id, acId: head.ac_id };
 }
 var defaultGreenVerifier = async ({ projectDir, branchId }) => {
   const r = await ensureDeployedAndVerify({ projectDir, lakebaseBranch: branchId });
@@ -7701,11 +7749,15 @@ async function greenOpenCycle(args) {
     return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
-  try {
-    markTestItemGreen(tddDir, featureId, story, open.test_id);
-  } catch {
+  for (const tid of coveredTestIds(open)) {
+    try {
+      markTestItemGreen(tddDir, featureId, story, tid);
+    } catch {
+    }
   }
-  await commitCycleWork(tddDir, `green: ${open.test_id} (${open.ac_id})`);
+  const greened = coveredTestIds(open);
+  const greenedLabel = greened.length > 1 ? `${greened.join(", ")} (${open.ac_id} batch)` : `${open.test_id} (${open.ac_id})`;
+  await commitCycleWork(tddDir, `green: ${greenedLabel}`);
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 function readReview(tddDir, featureId, story, acId) {
@@ -7724,7 +7776,9 @@ function acReviewStates(tddDir, featureId, story) {
   } catch {
     items = [];
   }
-  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const greenTestIds = new Set(
+    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c))
+  );
   const acOrder = [];
   const acTests = /* @__PURE__ */ new Map();
   for (const it of items) {
@@ -7835,6 +7889,14 @@ function parse(argv) {
       case "--tdd-dir":
         out.tddDir = argv[++i];
         break;
+      case "--loop":
+        out.loop = argv[++i];
+        break;
+      case "--batch-cap": {
+        const n = Number(argv[++i]);
+        if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
+        break;
+      }
     }
   }
   return out;
@@ -7842,7 +7904,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>]
+Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>] [--loop ac|hybrid-a] [--batch-cap <n>]
 `
   );
   return 2;
@@ -7854,7 +7916,7 @@ async function main() {
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {
-      const r = beginNextPendingCycle(base);
+      const r = a.loop === "hybrid-a" ? beginNextPendingBatch(base, { cap: a.batchCap }) : beginNextPendingCycle(base);
       process.stdout.write(
         r.recorded ? `cycle: RED ${r.cycleId} for ${r.testId} (${r.acId})
 ` : `cycle: no pending test for ${a.story} (every test-list item already has a cycle)

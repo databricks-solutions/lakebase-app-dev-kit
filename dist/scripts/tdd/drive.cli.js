@@ -7844,6 +7844,10 @@ function emitAgentLogEvent(input, opts = {}) {
 function readAcLayer2(tddDir, featureId, acId) {
   return readAcLayer(tddDir, featureId, acId);
 }
+function coveredTestIds(c) {
+  if (c.test_ids && c.test_ids.length > 0) return c.test_ids;
+  return c.test_id ? [c.test_id] : [];
+}
 
 // scripts/tdd/smells.ts
 function readSmellsLog(tddDir) {
@@ -8069,12 +8073,21 @@ function storyTestProgress(tddDir, featureId, story) {
     items = [];
   }
   const cycles = storyCycles(tddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.map((c) => c.test_id));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).map((c) => c.test_id));
+  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
   const pending = items.filter((i) => !cycledTestIds.has(i.id));
   const openRed = cycles.filter((c) => c.red_at && !c.green_at);
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
   return { total: items.length, pending, openRed, allGreen };
+}
+var DEFAULT_BATCH_CAP = 3;
+function nextPendingBatch(tddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
+  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
+  const pending = storyTestProgress(tddDir, featureId, story).pending;
+  if (pending.length === 0) return [];
+  const layerOf = (acId) => readAcLayer2(tddDir, featureId, acId) ?? "_nolayer";
+  const headLayer = layerOf(pending[0].ac_id);
+  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
@@ -8092,7 +8105,9 @@ function acReviewStates(tddDir, featureId, story) {
   } catch {
     items = [];
   }
-  const greenTestIds = new Set(storyCycles(tddDir, featureId, story).filter((c) => c.green_at).map((c) => c.test_id));
+  const greenTestIds = new Set(
+    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c))
+  );
   const acOrder = [];
   const acTests = /* @__PURE__ */ new Map();
   for (const it of items) {
@@ -8584,7 +8599,20 @@ function reviewRubric(tddDir, featureId, story, ac) {
   }
   return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
 }
-function nextPendingTestDirective(tddDir, featureId, story) {
+function nextPendingTestDirective(tddDir, featureId, story, loop, cap) {
+  if (loop === "hybrid-a") {
+    let batch = [];
+    try {
+      batch = nextPendingBatch(tddDir, featureId, story, cap ?? DEFAULT_BATCH_CAP);
+    } catch {
+      batch = [];
+    }
+    if (batch.length === 0) {
+      return `Write the next failing tests (RED) for story ${story}: the next un-cycled layer-batch in the test list.`;
+    }
+    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
+    return `Write the failing tests (RED) for story ${story}'s next layer-batch , EXACTLY these ${batch.length} item(s), in order: ${list}. Write ALL of them this turn and ONLY these (they share one layer/runner); do NOT skip ahead to another layer, do NOT add or drop items , the orchestration stamps ONE batch RED cycle for exactly these ids, and any mismatch is a defect.`;
+  }
   let next;
   try {
     next = storyTestProgress(tddDir, featureId, story).pending[0];
@@ -8611,10 +8639,10 @@ function consumeHandback(action, featureId, tddDir) {
 
 ` : "";
 }
-function roleTask(action, featureId, uiTrack, tddDir) {
-  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir);
+function roleTask(action, featureId, uiTrack, tddDir, build) {
+  return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir, build);
 }
-function roleTaskBody(action, featureId, uiTrack, tddDir) {
+function roleTaskBody(action, featureId, uiTrack, tddDir, build) {
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -8645,12 +8673,12 @@ function roleTaskBody(action, featureId, uiTrack, tddDir) {
       if (action.buildMode === "review") {
         return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` + reviewRubric(tddDir, featureId, s, action.ac ?? "") + ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md , open those full files ONLY if you need more detail than it carries (do not re-read them by default). Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"} , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
       }
-      return `${nextPendingTestDirective(tddDir, featureId, s)}${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
       if (action.buildMode === "refactor") {
         return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`;
       }
-      return `Make the failing test for story ${s} GREEN (simplest honest code).${uiTrack ? UI_TRACK_BUILD : ""}`;
+      return (build?.loop === "hybrid-a" ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.` : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? UI_TRACK_BUILD : "");
     default:
       return `Work story ${s}.`;
   }
@@ -8698,7 +8726,10 @@ function commandsForAction(action, cfg) {
         model: cfg.modelForRole(action.role),
         ...resumeKey !== void 0 ? { resumeKey } : {},
         ...isReviewTurn && reviewEffort ? { effort: reviewEffort } : {},
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir) + AGENT_TERSE_SUFFIX,
+        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir, {
+          loop: cfg.loopGranularity,
+          cap: cfg.batchCap
+        }) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : void 0,
           story: "story" in action ? action.story : void 0
@@ -8714,7 +8745,8 @@ function commandsForAction(action, cfg) {
       if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+        const loopFlag = verb === "begin" && cfg.loopGranularity === "hybrid-a" ? ["--loop", "hybrid-a", ...cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : []] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...loopFlag] });
       }
       if (!("mode" in action) && action.role === "driver") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
@@ -9386,6 +9418,14 @@ function buildCfg(args, featureId) {
     // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
     // to drop the flag and use the model default.
     reviewEffort: process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default" ? "" : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
+    // P8b: build loop granularity. Default "ac" (strict per-AC TDD); set
+    // LAKEBASE_TDD_LOOP=hybrid-a to batch RED+GREEN by layer. LAKEBASE_TDD_BATCH_CAP
+    // caps items per batch (default 3 in the substrate).
+    loopGranularity: process.env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : "ac",
+    batchCap: (() => {
+      const n = Number(process.env.LAKEBASE_TDD_BATCH_CAP);
+      return Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+    })(),
     modelForRole: (role) => resolveModelForRole(role, projectDir),
     runner: { async run() {
     } },

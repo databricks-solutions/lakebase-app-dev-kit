@@ -15,6 +15,7 @@
 import { join } from "path";
 import {
   beginNextPendingCycle,
+  beginNextPendingBatch,
   greenOpenCycle,
   reviewAc,
   refactorAc,
@@ -28,6 +29,10 @@ interface Args {
   story?: string;
   ac?: string;
   tddDir?: string;
+  /** P8b: "hybrid-a" makes `begin` stamp a layer-batch RED (vs one test). */
+  loop?: string;
+  /** P8b: layer-batch cap for `begin --loop hybrid-a`. */
+  batchCap?: number;
 }
 
 function parse(argv: string[]): Args {
@@ -38,6 +43,12 @@ function parse(argv: string[]): Args {
       case "--story": out.story = argv[++i]; break;
       case "--ac": out.ac = argv[++i]; break;
       case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--loop": out.loop = argv[++i]; break;
+      case "--batch-cap": {
+        const n = Number(argv[++i]);
+        if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
+        break;
+      }
     }
   }
   return out;
@@ -45,7 +56,7 @@ function parse(argv: string[]): Args {
 
 function usage(msg: string): number {
   process.stderr.write(
-    `${msg}\nUsage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>]\n`,
+    `${msg}\nUsage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S> [--ac <AC>] [--tdd-dir <D>] [--loop ac|hybrid-a] [--batch-cap <n>]\n`,
   );
   return 2;
 }
@@ -58,7 +69,12 @@ async function main(): Promise<number> {
 
   switch (a.cmd) {
     case "begin": {
-      const r = beginNextPendingCycle(base);
+      // P8b: hybrid-a stamps ONE batch RED cycle for the first pending layer's
+      // items (capped); the default (ac) stamps one RED for the next test.
+      const r =
+        a.loop === "hybrid-a"
+          ? beginNextPendingBatch(base, { cap: a.batchCap })
+          : beginNextPendingCycle(base);
       process.stdout.write(
         r.recorded
           ? `cycle: RED ${r.cycleId} for ${r.testId} (${r.acId})\n`

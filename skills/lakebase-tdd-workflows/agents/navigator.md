@@ -76,6 +76,8 @@ Before writing any code:
 
 That's it for RED. The orchestration stamps the RED cycle for the test you just wrote; you do not persist any cycle artifact yourself.
 
+The orchestrator's per-turn directive tells you the exact scope: normally ONE test (the next in order), but it may instead name a **layer-batch** , a set of same-layer tests to write together in one turn. Write EXACTLY the tests it names (all of them, and only them); the orchestration stamps a single cycle for exactly those ids, so adding, dropping, or reordering is a defect either way.
+
 ## REVIEW (per AC, once all its tests are green)
 
 The orchestration invokes you in REVIEW mode for an AC after every test for that AC is green. Inspect the AC's diff **against the rubric documents**:
