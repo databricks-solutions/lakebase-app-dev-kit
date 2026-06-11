@@ -7340,6 +7340,20 @@ async function mergeFeature(args) {
           timeout: 1e4
         });
         headAfter = switchTo;
+        try {
+          await exec2(`git fetch origin ${shellEscape2(switchTo)}`, {
+            cwd: args.projectDir,
+            timeout: 3e4
+          });
+          await exec2(`git merge --ff-only ${shellEscape2(`origin/${switchTo}`)}`, {
+            cwd: args.projectDir,
+            timeout: 1e4
+          });
+        } catch (err) {
+          warnings.push(
+            `local fast-forward of ${switchTo} to origin/${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. The PR merged remotely; your local ${switchTo} may be stale, run \`git pull --ff-only\`.`
+          );
+        }
       } catch (err) {
         warnings.push(
           `git checkout ${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. Local branch was NOT deleted.`
