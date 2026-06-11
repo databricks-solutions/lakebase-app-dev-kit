@@ -6967,6 +6967,7 @@ function checkSpecAuthor(args, v) {
     return;
   }
   if (!existsSync2(dir)) return;
+  const thenById = /* @__PURE__ */ new Map();
   for (const f of readdirSync2(dir)) {
     if (!f.endsWith(".json")) continue;
     let content;
@@ -6977,6 +6978,24 @@ function checkSpecAuthor(args, v) {
     }
     const r = checkArtifactConformance(canonicalArtifactName(`${dir}/${f}`), content);
     if (!r.ok) v.push({ artifact: `stories/${story}/acs/${f}`, problem: r.violations.join("; ") });
+    try {
+      const ac = JSON.parse(content);
+      if (typeof ac.id === "string" && typeof ac.then === "string") {
+        const norm = ac.then.trim().replace(/\s+/g, " ").toLowerCase();
+        if (norm) thenById.set(ac.id, norm);
+      }
+    } catch {
+    }
+  }
+  const byThen = /* @__PURE__ */ new Map();
+  for (const [id, norm] of thenById) (byThen.get(norm) ?? byThen.set(norm, []).get(norm)).push(id);
+  for (const ids2 of byThen.values()) {
+    if (ids2.length > 1) {
+      v.push({
+        artifact: `stories/${story}/acs`,
+        problem: `ACs ${ids2.sort().join(", ")} share an identical \`then\` , each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`
+      });
+    }
   }
 }
 function checkArchitect(args, v) {

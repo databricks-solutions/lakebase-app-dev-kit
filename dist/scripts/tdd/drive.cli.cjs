@@ -7858,7 +7858,12 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
   // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
   // conftest defect (2026-06-11 smoke) traced to this not being blocking.
-  "scaffold-defect"
+  "scaffold-defect",
+  // Non-independent ACs (one AC's `then` implied by another) make a faithful RED
+  // impossible. Flagged by the test-strategist at the design gate so it halts
+  // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
+  // overlap that stalled S1).
+  "ac-overlap"
 ]);
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
