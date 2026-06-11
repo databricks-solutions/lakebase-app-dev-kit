@@ -12,7 +12,15 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync,
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { beginNextPendingCycle, greenOpenCycle, storyTestProgress, type GreenVerifier } from "../../scripts/tdd/cycle-record.js";
+import {
+  beginNextPendingCycle,
+  greenOpenCycle,
+  storyTestProgress,
+  reviewAc,
+  refactorAc,
+  firstRefactorPendingAc,
+  type GreenVerifier,
+} from "../../scripts/tdd/cycle-record.js";
 import {
   writeEscalation,
   readEscalations,
@@ -78,6 +86,48 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
     expect(r.recorded).toBe(true);
     expect(r.escalated).toBeFalsy();
     expect(cycle("AC1").green_at).toBeTruthy();
+    expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
+  });
+});
+
+// A4: a REFACTOR must be behavior-preserving. refactorAc re-runs the same honest
+// verify before stamping refactored_at; a failing verify (the refactor broke a
+// sibling test) leaves the AC refactor-pending + raises the same HIL escalation
+// channel as a failed GREEN, instead of the old unconditional stamp+commit.
+describe("honest REFACTOR: refactorAc re-verifies before stamping refactored_at", () => {
+  // Drive AC1 to a refactor-pending state: green its test, then a REVIEW that
+  // requested a refactor.
+  async function toRefactorPending(): Promise<void> {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
+    reviewAc(tdd, F, S, "AC1");
+    expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1");
+  }
+
+  it("a FAILING verify does NOT stamp refactored_at, leaves the AC refactor-pending, and raises an escalation", async () => {
+    await toRefactorPending();
+    const r = await refactorAc(tdd, F, S, "AC1", { verify: fail });
+
+    expect(r.refactored).toBe(false);
+    expect(r.escalated).toBe(true);
+    // Still refactor-pending: refactored_at was NOT written.
+    expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1");
+    const review = JSON.parse(readFileSync(join(tdd, "cycles", F, S, "AC1", "review.json"), "utf8"));
+    expect(review.refactored_at).toBeFalsy();
+    // An escalation was recorded for the HIL, tagged to the refactor source.
+    const escs = readEscalations(tdd).filter((e) => !e.resolved_at);
+    expect(escs.length).toBe(1);
+    expect(escs[0].source).toBe("driver-refactor");
+    expect(escs[0].reason).toMatch(/contradiction/);
+  });
+
+  it("a PASSING verify stamps refactored_at + raises no escalation (the happy path)", async () => {
+    await toRefactorPending();
+    const r = await refactorAc(tdd, F, S, "AC1", { verify: pass });
+    expect(r.refactored).toBe(true);
+    expect(r.escalated).toBeFalsy();
+    expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored -> AC done
     expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
   });
 });

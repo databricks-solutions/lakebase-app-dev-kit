@@ -137,7 +137,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(r.refactorRequested).toBe(true);
     expect(firstReviewPendingAc(tdd, F, S)).toBeNull(); // reviewed
     expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1"); // refactor pending
-    await refactorAc(tdd, F, S, "AC1");
+    await refactorAc(tdd, F, S, "AC1", { verify: pass });
     expect(firstRefactorPendingAc(tdd, F, S)).toBeNull(); // refactored , AC fully done
   });
 
@@ -150,7 +150,7 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
     writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
     reviewAc(tdd, F, S, "AC1");
-    await refactorAc(tdd, F, S, "AC1");
+    await refactorAc(tdd, F, S, "AC1", { verify: pass });
 
     const log = readAgentLog({ tddDir: tdd });
     const review = log.find((e) => e.event === "cycle.review");
@@ -250,7 +250,7 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     writeJson(join(ptdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract helper" });
     reviewAc(ptdd, F, S, "AC1");
     writeFileSync(join(proj, "app.py"), "x = 2  # extracted helper\n");
-    await refactorAc(ptdd, F, S, "AC1");
+    await refactorAc(ptdd, F, S, "AC1", { verify: pass });
     expect(gitlog()).toMatch(/refactor: AC1/);
     expect(codeDirty()).toBe("");
   });

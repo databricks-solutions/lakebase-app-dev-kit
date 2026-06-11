@@ -423,8 +423,52 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
   return { reviewed: true, refactorRequested };
 }
 
-/** Record that the Driver completed the requested REFACTOR for an AC. */
-export async function refactorAc(tddDir: string, featureId: string, story: string, acId: string): Promise<void> {
+export interface RefactorResult {
+  /** The refactor was recorded (refactored_at stamped + committed). */
+  refactored: boolean;
+  /** Set when the post-refactor verify FAILED: refactored_at was NOT stamped (the
+   *  AC stays refactor-pending) + an escalation was raised to the HIL (the driver's
+   *  next readState routes to raise-to-hil). */
+  escalated?: boolean;
+  escalation?: Escalation;
+  /** The post-refactor verify summary (pass or the failure reason). */
+  summary?: string;
+}
+
+/**
+ * Record that the Driver completed the requested REFACTOR for an AC.
+ *
+ * A refactor must be BEHAVIOR-PRESERVING, so before stamping refactored_at we
+ * re-run the project's verify suite against the running app (the same honest
+ * check greenOpenCycle uses). A refactor commonly edits code shared by sibling
+ * tests, so a regression here is real and was previously invisible: the old
+ * code stamped refactored_at + committed unconditionally, so a refactor that
+ * broke a sibling AC's test advanced anyway. On failure we leave the AC
+ * refactor-pending and raise an escalation to the HIL (same channel as a failed
+ * GREEN); the orchestration then routes to raise-to-hil rather than advancing.
+ */
+export async function refactorAc(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  acId: string,
+  opts?: { verify?: GreenVerifier },
+): Promise<RefactorResult> {
+  // Honest post-refactor verify against the story's experiment branch.
+  const exp = storyExperiment(tddDir, featureId, story);
+  const verify = opts?.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-refactor",
+      reason: `REFACTOR verify failed for ${acId} in ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+      ac_id: acId,
+    });
+    return { refactored: false, escalated: true, escalation, summary: result.summary };
+  }
+
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
@@ -445,4 +489,5 @@ export async function refactorAc(tddDir: string, featureId: string, story: strin
   // Commit the behavior-preserving refactor as its own commit (the second half
   // of the "commit when green, then commit the refactor" rhythm).
   await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
+  return { refactored: true, summary: result.summary };
 }
