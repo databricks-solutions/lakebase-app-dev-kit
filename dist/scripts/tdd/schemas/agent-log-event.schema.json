@@ -75,6 +75,7 @@
         "verify.failed",
         "adherence.passed",
         "adherence.failed",
+        "turn.usage",
         "reasoning",
         "progress"
       ]
