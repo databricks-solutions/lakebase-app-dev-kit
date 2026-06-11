@@ -92,13 +92,21 @@ async function main(): Promise<number> {
     }
     case "refactor": {
       // Record that the Driver completed the requested REFACTOR for an AC.
+      // Like GREEN, the refactor is re-verified honestly: on a failed verify the
+      // AC stays refactor-pending + an escalation is raised; we exit 0 (the
+      // escalation is recorded data, not a crash) so the driver's next readState
+      // routes to a clean raise-to-hil halt.
       const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
       if (!ac) {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
         return 0;
       }
-      await refactorAc(tddDir, a.feature, a.story, ac);
-      process.stdout.write(`cycle: REFACTORED ${ac}\n`);
+      const r = await refactorAc(tddDir, a.feature, a.story, ac);
+      if (r.escalated) {
+        process.stdout.write(`cycle: REFACTOR BLOCKED for ${ac} -> raised to HIL: ${r.summary}\n`);
+      } else {
+        process.stdout.write(`cycle: REFACTORED ${ac}\n`);
+      }
       return 0;
     }
     default:

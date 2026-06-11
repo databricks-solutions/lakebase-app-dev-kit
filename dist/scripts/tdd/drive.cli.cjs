@@ -8983,6 +8983,63 @@ function resolveModelForRole(role, projectDir) {
   return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
 }
 
+// scripts/tdd/run-config.ts
+init_cjs_shims();
+var import_fs11 = require("fs");
+var import_path10 = require("path");
+var RUN_CONFIG_REL = (0, import_path10.join)(".tdd", "run-config.json");
+function readKitRef(projectDir) {
+  const f = (0, import_path10.join)(projectDir, ".lakebase", "kit-ref");
+  if (!(0, import_fs11.existsSync)(f)) return void 0;
+  try {
+    const v = (0, import_fs11.readFileSync)(f, "utf8").trim();
+    return v.length > 0 ? v : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function buildRunConfig(inputs) {
+  const env = inputs.env ?? process.env;
+  const models = {};
+  for (const role of ALL_AGENT_ROLES) models[role] = inputs.modelForRole(role);
+  const capRaw = env.LAKEBASE_TDD_BATCH_CAP;
+  const cap = capRaw && Number.isFinite(Number(capRaw)) ? Number(capRaw) : void 0;
+  const cfg = {
+    version: 1,
+    started_at: inputs.startedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
+    bound: inputs.bound ?? "full",
+    gates: inputs.gates ?? "proxy",
+    ui_track: Boolean(inputs.uiTrack),
+    build_session_scope: inputs.buildSessionScope ?? "story",
+    review_effort: inputs.reviewEffort ?? "",
+    loop_granularity: env.LAKEBASE_TDD_LOOP || "ac",
+    batch_fallback: env.LAKEBASE_TDD_BATCH_FALLBACK || "",
+    deploy_target: inputs.deployTarget ?? "local",
+    models
+  };
+  if (cap !== void 0) cfg.batch_cap = cap;
+  const label = env.LAKEBASE_TDD_RUN_LABEL;
+  if (label) cfg.run_label = label;
+  const kitRef = readKitRef(inputs.projectDir);
+  if (kitRef) cfg.kit_ref = kitRef;
+  return cfg;
+}
+function writeRunConfig(inputs) {
+  const cfg = buildRunConfig(inputs);
+  const body = JSON.stringify(cfg, null, 2) + "\n";
+  try {
+    (0, import_fs11.mkdirSync)(inputs.tddDir, { recursive: true });
+    (0, import_fs11.writeFileSync)((0, import_path10.join)(inputs.tddDir, "run-config.json"), body);
+    const recordDir = (inputs.env ?? process.env).LAKEBASE_TDD_RECORD_DIR?.trim();
+    if (recordDir) {
+      (0, import_fs11.mkdirSync)(recordDir, { recursive: true });
+      (0, import_fs11.writeFileSync)((0, import_path10.join)(recordDir, "run-config.json"), body);
+    }
+  } catch {
+  }
+  return cfg;
+}
+
 // scripts/tdd/orchestrator-logging.ts
 init_cjs_shims();
 function storyOf2(action) {
@@ -9475,6 +9532,7 @@ async function runSprintMode(args) {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
+      snapshotRunConfig(cfg, args, "plan");
       const planning = {
         // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
         readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
@@ -9499,6 +9557,7 @@ async function runSprintMode(args) {
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
       cfg.runner = execRunner(cfg);
+      snapshotRunConfig(cfg, args, "full");
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(void 0, interactive)
       });
@@ -9536,6 +9595,19 @@ async function runSprintMode(args) {
 `);
     return 1;
   }
+}
+function snapshotRunConfig(cfg, args, bound) {
+  writeRunConfig({
+    projectDir: cfg.projectDir,
+    tddDir: cfg.tddDir,
+    bound,
+    gates: args.gates ?? "proxy",
+    uiTrack: cfg.uiTrack,
+    buildSessionScope: cfg.buildSessionScope,
+    reviewEffort: cfg.reviewEffort,
+    deployTarget: cfg.deployTarget,
+    modelForRole: cfg.modelForRole ?? (() => "inherit")
+  });
 }
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -9583,6 +9655,7 @@ ${help()}`);
     return 0;
   }
   cfg.runner = execRunner(cfg);
+  snapshotRunConfig(cfg, args, bound ?? "full");
   const interactive = args.gates === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {

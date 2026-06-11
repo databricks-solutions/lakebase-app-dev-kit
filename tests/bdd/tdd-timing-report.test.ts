@@ -144,7 +144,7 @@ describe("timingReportFromLog + CLI", () => {
     expect(r.byRole[0].key).toBe("test-strategist");
   });
 
-  it("CLI --json prints a parseable TimingReport; bad arg exits 2", () => {
+  it("CLI --json prints a parseable { config, timing } pair; bad arg exits 2", () => {
     const tdd = seedLog();
     const chunks: string[] = [];
     const spy = vi.spyOn(process.stdout, "write").mockImplementation((c: string | Uint8Array) => {
@@ -156,9 +156,15 @@ describe("timingReportFromLog + CLI", () => {
     } finally {
       spy.mockRestore();
     }
-    const parsed = JSON.parse(chunks.join("")) as { events: number; byRole: Array<{ key: string }> };
-    expect(parsed.events).toBe(6);
-    expect(parsed.byRole[0].key).toBe("test-strategist");
+    // P0.1: --json nests the timing under `timing` and pairs it with `config`
+    // (null here , no run-config.json was seeded), so a report is self-describing.
+    const parsed = JSON.parse(chunks.join("")) as {
+      config: unknown;
+      timing: { events: number; byRole: Array<{ key: string }> };
+    };
+    expect(parsed.config).toBeNull();
+    expect(parsed.timing.events).toBe(6);
+    expect(parsed.timing.byRole[0].key).toBe("test-strategist");
 
     expect(runTimingCli(["--bogus"])).toBe(2);
   });
