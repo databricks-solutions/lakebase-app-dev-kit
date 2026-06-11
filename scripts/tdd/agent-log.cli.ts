@@ -84,7 +84,7 @@ Emit:
     --slot k=v fill one template slot (repeatable). A missing required slot is
                rejected (exit 3). The event NAME carries the phase; slots carry
                the specifics. NOTE: cycle.* events are CODE-emitted by the
-               orchestration , agents do not emit them.
+               orchestration, agents do not emit them.
     --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
 
 Read:

@@ -19,7 +19,7 @@ An approved AC's `then` is locked at Gate 1; no downstream role may weaken it. S
 1. **Shift the detection left** to the design gates (catch overlap before any build cycle).
 2. When a spec-level defect does escape to build, **raise to HIL, let the PO decide, then route the fix to the owning author and re-gate**, never auto-edit.
 
-## Part A , shift-left: catch overlap at the design gate (this is the implemented piece)
+## Part A, shift-left: catch overlap at the design gate (this is the implemented piece)
 
 The test-strategist already owns "one observable behavior per item." Extend that to **AC independence**: every AC must be independently RED-able, and no AC's `then` may be implied by, duplicate, or contradict another's.
 
@@ -28,7 +28,7 @@ The test-strategist already owns "one observable behavior per item." Extend that
 3. **Deterministic backstop.** A `checkAcIndependence(acs)` helper flags the literal case, two ACs in a story whose normalized `then` clauses are identical, in the spec-author response-formatter self-check (exit non-zero before handoff). It catches only exact duplication (semantic implication is the LLM's job via #2), but it is a true-positive-only guard that documents the contract.
 4. **Story-level independence (the same principle, one level up).** The recurring live failure was not two ACs but two STORIES overlapping: stories build in order on one growing codebase, so a later story whose behavior an earlier story's build already produced ("file a bug" already builds the detail page that "view a bug" is about) has no honest RED and stalls. The spec-author breakdown applies a **story-independence test** (could you build story A fully and have B still genuinely unbuilt? if building A inherently delivers B, fold B into A or re-scope B to a distinct slice) at enumeration time. Prevention upstream of the build; revise-routing (Part B) is the recovery when one still escapes.
 
-## Part B , revise-routing (Phase 2, headless self-heal IMPLEMENTED)
+## Part B, revise-routing (Phase 2, headless self-heal IMPLEMENTED)
 
 When a spec-level blocking smell escapes to build (or is raised at the gate), the loop currently halts and waits for a human re-run. The target flow:
 
@@ -95,6 +95,6 @@ How Part B maps onto the deterministic driver (the resume reuses the standing la
 
 ## Phasing
 
-- **Phase 1 (landed):** Part A , `ac-overlap` blocking smell + prompt contract + deterministic backstop. Prevents the stall.
-- **Phase 2 (landed):** Part B , smell taxonomy (`spec-level`/`build-level`) + the `revise-route` transition + the test-strategist/spec-author circle-back + the Human-Proxy self-heal (bounded one revise per smell per story). Recovers from it headless.
-- **Phase 2 follow-up (not yet built):** interactive (`--gates interactive`) parity , surface the live `accept | revise` choice to a human (stop before `revise-route`), the live-human analog of the headless self-heal.
+- **Phase 1 (landed):** Part A, `ac-overlap` blocking smell + prompt contract + deterministic backstop. Prevents the stall.
+- **Phase 2 (landed):** Part B, smell taxonomy (`spec-level`/`build-level`) + the `revise-route` transition + the test-strategist/spec-author circle-back + the Human-Proxy self-heal (bounded one revise per smell per story). Recovers from it headless.
+- **Phase 2 follow-up (not yet built):** interactive (`--gates interactive`) parity, surface the live `accept | revise` choice to a human (stop before `revise-route`), the live-human analog of the headless self-heal.

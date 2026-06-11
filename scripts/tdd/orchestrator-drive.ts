@@ -453,7 +453,7 @@ export function nextDesignOnlyTransition(state: DriveState): WorkflowAction {
  * bail-out): "navigator" = the first build handoff (the Navigator kickoff, before
  * any code is written), "release-engineer" = the deploy/verify (the Release
  * Engineer takes the built + reviewed story and ships it). The driver blocks at
- * the gate, prompts the human [Y/n], and RESUMES the same run on Y , it never
+ * the gate, prompts the human [Y/n], and RESUMES the same run on Y, it never
  * leaves the state machine. Backs run-to-navigator / run-to-release-engineer and
  * the `--pause-before` flag.
  */
@@ -466,7 +466,7 @@ export function pauseBeforeMilestone(m: PauseMilestone): (action: WorkflowAction
     case "navigator":
       // The initial Navigator handoff writes the first failing test (tests not
       // yet written). The per-AC REVIEW/REFACTOR turns also invoke the navigator
-      // but carry a buildMode, so exclude those , we pause at the build kickoff.
+      // but carry a buildMode, so exclude those, we pause at the build kickoff.
       return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === undefined;
     case "release-engineer":
       // The per-story deploy + verify (await-acceptance) and the feature-level
@@ -544,7 +544,7 @@ export function isHitlGateAction(action: WorkflowAction): boolean {
 /**
  * Steps where the HUMAN provides an input artifact (not an approval): the
  * Product Owner's feature-requests at `author-requests`. The state machine is
- * identical for a human and the headless proxy , in interactive mode the driver
+ * identical for a human and the headless proxy, in interactive mode the driver
  * STOPS here so the human provides the requests (directly, or by working with
  * the agents), then re-runs; in proxy mode the Human Proxy supplies the recorded
  * answers when asked. Same transition, only the provider differs.

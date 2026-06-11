@@ -35,7 +35,7 @@ export type DriveCommand =
   // in fast-forward replay mode, copy this design turn's recorded artifact
   // instead of spawning the model. Ignored by the normal (live) runner.
   // `effort` (P6): the `claude -p --effort <level>` knob for THIS turn. Set on the
-  // judgment turns (REVIEW) to run them fast (low reasoning effort) , the headless
+  // judgment turns (REVIEW) to run them fast (low reasoning effort), the headless
   // realization of "fast mode", since `claude -p` has no `--fast` flag. Omitted =>
   // the model's default effort.
   | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; fallbackModel?: string; maxBudgetUsd?: number; replay?: { mode?: string; story?: string } }
@@ -107,7 +107,7 @@ export interface DriveEffectsConfig {
 /** Appended to the Spec Author's propose/breakdown tasks when the UI track is
  *  on, so the proposal + story breakdown account for user-facing E2E stories
  *  (the design lane's `layer: "E2E"` work), not just API surface. */
-const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story , a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
+const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story, a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
 const UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
 
@@ -172,13 +172,13 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
       (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId),
     );
     if (nfrs.length) {
-      parts.push(`required NFRs , ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
+      parts.push(`required NFRs, ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
     }
   } catch {
     /* no architecture.json -> omit; prompt still names nfrs.md */
   }
 
-  // Design-token groups to check, for a UI (E2E) AC only , the non-UI majority
+  // Design-token groups to check, for a UI (E2E) AC only, the non-UI majority
   // need NO design-guide read at all.
   if (layer === "E2E") {
     try {
@@ -186,7 +186,7 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
         tokens?: Record<string, unknown>;
       };
       const groups = Object.keys(dg.tokens ?? (dg as Record<string, unknown>));
-      if (groups.length) parts.push(`design-token groups , ${groups.join(", ")}`);
+      if (groups.length) parts.push(`design-token groups, ${groups.join(", ")}`);
     } catch {
       /* omit */
     }
@@ -197,7 +197,7 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
 
 /** Short task directive handed to a role subagent for an invoke-role action. */
 /**
- * Pin the Navigator to the EXACT next-pending test , the same item the cycle
+ * Pin the Navigator to the EXACT next-pending test, the same item the cycle
  * stamp (beginNextPendingCycle -> storyTestProgress.pending[0]) will record. The
  * Navigator must write THAT test, not pick its own: when the prompt only said
  * "write the next test", the model wandered (authored a later AC's test) while
@@ -227,9 +227,9 @@ function nextPendingTestDirective(
     }
     const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
     return (
-      `Write the failing tests (RED) for story ${story}'s next layer-batch , EXACTLY these ${batch.length} item(s),` +
+      `Write the failing tests (RED) for story ${story}'s next layer-batch, EXACTLY these ${batch.length} item(s),` +
       ` in order: ${list}. Write ALL of them this turn and ONLY these (they share one layer/runner); do NOT skip ahead to` +
-      ` another layer, do NOT add or drop items , the orchestration stamps ONE batch RED cycle for exactly these ids,` +
+      ` another layer, do NOT add or drop items, the orchestration stamps ONE batch RED cycle for exactly these ids,` +
       ` and any mismatch is a defect.`
     );
   }
@@ -244,7 +244,7 @@ function nextPendingTestDirective(
   }
   return (
     `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}".` +
-    ` Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item , the orchestration stamps the RED cycle for ${next.id},` +
+    ` Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item, the orchestration stamps the RED cycle for ${next.id},` +
     ` and a mismatch between the test you write and ${next.id} is a defect.`
   );
 }
@@ -253,7 +253,7 @@ function nextPendingTestDirective(
  * Consume a pending hand-back note for this role's retry: read it, delete it
  * (consume-once), and return it as a prompt PREFIX. Empty when none is pending.
  * The orchestrator wrote it (via DriveEffects.onHandback) when the role's prior
- * turn failed its expectation contract, so the retry is informed , the role sees
+ * turn failed its expectation contract, so the retry is informed, the role sees
  * exactly what it failed to return before it runs again.
  */
 function consumeHandback(
@@ -334,7 +334,7 @@ function roleTaskBody(
       return (
         `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)}` +
         ` Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/` +
-        ` (no test lists, no -tests.json / -test-list.json, no scratch files , the spec gate validates every` +
+        ` (no test lists, no -tests.json / -test-list.json, no scratch files, the spec gate validates every` +
         ` acs/*.json against the AC schema and rejects non-AC files).` +
         ` The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a` +
         ` number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks` +
@@ -349,12 +349,12 @@ function roleTaskBody(
     case "test-strategist": {
       // Pass the story's AC ids INLINE so the strategist does not re-scan the
       // acs/ dir to re-derive them (a slow, error-prone step that, on a small
-      // model, was the design lane's worst outlier , a single test-list took
+      // model, was the design lane's worst outlier, a single test-list took
       // ~200s of haiku thrashing on the structured output). The ids are the
       // EXACT contract the response-formatter + the per-story test-list scoping
       // enforce, so stating them up front both speeds convergence and pins the
       // ac_id mapping. Absent ids (no acs/ on disk yet) fall back to the bare
-      // directive , the role still reads them from disk as before.
+      // directive, the role still reads them from disk as before.
       const acIds = storyAcIds(tddDir, featureId, s);
       const acScope = acIds.length
         ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids` +
@@ -363,10 +363,10 @@ function roleTaskBody(
       // Author the FEATURE MASTER (append this story; keep other stories' items).
       // The orchestration generates the per-story + per-AC views FROM the master
       // (lakebase-tdd-test-list), so a per-story file the role writes is
-      // regenerated , author the master, not the per-story file.
+      // regenerated, author the master, not the per-story file.
       return (
         `Produce story ${s}'s ordered tests and APPEND them to the feature master test list` +
-        ` .tdd/features/${featureId}/test-list.json , keep every item already there for the other` +
+        ` .tdd/features/${featureId}/test-list.json, keep every item already there for the other` +
         ` stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration` +
         ` generates the per-story + per-AC views from the master).${acScope}`
       );
@@ -378,11 +378,11 @@ function roleTaskBody(
           reviewRubric(tddDir, featureId, s, action.ac ?? "") +
           ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
           ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
-          ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md , open` +
+          ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
           ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
           ` Write your verdict to` +
           ` .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
-          ` , refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
+          `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
       }
       return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
@@ -392,7 +392,7 @@ function roleTaskBody(
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
           ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
           ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
-          ` Keep ALL tests green and do not change what the outer-boundary tests check , refactor only.`
+          ` Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.`
         );
       }
       return (
@@ -412,7 +412,7 @@ const HUMAN_PROXY_BIN = "lakebase-tdd-human-proxy";
 const LOG_BIN = "lakebase-tdd-log";
 const TEST_LIST_BIN = "lakebase-tdd-test-list";
 const DEPLOY_BIN = "lakebase-tdd-deploy";
-// Promote phase , the SCM workflow CLIs (lakebase-scm-workflows). They read +
+// Promote phase, the SCM workflow CLIs (lakebase-scm-workflows). They read +
 // advance the SCM ladder in .lakebase/workflow-state.json, so they take
 // --project-dir (the project root), NOT --feature/--tdd-dir.
 const SCM_PREPARE_PR_BIN = "lakebase-scm-prepare-pr";
@@ -452,7 +452,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     case "invoke-role": {
       // author-requests is a HUMAN-INPUT step, not an agent task: the state
       // machine asks for the PO's feature-request.md per committed feature. The
-      // machine is identical for a human and the proxy , interactive, the driver
+      // machine is identical for a human and the proxy, interactive, the driver
       // stops here and the human provides them (directly or via the agents);
       // headless, the Human Proxy supplies the recorded answers WHEN ASKED (and
       // logs each). Then sync-backlog (the one writer) projects backlog.json from
@@ -465,9 +465,9 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       }
       // Navigator + Driver are the BUILD roles, invoked in a tight RED/GREEN/
       // REVIEW/REFACTOR loop per AC; the artifact on disk is their only inter-role
-      // channel, so correctness never depends on a retained session , only speed.
+      // channel, so correctness never depends on a retained session, only speed.
       // P5 (`buildSessionScope`): resume their `claude -p` session PER STORY by
-      // default (`story`) , warm context + prompt cache across a story's cycles,
+      // default (`story`), warm context + prompt cache across a story's cycles,
       // and a FRESH session at each new story so growth is bounded to one story
       // (the per-story spec gate keeps stories small). `cycle` is the safety valve
       // (cold-spawn every turn, the prior behavior) if a long story ever overflows
@@ -534,7 +534,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       }
       // After the Test Strategist orders a story's tests, deterministically
       // scope the feature master to that story and write the canonical per-story
-      // list (storyTestListJson) , the exact file + field the testListReady probe
+      // list (storyTestListJson), the exact file + field the testListReady probe
       // reads. Code-emitting it (not relying on the role) is what keeps producer
       // + probe on the single source of truth, so the design lane cannot stall
       // waiting on a per-story list the role wrote under a different name/shape.
@@ -627,7 +627,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // visible actor, but the deploy itself is the deterministic CLI, not the
       // model's word: if the RE narrates success without running it, no
       // deploy-evidence.json is written, deployVerified stays false, and the
-      // driver does NOT accept (the honest-deploy backstop , a false narration
+      // driver does NOT accept (the honest-deploy backstop, a false narration
       // cannot pass). The CLI's --gate soft-fails (exit 0) on a real failure,
       // recording honest evidence + an escalation that the next readState routes
       // to a raise-to-hil halt. (Teardown first so a prior story's app frees the port.)
@@ -645,7 +645,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
             `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget}` +
             ` target and verify it actually serves: from the project root run exactly\n  ${deployCmd}\n` +
             `That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence` +
-            ` the acceptance gate reads. Do NOT report success without running it , the orchestration checks the` +
+            ` the acceptance gate reads. Do NOT report success without running it, the orchestration checks the` +
             ` evidence on disk, not your word.` + AGENT_TERSE_SUFFIX,
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
@@ -752,7 +752,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // parent tier (the PR's base, e.g. staging). AFTER ci-green and BEFORE the
       // merge. The promote gate REQUIRES a non-empty promote_ref (what is being
       // promoted); the Human Proxy SKIPS the gate without one, so the orchestrator
-      // must supply it , else the gate never approves and the driver loops on
+      // must supply it, else the gate never approves and the driver loops on
       // approve-promote-gate forever (the promote-phase stall). The thing being
       // promoted is the feature's canonical branch (the merge then releases it into
       // the parent tier + runs the parent's migrations). Teeth remain the merge
@@ -820,7 +820,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
 
     case "raise-to-hil":
       // Surface + halt: the escalation is already recorded under
-      // .tdd/escalations/ (that is how it was detected). No CLI to run , the
+      // .tdd/escalations/ (that is how it was detected). No CLI to run, the
       // onAction logging emits the loud "RAISED TO HIL" line + runDriver returns
       // escalated, and drive.cli exits non-zero. A no-op command list.
       return [];

@@ -12,7 +12,7 @@
 // (orchestrator-expect.ts): the queue is the SAFETY NET that hands back + retries
 // + aborts when a bad result still escapes; response-formatter is the PRIMARY
 // defense that stops most bad results at the source. The two share the same
-// contracts , e.g. the test-strategist owes a non-empty per-story test list whose
+// contracts, e.g. the test-strategist owes a non-empty per-story test list whose
 // every item maps to one of the story's ACs (the S2 live-stall bug).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -42,7 +42,7 @@ export interface FormatArgs {
 }
 
 /** Roles whose output this precheck knows how to type-check. Others are a no-op
- *  PASS (nothing to deterministically validate yet) , extend as contracts grow. */
+ *  PASS (nothing to deterministically validate yet), extend as contracts grow. */
 export const FORMATTED_ROLES = new Set([
   "spec-author",
   "architect-reviewer",
@@ -71,7 +71,7 @@ function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
   if (!existsSync(dir)) return;
   // Collect normalized `then` clauses to backstop the AC-independence contract:
   // two ACs in a story with an identical `then` are a literal overlap (the
-  // semantic case , one AC's `then` implied by another's , is the test-strategist's
+  // semantic case, one AC's `then` implied by another's, is the test-strategist's
   // ac-overlap judgment, this only catches the exact-duplicate defect).
   const thenById = new Map<string, string>();
   for (const f of readdirSync(dir)) {
@@ -101,7 +101,7 @@ function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
     if (ids.length > 1) {
       v.push({
         artifact: `stories/${story}/acs`,
-        problem: `ACs ${ids.sort().join(", ")} share an identical \`then\` , each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`,
+        problem: `ACs ${ids.sort().join(", ")} share an identical \`then\`, each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`,
       });
     }
   }

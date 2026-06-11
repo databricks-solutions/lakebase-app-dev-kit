@@ -146,7 +146,7 @@ mkdir -p "$(dirname "$PROJECT_DIR")"
 # Turn recording (code asset): the deterministic driver records EVERY state-
 # machine turn (design + build + gates + deploy + promote) into a replayable
 # corpus when LAKEBASE_TDD_RECORD_DIR is set. The test runner turns it on by
-# default , one corpus dir beside the project, surviving --keep-on-failure:
+# default, one corpus dir beside the project, surviving --keep-on-failure:
 #   <RECORD_DIR>/turns/<NNNN>-<label>/   per-turn manifest + the .tdd/code delta
 #   <RECORD_DIR>/turns/index.json        the ordered timeline of every step
 #   <RECORD_DIR>/recorded-artifacts/     cumulative .tdd mirror (replayDesignTurn)

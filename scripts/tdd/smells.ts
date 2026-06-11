@@ -90,7 +90,7 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     name: "import-time-build-coupling",
     description:
       "The app entry module requires an optional build artifact (e.g. client/dist) at " +
-      "module load time , an unconditional StaticFiles mount / asset read at import scope. " +
+      "module load time, an unconditional StaticFiles mount / asset read at import scope. " +
       "It greens where the artifact happens to exist and crashes at import everywhere it " +
       "does not (backend-only test runs, CI before the client build, fresh clones). Caught " +
       "deterministically by the `lakebase-tdd-imports-clean` gate; the Navigator may also " +

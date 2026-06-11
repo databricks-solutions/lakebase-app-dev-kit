@@ -2,7 +2,7 @@
 //
 // A live smoke shipped a FALSE-GREEN: greenOpenCycle stamped green without a real
 // run (it hardcoded passed:true), so a test that broke a sibling test was marked
-// green and only the deploy gate caught it , then the driver STALLED. These tests
+// green and only the deploy gate caught it, then the driver STALLED. These tests
 // pin the fix: GREEN reflects a real verify run; a failure leaves the cycle RED +
 // raises an escalation; the driver routes any unresolved escalation to a single
 // raise-to-hil halt (surface + halt) instead of advancing or spinning.

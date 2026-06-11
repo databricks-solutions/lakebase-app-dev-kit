@@ -62,7 +62,7 @@ export const NODE_E2E_TEMPLATE_FILES = [
 /** Python-only E2E template: the canonical `live_server` fixture (a Python
  *  file). Shipped (not agent-authored) so every Python UI project gets a fixture
  *  that inherits the env (CI's DATABASE_URL wins) + polls readiness, instead of
- *  a hand-rolled one that pins `--env-file .env` and sleeps a fixed time , the
+ *  a hand-rolled one that pins `--env-file .env` and sleeps a fixed time, the
  *  dev/prod CI-parity bug where E2E pass in the build lane (live local .env) but
  *  fail in PR CI with ERR_CONNECTION_REFUSED. It carries no `playwright.config.*`,
  *  so it does not trip CI's Node E2E gate. */

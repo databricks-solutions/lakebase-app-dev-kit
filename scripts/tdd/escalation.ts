@@ -1,12 +1,12 @@
 // Escalations: the single "raise to the HIL" channel (follow-up).
 //
-// WHY: a live smoke shipped a false-GREEN on a self-contradictory test , the
+// WHY: a live smoke shipped a false-GREEN on a self-contradictory test, the
 // orchestration stamped green without a real run, ignored the Navigator's
 // contradiction smell, and then STALLED at await-acceptance. The fix is a
 // uniform rule: after ANY role/step surfaces a blocking problem (a failed honest
 // GREEN run, a blocking bad-smell, a deploy verify-fail), it writes an
 // escalation here, and the deterministic driver routes to a single `raise-to-hil`
-// halt while an unresolved escalation exists , it never advances past it and
+// halt while an unresolved escalation exists, it never advances past it and
 // never silently spins. Headless mode surfaces + halts (a human resumes); it
 // does not auto-decide.
 
