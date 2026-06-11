@@ -53,6 +53,7 @@ import {
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import { resolveTddSettings } from "./tdd-config.js";
+import { parseTurnUsage, assistantTextFromLine, type TurnUsage } from "./claude-usage.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
@@ -153,6 +154,33 @@ function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
     const child = spawn(bin, args, { cwd, stdio: "inherit" });
     child.on("error", (err) => reject(err));
     child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`${bin} exited ${code}`))));
+  });
+}
+
+/**
+ * Spawn a `claude -p --output-format stream-json --verbose` turn, TEE the
+ * human-readable assistant text to stderr (so the live console still shows the
+ * agent working, not raw JSON), and return the turn's usage from the terminal
+ * `result` event , the per-turn CONTEXT SIZE (input_tokens) + output + cache +
+ * cost. stderr is inherited so claude's own errors surface. Usage parsing is
+ * best-effort: a missing result event yields undefined (never breaks the turn).
+ */
+function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | undefined> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("claude", args, { cwd, stdio: ["inherit", "pipe", "inherit"] });
+    const lines: string[] = [];
+    const rl = readline.createInterface({ input: child.stdout! });
+    rl.on("line", (line) => {
+      lines.push(line);
+      const text = assistantTextFromLine(line);
+      if (text) process.stderr.write(text);
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      rl.close();
+      if (code !== 0) return reject(new Error(`claude exited ${code}`));
+      resolve(parseTurnUsage(lines));
+    });
   });
 }
 
@@ -264,7 +292,9 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           }
           process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
         }
-        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        // stream-json (requires --verbose with --print) lets us capture the turn's
+        // token usage from the result event while teeing readable text to the console.
+        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
         // Per-role/turn model-side knobs (tdd-config.json): effort (set on judgment
         // turns to run fast), fallback model (auto-failover when the primary is
         // overloaded), and a per-invocation dollar cap.
@@ -281,7 +311,36 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
             args.push("--session-id", id);
           }
         }
-        await spawnCmd("claude", args, cfg.projectDir);
+        const usage = await spawnClaudeStreaming(args, cfg.projectDir);
+        // Log the turn's CONTEXT SIZE + usage right after it returns (role + model
+        // + effort after role; the token counts in metadata). Best-effort: never
+        // let a logging hiccup break the turn.
+        if (usage) {
+          try {
+            emitAgentLogEvent(
+              {
+                role: cmd.role as AgentRole,
+                level: "info",
+                event: "turn.usage",
+                model: cmd.model,
+                ...(cmd.effort ? { effort: cmd.effort } : {}),
+                feature_id: cfg.featureId,
+                slots: {
+                  input_tokens: usage.inputTokens,
+                  output_tokens: usage.outputTokens,
+                  ...(usage.cacheReadTokens !== undefined ? { cache_read_tokens: usage.cacheReadTokens } : {}),
+                  ...(usage.cacheCreationTokens !== undefined ? { cache_creation_tokens: usage.cacheCreationTokens } : {}),
+                  ...(usage.costUsd !== undefined ? { cost_usd: usage.costUsd } : {}),
+                  ...(cmd.replay?.story ? { story: cmd.replay.story } : {}),
+                  ...(cmd.replay?.mode ? { phase: cmd.replay.mode } : {}),
+                },
+              },
+              { tddDir: cfg.tddDir },
+            );
+          } catch {
+            /* usage logging is observability, never load-bearing */
+          }
+        }
         return;
       }
       // cmd.kind === "cli": resolve the kit bin to its dist JS via the kit's
