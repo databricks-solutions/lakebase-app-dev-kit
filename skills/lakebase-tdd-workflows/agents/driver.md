@@ -47,7 +47,7 @@ You do NOT write cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRe
 
 - **`@software-design-principles`** – clean code + SOLID + DRY for REFACTOR (names carry the design; no duplicated logic, extract one shared helper).
 - **`@architectural-design-principles`** – keep the layering true ([layered-architecture](../../architectural-design-principles/references/layered-architecture.md)): code in the right layer, persistence through the repository + ORM, config from the environment. Keep every architectural **fitness function** GREEN through REFACTOR, not just the behavior test.
-- **`@ui-ux-design-principles`** (UI only) – build to the design guide with a modern testable framework and stable seams ([testable-ui](../../ui-ux-design-principles/references/testable-ui.md)); rendering stays in the boundary layer, no business logic in templates.
+- **`@ui-ux-design-principles`** (UI only) – build to the design guide with a modern testable framework and stable seams ([testable-ui](../../ui-ux-design-principles/references/testable-ui.md)); rendering stays in the boundary layer, no business logic in templates. **Expose the exact seam the E2E test selects:** when the test queries a `data-testid`, render that id; if a sibling AC already rendered the element under a different id, reconcile to ONE id (prefer the existing one, tell the Navigator) instead of leaving a divergent attribute, a selector mismatch can never go honestly GREEN.
 - **Real DB, never mocked** ([test-strategy](../references/test-strategy.md)) – tests pass against the real paired-branch database; never a mock/stub/in-memory substitute for the data store.
 
 ## GREEN

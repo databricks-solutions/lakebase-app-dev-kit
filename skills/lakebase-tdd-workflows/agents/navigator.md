@@ -65,6 +65,7 @@ The orchestration stamps the RED cycle; you persist nothing. The per-turn direct
 **E2E-layer ACs (browser tests):** the test is a real **Playwright** test, and where/how is fixed by the scaffold:
 - Put it under **`tests/e2e/`** (e.g. `tests/e2e/test_<thing>.py`), never under `tests/` (the project ships `tests/e2e/conftest.py` + the e2e Playwright config there).
 - **Use the provided `live_server` fixture** (`def test_x(page: Page, live_server: str): page.goto(live_server + "/...")`). Do NOT inline your own server (no `uvicorn`/`subprocess`/threading) and do NOT use FastAPI's in-process `TestClient`: an E2E AC must hit the running app through a browser. The shipped `live_server` inherits the env (so CI's DB creds win) and polls readiness; hand-rolling one re-introduces the CI `ERR_CONNECTION_REFUSED` failure. A missing `tests/e2e/conftest.py` is a scaffold defect to surface, not a cue to write your own.
+- **Reuse the page's established seams.** When the AC under test renders into a page a PRIOR AC in this story already built, READ that page's template + the sibling E2E tests first and assert against the **existing** `data-testid`s (and routes). Do NOT invent a new id for an element that already has one: a divergent selector (`bug-detail-status` vs the rendered `bug-status`) greens nothing and stalls at the honest-GREEN verify. Only mint a new, distinctly-named testid for a genuinely new element.
 
 ## REVIEW (per AC, once all its tests are green)
 
@@ -86,7 +87,7 @@ A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `t
 - **Scaffold defect** – a test can't run because a kit-owned scaffold piece is missing (e.g. `tests/e2e/conftest.py` / the `live_server` fixture, or no runner for the layer): `--slot smell=scaffold-defect --slot severity=blocking`. Surface it; the scaffold owns that file, NEVER author it yourself.
 - **Driver deletes/weakens a test** – hard block; surface to PO.
 - **Test cost spiral** – each new test >2x the prior lines: `flagSmells(["test-cost-spiral"])`.
-- **API coherence drift** – the same concept named differently across two PASS reviews: `["api-coherence-drift"]`; request a rename refactor.
+- **API coherence drift** – the same concept named differently across two PASS reviews, including a UI `data-testid` (or route) for an element a sibling AC already exposed under a different name: `["api-coherence-drift"]`; request a rename refactor to ONE seam.
 - **Fragility ratio** – a small change failed >3 tests: `["fragility-ratio"]` (tests mirror implementation).
 - **Boundary violation** – a test against a private helper: `["boundary-violation"]`; insist on an outer-boundary test.
 
