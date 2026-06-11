@@ -48,6 +48,8 @@ import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.j
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
 import { featureResolved, featureRequestMd } from "./tdd-paths.js";
+import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
+import { markSmellResolved } from "./smells.js";
 
 /**
  * Emit the HITL reviewer's decision to the centralized agent log. The mock
@@ -93,6 +95,88 @@ function logHitlDecision(
 }
 
 export const HUMAN_PROXY = "human-proxy";
+
+export interface DecideEscalationArgs {
+  featureId: string;
+  /** The story to send back to its owning author + resume. */
+  story: string;
+  /** The blocking smell being resolved (e.g. ac-overlap, test-list-drift). */
+  smell: string;
+  /** The owning author the verdict routes to. */
+  routedTo: "spec-author" | "test-strategist";
+  /** The gate to re-open + re-run (Gate 1 spec vs Gate 3 test_list). */
+  gate: "spec" | "test_list";
+  /** The verdict (the smell's detail): the spec/test author's brief on resume. */
+  reason: string;
+  approver?: string;
+  tddDir?: string;
+}
+
+export interface DecideEscalationResult {
+  decided: "revise";
+  story: string;
+  routedTo: string;
+  /** True iff an open matching smell was found + marked resolved. */
+  resolvedSmell: boolean;
+}
+
+/**
+ * FEIP-7626 self-heal: the Human Proxy makes the PO's `revise` decision on a
+ * SPEC-level blocking escalation and drives the circle-back in one step, the
+ * headless stand-in for a human choosing accept|revise. It (1) records the
+ * decision as the PO's gate event (auditable as a self-heal, not an invisible
+ * auto-edit), (2) resets the story to `designing` via reviseStory (discard the
+ * experiment, reopen the gate, free the lane), and (3) resolves the smell as
+ * `revised`, which spends the one-revise-per-(smell,story) budget so a second
+ * escape of the SAME smell on the SAME story hard-halts instead of looping. The
+ * standing design lane then re-runs Gate 1->2->3 at the owning author and the
+ * build resumes. The driver only emits this AFTER the pure transition already
+ * decided the escalation was routable (budget not yet spent), so it always
+ * spends from 0 -> 1.
+ */
+export function decideEscalationAsHumanProxy(args: DecideEscalationArgs): DecideEscalationResult {
+  const tddDir = args.tddDir ?? "./.tdd";
+  const approver = args.approver ?? HUMAN_PROXY;
+  const at = new Date().toISOString();
+
+  // 1. Record the PO's revise decision (the human's choice, made by the proxy).
+  try {
+    emitAgentLogEvent(
+      {
+        role: "product-owner",
+        level: "info",
+        event: "gate.modified",
+        feature_id: args.featureId,
+        slots: {
+          gate: args.gate,
+          decision: "revise",
+          routed_to: args.routedTo,
+          smell: args.smell,
+          story: args.story,
+          verdict: args.reason,
+          approver,
+        },
+      },
+      { tddDir },
+    );
+  } catch {
+    // Logging is observability, never block the heal.
+  }
+
+  // 2. Reset the story to designing (discard experiment + reopen gate + free lane).
+  const pipeline = readPipeline(tddDir, args.featureId);
+  reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
+  writePipeline(tddDir, pipeline);
+
+  // 3. Resolve the smell as `revised` (spends the budget; a re-fire is a hard halt).
+  const resolvedSmell = markSmellResolved(tddDir, args.smell, {
+    story_id: args.story,
+    kind: "revised",
+    note: `revised by ${approver}: routed to ${args.routedTo} (${args.gate} gate)`,
+  });
+
+  return { decided: "revise", story: args.story, routedTo: args.routedTo, resolvedSmell };
+}
 
 export interface HumanProxyArgs {
   featureId: string;

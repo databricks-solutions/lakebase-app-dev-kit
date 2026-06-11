@@ -778,6 +778,46 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     case "done":
       return [{ kind: "set-phase", phase: "shipped" }];
 
+    case "revise-route": {
+      // FEIP-7626: a SPEC-level smell the PO sends back to its owning author.
+      // ONE in-process command does it atomically (no inter-command readState
+      // window): record the PO's revise decision as gate events, reset the story
+      // to `designing` (reviseStory: discard the experiment + reopen the gate +
+      // free the lane), and resolve the smell (kind=revised, spending the
+      // one-revise-per-(smell,story) budget). The standing design lane then
+      // re-runs Gate 1->2->3 at the owning author and the build resumes.
+      const smellName = action.source.startsWith("smell:")
+        ? action.source.slice("smell:".length)
+        : action.source;
+      return [
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: [
+            "decide-escalation",
+            "--feature",
+            f,
+            "--story",
+            action.story,
+            "--smell",
+            smellName,
+            "--routed-to",
+            action.role,
+            "--gate",
+            action.gate,
+            "--reason",
+            action.reason,
+            "--approver",
+            approver,
+            "--project-dir",
+            cfg.projectDir,
+            "--tdd-dir",
+            cfg.tddDir,
+          ],
+        },
+      ];
+    }
+
     case "raise-to-hil":
       // Surface + halt: the escalation is already recorded under
       // .tdd/escalations/ (that is how it was detected). No CLI to run , the
@@ -812,7 +852,9 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
   return {
     async readState() {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
-      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
+      // Thread the active build story so a smell-derived escalation with no story
+      // scope still resolves to a story for revise-routing (FEIP-7626).
+      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId, pipeline.build_active);
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId, cfg.projectDir);
       const state = deriveDriveState(pipeline, probe, ctx);
       // UI track: gate the UX Designer step. uiTrack is config (env); the design

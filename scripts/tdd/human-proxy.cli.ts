@@ -11,7 +11,12 @@
 //   3 = substrate failure
 
 import { isCliEntry } from "../util/cli-entry.js";
-import { drainGatesAsHumanProxy, supplyArtifact, supplyRequests } from "./human-proxy.js";
+import {
+  drainGatesAsHumanProxy,
+  supplyArtifact,
+  supplyRequests,
+  decideEscalationAsHumanProxy,
+} from "./human-proxy.js";
 import { approveSprintPlanGate } from "./sprint-gates.js";
 import type { GateName } from "./gates.js";
 
@@ -84,6 +89,75 @@ function runSupplyRequestsCli(argv: string[]): number {
     );
   }
   return 0;
+}
+
+/**
+ * `decide-escalation` subcommand (FEIP-7626): the Human Proxy makes the PO's
+ * `revise` decision on a SPEC-level blocking escalation and drives the
+ * circle-back (record the decision, reset the story to designing, resolve the
+ * smell). The deterministic driver emits this for a `revise-route` action; it is
+ * never invoked for a build-level/non-routable escalation (those hard-halt).
+ *
+ *   lakebase-tdd-human-proxy decide-escalation --feature F --story S --smell N \
+ *       --routed-to spec-author --gate spec --reason "<verdict>" [--approver A] [--tdd-dir D]
+ */
+function runDecideEscalationCli(argv: string[]): number {
+  let feature: string | undefined;
+  let story: string | undefined;
+  let smell: string | undefined;
+  let routedTo: string | undefined;
+  let gate: string | undefined;
+  let reason: string | undefined;
+  let approver: string | undefined;
+  let tddDir: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--feature": feature = argv[++i]; break;
+      case "--story": story = argv[++i]; break;
+      case "--smell": smell = argv[++i]; break;
+      case "--routed-to": routedTo = argv[++i]; break;
+      case "--gate": gate = argv[++i]; break;
+      case "--reason": reason = argv[++i]; break;
+      case "--approver": approver = argv[++i]; break;
+      case "--tdd-dir": tddDir = argv[++i]; break;
+      // --project-dir is accepted (the effect passes it) but unused here.
+      case "--project-dir": i++; break;
+    }
+  }
+  if (!feature || !story || !smell || !routedTo || !gate) {
+    process.stderr.write(
+      "Error: decide-escalation requires --feature, --story, --smell, --routed-to, --gate.\n",
+    );
+    return 2;
+  }
+  if (routedTo !== "spec-author" && routedTo !== "test-strategist") {
+    process.stderr.write(`Error: --routed-to must be spec-author|test-strategist (got ${routedTo}).\n`);
+    return 2;
+  }
+  if (gate !== "spec" && gate !== "test_list") {
+    process.stderr.write(`Error: --gate must be spec|test_list (got ${gate}).\n`);
+    return 2;
+  }
+  try {
+    const r = decideEscalationAsHumanProxy({
+      featureId: feature,
+      story,
+      smell,
+      routedTo,
+      gate,
+      reason: reason ?? `revise ${smell} on ${story}`,
+      approver,
+      tddDir,
+    });
+    process.stdout.write(
+      `human-proxy: revised ${story} (smell ${smell} -> ${r.routedTo}); ` +
+        `story reset to designing${r.resolvedSmell ? ", smell resolved" : " (no open smell found)"}\n`,
+    );
+    return 0;
+  } catch (e) {
+    process.stderr.write(`human-proxy decide-escalation: ${(e as Error).message}\n`);
+    return 3;
+  }
 }
 
 interface ParsedArgs {
@@ -161,6 +235,7 @@ export function runHumanProxyCli(argv: string[]): number {
   // default (no subcommand, or `approve`) drains open gates.
   if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
   if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
+  if (argv[0] === "decide-escalation") return runDecideEscalationCli(argv.slice(1));
   if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);
   if (args.help) {

@@ -22,6 +22,17 @@ export interface SmellDefinition {
   name: SmellName;
   description: string;
   proposed_remediation: string;
+  /** FEIP-7626 revise-routing taxonomy. `spec` smells are a design-time
+   *  decomposition defect the PO can send back to an owning author and resume
+   *  (revise-routing); `build`/undefined smells hard-halt to the HIL (genuine
+   *  build thrashing, a missing scaffold, etc.), with no automatic author route. */
+  level?: "spec" | "build";
+  /** For a `spec`-level smell: the design-lane author whose remediation it is
+   *  (the verdict routes here on `revise`). */
+  owning_role?: "spec-author" | "test-strategist";
+  /** For a `spec`-level smell: the gate to re-open + re-run (Gate 1 spec vs
+   *  Gate 3 test_list). The story re-enters the design lane at that author. */
+  gate_to_rerun?: "spec" | "test_list";
 }
 
 export const SMELL_CATALOG: SmellDefinition[] = [
@@ -29,6 +40,11 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     name: "test-list-drift",
     description: "Test list grew by >25% since cycle start without HITL approval.",
     proposed_remediation: "PO refinement on spec.",
+    // A drifted/non-orderable test list is a test-strategist decomposition
+    // defect: route the remediation back to Gate 3 on `revise`.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list",
   },
   {
     name: "cycle-stall",
@@ -108,6 +124,10 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "Surface to the PO at the gate. Merge the overlapping ACs, differentiate their observable " +
       "behavior, or (PO decision) accept the dependent AC as already-satisfied. Do not order both " +
       "as separate cycles.",
+    // An AC overlap is a spec-author decomposition defect: route back to Gate 1.
+    level: "spec",
+    owning_role: "spec-author",
+    gate_to_rerun: "spec",
   },
   {
     name: "e2e-row-perma-red",
@@ -137,6 +157,21 @@ export interface SmellHit {
   smell: SmellName;
   cycle_ids: string[];
   detail: string;
+  /** Story the smell was flagged against (FEIP-7626): lets revise-routing know
+   *  which story to send back to its owning author. Optional for back-compat. */
+  story_id?: string;
+  /** AC the smell concerns, when applicable (carried into the revise brief). */
+  ac_id?: string;
+}
+
+/** The revise-routing taxonomy for a smell, or null if it is build-level
+ *  (hard-halt, no automatic author route). FEIP-7626. */
+export function specLevelSmell(
+  name: string,
+): { owning_role: "spec-author" | "test-strategist"; gate_to_rerun: "spec" | "test_list" } | null {
+  const def = SMELL_CATALOG.find((s) => s.name === name);
+  if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
+  return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
 }
 
 const CYCLE_STALL_THRESHOLD = 3;
@@ -342,7 +377,16 @@ export function detectE2eRowPermaRed(input: DetectorInput): SmellHit[] {
 }
 
 export interface SmellsLog {
-  detected: Array<SmellHit & { detected_at: string; resolution?: string }>;
+  detected: Array<
+    SmellHit & {
+      detected_at: string;
+      resolution?: string;
+      /** How a resolved smell was resolved (FEIP-7626): `revised` = the PO sent
+       *  it back to the owning author and the loop resumed; `accepted` = the PO
+       *  accepted it as-is. Drives the one-revise-per-(smell,story) bound. */
+      resolution_kind?: "revised" | "accepted";
+    }
+  >;
 }
 
 export function writeSmellsLog(tddDir: string, hits: SmellHit[]): SmellsLog {
@@ -359,6 +403,50 @@ export function readSmellsLog(tddDir: string): SmellsLog {
   const file = join(tddDir, "smells.json");
   if (!existsSync(file)) return { detected: [] };
   return JSON.parse(readFileSync(file, "utf8"));
+}
+
+/** Does an entry concern this (smell, story)? story_id matches when both name it,
+ *  or when the caller passes no story (feature-wide match). FEIP-7626. */
+function smellMatches(
+  entry: SmellHit & { detected_at: string },
+  smell: string,
+  story_id?: string,
+): boolean {
+  if (entry.smell !== smell) return false;
+  if (story_id === undefined) return true;
+  // A scoped lookup matches an entry with the same story, or a legacy entry that
+  // carried no story (so a pre-scope smell still resolves).
+  return entry.story_id === undefined || entry.story_id === story_id;
+}
+
+/**
+ * Mark the first OPEN matching smell resolved (FEIP-7626). `kind` records how:
+ * `revised` (sent back to the owning author + resumed) or `accepted` (as-is).
+ * Returns true iff an open entry was found + resolved.
+ */
+export function markSmellResolved(
+  tddDir: string,
+  smell: string,
+  opts: { story_id?: string; kind: "revised" | "accepted"; note?: string },
+): boolean {
+  const file = join(tddDir, "smells.json");
+  if (!existsSync(file)) return false;
+  const log: SmellsLog = JSON.parse(readFileSync(file, "utf8"));
+  const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
+  if (!entry) return false;
+  entry.resolution = opts.note ?? `${opts.kind} by PO`;
+  entry.resolution_kind = opts.kind;
+  writeFileSync(file, JSON.stringify(log, null, 2) + "\n");
+  return true;
+}
+
+/** How many times this (smell, story) has already been revised (FEIP-7626): the
+ *  count of resolved-as-`revised` entries. The one-revise-per-(smell,story) bound
+ *  compares against this so a re-fired-then-revised smell can't loop forever. */
+export function priorReviseCount(tddDir: string, smell: string, story_id?: string): number {
+  return readSmellsLog(tddDir).detected.filter(
+    (d) => d.resolution_kind === "revised" && smellMatches(d, smell, story_id),
+  ).length;
 }
 
 export function runDetectorsForScope(

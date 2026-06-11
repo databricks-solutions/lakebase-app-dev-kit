@@ -27,7 +27,7 @@ The test-strategist already owns "one observable behavior per item." Extend that
 2. **Prompt contract.** `test-strategist.md` + `spec-author.md` require each AC to be independently testable; on overlap/contradiction, surface to the PO (`ac-overlap`) rather than ordering both as separate cycles. The spec-author prompt makes prevention *operational*, not just declarative: an **independence test** run on every AC pair in a story (you must be able to make AC_n RED while AC_m is GREEN and vice versa, else merge), and an explicit **delineate-by-outcome-not-mechanism** rule (a single action that persists + navigates is one outcome unless each is independently observable and breakable, do not split "the redirect" into its own AC). This targets the authoring failure mode behind the smoke (AC2/AC3 split along an implementation seam).
 3. **Deterministic backstop.** A `checkAcIndependence(acs)` helper flags the literal case, two ACs in a story whose normalized `then` clauses are identical, in the spec-author response-formatter self-check (exit non-zero before handoff). It catches only exact duplication (semantic implication is the LLM's job via #2), but it is a true-positive-only guard that documents the contract.
 
-## Part B , revise-routing (design only; not yet built)
+## Part B , revise-routing (Phase 2, headless self-heal IMPLEMENTED)
 
 When a spec-level blocking smell escapes to build (or is raised at the gate), the loop currently halts and waits for a human re-run. The target flow:
 
@@ -81,7 +81,19 @@ Required:
 - (Part B) On a spec-level escalation, the PO can choose `revise`; the orchestrator routes the **test-strategist's verdict to the spec-author** (the smell's owning author), re-runs it + re-gates (1->2->3) + resumes build, with no human re-run and no AC weakened without PO approval.
 - (Part B) Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`), the same circle-back is **self-healing**: the Human Proxy makes the `accept | revise` decision as the PO, routes to the spec-author, and re-gates, all without a live human, bounded to one revise per story per smell before a hard halt.
 
+## Implementation notes (Phase 2, landed)
+
+How Part B maps onto the deterministic driver (the resume reuses the standing lanes, no parallel re-gate machinery):
+
+- **Taxonomy** lives on `SMELL_CATALOG` (`smells.ts`): each entry gains `level` (`spec`/`build`), `owning_role`, and `gate_to_rerun`. `specLevelSmell(name)` is the routing lookup. `ac-overlap` -> spec-author/spec; `test-list-drift` -> test-strategist/test_list; everything else is build-level (hard-halt).
+- **Story scope + budget** on `smells.json`: a `SmellHit` carries `story_id`; `markSmellResolved(...,{kind:"revised"})` + `priorReviseCount` enforce the one-revise-per-(smell,story) bound.
+- **Routability** is computed in the disk probe (`orchestrator-probe.ts` `pendingEscalation`): a `smell:<name>` escalation that is spec-level, has a story (its own, else the active build story), and has revise budget left gets `escalation.routable = { story, owning_role, gate }`. Everything else leaves it unset.
+- **The pure transition** (`orchestrator-drive.ts` `nextTransition`): `escalation.routable` -> `revise-route` (lane `design`); else the byte-identical `raise-to-hil`. Gated behind `routable` so every existing escalation path is unchanged.
+- **The effect** (`orchestrator-effects.ts`): `revise-route` emits ONE `lakebase-tdd-human-proxy decide-escalation` command (atomic, no inter-command readState window).
+- **The self-heal** (`human-proxy.ts` `decideEscalationAsHumanProxy`): records the PO's `revise` decision as a `gate.modified` event (auditable), `reviseStory` (discard experiment + reopen gate + free lane -> `designing`), and resolves the smell as `revised` (spends the budget). The standing design lane then re-runs Gate 1->2->3 at the owning author and the build resumes.
+
 ## Phasing
 
-- **Phase 1 (now):** Part A , `ac-overlap` blocking smell + prompt contract + deterministic backstop. Prevents the stall.
-- **Phase 2:** Part B , smell taxonomy (`spec-level`/`build-level`) + the `revise` transition + the PO `accept|revise` gate surface + the test-strategist-verdict -> spec-author circle-back + the Human-Proxy self-heal (bounded per story). Recovers from it.
+- **Phase 1 (landed):** Part A , `ac-overlap` blocking smell + prompt contract + deterministic backstop. Prevents the stall.
+- **Phase 2 (landed):** Part B , smell taxonomy (`spec-level`/`build-level`) + the `revise-route` transition + the test-strategist/spec-author circle-back + the Human-Proxy self-heal (bounded one revise per smell per story). Recovers from it headless.
+- **Phase 2 follow-up (not yet built):** interactive (`--gates interactive`) parity , surface the live `accept | revise` choice to a human (stop before `revise-route`), the live-human analog of the headless self-heal.

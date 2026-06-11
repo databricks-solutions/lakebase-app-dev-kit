@@ -113,10 +113,12 @@ export function escalationsFromSmells(tddDir: string, featureId?: string): Escal
   return log.detected
     .filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell))
     .map((d) => ({
-      id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId }),
+      id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
       source: `smell:${d.smell}`,
       reason: `blocking smell "${d.smell}": ${d.detail}`,
       ...(featureId ? { feature_id: featureId } : {}),
+      ...(d.story_id ? { story_id: d.story_id } : {}),
+      ...(d.ac_id ? { ac_id: d.ac_id } : {}),
       raised_at: d.detected_at,
     }));
 }
@@ -128,12 +130,31 @@ export function escalationsFromSmells(tddDir: string, featureId?: string): Escal
  *  (the driver-fabricated-conftest defect traced to this gap). No-op for
  *  advisory/unknown smell names; idempotent (skips a still-unresolved dup of the
  *  same smell). Returns true iff a new entry was written. */
-export function recordBlockingSmellFlag(tddDir: string, smell: string, detail?: string): boolean {
+export function recordBlockingSmellFlag(
+  tddDir: string,
+  smell: string,
+  detail?: string,
+  scope?: { story_id?: string; ac_id?: string },
+): boolean {
   if (!BLOCKING_SMELLS.has(smell as SmellName)) return false;
-  const open = readSmellsLog(tddDir).detected.some((d) => d.smell === smell && !d.resolution);
+  // Idempotent per (smell, story): a still-open flag of the same smell on the
+  // same story is a dup. A legacy entry with no story matches any story so a
+  // pre-scope flag is not re-raised.
+  const open = readSmellsLog(tddDir).detected.some(
+    (d) =>
+      d.smell === smell &&
+      !d.resolution &&
+      (scope?.story_id === undefined || d.story_id === undefined || d.story_id === scope.story_id),
+  );
   if (open) return false;
   writeSmellsLog(tddDir, [
-    { smell: smell as SmellName, cycle_ids: [], detail: detail || `flagged blocking smell: ${smell}` },
+    {
+      smell: smell as SmellName,
+      cycle_ids: [],
+      detail: detail || `flagged blocking smell: ${smell}`,
+      ...(scope?.story_id ? { story_id: scope.story_id } : {}),
+      ...(scope?.ac_id ? { ac_id: scope.ac_id } : {}),
+    },
   ]);
   return true;
 }
