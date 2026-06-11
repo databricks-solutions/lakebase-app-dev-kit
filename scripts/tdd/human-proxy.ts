@@ -41,13 +41,21 @@
 // /design path produces no plan.json, so a rigid chain would stall. Sequencing
 // belongs in the orchestrator once the phase<->gate<->mode mapping is settled.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
-import { featureResolved, featureRequestMd } from "./tdd-paths.js";
+import {
+  featureResolved,
+  featureRequestMd,
+  featureTestListJson,
+  storyTestListJson,
+  acsDir,
+  handbackFile,
+  storyAcIds,
+} from "./tdd-paths.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
 import { markSmellResolved } from "./smells.js";
 
@@ -95,6 +103,47 @@ function logHitlDecision(
 }
 
 export const HUMAN_PROXY = "human-proxy";
+
+/**
+ * Stale the owning author's artifact for a story so the design lane RE-INVOKES
+ * that author on a revise (FEIP-7626), the teeth that make revise non-hollow.
+ * Always clears the story's test list (remove its items from the master
+ * test-list.json + delete the per-story view) so testListReady reads false and
+ * the test-strategist re-runs. A `spec`-gate revise also clears the story's ACs
+ * (a re-decomposition) so hasAcs reads false and the spec-author re-drafts.
+ */
+function staleStoryArtifactsForRevise(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  gate: "spec" | "test_list",
+): void {
+  const acIds = new Set(storyAcIds(tddDir, featureId, story));
+  const master = featureTestListJson(tddDir, featureId);
+  if (existsSync(master)) {
+    try {
+      const data = JSON.parse(readFileSync(master, "utf8")) as { items?: Array<{ ac_id?: string }> };
+      if (Array.isArray(data.items)) {
+        data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
+        writeFileSync(master, JSON.stringify(data, null, 2) + "\n");
+      }
+    } catch {
+      // Leave the master as-is on a parse error; deleting the per-story view
+      // below still forces a re-run.
+    }
+  }
+  const perStory = storyTestListJson(tddDir, featureId, story);
+  if (existsSync(perStory)) rmSync(perStory, { force: true });
+
+  if (gate === "spec") {
+    const dir = acsDir(tddDir, featureId, story);
+    if (existsSync(dir)) {
+      for (const f of readdirSync(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join(dir, f), { force: true });
+      }
+    }
+  }
+}
 
 export interface DecideEscalationArgs {
   featureId: string;
@@ -167,6 +216,26 @@ export function decideEscalationAsHumanProxy(args: DecideEscalationArgs): Decide
   const pipeline = readPipeline(tddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(tddDir, pipeline);
+
+  // 2b. Force the owning author to actually RE-AUTHOR (not just re-gate the same
+  // artifacts): stale its artifact so the design lane re-invokes it, and deliver
+  // the verdict as that author's hand-back brief. Without this the design lane
+  // sees the artifact still on disk + jumps straight to re-approving the
+  // IDENTICAL spec, so the same smell re-fires and the revise heals nothing.
+  staleStoryArtifactsForRevise(tddDir, args.featureId, args.story, args.gate);
+  try {
+    const hb = handbackFile(tddDir, args.featureId, args.routedTo, args.story);
+    mkdirSync(dirname(hb), { recursive: true });
+    const artifact = args.gate === "spec" ? "acceptance criteria" : "ordered test list";
+    writeFileSync(
+      hb,
+      `REVISE (Product Owner): ${args.reason}\n\nRe-author this story's ${artifact} to address the above. ` +
+        `Do NOT re-emit the same overlap/redundancy; if no honest, not-already-delivered behavior remains, ` +
+        `say so as an open question rather than fabricating one.`,
+    );
+  } catch {
+    // The brief is best-effort observability; never block the heal.
+  }
 
   // 3. Resolve the smell as `revised` (spends the budget; a re-fire is a hard halt).
   const resolvedSmell = markSmellResolved(tddDir, args.smell, {

@@ -4,9 +4,16 @@
 // Human-Proxy self-heal on a tmp .tdd, no model, no real branches.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  featureTestListJson,
+  storyTestListJson,
+  acsDir,
+  acJson,
+  handbackFile,
+} from "../../scripts/tdd/tdd-paths";
 
 import {
   SMELL_CATALOG,
@@ -171,11 +178,32 @@ function pipelineBuilding(): StoryPipeline {
   } as unknown as StoryPipeline;
 }
 
+// Seed the design artifacts a built story would have on disk, so we can prove
+// the revise STALES them (forces the owning author to re-author).
+function seedDesignArtifacts(tdd: string): void {
+  mkdirSync(acsDir(tdd, FEATURE, STORY), { recursive: true });
+  writeFileSync(
+    acJson(tdd, FEATURE, STORY, "AC1-x"),
+    JSON.stringify({ id: "AC1-x", layer: "E2E", given: "g", when: "w", then: "t", status: "draft" }) + "\n",
+  );
+  mkdirSync(join(featureTestListJson(tdd, FEATURE), ".."), { recursive: true });
+  writeFileSync(
+    featureTestListJson(tdd, FEATURE),
+    JSON.stringify({ feature_id: FEATURE, items: [{ id: "T1", description: "x", ac_id: "AC1-x", status: "pending" }] }) + "\n",
+  );
+  mkdirSync(join(storyTestListJson(tdd, FEATURE, STORY), ".."), { recursive: true });
+  writeFileSync(
+    storyTestListJson(tdd, FEATURE, STORY),
+    JSON.stringify({ feature_id: FEATURE, story_id: STORY, items: [{ id: "T1", description: "x", ac_id: "AC1-x", status: "pending" }] }) + "\n",
+  );
+}
+
 describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
   let tdd: string;
   beforeEach(() => {
     tdd = mkdtempSync(join(tmpdir(), "tdd-revise-e2e-"));
     writePipeline(tdd, pipelineBuilding());
+    seedDesignArtifacts(tdd);
     recordBlockingSmellFlag(tdd, "ac-overlap", "AC4 implied by AC2", { story_id: STORY });
   });
   afterEach(() => rmSync(tdd, { recursive: true, force: true }));
@@ -201,6 +229,34 @@ describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
 
     // The smell is resolved-as-revised: the one-revise budget is now spent.
     expect(priorReviseCount(tdd, "ac-overlap", STORY)).toBe(1);
+  });
+
+  it("is NOT hollow: stales the owning author's artifacts + writes the verdict brief", () => {
+    decideEscalationAsHumanProxy({
+      featureId: FEATURE, story: STORY, smell: "ac-overlap",
+      routedTo: "spec-author", gate: "spec", reason: "AC4 implied by AC2", tddDir: tdd,
+    });
+    // spec-gate revise clears the ACs (re-decomposition) + the test list, so the
+    // design lane re-invokes spec-author, not just re-approve the same spec.
+    expect(existsSync(acJson(tdd, FEATURE, STORY, "AC1-x"))).toBe(false);
+    expect(existsSync(storyTestListJson(tdd, FEATURE, STORY))).toBe(false);
+    const master = JSON.parse(readFileSync(featureTestListJson(tdd, FEATURE), "utf8")) as { items: unknown[] };
+    expect(master.items).toHaveLength(0); // the story's item was removed
+    // The verdict reached the spec-author as a hand-back brief.
+    const hb = handbackFile(tdd, FEATURE, "spec-author", STORY);
+    expect(existsSync(hb)).toBe(true);
+    expect(readFileSync(hb, "utf8")).toMatch(/AC4 implied by AC2/);
+  });
+
+  it("test_list-gate revise stales the test list but KEEPS the ACs", () => {
+    decideEscalationAsHumanProxy({
+      featureId: FEATURE, story: STORY, smell: "test-list-drift",
+      routedTo: "test-strategist", gate: "test_list", reason: "T1 already green", tddDir: tdd,
+    });
+    expect(existsSync(storyTestListJson(tdd, FEATURE, STORY))).toBe(false);
+    expect(existsSync(acJson(tdd, FEATURE, STORY, "AC1-x"))).toBe(true); // ACs preserved
+    const hb = handbackFile(tdd, FEATURE, "test-strategist", STORY);
+    expect(readFileSync(hb, "utf8")).toMatch(/T1 already green/);
   });
 });
 
