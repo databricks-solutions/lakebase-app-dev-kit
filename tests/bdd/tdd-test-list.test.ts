@@ -228,4 +228,50 @@ describe("test-list: per-story scoping (phase 2c)", () => {
     expect(writeStoryTestList(tdd, "F1", "S1")).toBeTruthy();
     expect(readStoryTestList(tdd, "F1", "S1")!.items.map((i) => i.id).sort()).toEqual(["T1", "T2", "T3"]);
   });
+
+  it("folds a later story whose per-story ids COLLIDE with the master (the live S3 abort)", () => {
+    // The real failure: the Strategist restarts test ids at T1 per story, so S2's
+    // authored ids (T1, T2) collided with the master's existing T1/T2. The old
+    // id-keyed dedup dropped every S2 item, the master never got S2, and S2 scoped
+    // to EMPTY -> protocol abort. Dedup must key on (ac_id, description) and re-id
+    // the colliding additions.
+    writeMasterTestList(tdd, masterList()); // T1/T2 (AC1), T3 (AC2)
+    writeFileSync(
+      join(tdd, STORY2_DIR, "test-list-per-story.json"),
+      JSON.stringify({
+        feature_id: "F1",
+        story_id: "S2",
+        ordered_for: "design-momentum",
+        items: [
+          { id: "T1", description: "owner opens the detail page", ac_id: "AC3", status: "pending" },
+          { id: "T2", description: "missing id returns not-found", ac_id: "AC3", status: "pending" },
+        ],
+      }) + "\n",
+    );
+    expect(writeStoryTestList(tdd, "F1", "S2")).toBeTruthy();
+    // S2's per-story list is non-empty (both items survived, not dropped).
+    const s2 = readStoryTestList(tdd, "F1", "S2")!;
+    expect(s2.items.map((i) => i.ac_id)).toEqual(["AC3", "AC3"]);
+    // The master accumulated both S2 items, re-id'd to keep ids globally unique.
+    const master = readMasterTestList(tdd, "F1");
+    const ids = master.items.map((i) => i.id);
+    expect(new Set(ids).size).toBe(ids.length); // no duplicate ids
+    expect(master.items.filter((i) => i.ac_id === "AC3").length).toBe(2);
+  });
+
+  it("fold is idempotent on a re-dispatch (does not duplicate the story's items)", () => {
+    writeMasterTestList(tdd, masterList());
+    const authored =
+      JSON.stringify({
+        feature_id: "F1",
+        story_id: "S2",
+        items: [{ id: "T1", description: "owner opens the detail page", ac_id: "AC3", status: "pending" }],
+      }) + "\n";
+    const s2File = join(tdd, STORY2_DIR, "test-list-per-story.json");
+    writeFileSync(s2File, authored);
+    writeStoryTestList(tdd, "F1", "S2");
+    writeFileSync(s2File, authored); // re-dispatch re-writes the same per-story list
+    writeStoryTestList(tdd, "F1", "S2");
+    expect(readMasterTestList(tdd, "F1").items.filter((i) => i.ac_id === "AC3").length).toBe(1);
+  });
 });

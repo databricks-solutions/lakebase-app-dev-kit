@@ -7075,6 +7075,17 @@ function scan(projectDir, tddDir) {
   }
   return map;
 }
+function writeRecorderState(recordDir, cur) {
+  const files = {};
+  for (const [rel, f] of cur) files[rel] = f.sha;
+  mkdirSync4(recordDir, { recursive: true });
+  writeFileSync3(join5(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+}
+function seedRecorderBaseline(args) {
+  if (existsSync5(join5(args.recordDir, ".recorder-state.json"))) return false;
+  writeRecorderState(args.recordDir, scan(args.projectDir, args.tddDir));
+  return true;
+}
 function readState(recordDir) {
   const f = join5(recordDir, ".recorder-state.json");
   if (!existsSync5(f)) return { files: {} };
@@ -7167,9 +7178,7 @@ function recordTurn(args) {
   index.push(entry);
   mkdirSync4(join5(recordDir, "turns"), { recursive: true });
   writeFileSync3(join5(recordDir, "turns", "index.json"), JSON.stringify({ turns: index }, null, 2) + "\n");
-  const files = {};
-  for (const [rel, f] of cur) files[rel] = f.sha;
-  writeFileSync3(join5(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
+  writeRecorderState(recordDir, cur);
   return { ordinal, dir: dirName, produced, deleted };
 }
 
@@ -8630,7 +8639,7 @@ function roleTaskBody(action, featureId, uiTrack, tddDir) {
     case "test-strategist": {
       const acIds = storyAcIds(tddDir, featureId, s);
       const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
-      return `Produce the ordered test list for story ${s}.${acScope}`;
+      return `Produce story ${s}'s ordered tests and APPEND them to the feature master test list .tdd/features/${featureId}/test-list.json , keep every item already there for the other stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration generates the per-story + per-AC views from the master).${acScope}`;
     }
     case "navigator":
       if (action.buildMode === "review") {
@@ -9441,6 +9450,7 @@ function withBuildRecording(inner, cfg) {
 function withTurnRecording(inner, cfg) {
   const recordDir = process.env.LAKEBASE_TDD_RECORD_DIR?.trim();
   if (!recordDir) return inner;
+  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir });
   return {
     readState: () => inner.readState(),
     onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
