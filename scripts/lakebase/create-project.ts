@@ -30,7 +30,7 @@ import {
   writeWorkflowState,
 } from "./scm-workflow-state.js";
 import type { AgentRole } from "../tdd/agent-log.js";
-import { buildAgentConfig, writeAgentConfig } from "../tdd/agent-models.js";
+import { defaultTddConfig, writeTddConfig } from "../tdd/tdd-config.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -353,19 +353,26 @@ export async function createProject(
     );
   }
 
-  // ── Step 7d: per-role agent model config ──────────
-  // Seed .lakebase/agent-config.json with each TDD-workflow role's
-  // strongly-recommended model (from its definition) plus any HIL overrides
-  // chosen at setup. Written before the initial commit so it is tracked, like
-  // workflow-state.json. The orchestrator resolves the per-role model from
-  // this file (override -> recommended -> inherit). Best-effort: a failure is
-  // a warning, the recommended models still apply by default.
+  // ── Step 7d: unified TDD run config ──────────
+  // Seed .lakebase/tdd-config.json , the one declarative source for the per-role
+  // + per-turn model/effort matrix and the build/plan/project knobs (the
+  // orchestrator resolves file -> LAKEBASE_TDD_* env -> default). Seeded with each
+  // role's recommended model + any HIL model overrides chosen at setup, and the
+  // navigator REVIEW turn pinned to low effort (the fast judgment turn). Written
+  // before the initial commit so it is tracked, like workflow-state.json.
+  // Best-effort: a failure is a warning; the code defaults still apply.
   if (enableTdd) {
     try {
-      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+      const tddConfig = defaultTddConfig();
+      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+        if (model && tddConfig.roles?.[role as keyof typeof tddConfig.roles]) {
+          tddConfig.roles[role as keyof typeof tddConfig.roles]!.model = model;
+        }
+      }
+      writeTddConfig(projectDir, tddConfig);
     } catch (err) {
       warnings.push(
-        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
+        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
       );
     }
   }
