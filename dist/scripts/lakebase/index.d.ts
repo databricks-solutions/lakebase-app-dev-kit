@@ -1780,7 +1780,7 @@ interface InstallPlaywrightOptions {
     templatesDir?: string;
 }
 /** Files this primitive drops into a project root, relative to projectDir. */
-declare const PLAYWRIGHT_TEMPLATE_FILES: readonly ["playwright.config.ts", string];
+declare const PLAYWRIGHT_TEMPLATE_FILES: readonly ["playwright.config.ts", string, string];
 interface WritePlaywrightTemplatesArgs extends InstallPlaywrightOptions {
     projectDir: string;
     /** Overwrite an existing playwright.config.ts / smoke fixture. Default: false. */
