@@ -31,6 +31,14 @@
       ],
       "description": "The role performing the work."
     },
+    "model": {
+      "type": "string",
+      "description": "The model the role's turn ran with (resolved from tdd-config.json). Present on the per-turn dispatch (phase.start) events; omitted where not applicable."
+    },
+    "effort": {
+      "type": "string",
+      "description": "The --effort level the role's turn ran with (low|medium|high|xhigh|max), or 'default' when no flag was passed. Present on the per-turn dispatch (phase.start) events."
+    },
     "event": {
       "type": "string",
       "description": "Event name from the CLOSED vocabulary (scripts/tdd/agent-log-events.ts). An off-vocabulary event is rejected at emit (the message template + required slots live there). Keep this enum in sync with that module (guarded by a test).",
