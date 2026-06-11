@@ -6,8 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.1] - 2026-06-10
+
+Second beta on the 0.3.0 line. Consume via
+`npx github:databricks-solutions/lakebase-app-dev-kit#v0.3.0-beta.1`.
+
 ### Added
 
+- **Promote phase.** After a feature is accepted, the deterministic driver runs a
+  PR cycle (prepare-pr -> wait-ci -> HITL promote gate) then merges the feature up
+  to its parent tier in git + Lakebase, so the next sprint forks from a populated
+  parent.
+- **Universal turn recorder.** `LAKEBASE_TDD_RECORD_DIR` makes the driver record
+  every state-machine turn (design, build, gates, deploy, promote) as a replayable
+  per-turn corpus: `turns/<NNNN>-<label>/` (manifest + the .tdd/code delta that
+  turn produced) + `turns/index.json`, plus the cumulative `recorded-artifacts`
+  and `recorded-build` mirrors the existing replay engine consumes.
+- **imports-clean gate** (`lakebase-tdd-imports-clean`): the app entry must import
+  without an optional build artifact (e.g. `client/dist`) present, catching
+  import-time coupling before deploy. New `import-time-build-coupling` bad smell
+  plus a dev/prod-parity rule in the `software-design-principles` canon.
 - **Claude Code plugin.** The kit installs as a plugin: `claude plugin
   marketplace add databricks-solutions/lakebase-app-dev-kit` then `claude plugin
   install lakebase-app-dev-kit@lakebase-app-dev-kit`. Launch the workflow with
@@ -26,6 +44,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Build commits working software at each GREEN + REFACTOR** (code only, on the
+  experiment branch), so accept's merge carries real commits to the feature branch
+  and the promote phase opens a clean PR. CI now builds the client before tests
+  (dev/CI parity).
+- **Agent-loop performance (P0-P7).** Per-turn timing report
+  (`lakebase-tdd-timing`), a leaner pre-digested REVIEW rubric, a fresh-per-story
+  build session, a low-effort REVIEW turn, and reduced inter-phase shell overhead.
 - **Kit CLIs resolve through a project's `scripts/lk`** (ref-keyed cache or
   `LAKEBASE_KIT_DIR`) instead of per-call `npx` git resolution.
 - The orchestrator is a **deterministic state-machine driver**
@@ -76,4 +101,5 @@ First beta on the 0.3.0 line, graduating from the alpha series. Consume via
   requester's document is preserved as `feature-request.md` and never
   overwritten.
 
+[0.3.0-beta.1]: https://github.com/databricks-solutions/lakebase-app-dev-kit/releases/tag/v0.3.0-beta.1
 [0.3.0-beta.0]: https://github.com/databricks-solutions/lakebase-app-dev-kit/releases/tag/v0.3.0-beta.0
