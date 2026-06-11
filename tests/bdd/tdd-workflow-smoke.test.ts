@@ -115,19 +115,24 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model: code-writers on sonnet, prose roles haiku, test-strategist NOT pinned (P1)", () => {
-    // navigator/driver keep the kit-default sonnet (their output must compile +
-    // pass tests). The prose roles run haiku for speed (the smoke validates
-    // workflow mechanics, not prose quality).
-    expect(runSmoke).toMatch(/--agent-model architect-reviewer=haiku/);
-    expect(runSmoke).toMatch(/--agent-model spec-author=haiku/);
-    expect(runSmoke).toMatch(/--agent-model ux-designer=haiku/);
-    expect(runSmoke).toMatch(/--agent-model product-owner=haiku/);
-    expect(runSmoke).toMatch(/--agent-model release-engineer=haiku/);
-    // P1 (agent-loop optimization): the test-strategist is NOT pinned to haiku ,
-    // haiku thrashed ~200s on its structured test-list, the design lane's worst
-    // turn. It runs on its sonnet kit default instead.
-    expect(runSmoke).not.toMatch(/--agent-model test-strategist=haiku/);
+  it("tiers roles for the smoke via --agent-model + effort: only navigator + test-strategist pinned to opus, rest default, effort=low for all", () => {
+    // Perf-experiment matrix: pin ONLY the two capability-critical roles to opus,
+    // the navigator (writes the RED tests + reviews the design) and the
+    // test-strategist (the structured test-list whose every ac_id must map to a
+    // real AC). Every other role keeps its kit-default model (left unpinned).
+    expect(runSmoke).toMatch(/--agent-model navigator=opus/);
+    expect(runSmoke).toMatch(/--agent-model test-strategist=opus/);
+    // The rest are default: NOT pinned via --agent-model at all.
+    for (const role of ["spec-author", "architect-reviewer", "ux-designer", "product-owner", "release-engineer", "driver"]) {
+      expect(runSmoke, `${role} should keep its kit default (not pinned)`).not.toMatch(
+        new RegExp(`--agent-model ${role}=`),
+      );
+    }
+    // No role is on haiku now.
+    expect(runSmoke).not.toMatch(/--agent-model \S+=haiku/);
+    // create-project takes only --agent-model (model), so effort=low is patched
+    // into the seeded tdd-config.json right after scaffold (scalar per role).
+    expect(runSmoke).toMatch(/\.roles \|= with_entries\(\.value\.effort = "low"\)/);
   });
 
   // Role observability is now structural inside the deterministic driver
