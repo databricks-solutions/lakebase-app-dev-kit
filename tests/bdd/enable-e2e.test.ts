@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import {
   addE2eToRunTestsScript,
   addPlaywrightToPackageJson,
+  ensurePythonE2eDeps,
   enableE2eForProject,
   NODE_E2E_TEMPLATE_FILES,
   PYTHON_E2E_TEMPLATE_FILES,
@@ -142,6 +143,55 @@ describe("addE2eToRunTestsScript", () => {
   });
 });
 
+describe("ensurePythonE2eDeps (pyproject dev-extras patch)", () => {
+  let projectDir: string;
+  beforeEach(() => {
+    projectDir = mkTempProject("pydeps");
+  });
+  afterEach(() => rmTempProject(projectDir));
+
+  const py = () => path.join(projectDir, "pyproject.toml");
+
+  it("inserts pytest-playwright into an existing dev array, preserving siblings", () => {
+    fs.writeFileSync(
+      py(),
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n    "httpx>=0.27.0",\n]\n',
+    );
+    const r = ensurePythonE2eDeps({ projectDir });
+    expect(r).toEqual({ patched: true, depAdded: true });
+    const out = fs.readFileSync(py(), "utf8");
+    expect(out).toMatch(/pytest-playwright/);
+    expect(out).toMatch(/"pytest>=8\.0\.0"/);
+    expect(out).toMatch(/"httpx>=0\.27\.0"/);
+  });
+
+  it("is idempotent: a second call adds nothing", () => {
+    fs.writeFileSync(
+      py(),
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n]\n',
+    );
+    ensurePythonE2eDeps({ projectDir });
+    const after1 = fs.readFileSync(py(), "utf8");
+    const r2 = ensurePythonE2eDeps({ projectDir });
+    expect(r2).toEqual({ patched: true, depAdded: false });
+    expect(fs.readFileSync(py(), "utf8")).toBe(after1);
+    expect((after1.match(/pytest-playwright/g) ?? []).length).toBe(1);
+  });
+
+  it("appends a dev extras table when none exists (retrofit)", () => {
+    fs.writeFileSync(py(), '[project]\nname = "x"\n');
+    const r = ensurePythonE2eDeps({ projectDir });
+    expect(r).toEqual({ patched: true, depAdded: true });
+    const out = fs.readFileSync(py(), "utf8");
+    expect(out).toMatch(/\[project\.optional-dependencies\]/);
+    expect(out).toMatch(/pytest-playwright/);
+  });
+
+  it("no-ops when pyproject.toml is absent", () => {
+    expect(ensurePythonE2eDeps({ projectDir })).toEqual({ patched: false, depAdded: false });
+  });
+});
+
 describe("enableE2eForProject orchestrator", () => {
   let projectDir: string;
   beforeEach(() => {
@@ -170,7 +220,12 @@ describe("enableE2eForProject orchestrator", () => {
     // Regression for the E2E-on-Python scaffold gap: a Python project (no
     // package.json, has pyproject.toml) must get its live_server conftest, the
     // prior all-or-nothing early-return dropped it and the driver fabricated one.
-    fs.writeFileSync(path.join(projectDir, "pyproject.toml"), "[project]\nname = \"x\"\n");
+    // Realistic kit-scaffold pyproject (dev extras present) so we exercise the
+    // insert-into-existing-`dev`-array path the live scaffold uses.
+    fs.writeFileSync(
+      path.join(projectDir, "pyproject.toml"),
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n    "httpx>=0.27.0",\n]\n',
+    );
     seedRunTestsScript(projectDir);
     const result = enableE2eForProject({ projectDir, language: "python", templatesDir: REPO_TEMPLATES });
     expect(result.templatesWritten).toEqual([...PYTHON_E2E_TEMPLATE_FILES]);
@@ -178,10 +233,18 @@ describe("enableE2eForProject orchestrator", () => {
     // No package.json to wire, and the Node config must NOT ship (it would trip CI's E2E gate).
     expect(result.packageJson).toEqual({ patched: false, scriptAdded: false, depAdded: false });
     expect(fs.existsSync(path.join(projectDir, "playwright.config.ts"))).toBe(false);
-    // run-tests.sh patched, and its block now runs the Python e2e suite.
+    // The Playwright RUNNER dep must be declared in pyproject's dev extras, the
+    // shipped conftest + specs use the `page` fixture (else ModuleNotFoundError).
+    expect(result.pyproject.depAdded).toBe(true);
+    const pyproject = fs.readFileSync(path.join(projectDir, "pyproject.toml"), "utf8");
+    expect(pyproject).toMatch(/pytest-playwright/);
+    expect(pyproject).toMatch(/"pytest>=8\.0\.0"/); // existing deps preserved
+    expect(pyproject).toMatch(/"httpx>=0\.27\.0"/);
+    // run-tests.sh patched: its block installs the browser then runs the suite.
     expect(result.runTestsScript.inserted).toBe(true);
     const runTests = fs.readFileSync(path.join(projectDir, "scripts", "run-tests.sh"), "utf8");
     expect(runTests).toMatch(/pytest tests\/e2e/);
+    expect(runTests).toMatch(/playwright install chromium/);
   });
 
   it("is safe on non-Node projects: templates SKIPPED, package.json untouched, run-tests.sh still patched", () => {
