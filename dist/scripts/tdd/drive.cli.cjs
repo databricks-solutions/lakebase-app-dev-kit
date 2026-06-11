@@ -7209,6 +7209,16 @@ function nextBuildAction(story, b) {
 function nextTransition(state) {
   if (state.escalation) {
     const e = state.escalation;
+    if (e.routable) {
+      return {
+        kind: "revise-route",
+        story: e.routable.story,
+        role: e.routable.owning_role,
+        gate: e.routable.gate,
+        reason: e.reason,
+        source: e.source
+      };
+    }
     return { kind: "raise-to-hil", reason: e.reason, source: e.source, ...e.story_id ? { story: e.story_id } : {} };
   }
   if (state.phase === "planning") {
@@ -7307,6 +7317,8 @@ function actionLane(action) {
       return "promote";
     case "raise-to-hil":
       return "done";
+    case "revise-route":
+      return "design";
     case "done":
       return "done";
   }
@@ -7843,10 +7855,101 @@ function coveredTestIds(c) {
 }
 
 // scripts/tdd/smells.ts
+var SMELL_CATALOG = [
+  {
+    name: "test-list-drift",
+    description: "Test list grew by >25% since cycle start without HITL approval.",
+    proposed_remediation: "PO refinement on spec.",
+    // A drifted/non-orderable test list is a test-strategist decomposition
+    // defect: route the remediation back to Gate 3 on `revise`.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list"
+  },
+  {
+    name: "cycle-stall",
+    description: "N cycles in a row with no GREEN.",
+    proposed_remediation: "Re-examine test ordering or spec ambiguity."
+  },
+  {
+    name: "api-coherence-drift",
+    description: "Same concept named differently across two consecutive PASS reviews.",
+    proposed_remediation: "Rename refactor before next test."
+  },
+  {
+    name: "fragility-ratio",
+    description: "One behavior change failed >3 tests.",
+    proposed_remediation: "Refactor + flag tests-mirror-implementation anti-pattern."
+  },
+  {
+    name: "test-cost-spiral",
+    description: "Each subsequent test takes >2x the lines of the prior one.",
+    proposed_remediation: "Reconsider boundary; outer-loop tests probably needed."
+  },
+  {
+    name: "cross-experiment-divergence",
+    description: "Two parallel experiments are solving different problems.",
+    proposed_remediation: "Was an opinion gap hidden? Re-run design-spec gate."
+  },
+  {
+    name: "dead-requirement-signal",
+    description: "An AC has had no scenarios written in N cycles while others mature.",
+    proposed_remediation: "Deprecate or clarify via PO refinement."
+  },
+  {
+    name: "test-deletion-attempt",
+    description: "Driver or human attempts to remove or weaken an existing test.",
+    proposed_remediation: "Hard block. Tests are immutable until the test list itself is renegotiated."
+  },
+  {
+    name: "boundary-violation",
+    description: "Test references a private method or internal helper.",
+    proposed_remediation: "Refactor to public boundary or move to inner-loop list."
+  },
+  {
+    name: "import-time-build-coupling",
+    description: "The app entry module requires an optional build artifact (e.g. client/dist) at module load time , an unconditional StaticFiles mount / asset read at import scope. It greens where the artifact happens to exist and crashes at import everywhere it does not (backend-only test runs, CI before the client build, fresh clones). Caught deterministically by the `lakebase-tdd-imports-clean` gate; the Navigator may also flag it in REVIEW.",
+    proposed_remediation: "Guard the coupling: mount the compiled client ONLY when its directory exists, and serve a clear 503 from the SPA route when index.html is absent, so the module imports without the artifact. See the dev/prod-parity rule in software-design-principles."
+  },
+  {
+    name: "scaffold-defect",
+    description: "A test cannot run because the project scaffold is missing a piece the kit owns (e.g. tests/e2e/conftest.py + the live_server fixture for an E2E AC, or an absent runner). The role flags it instead of fabricating the missing scaffold itself. Blocking: a fabricated fixture diverges from the shipped one + reintroduces the CI-parity bugs the kit template prevents.",
+    proposed_remediation: "Halt + surface to the HIL. Fix the scaffold (re-run the kit's wiring, e.g. --enable-e2e for the project's language), never hand-author the missing piece in the build."
+  },
+  {
+    name: "ac-overlap",
+    description: "Two acceptance criteria in a story are not independent: satisfying one's `then` inherently satisfies (or contradicts) another, so the dependent AC's test can never go RED without deleting shipped code. A spec/test-list decomposition defect. Blocking, and flagged at the design gate (Gate 3) so it halts BEFORE a build cycle is wasted, rather than surfacing mid-build as a cycle-stall.",
+    proposed_remediation: "Surface to the PO at the gate. Merge the overlapping ACs, differentiate their observable behavior, or (PO decision) accept the dependent AC as already-satisfied. Do not order both as separate cycles.",
+    // An AC overlap is a spec-author decomposition defect: route back to Gate 1.
+    level: "spec",
+    owning_role: "spec-author",
+    gate_to_rerun: "spec"
+  },
+  {
+    name: "e2e-row-perma-red",
+    description: "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
+    proposed_remediation: "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner."
+  }
+];
+function specLevelSmell(name) {
+  const def = SMELL_CATALOG.find((s) => s.name === name);
+  if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
+  return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
+}
 function readSmellsLog(tddDir) {
   const file = (0, import_path6.join)(tddDir, "smells.json");
   if (!(0, import_fs6.existsSync)(file)) return { detected: [] };
   return JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
+}
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function priorReviseCount(tddDir, smell, story_id) {
+  return readSmellsLog(tddDir).detected.filter(
+    (d) => d.resolution_kind === "revised" && smellMatches(d, smell, story_id)
+  ).length;
 }
 
 // scripts/tdd/escalation.ts
@@ -7908,10 +8011,12 @@ function readEscalations(tddDir) {
 function escalationsFromSmells(tddDir, featureId) {
   const log = readSmellsLog(tddDir);
   return log.detected.filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell)).map((d) => ({
-    id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId }),
+    id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
     source: `smell:${d.smell}`,
     reason: `blocking smell "${d.smell}": ${d.detail}`,
     ...featureId ? { feature_id: featureId } : {},
+    ...d.story_id ? { story_id: d.story_id } : {},
+    ...d.ac_id ? { ac_id: d.ac_id } : {},
     raised_at: d.detected_at
   }));
 }
@@ -8484,7 +8589,7 @@ function readGateApproved(featureId, tddDir, gate) {
     return false;
   }
 }
-function diskArtifactProbe(tddDir, featureId) {
+function diskArtifactProbe(tddDir, featureId, buildActive) {
   return {
     hasAcs(story) {
       return storyAcIds(tddDir, featureId, story).length > 0;
@@ -8539,7 +8644,21 @@ function diskArtifactProbe(tddDir, featureId) {
     pendingEscalation() {
       const e = firstPendingEscalation(tddDir, featureId);
       if (!e) return null;
-      return { id: e.id, source: e.source, reason: e.reason, ...e.story_id ? { story_id: e.story_id } : {} };
+      const base = {
+        id: e.id,
+        source: e.source,
+        reason: e.reason,
+        ...e.story_id ? { story_id: e.story_id } : {}
+      };
+      if (e.source.startsWith("smell:")) {
+        const name = e.source.slice("smell:".length);
+        const spec = specLevelSmell(name);
+        const story = e.story_id ?? buildActive ?? void 0;
+        if (spec && story && priorReviseCount(tddDir, name, story) < 1) {
+          base.routable = { story, owning_role: spec.owning_role, gate: spec.gate_to_rerun };
+        }
+      }
+      return base;
     }
   };
 }
@@ -8890,6 +9009,36 @@ That command starts the app, polls it reachable, runs the verify suite, and writ
       return [{ kind: "cli", bin: SCM_MERGE_BIN, args: ["--project-dir", cfg.projectDir, "--wait-migrate"] }];
     case "done":
       return [{ kind: "set-phase", phase: "shipped" }];
+    case "revise-route": {
+      const smellName = action.source.startsWith("smell:") ? action.source.slice("smell:".length) : action.source;
+      return [
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: [
+            "decide-escalation",
+            "--feature",
+            f,
+            "--story",
+            action.story,
+            "--smell",
+            smellName,
+            "--routed-to",
+            action.role,
+            "--gate",
+            action.gate,
+            "--reason",
+            action.reason,
+            "--approver",
+            approver,
+            "--project-dir",
+            cfg.projectDir,
+            "--tdd-dir",
+            cfg.tddDir
+          ]
+        }
+      ];
+    }
     case "raise-to-hil":
       return [];
     case "design-complete":
@@ -8905,7 +9054,7 @@ function buildDriveEffects(cfg) {
   return {
     async readState() {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
-      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId);
+      const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId, pipeline.build_active);
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId, cfg.projectDir);
       const state = deriveDriveState(pipeline, probe, ctx);
       state.uiTrack = cfg.uiTrack ?? false;

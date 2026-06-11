@@ -7098,12 +7098,20 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   // overlap that stalled S1).
   "ac-overlap"
 ]);
-function recordBlockingSmellFlag(tddDir, smell, detail) {
+function recordBlockingSmellFlag(tddDir, smell, detail, scope) {
   if (!BLOCKING_SMELLS.has(smell)) return false;
-  const open = readSmellsLog(tddDir).detected.some((d) => d.smell === smell && !d.resolution);
+  const open = readSmellsLog(tddDir).detected.some(
+    (d) => d.smell === smell && !d.resolution && (scope?.story_id === void 0 || d.story_id === void 0 || d.story_id === scope.story_id)
+  );
   if (open) return false;
   writeSmellsLog(tddDir, [
-    { smell, cycle_ids: [], detail: detail || `flagged blocking smell: ${smell}` }
+    {
+      smell,
+      cycle_ids: [],
+      detail: detail || `flagged blocking smell: ${smell}`,
+      ...scope?.story_id ? { story_id: scope.story_id } : {},
+      ...scope?.ac_id ? { ac_id: scope.ac_id } : {}
+    }
   ]);
   return true;
 }
@@ -7274,7 +7282,11 @@ ${HELP}
       recordBlockingSmellFlag(
         a.tddDir ?? "./.tdd",
         slots.smell,
-        typeof slots.detail === "string" ? slots.detail : void 0
+        typeof slots.detail === "string" ? slots.detail : void 0,
+        {
+          story_id: typeof slots.story === "string" ? slots.story : void 0,
+          ac_id: typeof slots.ac === "string" ? slots.ac : void 0
+        }
       );
     }
     return 0;

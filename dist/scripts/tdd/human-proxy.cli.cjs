@@ -3262,8 +3262,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path3) {
+      let input = path3;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3516,8 +3516,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const [path3, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6718,6 +6718,7 @@ var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
+var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
 var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
 function findFeatureDir(tdd, featureId) {
@@ -7221,9 +7222,9 @@ function checkTestListMd(content) {
   }
   return violations;
 }
-function canonicalArtifactName(path) {
-  const base = (0, import_path5.basename)(path);
-  if ((0, import_path5.basename)((0, import_path5.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
+function canonicalArtifactName(path3) {
+  const base = (0, import_path5.basename)(path3);
+  if ((0, import_path5.basename)((0, import_path5.dirname)(path3)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
@@ -7348,6 +7349,203 @@ function emitAgentLogEvent(input, opts = {}) {
   return event;
 }
 
+// scripts/tdd/story-pipeline.ts
+init_cjs_shims();
+var import_fs6 = require("fs");
+var import_path7 = require("path");
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(tddDir, featureId) {
+  return pipelineJson(tddDir, featureId);
+}
+function readPipeline(tddDir, featureId) {
+  const p = pipelinePath(tddDir, featureId);
+  if (!(0, import_fs6.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs6.readFileSync)(p, "utf8"));
+}
+function writePipeline(tddDir, pipeline) {
+  const p = pipelinePath(tddDir, pipeline.feature_id);
+  (0, import_fs6.mkdirSync)((0, import_path7.dirname)(p), { recursive: true });
+  (0, import_fs6.writeFileSync)(p, JSON.stringify(pipeline, null, 2) + "\n");
+}
+function setStoryStatus(pipeline, storyId, status) {
+  const existing = pipeline.stories[storyId];
+  pipeline.stories[storyId] = { ...existing, status };
+  return pipeline;
+}
+function recordAcceptance(story, decision, opts) {
+  const acc = story.acceptance ?? { decision: null, history: [] };
+  acc.decision = decision;
+  acc.approver = opts.approver;
+  acc.at = opts.at;
+  if (opts.reason !== void 0) acc.reason = opts.reason;
+  acc.history.push({
+    decision,
+    at: opts.at,
+    approver: opts.approver,
+    ...opts.reason !== void 0 ? { reason: opts.reason } : {}
+  });
+  story.acceptance = acc;
+}
+function freeLaneIfActive(pipeline, storyId) {
+  if (pipeline.build_active === storyId) pipeline.build_active = null;
+}
+function reviseStory(pipeline, storyId, opts) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`reviseStory: story ${storyId} is not in the pipeline`);
+  recordAcceptance(story, "revise", opts);
+  if (story.experiment) {
+    story.experiment.status = "discarded";
+    story.experiment.closed_at = opts.at;
+  }
+  if (story.gate) story.gate = { status: "open", history: story.gate.history };
+  setStoryStatus(pipeline, storyId, "designing");
+  freeLaneIfActive(pipeline, storyId);
+  return pipeline;
+}
+
+// scripts/tdd/smells.ts
+init_cjs_shims();
+var import_fs7 = require("fs");
+var import_path8 = require("path");
+
+// scripts/tdd/run-cycle.ts
+init_cjs_shims();
+
+// scripts/lakebase/get-connection.ts
+init_cjs_shims();
+var import_node_child_process2 = require("child_process");
+var import_lakebase = require("@databricks/lakebase");
+var import_pg = require("pg");
+
+// scripts/lakebase/branch-utils.ts
+init_cjs_shims();
+var import_node_child_process = require("child_process");
+var import_node_util = require("util");
+
+// scripts/lakebase/branch-id.ts
+init_cjs_shims();
+
+// scripts/lakebase/kit-config.ts
+init_cjs_shims();
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/branch-utils.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
+
+// scripts/lakebase/constants.ts
+init_cjs_shims();
+
+// scripts/tdd/experiment.ts
+init_cjs_shims();
+
+// scripts/lakebase/paired-branch.ts
+init_cjs_shims();
+var fs4 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
+
+// scripts/lakebase/branch-create.ts
+init_cjs_shims();
+var import_node_child_process4 = require("child_process");
+var import_node_util3 = require("util");
+
+// scripts/util/poll-until.ts
+init_cjs_shims();
+
+// scripts/util/delay.ts
+init_cjs_shims();
+
+// scripts/util/sanitize-branch-name.ts
+init_cjs_shims();
+
+// scripts/lakebase/lakebase-project.ts
+init_cjs_shims();
+var import_node_child_process3 = require("child_process");
+var import_node_util2 = require("util");
+var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.execFile);
+
+// scripts/lakebase/branch-create.ts
+var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
+
+// scripts/lakebase/branch-delete.ts
+init_cjs_shims();
+var import_node_child_process5 = require("child_process");
+var import_node_util4 = require("util");
+var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process5.execFile);
+
+// scripts/lakebase/branch-endpoint.ts
+init_cjs_shims();
+var import_node_child_process6 = require("child_process");
+
+// scripts/lakebase/env-file.ts
+init_cjs_shims();
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+init_cjs_shims();
+var fs3 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+init_cjs_shims();
+var cp = __toESM(require("child_process"), 1);
+
+// scripts/tdd/smells.ts
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function markSmellResolved(tddDir, smell, opts) {
+  const file = (0, import_path8.join)(tddDir, "smells.json");
+  if (!(0, import_fs7.existsSync)(file)) return false;
+  const log = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
+  const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
+  if (!entry) return false;
+  entry.resolution = opts.note ?? `${opts.kind} by PO`;
+  entry.resolution_kind = opts.kind;
+  (0, import_fs7.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
+  return true;
+}
+
 // scripts/tdd/human-proxy.ts
 function logHitlDecision(tddDir, featureId, approver, decision) {
   try {
@@ -7378,6 +7576,41 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
   }
 }
 var HUMAN_PROXY = "human-proxy";
+function decideEscalationAsHumanProxy(args) {
+  const tddDir = args.tddDir ?? "./.tdd";
+  const approver = args.approver ?? HUMAN_PROXY;
+  const at = (/* @__PURE__ */ new Date()).toISOString();
+  try {
+    emitAgentLogEvent(
+      {
+        role: "product-owner",
+        level: "info",
+        event: "gate.modified",
+        feature_id: args.featureId,
+        slots: {
+          gate: args.gate,
+          decision: "revise",
+          routed_to: args.routedTo,
+          smell: args.smell,
+          story: args.story,
+          verdict: args.reason,
+          approver
+        }
+      },
+      { tddDir }
+    );
+  } catch {
+  }
+  const pipeline = readPipeline(tddDir, args.featureId);
+  reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
+  writePipeline(tddDir, pipeline);
+  const resolvedSmell = markSmellResolved(tddDir, args.smell, {
+    story_id: args.story,
+    kind: "revised",
+    note: `revised by ${approver}: routed to ${args.routedTo} (${args.gate} gate)`
+  });
+  return { decided: "revise", story: args.story, routedTo: args.routedTo, resolvedSmell };
+}
 function featureDir2(tddDir, featureId) {
   return featureResolved(tddDir, featureId);
 }
@@ -7394,11 +7627,11 @@ function acsConformanceReason(fdir) {
   if (!(0, import_node_fs2.existsSync)(stories)) return null;
   const problems = [];
   for (const s of (0, import_node_fs2.readdirSync)(stories)) {
-    const acsDir = (0, import_node_path2.join)(stories, s, "acs");
-    if (!(0, import_node_fs2.existsSync)(acsDir)) continue;
-    for (const f of (0, import_node_fs2.readdirSync)(acsDir)) {
+    const acsDir2 = (0, import_node_path2.join)(stories, s, "acs");
+    if (!(0, import_node_fs2.existsSync)(acsDir2)) continue;
+    for (const f of (0, import_node_fs2.readdirSync)(acsDir2)) {
       if (!f.endsWith(".json")) continue;
-      const p = (0, import_node_path2.join)(acsDir, f);
+      const p = (0, import_node_path2.join)(acsDir2, f);
       let content;
       try {
         content = (0, import_node_fs2.readFileSync)(p, "utf8");
@@ -7759,6 +7992,85 @@ function runSupplyRequestsCli(argv) {
   }
   return 0;
 }
+function runDecideEscalationCli(argv) {
+  let feature;
+  let story;
+  let smell;
+  let routedTo;
+  let gate;
+  let reason;
+  let approver;
+  let tddDir;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--feature":
+        feature = argv[++i];
+        break;
+      case "--story":
+        story = argv[++i];
+        break;
+      case "--smell":
+        smell = argv[++i];
+        break;
+      case "--routed-to":
+        routedTo = argv[++i];
+        break;
+      case "--gate":
+        gate = argv[++i];
+        break;
+      case "--reason":
+        reason = argv[++i];
+        break;
+      case "--approver":
+        approver = argv[++i];
+        break;
+      case "--tdd-dir":
+        tddDir = argv[++i];
+        break;
+      // --project-dir is accepted (the effect passes it) but unused here.
+      case "--project-dir":
+        i++;
+        break;
+    }
+  }
+  if (!feature || !story || !smell || !routedTo || !gate) {
+    process.stderr.write(
+      "Error: decide-escalation requires --feature, --story, --smell, --routed-to, --gate.\n"
+    );
+    return 2;
+  }
+  if (routedTo !== "spec-author" && routedTo !== "test-strategist") {
+    process.stderr.write(`Error: --routed-to must be spec-author|test-strategist (got ${routedTo}).
+`);
+    return 2;
+  }
+  if (gate !== "spec" && gate !== "test_list") {
+    process.stderr.write(`Error: --gate must be spec|test_list (got ${gate}).
+`);
+    return 2;
+  }
+  try {
+    const r = decideEscalationAsHumanProxy({
+      featureId: feature,
+      story,
+      smell,
+      routedTo,
+      gate,
+      reason: reason ?? `revise ${smell} on ${story}`,
+      approver,
+      tddDir
+    });
+    process.stdout.write(
+      `human-proxy: revised ${story} (smell ${smell} -> ${r.routedTo}); story reset to designing${r.resolvedSmell ? ", smell resolved" : " (no open smell found)"}
+`
+    );
+    return 0;
+  } catch (e) {
+    process.stderr.write(`human-proxy decide-escalation: ${e.message}
+`);
+    return 3;
+  }
+}
 function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -7818,6 +8130,7 @@ Flags:
 function runHumanProxyCli(argv) {
   if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
   if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
+  if (argv[0] === "decide-escalation") return runDecideEscalationCli(argv.slice(1));
   if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);
   if (args.help) {
