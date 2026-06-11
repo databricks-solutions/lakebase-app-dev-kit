@@ -6673,7 +6673,7 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/human-proxy.ts
 init_esm_shims();
-import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync5, readdirSync as readdirSync5 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync5, readdirSync as readdirSync5, rmSync } from "fs";
 import { join as join12, dirname as dirname4, basename as basename2 } from "path";
 
 // scripts/tdd/approve-gate.ts
@@ -6710,7 +6710,23 @@ var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md")
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
+var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
 var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
+var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
+function findStoryDir(tdd, f, s) {
+  const root = storiesDir(tdd, f);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = join(root, s);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
+  return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
+var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var handbackFile = (tdd, f, role, story) => join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
 function findFeatureDir(tdd, featureId) {
@@ -6725,6 +6741,39 @@ function requireFeatureDir(tdd, featureId) {
   const dir = findFeatureDir(tdd, featureId);
   if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
   return dir;
+}
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
+      }
+    } catch {
+    }
+  }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (!m) continue;
+        const base = m[1];
+        try {
+          const obj = JSON.parse(fs.readFileSync(join(dir, file), "utf8"));
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  return [...ids];
 }
 
 // scripts/tdd/gates-lock.ts
@@ -7568,6 +7617,30 @@ function logHitlDecision(tddDir, featureId, approver, decision) {
   }
 }
 var HUMAN_PROXY = "human-proxy";
+function staleStoryArtifactsForRevise(tddDir, featureId, story, gate) {
+  const acIds = new Set(storyAcIds(tddDir, featureId, story));
+  const master = featureTestListJson(tddDir, featureId);
+  if (existsSync11(master)) {
+    try {
+      const data = JSON.parse(readFileSync12(master, "utf8"));
+      if (Array.isArray(data.items)) {
+        data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
+        writeFileSync9(master, JSON.stringify(data, null, 2) + "\n");
+      }
+    } catch {
+    }
+  }
+  const perStory = storyTestListJson(tddDir, featureId, story);
+  if (existsSync11(perStory)) rmSync(perStory, { force: true });
+  if (gate === "spec") {
+    const dir = acsDir(tddDir, featureId, story);
+    if (existsSync11(dir)) {
+      for (const f of readdirSync5(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join12(dir, f), { force: true });
+      }
+    }
+  }
+}
 function decideEscalationAsHumanProxy(args) {
   const tddDir = args.tddDir ?? "./.tdd";
   const approver = args.approver ?? HUMAN_PROXY;
@@ -7596,6 +7669,19 @@ function decideEscalationAsHumanProxy(args) {
   const pipeline = readPipeline(tddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(tddDir, pipeline);
+  staleStoryArtifactsForRevise(tddDir, args.featureId, args.story, args.gate);
+  try {
+    const hb = handbackFile(tddDir, args.featureId, args.routedTo, args.story);
+    mkdirSync5(dirname4(hb), { recursive: true });
+    const artifact = args.gate === "spec" ? "acceptance criteria" : "ordered test list";
+    writeFileSync9(
+      hb,
+      `REVISE (Product Owner): ${args.reason}
+
+Re-author this story's ${artifact} to address the above. Do NOT re-emit the same overlap/redundancy; if no honest, not-already-delivered behavior remains, say so as an open question rather than fabricating one.`
+    );
+  } catch {
+  }
   const resolvedSmell = markSmellResolved(tddDir, args.smell, {
     story_id: args.story,
     kind: "revised",
