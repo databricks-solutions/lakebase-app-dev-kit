@@ -4900,8 +4900,11 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/tdd/agent-models.ts
+// scripts/tdd/tdd-config.ts
 var import_fs2 = require("fs");
+var import_path3 = require("path");
+
+// scripts/tdd/agent-models.ts
 var import_path2 = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -4915,21 +4918,28 @@ var RECOMMENDED_MODELS = {
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path2.join)(".lakebase", "agent-config.json");
-function buildAgentConfig(overrides) {
+
+// scripts/tdd/tdd-config.ts
+var TDD_CONFIG_REL = (0, import_path3.join)(".lakebase", "tdd-config.json");
+function defaultTddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
-    const recommended = RECOMMENDED_MODELS[role];
-    const ov = overrides?.[role];
-    const entry = { recommended };
-    if (ov && ov !== recommended) entry.override = ov;
-    roles[role] = entry;
+    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : { model: RECOMMENDED_MODELS[role] };
   }
-  return { version: 1, roles };
+  return {
+    version: 1,
+    roles,
+    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    plan: { sizing: true },
+    project: { gates: "proxy", deployTarget: "local" }
+  };
 }
-function writeAgentConfig(projectDir, config) {
-  const p = (0, import_path2.join)(projectDir, AGENT_CONFIG_REL);
-  (0, import_fs2.mkdirSync)((0, import_path2.dirname)(p), { recursive: true });
-  (0, import_fs2.writeFileSync)(p, JSON.stringify(config, null, 2) + "\n");
+function writeTddConfig(projectDir, config, opts) {
+  const f = (0, import_path3.join)(projectDir, TDD_CONFIG_REL);
+  if ((0, import_fs2.existsSync)(f) && !opts?.force) return false;
+  (0, import_fs2.mkdirSync)((0, import_path3.dirname)(f), { recursive: true });
+  (0, import_fs2.writeFileSync)(f, JSON.stringify(config, null, 2) + "\n");
+  return true;
 }
 
 // scripts/lakebase/create-project.ts
@@ -5100,10 +5110,16 @@ Last probe error:
   }
   if (enableTdd) {
     try {
-      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+      const tddConfig = defaultTddConfig();
+      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+        if (model && tddConfig.roles?.[role]) {
+          tddConfig.roles[role].model = model;
+        }
+      }
+      writeTddConfig(projectDir, tddConfig);
     } catch (err) {
       warnings.push(
-        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
       );
     }
   }
@@ -7577,7 +7593,7 @@ var path26 = __toESM(require("path"), 1);
 
 // scripts/tdd/stale-branches.ts
 var import_fs5 = require("fs");
-var import_path4 = require("path");
+var import_path5 = require("path");
 
 // scripts/tdd/story-pipeline.ts
 var import_fs3 = require("fs");
@@ -7613,15 +7629,15 @@ function readPipeline(tddDir, featureId) {
 
 // scripts/tdd/spike.ts
 var import_fs4 = require("fs");
-var import_path3 = require("path");
+var import_path4 = require("path");
 function listSpikes(tddDir) {
-  const root = (0, import_path3.join)(tddDir, "spikes");
+  const root = (0, import_path4.join)(tddDir, "spikes");
   if (!(0, import_fs4.existsSync)(root)) return [];
   const out = [];
   for (const slug of (0, import_fs4.readdirSync)(root)) {
-    const dir = (0, import_path3.join)(root, slug);
+    const dir = (0, import_path4.join)(root, slug);
     if (!(0, import_fs4.statSync)(dir).isDirectory()) continue;
-    const branchFile = (0, import_path3.join)(dir, "branch.txt");
+    const branchFile = (0, import_path4.join)(dir, "branch.txt");
     if (!(0, import_fs4.existsSync)(branchFile)) continue;
     out.push({
       spike_slug: slug,
@@ -7637,7 +7653,7 @@ function listSpikes(tddDir) {
 function listPipelineFeatures(tddDir) {
   const featuresDir2 = featuresDir(tddDir);
   if (!(0, import_fs5.existsSync)(featuresDir2)) return [];
-  return (0, import_fs5.readdirSync)(featuresDir2).filter((d) => (0, import_fs5.statSync)((0, import_path4.join)(featuresDir2, d)).isDirectory()).filter((d) => (0, import_fs5.existsSync)((0, import_path4.join)(featuresDir2, d, "pipeline.json"))).sort();
+  return (0, import_fs5.readdirSync)(featuresDir2).filter((d) => (0, import_fs5.statSync)((0, import_path5.join)(featuresDir2, d)).isDirectory()).filter((d) => (0, import_fs5.existsSync)((0, import_path5.join)(featuresDir2, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];

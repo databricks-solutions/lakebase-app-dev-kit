@@ -194,6 +194,48 @@ describe("commandsForAction: invoke-role -> claude", () => {
   });
 });
 
+describe("commandsForAction: unified config model-side payload (effort per turn + fallback + budget)", () => {
+  const claudeOf = (cmds: ReturnType<typeof commandsForAction>) =>
+    cmds.find((c) => (c as { kind: string }).kind === "claude") as
+      | { effort?: string; fallbackModel?: string; maxBudgetUsd?: number }
+      | undefined;
+
+  it("effortForTurn governs ANY turn (not just review); fallback + budget reach the claude command", () => {
+    const c = cfg({
+      effortForTurn: (_role, turn) => (turn === "green" ? "high" : turn === "review" ? "low" : ""),
+      fallbackModelForRole: (role) => (role === "navigator" ? "haiku" : undefined),
+      maxBudgetUsdForRole: (role) => (role === "driver" ? 1.5 : undefined),
+    });
+    // Driver GREEN: effort high (per the resolver) + budget 1.5, no fallback.
+    const green = claudeOf(commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c));
+    expect(green?.effort).toBe("high");
+    expect(green?.maxBudgetUsd).toBe(1.5);
+    expect(green?.fallbackModel).toBeUndefined();
+    // Navigator REVIEW: effort low + fallback haiku.
+    const review = claudeOf(
+      commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" }, c),
+    );
+    expect(review?.effort).toBe("low");
+    expect(review?.fallbackModel).toBe("haiku");
+  });
+
+  it("effort '' / 'default' from the resolver omits --effort entirely", () => {
+    const c = cfg({ effortForTurn: () => "" });
+    const red = claudeOf(commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, c));
+    expect(red?.effort).toBeUndefined();
+  });
+
+  it("back-compat: no effortForTurn -> review-only reviewEffort still applies", () => {
+    const c = cfg({ reviewEffort: "low" }); // no effortForTurn
+    const review = claudeOf(
+      commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" }, c),
+    );
+    const green = claudeOf(commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c));
+    expect(review?.effort).toBe("low");
+    expect(green?.effort).toBeUndefined(); // authoring turns keep model default
+  });
+});
+
 describe("commandsForAction: P8b loop granularity (hybrid-a layer-batched build)", () => {
   const cycleArgs = (cmds: ReturnType<typeof commandsForAction>): string[] =>
     (cmds.find((c) => (c as { bin?: string }).bin === "lakebase-tdd-cycle") as { args: string[] }).args;

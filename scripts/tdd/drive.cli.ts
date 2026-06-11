@@ -52,6 +52,7 @@ import {
   type SprintEffects,
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
+import { resolveTddSettings } from "./tdd-config.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
@@ -264,8 +265,12 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
         }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
-        // P6: per-turn effort (set on the REVIEW judgment turn to run it fast).
+        // Per-role/turn model-side knobs (tdd-config.json): effort (set on judgment
+        // turns to run fast), fallback model (auto-failover when the primary is
+        // overloaded), and a per-invocation dollar cap.
         if (cmd.effort) args.push("--effort", cmd.effort);
+        if (cmd.fallbackModel) args.push("--fallback-model", cmd.fallbackModel);
+        if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
           if (existing) {
@@ -302,6 +307,9 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   // and the feature branch as the experiment's parent + merge target. --instance
   // overrides the recorded project_id when given.
   const scm = readWorkflowState(projectDir);
+  // Unified config: one resolution of the per-role/turn model+effort matrix + the
+  // build/plan/project knobs (tdd-config.json -> LAKEBASE_TDD_* env -> default).
+  const settings = resolveTddSettings({ projectDir });
   return {
     projectDir,
     tddDir,
@@ -309,32 +317,32 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     sprintName: args.sprint,
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
-    deployTarget: args.deployTarget ?? "local",
+    // Deploy target: the --deploy-target flag wins, else the config's default.
+    deployTarget: args.deployTarget ?? settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",
-    // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
-    // Spec Author then proposes + breaks down user-facing capabilities as E2E
-    // (browser/screen) stories, not API-only.
-    uiTrack: process.env.LAKEBASE_TDD_UI === "1",
-    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
-    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
-    // turn (the safety valve if a long story overflows the context window).
-    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
-    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
-    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
-    // to drop the flag and use the model default.
-    reviewEffort:
-      process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default"
-        ? ""
-        : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
-    // P8b: build loop granularity. Default "ac" (strict per-AC TDD); set
-    // LAKEBASE_TDD_LOOP=hybrid-a to batch RED+GREEN by layer. LAKEBASE_TDD_BATCH_CAP
-    // caps items per batch (default 3 in the substrate).
-    loopGranularity: process.env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : "ac",
-    batchCap: ((): number | undefined => {
-      const n = Number(process.env.LAKEBASE_TDD_BATCH_CAP);
-      return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+    // UI track: config (file or LAKEBASE_TDD_UI) decides whether the Spec Author
+    // frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
+    uiTrack: settings.project.uiTrack,
+    // P5: Navigator/Driver session scope (story warm-resume vs cycle cold-spawn).
+    buildSessionScope: settings.build.sessionScope,
+    // P6 (back-compat): the navigator REVIEW turn's effort, still surfaced for
+    // run-config + any caller without effortForTurn. effortForTurn (below) is the
+    // primary, per-role/turn resolver and supersedes this.
+    reviewEffort: ((): string => {
+      const e = settings.effortFor("navigator", "review");
+      return e === "default" ? "" : e;
     })(),
-    modelForRole: (role) => resolveModelForRole(role as AgentRole, projectDir),
+    // P8b: build loop granularity + batch cap (config / env).
+    loopGranularity: settings.build.loopGranularity,
+    batchCap: settings.build.batchCap,
+    // Unified per-role/turn model-side resolvers ("" => omit --effort).
+    effortForTurn: (role, turn) => {
+      const e = settings.effortFor(role, turn);
+      return e === "default" ? "" : e;
+    },
+    fallbackModelForRole: (role) => settings.fallbackModels[role],
+    maxBudgetUsdForRole: (role) => settings.budgets[role],
+    modelForRole: (role) => settings.models[role] ?? resolveModelForRole(role as AgentRole, projectDir),
     runner: { async run() {} },
     onAction: composeOnAction(
       // Narrate each routing decision in plain language (DRY: the same message
@@ -527,7 +535,11 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  const interactive = args.gates === "interactive";
+  // Config defaults (tdd-config.json) for the two CLI-flag knobs: the --gates mode
+  // and t-shirt sizing. The flag wins when given; else the config's default.
+  const settings = resolveTddSettings({ projectDir });
+  const interactive = (args.gates ?? settings.project.gates) === "interactive";
+  const skipSizing = args.noSizing ?? !settings.plan.sizing;
 
   const effects: SprintEffects = {
     async drivePlanning() {
@@ -535,8 +547,8 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       cfg.runner = execRunner(cfg);
       snapshotRunConfig(cfg, args, "plan");
       const planning: DriveEffects = {
-        // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
+        // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },
@@ -667,7 +679,9 @@ async function main(): Promise<number> {
 
   cfg.runner = execRunner(cfg);
   snapshotRunConfig(cfg, args, bound ?? "full");
-  const interactive = args.gates === "interactive";
+  // --gates flag wins; else the tdd-config.json project.gates default.
+  const interactive =
+    (args.gates ?? resolveTddSettings({ projectDir: cfg.projectDir }).project.gates) === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,

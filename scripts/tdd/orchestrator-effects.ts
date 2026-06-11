@@ -38,7 +38,7 @@ export type DriveCommand =
   // judgment turns (REVIEW) to run them fast (low reasoning effort) , the headless
   // realization of "fast mode", since `claude -p` has no `--fast` flag. Omitted =>
   // the model's default effort.
-  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; replay?: { mode?: string; story?: string } }
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; fallbackModel?: string; maxBudgetUsd?: number; replay?: { mode?: string; story?: string } }
   | { kind: "cli"; bin: string; args: string[] }
   | { kind: "set-phase"; phase: string }
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
@@ -82,8 +82,17 @@ export interface DriveEffectsConfig {
   buildSessionScope?: "cycle" | "story";
   /** P6: `--effort` level for the Navigator's REVIEW turn (judgment, not code
    *  authoring), so it runs fast. Default "low"; set "" / undefined-via-env to
-   *  use the model default. */
+   *  use the model default. Superseded by effortForTurn when that is provided
+   *  (kept as the fallback so older callers / tests still resolve review effort). */
   reviewEffort?: string;
+  /** Unified config: resolve `--effort` for ANY role+turn ("" / "default" => omit
+   *  the flag). When set it governs every turn; absent, the review-only
+   *  reviewEffort fallback applies. (tdd-config.json, file -> env -> default.) */
+  effortForTurn?(role: string, turn?: "red" | "green" | "review" | "refactor"): string;
+  /** Unified config: a role's `--fallback-model` (auto-failover), or undefined. */
+  fallbackModelForRole?(role: string): string | undefined;
+  /** Unified config: a role's `--max-budget-usd` per-invocation cap, or undefined. */
+  maxBudgetUsdForRole?(role: string): number | undefined;
   /** P8b: build loop granularity. "ac" (default) writes + greens one test at a
    *  time (strict per-AC TDD). "hybrid-a" batches RED+GREEN by layer (the
    *  Navigator writes a layer's failing tests in one turn, the Driver greens them
@@ -475,19 +484,37 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       } else {
         resumeKey = action.role;
       }
-      // P6: run the Navigator's REVIEW turn fast (judgment, not code authoring) via
-      // the `--effort` knob , the headless realization of "fast mode" (`claude -p`
-      // has no `--fast` flag). Only the review turn; RED/GREEN/REFACTOR author code
-      // and keep the model's default effort.
-      const isReviewTurn =
-        action.role === "navigator" && "buildMode" in action && action.buildMode === "review";
-      const reviewEffort = cfg.reviewEffort ?? "low";
+      // Per-role + per-turn `--effort` (unified config). Derive the build turn from
+      // the action: navigator review|red, driver refactor|green; design roles have
+      // no turn (scalar effort). When `effortForTurn` is provided (tdd-config.json)
+      // it governs EVERY turn; absent, fall back to the review-only `reviewEffort`
+      // (P6 default low on the navigator REVIEW, model-default elsewhere).
+      const buildTurn: "red" | "green" | "review" | "refactor" | undefined =
+        "buildMode" in action && action.buildMode === "review"
+          ? "review"
+          : "buildMode" in action && action.buildMode === "refactor"
+            ? "refactor"
+            : action.role === "navigator"
+              ? "red"
+              : action.role === "driver"
+                ? "green"
+                : undefined;
+      const isReviewTurn = action.role === "navigator" && buildTurn === "review";
+      const effort = cfg.effortForTurn
+        ? cfg.effortForTurn(action.role, buildTurn)
+        : isReviewTurn
+          ? cfg.reviewEffort ?? "low"
+          : "";
+      const fallbackModel = cfg.fallbackModelForRole?.(action.role);
+      const maxBudgetUsd = cfg.maxBudgetUsdForRole?.(action.role);
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
         ...(resumeKey !== undefined ? { resumeKey } : {}),
-        ...(isReviewTurn && reviewEffort ? { effort: reviewEffort } : {}),
+        ...(effort && effort !== "default" ? { effort } : {}),
+        ...(fallbackModel ? { fallbackModel } : {}),
+        ...(typeof maxBudgetUsd === "number" ? { maxBudgetUsd } : {}),
         task:
           roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir, {
             loop: cfg.loopGranularity,
