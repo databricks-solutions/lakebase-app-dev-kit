@@ -720,13 +720,25 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // pr.yml ci-pr-branch check; SCM pr-ready -> ci-green).
       return [{ kind: "cli", bin: SCM_WAIT_CI_BIN, args: ["--project-dir", cfg.projectDir] }];
 
-    case "approve-promote-gate":
-      // The HITL `promote` gate: the human/PO accepts the PR. AFTER ci-green and
-      // BEFORE the merge. Headless, the Human Proxy approves it (teeth: the PR
-      // must exist + be ci-green, enforced by the merge precondition next).
+    case "approve-promote-gate": {
+      // The HITL `promote` gate: the human/PO accepts promoting the feature to its
+      // parent tier (the PR's base, e.g. staging). AFTER ci-green and BEFORE the
+      // merge. The promote gate REQUIRES a non-empty promote_ref (what is being
+      // promoted); the Human Proxy SKIPS the gate without one, so the orchestrator
+      // must supply it , else the gate never approves and the driver loops on
+      // approve-promote-gate forever (the promote-phase stall). The thing being
+      // promoted is the feature's canonical branch (the merge then releases it into
+      // the parent tier + runs the parent's migrations). Teeth remain the merge
+      // precondition next (PR must exist + be ci-green).
+      const promoteRef = cfg.featureBranch ?? f;
       return [
-        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.tddDir] },
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.tddDir, "--promote-ref", promoteRef],
+        },
       ];
+    }
 
     case "merge":
       // The promotion: merge the PR (release the feature into the parent tier) and

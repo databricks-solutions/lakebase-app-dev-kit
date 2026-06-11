@@ -8869,10 +8869,16 @@ That command starts the app, polls it reachable, runs the verify suite, and writ
       return [{ kind: "cli", bin: SCM_PREPARE_PR_BIN, args: ["--project-dir", cfg.projectDir] }];
     case "wait-ci":
       return [{ kind: "cli", bin: SCM_WAIT_CI_BIN, args: ["--project-dir", cfg.projectDir] }];
-    case "approve-promote-gate":
+    case "approve-promote-gate": {
+      const promoteRef = cfg.featureBranch ?? f;
       return [
-        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.tddDir] }
+        {
+          kind: "cli",
+          bin: HUMAN_PROXY_BIN,
+          args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.tddDir, "--promote-ref", promoteRef]
+        }
       ];
+    }
     case "merge":
       return [{ kind: "cli", bin: SCM_MERGE_BIN, args: ["--project-dir", cfg.projectDir, "--wait-migrate"] }];
     case "done":
