@@ -2382,8 +2382,11 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/tdd-config.ts
+import { existsSync as existsSync12, readFileSync as readFileSync9, mkdirSync as mkdirSync8, writeFileSync as writeFileSync9 } from "fs";
+import { dirname as dirname7, join as join14 } from "path";
+
 // scripts/tdd/agent-models.ts
-import { existsSync as existsSync12, readFileSync as readFileSync9, writeFileSync as writeFileSync9, mkdirSync as mkdirSync8 } from "fs";
 import { dirname as dirname6, join as join13 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -2397,21 +2400,28 @@ var RECOMMENDED_MODELS = {
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = join13(".lakebase", "agent-config.json");
-function buildAgentConfig(overrides) {
+
+// scripts/tdd/tdd-config.ts
+var TDD_CONFIG_REL = join14(".lakebase", "tdd-config.json");
+function defaultTddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
-    const recommended = RECOMMENDED_MODELS[role];
-    const ov = overrides?.[role];
-    const entry = { recommended };
-    if (ov && ov !== recommended) entry.override = ov;
-    roles[role] = entry;
+    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : { model: RECOMMENDED_MODELS[role] };
   }
-  return { version: 1, roles };
+  return {
+    version: 1,
+    roles,
+    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    plan: { sizing: true },
+    project: { gates: "proxy", deployTarget: "local" }
+  };
 }
-function writeAgentConfig(projectDir, config) {
-  const p = join13(projectDir, AGENT_CONFIG_REL);
-  mkdirSync8(dirname6(p), { recursive: true });
-  writeFileSync9(p, JSON.stringify(config, null, 2) + "\n");
+function writeTddConfig(projectDir, config, opts) {
+  const f = join14(projectDir, TDD_CONFIG_REL);
+  if (existsSync12(f) && !opts?.force) return false;
+  mkdirSync8(dirname7(f), { recursive: true });
+  writeFileSync9(f, JSON.stringify(config, null, 2) + "\n");
+  return true;
 }
 
 // scripts/lakebase/create-project.ts
@@ -2582,10 +2592,16 @@ Last probe error:
   }
   if (enableTdd) {
     try {
-      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+      const tddConfig = defaultTddConfig();
+      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+        if (model && tddConfig.roles?.[role]) {
+          tddConfig.roles[role].model = model;
+        }
+      }
+      writeTddConfig(projectDir, tddConfig);
     } catch (err) {
       warnings.push(
-        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
       );
     }
   }

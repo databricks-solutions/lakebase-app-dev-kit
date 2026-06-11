@@ -8718,14 +8718,19 @@ function commandsForAction(action, cfg) {
       } else {
         resumeKey = action.role;
       }
-      const isReviewTurn = action.role === "navigator" && "buildMode" in action && action.buildMode === "review";
-      const reviewEffort = cfg.reviewEffort ?? "low";
+      const buildTurn = "buildMode" in action && action.buildMode === "review" ? "review" : "buildMode" in action && action.buildMode === "refactor" ? "refactor" : action.role === "navigator" ? "red" : action.role === "driver" ? "green" : void 0;
+      const isReviewTurn = action.role === "navigator" && buildTurn === "review";
+      const effort = cfg.effortForTurn ? cfg.effortForTurn(action.role, buildTurn) : isReviewTurn ? cfg.reviewEffort ?? "low" : "";
+      const fallbackModel = cfg.fallbackModelForRole?.(action.role);
+      const maxBudgetUsd = cfg.maxBudgetUsdForRole?.(action.role);
       const claude = {
         kind: "claude",
         role: action.role,
         model: cfg.modelForRole(action.role),
         ...resumeKey !== void 0 ? { resumeKey } : {},
-        ...isReviewTurn && reviewEffort ? { effort: reviewEffort } : {},
+        ...effort && effort !== "default" ? { effort } : {},
+        ...fallbackModel ? { fallbackModel } : {},
+        ...typeof maxBudgetUsd === "number" ? { maxBudgetUsd } : {},
         task: roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir, {
           loop: cfg.loopGranularity,
           cap: cfg.batchCap
@@ -9035,16 +9040,77 @@ function resolveModelForRole(role, projectDir) {
   return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
 }
 
-// scripts/tdd/run-config.ts
+// scripts/tdd/tdd-config.ts
 init_esm_shims();
-import { existsSync as existsSync22, mkdirSync as mkdirSync14, readFileSync as readFileSync20, writeFileSync as writeFileSync16 } from "fs";
-import { join as join17 } from "path";
-var RUN_CONFIG_REL = join17(".tdd", "run-config.json");
-function readKitRef(projectDir) {
-  const f = join17(projectDir, ".lakebase", "kit-ref");
+import { existsSync as existsSync22, readFileSync as readFileSync20, mkdirSync as mkdirSync14, writeFileSync as writeFileSync16 } from "fs";
+import { dirname as dirname9, join as join17 } from "path";
+var TDD_CONFIG_REL = join17(".lakebase", "tdd-config.json");
+function loadTddConfig(projectDir) {
+  const f = join17(projectDir, TDD_CONFIG_REL);
   if (!existsSync22(f)) return void 0;
   try {
-    const v = readFileSync20(f, "utf8").trim();
+    return JSON.parse(readFileSync20(f, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function defaultEffort(role, turn) {
+  if (role === "navigator" && turn === "review") return "low";
+  return "default";
+}
+function resolveTddSettings(inputs) {
+  const env = inputs.env ?? process.env;
+  const file = loadTddConfig(inputs.projectDir);
+  const legacy = readAgentConfig(inputs.projectDir);
+  const models = {};
+  const fallbackModels = {};
+  const budgets = {};
+  for (const role of ALL_AGENT_ROLES) {
+    const rc = file?.roles?.[role];
+    const legacyEntry = legacy?.roles?.[role];
+    models[role] = rc?.model ?? legacyEntry?.override ?? legacyEntry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
+    fallbackModels[role] = rc?.fallbackModel;
+    budgets[role] = typeof rc?.maxBudgetUsd === "number" ? rc.maxBudgetUsd : void 0;
+  }
+  const effortFor = (role, turn) => {
+    if (role === "navigator" && turn === "review") {
+      const ev = env.LAKEBASE_TDD_REVIEW_EFFORT;
+      if (ev === "default") return "default";
+      if (ev) return ev;
+    }
+    const rc = file?.roles?.[role];
+    const e = rc?.effort;
+    if (typeof e === "string") return e;
+    if (e && turn && e[turn]) return e[turn];
+    return defaultEffort(role, turn);
+  };
+  const batchCapRaw = env.LAKEBASE_TDD_BATCH_CAP;
+  const envBatchCap = batchCapRaw && Number.isFinite(Number(batchCapRaw)) ? Math.floor(Number(batchCapRaw)) : void 0;
+  const build = {
+    loopGranularity: env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : file?.build?.loopGranularity ?? "ac",
+    batchCap: envBatchCap ?? file?.build?.batchCap,
+    batchFallback: env.LAKEBASE_TDD_BATCH_FALLBACK || file?.build?.batchFallback || "",
+    sessionScope: env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : file?.build?.sessionScope ?? "story"
+  };
+  const project = {
+    uiTrack: env.LAKEBASE_TDD_UI === "1" ? true : env.LAKEBASE_TDD_UI === "0" ? false : file?.project?.uiTrack ?? false,
+    gates: file?.project?.gates ?? "proxy",
+    deployTarget: file?.project?.deployTarget ?? "local"
+  };
+  const plan = { sizing: file?.plan?.sizing ?? true };
+  return { models, fallbackModels, budgets, effortFor, build, plan, project };
+}
+
+// scripts/tdd/run-config.ts
+init_esm_shims();
+import { existsSync as existsSync23, mkdirSync as mkdirSync15, readFileSync as readFileSync21, writeFileSync as writeFileSync17 } from "fs";
+import { join as join18 } from "path";
+var RUN_CONFIG_REL = join18(".tdd", "run-config.json");
+function readKitRef(projectDir) {
+  const f = join18(projectDir, ".lakebase", "kit-ref");
+  if (!existsSync23(f)) return void 0;
+  try {
+    const v = readFileSync21(f, "utf8").trim();
     return v.length > 0 ? v : void 0;
   } catch {
     return void 0;
@@ -9080,12 +9146,12 @@ function writeRunConfig(inputs) {
   const cfg = buildRunConfig(inputs);
   const body = JSON.stringify(cfg, null, 2) + "\n";
   try {
-    mkdirSync14(inputs.tddDir, { recursive: true });
-    writeFileSync16(join17(inputs.tddDir, "run-config.json"), body);
+    mkdirSync15(inputs.tddDir, { recursive: true });
+    writeFileSync17(join18(inputs.tddDir, "run-config.json"), body);
     const recordDir = (inputs.env ?? process.env).LAKEBASE_TDD_RECORD_DIR?.trim();
     if (recordDir) {
-      mkdirSync14(recordDir, { recursive: true });
-      writeFileSync16(join17(recordDir, "run-config.json"), body);
+      mkdirSync15(recordDir, { recursive: true });
+      writeFileSync17(join18(recordDir, "run-config.json"), body);
     }
   } catch {
   }
@@ -9377,6 +9443,8 @@ function execRunner(cfg) {
         }
         const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
         if (cmd.effort) args.push("--effort", cmd.effort);
+        if (cmd.fallbackModel) args.push("--fallback-model", cmd.fallbackModel);
+        if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
           if (existing) {
@@ -9403,6 +9471,7 @@ function buildCfg(args, featureId) {
   const projectDir = args.projectDir ?? process.cwd();
   const tddDir = args.tddDir ?? path6.join(projectDir, ".tdd");
   const scm = readWorkflowState(projectDir);
+  const settings = resolveTddSettings({ projectDir });
   return {
     projectDir,
     tddDir,
@@ -9410,29 +9479,32 @@ function buildCfg(args, featureId) {
     sprintName: args.sprint,
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
-    deployTarget: args.deployTarget ?? "local",
+    // Deploy target: the --deploy-target flag wins, else the config's default.
+    deployTarget: args.deployTarget ?? settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",
-    // UI track on (the scaffold exports LAKEBASE_TDD_UI=1 for UI projects): the
-    // Spec Author then proposes + breaks down user-facing capabilities as E2E
-    // (browser/screen) stories, not API-only.
-    uiTrack: process.env.LAKEBASE_TDD_UI === "1",
-    // P5: Navigator/Driver resume per STORY by default (warm within a story, fresh
-    // at each new story). Set LAKEBASE_TDD_BUILD_SESSION=cycle to cold-spawn every
-    // turn (the safety valve if a long story overflows the context window).
-    buildSessionScope: process.env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : "story",
-    // P6: the REVIEW turn's --effort (the headless "fast" knob). Default low;
-    // override with LAKEBASE_TDD_REVIEW_EFFORT (e.g. medium), or set it to "default"
-    // to drop the flag and use the model default.
-    reviewEffort: process.env.LAKEBASE_TDD_REVIEW_EFFORT === "default" ? "" : process.env.LAKEBASE_TDD_REVIEW_EFFORT || "low",
-    // P8b: build loop granularity. Default "ac" (strict per-AC TDD); set
-    // LAKEBASE_TDD_LOOP=hybrid-a to batch RED+GREEN by layer. LAKEBASE_TDD_BATCH_CAP
-    // caps items per batch (default 3 in the substrate).
-    loopGranularity: process.env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : "ac",
-    batchCap: (() => {
-      const n = Number(process.env.LAKEBASE_TDD_BATCH_CAP);
-      return Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
+    // UI track: config (file or LAKEBASE_TDD_UI) decides whether the Spec Author
+    // frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
+    uiTrack: settings.project.uiTrack,
+    // P5: Navigator/Driver session scope (story warm-resume vs cycle cold-spawn).
+    buildSessionScope: settings.build.sessionScope,
+    // P6 (back-compat): the navigator REVIEW turn's effort, still surfaced for
+    // run-config + any caller without effortForTurn. effortForTurn (below) is the
+    // primary, per-role/turn resolver and supersedes this.
+    reviewEffort: (() => {
+      const e = settings.effortFor("navigator", "review");
+      return e === "default" ? "" : e;
     })(),
-    modelForRole: (role) => resolveModelForRole(role, projectDir),
+    // P8b: build loop granularity + batch cap (config / env).
+    loopGranularity: settings.build.loopGranularity,
+    batchCap: settings.build.batchCap,
+    // Unified per-role/turn model-side resolvers ("" => omit --effort).
+    effortForTurn: (role, turn) => {
+      const e = settings.effortFor(role, turn);
+      return e === "default" ? "" : e;
+    },
+    fallbackModelForRole: (role) => settings.fallbackModels[role],
+    maxBudgetUsdForRole: (role) => settings.budgets[role],
+    modelForRole: (role) => settings.models[role] ?? resolveModelForRole(role, projectDir),
     runner: { async run() {
     } },
     onAction: composeOnAction(
@@ -9587,15 +9659,17 @@ async function runSprintMode(args) {
   const projectDir = args.projectDir ?? process.cwd();
   const tddDir = args.tddDir ?? path6.join(projectDir, ".tdd");
   const claimJs = path6.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  const interactive = args.gates === "interactive";
+  const settings = resolveTddSettings({ projectDir });
+  const interactive = (args.gates ?? settings.project.gates) === "interactive";
+  const skipSizing = args.noSizing ?? !settings.plan.sizing;
   const effects = {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
       snapshotRunConfig(cfg, args, "plan");
       const planning = {
-        // Sizing is ON by default; --no-sizing opts out (skips the estimate step).
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing: args.noSizing }),
+        // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
+        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },
@@ -9716,7 +9790,7 @@ ${help()}`);
   }
   cfg.runner = execRunner(cfg);
   snapshotRunConfig(cfg, args, bound ?? "full");
-  const interactive = args.gates === "interactive";
+  const interactive = (args.gates ?? resolveTddSettings({ projectDir: cfg.projectDir }).project.gates) === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,

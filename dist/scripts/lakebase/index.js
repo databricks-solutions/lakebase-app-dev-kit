@@ -4684,8 +4684,11 @@ function orderForOutput(state) {
   return out;
 }
 
+// scripts/tdd/tdd-config.ts
+import { existsSync as existsSync17, readFileSync as readFileSync14, mkdirSync as mkdirSync10, writeFileSync as writeFileSync12 } from "fs";
+import { dirname as dirname8, join as join19 } from "path";
+
 // scripts/tdd/agent-models.ts
-import { existsSync as existsSync17, readFileSync as readFileSync14, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10 } from "fs";
 import { dirname as dirname7, join as join18 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -4699,21 +4702,28 @@ var RECOMMENDED_MODELS = {
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = join18(".lakebase", "agent-config.json");
-function buildAgentConfig(overrides) {
+
+// scripts/tdd/tdd-config.ts
+var TDD_CONFIG_REL = join19(".lakebase", "tdd-config.json");
+function defaultTddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
-    const recommended = RECOMMENDED_MODELS[role];
-    const ov = overrides?.[role];
-    const entry = { recommended };
-    if (ov && ov !== recommended) entry.override = ov;
-    roles[role] = entry;
+    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : { model: RECOMMENDED_MODELS[role] };
   }
-  return { version: 1, roles };
+  return {
+    version: 1,
+    roles,
+    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    plan: { sizing: true },
+    project: { gates: "proxy", deployTarget: "local" }
+  };
 }
-function writeAgentConfig(projectDir, config) {
-  const p = join18(projectDir, AGENT_CONFIG_REL);
-  mkdirSync10(dirname7(p), { recursive: true });
-  writeFileSync12(p, JSON.stringify(config, null, 2) + "\n");
+function writeTddConfig(projectDir, config, opts) {
+  const f = join19(projectDir, TDD_CONFIG_REL);
+  if (existsSync17(f) && !opts?.force) return false;
+  mkdirSync10(dirname8(f), { recursive: true });
+  writeFileSync12(f, JSON.stringify(config, null, 2) + "\n");
+  return true;
 }
 
 // scripts/lakebase/create-project.ts
@@ -4884,10 +4894,16 @@ Last probe error:
   }
   if (enableTdd) {
     try {
-      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+      const tddConfig = defaultTddConfig();
+      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+        if (model && tddConfig.roles?.[role]) {
+          tddConfig.roles[role].model = model;
+        }
+      }
+      writeTddConfig(projectDir, tddConfig);
     } catch (err) {
       warnings.push(
-        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
       );
     }
   }
@@ -7361,25 +7377,25 @@ import * as path27 from "path";
 
 // scripts/tdd/stale-branches.ts
 import { existsSync as existsSync29, readdirSync as readdirSync15, statSync as statSync9 } from "fs";
-import { join as join30 } from "path";
+import { join as join31 } from "path";
 
 // scripts/tdd/story-pipeline.ts
 import { existsSync as existsSync27, readFileSync as readFileSync16, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
 
 // scripts/tdd/tdd-paths.ts
 import * as fs27 from "fs";
-import { join as join28 } from "path";
-var featuresDir = (tdd) => join28(tdd, "features");
-var featureDir = (tdd, featureId) => join28(featuresDir(tdd), featureId);
+import { join as join29 } from "path";
+var featuresDir = (tdd) => join29(tdd, "features");
+var featureDir = (tdd, featureId) => join29(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var pipelineJson = (tdd, f) => join28(featureResolved(tdd, f), "pipeline.json");
+var pipelineJson = (tdd, f) => join29(featureResolved(tdd, f), "pipeline.json");
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs27.existsSync(root)) return void 0;
-  const exact = join28(root, featureId);
+  const exact = join29(root, featureId);
   if (fs27.existsSync(exact)) return exact;
   const matches = fs27.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? join28(root, matches[0]) : void 0;
+  return matches.length === 1 ? join29(root, matches[0]) : void 0;
 }
 
 // scripts/tdd/story-pipeline.ts
@@ -7397,15 +7413,15 @@ function readPipeline(tddDir, featureId) {
 
 // scripts/tdd/spike.ts
 import { existsSync as existsSync28, mkdirSync as mkdirSync16, readdirSync as readdirSync14, readFileSync as readFileSync17, statSync as statSync8, writeFileSync as writeFileSync18 } from "fs";
-import { join as join29 } from "path";
+import { join as join30 } from "path";
 function listSpikes(tddDir) {
-  const root = join29(tddDir, "spikes");
+  const root = join30(tddDir, "spikes");
   if (!existsSync28(root)) return [];
   const out = [];
   for (const slug of readdirSync14(root)) {
-    const dir = join29(root, slug);
+    const dir = join30(root, slug);
     if (!statSync8(dir).isDirectory()) continue;
-    const branchFile = join29(dir, "branch.txt");
+    const branchFile = join30(dir, "branch.txt");
     if (!existsSync28(branchFile)) continue;
     out.push({
       spike_slug: slug,
@@ -7421,7 +7437,7 @@ function listSpikes(tddDir) {
 function listPipelineFeatures(tddDir) {
   const featuresDir2 = featuresDir(tddDir);
   if (!existsSync29(featuresDir2)) return [];
-  return readdirSync15(featuresDir2).filter((d) => statSync9(join30(featuresDir2, d)).isDirectory()).filter((d) => existsSync29(join30(featuresDir2, d, "pipeline.json"))).sort();
+  return readdirSync15(featuresDir2).filter((d) => statSync9(join31(featuresDir2, d)).isDirectory()).filter((d) => existsSync29(join31(featuresDir2, d, "pipeline.json"))).sort();
 }
 function findStaleBranches(tddDir) {
   const findings = [];

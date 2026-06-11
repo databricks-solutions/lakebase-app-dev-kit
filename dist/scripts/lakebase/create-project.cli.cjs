@@ -2402,8 +2402,11 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/tdd/agent-models.ts
+// scripts/tdd/tdd-config.ts
 var import_fs = require("fs");
+var import_path2 = require("path");
+
+// scripts/tdd/agent-models.ts
 var import_path = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -2417,21 +2420,28 @@ var RECOMMENDED_MODELS = {
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path.join)(".lakebase", "agent-config.json");
-function buildAgentConfig(overrides) {
+
+// scripts/tdd/tdd-config.ts
+var TDD_CONFIG_REL = (0, import_path2.join)(".lakebase", "tdd-config.json");
+function defaultTddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
-    const recommended = RECOMMENDED_MODELS[role];
-    const ov = overrides?.[role];
-    const entry = { recommended };
-    if (ov && ov !== recommended) entry.override = ov;
-    roles[role] = entry;
+    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : { model: RECOMMENDED_MODELS[role] };
   }
-  return { version: 1, roles };
+  return {
+    version: 1,
+    roles,
+    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    plan: { sizing: true },
+    project: { gates: "proxy", deployTarget: "local" }
+  };
 }
-function writeAgentConfig(projectDir, config) {
-  const p = (0, import_path.join)(projectDir, AGENT_CONFIG_REL);
-  (0, import_fs.mkdirSync)((0, import_path.dirname)(p), { recursive: true });
-  (0, import_fs.writeFileSync)(p, JSON.stringify(config, null, 2) + "\n");
+function writeTddConfig(projectDir, config, opts) {
+  const f = (0, import_path2.join)(projectDir, TDD_CONFIG_REL);
+  if ((0, import_fs.existsSync)(f) && !opts?.force) return false;
+  (0, import_fs.mkdirSync)((0, import_path2.dirname)(f), { recursive: true });
+  (0, import_fs.writeFileSync)(f, JSON.stringify(config, null, 2) + "\n");
+  return true;
 }
 
 // scripts/lakebase/create-project.ts
@@ -2602,10 +2612,16 @@ Last probe error:
   }
   if (enableTdd) {
     try {
-      writeAgentConfig(projectDir, buildAgentConfig(input.agentModels));
+      const tddConfig = defaultTddConfig();
+      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+        if (model && tddConfig.roles?.[role]) {
+          tddConfig.roles[role].model = model;
+        }
+      }
+      writeTddConfig(projectDir, tddConfig);
     } catch (err) {
       warnings.push(
-        `Agent model config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
       );
     }
   }
