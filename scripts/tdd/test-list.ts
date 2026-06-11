@@ -214,6 +214,18 @@ export function scopeToStory(list: TestList, storyId: string, acIds: string[]): 
   };
 }
 
+/** The next free `T<n>` ordinal for the master, so folded-in story items keep
+ *  globally-unique ids. Continues past the highest existing `T<n>`, and never
+ *  below the item count (covers a list whose ids are not all `T`-prefixed). */
+function nextTestNumber(items: TestListItem[]): number {
+  let max = 0;
+  for (const it of items) {
+    const m = /^T(\d+)$/.exec(it.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return Math.max(max, items.length) + 1;
+}
+
 /**
  * Read the master test list, scope it to one story's ACs, and write the
  * canonical per-story list (storyTestListJson, the build lane's per-story input
@@ -251,10 +263,34 @@ export function writeStoryTestList(
         ...(authored.ordered_for ? { ordered_for: authored.ordered_for } : {}),
         items: [],
       };
-    const haveIds = new Set(baseList.items.map((i) => i.id));
-    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
-    if (additions.length > 0 || master === null) {
-      master = { ...baseList, items: [...baseList.items, ...additions] };
+    // Dedup identity MUST be feature-stable. The test `id` (T1, T2, ...) is
+    // per-STORY , the Strategist restarts numbering each story , so keying dedup
+    // on `id` made a later story's T1.. collide with an earlier story's T1.. and
+    // every item got dropped as "already present", leaving the master without that
+    // story. Its per-story scope then came back EMPTY and the build aborted. Key
+    // on (ac_id + description), which is unique across the feature (each AC belongs
+    // to one story), and RE-ID the additions to extend the master's numbering so
+    // the master keeps globally-unique ids (markTestItemGreen finds items by id).
+    const key = (it: TestListItem): string => `${it.ac_id} ${it.description}`;
+    const have = new Set(baseList.items.map(key));
+    const usedIds = new Set(baseList.items.map((i) => i.id));
+    const fresh = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !have.has(key(it)));
+    if (fresh.length > 0 || master === null) {
+      let n = nextTestNumber(baseList.items);
+      // Keep an authored id when it is free; re-id ONLY on collision with an id
+      // already in the master (the per-story-numbering clash), so the master's
+      // ids stay globally unique while the Strategist's ids survive in the norm.
+      const renumbered = fresh.map((it) => {
+        if (!usedIds.has(it.id)) {
+          usedIds.add(it.id);
+          return it;
+        }
+        let nid = `T${n++}`;
+        while (usedIds.has(nid)) nid = `T${n++}`;
+        usedIds.add(nid);
+        return { ...it, id: nid };
+      });
+      master = { ...baseList, items: [...baseList.items, ...renumbered] };
       writeMasterTestList(tddDir, master);
     }
   }

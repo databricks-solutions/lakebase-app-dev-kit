@@ -137,6 +137,14 @@ function scopeToStory(list, storyId, acIds) {
     items: grouped
   };
 }
+function nextTestNumber(items) {
+  let max = 0;
+  for (const it of items) {
+    const m = /^T(\d+)$/.exec(it.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return Math.max(max, items.length) + 1;
+}
 function writeStoryTestList(tddDir, featureId, storyId) {
   const storyDir2 = findStoryDir(tddDir, featureId, storyId);
   if (!storyDir2) return null;
@@ -154,10 +162,23 @@ function writeStoryTestList(tddDir, featureId, storyId) {
       ...authored.ordered_for ? { ordered_for: authored.ordered_for } : {},
       items: []
     };
-    const haveIds = new Set(baseList.items.map((i) => i.id));
-    const additions = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !haveIds.has(it.id));
-    if (additions.length > 0 || master === null) {
-      master = { ...baseList, items: [...baseList.items, ...additions] };
+    const key = (it) => `${it.ac_id}\0${it.description}`;
+    const have = new Set(baseList.items.map(key));
+    const usedIds = new Set(baseList.items.map((i) => i.id));
+    const fresh = authored.items.filter((it) => storyAcIds.includes(it.ac_id) && !have.has(key(it)));
+    if (fresh.length > 0 || master === null) {
+      let n = nextTestNumber(baseList.items);
+      const renumbered = fresh.map((it) => {
+        if (!usedIds.has(it.id)) {
+          usedIds.add(it.id);
+          return it;
+        }
+        let nid = `T${n++}`;
+        while (usedIds.has(nid)) nid = `T${n++}`;
+        usedIds.add(nid);
+        return { ...it, id: nid };
+      });
+      master = { ...baseList, items: [...baseList.items, ...renumbered] };
       writeMasterTestList(tddDir, master);
     }
   }

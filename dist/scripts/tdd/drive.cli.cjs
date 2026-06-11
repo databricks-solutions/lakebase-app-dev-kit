@@ -8625,7 +8625,7 @@ function roleTaskBody(action, featureId, uiTrack, tddDir) {
     case "test-strategist": {
       const acIds = storyAcIds(tddDir, featureId, s);
       const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
-      return `Produce the ordered test list for story ${s}.${acScope}`;
+      return `Produce story ${s}'s ordered tests and APPEND them to the feature master test list .tdd/features/${featureId}/test-list.json , keep every item already there for the other stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration generates the per-story + per-AC views from the master).${acScope}`;
     }
     case "navigator":
       if (action.buildMode === "review") {
