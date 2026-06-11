@@ -76,7 +76,23 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   echo "Running Alembic migrations..."
   uv run alembic upgrade head
   PORT="$(resolve_port 8000)"
-  echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop). Open it in your browser."
+  echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop)."
+  # Best-effort: list the app's browsable (GET) routes so the reviewer knows
+  # where to go. A freshly built app may have no "/" route (only e.g. /bugs/new),
+  # so opening the bare host 404s; printing the real entry points avoids the
+  # guessing game. Non-fatal if introspection fails (printed hint falls back).
+  routes="$(uv run python -c "
+from app.main import app
+for r in getattr(app, 'routes', []):
+    methods = getattr(r, 'methods', None) or set()
+    path = getattr(r, 'path', '')
+    if 'GET' in methods and not path.startswith('/openapi') and path not in ('/docs', '/redoc', '/docs/oauth2-redirect'):
+        print(path)
+" 2>/dev/null)" || true
+  if [ -n "$routes" ]; then
+    echo "Open one of these in your browser:"
+    printf '%s\n' "$routes" | while IFS= read -r p; do echo "  http://${HOST}:${PORT}${p}"; done
+  fi
   uv run uvicorn app.main:app --reload --host "$HOST" --port "$PORT" "$@"
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js – prefer a "dev" script, fall back to "start".
