@@ -57,6 +57,24 @@ describe("writePlaywrightTemplates: file copy", () => {
     expect(fs.existsSync(path.join(projectDir, "tests", "e2e"))).toBe(true);
   });
 
+  it("ships a canonical live_server conftest that inherits the env + polls readiness (CI-parity)", () => {
+    // The dev/prod CI-parity bug: a hand-rolled live_server fixture forced
+    // `--env-file .env` (shadowing CI's DATABASE_URL) + slept a fixed time, so
+    // E2E passed in the build lane (live local .env) but failed in PR CI with
+    // ERR_CONNECTION_REFUSED. Shipping the fixture pins the correct behavior.
+    writePlaywrightTemplates({ projectDir, templatesDir: REPO_TEMPLATES });
+    const conftest = fs.readFileSync(path.join(projectDir, "tests", "e2e", "conftest.py"), "utf8");
+    expect(conftest).toMatch(/def live_server/);
+    expect(conftest).toContain("app.main:app");
+    // Must inherit the process env, NOT pin --env-file (which shadows CI creds).
+    // Check the subprocess ARG form (quoted) is absent; prose mentions of the
+    // flag in the docstring are fine (and intended).
+    expect(conftest).toContain("os.environ.copy()");
+    expect(conftest).not.toContain('"--env-file"');
+    // Must poll for readiness (a real wait), not just sleep a fixed time.
+    expect(conftest).toMatch(/E2E_READY_TIMEOUT|monotonic|_is_up/);
+  });
+
   it("skips existing files by default and reports them in `skipped`", () => {
     fs.writeFileSync(path.join(projectDir, "playwright.config.ts"), "// user-edited\n", "utf8");
     const result = writePlaywrightTemplates({ projectDir, templatesDir: REPO_TEMPLATES });
