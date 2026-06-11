@@ -3262,8 +3262,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path) {
-      let input = path;
+    function removeDotSegments(path3) {
+      let input = path3;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3516,8 +3516,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path && path !== "/" ? path : void 0;
+        const [path3, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6947,6 +6947,170 @@ function reconcileArtifactLog(opts) {
   return emitted;
 }
 
+// scripts/tdd/escalation.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+
+// scripts/tdd/smells.ts
+init_cjs_shims();
+var import_fs4 = require("fs");
+var import_path4 = require("path");
+
+// scripts/tdd/run-cycle.ts
+init_cjs_shims();
+
+// scripts/lakebase/get-connection.ts
+init_cjs_shims();
+var import_node_child_process2 = require("child_process");
+var import_lakebase = require("@databricks/lakebase");
+var import_pg = require("pg");
+
+// scripts/lakebase/branch-utils.ts
+init_cjs_shims();
+var import_node_child_process = require("child_process");
+var import_node_util = require("util");
+
+// scripts/lakebase/branch-id.ts
+init_cjs_shims();
+
+// scripts/lakebase/kit-config.ts
+init_cjs_shims();
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/branch-utils.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
+
+// scripts/lakebase/constants.ts
+init_cjs_shims();
+
+// scripts/tdd/experiment.ts
+init_cjs_shims();
+
+// scripts/lakebase/paired-branch.ts
+init_cjs_shims();
+var fs4 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
+var import_node_child_process7 = require("child_process");
+
+// scripts/lakebase/branch-create.ts
+init_cjs_shims();
+var import_node_child_process4 = require("child_process");
+var import_node_util3 = require("util");
+
+// scripts/util/poll-until.ts
+init_cjs_shims();
+
+// scripts/util/delay.ts
+init_cjs_shims();
+
+// scripts/util/sanitize-branch-name.ts
+init_cjs_shims();
+
+// scripts/lakebase/lakebase-project.ts
+init_cjs_shims();
+var import_node_child_process3 = require("child_process");
+var import_node_util2 = require("util");
+var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.execFile);
+
+// scripts/lakebase/branch-create.ts
+var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process4.execFile);
+
+// scripts/lakebase/branch-delete.ts
+init_cjs_shims();
+var import_node_child_process5 = require("child_process");
+var import_node_util4 = require("util");
+var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process5.execFile);
+
+// scripts/lakebase/branch-endpoint.ts
+init_cjs_shims();
+var import_node_child_process6 = require("child_process");
+
+// scripts/lakebase/env-file.ts
+init_cjs_shims();
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+init_cjs_shims();
+var fs3 = __toESM(require("fs"), 1);
+
+// scripts/util/exec.ts
+init_cjs_shims();
+var cp = __toESM(require("child_process"), 1);
+
+// scripts/tdd/smells.ts
+function writeSmellsLog(tddDir, hits) {
+  const file = (0, import_path4.join)(tddDir, "smells.json");
+  const existing = (0, import_fs4.existsSync)(file) ? JSON.parse((0, import_fs4.readFileSync)(file, "utf8")) : { detected: [] };
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const newEntries = hits.map((h) => ({ ...h, detected_at: ts }));
+  const merged = { detected: [...existing.detected, ...newEntries] };
+  (0, import_fs4.writeFileSync)(file, JSON.stringify(merged, null, 2) + "\n");
+  return merged;
+}
+function readSmellsLog(tddDir) {
+  const file = (0, import_path4.join)(tddDir, "smells.json");
+  if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
+  return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
+}
+
+// scripts/tdd/escalation.ts
+var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
+  "test-list-drift",
+  "cycle-stall",
+  "boundary-violation",
+  "test-deletion-attempt",
+  // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
+  // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
+  // conftest defect (2026-06-11 smoke) traced to this not being blocking.
+  "scaffold-defect"
+]);
+function recordBlockingSmellFlag(tddDir, smell, detail) {
+  if (!BLOCKING_SMELLS.has(smell)) return false;
+  const open = readSmellsLog(tddDir).detected.some((d) => d.smell === smell && !d.resolution);
+  if (open) return false;
+  writeSmellsLog(tddDir, [
+    { smell, cycle_ids: [], detail: detail || `flagged blocking smell: ${smell}` }
+  ]);
+  return true;
+}
+
 // scripts/tdd/agent-log.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -7109,6 +7273,13 @@ ${HELP}
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });
+    if (a.event === "smell.flagged" && typeof slots.smell === "string") {
+      recordBlockingSmellFlag(
+        a.tddDir ?? "./.tdd",
+        slots.smell,
+        typeof slots.detail === "string" ? slots.detail : void 0
+      );
+    }
     return 0;
   } catch (e) {
     process.stderr.write(`lakebase-tdd-log: ${e.message}

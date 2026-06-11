@@ -7854,7 +7854,11 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   "test-list-drift",
   "cycle-stall",
   "boundary-violation",
-  "test-deletion-attempt"
+  "test-deletion-attempt",
+  // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
+  // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
+  // conftest defect (2026-06-11 smoke) traced to this not being blocking.
+  "scaffold-defect"
 ]);
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");

@@ -8613,21 +8613,22 @@ function findTemplatesDir4() {
 function commonDir2(opts) {
   return path8.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
 }
-var PLAYWRIGHT_TEMPLATE_FILES = [
+var NODE_E2E_TEMPLATE_FILES = [
   "playwright.config.ts",
-  path8.join("tests", "e2e", "smoke.spec.ts"),
-  // The canonical `live_server` fixture. Shipped (not agent-authored) so every
-  // UI project gets a fixture that inherits the env (CI's DATABASE_URL wins) +
-  // polls readiness, instead of a hand-rolled one that pins `--env-file .env`
-  // and sleeps a fixed time , the dev/prod CI-parity bug where E2E pass in the
-  // build lane (live local .env) but fail in PR CI with ERR_CONNECTION_REFUSED.
+  path8.join("tests", "e2e", "smoke.spec.ts")
+];
+var PYTHON_E2E_TEMPLATE_FILES = [
   path8.join("tests", "e2e", "conftest.py")
+];
+var PLAYWRIGHT_TEMPLATE_FILES = [
+  ...NODE_E2E_TEMPLATE_FILES,
+  ...PYTHON_E2E_TEMPLATE_FILES
 ];
 function writePlaywrightTemplates(args) {
   const src = commonDir2(args);
   const written = [];
   const skipped = [];
-  for (const rel of PLAYWRIGHT_TEMPLATE_FILES) {
+  for (const rel of args.files ?? PLAYWRIGHT_TEMPLATE_FILES) {
     const from = path8.join(src, rel);
     if (!fs9.existsSync(from)) {
       throw new Error(`Kit template missing: ${from}`);
@@ -8695,6 +8696,12 @@ function addE2eToRunTestsScript(args) {
     "  else",
     '    (cd "$REPO_ROOT" && npx --yes playwright test)',
     "  fi",
+    // Python E2E: pytest-playwright + the shipped tests/e2e/conftest.py
+    // (live_server). Gated on the conftest + pyproject so it only fires for a
+    // Python project that has the E2E harness, never on a bare API project.
+    'elif [ -f "$REPO_ROOT/tests/e2e/conftest.py" ] && [ -f "$REPO_ROOT/pyproject.toml" ]; then',
+    '  echo "Running Python E2E tests (pytest tests/e2e)..."',
+    '  (cd "$REPO_ROOT" && uv run --extra dev pytest tests/e2e)',
     "fi",
     ""
   ].join("\n");
@@ -8703,13 +8710,19 @@ function addE2eToRunTestsScript(args) {
 }
 function enableE2eForProject(args) {
   const rootPkg = path9.join(args.projectDir, "package.json");
-  if (!fs10.existsSync(rootPkg)) {
+  const isNode = args.language === "nodejs" || args.language === "node" || fs10.existsSync(rootPkg);
+  if (!isNode) {
+    const isPython = args.language === "python" || fs10.existsSync(path9.join(args.projectDir, "pyproject.toml"));
+    const templates2 = isPython ? writePlaywrightTemplates({
+      projectDir: args.projectDir,
+      force: args.force,
+      templatesDir: args.templatesDir,
+      files: PYTHON_E2E_TEMPLATE_FILES
+    }) : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
     return {
-      templatesWritten: [],
-      // Same shape as writePlaywrightTemplates would have returned; the
-      // template paths show up under skipped with the npm-wiring caveat
-      // captured in packageJson.patched=false.
-      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      templatesWritten: templates2.written,
+      templatesSkipped: templates2.skipped,
+      // No package.json to wire (the caveat the report surfaces).
       packageJson: { patched: false, scriptAdded: false, depAdded: false },
       runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir })
     };
@@ -8717,7 +8730,8 @@ function enableE2eForProject(args) {
   const templates = writePlaywrightTemplates({
     projectDir: args.projectDir,
     force: args.force,
-    templatesDir: args.templatesDir
+    templatesDir: args.templatesDir,
+    files: NODE_E2E_TEMPLATE_FILES
   });
   const packageJson = addPlaywrightToPackageJson({
     projectDir: args.projectDir,
@@ -9538,7 +9552,7 @@ Last probe error:
   }
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir });
+    const e2e = enableE2eForProject({ projectDir, language });
     if (e2e.templatesWritten.length > 0) {
       report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
     }

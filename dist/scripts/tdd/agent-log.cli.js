@@ -3259,8 +3259,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path2) {
-      let input = path2;
+    function removeDotSegments(path4) {
+      let input = path4;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3513,8 +3513,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path2, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path2 && path2 !== "/" ? path2 : void 0;
+        const [path4, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6939,6 +6939,170 @@ function reconcileArtifactLog(opts) {
   return emitted;
 }
 
+// scripts/tdd/escalation.ts
+init_esm_shims();
+import * as fs5 from "fs";
+
+// scripts/tdd/smells.ts
+init_esm_shims();
+import { existsSync as existsSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync4 } from "fs";
+import { join as join7 } from "path";
+
+// scripts/tdd/run-cycle.ts
+init_esm_shims();
+
+// scripts/lakebase/get-connection.ts
+init_esm_shims();
+import { execFileSync } from "child_process";
+import { createLakebasePool } from "@databricks/lakebase";
+import { Client } from "pg";
+
+// scripts/lakebase/branch-utils.ts
+init_esm_shims();
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+// scripts/lakebase/branch-id.ts
+init_esm_shims();
+
+// scripts/lakebase/kit-config.ts
+init_esm_shims();
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/branch-utils.ts
+var execFileP = promisify(execFile);
+
+// scripts/lakebase/constants.ts
+init_esm_shims();
+
+// scripts/tdd/experiment.ts
+init_esm_shims();
+
+// scripts/lakebase/paired-branch.ts
+init_esm_shims();
+import * as fs4 from "fs";
+import * as path3 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
+// scripts/lakebase/branch-create.ts
+init_esm_shims();
+import { execFile as execFile3 } from "child_process";
+import { promisify as promisify3 } from "util";
+
+// scripts/util/poll-until.ts
+init_esm_shims();
+
+// scripts/util/delay.ts
+init_esm_shims();
+
+// scripts/util/sanitize-branch-name.ts
+init_esm_shims();
+
+// scripts/lakebase/lakebase-project.ts
+init_esm_shims();
+import { execFile as execFile2 } from "child_process";
+import { promisify as promisify2 } from "util";
+var execFileP2 = promisify2(execFile2);
+
+// scripts/lakebase/branch-create.ts
+var execFileP3 = promisify3(execFile3);
+
+// scripts/lakebase/branch-delete.ts
+init_esm_shims();
+import { execFile as execFile4 } from "child_process";
+import { promisify as promisify4 } from "util";
+var execFileP4 = promisify4(execFile4);
+
+// scripts/lakebase/branch-endpoint.ts
+init_esm_shims();
+import { execFileSync as execFileSync2 } from "child_process";
+
+// scripts/lakebase/env-file.ts
+init_esm_shims();
+import * as fs2 from "fs";
+import * as path2 from "path";
+
+// scripts/lakebase/databricks-profile.ts
+init_esm_shims();
+import * as fs3 from "fs";
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp from "child_process";
+
+// scripts/tdd/smells.ts
+function writeSmellsLog(tddDir, hits) {
+  const file = join7(tddDir, "smells.json");
+  const existing = existsSync7(file) ? JSON.parse(readFileSync7(file, "utf8")) : { detected: [] };
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const newEntries = hits.map((h) => ({ ...h, detected_at: ts }));
+  const merged = { detected: [...existing.detected, ...newEntries] };
+  writeFileSync4(file, JSON.stringify(merged, null, 2) + "\n");
+  return merged;
+}
+function readSmellsLog(tddDir) {
+  const file = join7(tddDir, "smells.json");
+  if (!existsSync7(file)) return { detected: [] };
+  return JSON.parse(readFileSync7(file, "utf8"));
+}
+
+// scripts/tdd/escalation.ts
+var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
+  "test-list-drift",
+  "cycle-stall",
+  "boundary-violation",
+  "test-deletion-attempt",
+  // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
+  // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
+  // conftest defect (2026-06-11 smoke) traced to this not being blocking.
+  "scaffold-defect"
+]);
+function recordBlockingSmellFlag(tddDir, smell, detail) {
+  if (!BLOCKING_SMELLS.has(smell)) return false;
+  const open = readSmellsLog(tddDir).detected.some((d) => d.smell === smell && !d.resolution);
+  if (open) return false;
+  writeSmellsLog(tddDir, [
+    { smell, cycle_ids: [], detail: detail || `flagged blocking smell: ${smell}` }
+  ]);
+  return true;
+}
+
 // scripts/tdd/agent-log.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -7101,6 +7265,13 @@ ${HELP}
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });
+    if (a.event === "smell.flagged" && typeof slots.smell === "string") {
+      recordBlockingSmellFlag(
+        a.tddDir ?? "./.tdd",
+        slots.smell,
+        typeof slots.detail === "string" ? slots.detail : void 0
+      );
+    }
     return 0;
   } catch (e) {
     process.stderr.write(`lakebase-tdd-log: ${e.message}
