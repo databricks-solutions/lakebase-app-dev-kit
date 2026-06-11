@@ -1189,6 +1189,7 @@ async function installPlaywright(args) {
 
 // scripts/lakebase/enable-e2e.ts
 var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
+var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
 function addPlaywrightToPackageJson(args) {
   const pkgPath = path9.join(args.projectDir, "package.json");
   if (!fs9.existsSync(pkgPath)) {
@@ -1217,6 +1218,37 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
+function ensurePythonE2eDeps(args) {
+  const pyPath = path9.join(args.projectDir, "pyproject.toml");
+  if (!fs9.existsSync(pyPath)) {
+    return { patched: false, depAdded: false };
+  }
+  const original = fs9.readFileSync(pyPath, "utf8");
+  if (/["']pytest-playwright/.test(original)) {
+    return { patched: true, depAdded: false };
+  }
+  const range = args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE;
+  const depLine = `    "pytest-playwright${range}",`;
+  const devArray = /(\n[ \t]*dev[ \t]*=[ \t]*\[)([\s\S]*?)(\n[ \t]*\])/;
+  if (devArray.test(original)) {
+    const patched = original.replace(devArray, (_m, open, body, close) => {
+      const sep2 = body.trim() === "" || body.trimEnd().endsWith(",") ? "" : ",";
+      return `${open}${body}${sep2}
+${depLine}${close}`;
+    });
+    fs9.writeFileSync(pyPath, patched, "utf8");
+    return { patched: true, depAdded: true };
+  }
+  const trimmed = original.replace(/\n+$/, "\n");
+  const block = `
+[project.optional-dependencies]
+dev = [
+${depLine}
+]
+`;
+  fs9.writeFileSync(pyPath, trimmed + block, "utf8");
+  return { patched: true, depAdded: true };
+}
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path9.join(args.projectDir, "scripts", "run-tests.sh");
@@ -1243,7 +1275,11 @@ function addE2eToRunTestsScript(args) {
     // Python project that has the E2E harness, never on a bare API project.
     'elif [ -f "$REPO_ROOT/tests/e2e/conftest.py" ] && [ -f "$REPO_ROOT/pyproject.toml" ]; then',
     '  echo "Running Python E2E tests (pytest tests/e2e)..."',
-    '  (cd "$REPO_ROOT" && uv run --extra dev pytest tests/e2e)',
+    // pytest-playwright provides the `page` fixture but needs its browser
+    // binaries; install chromium first (idempotent, cached after the first
+    // run), then run the suite. && so a failed browser install fails loudly
+    // instead of letting pytest error with a bare "Executable doesn't exist".
+    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium && uv run --extra dev pytest tests/e2e)',
     "fi",
     ""
   ].join("\n");
@@ -1266,6 +1302,10 @@ function enableE2eForProject(args) {
       templatesSkipped: templates2.skipped,
       // No package.json to wire (the caveat the report surfaces).
       packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      // Python: declare the pytest-playwright runner in pyproject's dev extras
+      // so the shipped conftest + E2E specs' `page` fixture resolves. (Skipped
+      // for other non-Node shapes, which have no pyproject.)
+      pyproject: isPython ? ensurePythonE2eDeps({ projectDir: args.projectDir }) : { patched: false, depAdded: false },
       runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir })
     };
   }
@@ -1284,6 +1324,8 @@ function enableE2eForProject(args) {
     templatesWritten: templates.written,
     templatesSkipped: templates.skipped,
     packageJson,
+    // Node project: no pyproject to patch.
+    pyproject: { patched: false, depAdded: false },
     runTestsScript
   };
 }
@@ -5001,6 +5043,7 @@ Last probe error:
   if (enableTdd) {
     report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
   }
+  report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -8342,6 +8385,7 @@ export {
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
   PROJECT_SKILLS,
+  PYTEST_PLAYWRIGHT_VERSION_RANGE,
   PYTHON_E2E_TEMPLATE_FILES,
   SCM_STATES,
   STATE_FILE_REL,
@@ -8412,6 +8456,7 @@ export {
   ensureEndpoint,
   ensureLakebaseSecretAuth,
   ensureProfilePinned,
+  ensurePythonE2eDeps,
   ensureSchemaAndVolume,
   extractPullNumber,
   featureBranchName,
