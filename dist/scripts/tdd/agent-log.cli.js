@@ -6800,6 +6800,9 @@ function emitAgentLogEvent(input, opts = {}) {
     timestamp: input.timestamp ?? now().toISOString(),
     level: input.level,
     role: input.role,
+    // model + effort sit right after role (the per-turn dispatch events carry them).
+    ...input.model ? { model: input.model } : {},
+    ...input.effort ? { effort: input.effort } : {},
     event: input.event,
     message,
     ...Object.keys(metadata).length > 0 ? { metadata } : {}

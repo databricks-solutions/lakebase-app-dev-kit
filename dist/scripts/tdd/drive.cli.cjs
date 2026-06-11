@@ -7813,6 +7813,9 @@ function emitAgentLogEvent(input, opts = {}) {
     timestamp: input.timestamp ?? now().toISOString(),
     level: input.level,
     role: input.role,
+    // model + effort sit right after role (the per-turn dispatch events carry them).
+    ...input.model ? { model: input.model } : {},
+    ...input.effort ? { effort: input.effort } : {},
     event: input.event,
     message,
     ...Object.keys(metadata).length > 0 ? { metadata } : {}
@@ -9146,6 +9149,16 @@ function writeRunConfig(inputs) {
 
 // scripts/tdd/orchestrator-logging.ts
 init_cjs_shims();
+var BUILD_TURNS = /* @__PURE__ */ new Set(["red", "green", "review", "refactor"]);
+function turnSettings(ctx, role, phase) {
+  const turn = BUILD_TURNS.has(phase) ? phase : void 0;
+  const model = ctx.modelForRole?.(role);
+  const effort = ctx.effortForTurn?.(role, turn);
+  return {
+    ...model ? { model } : {},
+    ...effort && effort !== "default" ? { effort } : {}
+  };
+}
 function storyOf2(action) {
   return "story" in action ? action.story : void 0;
 }
@@ -9164,7 +9177,7 @@ function orchestratorLogEvents(action, ctx = {}) {
       const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
       return [
         { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
-        { role, level: "info", feature_id, event: "phase.start", slots: { phase, ...detail } }
+        { role, level: "info", feature_id, ...turnSettings(ctx, role, phase), event: "phase.start", slots: { phase, ...detail } }
       ];
     }
     case "surface-gate":
@@ -9234,9 +9247,9 @@ function describeAction(action, ctx = {}) {
   }
 }
 function makeOnAction(opts) {
-  const { featureId, ...io } = opts;
+  const { featureId, modelForRole, effortForTurn, ...io } = opts;
   return (action) => {
-    for (const event of orchestratorLogEvents(action, { featureId })) {
+    for (const event of orchestratorLogEvents(action, { featureId, modelForRole, effortForTurn })) {
       try {
         emitAgentLogEvent(event, io);
       } catch {
@@ -9503,7 +9516,17 @@ function buildCfg(args, featureId) {
       // Code-emit the orchestrator's lifecycle (handoff / phase.start /
       // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
       // so the structured trail is written every run with no LLM in the loop.
-      makeOnAction({ tddDir, featureId })
+      // The resolvers stamp each per-turn phase.start with the model + effort it
+      // ran with (right after `role`).
+      makeOnAction({
+        tddDir,
+        featureId,
+        modelForRole: (role) => settings.models[role],
+        effortForTurn: (role, turn) => {
+          const e = settings.effortFor(role, turn);
+          return e === "default" ? "" : e;
+        }
+      })
     )
   };
 }

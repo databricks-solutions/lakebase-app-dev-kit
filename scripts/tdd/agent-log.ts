@@ -45,11 +45,15 @@ export interface AgentLogMetadata {
   [key: string]: unknown;
 }
 
-/** One persisted log line. Field order: timestamp, level, role, event, message, metadata. */
+/** One persisted log line. Field order: timestamp, level, role, model?, effort?, event, message, metadata. */
 export interface AgentLogEvent {
   timestamp: string;
   level: AgentLogLevel;
   role: AgentRole;
+  /** The model the role's turn ran with (per-turn dispatch events); omitted otherwise. */
+  model?: string;
+  /** The --effort the role's turn ran with ("default" => no flag); per-turn dispatch events. */
+  effort?: string;
   event: string;
   message: string;
   metadata?: AgentLogMetadata;
@@ -64,6 +68,10 @@ export interface AgentLogEventInput {
   timestamp?: string;
   level: AgentLogLevel;
   role: AgentRole;
+  /** The model the role's turn ran with (set on the per-turn dispatch events). */
+  model?: string;
+  /** The --effort the role's turn ran with ("default" => no flag). */
+  effort?: string;
   /** Must be one of the closed vocabulary (agent-log-events.ts). */
   event: AgentLogEventName;
   /**
@@ -126,6 +134,9 @@ export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpt
     timestamp: input.timestamp ?? now().toISOString(),
     level: input.level,
     role: input.role,
+    // model + effort sit right after role (the per-turn dispatch events carry them).
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
     event: input.event,
     message,
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
