@@ -193,6 +193,31 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
           timeout: 10_000,
         });
         headAfter = switchTo;
+        // The PR merged SERVER-SIDE (into origin/<parent>), so the LOCAL <parent>
+        // ref is still at its pre-merge commit. Fast-forward it to the merged
+        // commit so the working tree carries what was merged (the feature's
+        // files, incl. its migration) and matches the parent's paired DB, which
+        // the downstream migrate just advanced. Without this, a post-merge
+        // `run-tests.sh` / `run-dev.sh` on <parent> runs STALE code against an
+        // already-migrated DB and alembic fails "Can't locate revision <id>".
+        // Best-effort: the merge already succeeded remotely, so a local sync
+        // failure is a warning (a human runs `git pull --ff-only`), not a throw.
+        try {
+          await exec(`git fetch origin ${shellEscape(switchTo)}`, {
+            cwd: args.projectDir,
+            timeout: 30_000,
+          });
+          await exec(`git merge --ff-only ${shellEscape(`origin/${switchTo}`)}`, {
+            cwd: args.projectDir,
+            timeout: 10_000,
+          });
+        } catch (err) {
+          warnings.push(
+            `local fast-forward of ${switchTo} to origin/${switchTo} failed: ` +
+              `${err instanceof Error ? err.message : String(err)}. The PR merged remotely; ` +
+              `your local ${switchTo} may be stale, run \`git pull --ff-only\`.`,
+          );
+        }
       } catch (err) {
         warnings.push(
           `git checkout ${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. Local branch was NOT deleted.`,

@@ -150,6 +150,23 @@ describe("mergeFeature happy path", () => {
     expect(result.localBranchDeleted).toBe(true);
   });
 
+  it("fast-forwards the local parent tier to the merged remote (post-merge checkout is not stale)", async () => {
+    // Regression: the PR merges SERVER-SIDE, so after `git checkout <parent>` the
+    // local <parent> is still pre-merge. Without a fetch + ff, a post-merge
+    // run-tests.sh / run-dev.sh runs stale code against the already-migrated DB
+    // and alembic fails "Can't locate revision". scm-merge must sync the local
+    // parent to origin/<parent>.
+    seedCiGreen();
+    await merge.mergeFeature({ projectDir: tmpDir, waitMigrate: false, now: () => new Date() });
+    const calls = mockExec.mock.calls.map((c) => String(c[0]));
+    const coIdx = calls.findIndex((c) => c.includes("git checkout") && c.includes("staging"));
+    const fetchIdx = calls.findIndex((c) => c.includes("git fetch origin") && c.includes("staging"));
+    const ffIdx = calls.findIndex((c) => /git merge --ff-only .*origin\/staging/.test(c));
+    expect(coIdx).toBeGreaterThanOrEqual(0);
+    expect(fetchIdx).toBeGreaterThan(coIdx); // fetch + ff happen AFTER the checkout
+    expect(ffIdx).toBeGreaterThan(fetchIdx);
+  });
+
   it("--method override is forwarded", async () => {
     seedCiGreen();
     await merge.mergeFeature({
