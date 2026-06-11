@@ -1,70 +1,61 @@
 # Cross-cutting concerns
 
-Concerns that span multiple modules – auth, audit, rate limiting, schema validation, capability resolution, policy. The design failure mode is *implementing the same concern in multiple places* and having the implementations drift.
+Concerns that span modules: auth, audit, rate limiting, schema validation, capability resolution, policy. Failure mode: the same concern implemented in two places, then the copies drift.
 
-The rule: **each cross-cutting concern has one owner layer and one owner module.** Everything else delegates.
+Rule: **one owner layer and one owner module per concern.** Everything else delegates.
 
 ## The mapping (default ownership)
 
-| Concern | Owner layer | Typical module name | Notes |
+| Concern | Owner layer | Typical module | Notes |
 |---|---|---|---|
-| Authentication | HTTP / boundary | `auth/authenticate.ts` | Extracts identity from request (token, session, mTLS). Sets request context. |
-| Authorization | Service | `authz/policy.ts` | "Can this identity perform this action on this resource?" Decision lives next to business rules. |
-| Capability resolution | Service | `capabilities/resolve.ts` | What the caller is *allowed* to do (independent of any specific action). |
-| Audit logging | Cross-cutting (HTTP wraps service) | `audit/emit.ts` | Emitted at service-call boundary so the event captures the domain meaning, not the HTTP shape. |
+| Authentication | HTTP / boundary | `auth/authenticate.ts` | Extract identity (token, session, mTLS); set request context. |
+| Authorization | Service | `authz/policy.ts` | "Can this identity do this action on this resource?" Lives next to business rules. |
+| Capability resolution | Service | `capabilities/resolve.ts` | What the caller is allowed to do, independent of any action. |
+| Audit logging | Cross-cutting (HTTP wraps service) | `audit/emit.ts` | Emit at the service-call boundary so the event captures domain meaning, not HTTP shape. |
 | Rate limiting | HTTP / boundary | `ratelimit/middleware.ts` | Decided per-request at the edge. |
-| Schema validation | HTTP / boundary | `schema/validate.ts` | Reject malformed input before it reaches the service layer. |
-| Policy config | Policy layer | `policy/config.ts` | Read-only by HTTP, service, and infrastructure. |
-| Transactions | Service | within use-case orchestrators | The use-case decides the boundary; infrastructure executes. |
-| Caching | Infrastructure | `cache/` adapters | Cache reads at the repository, never at the service interface. |
-| Tracing / metrics | Cross-cutting (HTTP wraps service) | `observability/` | Wraps service calls so spans align with use cases. |
-| Secrets resolution | Infrastructure | `secrets/resolve.ts` | Single seam for env / vault / KMS lookups. |
-| Feature flags | Policy layer | `flags/eval.ts` | Read at decision points by service layer. |
+| Schema validation | HTTP / boundary | `schema/validate.ts` | Reject malformed input before the service layer. |
+| Policy config | Policy layer | `policy/config.ts` | Read-only by HTTP, service, infrastructure. |
+| Transactions | Service | use-case orchestrators | Use-case sets the boundary; infrastructure executes. |
+| Caching | Infrastructure | `cache/` adapters | Cache at the repository, never at the service interface. |
+| Tracing / metrics | Cross-cutting (HTTP wraps service) | `observability/` | Wrap service calls so spans align with use cases. |
+| Secrets resolution | Infrastructure | `secrets/resolve.ts` | One seam for env / vault / KMS. |
+| Feature flags | Policy layer | `flags/eval.ts` | Read at decision points by the service layer. |
 
-## Where each concern *should not* live
+## Where each concern must not live
 
-- **Auth in service:** identity extraction reaches into HTTP-specific request shapes. Wrong layer.
-- **Authz in HTTP:** the HTTP layer doesn't know the domain rules. It can check that a token is *valid*; it cannot check that an action is *allowed*.
-- **Audit in infrastructure:** infrastructure sees DB calls, not domain events. Auditing "INSERT INTO orders" is less useful than auditing "createOrder."
-- **Rate limit in service:** services would have to know the per-route policies. Wrong scope.
-- **Schema validation in service:** the service should trust its inputs once the HTTP layer has validated them. Re-validating in service is duplication.
+- **Auth in service** reaches into HTTP-specific request shapes. Wrong layer.
+- **Authz in HTTP**: the boundary can check a token is valid; it cannot know if an action is allowed.
+- **Audit in infrastructure** sees `INSERT INTO orders`, not `createOrder`. Less useful.
+- **Rate limit in service** forces services to know per-route policy. Wrong scope.
+- **Schema validation in service** re-validates what the boundary already checked. Duplication.
 
-## When a concern needs to span layers
+## When a concern spans layers
 
-Some concerns *unavoidably* touch multiple layers. The rule then is: **one module owns the concern; other modules delegate via narrow interfaces.**
+One module owns it; others delegate through a narrow interface. Audit:
+- HTTP wraps the service call and calls `audit.emit(event)` on return or throw.
+- The audit module formats and writes; the service never calls `audit.emit()` directly.
+- Result: a new destination touches one module; removing audit from a route touches one registration.
 
-Example: audit logging
-- The HTTP layer wraps the service call.
-- The wrapper calls `audit.emit(event)` after the service call returns or throws.
-- The audit module formats and writes the event.
-- The service does not call `audit.emit()` directly – that's the wrapper's job.
+## The checklist (walk before merging)
 
-This way: adding a new audit destination touches *one* module; removing audit from a route touches *one* middleware registration.
+- [ ] Authentication: needed on this route? Where enforced?
+- [ ] Authorization: action gated? Where does the decision live?
+- [ ] Capability resolution: does the caller need a capability check?
+- [ ] Audit: should this emit an event? At which boundary?
+- [ ] Rate limiting: does this route need a limit?
+- [ ] Schema validation: input validated? Where?
+- [ ] Policy config: configuration? Where does it live?
+- [ ] Transactions: what's the atomicity boundary?
+- [ ] Caching: does this read benefit from a cache?
+- [ ] Tracing / metrics: traced?
+- [ ] Secrets: any consumed?
+- [ ] Feature flags: behind a flag?
 
-## The cross-cutting checklist
-
-Before merging a new feature, walk the mapping:
-
-- [ ] Authentication – does this route need it? Where is it enforced?
-- [ ] Authorization – is the action gated? Where does the decision live?
-- [ ] Capability resolution – does the caller need a capability check?
-- [ ] Audit – should this action emit an event? At which boundary?
-- [ ] Rate limiting – does this route need a limit?
-- [ ] Schema validation – is the input validated? Where?
-- [ ] Policy config – does this feature have configuration? Where does it live?
-- [ ] Transactions – what's the atomicity boundary?
-- [ ] Caching – does this read benefit from a cache?
-- [ ] Tracing/metrics – is this operation traced?
-- [ ] Secrets – does this feature consume any?
-- [ ] Feature flags – is this feature behind a flag?
-
-A row left unanswered is a smell. A row answered "two modules handle it" is a bug waiting to happen.
+An unanswered row is a smell. A row answered "two modules handle it" is a bug waiting to happen.
 
 ## When the mapping doesn't fit
 
-The defaults above assume a typical web service. For other shapes (CLI, batch job, MCP server), the boundaries shift:
-- **CLI:** the "HTTP layer" is the arg parser. Auth comes from the OS user / env.
-- **Batch job:** the "HTTP layer" is the job runner. Auth comes from the runner's identity. Rate limiting becomes "concurrency limit."
-- **MCP server:** the "HTTP layer" is the MCP transport (stdio / SSE). Schema validation comes from the tool schema.
-
-The principle is unchanged: each concern has one owner, and that owner lives at the layer with the right scope.
+For non-web shapes the boundary shifts, but each concern still has one owner at the layer with the right scope:
+- **CLI:** "HTTP layer" is the arg parser; auth comes from the OS user / env.
+- **Batch job:** "HTTP layer" is the job runner; auth from the runner identity; rate limit becomes concurrency limit.
+- **MCP server:** "HTTP layer" is the transport (stdio / SSE); schema validation comes from the tool schema.

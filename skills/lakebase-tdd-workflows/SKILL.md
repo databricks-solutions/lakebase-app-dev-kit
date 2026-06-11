@@ -65,44 +65,18 @@ The same orchestrated path runs for real and headless; headless, the Human Proxy
 
 ## Headless / Human Proxy mode
 
-By default every gate is HITL: the workflow halts for the Product Owner. When
-`LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the TDD-workflow smoke), the human
-approver role is **performed by** the `human-proxy` identity. This does not
-skip the gate or rubber-stamp it, the Human Proxy stands in as a diligent reviewer and
-does exactly what a careful human would:
+By default every gate is HITL (the workflow halts for the Product Owner). When `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the smoke), the approver role is **performed by** the `human-proxy` identity, a diligent stand-in, not a rubber stamp. It approves a `gates.json` gate (`spec`/`plan`/`test_list`/`promote`) and emits `gate.approved` only when both hold:
+- **Given the artifacts:** the gate's expected artifacts EXIST (a missing one is refused).
+- **Format-conformant:** each validates against its declared format (JSON against its schema; narrative MD against its required sections, see `references/spec-format.md` + `lakebase-tdd-gate-conformance`). A malformed artifact, or one missing a required section, is refused.
 
-- **It must be GIVEN the artifacts.** The mock approves a gate only when the
-  gate's expected artifacts EXIST. A missing artifact is refused, just as a
-  human would not sign off on work they were never handed.
-- **It checks the artifacts FOLLOW THE FORMAT RULES.** The mock validates each
-  artifact against its declared format (JSON against its schema; narrative MD
-  against its required sections, see `references/spec-format.md` +
-  `lakebase-tdd-gate-conformance`). A malformed artifact, or one missing a
-  required section, is refused. The mock has expectations about WHAT IS IN the
-  artifact, not just that it exists.
-- **Only when both hold does it approve** the `gates.json` gate
-  (`spec`/`plan`/`test_list`/`promote`) and emit a `gate.approved` log event.
+So the producing role's job here is to HAND the approver complete, conformant artifacts, recording its recommended resolutions (decisions, NFR acceptances, orderings) INSIDE them rather than leaving open questions for a human reply. A gate advances because real well-formed work was verified, never because it was skipped; a missing/malformed artifact hard-blocks in CI exactly as for a human.
 
-So the producing role's job in this mode is to HAND the approver complete,
-conformant artifacts, recording its recommended resolutions (decisions, NFR
-acceptances, orderings) INSIDE those artifacts rather than leaving them as open
-questions awaiting a human reply. A gate advances because the Human Proxy
-verified and approved real, well-formed work, never because the gate was
-skipped. A missing or malformed artifact hard-blocks in CI exactly as it would
-for a human. Auto-approve is automated diligent approval, not auto-fabrication.
+Beyond the gates, the Human Proxy stands in wherever the path needs human input (`lakebase-tdd-human-proxy` has two subcommands, `supply` and `approve`; both validate-then-place, neither fabricates or skips):
+- **Project intake** (precondition of `/plan` + `/design`): `supply`s `product-overview.md` / `nfrs.md` / `design-brief.md` from `$LAKEBASE_TDD_RECORDED_INTAKE_DIR`; `lakebase-tdd-intake` then passes because they're present + conformant.
+- **`/plan` backlog:** the Architect sizes the candidates live; the Proxy `supply`s the recorded `feature-request.md` files (the PO's groomed sprint). `sync-backlog` projects `backlog.json` (committed ids + sizes).
+- **`/deploy` gate:** confirms the app came up reachable AND the verify passed, then records `gate.approved`; never approves a non-reachable or failed-verify deploy.
 
-### The Human Proxy at each point in the orchestrated path
-
-Beyond approving the four design/build gates, the Human Proxy stands in for the human wherever the path needs human input:
-
-- **Project intake (precondition of `/plan` and `/design`):** where a human would be interviewed to author `product-overview.md` / `nfrs.md` / `design-brief.md`, the Human Proxy SUPPLIES each from the pre-recorded answers directory (`$LAKEBASE_TDD_RECORDED_INTAKE_DIR`) via `lakebase-tdd-human-proxy supply` (validate-then-place; refuses a missing or non-conformant recording). The precondition (`lakebase-tdd-intake`) then passes because the artifacts are present + conformant, not because it was skipped.
-- **`/plan` sprint backlog:** the Architect t-shirt-sizes the candidates (`planning/estimates.json`) live from the proposal. Where the Product Owner would then commit the sprint by authoring the `feature-request.md` files, the Human Proxy supplies them from the recorded backlog. The recorded specs ARE the PO's groomed, prioritized sprint. Same validate-then-place; a missing or non-conformant request refuses, so headless planning never produces an empty or malformed sprint. The deterministic `sync-backlog` step then projects `backlog.json` (committed ids + sizes) , the manifest the per-feature loop drives.
-- **`/deploy` deploy gate:** the per-sprint working-software review. The Human Proxy confirms the app came up reachable AND the feature verify passed, then records the `gate.approved`. It never approves a non-reachable or failed-verify deploy, that hard-blocks exactly as a missing gate artifact would.
-
-`supply` (intake + backlog) and `approve` (gates) are the two `lakebase-tdd-human-proxy` subcommands; both are diligent stand-ins, neither fabricates or skips.
-
-Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent or unset =
-normal HITL (halt for human sign-off / interview).
+Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent/unset = normal HITL.
 
 ## Agent roles (the per-role agent runtime)
 
@@ -125,7 +99,7 @@ The **orchestrator** is the deterministic driver (`lakebase-tdd-drive`), **not a
 - [`references/spec-format.md`](references/spec-format.md) – full `.tdd/` directory layout + markdown ↔ JSON contract.
 - [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-tdd-log` (debug = reasoning, info = outputs) to the centralized `.tdd/agent-log.jsonl`.
 - `scripts/tdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
-- [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, DTSTTCPW, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
+- [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
 
 ## tag → runner map
 

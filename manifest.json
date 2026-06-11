@@ -1,7 +1,19 @@
 {
   "version": "2",
-  "updated_at": "2026-06-05T15:00:33Z",
+  "updated_at": "2026-06-11T05:55:22Z",
   "skills": {
+    "architectural-design-principles": {
+      "version": "0.0.0",
+      "description": "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, and evolutionary architecture with fitness functions. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves.",
+      "experimental": false,
+      "updated_at": "2026-06-11T05:20:00Z",
+      "files": [
+        "SKILL.md",
+        "references/evolutionary-architecture.md",
+        "references/layered-architecture.md",
+        "references/twelve-factor.md"
+      ]
+    },
     "databricks-core": {
       "version": "0.1.0",
       "description": "Databricks CLI operations: auth, profiles, data exploration, and bundles. Contains up-to-date guidelines for Databricks-related CLI tasks.",
@@ -28,7 +40,7 @@
       "version": "0.2.0",
       "description": "Opinionated branching + release methodology for Lakebase-paired projects. Use when designing a project's branch layout, cutting a release candidate, promoting between long-running tiers, rolling back, or asking 'where should this work happen?' Encodes the prod / staging / {feature,test,uat,perf} default and the N-tier-capable cut-RC / regression-test / cut-backup / migrate release flow.",
       "experimental": false,
-      "updated_at": "2026-06-04T17:16:43Z",
+      "updated_at": "2026-06-10T08:15:11Z",
       "files": [
         "README.md",
         "SKILL.md",
@@ -54,36 +66,55 @@
       "version": "0.0.0",
       "description": "Test-driven development against paired Lakebase branches. Canonical Beck-style RED-GREEN-REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
       "experimental": false,
-      "updated_at": "2026-06-05T15:00:23Z",
+      "updated_at": "2026-06-11T05:18:19Z",
       "files": [
         "README.md",
         "SKILL.md",
         "agents/architect-reviewer.md",
         "agents/driver.md",
         "agents/navigator.md",
+        "agents/product-owner.md",
+        "agents/release-engineer.md",
         "agents/spec-author.md",
         "agents/test-strategist.md",
         "agents/ux-designer.md",
         "references/agent-logging.md",
+        "references/agent-operating-rules.md",
         "references/default-design-guide.md",
         "references/feature-status-schema.md",
-        "references/spec-format.md"
+        "references/spec-format.md",
+        "references/test-strategy.md"
       ]
     },
     "software-design-principles": {
       "version": "0.0.0",
-      "description": "Foundational engineering canon \u2013 SOLID, DRY, DTSTTCPW, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows) and project skills that need shared engineering vocabulary. Use when: designing a new module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape.",
+      "description": "Foundational engineering canon \u2013 SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when designing a module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape.",
       "experimental": false,
-      "updated_at": "2026-06-04T17:16:43Z",
+      "updated_at": "2026-06-11T05:17:13Z",
       "files": [
         "SKILL.md",
         "references/clean-code.md",
         "references/cross-cutting-concerns.md",
         "references/dry.md",
-        "references/dtsttcpw.md",
         "references/layered-architecture.md",
         "references/nfrs.md",
         "references/solid.md"
+      ]
+    },
+    "ui-ux-design-principles": {
+      "version": "0.0.0",
+      "description": "Experience-level engineering canon, the UI/UX counterpart to software-design-principles (code-level) and architectural-design-principles (system-level). Usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems and tokens, and testable UI. Imported by the lakebase-tdd-workflows UX Designer (authoring design-guide.{md,json} + ia.md and the adherence gate) and by the Driver building UI. Use when: shaping a design guide or information architecture, reviewing a user-facing surface, choosing a UI framework, or making the UI testable.",
+      "experimental": false,
+      "updated_at": "2026-06-11T05:21:45Z",
+      "files": [
+        "SKILL.md",
+        "references/accessibility.md",
+        "references/design-systems-and-tokens.md",
+        "references/information-architecture.md",
+        "references/interaction-and-feedback.md",
+        "references/testable-ui.md",
+        "references/usability-heuristics.md",
+        "references/visual-hierarchy.md"
       ]
     }
   }
