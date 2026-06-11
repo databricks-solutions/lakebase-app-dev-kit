@@ -35,6 +35,36 @@ describe("orchestratorLogEvents: pure action -> canonical log events", () => {
     expect(start!.feature_id).toBe("F1-initial-domain");
   });
 
+  it("stamps model + effort on the role phase.start (right after role) from the context resolvers", () => {
+    const ctx = {
+      featureId: "F1",
+      modelForRole: (role: string) => (role === "navigator" ? "sonnet" : "opus"),
+      effortForTurn: (_role: string, turn?: string) => (turn === "review" ? "low" : ""),
+    };
+    // Build REVIEW turn: navigator, effort low + model sonnet.
+    const review = orchestratorLogEvents(
+      { kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review", ac: "AC1" } as WorkflowAction,
+      ctx,
+    ).find((e) => e.event === "phase.start");
+    expect(review?.role).toBe("navigator");
+    expect(review?.model).toBe("sonnet");
+    expect(review?.effort).toBe("low");
+    // Design turn (spec-author): model opus, no effort (resolver returns "" => omitted).
+    const design = orchestratorLogEvents(
+      { kind: "invoke-role", role: "spec-author", story: "S1" } as WorkflowAction,
+      ctx,
+    ).find((e) => e.event === "phase.start");
+    expect(design?.model).toBe("opus");
+    expect(design?.effort).toBeUndefined();
+    // No resolvers -> no model/effort fields (back-compat).
+    const bare = orchestratorLogEvents(
+      { kind: "invoke-role", role: "driver", story: "S1" } as WorkflowAction,
+      { featureId: "F1" },
+    ).find((e) => e.event === "phase.start");
+    expect(bare?.model).toBeUndefined();
+    expect(bare?.effort).toBeUndefined();
+  });
+
   it("await-acceptance narrates the release-engineer handoff + phase.start (it is the invisible deploy actor)", () => {
     // The Release Engineer runs the deterministic deploy at await-acceptance, but
     // the deploy is a CLI and the RE's own model may stay silent. The orchestrator

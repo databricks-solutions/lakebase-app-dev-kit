@@ -19,6 +19,31 @@ import { renderEventMessage } from "./agent-log-events.js";
 
 export interface OrchestratorLogContext {
   featureId?: string;
+  /** Resolve the model a role's turn runs with (tdd-config). When given, the
+   *  per-turn `phase.start` event carries `model` (right after `role`). */
+  modelForRole?(role: string): string | undefined;
+  /** Resolve the --effort a role+turn runs with ("" / "default" => omit). When
+   *  given, the per-turn `phase.start` event carries `effort`. */
+  effortForTurn?(role: string, turn?: "red" | "green" | "review" | "refactor"): string | undefined;
+}
+
+/** The build turns whose effort can differ; design/deploy phases have no turn. */
+const BUILD_TURNS = new Set(["red", "green", "review", "refactor"]);
+
+/** model + effort fields for a role's per-turn event (omitted when unresolved /
+ *  "default"), so each turn's log line shows what it ran with, right after role. */
+function turnSettings(
+  ctx: OrchestratorLogContext,
+  role: string,
+  phase: string,
+): { model?: string; effort?: string } {
+  const turn = BUILD_TURNS.has(phase) ? (phase as "red" | "green" | "review" | "refactor") : undefined;
+  const model = ctx.modelForRole?.(role);
+  const effort = ctx.effortForTurn?.(role, turn);
+  return {
+    ...(model ? { model } : {}),
+    ...(effort && effort !== "default" ? { effort } : {}),
+  };
 }
 
 /** The story an action targets, if any (most build/design-lane actions carry one). */
@@ -59,7 +84,7 @@ export function orchestratorLogEvents(
       const detail = { ...withStory, ...(mode ? { mode } : {}), ...(buildMode ? { buildMode } : {}), ...(ac ? { ac } : {}) };
       return [
         { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
-        { role, level: "info", feature_id, event: "phase.start", slots: { phase, ...detail } },
+        { role, level: "info", feature_id, ...turnSettings(ctx, role, phase), event: "phase.start", slots: { phase, ...detail } },
       ];
     }
     case "surface-gate":
@@ -158,11 +183,15 @@ export function describeAction(action: WorkflowAction, ctx: OrchestratorLogConte
  * on every run with no LLM in the loop.
  */
 export function makeOnAction(
-  opts: AgentLogIoOpts & { featureId?: string },
+  opts: AgentLogIoOpts & {
+    featureId?: string;
+    modelForRole?(role: string): string | undefined;
+    effortForTurn?(role: string, turn?: "red" | "green" | "review" | "refactor"): string | undefined;
+  },
 ): (action: WorkflowAction, iteration: number) => void {
-  const { featureId, ...io } = opts;
+  const { featureId, modelForRole, effortForTurn, ...io } = opts;
   return (action) => {
-    for (const event of orchestratorLogEvents(action, { featureId })) {
+    for (const event of orchestratorLogEvents(action, { featureId, modelForRole, effortForTurn })) {
       // Best-effort: a logging failure must never abort the workflow.
       try {
         emitAgentLogEvent(event, io);

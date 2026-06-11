@@ -354,7 +354,17 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
       // Code-emit the orchestrator's lifecycle (handoff / phase.start /
       // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
       // so the structured trail is written every run with no LLM in the loop.
-      makeOnAction({ tddDir, featureId }),
+      // The resolvers stamp each per-turn phase.start with the model + effort it
+      // ran with (right after `role`).
+      makeOnAction({
+        tddDir,
+        featureId,
+        modelForRole: (role) => settings.models[role],
+        effortForTurn: (role, turn) => {
+          const e = settings.effortFor(role, turn);
+          return e === "default" ? "" : e;
+        },
+      }),
     ),
   };
 }
