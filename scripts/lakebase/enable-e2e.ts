@@ -38,6 +38,15 @@ export const PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
  */
 export const PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
 
+/**
+ * Version range applied to `pytest-bdd` when patching a Python project's
+ * pyproject.toml. The canon (test-strategy.md) authors AC behavior scenarios as
+ * pytest-bdd Gherkin (`.feature` + step defs); without the dep the navigator
+ * cannot `import pytest_bdd` and falls back to plain pytest, so it ships in the
+ * base Python scaffold AND is retrofit here.
+ */
+export const PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
+
 export interface AddPlaywrightToPackageJsonArgs {
   projectDir: string;
   /** Override the version range stamped into devDependencies. */
@@ -117,20 +126,24 @@ export interface AddPythonE2eDepsResult {
  * dev extras list is missing entirely, appends a minimal
  * `[project.optional-dependencies]` table.
  */
-export function ensurePythonE2eDeps(
-  args: AddPythonE2eDepsArgs
-): AddPythonE2eDepsResult {
-  const pyPath = path.join(args.projectDir, "pyproject.toml");
+/**
+ * Idempotently add one package to a Python project's
+ * `[project.optional-dependencies].dev` list in pyproject.toml (the single
+ * inserter `ensurePythonE2eDeps` + `ensurePythonBddDeps` share). No-ops if
+ * pyproject.toml is absent or the package is already declared; appends a minimal
+ * `[project.optional-dependencies]` table when the dev list is missing.
+ */
+function addPythonDevDep(projectDir: string, pkg: string, range: string): AddPythonE2eDepsResult {
+  const pyPath = path.join(projectDir, "pyproject.toml");
   if (!fs.existsSync(pyPath)) {
     return { patched: false, depAdded: false };
   }
   const original = fs.readFileSync(pyPath, "utf8");
   // Already declared in any form -> nothing to do (idempotent).
-  if (/["']pytest-playwright/.test(original)) {
+  if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
     return { patched: true, depAdded: false };
   }
-  const range = args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE;
-  const depLine = `    "pytest-playwright${range}",`;
+  const depLine = `    "${pkg}${range}",`;
   // Case 1: an existing `dev = [ ... ]` array (the kit scaffold shape). Insert
   // the new dep just before the closing bracket, preserving the rest verbatim.
   const devArray = /(\n[ \t]*dev[ \t]*=[ \t]*\[)([\s\S]*?)(\n[ \t]*\])/;
@@ -147,6 +160,20 @@ export function ensurePythonE2eDeps(
   const block = `\n[project.optional-dependencies]\ndev = [\n${depLine}\n]\n`;
   fs.writeFileSync(pyPath, trimmed + block, "utf8");
   return { patched: true, depAdded: true };
+}
+
+export function ensurePythonE2eDeps(args: AddPythonE2eDepsArgs): AddPythonE2eDepsResult {
+  return addPythonDevDep(args.projectDir, "pytest-playwright", args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE);
+}
+
+/**
+ * Idempotently add `pytest-bdd` to a Python project's dev extras, so the
+ * navigator can author AC behavior scenarios as Gherkin `.feature` + step defs
+ * (the canon's BDD test surface). Base Python scaffolds already declare it; this
+ * is the retrofit path for an existing project. No-ops if pyproject is absent.
+ */
+export function ensurePythonBddDeps(args: AddPythonE2eDepsArgs): AddPythonE2eDepsResult {
+  return addPythonDevDep(args.projectDir, "pytest-bdd", args.versionRange ?? PYTEST_BDD_VERSION_RANGE);
 }
 
 export interface AddE2eToRunTestsScriptArgs {
@@ -279,6 +306,10 @@ export function enableE2eForProject(
           files: PYTHON_E2E_TEMPLATE_FILES,
         })
       : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
+    // Python: retrofit pytest-bdd (AC behavior scenarios as Gherkin) into the dev
+    // extras; the pytest-playwright runner dep is wired below. Both no-op for
+    // non-Python shapes (no pyproject).
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
     return {
       templatesWritten: templates.written,
       templatesSkipped: templates.skipped,

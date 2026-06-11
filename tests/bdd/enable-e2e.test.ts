@@ -12,6 +12,7 @@ import {
   addE2eToRunTestsScript,
   addPlaywrightToPackageJson,
   ensurePythonE2eDeps,
+  ensurePythonBddDeps,
   enableE2eForProject,
   NODE_E2E_TEMPLATE_FILES,
   PYTHON_E2E_TEMPLATE_FILES,
@@ -190,6 +191,19 @@ describe("ensurePythonE2eDeps (pyproject dev-extras patch)", () => {
   it("no-ops when pyproject.toml is absent", () => {
     expect(ensurePythonE2eDeps({ projectDir })).toEqual({ patched: false, depAdded: false });
   });
+
+  it("ensurePythonBddDeps adds pytest-bdd (idempotent), preserving siblings", () => {
+    fs.writeFileSync(
+      py(),
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n]\n',
+    );
+    expect(ensurePythonBddDeps({ projectDir })).toEqual({ patched: true, depAdded: true });
+    const out = fs.readFileSync(py(), "utf8");
+    expect(out).toMatch(/pytest-bdd/);
+    expect(out).toMatch(/"pytest>=8\.0\.0"/);
+    expect(ensurePythonBddDeps({ projectDir })).toEqual({ patched: true, depAdded: false });
+    expect((fs.readFileSync(py(), "utf8").match(/pytest-bdd/g) ?? []).length).toBe(1);
+  });
 });
 
 describe("enableE2eForProject orchestrator", () => {
@@ -238,6 +252,7 @@ describe("enableE2eForProject orchestrator", () => {
     expect(result.pyproject.depAdded).toBe(true);
     const pyproject = fs.readFileSync(path.join(projectDir, "pyproject.toml"), "utf8");
     expect(pyproject).toMatch(/pytest-playwright/);
+    expect(pyproject).toMatch(/pytest-bdd/); // AC behavior scenarios authored as Gherkin
     expect(pyproject).toMatch(/"pytest>=8\.0\.0"/); // existing deps preserved
     expect(pyproject).toMatch(/"httpx>=0\.27\.0"/);
     // run-tests.sh patched: its block installs the browser then runs the suite.
