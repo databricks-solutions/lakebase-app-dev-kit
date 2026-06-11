@@ -55,6 +55,7 @@ describe("smells catalog", () => {
         "e2e-row-perma-red",
         "fragility-ratio",
         "import-time-build-coupling",
+        "scaffold-defect",
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",

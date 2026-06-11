@@ -108,7 +108,7 @@ Every AC declares a `layer` ("API" / "E2E" / "Infra" in `ac.schema.json`). The D
 | AC.layer | tag | Default runner | Notes |
 |---|---|---|---|
 | `API` | `api` | `npm test` (Node), `./mvnw test` (Java/Kotlin), `uv run pytest` (Python) | The project's primary test runner. Driver runs it as-is. |
-| `E2E` | `e2e` | `npm run test:e2e` (alias for `playwright test`) | Wired by `lakebase-create-project --enable-e2e`. Driver must export `BASE_URL` pointing at the paired-branch app endpoint before invoking. |
+| `E2E` | `e2e` | `npm run test:e2e` (Node, alias for `playwright test`) or `uv run --extra dev pytest tests/e2e` (Python, pytest-playwright) | Wired by `lakebase-create-project --enable-e2e` (ships the Node `playwright.config.ts` + smoke for Node, the `tests/e2e/conftest.py` `live_server` fixture for Python). Driver exports `BASE_URL` at the paired-branch app endpoint before invoking; `scripts/run-tests.sh` runs whichever matches the project. A missing `tests/e2e/conftest.py` is a `scaffold-defect` to surface, never author it in the build. |
 | `Infra` | `infra` | `npm run test:infra` (alias for `lakebase-infra-runner`) | Wired by `lakebase-create-project --enable-infra`. Ships three substrate-side checks: migrations-clean, schema-diff-computable, connection-reachable. JUnit XML output via `--junit-output` matches vitest's reporter shape. When no runner is wired, the Driver flags the cycle and surfaces to PO; do not silent-skip. |
 
 Each cycle records its runner outcome via `recordRunnerOutcome({ scope, cycleId, experimentSlug, layer, passed })`. The substrate uses these counts for `outcomes.by_tag`, the `e2e-row-perma-red` smell detector, and the design-spec gate guard.

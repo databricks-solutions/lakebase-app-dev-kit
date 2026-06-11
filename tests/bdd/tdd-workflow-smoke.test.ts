@@ -115,15 +115,17 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     expect(runSmoke).toMatch(/lakebase-tdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model + effort: only navigator + test-strategist pinned to opus, rest default, effort=low for all", () => {
-    // Perf-experiment matrix: pin ONLY the two capability-critical roles to opus,
-    // the navigator (writes the RED tests + reviews the design) and the
-    // test-strategist (the structured test-list whose every ac_id must map to a
-    // real AC). Every other role keeps its kit-default model (left unpinned).
+  it("tiers roles for the smoke via --agent-model + effort: navigator + test-strategist + ux-designer pinned to opus, rest default, effort=low for all", () => {
+    // Perf-experiment matrix: pin the capability-critical roles to opus, the
+    // navigator (writes the RED tests + reviews the design), the test-strategist
+    // (the structured test-list whose every ac_id must map to a real AC), and the
+    // ux-designer (the design system + IA the UI build adheres to). Every other
+    // role keeps its kit-default model (left unpinned).
     expect(runSmoke).toMatch(/--agent-model navigator=opus/);
     expect(runSmoke).toMatch(/--agent-model test-strategist=opus/);
+    expect(runSmoke).toMatch(/--agent-model ux-designer=opus/);
     // The rest are default: NOT pinned via --agent-model at all.
-    for (const role of ["spec-author", "architect-reviewer", "ux-designer", "product-owner", "release-engineer", "driver"]) {
+    for (const role of ["spec-author", "architect-reviewer", "product-owner", "release-engineer", "driver"]) {
       expect(runSmoke, `${role} should keep its kit default (not pinned)`).not.toMatch(
         new RegExp(`--agent-model ${role}=`),
       );

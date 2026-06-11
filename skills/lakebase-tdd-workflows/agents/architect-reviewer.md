@@ -87,10 +87,11 @@ Surface to the PO: a one-paragraph layer-assignment summary, the cross-cutting m
 ## Logging
 
 Via `./scripts/lk lakebase-tdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role architect-reviewer --feature <id>`:
-- `artifact.written` for `architecture.json` + `architecture.md` (note NFR count, e.g. `--data '{"nfrs":7}'`).
 - `gate.surfaced` when you present NFRs + decisions at Gate 2; `reasoning` for layer assignments + each NFR.
 - `concern.flagged --slot concern=<name> --slot owner_layer=<layer>` when a cross-cutting concern has no clear owner.
 - **HITL (Gate 2):** after `gate.surfaced`, record the actual `--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=plan` before proceeding (Human Proxy records it headless).
+
+Emit only your judgment events. The orchestrator code-emits the lifecycle (`phase.*`, `handoff`, `artifact.written`) with the correct feature scope; do NOT emit those yourself.
 
 ## Rules
 

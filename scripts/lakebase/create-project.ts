@@ -256,7 +256,7 @@ export async function createProject(
   // ── Step 5c: Playwright E2E wire-up (phase 2) ────────
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir });
+    const e2e = enableE2eForProject({ projectDir, language });
     if (e2e.templatesWritten.length > 0) {
       report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
     }

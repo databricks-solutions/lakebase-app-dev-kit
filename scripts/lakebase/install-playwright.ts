@@ -51,22 +51,39 @@ function commonDir(opts?: InstallPlaywrightOptions): string {
   return path.join(opts?.templatesDir ?? findTemplatesDir(), "common");
 }
 
-/** Files this primitive drops into a project root, relative to projectDir. */
-export const PLAYWRIGHT_TEMPLATE_FILES = [
+/** Node-only E2E templates: the Playwright config + a TS smoke spec. These
+ *  write `playwright.config.*`, which CI gates its E2E step on, so they ship
+ *  ONLY into Node projects (a root package.json), never into Python/Java. */
+export const NODE_E2E_TEMPLATE_FILES = [
   "playwright.config.ts",
   path.join("tests", "e2e", "smoke.spec.ts"),
-  // The canonical `live_server` fixture. Shipped (not agent-authored) so every
-  // UI project gets a fixture that inherits the env (CI's DATABASE_URL wins) +
-  // polls readiness, instead of a hand-rolled one that pins `--env-file .env`
-  // and sleeps a fixed time , the dev/prod CI-parity bug where E2E pass in the
-  // build lane (live local .env) but fail in PR CI with ERR_CONNECTION_REFUSED.
+] as const;
+
+/** Python-only E2E template: the canonical `live_server` fixture (a Python
+ *  file). Shipped (not agent-authored) so every Python UI project gets a fixture
+ *  that inherits the env (CI's DATABASE_URL wins) + polls readiness, instead of
+ *  a hand-rolled one that pins `--env-file .env` and sleeps a fixed time , the
+ *  dev/prod CI-parity bug where E2E pass in the build lane (live local .env) but
+ *  fail in PR CI with ERR_CONNECTION_REFUSED. It carries no `playwright.config.*`,
+ *  so it does not trip CI's Node E2E gate. */
+export const PYTHON_E2E_TEMPLATE_FILES = [
   path.join("tests", "e2e", "conftest.py"),
+] as const;
+
+/** All E2E templates this primitive can drop. Back-compat default for
+ *  writePlaywrightTemplates; callers should pass the language-specific set. */
+export const PLAYWRIGHT_TEMPLATE_FILES = [
+  ...NODE_E2E_TEMPLATE_FILES,
+  ...PYTHON_E2E_TEMPLATE_FILES,
 ] as const;
 
 export interface WritePlaywrightTemplatesArgs extends InstallPlaywrightOptions {
   projectDir: string;
   /** Overwrite an existing playwright.config.ts / smoke fixture. Default: false. */
   force?: boolean;
+  /** The template files to write (relative to projectDir). Defaults to the full
+   *  set; callers pass the language-specific subset (NODE_/PYTHON_E2E_TEMPLATE_FILES). */
+  files?: readonly string[];
 }
 
 export interface WritePlaywrightTemplatesResult {
@@ -88,7 +105,7 @@ export function writePlaywrightTemplates(
   const src = commonDir(args);
   const written: string[] = [];
   const skipped: string[] = [];
-  for (const rel of PLAYWRIGHT_TEMPLATE_FILES) {
+  for (const rel of args.files ?? PLAYWRIGHT_TEMPLATE_FILES) {
     const from = path.join(src, rel);
     if (!fs.existsSync(from)) {
       throw new Error(`Kit template missing: ${from}`);

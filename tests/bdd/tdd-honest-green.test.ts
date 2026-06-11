@@ -26,6 +26,7 @@ import {
   readEscalations,
   firstPendingEscalation,
   escalationsFromSmells,
+  recordBlockingSmellFlag,
   BLOCKING_SMELLS,
 } from "../../scripts/tdd/escalation.js";
 import { writeSmellsLog } from "../../scripts/tdd/smells.js";
@@ -156,6 +157,25 @@ describe("escalation module", () => {
     writeSmellsLog(tdd, [{ smell: "test-cost-spiral", cycle_ids: ["cycle-002"], detail: "tests doubling" }]);
     expect(escalationsFromSmells(tdd, F).length).toBe(0);
     expect(firstPendingEscalation(tdd, F)).toBeNull();
+  });
+
+  describe("recordBlockingSmellFlag (mirror a flagged blocking smell into smells.json so the loop halts)", () => {
+    it("persists a BLOCKING smell (scaffold-defect) -> firstPendingEscalation halts", () => {
+      expect(BLOCKING_SMELLS.has("scaffold-defect")).toBe(true);
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "tests/e2e/conftest.py missing")).toBe(true);
+      const e = firstPendingEscalation(tdd, F);
+      expect(e?.source).toBe("smell:scaffold-defect");
+      expect(e?.reason).toMatch(/conftest\.py missing/);
+    });
+
+    it("is idempotent (a still-open dup is not re-written) and ignores advisory/unknown names", () => {
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "first")).toBe(true);
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "second")).toBe(false); // dup
+      expect(recordBlockingSmellFlag(tdd, "test-cost-spiral", "advisory")).toBe(false); // not blocking
+      expect(recordBlockingSmellFlag(tdd, "not-a-real-smell", "x")).toBe(false); // unknown
+      // Only the one blocking entry made it in.
+      expect(escalationsFromSmells(tdd, F).length).toBe(1);
+    });
   });
 });
 

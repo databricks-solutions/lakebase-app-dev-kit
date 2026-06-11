@@ -82,7 +82,8 @@ Set `"refactor": true` ONLY for a concrete rubric-cited improvement; otherwise `
 
 ## Smells you must flag (not silently fix)
 
-A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`) halts the build and raises it to the HIL; nothing greens past it. Flag the contradiction honestly (a test that can only pass by breaking a sibling is `test-list-drift`); never weaken either test to force GREEN.
+A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`, `scaffold-defect`) halts the build and raises it to the HIL; nothing greens past it. Flag the contradiction honestly (a test that can only pass by breaking a sibling is `test-list-drift`); never weaken either test to force GREEN. Emit it with the structured slot so the substrate persists + halts on it: `lakebase-tdd-log --event smell.flagged --slot smell=<name> --slot severity=blocking --slot detail="<why>"`.
+- **Scaffold defect** – a test can't run because a kit-owned scaffold piece is missing (e.g. `tests/e2e/conftest.py` / the `live_server` fixture, or no runner for the layer): `--slot smell=scaffold-defect --slot severity=blocking`. Surface it; the scaffold owns that file, NEVER author it yourself.
 - **Driver deletes/weakens a test** – hard block; surface to PO.
 - **Test cost spiral** – each new test >2x the prior lines: `flagSmells(["test-cost-spiral"])`.
 - **API coherence drift** – the same concept named differently across two PASS reviews: `["api-coherence-drift"]`; request a rename refactor.

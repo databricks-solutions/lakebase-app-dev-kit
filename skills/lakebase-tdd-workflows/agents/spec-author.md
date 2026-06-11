@@ -91,8 +91,9 @@ Surface to the PO: the feature/story/AC structure, the restated scope boundaries
 ## Logging
 
 Via `./scripts/lk lakebase-tdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role spec-author --feature <id>`:
-- `phase.start` / `phase.end` (discovery boundaries); `artifact.written` per `feature-spec.json` / story / AC (`--data '{"path":"...","conformant":true}'`).
-- `reasoning` for scope calls; `open.question` per boundary question; `handoff` when the draft is ready for the Architect.
+- `reasoning` for scope calls; `open.question` per boundary question.
+
+Emit only your judgment events. The orchestrator code-emits the lifecycle (`phase.*`, `handoff`, `artifact.written`) with the correct feature scope; do NOT emit those yourself.
 - **HITL (Gate 1):** `gate.surfaced` when you hand off, then record the actual `--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=spec` before proceeding (Human Proxy records it headless).
 
 ## Rules

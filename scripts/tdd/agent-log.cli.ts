@@ -21,6 +21,7 @@ import {
   type AgentLogEventName,
 } from "./agent-log.js";
 import { reconcileArtifactLog } from "./log-reconcile.js";
+import { recordBlockingSmellFlag } from "./escalation.js";
 
 interface ParsedArgs {
   read?: boolean;
@@ -169,6 +170,16 @@ export function runAgentLogCli(argv: string[]): number {
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });
+    // A role-flagged BLOCKING smell must HALT the loop, not just log: mirror it
+    // into smells.json so the driver's firstPendingEscalation -> raise-to-hil
+    // fires before the next dispatch. No-op for advisory/unknown smell names.
+    if (a.event === "smell.flagged" && typeof slots.smell === "string") {
+      recordBlockingSmellFlag(
+        a.tddDir ?? "./.tdd",
+        slots.smell,
+        typeof slots.detail === "string" ? slots.detail : undefined,
+      );
+    }
     return 0;
   } catch (e) {
     process.stderr.write(`lakebase-tdd-log: ${(e as Error).message}\n`);

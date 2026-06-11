@@ -56,7 +56,7 @@ You do NOT write cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRe
 2. Write the code that makes the failing test pass. The test list is your horizon; the *current* test is your increment.
 3. **Dispatch on the AC's layer** to pick the runner:
    - `API` -> the project's primary runner (`npm test`, `./mvnw test`, `uv run pytest`).
-   - `E2E` -> `npm run test:e2e`. First export `BASE_URL` pointing at the paired-branch app endpoint (the kit's `playwright.config.ts` reads it from env).
+   - `E2E` -> the project's e2e runner: `npm run test:e2e` (Node) or `uv run --extra dev pytest tests/e2e` (Python). First export `BASE_URL` at the paired-branch app endpoint. The shipped `tests/e2e/conftest.py` provides `live_server`; **if it's missing, flag `scaffold-defect` and STOP, never author your own conftest/fixture** (a hand-rolled one diverges from the shipped fixture + reintroduces the CI-parity bug). The scaffold (`--enable-e2e`) owns that file.
    - `Infra` -> the project's infra runner (e.g. `lakebase-schema-migrate`, a schema-diff smoke, `npm run test:infra`). No runner wired? Flag the cycle and surface to the PO, never silent-skip.
    - See SKILL's `tag → runner map` for the full table.
 4. Run that command against the experiment branch's `.env`-pointed DB and confirm the previously-failing test now passes (and only it changed `pending` -> green).
@@ -84,6 +84,7 @@ Via `./scripts/lk lakebase-tdd-log` (see [agent-logging.md](../references/agent-
 3. **Never make a private method public to test it.** If the public boundary can't exercise the behavior, the design is wrong.
 4. **Never change tests during REFACTOR.** A correct refactor preserves outer-boundary tests verbatim.
 5. **No mocks for the database.** Tests hit the experiment branch's real DB via `openBranchDsn`.
+6. **Never fabricate a missing kit scaffold.** A missing `tests/e2e/conftest.py` / `live_server` fixture (or any kit-owned scaffold piece) is a `scaffold-defect` to flag + surface, not a cue to author it yourself. The shipped fixture inherits the env + polls readiness; a hand-rolled one reintroduces the CI `ERR_CONNECTION_REFUSED` parity bug.
 
 ## Smells you must surface (via the Navigator's flagSmells)
 

@@ -1,6 +1,6 @@
 {
   "version": "2",
-  "updated_at": "2026-06-11T05:55:22Z",
+  "updated_at": "2026-06-11T07:38:26Z",
   "skills": {
     "architectural-design-principles": {
       "version": "0.0.0",
@@ -66,7 +66,7 @@
       "version": "0.0.0",
       "description": "Test-driven development against paired Lakebase branches. Canonical Beck-style RED-GREEN-REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
       "experimental": false,
-      "updated_at": "2026-06-11T05:18:19Z",
+      "updated_at": "2026-06-11T07:19:00Z",
       "files": [
         "README.md",
         "SKILL.md",

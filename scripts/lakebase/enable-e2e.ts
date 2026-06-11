@@ -17,6 +17,8 @@ import * as path from "node:path";
 import {
   writePlaywrightTemplates,
   PLAYWRIGHT_TEMPLATE_FILES,
+  NODE_E2E_TEMPLATE_FILES,
+  PYTHON_E2E_TEMPLATE_FILES,
 } from "./install-playwright.js";
 
 /**
@@ -131,6 +133,12 @@ export function addE2eToRunTestsScript(
     "  else",
     '    (cd "$REPO_ROOT" && npx --yes playwright test)',
     "  fi",
+    // Python E2E: pytest-playwright + the shipped tests/e2e/conftest.py
+    // (live_server). Gated on the conftest + pyproject so it only fires for a
+    // Python project that has the E2E harness, never on a bare API project.
+    'elif [ -f "$REPO_ROOT/tests/e2e/conftest.py" ] && [ -f "$REPO_ROOT/pyproject.toml" ]; then',
+    '  echo "Running Python E2E tests (pytest tests/e2e)..."',
+    '  (cd "$REPO_ROOT" && uv run --extra dev pytest tests/e2e)',
     "fi",
     "",
   ].join("\n");
@@ -146,6 +154,11 @@ export interface EnableE2eForProjectArgs {
   templatesDir?: string;
   /** Override the @playwright/test version range. */
   versionRange?: string;
+  /** Project language. Decides which E2E templates ship: Node gets the
+   *  playwright.config + TS smoke; Python gets the `live_server` conftest.
+   *  When omitted, falls back to package.json (Node) / pyproject.toml (Python)
+   *  detection so retrofits work without it. */
+  language?: string;
 }
 
 export interface EnableE2eForProjectResult {
@@ -176,13 +189,29 @@ export function enableE2eForProject(
   // write when there's nowhere to wire it keeps the CI step from
   // firing at all (it's gated on hashFiles('playwright.config.*')).
   const rootPkg = path.join(args.projectDir, "package.json");
-  if (!fs.existsSync(rootPkg)) {
+  const isNode =
+    args.language === "nodejs" || args.language === "node" || fs.existsSync(rootPkg);
+  if (!isNode) {
+    // Non-Node project. Ship the language-appropriate E2E templates: a Python
+    // project still needs its `tests/e2e/conftest.py` (the `live_server`
+    // fixture), the prior all-or-nothing early-return dropped it, so the build
+    // hit a missing conftest and the driver fabricated its own. It carries no
+    // `playwright.config.*`, so CI's Node E2E gate stays quiet.
+    const isPython =
+      args.language === "python" ||
+      fs.existsSync(path.join(args.projectDir, "pyproject.toml"));
+    const templates = isPython
+      ? writePlaywrightTemplates({
+          projectDir: args.projectDir,
+          force: args.force,
+          templatesDir: args.templatesDir,
+          files: PYTHON_E2E_TEMPLATE_FILES,
+        })
+      : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
     return {
-      templatesWritten: [],
-      // Same shape as writePlaywrightTemplates would have returned; the
-      // template paths show up under skipped with the npm-wiring caveat
-      // captured in packageJson.patched=false.
-      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      templatesWritten: templates.written,
+      templatesSkipped: templates.skipped,
+      // No package.json to wire (the caveat the report surfaces).
       packageJson: { patched: false, scriptAdded: false, depAdded: false },
       runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir }),
     };
@@ -191,6 +220,7 @@ export function enableE2eForProject(
     projectDir: args.projectDir,
     force: args.force,
     templatesDir: args.templatesDir,
+    files: NODE_E2E_TEMPLATE_FILES,
   });
   const packageJson = addPlaywrightToPackageJson({
     projectDir: args.projectDir,
@@ -206,4 +236,8 @@ export function enableE2eForProject(
 }
 
 /** Re-export so consumers can import everything from one module. */
-export { PLAYWRIGHT_TEMPLATE_FILES };
+export {
+  PLAYWRIGHT_TEMPLATE_FILES,
+  NODE_E2E_TEMPLATE_FILES,
+  PYTHON_E2E_TEMPLATE_FILES,
+};

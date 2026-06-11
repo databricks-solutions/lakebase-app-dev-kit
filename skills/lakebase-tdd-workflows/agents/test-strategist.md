@@ -75,9 +75,10 @@ Surface to the PO: the ordered list with rationale, items deferred (with reason)
 ## Logging
 
 Via `./scripts/lk lakebase-tdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role test-strategist --feature <id>`:
-- `artifact.written` for `test-list.json` + rendered `test-list.md` (note item count).
 - `gate.surfaced` at Gate 3; `reasoning` for the `ordered_for` rationale; `smell.flagged` for any test needing implementation first.
 - **HITL (Gate 3):** after `gate.surfaced`, record the human's actual `--role product-owner --event gate.approved|gate.modified|gate.rejected --slot gate=test_list` before proceeding (Human Proxy records it headless).
+
+Emit only your judgment events. The orchestrator code-emits the lifecycle (`phase.*`, `handoff`, `artifact.written`) with the correct feature scope; do NOT emit those yourself.
 
 ## Rules
 

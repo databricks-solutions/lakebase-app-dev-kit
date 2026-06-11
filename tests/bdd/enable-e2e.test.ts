@@ -12,7 +12,8 @@ import {
   addE2eToRunTestsScript,
   addPlaywrightToPackageJson,
   enableE2eForProject,
-  PLAYWRIGHT_TEMPLATE_FILES,
+  NODE_E2E_TEMPLATE_FILES,
+  PYTHON_E2E_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
 } from "../../scripts/lakebase/enable-e2e.js";
 
@@ -148,17 +149,39 @@ describe("enableE2eForProject orchestrator", () => {
   });
   afterEach(() => rmTempProject(projectDir));
 
-  it("drops templates, patches package.json, and patches run-tests.sh", () => {
+  it("Node project: drops the NODE e2e templates, patches package.json + run-tests.sh (no Python conftest)", () => {
     seedNodeProject(projectDir);
     seedRunTestsScript(projectDir);
-    const result = enableE2eForProject({ projectDir, templatesDir: REPO_TEMPLATES });
-    expect(result.templatesWritten.sort()).toEqual([...PLAYWRIGHT_TEMPLATE_FILES].sort());
+    const result = enableE2eForProject({ projectDir, language: "nodejs", templatesDir: REPO_TEMPLATES });
+    expect(result.templatesWritten.sort()).toEqual([...NODE_E2E_TEMPLATE_FILES].sort());
     expect(result.packageJson.scriptAdded).toBe(true);
     expect(result.packageJson.depAdded).toBe(true);
     expect(result.runTestsScript.inserted).toBe(true);
-    for (const rel of PLAYWRIGHT_TEMPLATE_FILES) {
+    for (const rel of NODE_E2E_TEMPLATE_FILES) {
       expect(fs.existsSync(path.join(projectDir, rel))).toBe(true);
     }
+    // The Python live_server conftest must NOT ship into a Node project.
+    for (const rel of PYTHON_E2E_TEMPLATE_FILES) {
+      expect(fs.existsSync(path.join(projectDir, rel))).toBe(false);
+    }
+  });
+
+  it("Python project: ships tests/e2e/conftest.py (live_server), NOT the Node playwright.config", () => {
+    // Regression for the E2E-on-Python scaffold gap: a Python project (no
+    // package.json, has pyproject.toml) must get its live_server conftest, the
+    // prior all-or-nothing early-return dropped it and the driver fabricated one.
+    fs.writeFileSync(path.join(projectDir, "pyproject.toml"), "[project]\nname = \"x\"\n");
+    seedRunTestsScript(projectDir);
+    const result = enableE2eForProject({ projectDir, language: "python", templatesDir: REPO_TEMPLATES });
+    expect(result.templatesWritten).toEqual([...PYTHON_E2E_TEMPLATE_FILES]);
+    expect(fs.existsSync(path.join(projectDir, "tests", "e2e", "conftest.py"))).toBe(true);
+    // No package.json to wire, and the Node config must NOT ship (it would trip CI's E2E gate).
+    expect(result.packageJson).toEqual({ patched: false, scriptAdded: false, depAdded: false });
+    expect(fs.existsSync(path.join(projectDir, "playwright.config.ts"))).toBe(false);
+    // run-tests.sh patched, and its block now runs the Python e2e suite.
+    expect(result.runTestsScript.inserted).toBe(true);
+    const runTests = fs.readFileSync(path.join(projectDir, "scripts", "run-tests.sh"), "utf8");
+    expect(runTests).toMatch(/pytest tests\/e2e/);
   });
 
   it("is safe on non-Node projects: templates SKIPPED, package.json untouched, run-tests.sh still patched", () => {

@@ -86,8 +86,10 @@ Surface to the PO: the IA (screens + flows), the design guide (or its changes), 
 ## Logging
 
 Via `./scripts/lk lakebase-tdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role ux-designer --feature <id>`:
-- `artifact.written` per `design-guide.md` / `design-guide.json` / `ia.md`; `reasoning` for token + IA choices (cite the reference each came from).
-- `--level error --event adherence.failed` when the adherence check (Playwright `:root` vs `design-guide.json`) fails; `handoff` when the design system + IA are ready for the Architect.
+- `reasoning` for token + IA choices (cite the reference each came from).
+- `--level error --event adherence.failed` when the adherence check (Playwright `:root` vs `design-guide.json`) fails.
+
+Emit only your judgment events. The orchestrator code-emits the lifecycle (`phase.*`, `handoff`, `artifact.written`) with the correct feature scope; do NOT emit those yourself (a hand-emitted one mislabels the scope, e.g. the project name instead of the feature id).
 
 ## Rules
 

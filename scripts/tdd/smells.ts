@@ -14,6 +14,7 @@ export type SmellName =
   | "test-deletion-attempt"
   | "boundary-violation"
   | "import-time-build-coupling"
+  | "scaffold-defect"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -81,6 +82,18 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "Guard the coupling: mount the compiled client ONLY when its directory exists, and " +
       "serve a clear 503 from the SPA route when index.html is absent, so the module imports " +
       "without the artifact. See the dev/prod-parity rule in software-design-principles.",
+  },
+  {
+    name: "scaffold-defect",
+    description:
+      "A test cannot run because the project scaffold is missing a piece the kit owns " +
+      "(e.g. tests/e2e/conftest.py + the live_server fixture for an E2E AC, or an absent " +
+      "runner). The role flags it instead of fabricating the missing scaffold itself. " +
+      "Blocking: a fabricated fixture diverges from the shipped one + reintroduces the " +
+      "CI-parity bugs the kit template prevents.",
+    proposed_remediation:
+      "Halt + surface to the HIL. Fix the scaffold (re-run the kit's wiring, e.g. " +
+      "--enable-e2e for the project's language), never hand-author the missing piece in the build.",
   },
   {
     name: "e2e-row-perma-red",
