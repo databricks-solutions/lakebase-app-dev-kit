@@ -78,6 +78,15 @@ That's it for RED. The orchestration stamps the RED cycle for the test you just 
 
 The orchestrator's per-turn directive tells you the exact scope: normally ONE test (the next in order), but it may instead name a **layer-batch** , a set of same-layer tests to write together in one turn. Write EXACTLY the tests it names (all of them, and only them); the orchestration stamps a single cycle for exactly those ids, so adding, dropping, or reordering is a defect either way.
 
+### E2E-layer ACs (browser tests)
+
+For an AC tagged `layer: E2E`, the test is a real **Playwright browser test**, and where + how you write it is fixed by the scaffold , do not improvise:
+
+- Put it under **`tests/e2e/`** (e.g. `tests/e2e/test_<thing>.py`), NEVER under `tests/` , the project ships `tests/e2e/conftest.py` and the e2e Playwright config there.
+- **Use the provided `live_server` fixture** (`def test_x(page: Page, live_server: str): page.goto(live_server + "/...")`). Do NOT inline your own server startup (no `uvicorn`/`subprocess`/threading in the test file) and do NOT substitute FastAPI's in-process `TestClient` , an E2E AC must exercise the running app through a browser. The shipped `live_server` already starts the app correctly (inherits the env so CI's DB creds win, polls readiness); hand-rolling one re-introduces the CI-parity failure (`ERR_CONNECTION_REFUSED` in PR CI). If `tests/e2e/conftest.py` is absent, that is a scaffold defect to surface, not a cue to write your own fixture.
+
+An E2E AC satisfied by an in-process `TestClient` test, or by a browser test with a hand-rolled server, does NOT meet the E2E layer contract.
+
 ## REVIEW (per AC, once all its tests are green)
 
 The orchestration invokes you in REVIEW mode for an AC after every test for that AC is green. Inspect the AC's diff **against the rubric documents**:

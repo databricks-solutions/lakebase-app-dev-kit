@@ -254,6 +254,25 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(approve.args).toContain("human-proxy");
   });
 
+  it("approve-promote-gate supplies a non-empty --promote-ref (else the gate skips + the driver stalls)", () => {
+    // The promote-phase stall: the Human Proxy SKIPS the promote gate without a
+    // promote_ref ("nothing to promote"), so the orchestrator MUST pass one or
+    // the gate never approves and approve-promote-gate loops forever. The ref is
+    // the feature's canonical branch (what gets merged into the parent tier).
+    const cmd = commandsForAction({ kind: "approve-promote-gate" }, cfg({ featureBranch: "feature-f1" }))[0] as { args: string[] };
+    expect(cmd.args).toContain("--gate");
+    expect(cmd.args[cmd.args.indexOf("--gate") + 1]).toBe("promote");
+    expect(cmd.args).toContain("--promote-ref");
+    expect(cmd.args[cmd.args.indexOf("--promote-ref") + 1]).toBe("feature-f1");
+  });
+
+  it("approve-promote-gate falls back to the feature id when no featureBranch is set", () => {
+    const cmd = commandsForAction({ kind: "approve-promote-gate" }, cfg())[0] as { args: string[] };
+    const ref = cmd.args[cmd.args.indexOf("--promote-ref") + 1];
+    expect(ref).toBe("F1");
+    expect(ref.length).toBeGreaterThan(0);
+  });
+
   it("cut-experiment routes to a COMPLETE lakebase-tdd-experiment cut command", () => {
     const cmds = commandsForAction({ kind: "cut-experiment", story: "S1" }, cfg({ featureBranch: "feature/x" }));
     const cmd = cmds[0] as { bin: string; args: string[] };
@@ -558,12 +577,15 @@ describe("commandsForAction: promote phase (PR review + merge to parent)", () =>
     ]);
   });
 
-  it("approve-promote-gate approves the `promote` gate via the Human Proxy", () => {
+  it("approve-promote-gate approves the `promote` gate via the Human Proxy (with a promote-ref)", () => {
     const cmds = commandsForAction({ kind: "approve-promote-gate" }, cfg());
     expect(cmds).toHaveLength(1);
     expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-tdd-human-proxy" });
+    // The promote gate REQUIRES a non-empty promote_ref or the Human Proxy skips it
+    // (and the driver stalls), so the orchestrator always supplies one (the feature
+    // being promoted; falls back to the feature id when no featureBranch is set).
     expect((cmds[0] as { args: string[] }).args).toEqual(
-      ["--feature", "F1", "--gate", "promote", "--approver", "human-proxy", "--tdd-dir", "/p/.tdd"],
+      ["--feature", "F1", "--gate", "promote", "--approver", "human-proxy", "--tdd-dir", "/p/.tdd", "--promote-ref", "F1"],
     );
   });
 });
