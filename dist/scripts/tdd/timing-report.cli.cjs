@@ -6738,6 +6738,10 @@ var EVENT_TEMPLATES = {
   // UX adherence
   "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
   "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Per-turn model usage (code-emitted by the runner from the claude -p result).
+  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
+  // cache_* + cost_usd ride in metadata (not template slots, so not required).
+  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
   // Generic (agent-emitted; debug / interim)
   "reasoning": { template: "{{note}}" },
   "progress": { template: "{{note}} , {{step}}" }

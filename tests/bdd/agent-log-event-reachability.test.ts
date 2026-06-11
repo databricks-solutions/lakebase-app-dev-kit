@@ -87,6 +87,9 @@ const CODE_EMITTED = new Set<string>([
   "gate.surfaced", "gate.approved", "gate.rejected",
   "handoff", "phase.start", "phase.end",
   "intake.supplied", "intake.refused",
+  // The runner emits this from each claude -p turn's stream-json result event
+  // (the per-turn context size + token usage).
+  "turn.usage",
   "reasoning",
 ]);
 

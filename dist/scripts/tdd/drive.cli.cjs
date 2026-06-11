@@ -7760,6 +7760,10 @@ var EVENT_TEMPLATES = {
   // UX adherence
   "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
   "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Per-turn model usage (code-emitted by the runner from the claude -p result).
+  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
+  // cache_* + cost_usd ride in metadata (not template slots, so not required).
+  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
   // Generic (agent-emitted; debug / interim)
   "reasoning": { template: "{{note}}" },
   "progress": { template: "{{note}} , {{step}}" }
@@ -9090,6 +9094,57 @@ function resolveTddSettings(inputs) {
   return { models, fallbackModels, budgets, effortFor, build, plan, project };
 }
 
+// scripts/tdd/claude-usage.ts
+init_cjs_shims();
+function numOr(v, fallback) {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+function usageFromResultEvent(ev) {
+  if (!ev || ev.type !== "result" || !ev.usage) return void 0;
+  const u = ev.usage;
+  const usage = {
+    inputTokens: numOr(u.input_tokens, 0),
+    outputTokens: numOr(u.output_tokens, 0)
+  };
+  if (typeof u.cache_read_input_tokens === "number") usage.cacheReadTokens = u.cache_read_input_tokens;
+  if (typeof u.cache_creation_input_tokens === "number") usage.cacheCreationTokens = u.cache_creation_input_tokens;
+  if (typeof ev.total_cost_usd === "number") usage.costUsd = ev.total_cost_usd;
+  return usage;
+}
+function parseTurnUsage(streamJson) {
+  const lines = Array.isArray(streamJson) ? streamJson : streamJson.split("\n");
+  let last;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed[0] !== "{") continue;
+    let ev;
+    try {
+      ev = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const u = usageFromResultEvent(ev);
+    if (u) last = u;
+  }
+  return last;
+}
+function assistantTextFromLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed[0] !== "{") return "";
+  let ev;
+  try {
+    ev = JSON.parse(trimmed);
+  } catch {
+    return "";
+  }
+  if (ev.type !== "assistant" || !ev.message || !Array.isArray(ev.message.content)) return "";
+  const parts = [];
+  for (const block of ev.message.content) {
+    if (block?.type === "text" && typeof block.text === "string") parts.push(block.text);
+  }
+  return parts.join("");
+}
+
 // scripts/tdd/run-config.ts
 init_cjs_shims();
 var import_fs12 = require("fs");
@@ -9371,6 +9426,24 @@ function spawnCmd(bin, args, cwd) {
     child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
   });
 }
+function spawnClaudeStreaming(args, cwd) {
+  return new Promise((resolve2, reject) => {
+    const child = (0, import_node_child_process9.spawn)("claude", args, { cwd, stdio: ["inherit", "pipe", "inherit"] });
+    const lines = [];
+    const rl = readline.createInterface({ input: child.stdout });
+    rl.on("line", (line) => {
+      lines.push(line);
+      const text = assistantTextFromLine(line);
+      if (text) process.stderr.write(text);
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      rl.close();
+      if (code !== 0) return reject(new Error(`claude exited ${code}`));
+      resolve2(parseTurnUsage(lines));
+    });
+  });
+}
 var KIT_ROOT = path5.resolve(__dirname, "..", "..", "..");
 var kitBinMap = null;
 function resolveKitBinJs(bin) {
@@ -9440,7 +9513,7 @@ function execRunner(cfg) {
           process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent
 `);
         }
-        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config"];
+        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
         if (cmd.effort) args.push("--effort", cmd.effort);
         if (cmd.fallbackModel) args.push("--fallback-model", cmd.fallbackModel);
         if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
@@ -9454,7 +9527,32 @@ function execRunner(cfg) {
             args.push("--session-id", id);
           }
         }
-        await spawnCmd("claude", args, cfg.projectDir);
+        const usage = await spawnClaudeStreaming(args, cfg.projectDir);
+        if (usage) {
+          try {
+            emitAgentLogEvent(
+              {
+                role: cmd.role,
+                level: "info",
+                event: "turn.usage",
+                model: cmd.model,
+                ...cmd.effort ? { effort: cmd.effort } : {},
+                feature_id: cfg.featureId,
+                slots: {
+                  input_tokens: usage.inputTokens,
+                  output_tokens: usage.outputTokens,
+                  ...usage.cacheReadTokens !== void 0 ? { cache_read_tokens: usage.cacheReadTokens } : {},
+                  ...usage.cacheCreationTokens !== void 0 ? { cache_creation_tokens: usage.cacheCreationTokens } : {},
+                  ...usage.costUsd !== void 0 ? { cost_usd: usage.costUsd } : {},
+                  ...cmd.replay?.story ? { story: cmd.replay.story } : {},
+                  ...cmd.replay?.mode ? { phase: cmd.replay.mode } : {}
+                }
+              },
+              { tddDir: cfg.tddDir }
+            );
+          } catch {
+          }
+        }
         return;
       }
       const js = resolveKitBinJs(cmd.bin);
