@@ -35,28 +35,54 @@ fi
 
 HOST="${HOST:-127.0.0.1}"
 
+# Pick a free TCP port, probing upward from the requested one, so run-dev does
+# NOT collide with a deploy server (the deploy target also uses 8000) or another
+# dev server already on the port. Uses bash /dev/tcp: a successful connect means
+# something is LISTENING (busy); a failed connect means free. PORT pins the start.
+free_port() {
+  local p="$1" tries=0
+  while [ "$tries" -lt 20 ]; do
+    if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
+      printf '%s' "$p"; return 0
+    fi
+    p=$((p + 1)); tries=$((tries + 1))
+  done
+  printf '%s' "$1"
+}
+
+# Resolve the listen port from the per-language default (or PORT), then bump off
+# any busy port. Announce the bump so the URL printed below is the real one.
+resolve_port() {
+  local req="${PORT:-$1}" got
+  got="$(free_port "$req")"
+  if [ "$got" != "$req" ]; then
+    echo "Port $req is in use (a deploy or another server?), using $got instead." >&2
+  fi
+  printf '%s' "$got"
+}
+
 # Detect project language, migrate, then serve with hot-reload.
 if [ -f "$REPO_ROOT/pom.xml" ]; then
   # Java / Maven + Spring Boot
-  PORT="${PORT:-8080}"
+  PORT="$(resolve_port 8080)"
   echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop). Open it in your browser."
   ./mvnw spring-boot:run -Dspring-boot.run.arguments="--server.port=${PORT} --server.address=${HOST}" "$@"
 elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ]; then
   # Python / Alembic + FastAPI (uvicorn)
-  PORT="${PORT:-8000}"
   if [ -d ".venv" ]; then
     # shellcheck source=/dev/null
     source .venv/bin/activate
   fi
   echo "Running Alembic migrations..."
   uv run alembic upgrade head
+  PORT="$(resolve_port 8000)"
   echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop). Open it in your browser."
   uv run uvicorn app.main:app --reload --host "$HOST" --port "$PORT" "$@"
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js – prefer a "dev" script, fall back to "start".
-  PORT="${PORT:-8000}"
+  PORT="$(resolve_port 8000)"
   export PORT HOST
-  echo "Serving (PORT=${PORT})  (Ctrl-C to stop). Open it in your browser."
+  echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop). Open it in your browser."
   if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.dev ? 0 : 1)" 2>/dev/null; then
     npm run dev -- "$@"
   else
