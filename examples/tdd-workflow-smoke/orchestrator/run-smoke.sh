@@ -351,14 +351,16 @@ scaffold_project() {
       --language python \
       --runner self-hosted \
       --tiers "$TIERS" \
-      `# Per-role model/effort matrix for the smoke (perf experiment): pin ONLY the` \
-      `# two capability-critical roles to opus, the navigator (writes the RED tests` \
-      `# + reviews the design) and the test-strategist (the structured test-list` \
-      `# whose every ac_id must map to a real AC). Every other role keeps its kit-` \
-      `# default model. create-project takes only --agent-model (model), so` \
-      `# effort=low for ALL roles is patched into tdd-config.json right after scaffold.` \
+      `# Per-role model/effort matrix for the smoke (perf experiment): pin the` \
+      `# capability-critical roles to opus, the navigator (writes the RED tests +` \
+      `# reviews the design), the test-strategist (the structured test-list whose` \
+      `# every ac_id must map to a real AC), and the ux-designer (the design system` \
+      `# + IA the UI build adheres to). Every other role keeps its kit-default model.` \
+      `# create-project takes only --agent-model (model), so effort=low for ALL` \
+      `# roles is patched into tdd-config.json right after scaffold.` \
       --agent-model navigator=opus \
       --agent-model test-strategist=opus \
+      --agent-model ux-designer=opus \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 
