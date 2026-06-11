@@ -8623,7 +8623,13 @@ function commonDir2(opts) {
 }
 var PLAYWRIGHT_TEMPLATE_FILES = [
   "playwright.config.ts",
-  path9.join("tests", "e2e", "smoke.spec.ts")
+  path9.join("tests", "e2e", "smoke.spec.ts"),
+  // The canonical `live_server` fixture. Shipped (not agent-authored) so every
+  // UI project gets a fixture that inherits the env (CI's DATABASE_URL wins) +
+  // polls readiness, instead of a hand-rolled one that pins `--env-file .env`
+  // and sleeps a fixed time , the dev/prod CI-parity bug where E2E pass in the
+  // build lane (live local .env) but fail in PR CI with ERR_CONNECTION_REFUSED.
+  path9.join("tests", "e2e", "conftest.py")
 ];
 function writePlaywrightTemplates(args) {
   const src = commonDir2(args);
