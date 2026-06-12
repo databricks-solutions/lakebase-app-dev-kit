@@ -1,6 +1,6 @@
 # Enforce layered architecture + architectural fitness functions + pytest-bdd (Python build quality)
 
-Status: in progress. Branch `docs/tighten-design-canon-drop-dtsttcpw`. Owner: TDD substrate.
+Status: increments 1-5 + thread 2 LANDED (local, branch `docs/tighten-design-canon-drop-dtsttcpw`); live FEIP-7422 re-smoke pending. Owner: TDD substrate.
 
 ## Problem (confirmed from a live complete build, project bug-tracker-20260611-171519, kit 0df37f4)
 
@@ -66,6 +66,7 @@ Three enforcement surfaces, increasing strength:
 - Symptom (project 171519): `scm-merge --wait-migrate` timed out after 1800s on "no matching run" for the staging downstream-migrate workflow. The prior run (163522) found it in 3 polls. The merge + local fast-forward already succeeded; only the downstream-migrate poll hung.
 - Fix direction: (a) harden the run-matching in `scm-wait-ci.ts`/`scm-merge.ts` wait-migrate loop (match the merge.yml run by branch+sha+workflow more robustly; handle "run not yet created" vs "never triggered"); (b) make a wait-migrate timeout NON-FATAL (warn + record, since the merge + local sync already landed and the migrate can complete async) rather than failing the whole drive; (c) lower the default timeout from 1800s with clearer guidance. Decide gate-vs-warn: recommend warn-not-fail for the smoke, because the workflow is otherwise complete.
 - Verify: hermetic test on the wait-migrate matcher; live , a smoke reaches `done` without a 30-min hang even if the migrate run is slow/absent.
+- LANDED (option b, warn-not-fail): `mergeFeature` gains `migrateTimeoutFatal` (default true, preserves the standalone "confirm migrations" contract + the existing/live tests). The timeout branch, when fatal=false, records `migrate.timedOut` + a warning instead of throwing, because the GitHub merge + local fast-forward already landed and the state is already `merged`. A migrate run that COMPLETES with a failure conclusion is still fatal (a real migration failure, not a wait timeout). `scm-merge.cli.ts` exposes `--migrate-timeout-nonfatal` (exit 0 on a non-fatal timeout). The TDD orchestrator's `merge` action now passes `--migrate-timeout-nonfatal --migrate-timeout-sec 600`, so the drive reaches `done` after a bounded wait and the migrate confirms async. Hermetic tests: never-completing run -> warning + timedOut + state stays merged; completed-but-failed -> still migrate-failed.
 
 ## Definition of done (the whole effort)
 A live FEIP-7422 smoke on a service-backed feature produces, and a human can confirm:

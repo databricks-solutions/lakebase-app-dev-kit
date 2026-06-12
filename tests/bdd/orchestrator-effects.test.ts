@@ -613,9 +613,22 @@ describe("commandsForAction: promote phase (PR review + merge to parent)", () =>
     expect(commandsForAction({ kind: "wait-ci" }, cfg())).toEqual([
       { kind: "cli", bin: "lakebase-scm-wait-ci", args: ["--project-dir", "/p"] },
     ]);
-    // The merge waits for the downstream migrate so staging gets code + schema.
+    // The merge waits for the downstream migrate so staging gets code + schema,
+    // but a slow/absent migrate run is non-fatal (the merge already landed) so
+    // the drive reaches `done` instead of hanging then failing.
     expect(commandsForAction({ kind: "merge" }, cfg())).toEqual([
-      { kind: "cli", bin: "lakebase-scm-merge", args: ["--project-dir", "/p", "--wait-migrate"] },
+      {
+        kind: "cli",
+        bin: "lakebase-scm-merge",
+        args: [
+          "--project-dir",
+          "/p",
+          "--wait-migrate",
+          "--migrate-timeout-nonfatal",
+          "--migrate-timeout-sec",
+          "600",
+        ],
+      },
     ]);
   });
 

@@ -770,10 +770,28 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     case "merge":
       // The promotion: merge the PR (release the feature into the parent tier) and
       // WAIT for the downstream migrate workflow to apply the migrations to the
-      // parent's Lakebase branch (SCM ci-green -> merged). --wait-migrate is the
-      // default; pass it explicitly so the merge is not "done" until staging has
-      // both the code (PR merge) and the schema (parent merge.yml migrate run).
-      return [{ kind: "cli", bin: SCM_MERGE_BIN, args: ["--project-dir", cfg.projectDir, "--wait-migrate"] }];
+      // parent's Lakebase branch (SCM ci-green -> merged). We wait so the merge
+      // is not "done" until staging has both the code (PR merge) and the schema
+      // (parent merge.yml migrate run), but with --migrate-timeout-nonfatal: the
+      // GitHub merge + local fast-forward have already landed by the time the
+      // poll runs, so a slow/absent downstream-migrate run is a WARNING, not a
+      // 30-minute hang that fails the whole drive (a migrate run that COMPLETES
+      // with failure is still fatal). Budget shortened to 10 min for the same
+      // reason, the drive reaches `done` and the migrate confirms async.
+      return [
+        {
+          kind: "cli",
+          bin: SCM_MERGE_BIN,
+          args: [
+            "--project-dir",
+            cfg.projectDir,
+            "--wait-migrate",
+            "--migrate-timeout-nonfatal",
+            "--migrate-timeout-sec",
+            "600",
+          ],
+        },
+      ];
 
     case "done":
       return [{ kind: "set-phase", phase: "shipped" }];
