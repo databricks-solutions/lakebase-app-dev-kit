@@ -67,6 +67,42 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1" })).ok).toBe(false);
   });
 
+  it("accepts architecture.json with service_backed + layers; rejects a bad layer role", () => {
+    const layered = JSON.stringify({
+      feature_id: "F1-initial-domain",
+      nfrs: [],
+      service_backed: true,
+      layers: [
+        { role: "boundary", module: "app/routes", may_import: ["service"] },
+        { role: "service", module: "app/services", may_import: ["repository"] },
+        { role: "repository", module: "app/repositories" },
+      ],
+    });
+    expect(checkArtifactConformance("architecture.json", layered).ok).toBe(true);
+    const badRole = JSON.stringify({
+      feature_id: "F1-initial-domain",
+      nfrs: [],
+      layers: [{ role: "controller", module: "app/routes" }],
+    });
+    expect(checkArtifactConformance("architecture.json", badRole).ok).toBe(false);
+  });
+
+  it("accepts a test-list item with kind behavior|fitness; rejects a bad kind", () => {
+    const withKind = JSON.stringify({
+      feature_id: "F1-initial-domain",
+      items: [
+        { id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" },
+        { id: "T2", description: "layering contract", ac_id: "AC1", status: "pending", kind: "fitness" },
+      ],
+    });
+    expect(checkArtifactConformance("test-list.json", withKind).ok).toBe(true);
+    const badKind = JSON.stringify({
+      feature_id: "F1-initial-domain",
+      items: [{ id: "T1", description: "x", ac_id: "AC1", status: "pending", kind: "bogus" }],
+    });
+    expect(checkArtifactConformance("test-list.json", badKind).ok).toBe(false);
+  });
+
   it("rejects nfrs on the spec-gated feature-spec.json (moved to architecture.json)", () => {
     const withNfrs = JSON.stringify({
       id: "F1-initial-domain",

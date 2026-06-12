@@ -10,6 +10,35 @@
       "type": "string",
       "pattern": "^F[0-9]+(-[a-z0-9-]+)?$"
     },
+    "service_backed": {
+      "type": "boolean",
+      "description": "True when the feature persists data or carries business logic (anything beyond a trivial static/read-through endpoint). A service-backed feature MUST declare layered `layers` and be defended by a layering fitness test; checkLayeringDeclared hard-blocks Gate 2 when it is service_backed with no boundary+service+repository. Omit/false for a trivial feature (the YAGNI guard, so layering is not forced where it is not warranted)."
+    },
+    "layers": {
+      "type": "array",
+      "description": "The module layering the build must realize (boundary -> service -> repository -> ORM, dependencies inward). Required in substance for a service_backed feature. The boundary never imports the DB session; persistence lives only in the repository; business logic only in the service.",
+      "items": {
+        "type": "object",
+        "required": ["role", "module"],
+        "properties": {
+          "name": { "type": "string" },
+          "role": {
+            "type": "string",
+            "enum": ["boundary", "service", "repository", "infrastructure", "policy"]
+          },
+          "module": {
+            "type": "string",
+            "description": "Path/dotted-module this layer lives in (e.g. app/routes, app/services, app/repositories)."
+          },
+          "may_import": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Layer roles this one is allowed to depend on (inward). Empty/omitted means it depends on nothing inward."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "nfrs": {
       "type": "array",
       "description": "Non-functional requirements proposed by the architect, adjudicated by the HIL at Gate 2. An empty array is valid (a feature may have no NFRs), but every entry that exists must be HIL-considered, not unconsidered.",

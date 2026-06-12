@@ -15,6 +15,10 @@ export interface TestListItem {
   ac_id: string;
   status: "pending" | "red" | "green" | "refactored" | "skipped";
   scenario_file?: string;
+  /** behavior = an AC scenario (pytest-bdd for Python); fitness = an
+   *  architectural fitness test (layering, ORM-only, config-in-env, NFR budget).
+   *  Default behavior. A service-backed feature needs >=1 fitness item. */
+  kind?: "behavior" | "fitness";
   notes?: string;
 }
 
