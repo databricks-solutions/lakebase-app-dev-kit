@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import { escalationsDir, escalationFile } from "./tdd-paths.js";
 import { readSmellsLog, writeSmellsLog, type SmellName } from "./smells.js";
+import { pendingItemKind } from "./cycle-record.js";
 
 /** A blocking problem raised to the HIL. Identity is `id` (derived from source +
  *  scope) so the same condition re-detected across driver iterations is the same
@@ -118,6 +119,16 @@ export function escalationsFromSmells(tddDir: string, featureId?: string): Escal
   const log = readSmellsLog(tddDir);
   return log.detected
     .filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell))
+    // Born-green fitness guard: a `cycle-stall` flagged while the story's next
+    // pending item is a `kind:"fitness"` test is NOT a stuck build , a fitness
+    // test that "can't go RED" is born-green (a regression guard that already
+    // holds). The GREEN run is the real arbiter (it greens a passing test;
+    // a genuinely failing behavior test still stalls). Drop such a cycle-stall
+    // so the loop proceeds to the GREEN turn instead of hard-halting to the HIL.
+    .filter((d) => {
+      if (d.smell !== "cycle-stall" || !featureId || !d.story_id) { return true; }
+      return pendingItemKind(tddDir, featureId, d.story_id) !== "fitness";
+    })
     .map((d) => ({
       id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
       source: `smell:${d.smell}`,

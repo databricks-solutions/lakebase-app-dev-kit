@@ -159,6 +159,40 @@ describe("escalation module", () => {
     expect(firstPendingEscalation(tdd, F)).toBeNull();
   });
 
+  describe("born-green fitness guard: a cycle-stall while the next item is fitness is NOT a halt", () => {
+    const reseedFirstPendingKind = (kind: "behavior" | "fitness"): void => {
+      writeJson(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), {
+        feature_id: F,
+        story_id: S,
+        items: [{ id: "TF", description: "the guard", ac_id: "AC1", status: "pending", kind }],
+      });
+    };
+
+    it("DROPS a cycle-stall when the story's next pending item is kind:fitness (born-green regression guard)", () => {
+      expect(BLOCKING_SMELLS.has("cycle-stall")).toBe(true);
+      reseedFirstPendingKind("fitness");
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-003"], detail: "ORM-only test can't go RED", story_id: S }]);
+      // The smell is blocking + unresolved, but the pending item is a fitness
+      // guard, so it is filtered out: no escalation, the loop proceeds to GREEN.
+      expect(escalationsFromSmells(tdd, F).length).toBe(0);
+      expect(firstPendingEscalation(tdd, F)).toBeNull();
+    });
+
+    it("KEEPS a cycle-stall when the story's next pending item is a behavior test (a genuine stall halts)", () => {
+      reseedFirstPendingKind("behavior");
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-004"], detail: "behavior test never goes RED", story_id: S }]);
+      const escs = escalationsFromSmells(tdd, F);
+      expect(escs.length).toBe(1);
+      expect(escs[0].source).toBe("smell:cycle-stall");
+      expect(firstPendingEscalation(tdd, F)?.source).toBe("smell:cycle-stall");
+    });
+
+    it("KEEPS a cycle-stall with no story scope (cannot prove it is a fitness guard)", () => {
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-005"], detail: "stall, no story id" }]);
+      expect(escalationsFromSmells(tdd, F).length).toBe(1);
+    });
+  });
+
   describe("recordBlockingSmellFlag (mirror a flagged blocking smell into smells.json so the loop halts)", () => {
     it("persists a BLOCKING smell (scaffold-defect) -> firstPendingEscalation halts", () => {
       expect(BLOCKING_SMELLS.has("scaffold-defect")).toBe(true);

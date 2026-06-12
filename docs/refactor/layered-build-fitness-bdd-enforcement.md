@@ -1,6 +1,6 @@
 # Enforce layered architecture + architectural fitness functions + pytest-bdd (Python build quality)
 
-Status: increments 1-5 + thread 2 LANDED (local, branch `docs/tighten-design-canon-drop-dtsttcpw`); live FEIP-7422 re-smoke pending. Owner: TDD substrate.
+Status: increments 1-6 + thread 2 LANDED (local, branch `docs/tighten-design-canon-drop-dtsttcpw`); live FEIP-7422 re-smoke pending. Owner: TDD substrate.
 
 ## Problem (confirmed from a live complete build, project bug-tracker-20260611-171519, kit 0df37f4)
 
@@ -67,6 +67,60 @@ Three enforcement surfaces, increasing strength:
 - Fix direction: (a) harden the run-matching in `scm-wait-ci.ts`/`scm-merge.ts` wait-migrate loop (match the merge.yml run by branch+sha+workflow more robustly; handle "run not yet created" vs "never triggered"); (b) make a wait-migrate timeout NON-FATAL (warn + record, since the merge + local sync already landed and the migrate can complete async) rather than failing the whole drive; (c) lower the default timeout from 1800s with clearer guidance. Decide gate-vs-warn: recommend warn-not-fail for the smoke, because the workflow is otherwise complete.
 - Verify: hermetic test on the wait-migrate matcher; live , a smoke reaches `done` without a 30-min hang even if the migrate run is slow/absent.
 - LANDED (option b, warn-not-fail): `mergeFeature` gains `migrateTimeoutFatal` (default true, preserves the standalone "confirm migrations" contract + the existing/live tests). The timeout branch, when fatal=false, records `migrate.timedOut` + a warning instead of throwing, because the GitHub merge + local fast-forward already landed and the state is already `merged`. A migrate run that COMPLETES with a failure conclusion is still fatal (a real migration failure, not a wait timeout). `scm-merge.cli.ts` exposes `--migrate-timeout-nonfatal` (exit 0 on a non-fatal timeout). The TDD orchestrator's `merge` action now passes `--migrate-timeout-nonfatal --migrate-timeout-sec 600`, so the drive reaches `done` after a bounded wait and the migrate confirms async. Hermetic tests: never-completing run -> warning + timedOut + state stays merged; completed-but-failed -> still migrate-failed.
+
+## Increment 6: born-green fitness tests are regression guards, not a cycle-stall (the live blocker)
+
+Symptom (live FEIP-7422 capture, S1): the navigator authored the ORM-only fitness
+test `tests/architecture/test_orm_only.py`, but it was **born-green** , the app
+already had zero raw SQL (the layering refactor in prior cycles removed it). With
+no honest RED possible, the navigator (correctly refusing to fake a RED) flagged
+`cycle-stall` (blocking) -> raised to HIL -> the smoke halted, never reaching `done`.
+
+Root cause: the build state machine is strictly RED-first (each test-list item gets
+a RED cycle via `beginNextPendingCycle`, then the Driver greens it). A fitness /
+regression-guard test that PASSES on first run against already-correct architecture
+has no RED phase. The honest-RED guard (no faked RED; no markGreen without a real
+passing run) is right; the gap is that "no RED" was conflated with "stuck"
+(`cycle-stall`). A born-green regression guard is legitimately green: it genuinely
+passes now and defends against a future regression.
+
+Design (deterministic, not advisory , per the "only a hard gate / deterministic
+path reliably changes build output" lesson): for a pending `kind:"fitness"` item,
+the orchestration RUNS the just-written test and decides:
+- **born-green** (passes first run): record a regression-guard cycle (red_at +
+  green_at stamped together, `born_green: true`, empty driver_changes , no code
+  change, no Driver turn), advance. NOT a cycle-stall.
+- **RED first run** (e.g. the layering fitness test against a fat controller):
+  normal RED -> Driver GREEN.
+A born-green cycle carries green_at, so `detectCycleStall` (3 cycles, no GREEN)
+never fires on it; what remains is to stop the navigator FLAGGING cycle-stall for
+the born-green case.
+
+Mechanism (simpler than a new cycle type): the existing GREEN turn (`greenOpenCycle`)
+already runs the REAL verify and greens a test that passes , so a born-green fitness
+test, once WRITTEN, is greened by the normal `!codeWritten -> Driver GREEN` step. No
+new born-green cycle primitive is needed. The only thing that halted the live run was
+the navigator emitting `cycle-stall`. So the fix is guidance + a deterministic teeth
+that a `cycle-stall` cannot halt a born-green fitness item.
+
+Changes:
+- `cycle-record.ts`: surface `kind?: "behavior" | "fitness"` on `StoryTestItem` (it
+  is already in the per-story test-list JSON) + `pendingItemKind(tddDir, featureId,
+  story)` = the `kind` of the first pending item.
+- `escalation.ts` (deterministic teeth): a `cycle-stall` smell is NOT a blocking
+  escalation when the story's first pending item is `kind:"fitness"` , a fitness
+  test that "can't go RED" is born-green (a regression guard), not stuck; the GREEN
+  run is the real arbiter (pass -> green; genuinely failing 3x -> still a stall for a
+  behavior item). Suppressing the escalation lets the loop proceed to the GREEN turn,
+  which greens the born-green test.
+- `navigator.md` + `driver.md`: a born-green fitness test is a valid regression
+  guard; write it, do NOT fake a RED, do NOT flag `cycle-stall` (the build runs it
+  and records GREEN).
+- Tests: hermetic , `pendingItemKind`; `escalationsFromSmells` drops a cycle-stall
+  when the pending item is fitness, keeps it for a behavior item; the born-green
+  fitness greens via the normal GREEN turn.
+- Verify LIVE: the FEIP-7422 smoke passes S1's ORM-only (+ config-in-env) fitness
+  items born-green and reaches `done`.
 
 ## Definition of done (the whole effort)
 A live FEIP-7422 smoke on a service-backed feature produces, and a human can confirm:

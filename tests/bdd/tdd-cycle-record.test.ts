@@ -14,6 +14,7 @@ import {
   beginNextPendingCycle,
   greenOpenCycle,
   storyTestProgress,
+  pendingItemKind,
   firstReviewPendingAc,
   firstRefactorPendingAc,
   reviewAc,
@@ -191,6 +192,27 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(p.openRed.length).toBe(0);
     expect(p.allGreen).toBe(false); // NOT done , T2 unbuilt
     expect(p.pending.map((i) => i.id)).toEqual(["T2"]);
+  });
+
+  it("pendingItemKind: reports the next pending item's kind (drives the born-green fitness guard)", async () => {
+    // The seeded list has no `kind` on T1/T2 (a behavior AC test): undefined.
+    expect(pendingItemKind(tdd, F, S)).toBeUndefined();
+    // A fitness-kind item that is already done, then a pending fitness guard,
+    // then a pending behavior test , pendingItemKind reads the FIRST pending.
+    const perStory = join(tdd, "features", F, "stories", S, "test-list-per-story.json");
+    writeJson(perStory, {
+      feature_id: F,
+      story_id: S,
+      items: [
+        { id: "TF", description: "service layer owns persistence", ac_id: "AC1", status: "pending", kind: "fitness" },
+        { id: "T2", description: "second thing fails", ac_id: "AC1", status: "pending", kind: "behavior" },
+      ],
+    });
+    expect(pendingItemKind(tdd, F, S)).toBe("fitness");
+    // pending = "items with no cycle yet". Once TF has a cycle, the next pending
+    // item is the behavior test, so the reported kind advances to "behavior".
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); // RED cycle for TF (the first pending)
+    expect(pendingItemKind(tdd, F, S)).toBe("behavior");
   });
 });
 

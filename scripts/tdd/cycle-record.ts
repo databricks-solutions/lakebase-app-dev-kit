@@ -90,6 +90,11 @@ export interface StoryTestItem {
   description: string;
   ac_id: string;
   status?: string;
+  /** "behavior" (a pytest-bdd / behavior test, RED-first) or "fitness" (an
+   *  architectural constraint test). A fitness test MAY be born-green , a
+   *  regression guard that already holds , which is not a stall. Surfaced from
+   *  the per-story test-list JSON (the test-strategist writes it). */
+  kind?: "behavior" | "fitness";
 }
 
 function readStoryItems(tddDir: string, featureId: string, story: string): StoryTestItem[] {
@@ -171,6 +176,21 @@ export function storyTestProgress(tddDir: string, featureId: string, story: stri
   const openRed = cycles.filter((c) => c.red_at && !c.green_at);
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
   return { total: items.length, pending, openRed, allGreen };
+}
+
+/**
+ * The `kind` ("behavior" | "fitness") of the story's FIRST pending test-list item,
+ * or undefined when nothing is pending or the item omits it. Used by the
+ * escalation layer to recognize that a `cycle-stall` flagged while the next item
+ * is a fitness test is a born-green regression guard (not a stuck build), so it
+ * must not hard-halt , the GREEN run is the real arbiter.
+ */
+export function pendingItemKind(
+  tddDir: string,
+  featureId: string,
+  story: string,
+): "behavior" | "fitness" | undefined {
+  return storyTestProgress(tddDir, featureId, story).pending[0]?.kind;
 }
 
 export interface CycleRecordArgs {
