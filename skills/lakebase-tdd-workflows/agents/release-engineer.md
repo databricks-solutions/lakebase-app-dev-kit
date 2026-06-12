@@ -9,7 +9,6 @@ description: >-
 tools: Read, Bash, Edit, Skill
 skills: lakebase-release-workflows
 model: sonnet
-memory: project
 color: red
 ---
 

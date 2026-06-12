@@ -98,8 +98,8 @@ Requester's original ask is `feature-request.md` and is never overwritten.
 | Schema | Captures |
 |---|---|
 | `feature.schema.json` | id, name, status, tdd_mode, success_metrics, stories, owner, external_ref (NO `nfrs` , NFRs live in `architecture.json`) |
-| `story.schema.json` | id, asA, iWantTo, soThat, acs, feature_id, external_ref (NO `nfrs`) |
-| `ac.schema.json` | id, layer (API/E2E/Infra), given/when/then, scenarios, nfrs, architectural_notes, status, story_id, external_ref |
+| `story.schema.json` | id, asA, iWantTo, soThat, acs, feature_id, independence (`distinct_from_prior` + `rationale`; required on every story after the first, else the spec gate hard-blocks), external_ref (NO `nfrs`) |
+| `ac.schema.json` | id, layer (API/E2E/Infra), given/when/then, scenarios, nfrs, architectural_notes, status, story_id, independence (`distinct_from_prior` + `rationale`; required on every AC after the first in a story, else the spec gate hard-blocks), external_ref |
 | `test-list.schema.json` | feature_id, ordered_for, items (id, description, ac_id, status, scenario_file) |
 | `workflow-state.schema.json` | phase, feature_id, story_id, ac_id, cycle_id, experiment_id, timestamps |
 

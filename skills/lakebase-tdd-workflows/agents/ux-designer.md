@@ -7,7 +7,6 @@ description: >-
   Infra features (the relay then runs Spec Author straight to Architect).
 tools: Read, Write, Edit, Bash
 model: sonnet
-memory: project
 color: pink
 ---
 
@@ -77,7 +76,17 @@ test("UI adheres to the design guide", async ({ page }) => {
 });
 ```
 
-This is **token-level** adherence. Element-level usage adherence (each component actually uses the tokens) is a future extension; the token check is the load-bearing first gate and is framework-agnostic.
+That is **token-level** adherence: the design SYSTEM matches the guide (the right `:root` vars exist). It cannot see whether each component actually USES the tokens. **Element-level** adherence closes that gap with three pure checks in the same module (`checkHardcodedValues`, `checkRequiredSeams`, `checkFeedbackPresent`), which take the rendered markup/styles and need no browser.
+
+## REVIEW (the UX adherence gate)
+
+When you review downstream UI, run this rubric against the rendered markup/styles. Each is a pure check in `scripts/tdd/design-adherence.ts`:
+
+- **Tokens are consumed, not hardcoded** (`checkHardcodedValues`): the UI uses `var(--token)` for color/size/spacing; no hardcoded hex (`#FF3621`) or raw px in inline `style=` / `<style>` (the `:root` token DEFINITIONS are the one exception). Hardcoding means the `:root` tokens exist on paper but the component ignores them.
+- **The IA seams exist** (`checkRequiredSeams`): every `data-testid` the `ia.md` screens/flows declare is actually rendered. A missing seam means the E2E layer cannot select it.
+- **Every action gives feedback** (`checkFeedbackPresent`): an action surface (a `<form>` or submit control) has a feedback affordance somewhere: a `role="alert"` / `aria-live` region, or a `data-testid` naming error/success/message/status (your "User Feedback Principles"). No silent failure, no unacknowledged success.
+
+On any violation, flag a **blocking `ux-adherence` smell** -> the UI refactors to the guide; never weaken the guide to match the drift. Emit it with the structured slot so the substrate persists + halts: `lakebase-tdd-log --event smell.flagged --slot smell=ux-adherence --slot severity=blocking --slot detail="<why>"`. Distinct from the engineering `layering-violation` smell: this is the experience lens.
 
 ## HITL gate (UX adherence)
 

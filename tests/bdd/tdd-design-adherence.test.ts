@@ -11,6 +11,9 @@ import {
   designGuideToCssVars,
   checkTokenAdherence,
   assertDesignAdherence,
+  checkHardcodedValues,
+  checkRequiredSeams,
+  checkFeedbackPresent,
 } from "../../scripts/tdd/design-adherence";
 
 const GUIDE = {
@@ -101,5 +104,78 @@ describe("assertDesignAdherence: reads :root from a page-like reader", () => {
       "--radius-none": "0px",
     });
     await expect(assertDesignAdherence(reader, GUIDE)).rejects.toThrow(/--color-brand-red/);
+  });
+});
+
+// ─── Element-level adherence (increment B) ───────────────────────
+// A UI can set :root tokens yet never USE them. These checks read the rendered
+// markup/styles and flag the element-level gaps the token check cannot see:
+// hardcoded design values, missing data-testid seams, actions with no feedback.
+
+describe("checkHardcodedValues: hardcoded design values that should be tokens", () => {
+  it("flags a raw hex color in an inline style", () => {
+    const html = `<button style="color: #FF3621">Save</button>`;
+    const r = checkHardcodedValues(html);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join("\n")).toMatch(/#FF3621/);
+  });
+
+  it("flags a raw px font-size / spacing in a <style> block", () => {
+    const css = `<style>.card { font-size: 15px; padding: 16px; }</style>`;
+    const r = checkHardcodedValues(css);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join("\n")).toMatch(/15px/);
+  });
+
+  it("ok when values come from var(--token)", () => {
+    const html = `<button style="color: var(--color-brand-red); font-size: var(--text-base)">Save</button>`;
+    expect(checkHardcodedValues(html).ok).toBe(true);
+  });
+
+  it("exempts the :root token DEFINITIONS themselves", () => {
+    const css = `<style>:root { --color-brand-red: #FF3621; --text-base: 15px; --space-4: 16px; }</style>`;
+    expect(checkHardcodedValues(css).ok).toBe(true);
+  });
+});
+
+describe("checkRequiredSeams: every required data-testid must be rendered", () => {
+  const html = `<form data-testid="bug-form"><input data-testid="bug-title" /></form>`;
+
+  it("ok when every required testid appears", () => {
+    expect(checkRequiredSeams(html, ["bug-form", "bug-title"]).ok).toBe(true);
+  });
+
+  it("flags a missing required testid", () => {
+    const r = checkRequiredSeams(html, ["bug-form", "bug-status"]);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join("\n")).toMatch(/bug-status/);
+  });
+
+  it("ok when no seams are required (nothing to check)", () => {
+    expect(checkRequiredSeams(html, []).ok).toBe(true);
+  });
+});
+
+describe("checkFeedbackPresent: an action surface has a feedback affordance", () => {
+  it("flags a form with no feedback affordance anywhere", () => {
+    const html = `<form><input name="title" /><button type="submit">Save</button></form>`;
+    const r = checkFeedbackPresent(html);
+    expect(r.ok).toBe(false);
+    expect(r.violations.length).toBeGreaterThan(0);
+  });
+
+  it("ok when a role=alert feedback element is present", () => {
+    const html = `<form><button type="submit">Save</button><div role="alert"></div></form>`;
+    expect(checkFeedbackPresent(html).ok).toBe(true);
+  });
+
+  it("ok when a data-testid feedback seam is present", () => {
+    const html = `<form><button type="submit">Save</button><p data-testid="form-error"></p></form>`;
+    expect(checkFeedbackPresent(html).ok).toBe(true);
+  });
+
+  it("ok when there is no action surface to give feedback for", () => {
+    const html = `<main><h1>Bugs</h1><p>nothing actionable here</p></main>`;
+    expect(checkFeedbackPresent(html).ok).toBe(true);
   });
 });

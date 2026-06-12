@@ -29,6 +29,7 @@ import {
 } from "./branch-endpoint.js";
 import { mintCredential } from "./get-connection.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
+import { isDirty } from "../git/status.js";
 import { updateEnvConnection } from "./env-file.js";
 import { ensureProfilePinned } from "./databricks-profile.js";
 import { DEFAULT_DATABASE, POSTGRES_PORT } from "./constants.js";
@@ -58,12 +59,83 @@ function gitHasLocalBranch(cwd: string, branch: string): boolean {
   }
 }
 
-function gitCheckoutNewBranch(cwd: string, branch: string): void {
-  execFileSync("git", ["checkout", "-b", branch], {
+function gitCheckoutNewBranch(cwd: string, branch: string, startPoint?: string): void {
+  // A feature branch must fork from its PARENT tier, not whatever happens to be
+  // checked out. `git checkout -b <branch>` (no start point) forks from HEAD, so
+  // a feature cut while sitting on trunk diverges from the paired Lakebase branch
+  // (which is parented on the tier) -> migration history + agent log mismatch.
+  const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
+  execFileSync("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout,
   });
+}
+
+/** Fetch a single branch from `origin` (best-effort: a no-remote / offline repo
+ *  is fine; the caller falls back to a local ref or HEAD). */
+function gitFetchBranch(cwd: string, remote: string, branch: string): void {
+  try {
+    execFileSync("git", ["fetch", remote, branch], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitNetwork,
+    });
+  } catch {
+    /* best-effort: no `origin`, offline, or no such remote branch */
+  }
+}
+
+/** True iff `ref` resolves in this repo. */
+function gitRefExists(cwd: string, ref: string): boolean {
+  try {
+    execFileSync("git", ["rev-parse", "--verify", "--quiet", ref], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitDefault,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The git start-point a feature branch must fork from: the PARENT tier's pushed
+ * tip. Fetches `origin/<parentBranch>` and prefers it (the promoted state the
+ * paired Lakebase branch was cut from); falls back to a local `<parentBranch>`
+ * ref; returns undefined when neither resolves (no remote + no local parent),
+ * in which case the caller forks from HEAD (legacy behavior, e.g. tier-less /
+ * hermetic repos). Exported for hermetic testing.
+ */
+export function resolveFeatureStartPoint(cwd: string, parentBranch?: string): string | undefined {
+  if (!parentBranch) return undefined;
+  gitFetchBranch(cwd, "origin", parentBranch);
+  if (gitRefExists(cwd, `origin/${parentBranch}`)) return `origin/${parentBranch}`;
+  if (gitRefExists(cwd, parentBranch)) return parentBranch;
+  return undefined;
+}
+
+/**
+ * Refuse to fork a feature branch from a parent ref while the working tree is
+ * dirty: `git checkout -b <branch> <parent>` silently carries non-conflicting
+ * uncommitted changes onto the new branch. Same convention as
+ * scm-abandon-feature. The kit never prompts (it is non-interactive); a human /
+ * the extension stashes or commits and retries. No-op when startPoint is
+ * undefined (forking from HEAD carries nothing new). Exported for testing.
+ */
+export async function assertCleanForFork(cwd: string, startPoint?: string): Promise<void> {
+  if (!startPoint) return;
+  // "Uncommitted CODE?" , tolerate the workflow-metadata churn the driver writes
+  // mid-run (`.tdd/` log + state pointers, `.lakebase/` workflow state), matching
+  // scm-prepare-pr. Only real source changes that would be carried onto the new
+  // branch count.
+  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+    throw new Error(
+      `Working tree has uncommitted changes; refusing to fork from ${startPoint} ` +
+        `(they would be carried onto the new branch). Commit or stash first.`,
+    );
+  }
 }
 
 function gitCheckoutExistingBranch(cwd: string, branch: string): void {
@@ -196,6 +268,16 @@ export async function createPairedBranch(
   const syncEnv = args.syncEnv !== false;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
 
+  // Resolve the git fork-point + guard a dirty tree BEFORE creating the Lakebase
+  // branch, so we never mint a Lakebase branch we then refuse to pair. The git
+  // branch forks from the parent tier's pushed tip (origin/<parent>), matching
+  // the Lakebase parent; a dirty tree is refused here, not silently carried.
+  let gitStartPoint: string | undefined;
+  if (createGitBranch && !gitHasLocalBranch(args.cwd, sanitized)) {
+    gitStartPoint = resolveFeatureStartPoint(args.cwd, args.parentBranch);
+    await assertCleanForFork(args.cwd, gitStartPoint);
+  }
+
   // 1. Create Lakebase branch (idempotent if already exists with same name)
   // TTL semantics: callers that want a tier (no expiry) pass noExpiry: true;
   // callers that want a finite-lifetime convention branch pass ttl. If
@@ -233,7 +315,7 @@ export async function createPairedBranch(
       if (gitHasLocalBranch(args.cwd, sanitized)) {
         gitCheckoutExistingBranch(args.cwd, sanitized);
       } else {
-        gitCheckoutNewBranch(args.cwd, sanitized);
+        gitCheckoutNewBranch(args.cwd, sanitized, gitStartPoint);
         gitBranchCreated = true;
       }
     } catch (err) {

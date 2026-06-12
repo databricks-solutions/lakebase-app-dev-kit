@@ -353,6 +353,52 @@ export function checkNfrCoverage(nfrsMd: string, architectureJson: string): Conf
 }
 
 /**
+ * Evidence-bound `service_backed` determination: the layering + fitness guards
+ * all key off the architect's self-declared `service_backed` flag, so an architect
+ * that omits it (or sets false) on a feature that demonstrably persists data
+ * silently exempts the whole feature from layering enforcement , the defect that
+ * let a data-persisting bug tracker ship with HTML in a fat controller. This
+ * cross-checks the declaration against the architect's OWN structured evidence:
+ * a feature that is not `service_backed: true` while it shows persistence
+ * evidence (an `Infra`-layer AC, or an NFR about migrations/schema/storage) is a
+ * contradiction and HARD-BLOCKS the gate. `service_backed: true` owns it (no
+ * contradiction); a genuinely trivial feature with no such evidence is exempt.
+ * Evidence is passed in (the gate gathers AC layers + NFR text) so the check
+ * stays pure. Absent `service_backed` is treated as not-true (omission is not an
+ * escape hatch).
+ */
+const PERSISTENCE_EVIDENCE_RE =
+  /\b(migrat\w*|schema|persist\w*|stored|store|tables?|database|repositor\w*|\bORM\b)\b/i;
+
+export function checkServiceBackedDeclaration(
+  architectureJson: string,
+  evidence: { acLayers?: string[]; nfrsText?: string[] },
+): ConformanceResult {
+  let parsed: { service_backed?: boolean };
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed === true) return { ok: true }; // declared service-backed; layering checks take over
+  const infraAc = (evidence.acLayers ?? []).some((l) => l === "Infra");
+  const persistNfr = (evidence.nfrsText ?? []).some((t) => PERSISTENCE_EVIDENCE_RE.test(t));
+  if (!infraAc && !persistNfr) return { ok: true }; // no persistence evidence; a trivial feature may omit/false
+  const why = [
+    infraAc ? "an AC is tagged layer:Infra (a data-store contract)" : "",
+    persistNfr ? "an NFR references persistence (migration/schema/storage)" : "",
+  ].filter(Boolean).join(" and ");
+  return {
+    ok: false,
+    violations: [
+      `architecture.json is not service_backed but shows persistence evidence (${why}); ` +
+        `set service_backed:true + declare boundary/service/repository layers (a data-persisting feature MUST be layered), ` +
+        `or remove the misleading signal if the feature is genuinely trivial`,
+    ],
+  };
+}
+
+/**
  * Layering declared (FEIP layered-build enforcement): a feature the architect
  * marked `service_backed: true` MUST declare a boundary + service + repository in
  * `architecture.json.layers` (layered architecture: boundary -> service ->
@@ -421,6 +467,100 @@ export function checkFitnessCoverage(testListJson: string, architectureJson: str
 }
 
 /**
+ * Story independence (design-gate enforcement): in a feature with >1 story, every
+ * story AFTER the first must record `independence.distinct_from_prior: true` with a
+ * non-empty rationale on its story.json. A later story whose behavior an earlier
+ * story already builds (S2 subset of S1) has no honest RED and stalls the build as
+ * a cycle-stall; recording the determination forces the Spec Author to apply the
+ * story-independence test and gives the HIL a reject surface. The first story (the
+ * lowest S-number present) has no prior and is exempt. A single-story feature is a
+ * no-op. Deterministic on PRESENCE; correctness of the rationale is the model's +
+ * HIL's call.
+ */
+export function checkStoryIndependence(stories: Array<{ name: string; content: string }>): ConformanceResult {
+  const parsed: Array<{ name: string; num: number; indep: unknown }> = [];
+  for (const s of stories) {
+    let obj: { id?: unknown; independence?: unknown };
+    try {
+      obj = JSON.parse(s.content);
+    } catch {
+      continue; // malformed JSON is reported by the schema check elsewhere
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : s.name;
+    const m = /^S(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: s.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true }; // nothing to be independent OF
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations: string[] = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue; // first story has no prior
+    const i = p.indep as { distinct_from_prior?: unknown; rationale?: unknown } | undefined;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every story after the first must record ` +
+          `independence.distinct_from_prior + rationale; apply the story-independence test, or fold/re-scope it)`,
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this story's behavior is a subset of an earlier ` +
+          `story; fold it into that story or re-scope it to a distinct, independently-RED-able slice)`,
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct behavior this story adds beyond the prior stories)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+
+/**
+ * AC independence (design-gate enforcement), the per-story counterpart to
+ * checkStoryIndependence: within ONE story, every AC after the first must record
+ * `independence.distinct_from_prior: true` + a rationale on its ac.json. An AC
+ * whose `then` an earlier AC's build already delivers (AC3 confirmation-shown
+ * subset of AC2 submit-flow) is green-on-arrival and stalls the build as a
+ * test-list-drift. The first AC (lowest AC-number present) has no prior and is
+ * exempt; a single-AC story is a no-op. `acs` are the AC files of ONE story.
+ */
+export function checkAcIndependence(acs: Array<{ name: string; content: string }>): ConformanceResult {
+  const parsed: Array<{ name: string; num: number; indep: unknown }> = [];
+  for (const a of acs) {
+    let obj: { id?: unknown; independence?: unknown };
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue; // malformed JSON reported by the schema check elsewhere
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations: string[] = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep as { distinct_from_prior?: unknown; rationale?: unknown } | undefined;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record ` +
+          `independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`,
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an ` +
+          `earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`,
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+
+/**
  * Map a file path to the canonical artifact name the registry is keyed by.
  * Acceptance-criteria files are named <AC>.json/.md but share the "ac.json"
  * contract, so any *.json under an `acs/` directory normalizes to "ac.json".
@@ -482,16 +622,30 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
   }
   // Stories + their acceptance criteria.
   const storiesDir = join(featureDir, "stories");
+  const storyJsons: Array<{ name: string; content: string }> = [];
+  const acsByStory: Array<{ story: string; acs: Array<{ name: string; content: string }> }> = [];
   if (existsSync(storiesDir)) {
     for (const storyName of readdirSync(storiesDir)) {
       const storyDir = join(storiesDir, storyName);
       if (!statSync(storyDir).isDirectory()) continue;
-      pushIfExists(join(storyDir, "story.json"));
+      const storyJsonPath = join(storyDir, "story.json");
+      pushIfExists(storyJsonPath);
+      if (existsSync(storyJsonPath)) {
+        try {
+          storyJsons.push({ name: storyName, content: readFileSync(storyJsonPath, "utf8") });
+        } catch { /* unreadable reported by schema check */ }
+      }
       const acsDir = join(storyDir, "acs");
       if (existsSync(acsDir)) {
+        const acs: Array<{ name: string; content: string }> = [];
         for (const acFile of readdirSync(acsDir).filter((f) => f.endsWith(".json"))) {
-          paths.push(join(acsDir, acFile));
+          const acPath = join(acsDir, acFile);
+          paths.push(acPath);
+          try {
+            acs.push({ name: acFile.replace(/\.json$/, ""), content: readFileSync(acPath, "utf8") });
+          } catch { /* unreadable reported by schema check */ }
         }
+        if (acs.length > 0) acsByStory.push({ story: storyName, acs });
       }
     }
   }
@@ -505,6 +659,33 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
       violations: result.ok ? [] : result.violations,
     };
   });
+
+  // Cross-artifact story independence: a feature with >1 story must record, on
+  // every story after the first, that it delivers behavior an earlier story does
+  // not (story-independence test). Prevents the S2-subset-of-S1 overlap that
+  // surfaces mid-build as a born-green behavior cycle-stall.
+  if (storyJsons.length >= 2) {
+    const indep = checkStoryIndependence(storyJsons);
+    entries.push({
+      artifact: "stories/*/story.json (story independence)",
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations,
+    });
+  }
+
+  // Cross-artifact AC independence (per story): within a story, every AC after
+  // the first must record that its outcome is not already delivered by an earlier
+  // AC. Prevents the AC3-subset-of-AC2 overlap that surfaces mid-build as a
+  // test-list-drift / born-green behavior cycle-stall.
+  for (const { story, acs } of acsByStory) {
+    if (acs.length < 2) continue;
+    const indep = checkAcIndependence(acs);
+    entries.push({
+      artifact: `stories/${story}/acs/*.json (AC independence)`,
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations,
+    });
+  }
 
   // Cross-artifact NFR coverage: once architecture.json exists, every Required
   // NFR in the HIL's nfrs.md (project-level + optional per-feature) must be

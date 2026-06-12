@@ -25,6 +25,7 @@ import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
+import { readConventions } from "./architecture-conventions.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
 export type DriveCommand =
@@ -70,6 +71,12 @@ export interface DriveEffectsConfig {
   /** The feature's git + Lakebase branch (the PARENT a per-story experiment is
    *  cut off, and merged back into). Resolved from SCM state at drive start. */
   featureBranch?: string;
+  /** The feature's PARENT TIER (the branch the feature PR merges up into, e.g.
+   *  staging). Resolved from SCM state at drive start. The feature wrap-up
+   *  switches the working tree back to it as the last step, so the next feature
+   *  forks from a clean parent (and a human/the smoke is not left on the merged,
+   *  soon-deleted feature branch). */
+  parentBranch?: string;
   /** UI track on (LAKEBASE_TDD_UI=1 / a design-brief.md is part of intake): the
    *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
    *  stories, not API-only, when proposing + breaking down. */
@@ -291,6 +298,28 @@ function roleTask(
   return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir, build);
 }
 
+/**
+ * The architect's establish-vs-inherit directive for the project's architecture
+ * conventions (the canonical role -> module layout). When a prior feature already
+ * established them, this feature MUST reuse the same layout (the spec gate hard-
+ * blocks a divergence); otherwise this feature's layout becomes the project canon
+ * (the orchestrator persists it deterministically). Empty when no conventions
+ * exist (the first feature simply establishes them by building normally).
+ */
+function architectConventionsDirective(tddDir: string): string {
+  const conventions = readConventions(tddDir);
+  if (!conventions) {
+    return ` This is the first feature: the layered layout you declare in architecture.json (the role -> module` +
+      ` paths) becomes the PROJECT-WIDE convention every later feature inherits, so choose the canonical layout deliberately.`;
+  }
+  const layout = conventions.layers
+    .map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`)
+    .join(", ");
+  return ` REUSE the established project architecture conventions (set by ${conventions.established_by}): ${layout}.` +
+    ` Declare the SAME role -> module paths in architecture.json, do NOT remap or rename an established layer; a` +
+    ` divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
+}
+
 function roleTaskBody(
   action: Extract<WorkflowAction, { kind: "invoke-role" }>,
   featureId: string,
@@ -345,7 +374,15 @@ function roleTaskBody(
         ` delays ${s} reaching its spec gate and build, and is rejected at the gate.`
       );
     case "architect-reviewer":
-      return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
+      return (
+        `Annotate AC layers and nfrs.md coverage for story ${s}.` +
+        ` In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the` +
+        ` feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary,` +
+        ` service, and repository layers (plus a "models" PACKAGE app/models/ , one module per domain object, NOT a flat` +
+        ` app/models.py , when it persists entities); set false ONLY for a trivial static/read-through endpoint. A not-service_backed` +
+        ` declaration is cross-checked , an Infra-layer AC or a migration/schema/storage NFR while service_backed is` +
+        ` false hard-blocks the gate.${architectConventionsDirective(tddDir)}`
+      );
     case "test-strategist": {
       // Pass the story's AC ids INLINE so the strategist does not re-scan the
       // acs/ dir to re-derive them (a slow, error-prone step that, on a small
@@ -794,7 +831,27 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "done":
-      return [{ kind: "set-phase", phase: "shipped" }];
+      // Feature wrap-up: switch the working tree back to the PARENT TIER as the
+      // last step, so the run does not end on the just-merged (soon-deleted)
+      // feature branch and the next feature forks from a clean parent. scm-merge
+      // already attempts this on a clean merge, but only conditionally + it can be
+      // skipped when the merge step warns/errors; this is the deterministic,
+      // idempotent guarantee (a checkout to the branch you are already on is a
+      // no-op). Only when the parent is known (SCM state present).
+      return [
+        // Force the checkout: at `done` the feature has merged and its code is
+        // committed, but the per-run .tdd/.lakebase metadata (workflow-state.json,
+        // selection-log.md) is dirty + tracked, so a plain `git checkout` aborts
+        // ("local changes would be overwritten"). That churn is disposable here
+        // (the feature is shipped), and landing on the parent is the whole point,
+        // so -f discards it and switches. Mirrors the fork-guard ignoring the same
+        // metadata. (scm-merge attempts this switch too but non-fatally; this is
+        // the deterministic guarantee.)
+        ...(cfg.parentBranch
+          ? [{ kind: "cli" as const, bin: "git", args: ["checkout", "-f", cfg.parentBranch] }]
+          : []),
+        { kind: "set-phase", phase: "shipped" },
+      ];
 
     case "revise-route": {
       // FEIP-7626: a SPEC-level smell the PO sends back to its owning author.

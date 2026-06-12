@@ -113,4 +113,42 @@ describe("reconcileArtifactLog", () => {
     const tddDir = mkTdd();
     expect(reconcileArtifactLog({ tddDir, featureId: F })).toEqual([]);
   });
+
+  it("establishes project architecture conventions from a service-backed architecture.json AND code-emits the architect's layout decision (fixes architect silence)", () => {
+    // The architect runs but its substantive output , the canonical role -> module
+    // layout , otherwise left no trace in the log (only a phase.start). reconcile
+    // deterministically derives the project conventions from architecture.json and
+    // emits the decision as a `reasoning` event attributed to the architect, so a
+    // model that emits nothing still produces an observable, structural record.
+    const tddDir = mkTdd();
+    const f = path.join(tddDir, "features", F);
+    write(
+      path.join(f, "architecture.json"),
+      JSON.stringify({
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes/" },
+          { role: "service", module: "app/services/" },
+          { role: "repository", module: "app/repositories/" },
+        ],
+      }),
+    );
+    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+
+    // conventions.json was established on disk.
+    expect(fs.existsSync(path.join(tddDir, "architecture", "conventions.json"))).toBe(true);
+    // A code-emitted architect `reasoning` event names the established layout.
+    const reasoning = emitted.find((e) => e.event === "reasoning" && e.role === "architect-reviewer");
+    expect(reasoning, "expected an architect-reviewer reasoning event").toBeTruthy();
+    expect((reasoning!.metadata as { note?: string })?.note).toMatch(
+      /established project architecture conventions:.*boundary=app\/routes.*service=app\/services.*repository=app\/repositories/,
+    );
+    // The conventions.json is itself reconciled as an architect artifact.
+    const byPath = Object.fromEntries(emitted.map((e) => [e.metadata?.path, e.role]));
+    expect(byPath["architecture/conventions.json"]).toBe("architect-reviewer");
+
+    // Idempotent: a second reconcile re-establishes nothing + re-emits no reasoning.
+    const second = reconcileArtifactLog({ tddDir, featureId: F });
+    expect(second.find((e) => e.event === "reasoning")).toBeFalsy();
+  });
 });

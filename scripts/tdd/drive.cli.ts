@@ -376,6 +376,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     sprintName: args.sprint,
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
+    parentBranch: scm?.parent_branch,
     // Deploy target: the --deploy-target flag wins, else the config's default.
     deployTarget: args.deployTarget ?? settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",

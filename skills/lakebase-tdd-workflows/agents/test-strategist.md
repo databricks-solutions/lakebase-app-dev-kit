@@ -7,7 +7,6 @@ description: >-
   never the tests themselves (Navigator).
 tools: Read, Write, Edit, Bash
 model: sonnet
-memory: project
 color: green
 ---
 

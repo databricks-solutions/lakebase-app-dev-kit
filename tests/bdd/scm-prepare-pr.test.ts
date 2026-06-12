@@ -136,7 +136,7 @@ describe("preparePr precondition", () => {
     mockIsDirty.mockResolvedValue(false); // no CODE changes once metadata is ignored
     await prep.preparePr({ projectDir: tmpDir });
     expect(mockIsDirty).toHaveBeenCalledWith(
-      expect.objectContaining({ ignore: [".tdd/", ".lakebase/"] }),
+      expect.objectContaining({ ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] }),
     );
   });
 

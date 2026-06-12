@@ -32,6 +32,16 @@ function writeAcLayer(story: string, ac: string, layer: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${ac}.json`), JSON.stringify({ id: ac, layer }));
 }
+function writeAcNotes(story: string, ac: string, layer: string, notes: string): void {
+  const dir = join(storyDir(story), "acs");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${ac}.json`), JSON.stringify({ id: ac, layer, architectural_notes: notes }));
+}
+function writeArchitecture(): void {
+  const dir = join(tddDir, "features", FEATURE);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "architecture.json"), JSON.stringify({ feature_id: FEATURE, service_backed: true, layers: [], nfrs: [] }));
+}
 function writeTestList(story: string, items: unknown[]): void {
   // The canonical per-story list (storyTestListJson): a StoryTestList with an
   // `items[]` field, written as test-list-per-story.json , the exact file +
@@ -78,13 +88,24 @@ describe("diskArtifactProbe: design facts", () => {
     expect(probe.hasAcs("S3")).toBe(true);
   });
 
-  it("architectAnnotated is true only once EVERY AC has a layer", () => {
+  it("architectAnnotated requires the architect's OWN output (architectural_notes + architecture.json), NOT the spec-author's schema-required `layer`", () => {
+    // The bug this guards: `layer` is a REQUIRED ac.schema field the SPEC-AUTHOR
+    // fills, so keying architectAnnotated on `layer` made it true the instant the
+    // spec-author wrote the ACs , the architect-reviewer was ALWAYS skipped, so
+    // no architecture.json + no layering/service_backed enforcement ever ran.
     const probe = diskArtifactProbe(tddDir, FEATURE);
     writeStory("S1", ["AC1", "AC2"]);
     expect(probe.architectAnnotated("S1")).toBe(false);
+    // Spec-author wrote ACs WITH the required layer , architect has NOT run yet.
     writeAcLayer("S1", "AC1", "API");
-    expect(probe.architectAnnotated("S1")).toBe(false); // AC2 still unannotated
     writeAcLayer("S1", "AC2", "Infra");
+    expect(probe.architectAnnotated("S1")).toBe(false); // layer alone != annotated
+    // Architect adds architectural_notes to each AC...
+    writeAcNotes("S1", "AC1", "API", "boundary validates + delegates to the service");
+    writeAcNotes("S1", "AC2", "Infra", "repository is the only layer touching the ORM");
+    expect(probe.architectAnnotated("S1")).toBe(false); // still no architecture.json
+    // ...and writes the feature architecture.json -> NOW annotated.
+    writeArchitecture();
     expect(probe.architectAnnotated("S1")).toBe(true);
   });
 

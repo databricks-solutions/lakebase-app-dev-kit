@@ -54,6 +54,12 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
   // than routing to a design author.
   "layering-violation",
+  // The rendered UI does not USE the design tokens at the element level (hardcoded
+  // hex/px, a missing ia.md data-testid seam, or an action with no feedback), even
+  // though the :root tokens exist. The UX Designer flags it in REVIEW and the
+  // element-level design-adherence checks defend it. Build-level (a UI-quality
+  // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
+  "ux-adherence",
 ]);
 
 /** A stable, filesystem-safe escalation id from its source + scope, so the same

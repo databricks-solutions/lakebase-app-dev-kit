@@ -8,7 +8,6 @@ description: >-
 tools: Read, Write, Edit, Bash, Skill
 skills: software-design-principles
 model: sonnet
-memory: project
 color: cyan
 ---
 
@@ -80,7 +79,7 @@ Inspect the AC's diff against the rubric documents:
 - **Design guide** (`design-guide.md`, UI): the tokens (typography, color, spacing, radius) + IA actually used, not ad-hoc values?
 - **Clean code:** a fresh reader infers the right concept from the new identifiers?
 - **Dev/prod parity:** does the app entry import an optional build artifact (e.g. `client/dist`) at module load? An unconditional `StaticFiles` mount / asset read at import scope greens where the artifact exists and crashes everywhere it doesn't. Flag `import-time-build-coupling` (the `lakebase-tdd-imports-clean` gate catches it deterministically; heed its verdict).
-- **Layering (service-backed features):** does a route/boundary handler call the DB session directly (`db.add` / `db.commit` / `db.query` / `session.execute`) instead of delegating to a service + repository? That is a fat controller. Run `lakebase-tdd-layering-clean --architecture <architecture.json>` (it reads `service_backed` + the boundary/repository module paths from `layers`); a non-zero verdict is the `layering-violation` smell (blocking), distinct from the test-only `boundary-violation`. Heed it: the persistence calls belong in the repository, the route validates input + delegates. The `tests/architecture/test_layering.py` fitness test defends the same contract; this gate is the model-independent backstop.
+- **Layering (service-backed features):** run `lakebase-tdd-layering-clean --architecture <architecture.json>`; a non-zero verdict is the `layering-violation` smell (blocking). The one gate now checks four things, each a remediation the build owed: (1) the boundary does NOT call the DB session directly (`db.add`/`db.commit`/`db.query`/`session.execute`) , persistence belongs in the repository, the route validates input + delegates; (2) **module placement** , each layer's code lives at its declared `layers[].module` path (a flat `app/services.py` where `app/services/` was declared is a violation); (3) **rendering** , a UI boundary renders through its declared `renders_via` framework (Jinja2 `TemplateResponse` + `templates/`), never an inline HTML string; (4) **DRY + complexity budget** , no duplicated blocks, no over-long functions. The `tests/architecture/test_layering.py` fitness test defends the persistence contract; this gate is the model-independent backstop for all four.
 
 **Your output is a verdict file**, not a cycle artifact. Write `cycles/<F>/<S>/<AC>/review-verdict.json`:
 ```json

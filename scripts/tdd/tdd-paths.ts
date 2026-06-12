@@ -43,6 +43,13 @@ export const designBriefMd = (tdd: string): string => join(tdd, "design", "desig
  *  authored once from the design brief; gates the UI build (design-guide.md is
  *  its human-readable sibling, ia.md the information architecture). */
 export const designGuideJson = (tdd: string): string => join(tdd, "design", "design-guide.json");
+/** Project-level architecture conventions: the canonical layer layout (role ->
+ *  module) the FIRST service-backed feature establishes, persisted across
+ *  features so every later feature's architecture inherits + conforms to it
+ *  (the architecture analogue of the project-level design-guide). */
+export const architectureDir = (tdd: string): string => join(tdd, "architecture");
+export const architectureConventionsJson = (tdd: string): string =>
+  join(architectureDir(tdd), "conventions.json");
 /** The Spec Author's sprint proposal. ONE canonical location (project-level,
  *  sequential across sprints) , the path the spec-author actually writes. */
 export const featureProposalsMd = (tdd: string): string => join(planningDir(tdd), "feature-proposals.md");
@@ -217,6 +224,29 @@ export function readAcLayer(tdd: string, f: string, acId: string): AcLayer | und
       if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
     } catch {
       /* treat malformed as no layer */
+    }
+  }
+  return undefined;
+}
+
+/** Read an AC's `architectural_notes` (the Architect Reviewer's distinctive
+ *  per-AC output: layer rationale + cross-cutting concerns + owner module).
+ *  Undefined when the AC file is absent/malformed or has no notes. Used to tell
+ *  whether the ARCHITECT annotated the AC, vs the spec-author merely filling the
+ *  schema-required `layer`. */
+export function readAcArchitecturalNotes(tdd: string, f: string, acId: string): string | undefined {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return undefined;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8")) as { architectural_notes?: unknown };
+      if (typeof ac.architectural_notes === "string" && ac.architectural_notes.trim().length > 0) {
+        return ac.architectural_notes;
+      }
+    } catch {
+      /* treat malformed as no notes */
     }
   }
   return undefined;

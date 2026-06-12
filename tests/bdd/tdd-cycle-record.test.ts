@@ -265,6 +265,39 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     expect(execSync("git status --porcelain", { cwd: proj }).toString()).toMatch(/\.tdd\//);
   });
 
+  it("commits the project-level .tdd/design corpus (so the next feature inherits it) but NOT the churny .tdd state", async () => {
+    // The persistence bug: F1 authored design/design-guide.json but the build's
+    // code-only commit excluded ALL of .tdd, so the design guide never rode F1's
+    // PR to the parent tier. F2 forked from the tier WITHOUT it, designGuideReady
+    // was false, and the UX designer re-authored the whole design system. The
+    // fix force-includes the STABLE design corpus while still excluding the
+    // churny state that would diverge from the feature branch.
+    const designDir = join(ptdd, "design");
+    mkdirSync(designDir, { recursive: true });
+    writeJson(join(designDir, "design-guide.json"), { tokens: { color: { primary: "#111" } } });
+    writeFileSync(join(designDir, "design-guide.md"), "# Design Guide\n");
+    writeFileSync(join(designDir, "ia.md"), "# Information Architecture\n");
+    // Churny per-run state that must stay OUT of the commit (committing it would
+    // diverge from the feature branch and break accept's `git checkout`).
+    writeJson(join(ptdd, "workflow-state.json"), { phase: "build" });
+
+    beginNextPendingCycle({ tddDir: ptdd, featureId: F, story: S });
+    writeFileSync(join(proj, "app.py"), "x = 1\n");
+    await greenOpenCycle({ tddDir: ptdd, featureId: F, story: S, verify: pass });
+
+    const tracked = execSync("git ls-files", { cwd: proj }).toString();
+    // The design corpus IS committed (rides the PR to the parent tier). It was
+    // created AFTER the seed commit, so its presence proves commitCycleWork
+    // force-included it past the broad `.tdd` exclude.
+    expect(tracked).toMatch(/\.tdd\/design\/design-guide\.json/);
+    expect(tracked).toMatch(/\.tdd\/design\/design-guide\.md/);
+    expect(tracked).toMatch(/\.tdd\/design\/ia\.md/);
+    // The churny state (also created after the seed) is NOT committed: it stays
+    // uncommitted so its copy never diverges from the feature branch.
+    expect(tracked).not.toMatch(/\.tdd\/workflow-state\.json/);
+    expect(execSync("git status --porcelain", { cwd: proj }).toString()).toMatch(/\.tdd\/workflow-state\.json/);
+  });
+
   it("refactorAc commits the behavior-preserving refactor as its own commit", async () => {
     beginNextPendingCycle({ tddDir: ptdd, featureId: F, story: S });
     writeFileSync(join(proj, "app.py"), "x = 1\n");

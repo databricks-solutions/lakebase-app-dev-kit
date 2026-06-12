@@ -17,6 +17,7 @@ export type SmellName =
   | "scaffold-defect"
   | "ac-overlap"
   | "layering-violation"
+  | "ux-adherence"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -145,6 +146,21 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "Extract a service (business logic) + a repository (the ONLY layer that touches " +
       "the ORM/session); the route handler validates input + delegates. Defended by the " +
       "layering fitness test (tests/architecture/test_layering.py).",
+  },
+  {
+    name: "ux-adherence",
+    description:
+      "The rendered UI defines the design tokens on :root yet does not USE them at the " +
+      "element level: hardcoded hex colors / raw px where a var(--token) belongs, an " +
+      "ia.md data-testid seam that was never rendered, or an action surface (form/submit) " +
+      "with no feedback affordance (no silent failure / unacknowledged success). Token-level " +
+      "adherence (assertDesignAdherence) cannot see this; the element-level checks in " +
+      "design-adherence.ts do, and the UX Designer flags it in REVIEW. Distinct from " +
+      "`layering-violation` (engineering layering): this is the experience-lens gate.",
+    proposed_remediation:
+      "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with " +
+      "its data-testid seams, and give every action a perceivable result. Refactor the UI to the " +
+      "design guide; do not weaken the guide to match the drift.",
   },
   {
     name: "e2e-row-perma-red",

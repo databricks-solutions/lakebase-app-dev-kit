@@ -25,6 +25,13 @@
       "description": "Newly created bug displays status \"open\" on the detail page.",
       "ac_id": "AC4-created-bug-open-state",
       "status": "green"
+    },
+    {
+      "id": "T5",
+      "description": "Architectural fitness: the boundary (app/main.py) never imports the DB session; persistence lives only in the repository layer.",
+      "ac_id": "AC1-create-form-accessible",
+      "status": "green",
+      "kind": "fitness"
     }
   ]
 }

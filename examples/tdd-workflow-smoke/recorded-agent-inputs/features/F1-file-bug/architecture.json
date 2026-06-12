@@ -1,6 +1,12 @@
 {
   "id": "F1-file-bug-arch",
   "feature_id": "F1-file-bug",
+  "service_backed": true,
+  "layers": [
+    { "name": "API", "role": "boundary", "module": "app/main.py", "may_import": ["service"] },
+    { "name": "Domain", "role": "service", "module": "app/services", "may_import": ["repository"] },
+    { "name": "Persistence", "role": "repository", "module": "app/repositories" }
+  ],
   "nfrs": [
     {
       "id": "nfr-data-migration-preservation",

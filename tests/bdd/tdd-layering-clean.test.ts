@@ -10,6 +10,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   checkLayeringClean,
+  checkModulePlacement,
+  checkInlineRendering,
+  checkCodeBudget,
   layeringConfigFromArchitecture,
 } from "../../scripts/tdd/layering-clean.js";
 
@@ -196,6 +199,94 @@ describe("layeringConfigFromArchitecture", () => {
       serviceBacked: false,
       boundaryModules: [],
       repositoryModules: [],
+      allModules: [],
     });
+  });
+
+  it("returns allModules + boundary renders_via", () => {
+    const cfg = layeringConfigFromArchitecture(
+      JSON.stringify({
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes/", renders_via: "jinja2" },
+          { role: "service", module: "app/services/" },
+          { role: "repository", module: "app/repositories/" },
+        ],
+      }),
+    );
+    expect(cfg.allModules).toHaveLength(3);
+    expect(cfg.rendersVia).toBe("jinja2");
+  });
+});
+
+describe("checkModulePlacement (A1): layers live at their declared module paths", () => {
+  it("flags a flat file where a package directory was declared", () => {
+    const dir = mkProject();
+    write(dir, "app/services.py", "x = 1\n"); // built flat
+    const r = checkModulePlacement(dir, [{ role: "service", module: "app/services/" }]);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/service.*app\/services\/.*package directory/i);
+  });
+
+  it("passes when each declared module exists as declared (dir for `/`, file for `.py`)", () => {
+    const dir = mkProject();
+    write(dir, "app/services/bug_service.py", "x = 1\n");
+    write(dir, "app/main.py", "x = 1\n");
+    const r = checkModulePlacement(dir, [
+      { role: "service", module: "app/services/" },
+      { role: "boundary", module: "app/main.py" },
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("flags a declared module that does not exist at all", () => {
+    const dir = mkProject();
+    const r = checkModulePlacement(dir, [{ role: "repository", module: "app/repositories/" }]);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/not found/i);
+  });
+});
+
+describe("checkInlineRendering (A2): boundary renders via a framework, not inline HTML", () => {
+  it("flags a boundary returning an inline HTML document with no templating seam", () => {
+    const dir = mkProject();
+    write(dir, "app/main.py", `from fastapi.responses import HTMLResponse\n\ndef page():\n    html = "<!DOCTYPE html><html><body>hi</body></html>"\n    return HTMLResponse(content=html)\n`);
+    const r = checkInlineRendering(dir, ["app/main.py"], "jinja2");
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/inline HTML/i);
+  });
+
+  it("passes a boundary that uses a TemplateResponse seam", () => {
+    const dir = mkProject();
+    write(dir, "app/main.py", `from fastapi.templating import Jinja2Templates\ntemplates = Jinja2Templates(directory="templates")\n\ndef page(request):\n    return templates.TemplateResponse("index.html", {"request": request})\n`);
+    const r = checkInlineRendering(dir, ["app/main.py"], "jinja2");
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("checkCodeBudget (A3): DRY + function-length budget", () => {
+  it("flags an over-long function", () => {
+    const dir = mkProject();
+    const body = Array.from({ length: 70 }, (_, i) => `    x${i} = ${i}`).join("\n");
+    write(dir, "app/services.py", `def big():\n${body}\n`);
+    const r = checkCodeBudget(dir, ["app/services.py"], { maxFunctionLines: 60 });
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/def big is \d+ lines/i);
+  });
+
+  it("flags a duplicated block across two files (DRY)", () => {
+    const dir = mkProject();
+    const block = `    total = compute_total(items)\n    tax = total * rate\n    grand = total + tax\n    log.info(grand)\n    persist(grand)\n    notify(grand)\n`;
+    write(dir, "app/a.py", `def fa():\n${block}`);
+    write(dir, "app/b.py", `def fb():\n${block}`);
+    const r = checkCodeBudget(dir, ["app/a.py", "app/b.py"], { dupWindow: 6 });
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/duplicated .*block/i);
+  });
+
+  it("passes clean, short, non-duplicated code", () => {
+    const dir = mkProject();
+    write(dir, "app/services.py", `def small(x):\n    return x + 1\n`);
+    expect(checkCodeBudget(dir, ["app/services.py"]).ok).toBe(true);
   });
 });

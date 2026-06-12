@@ -6,6 +6,8 @@
 // backticks, dollar signs, or newlines round-trip correctly. The kit's
 // commit-push.ts already uses this pattern.
 
+import { existsSync } from "fs";
+import { join } from "path";
 import { exec, shq } from "../util/exec.js";
 
 export interface CommitArgs {
@@ -69,30 +71,54 @@ export interface CommitAllArgs extends CommitArgs {
    * `git checkout` of that branch , scope to code to avoid it.
    */
   exclude?: string[];
+  /**
+   * Repo-relative paths to FORCE-stage in addition to (and after) the
+   * exclude-aware `git add -A`, even when they sit UNDER an `exclude` prefix.
+   * The stable project-level `.tdd/design/` corpus is the motivating case: the
+   * broad `.tdd` exclude (churn control) would otherwise drop the design guide,
+   * so it never rides the feature branch's PR to the parent tier and the next
+   * feature re-authors the whole design system. The churny `.tdd` state
+   * (workflow-state.json, cycles/) must stay uncommitted so its copy doesn't
+   * diverge from the feature branch and break accept's `git checkout`; the
+   * design corpus is different, written ONCE in the design phase and never
+   * touched during build, so committing it is safe. A path that does not exist
+   * is skipped (git errors on an unmatched pathspec).
+   */
+  include?: string[];
 }
 
 /**
- * `git add -A` (optionally excluding path prefixes), then commit only if
- * something is actually staged. Returns true when a commit was made, false when
- * nothing matched (clean tree, or only excluded paths changed). Throws on a
- * genuine git failure (not a repo, detached HEAD, hook rejection); callers that
- * want best-effort behavior wrap it in try/catch.
+ * `git add -A` (optionally excluding path prefixes, then force-staging explicit
+ * `include` paths), then commit only if something is actually staged. Returns
+ * true when a commit was made, false when nothing matched (clean tree, or only
+ * excluded paths changed). Throws on a genuine git failure (not a repo,
+ * detached HEAD, hook rejection); callers that want best-effort behavior wrap it
+ * in try/catch.
  */
 export async function commitAllIfChanged(args: CommitAllArgs): Promise<boolean> {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
   }
   const exclude = args.exclude ?? [];
-  let addCmd = "git add -A";
-  let diffCmd = "git diff --cached --name-only";
   if (exclude.length > 0) {
     // A trailing slash on a prefix is dropped (`.tdd/` -> exclude the `.tdd` dir).
     const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-    addCmd = `git add -A -- . ${ex}`;
-    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+    await exec(`git add -A -- . ${ex}`, { cwd: args.cwd });
+  } else {
+    await exec("git add -A", { cwd: args.cwd });
   }
-  await exec(addCmd, { cwd: args.cwd });
-  const staged = await exec(diffCmd, { cwd: args.cwd });
+  // Force-stage the explicit includes the exclude above would otherwise drop
+  // (e.g. the stable `.tdd/design` corpus). Skip a path that isn't present so
+  // git doesn't error on an unmatched pathspec.
+  for (const inc of args.include ?? []) {
+    if (existsSync(join(args.cwd, inc))) {
+      await exec(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
+    }
+  }
+  // The commit decision reads the actual index after exclude + include staging,
+  // so it reflects exactly what this commit will contain (and skips a commit
+  // when only excluded paths changed).
+  const staged = await exec("git diff --cached --name-only", { cwd: args.cwd });
   if (!staged.trim()) return false;
   await exec(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
   return true;

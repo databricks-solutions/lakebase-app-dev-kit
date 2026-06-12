@@ -16,8 +16,141 @@ import {
   scanFeatureConformance,
   checkLayeringDeclared,
   checkFitnessCoverage,
+  checkStoryIndependence,
+  checkAcIndependence,
+  checkServiceBackedDeclaration,
 } from "../../scripts/tdd/artifact-conformance";
 import { renderTestListMarkdown } from "../../scripts/tdd/test-list";
+
+describe("checkServiceBackedDeclaration: evidence-bound service_backed (no silent under-declaration)", () => {
+  const arch = (over: Record<string, unknown> = {}) => JSON.stringify({ feature_id: "F1", nfrs: [], ...over });
+
+  it("ok when declared service_backed:true (it owns the layering enforcement)", () => {
+    expect(checkServiceBackedDeclaration(arch({ service_backed: true }), { acLayers: ["Infra"], nfrsText: ["schema migration"] })).toEqual({ ok: true });
+  });
+
+  it("ok for a genuinely trivial feature: not service_backed + NO persistence evidence", () => {
+    expect(checkServiceBackedDeclaration(arch({ service_backed: false }), { acLayers: ["API"], nfrsText: ["respond fast"] })).toEqual({ ok: true });
+  });
+
+  it("FLAGS not-service_backed while an AC is tagged layer:Infra (a data-store contract)", () => {
+    const r = checkServiceBackedDeclaration(arch({ service_backed: false }), { acLayers: ["API", "Infra"], nfrsText: [] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/not service_backed but shows persistence evidence.*Infra/i);
+  });
+
+  it("FLAGS not-service_backed while an NFR references persistence (migration/schema/stored/table)", () => {
+    const r = checkServiceBackedDeclaration(arch({ service_backed: false }), {
+      acLayers: ["API", "E2E"],
+      nfrsText: ["Existing bugs and their data survive every schema migration", "a status is never stored when invalid", "New tables are additive"],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/NFR references persistence/i);
+  });
+
+  it("treats ABSENT service_backed as not-true (omission is not an escape hatch)", () => {
+    const r = checkServiceBackedDeclaration(arch(), { acLayers: ["Infra"], nfrsText: [] });
+    expect(r.ok).toBe(false);
+  });
+
+  it("returns a violation for invalid JSON", () => {
+    expect(checkServiceBackedDeclaration("not json", {}).ok).toBe(false);
+  });
+});
+
+describe("checkAcIndependence: a later AC must not be a subset of an earlier one (within a story)", () => {
+  const ac = (id: string, indep?: unknown): { name: string; content: string } => ({
+    name: id,
+    content: JSON.stringify({ id, layer: "API", given: "g", when: "w", then: "t", status: "draft", ...(indep !== undefined ? { independence: indep } : {}) }),
+  });
+
+  it("no-op for a single-AC story", () => {
+    expect(checkAcIndependence([ac("AC1-create-form")]).ok).toBe(true);
+  });
+
+  it("exempts the first AC; passes when later ACs record independence", () => {
+    const r = checkAcIndependence([
+      ac("AC1-create-form"),
+      ac("AC2-submitted-bug-is-recorded", { distinct_from_prior: true, rationale: "persists a row; AC1 only renders the form" }),
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("BLOCKS a later AC missing the determination", () => {
+    const r = checkAcIndependence([ac("AC1-create-form"), ac("AC2-recorded")]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.violations.join(" ")).toMatch(/AC2-recorded.*missing independence/i);
+  });
+
+  it("BLOCKS the AC3-subset-of-AC2 case (distinct_from_prior:false)", () => {
+    const r = checkAcIndependence([
+      ac("AC1-create-form"),
+      ac("AC2-submitted-bug-is-recorded", { distinct_from_prior: true, rationale: "persists the bug" }),
+      ac("AC3-confirmation-shown", { distinct_from_prior: false, rationale: "AC2's redirect already renders the confirmation" }),
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.violations.join(" ")).toMatch(/AC3-confirmation-shown.*distinct_from_prior is not true/i);
+  });
+
+  it("lowest AC-number is 'first' regardless of array order", () => {
+    const r = checkAcIndependence([
+      ac("AC2-recorded", { distinct_from_prior: true, rationale: "persists" }),
+      ac("AC1-create-form"),
+    ]);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("checkStoryIndependence: a later story must not be a subset of an earlier one", () => {
+  const story = (id: string, indep?: unknown): { name: string; content: string } => ({
+    name: id,
+    content: JSON.stringify({ id, asA: "u", iWantTo: "x", soThat: "y", ...(indep !== undefined ? { independence: indep } : {}) }),
+  });
+
+  it("no-op for a single-story feature (nothing to be independent OF)", () => {
+    expect(checkStoryIndependence([story("S1-submit")]).ok).toBe(true);
+  });
+
+  it("exempts the first story; requires the determination on later stories", () => {
+    const r = checkStoryIndependence([
+      story("S1-submit"), // first: no independence needed
+      story("S2-retrieve", { distinct_from_prior: true, rationale: "lists bugs by status, a view S1 never builds" }),
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("BLOCKS a later story missing the independence determination", () => {
+    const r = checkStoryIndependence([story("S1-submit"), story("S2-retrieve")]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.violations.join(" ")).toMatch(/S2-retrieve.*missing independence/i);
+  });
+
+  it("BLOCKS a later story that declares distinct_from_prior:false (subset of an earlier one)", () => {
+    const r = checkStoryIndependence([
+      story("S1-submit"),
+      story("S2-view", { distinct_from_prior: false, rationale: "renders the detail page" }),
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.violations.join(" ")).toMatch(/distinct_from_prior is not true/i);
+  });
+
+  it("BLOCKS a later story with an empty rationale", () => {
+    const r = checkStoryIndependence([
+      story("S1-submit"),
+      story("S2-x", { distinct_from_prior: true, rationale: "  " }),
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.violations.join(" ")).toMatch(/rationale is empty/i);
+  });
+
+  it("uses the lowest S-number as 'first' regardless of array order", () => {
+    const r = checkStoryIndependence([
+      story("S2-retrieve", { distinct_from_prior: true, rationale: "distinct view" }),
+      story("S1-submit"), // first by number, exempt even though listed second
+    ]);
+    expect(r.ok).toBe(true);
+  });
+});
 
 describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
   it("passes a fully-formed feature-spec.json", () => {
@@ -57,16 +190,19 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("test-list.json", bad).ok).toBe(false);
   });
 
-  it("validates architecture.json (NFRs live here, not on feature-spec.json)", () => {
+  it("validates architecture.json (NFRs live here; service_backed is required)", () => {
     const arch = JSON.stringify({
       feature_id: "F1-initial-domain",
+      service_backed: false,
       nfrs: [{ category: "security", requirement: "all writes authn'd", hil_status: "accepted" }],
     });
     expect(checkArtifactConformance("architecture.json", arch).ok).toBe(true);
     // empty nfrs array is valid (a feature may have none)
-    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1", nfrs: [] })).ok).toBe(true);
-    // missing nfrs / bad category fails
-    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1" })).ok).toBe(false);
+    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1", service_backed: false, nfrs: [] })).ok).toBe(true);
+    // missing nfrs fails
+    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1", service_backed: false })).ok).toBe(false);
+    // missing service_backed now fails (no silent omission of the layering-enforcement flag)
+    expect(checkArtifactConformance("architecture.json", JSON.stringify({ feature_id: "F1", nfrs: [] })).ok).toBe(false);
   });
 
   it("accepts architecture.json with service_backed + layers; rejects a bad layer role", () => {
@@ -77,13 +213,15 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
       layers: [
         { role: "boundary", module: "app/routes", may_import: ["service"] },
         { role: "service", module: "app/services", may_import: ["repository"] },
-        { role: "repository", module: "app/repositories" },
+        { role: "repository", module: "app/repositories", may_import: ["models"] },
+        { role: "models", module: "app/models/" },
       ],
     });
     expect(checkArtifactConformance("architecture.json", layered).ok).toBe(true);
     const badRole = JSON.stringify({
       feature_id: "F1-initial-domain",
       nfrs: [],
+      service_backed: true,
       layers: [{ role: "controller", module: "app/routes" }],
     });
     expect(checkArtifactConformance("architecture.json", badRole).ok).toBe(false);

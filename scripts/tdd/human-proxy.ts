@@ -45,7 +45,16 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync
 import { join, dirname, basename } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
-import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
+import {
+  checkArtifactConformance,
+  canonicalArtifactName,
+  checkStoryIndependence,
+  checkAcIndependence,
+  checkLayeringDeclared,
+  checkNfrCoverage,
+  checkFitnessCoverage,
+  checkServiceBackedDeclaration,
+} from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
 import {
   featureResolved,
@@ -55,7 +64,11 @@ import {
   acsDir,
   handbackFile,
   storyAcIds,
+  architectureJson,
+  nfrsMd,
+  featureNfrsMd,
 } from "./tdd-paths.js";
+import { readConventions, assertArchitectureConforms } from "./architecture-conventions.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
 import { markSmellResolved } from "./smells.js";
 
@@ -300,6 +313,7 @@ function acsConformanceReason(fdir: string): string | null {
   for (const s of readdirSync(stories)) {
     const acsDir = join(stories, s, "acs");
     if (!existsSync(acsDir)) continue;
+    const acs: Array<{ name: string; content: string }> = [];
     for (const f of readdirSync(acsDir)) {
       if (!f.endsWith(".json")) continue;
       const p = join(acsDir, f);
@@ -309,11 +323,171 @@ function acsConformanceReason(fdir: string): string | null {
       } catch {
         continue;
       }
+      acs.push({ name: f.replace(/\.json$/, ""), content });
       const r = checkArtifactConformance(canonicalArtifactName(p), content);
       if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
     }
+    // AC independence within this story: a later AC must not be a subset of an
+    // earlier one (records independence.distinct_from_prior; blocks the
+    // AC3-subset-of-AC2 overlap that otherwise stalls the build).
+    const indep = checkAcIndependence(acs);
+    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
   }
   return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
+
+/**
+ * Story-independence spec-gate condition: in a feature with >1 story, every story
+ * after the first must record `independence.distinct_from_prior: true` + a
+ * rationale on its story.json. Blocks the S2-subset-of-S1 overlap at the design
+ * gate (it otherwise surfaces mid-build as a born-green behavior cycle-stall).
+ * Returns a reason listing offenders, or null when all conform (or <2 stories).
+ */
+function storyIndependenceReason(fdir: string): string | null {
+  const stories = join(fdir, "stories");
+  if (!existsSync(stories)) return null;
+  const storyJsons: Array<{ name: string; content: string }> = [];
+  for (const s of readdirSync(stories)) {
+    const p = join(stories, s, "story.json");
+    if (!existsSync(p)) continue;
+    try {
+      storyJsons.push({ name: s, content: readFileSync(p, "utf8") });
+    } catch {
+      continue;
+    }
+  }
+  const r = checkStoryIndependence(storyJsons);
+  return r.ok ? null : `story independence failed: ${r.violations.join("; ")}`;
+}
+
+/**
+ * Architecture-conventions spec-gate condition: once the project canon is
+ * established (.tdd/architecture/conventions.json, set by the first service-
+ * backed feature), every LATER feature's architecture.json must reuse the same
+ * role -> module layout (and rendering framework). Returns a reason listing the
+ * divergences, or null when it conforms / no conventions exist yet / the feature
+ * has no architecture.json. Hard-blocks the spec gate so a divergent layout never
+ * reaches build (where it would mismatch the inherited code + trip the layering
+ * gate's module-placement check).
+ */
+function architectureConventionsReason(tddDir: string, featureId: string): string | null {
+  const conventions = readConventions(tddDir);
+  if (!conventions) return null; // first feature / nothing established yet
+  const archFile = architectureJson(tddDir, featureId);
+  if (!existsSync(archFile)) return null; // architecture not produced yet
+  let content: string;
+  try {
+    content = readFileSync(archFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = assertArchitectureConforms(conventions, content);
+  return r.ok ? null : `architecture conventions failed: ${r.violations.join("; ")}`;
+}
+
+/** Read architecture.json content for the feature, or undefined when absent. */
+function readArchitecture(tddDir: string, featureId: string): string | undefined {
+  const f = architectureJson(tddDir, featureId);
+  if (!existsSync(f)) return undefined;
+  try {
+    return readFileSync(f, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Layering-declaration spec-gate condition (closes the "checkLayeringDeclared
+ * hard-blocks Gate 2" claim that was previously unwired): a service_backed
+ * feature MUST declare layered `layers` (boundary -> service -> repository) in
+ * architecture.json. A trivial (non-service-backed) feature is exempt (the YAGNI
+ * guard). Null when it conforms / architecture not produced yet.
+ */
+function layeringDeclaredReason(tddDir: string, featureId: string): string | null {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === undefined) return null;
+  const r = checkLayeringDeclared(arch);
+  return r.ok ? null : `layering declaration failed: ${r.violations.join("; ")}`;
+}
+
+/**
+ * NFR-coverage spec-gate condition (closes the "checkNfrCoverage hard-blocks the
+ * architecture gate" claim that was previously unwired): every `## Required`
+ * R<n> item in the HIL's nfrs.md must be covered by an architecture.json nfr via
+ * a matching brief_ref. Uses the feature-level nfrs.md override when present,
+ * else the project nfrs.md. Null when covered / no nfrs.md / no architecture yet.
+ */
+function nfrCoverageReason(tddDir: string, featureId: string): string | null {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === undefined) return null;
+  const featureNfrs = featureNfrsMd(tddDir, featureId);
+  const projectNfrs = nfrsMd(tddDir);
+  const nfrsFile = existsSync(featureNfrs) ? featureNfrs : existsSync(projectNfrs) ? projectNfrs : undefined;
+  if (nfrsFile === undefined) return null; // no NFR brief -> nothing Required to cover
+  let nfrsContent: string;
+  try {
+    nfrsContent = readFileSync(nfrsFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = checkNfrCoverage(nfrsContent, arch);
+  return r.ok ? null : `NFR coverage failed: ${r.violations.join("; ")}`;
+}
+
+/**
+ * Fitness-coverage test_list-gate condition (closes the "checkFitnessCoverage
+ * hard-blocks Gate 3" claim that was previously unwired): a service_backed/
+ * layered feature's test-list must have >=1 kind:"fitness" item (the
+ * architectural regression guard). A trivial feature is exempt. Null when
+ * covered / no test-list or architecture yet.
+ */
+function fitnessCoverageReason(tddDir: string, featureId: string, testListJson: string): string | null {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === undefined) return null;
+  const r = checkFitnessCoverage(testListJson, arch);
+  return r.ok ? null : `fitness coverage failed: ${r.violations.join("; ")}`;
+}
+
+/**
+ * Service-backed-declaration spec-gate condition (closes the under-declaration
+ * escape hatch): the layering + fitness guards all key off `service_backed`, so an
+ * architect that omits it / sets it false on a feature that demonstrably persists
+ * data silently disables every layering check. This cross-checks the declaration
+ * against the architect's OWN structured evidence , the feature's AC `layer`s and
+ * the architecture.json `nfrs[]` text , and hard-blocks a not-service_backed
+ * feature that shows persistence evidence. Null when consistent / no architecture.
+ */
+function serviceBackedReason(tddDir: string, featureId: string): string | null {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === undefined) return null;
+  // The architect's own evidence: every AC's declared layer + every nfrs[] text.
+  const acLayers: string[] = [];
+  const fdir = featureDir(tddDir, featureId);
+  const stories = join(fdir, "stories");
+  if (existsSync(stories)) {
+    for (const s of readdirSync(stories)) {
+      const ad = join(stories, s, "acs");
+      if (!existsSync(ad)) continue;
+      for (const f of readdirSync(ad)) {
+        if (!f.endsWith(".json")) continue;
+        try {
+          const layer = (JSON.parse(readFileSync(join(ad, f), "utf8")) as { layer?: string }).layer;
+          if (typeof layer === "string") acLayers.push(layer);
+        } catch {
+          /* a malformed AC is caught by acsConformanceReason */
+        }
+      }
+    }
+  }
+  const nfrsText: string[] = [];
+  try {
+    const nfrs = (JSON.parse(arch) as { nfrs?: Array<{ brief?: string; requirement?: string; notes?: string }> }).nfrs ?? [];
+    for (const n of nfrs) nfrsText.push(n.brief ?? "", n.requirement ?? "", n.notes ?? "");
+  } catch {
+    /* invalid architecture.json is reported by the schema conformance check */
+  }
+  const r = checkServiceBackedDeclaration(arch, { acLayers, nfrsText });
+  return r.ok ? null : `service_backed declaration failed: ${r.violations.join("; ")}`;
 }
 
 /**
@@ -326,6 +500,8 @@ function resolveArtifactInputs(
   gate: GateName,
   fdir: string,
   promoteRef: string | undefined,
+  tddDir: string,
+  featureId: string,
 ): { inputs: Record<string, string> } | { reason: string } {
   const readIfPresent = (name: string): string | undefined => {
     const p = join(fdir, name);
@@ -366,7 +542,33 @@ function resolveArtifactInputs(
       // Also enforce per-AC conformance (AC<n> id pattern + shape); the gate
       // previously skipped the acs/ files, letting slug ids + junk through.
       const acReason = acsConformanceReason(fdir);
-      return acReason === null ? conf : { reason: acReason };
+      if (acReason !== null) return { reason: acReason };
+      // And story independence: a later story must not be a subset of an earlier
+      // one (records independence.distinct_from_prior; blocks the S2-subset-of-S1
+      // overlap that otherwise stalls the build).
+      const indepReason = storyIndependenceReason(fdir);
+      if (indepReason !== null) return { reason: indepReason };
+      // And architecture conventions: once the project canon is established (by an
+      // earlier feature), this feature's architecture.json must REUSE the same
+      // role -> module layout. Blocks F2 from remapping app/services -> app/logic
+      // and diverging from the code it inherited (which would then trip the
+      // layering gate's module-placement check at build time). The first feature
+      // is exempt (no conventions yet); a non-service-backed feature is exempt.
+      const conventionsReason = architectureConventionsReason(tddDir, featureId);
+      if (conventionsReason !== null) return { reason: conventionsReason };
+      // Architecture conformance (Gate 2, surfaced through the per-story spec gate
+      // since the design lane runs the architect before surfacing it). First the
+      // service_backed determination itself: a feature that under-declares (not
+      // service_backed while it shows persistence evidence) silently disables the
+      // layering checks below, so cross-check it against the architect's own
+      // evidence before trusting the flag. Then: a service_backed feature must
+      // declare its layers, and every Required NFR must be covered by a brief_ref.
+      const serviceBacked = serviceBackedReason(tddDir, featureId);
+      if (serviceBacked !== null) return { reason: serviceBacked };
+      const layeringReason = layeringDeclaredReason(tddDir, featureId);
+      if (layeringReason !== null) return { reason: layeringReason };
+      const nfrReason = nfrCoverageReason(tddDir, featureId);
+      return nfrReason === null ? conf : { reason: nfrReason };
     }
     case "plan": {
       const planJson = readIfPresent("plan.json");
@@ -384,7 +586,16 @@ function resolveArtifactInputs(
       const inputs: Record<string, string> = {};
       if (tlJson !== undefined) inputs["test-list.json"] = tlJson;
       if (tlMd !== undefined) inputs["test-list.md"] = tlMd;
-      return withConformance(inputs);
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      // Fitness coverage (Gate 3): a service_backed/layered feature's test-list
+      // must carry >=1 kind:"fitness" item (the architectural regression guard).
+      // Claimed as a hard-block in test-list.schema.json but previously unwired.
+      if (tlJson !== undefined) {
+        const fitnessReason = fitnessCoverageReason(tddDir, featureId, tlJson);
+        if (fitnessReason !== null) return { reason: fitnessReason };
+      }
+      return conf;
     }
     case "promote": {
       if (promoteRef === undefined || promoteRef.length === 0) {
@@ -437,7 +648,7 @@ export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
       skipped.push({ gate, reason: `status=${record.status}` });
       continue;
     }
-    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
+    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef, tddDir, args.featureId);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
       // The HITL reviewer refused: the artifact was missing or did not carry

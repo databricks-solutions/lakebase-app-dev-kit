@@ -61,6 +61,7 @@ describe("smells catalog", () => {
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",
+        "ux-adherence",
       ].sort()
     );
   });

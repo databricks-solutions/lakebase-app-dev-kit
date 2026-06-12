@@ -119,8 +119,15 @@ export function runAgentLogCli(argv: string[]): number {
       if (a.json) {
         process.stdout.write(`${JSON.stringify(emitted)}\n`);
       } else {
-        process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}\n`);
-        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.metadata?.path}\n`);
+        process.stdout.write(`reconciled ${emitted.length} event(s) into the log for ${a.feature}\n`);
+        // Most reconciled events are artifact.written (a `path`); some are code-
+        // emitted reasoning (e.g. the architect's established-conventions note),
+        // which carries a `note`, not a `path`. Print whichever identifies it,
+        // never a bare `undefined`.
+        for (const e of emitted) {
+          const meta = e.metadata as { path?: string; note?: string } | undefined;
+          process.stdout.write(`  + [${e.role}] ${meta?.path ?? meta?.note ?? e.message}\n`);
+        }
       }
       return 0;
     } catch (e) {

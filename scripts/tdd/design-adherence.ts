@@ -145,3 +145,113 @@ export async function assertDesignAdherence(reader: CssVarReader, guide: DesignG
     throw new Error(`design adherence failed: UI does not match design-guide.json\n${lines.join("\n")}`);
   }
 }
+
+// ─── Element-level adherence (increment B) ───────────────────────
+// The token check above proves the design SYSTEM matches the guide (the right
+// :root vars exist). It cannot prove each component actually USES those tokens:
+// a UI may define --color-brand-red on :root yet hardcode #FF3621 everywhere, or
+// omit the data-testid seams the IA declared, or ship a form that never tells the
+// user the action succeeded/failed. These element-level checks close that gap.
+// They are pure + injectable (take plain rendered markup/styles, the way
+// checkTokenAdherence takes plain rendered vars) so they unit-test hermetically
+// without a real browser. A failure is the `ux-adherence` smell.
+
+export interface ElementAdherenceResult {
+  ok: boolean;
+  violations: string[];
+  remediation?: string;
+}
+
+// A `:root{...}` declaration block is where tokens are DEFINED (e.g.
+// `--color-brand-red: #FF3621`); a hardcoded value there is correct, not a
+// violation. Strip those blocks before scanning for hardcoded literals.
+const ROOT_BLOCK = /:root\s*\{[^}]*\}/gi;
+// A value inside `var(...)` is the consumed token, not a hardcoded literal.
+const VAR_CALL = /var\(\s*--[A-Za-z0-9-]+[^)]*\)/g;
+// Hardcoded design literals: a hex color, or a raw px length (font-size/spacing).
+const HEX_COLOR = /#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?\b/g;
+const RAW_PX = /\b\d+(?:\.\d+)?px\b/g;
+
+const HARDCODED_REMEDIATION =
+  "The UI hardcodes design values instead of consuming the design-guide tokens. " +
+  "Replace each hex color / raw px with the matching var(--token) (defined on :root); " +
+  "the design system is the single source of truth. See the `ux-adherence` smell.";
+
+/**
+ * Flag hardcoded design values (hex colors, raw px font-sizes/spacing) in inline
+ * `style=` attributes or `<style>` blocks that should be a `var(--token)` instead.
+ * Values inside `var(...)` are exempt (that IS token use) and `:root{...}` token
+ * DEFINITIONS are exempt (that is where tokens live). Returns the offending
+ * snippets so the build knows what to replace.
+ */
+export function checkHardcodedValues(stylesOrHtml: string): ElementAdherenceResult {
+  // Remove token-definition blocks + token consumptions so neither registers as a
+  // hardcoded literal; what remains is genuine hardcoding.
+  const scannable = stylesOrHtml.replace(ROOT_BLOCK, " ").replace(VAR_CALL, " ");
+  const violations: string[] = [];
+  for (const m of scannable.match(HEX_COLOR) ?? []) {
+    violations.push(`hardcoded color ${m} (use a var(--color-*) token)`);
+  }
+  for (const m of scannable.match(RAW_PX) ?? []) {
+    violations.push(`hardcoded length ${m} (use a var(--text-*/--space-*) token)`);
+  }
+  return violations.length === 0
+    ? { ok: true, violations: [] }
+    : { ok: false, violations, remediation: HARDCODED_REMEDIATION };
+}
+
+const SEAM_REMEDIATION =
+  "The IA's screens/flows declare these data-testid seams; the rendered UI must " +
+  "expose each one so the E2E layer can select it. Render the missing seam (do not " +
+  "rename an existing one out from under a test). See the `ux-adherence` smell.";
+
+/**
+ * Every required `data-testid` (derived from `ia.md` screens/flows, passed in)
+ * must appear in the rendered HTML. A missing seam is a violation: the IA said
+ * the element exists but the UI did not render it (or rendered it under a
+ * different id). An empty requirement list is trivially clean.
+ */
+export function checkRequiredSeams(html: string, requiredTestids: string[]): ElementAdherenceResult {
+  const violations: string[] = [];
+  for (const id of requiredTestids) {
+    // Match data-testid="id" / 'id' tolerant of quote style + surrounding space.
+    const present = new RegExp(`data-testid\\s*=\\s*["']${escapeRe(id)}["']`).test(html);
+    if (!present) violations.push(`missing required data-testid "${id}" (declared in the IA, not rendered)`);
+  }
+  return violations.length === 0
+    ? { ok: true, violations: [] }
+    : { ok: false, violations, remediation: SEAM_REMEDIATION };
+}
+
+/** Escape a string for safe inclusion in a RegExp. */
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// An action surface: a form, or a submit control. A feedback affordance: a
+// live/alert region, or a data-testid that names error/success/message/status.
+const ACTION_SURFACE = /<form\b|type\s*=\s*["']submit["']|<button\b(?![^>]*type\s*=\s*["'](?:button|reset)["'])/i;
+const FEEDBACK_AFFORDANCE = /role\s*=\s*["']alert["']|aria-live\s*=|data-testid\s*=\s*["'][^"']*(?:error|success|message|status)[^"']*["']/i;
+
+const FEEDBACK_REMEDIATION =
+  "An action surface (form/submit) renders with no feedback affordance. Give every " +
+  "action a result the user can perceive: a role=\"alert\" / aria-live region, or a " +
+  "data-testid naming error/success/message/status. No silent failure, no unacknowledged " +
+  "success (design-guide User Feedback Principles). See the `ux-adherence` smell.";
+
+/**
+ * Heuristic: an action surface (a `<form>` or submit control) must have a feedback
+ * affordance somewhere in the rendered HTML (a `role="alert"` / `aria-live` region,
+ * or a `data-testid` containing error/success/message/status), per the design-guide
+ * "User Feedback Principles". Conservative: only flags when an action surface exists
+ * with NO feedback affordance anywhere; HTML with no action surface is clean.
+ */
+export function checkFeedbackPresent(html: string): ElementAdherenceResult {
+  if (!ACTION_SURFACE.test(html)) return { ok: true, violations: [] };
+  if (FEEDBACK_AFFORDANCE.test(html)) return { ok: true, violations: [] };
+  return {
+    ok: false,
+    violations: ["an action surface (form/submit) has no feedback affordance (role=alert / aria-live / a *error/success/message/status* data-testid)"],
+    remediation: FEEDBACK_REMEDIATION,
+  };
+}

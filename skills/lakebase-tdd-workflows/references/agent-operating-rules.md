@@ -8,7 +8,7 @@ Your working directory is the project root. Read + write artifacts under `.tdd/`
 
 ## 2. Produce conformant artifacts from your prompt, not by reading schemas
 
-The shape of every artifact you write is in your role doc + [spec-format.md](spec-format.md). Produce it from that; you do **not** read `*.schema.json` or hunt for them. Conformance is validated for you: `lakebase-tdd-gate-conformance` checks each artifact against the bundled schemas at the gate.
+The shape of every artifact you write is in your role doc + [spec-format.md](spec-format.md). Produce it from that; you do **not** read `*.schema.json` or hunt for them. Conformance is enforced at the gate by the approver: each artifact is checked against its bundled schema, and the cross-artifact rules (NFR coverage, layering declared, fitness coverage, story/AC independence, architecture conventions) hard-block the gate. Self-check anytime with `lakebase-tdd-gate-conformance --feature <id>`.
 
 ## 3. The artifact on disk is the only channel between roles
 

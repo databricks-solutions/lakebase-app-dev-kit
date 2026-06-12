@@ -21,6 +21,9 @@
 import { readFileSync } from "node:fs";
 import {
   checkLayeringClean,
+  checkModulePlacement,
+  checkInlineRendering,
+  checkCodeBudget,
   layeringConfigFromArchitecture,
   type LayeringCleanArgs,
 } from "./layering-clean.js";
@@ -68,6 +71,8 @@ const p = parse(process.argv.slice(2));
 let serviceBacked = p.serviceBacked ?? false;
 let boundary = p.boundary;
 let repository = p.repository;
+let allModules: Array<{ role: string; module: string }> = [];
+let rendersVia: string | undefined;
 if (p.architecture) {
   let archJson = "";
   try {
@@ -80,29 +85,46 @@ if (p.architecture) {
   if (p.serviceBacked === undefined) serviceBacked = cfg.serviceBacked;
   if (boundary.length === 0) boundary = cfg.boundaryModules;
   if (repository.length === 0) repository = cfg.repositoryModules;
+  allModules = cfg.allModules;
+  rendersVia = cfg.rendersVia;
 }
 
 const callArgs: LayeringCleanArgs = { projectDir: p.projectDir, serviceBacked };
 if (boundary.length > 0) callArgs.boundaryModules = boundary;
 if (repository.length > 0) callArgs.repositoryModules = repository;
 
-const result = checkLayeringClean(callArgs);
+// The gate runs a suite of deterministic architecture checks; any failure fails
+// the gate (all surface together so one run shows every violation).
+const layering = checkLayeringClean(callArgs);
+const placement = serviceBacked && allModules.length ? checkModulePlacement(p.projectDir, allModules) : { ok: true, violations: [] };
+const rendering = serviceBacked ? checkInlineRendering(p.projectDir, boundary, rendersVia) : { ok: true, violations: [] as string[] };
+// Budget over the declared layer modules (or `app` by default) , broad clean-code check.
+const budgetPaths = allModules.length ? allModules.map((m) => m.module) : ["app"];
+const budget = checkCodeBudget(p.projectDir, budgetPaths);
+
+const groups: Array<{ label: string; ok: boolean; violations: string[]; remediation?: string }> = [
+  { label: "layering (boundary vs persistence)", ok: layering.clean, violations: layering.violations, remediation: layering.remediation },
+  { label: "module placement (layers at declared paths)", ok: placement.ok, violations: placement.violations },
+  { label: "rendering (templating, not inline HTML)", ok: rendering.ok, violations: rendering.violations, remediation: rendering.remediation },
+  { label: "DRY + complexity budget", ok: budget.ok, violations: budget.violations },
+];
+const ok = groups.every((g) => g.ok);
 
 if (p.json) {
-  process.stdout.write(`${JSON.stringify(result)}\n`);
-} else if (result.clean) {
+  process.stdout.write(`${JSON.stringify({ ok, scanned: layering.scanned, groups })}\n`);
+} else if (ok) {
   const what = serviceBacked
-    ? result.scanned.length
-      ? `boundary clean (scanned: ${result.scanned.join(", ")})`
+    ? layering.scanned.length
+      ? `layered + rendered + within budget (boundary scanned: ${layering.scanned.join(", ")})`
       : "no boundary modules to scan"
     : "feature is not service-backed (layering not required)";
   process.stdout.write(`layering-clean: OK , ${what}\n`);
 } else {
-  process.stderr.write(
-    `layering-clean: FAILED , the boundary/routes layer is not cleanly separated from persistence.\n\n` +
-      `${result.violations.map((v) => `  ${v}`).join("\n")}\n\n` +
-      `Remediation: ${result.remediation}\n`,
-  );
+  const blocks = groups
+    .filter((g) => !g.ok)
+    .map((g) => `  [${g.label}]\n${g.violations.map((v) => `    ${v}`).join("\n")}${g.remediation ? `\n    -> ${g.remediation}` : ""}`)
+    .join("\n\n");
+  process.stderr.write(`layering-clean: FAILED , architecture-quality checks did not pass.\n\n${blocks}\n`);
 }
 
-process.exit(result.clean ? 0 : 1);
+process.exit(ok ? 0 : 1);

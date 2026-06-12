@@ -30,6 +30,8 @@ import {
   hasEstimates,
   storyAcIds,
   storyTestListJson,
+  readAcArchitecturalNotes,
+  architectureJson,
 } from "./tdd-paths.js";
 
 /** Every recorded cycle artifact for a story, across all of its ACs. */
@@ -154,9 +156,17 @@ export function diskArtifactProbe(
 
     architectAnnotated(story) {
       const acs = storyAcIds(tddDir, featureId, story);
-      // Annotated only once EVERY AC has a layer (API|E2E|Infra). No ACs yet
-      // means the Architect has nothing to annotate -> not annotated.
-      return acs.length > 0 && acs.every((ac) => readAcLayer(tddDir, featureId, ac) !== undefined);
+      if (acs.length === 0) return false; // no ACs yet -> nothing to annotate
+      // The Architect is "done" with a story only once its DISTINCTIVE outputs
+      // are on disk, NOT merely the AC `layer`. `layer` is a REQUIRED ac.schema
+      // field the SPEC-AUTHOR fills, so keying on it made architectAnnotated true
+      // the moment the spec-author wrote the ACs -> the architect-reviewer was
+      // ALWAYS skipped (no architecture.json, no architectural_notes, and the
+      // layering/NFR/service_backed gate checks had nothing to validate). Key on
+      // the architect's own products: architectural_notes on every AC + the
+      // feature architecture.json (service_backed + layers + nfrs).
+      const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(tddDir, featureId, ac) !== undefined);
+      return everyAcNoted && fs.existsSync(architectureJson(tddDir, featureId));
     },
 
     testListReady(story) {

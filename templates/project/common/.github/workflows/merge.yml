@@ -439,6 +439,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Resolve the kit into the local cache so the thin-wrap scripts
+      # (sanitize-branch-name.sh + delete-lakebase-branches.sh) can find it. A
+      # fresh checkout has no node_modules, and a Python project never has one ,
+      # the substrate is resolved via scripts/lk from .lakebase/kit-ref, not npm.
+      # Without warming, the scripts exit "lakebase-app-dev-kit not installed"
+      # under `bash -e`, the whole job dies before the delete runs, and the
+      # ci-pr-<N> branch is never cleaned up.
+      - name: Warm the kit resolver (cleanup job)
+        run: bash scripts/lk --warm
+
       # No-sudo install via the official action; no-op if already on PATH.
       - name: Install Databricks CLI (cleanup job)
         uses: databricks/setup-cli@main

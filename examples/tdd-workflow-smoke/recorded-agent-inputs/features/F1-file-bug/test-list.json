@@ -55,6 +55,13 @@
       "description": "Form submission with empty description returns validation error message that names the 'description' field",
       "ac_id": "form-submission-succeeds",
       "status": "pending"
+    },
+    {
+      "id": "T10",
+      "description": "Architectural fitness: the boundary (app/main.py) never imports the DB session; persistence lives only in the repository layer.",
+      "ac_id": "form-submission-succeeds",
+      "status": "pending",
+      "kind": "fitness"
     }
   ]
 }

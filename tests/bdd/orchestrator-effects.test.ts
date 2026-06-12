@@ -643,4 +643,22 @@ describe("commandsForAction: promote phase (PR review + merge to parent)", () =>
       ["--feature", "F1", "--gate", "promote", "--approver", "human-proxy", "--tdd-dir", "/p/.tdd", "--promote-ref", "F1"],
     );
   });
+
+  it("done switches the working tree back to the parent tier as the last step (when the parent is known)", () => {
+    // Feature wrap-up: end on the parent (staging), not the just-merged feature
+    // branch, so the next feature forks from a clean parent. Deterministic +
+    // idempotent guarantee on top of scm-merge's conditional switch.
+    const cmds = commandsForAction({ kind: "done" }, cfg({ parentBranch: "staging" }));
+    // Force (-f): at `done` the feature is merged + its code committed; only the
+    // per-run .tdd/.lakebase metadata is dirty, and a plain `git checkout` refuses
+    // to overwrite those tracked-churny files. The switch must land on the parent
+    // regardless (the fork-guard ignores the same metadata).
+    expect(cmds[0]).toEqual({ kind: "cli", bin: "git", args: ["checkout", "-f", "staging"] });
+    expect(cmds[cmds.length - 1]).toMatchObject({ kind: "set-phase", phase: "shipped" });
+  });
+
+  it("done emits ONLY the set-phase when the parent tier is unknown (no SCM state)", () => {
+    const cmds = commandsForAction({ kind: "done" }, cfg({ parentBranch: undefined }));
+    expect(cmds).toEqual([{ kind: "set-phase", phase: "shipped" }]);
+  });
 });

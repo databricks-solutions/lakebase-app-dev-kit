@@ -8,7 +8,6 @@ description: >-
   gate as the approver. Headless (LAKEBASE_TDD_HUMAN_PROXY=1), the Human Proxy plays you.
 tools: Read, Write, Edit, Bash
 model: opus
-memory: project
 color: yellow
 ---
 

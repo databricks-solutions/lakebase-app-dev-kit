@@ -7,7 +7,6 @@ description: >-
   (uncovered Required NFRs hard-block the gate). Never weakens or rewrites an AC.
 tools: Read, Write, Edit, Bash
 model: opus
-memory: project
 color: purple
 ---
 
@@ -49,8 +48,8 @@ This is your only planning-phase artifact. Everything below is `/design`-phase (
 
 - For each `ac.json`: `layer` (`API` / `E2E` / `Infra`) + `architectural_notes` (layer rationale, cross-cutting concerns touched, owner module).
 - `.tdd/features/<F>/architecture.json` (validated against its schema): the **NFRs** you propose (`nfrs[]`, each `applies_to` the feature or a story id, `hil_status: "proposed"`). NFRs live HERE, not on `feature-spec.json`/`story.json`.
-  - **`service_backed`** (boolean): true when the feature persists data or carries business logic (anything beyond a trivial static/read-through endpoint). A service-backed feature MUST be layered.
-  - **`layers`** (array): the module layering the build must realize, per `@architectural-design-principles/layered-architecture.md`. For a service-backed feature declare at least a **boundary** (routes/controllers, e.g. `app/main.py` or `app/routes/`), a **service** (business logic, e.g. `app/services/`), and a **repository** (the ONLY layer that touches the ORM/session, e.g. `app/repositories/`). Each entry: `{ "name", "role": "boundary"|"service"|"repository"|"infrastructure"|"policy", "module": "<path>", "may_import": ["<role>", ...] }`. Dependencies point inward (boundary -> service -> repository); the boundary NEVER imports the DB session, and business logic NEVER lives in the boundary or the templates. This is the contract the layering fitness test defends.
+  - **`service_backed`** (boolean, REQUIRED, explicit , make a deliberate call): true when the feature persists data or carries business logic (anything beyond a trivial static/read-through endpoint), and then you MUST declare boundary+service+repository layers. False ONLY for a trivial static/read-through endpoint. Do not omit it. A not-service_backed declaration is cross-checked against your own evidence: an `Infra`-layer AC or a migration/schema/storage NFR while service_backed is false HARD-BLOCKS the gate (`checkServiceBackedDeclaration`), so a data-persisting feature cannot escape layering by under-declaring.
+  - **`layers`** (array): the module layering the build must realize, per `@architectural-design-principles/layered-architecture.md`. For a service-backed feature declare at least a **boundary** (routes/controllers, e.g. `app/main.py` or `app/routes/`), a **service** (business logic, e.g. `app/services/`), and a **repository** (the ONLY layer that touches the ORM/session, e.g. `app/repositories/`). When the feature persists domain entities, ALSO declare a **models** layer as a PACKAGE , `app/models/` (trailing slash), with one module per domain object/aggregate (`app/models/bug.py`, `app/models/comment.py`, ...), NOT a flat `app/models.py`; the repository `may_import` models. checkModulePlacement enforces the package shape and the architecture-conventions check keeps the role -> module layout identical across features. Each entry: `{ "name", "role": "boundary"|"service"|"repository"|"models"|"infrastructure"|"policy", "module": "<path>", "may_import": ["<role>", ...] }`. Dependencies point inward (boundary -> service -> repository -> models); the boundary NEVER imports the DB session, and business logic NEVER lives in the boundary or the templates. This is the contract the layering fitness test defends.
 - `.tdd/features/<F>/architecture.md`: layering summary, pattern proposals, and the Architectural Concerns Mapping table.
 
 **Self-check before you return:** `./scripts/lk lakebase-tdd-response-formatter --role architect-reviewer --feature <F> --story <S>`. Exits non-zero if any of the story's ACs lacks a valid `layer`. Fix every AC and re-run until it passes.
@@ -81,6 +80,13 @@ For the feature:
    - **Decisions** – the boundary questions (from the spec's Open questions) the PO adjudicates at Gate 2, each with your recommendation.
    - **Test strategy** – real-DB integration tests against the paired branch (pytest-bdd for Python; no mocks/stubs/in-memory). Name which ACs are verified through this suite.
    - **Sign-off** – your recommendation (proceed / hold / revise) + your identity.
+
+## Project architecture conventions (inherit, do not re-derive)
+
+The project's canonical layer layout (role -> module: boundary=app/routes, service=app/services, repository=app/repositories, the UI rendering framework) is pinned ONCE, then reused across features , the architecture analogue of the project design-guide.
+
+- **First feature:** the `layers` you declare in `architecture.json` BECOME the project convention. Choose the canonical layout deliberately; the orchestrator persists it to `.tdd/architecture/conventions.json` and every later feature inherits it.
+- **Later features:** the orchestrator's directive states the established layout. Declare the SAME role -> module paths. Do NOT remap or rename an established layer (service -> app/logic), add layers only. A divergent layout hard-blocks the spec gate and mismatches the inherited code (the layering gate's module-placement check).
 
 ## HITL gate (Gate 2)
 
