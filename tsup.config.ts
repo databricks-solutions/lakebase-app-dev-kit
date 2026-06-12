@@ -52,6 +52,7 @@ export default defineConfig({
     "scripts/tdd/agent-log.cli": "scripts/tdd/agent-log.cli.ts",
     "scripts/tdd/timing-report.cli": "scripts/tdd/timing-report.cli.ts",
     "scripts/tdd/imports-clean.cli": "scripts/tdd/imports-clean.cli.ts",
+    "scripts/tdd/layering-clean.cli": "scripts/tdd/layering-clean.cli.ts",
     "scripts/tdd/agent-models.cli": "scripts/tdd/agent-models.cli.ts",
     "scripts/tdd/story-pipeline.cli": "scripts/tdd/story-pipeline.cli.ts",
     "scripts/tdd/cycle.cli": "scripts/tdd/cycle.cli.ts",

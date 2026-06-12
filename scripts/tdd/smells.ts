@@ -16,6 +16,7 @@ export type SmellName =
   | "import-time-build-coupling"
   | "scaffold-defect"
   | "ac-overlap"
+  | "layering-violation"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -128,6 +129,22 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     level: "spec",
     owning_role: "spec-author",
     gate_to_rerun: "spec",
+  },
+  {
+    name: "layering-violation",
+    description:
+      "The boundary/routes layer touches persistence directly (calls the DB " +
+      "session: .query/.add/.commit/.delete on a route handler) or business logic " +
+      "lives in the boundary/templates, instead of delegating to a service + " +
+      "repository. A fat controller violates the layered-architecture contract the " +
+      "architect declared in architecture.json `layers`. Distinct from " +
+      "`boundary-violation` (which is a TEST reaching a private method). Caught " +
+      "deterministically by `lakebase-tdd-layering-clean`; the Navigator may also " +
+      "flag it in REVIEW.",
+    proposed_remediation:
+      "Extract a service (business logic) + a repository (the ONLY layer that touches " +
+      "the ORM/session); the route handler validates input + delegates. Defended by the " +
+      "layering fitness test (tests/architecture/test_layering.py).",
   },
   {
     name: "e2e-row-perma-red",

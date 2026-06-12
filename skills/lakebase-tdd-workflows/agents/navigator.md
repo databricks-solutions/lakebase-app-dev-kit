@@ -78,6 +78,7 @@ Inspect the AC's diff against the rubric documents:
 - **Design guide** (`design-guide.md`, UI): the tokens (typography, color, spacing, radius) + IA actually used, not ad-hoc values?
 - **Clean code:** a fresh reader infers the right concept from the new identifiers?
 - **Dev/prod parity:** does the app entry import an optional build artifact (e.g. `client/dist`) at module load? An unconditional `StaticFiles` mount / asset read at import scope greens where the artifact exists and crashes everywhere it doesn't. Flag `import-time-build-coupling` (the `lakebase-tdd-imports-clean` gate catches it deterministically; heed its verdict).
+- **Layering (service-backed features):** does a route/boundary handler call the DB session directly (`db.add` / `db.commit` / `db.query` / `session.execute`) instead of delegating to a service + repository? That is a fat controller. Run `lakebase-tdd-layering-clean --architecture <architecture.json>` (it reads `service_backed` + the boundary/repository module paths from `layers`); a non-zero verdict is the `layering-violation` smell (blocking), distinct from the test-only `boundary-violation`. Heed it: the persistence calls belong in the repository, the route validates input + delegates. The `tests/architecture/test_layering.py` fitness test defends the same contract; this gate is the model-independent backstop.
 
 **Your output is a verdict file**, not a cycle artifact. Write `cycles/<F>/<S>/<AC>/review-verdict.json`:
 ```json

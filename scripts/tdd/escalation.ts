@@ -47,6 +47,12 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
   // overlap that stalled S1).
   "ac-overlap",
+  // The boundary/routes layer touching persistence directly (a fat controller),
+  // instead of delegating to a service + repository. A build-level structural
+  // defect; the Navigator flags it in REVIEW and the layering fitness test
+  // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
+  // than routing to a design author.
+  "layering-violation",
 ]);
 
 /** A stable, filesystem-safe escalation id from its source + scope, so the same

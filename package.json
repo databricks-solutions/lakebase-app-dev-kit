@@ -111,6 +111,7 @@
     "lakebase-tdd-log": "./dist/scripts/tdd/agent-log.cli.js",
     "lakebase-tdd-timing": "./dist/scripts/tdd/timing-report.cli.js",
     "lakebase-tdd-imports-clean": "./dist/scripts/tdd/imports-clean.cli.js",
+    "lakebase-tdd-layering-clean": "./dist/scripts/tdd/layering-clean.cli.js",
     "lakebase-tdd-agent-model": "./dist/scripts/tdd/agent-models.cli.js",
     "lakebase-tdd-pipeline": "./dist/scripts/tdd/story-pipeline.cli.js",
     "lakebase-tdd-experiment": "./dist/scripts/tdd/story-experiment.cli.js",
