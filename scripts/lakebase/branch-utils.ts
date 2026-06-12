@@ -230,6 +230,64 @@ export function isLongRunningTierBranch(b: LakebaseBranchInfo): boolean {
 }
 
 /**
+ * The fixed default set of PROTECTED tier leaf names (the promotion
+ * hierarchy). A branch is a protected tier only if it is BOTH long-running
+ * ({@link isLongRunningTierBranch}) AND its leaf name is in the protected set
+ * , so a long-running branch with an off-convention name (e.g. a `scratch`
+ * spike left no_expiry) is treated as an ordinary branch, not a tier.
+ *
+ * Projects extend this per-project via {@link protectedTierNamesFromEnv}
+ * (LAKEBASE_TIER_NAMES + the configured trunk/staging/base names). The
+ * Lakebase DEFAULT branch (production) is always protected regardless of name,
+ * handled by callers via the isDefault / trunk-alias check, not this set.
+ */
+export const DEFAULT_PROTECTED_TIER_NAMES: ReadonlySet<string> = new Set([
+  "main",
+  "master",
+  "staging",
+  "dev",
+]);
+
+/** Canonical comparison key for a tier name: trimmed + lowercased. */
+export function normalizeTierName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * The protected tier-name set = the fixed default UNION any per-project extra
+ * names (normalized). Pass the project's configured trunk/staging/base +
+ * LAKEBASE_TIER_NAMES here so off-default tier names (e.g. "qa") are protected.
+ */
+export function resolveProtectedTierNames(extra?: Iterable<string>): Set<string> {
+  const out = new Set<string>(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) { out.add(k); }
+  }
+  return out;
+}
+
+/**
+ * Resolve the protected tier-name set for the current project from the
+ * environment: the fixed default plus `LAKEBASE_TIER_NAMES` (comma-separated)
+ * and the configured `LAKEBASE_TRUNK_BRANCH` / `LAKEBASE_STAGING_BRANCH` /
+ * `LAKEBASE_BASE_BRANCH`. The bash mirror lives in post-checkout.sh.
+ */
+export function protectedTierNamesFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): Set<string> {
+  const extra: string[] = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) { extra.push(part); }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) { extra.push(v); }
+  }
+  return resolveProtectedTierNames(extra);
+}
+
+/**
  * Tier check: returns true iff `name` matches a long-running tier
  * Lakebase branch by exact branchId leaf. See
  * {@link isLongRunningTierBranch} for the underlying classification.
@@ -237,8 +295,13 @@ export function isLongRunningTierBranch(b: LakebaseBranchInfo): boolean {
  * Mirrors the post-checkout hook's auto-discovery model
  * (templates/project/common/scripts/post-checkout.sh:252-279).
  */
-export function isTier(name: string, branches: LakebaseBranchInfo[]): boolean {
+export function isTier(
+  name: string,
+  branches: LakebaseBranchInfo[],
+  protectedNames: ReadonlySet<string> = DEFAULT_PROTECTED_TIER_NAMES,
+): boolean {
   if (!name) { return false; }
+  if (!protectedNames.has(normalizeTierName(name))) { return false; }
   return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
 }
 
@@ -251,8 +314,13 @@ export function isTier(name: string, branches: LakebaseBranchInfo[]): boolean {
  * Filters on {@link isLongRunningTierBranch} so feature branches
  * (which are non-default but carry an expireTime) are excluded.
  */
-export function tierBranchNames(branches: LakebaseBranchInfo[]): string[] {
-  return branches.filter(isLongRunningTierBranch).map((b) => b.nameLeaf as string);
+export function tierBranchNames(
+  branches: LakebaseBranchInfo[],
+  protectedNames: ReadonlySet<string> = DEFAULT_PROTECTED_TIER_NAMES,
+): string[] {
+  return branches
+    .filter((b) => isLongRunningTierBranch(b) && protectedNames.has(normalizeTierName(b.nameLeaf as string)))
+    .map((b) => b.nameLeaf as string);
 }
 
 /**

@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createBranch, waitForBranchReady } from "./branch-create.js";
 import { deleteBranch } from "./branch-delete.js";
-import { getBranchByName, isTier, listBranches } from "./branch-utils.js";
+import { getBranchByName, isTier, listBranches, protectedTierNamesFromEnv } from "./branch-utils.js";
 import type { LakebaseBranchInfo } from "./branch-utils.js";
 import {
   endpointPath,
@@ -684,7 +684,12 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
   // Lakebase branch. The hook compares against $BRANCH directly; we do the
   // same so a `feature/x` git branch never accidentally pairs with a tier
   // just because its sanitized form happens to collide.
-  const tierMatch = isTier(rawBranch, lakebaseBranches);
+  // A git branch maps to a tier only when it is long-running AND its name is in
+  // the project's protected tier-name set (the fixed default hierarchy + any
+  // LAKEBASE_TIER_NAMES / configured trunk/staging/base). A long-running branch
+  // with an off-convention name falls through to feature mode (gets its own
+  // paired feature branch), the same as before tiers existed.
+  const tierMatch = isTier(rawBranch, lakebaseBranches, protectedTierNamesFromEnv());
 
   if (isTrunkAlias || isMainOrMaster) {
     mode = "trunk";

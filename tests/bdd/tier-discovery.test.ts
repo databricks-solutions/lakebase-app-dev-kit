@@ -3,6 +3,9 @@ import {
   isTier,
   tierBranchNames,
   isLongRunningTierBranch,
+  DEFAULT_PROTECTED_TIER_NAMES,
+  resolveProtectedTierNames,
+  protectedTierNamesFromEnv,
 } from "../../scripts/lakebase/branch-utils.js";
 import type { LakebaseBranchInfo } from "../../scripts/lakebase/branch-utils.js";
 import { asBranchUid, asBranchName } from "../../scripts/lakebase/branch-id.js";
@@ -80,10 +83,24 @@ describe("isLongRunningTierBranch", () => {
 });
 
 describe("isTier", () => {
-  it("returns true for long-running tier names", () => {
+  it("returns true for a long-running branch whose name is in the protected set", () => {
     const branches = fixture();
     expect(isTier("staging", branches)).toBe(true);
-    expect(isTier("uat", branches)).toBe(true);
+  });
+
+  it("returns false for a long-running branch with an off-convention name (the new rule)", () => {
+    // uat IS long-running here, but it is NOT in the default protected set,
+    // so by default it is treated as an ordinary branch, not a tier.
+    const branches = fixture();
+    expect(isTier("uat", branches)).toBe(false);
+  });
+
+  it("protects an off-default name when it is supplied via the per-project set", () => {
+    const branches = fixture();
+    const names = resolveProtectedTierNames(["uat"]);
+    expect(isTier("uat", branches, names)).toBe(true);
+    // staging stays protected (still in the default base).
+    expect(isTier("staging", branches, names)).toBe(true);
   });
 
   it("returns false for feature branches even though they're non-default", () => {
@@ -121,8 +138,15 @@ describe("isTier", () => {
 });
 
 describe("tierBranchNames", () => {
-  it("returns only long-running tier branchIds (excludes features with expireTime)", () => {
+  it("returns only long-running branches whose name is in the protected set (default base)", () => {
+    // staging is in the default set; uat is long-running but off-convention,
+    // so it is excluded by default (treated as an ordinary branch).
     const names = tierBranchNames(fixture()).sort();
+    expect(names).toEqual(["staging"]);
+  });
+
+  it("includes an off-default long-running name when supplied via the per-project set", () => {
+    const names = tierBranchNames(fixture(), resolveProtectedTierNames(["uat"])).sort();
     expect(names).toEqual(["staging", "uat"]);
   });
 
@@ -172,5 +196,44 @@ describe("tierBranchNames", () => {
       },
     ];
     expect(tierBranchNames(allFeatures)).toEqual([]);
+  });
+});
+
+describe("protected tier-name set (named AND long-running)", () => {
+  it("ships the canonical default hierarchy", () => {
+    expect([...DEFAULT_PROTECTED_TIER_NAMES].sort()).toEqual(
+      ["dev", "main", "master", "staging"],
+    );
+  });
+
+  it("resolveProtectedTierNames unions the default with normalized extras", () => {
+    const names = resolveProtectedTierNames([" QA ", "Demo", "staging"]);
+    expect(names.has("qa")).toBe(true); // trimmed + lowercased
+    expect(names.has("demo")).toBe(true);
+    expect(names.has("staging")).toBe(true); // still present (no dup)
+    expect(names.has("dev")).toBe(true); // default retained
+  });
+
+  it("resolveProtectedTierNames ignores blank extras", () => {
+    const names = resolveProtectedTierNames(["", "   "]);
+    expect([...names].sort()).toEqual(["dev", "main", "master", "staging"]);
+  });
+
+  it("protectedTierNamesFromEnv reads LAKEBASE_TIER_NAMES + configured trunk/staging/base", () => {
+    const names = protectedTierNamesFromEnv({
+      LAKEBASE_TIER_NAMES: "qa, demo ,",
+      LAKEBASE_STAGING_BRANCH: "stg",
+      LAKEBASE_BASE_BRANCH: "integration",
+      LAKEBASE_TRUNK_BRANCH: "trunk",
+    });
+    for (const n of ["qa", "demo", "stg", "integration", "trunk", "staging", "dev", "main", "master"]) {
+      expect(names.has(n)).toBe(true);
+    }
+  });
+
+  it("protectedTierNamesFromEnv with no extras is exactly the default set", () => {
+    expect([...protectedTierNamesFromEnv({})].sort()).toEqual(
+      ["dev", "main", "master", "staging"],
+    );
   });
 });
