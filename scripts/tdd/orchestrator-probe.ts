@@ -20,7 +20,7 @@ import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
 import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js";
 import { firstPendingEscalation } from "./escalation.js";
-import { specLevelSmell, priorReviseCount } from "./smells.js";
+import { specLevelSmell, priorReviseCount, isBuildRefactorRoutableSmell } from "./smells.js";
 import {
   cyclesRootDir,
   workflowStateJson,
@@ -241,8 +241,18 @@ export function diskArtifactProbe(
       // are never routable -> they keep the terminal raise-to-hil halt.
       if (e.source.startsWith("smell:")) {
         const name = e.source.slice("smell:".length);
-        const spec = specLevelSmell(name);
         const story = e.story_id ?? buildActive ?? undefined;
+        // Build-level self-heal: a refactor-fixable build smell (layering-violation,
+        // ux-adherence, import-time-build-coupling) whose owning AC ALREADY has a
+        // refactor pending is NOT a terminal halt , the Driver's refactor turn is
+        // the remediation the Navigator's REVIEW just prescribed. Suppress the
+        // escalation so the build dispatches that refactor instead of raising to
+        // HIL. refactorAc preserves behavior + resolves the smell; if the refactor
+        // never lands, the smell re-surfaces with no refactor pending and halts.
+        if (isBuildRefactorRoutableSmell(name) && story && firstRefactorPendingAc(tddDir, featureId, story)) {
+          return null;
+        }
+        const spec = specLevelSmell(name);
         if (spec && story && priorReviseCount(tddDir, name, story) < 1) {
           base.routable = { story, owning_role: spec.owning_role, gate: spec.gate_to_rerun };
         }

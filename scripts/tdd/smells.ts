@@ -224,6 +224,28 @@ export function specLevelSmell(
   return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
 }
 
+/**
+ * Build-quality smells whose remediation is the ordinary REVIEW -> refactor ->
+ * Driver loop: the Navigator's REVIEW verdict names the concrete, behavior-
+ * preserving refactor (extract a service, move a module into its declared
+ * package, guard an import-time coupling), and the Driver's refactor turn applies
+ * it. Unlike a `spec`-level smell (routed back to a design author + re-gate) or a
+ * genuinely terminal build smell (cycle-stall, scaffold-defect, test-list-drift),
+ * these SELF-HEAL in-loop and must not hard-halt to the HIL while a refactor for
+ * the owning AC is already pending , the driver could have taken care of it.
+ * The post-refactor verify preserves behavior, refactorAc resolves the smell, and
+ * the deploy/promote layering/adherence gate is the final deterministic backstop.
+ */
+const BUILD_REFACTOR_ROUTABLE = new Set<string>([
+  "layering-violation",
+  "ux-adherence",
+  "import-time-build-coupling",
+]);
+
+export function isBuildRefactorRoutableSmell(name: string): boolean {
+  return BUILD_REFACTOR_ROUTABLE.has(name);
+}
+
 const CYCLE_STALL_THRESHOLD = 3;
 const FRAGILITY_RATIO_FAILED_TESTS = 3;
 const TEST_COST_SPIRAL_FACTOR = 2;

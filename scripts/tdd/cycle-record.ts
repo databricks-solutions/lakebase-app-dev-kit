@@ -25,6 +25,7 @@ import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
+import { readSmellsLog, markSmellResolved, isBuildRefactorRoutableSmell } from "./smells.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
 import {
@@ -592,6 +593,17 @@ export async function refactorAc(
   const prior = readReview(tddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
+  // Build-level self-heal: a refactor-routable build smell (layering-violation,
+  // ux-adherence, import-time-build-coupling) that the Navigator flagged + this
+  // refactor just addressed is resolved, so it no longer derives a (now
+  // refactor-less) terminal escalation on the next readState. The post-refactor
+  // verify above preserved behavior; the deploy/promote gate is the final teeth
+  // if a residual violation remains.
+  for (const d of readSmellsLog(tddDir).detected) {
+    if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === undefined || d.story_id === story)) {
+      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored: ${acId}` });
+    }
+  }
   // The Driver's refactor is a cycle transition: emit it so the central log
   // closes the per-AC RED -> GREEN -> REVIEW -> REFACTOR sequence. The notes the
   // Navigator requested are the closest signal to what changed.
