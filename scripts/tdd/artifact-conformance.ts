@@ -353,6 +353,74 @@ export function checkNfrCoverage(nfrsMd: string, architectureJson: string): Conf
 }
 
 /**
+ * Layering declared (FEIP layered-build enforcement): a feature the architect
+ * marked `service_backed: true` MUST declare a boundary + service + repository in
+ * `architecture.json.layers` (layered architecture: boundary -> service ->
+ * repository -> ORM). A service-backed feature with no/partial layers HARD-BLOCKS
+ * Gate 2, so the build cannot produce a fat controller unchecked. A feature that
+ * is not service_backed is exempt (the YAGNI guard). Absent/invalid architecture
+ * is reported elsewhere.
+ */
+export function checkLayeringDeclared(architectureJson: string): ConformanceResult {
+  let parsed: { service_backed?: boolean; layers?: Array<{ role?: string }> };
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed !== true) return { ok: true };
+  const roles = new Set(
+    (parsed.layers ?? []).map((l) => l.role).filter((r): r is string => typeof r === "string"),
+  );
+  const missing = ["boundary", "service", "repository"].filter((r) => !roles.has(r));
+  if (missing.length) {
+    return {
+      ok: false,
+      violations: [
+        `service_backed feature must declare layers [${missing.join(", ")}] in architecture.json ` +
+          `(layered architecture: boundary -> service -> repository -> ORM; the boundary never touches the DB session)`,
+      ],
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Fitness coverage (FEIP layered-build enforcement): a service-backed / layered
+ * feature MUST have >=1 `kind:"fitness"` item in its test-list (the architectural
+ * constraint gets a fitness test, per test-strategy.md), or Gate 3 HARD-BLOCKS.
+ * Scoped to service_backed/layered features only (NFR coverage is already enforced
+ * separately by checkNfrCoverage), so a trivial feature is exempt.
+ */
+export function checkFitnessCoverage(testListJson: string, architectureJson: string): ConformanceResult {
+  let arch: { service_backed?: boolean; layers?: unknown[] };
+  try {
+    arch = JSON.parse(architectureJson);
+  } catch {
+    return { ok: true }; // invalid architecture reported elsewhere
+  }
+  const declaresConstraint = arch.service_backed === true || (Array.isArray(arch.layers) && arch.layers.length > 0);
+  if (!declaresConstraint) return { ok: true };
+  let tl: { items?: Array<{ kind?: string }> };
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const hasFitness = (tl.items ?? []).some((i) => i.kind === "fitness");
+  if (!hasFitness) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed/layered but the test-list has no kind:"fitness" item ` +
+          `(every architectural constraint needs a fitness test, e.g. the layering contract; see test-strategy.md)`,
+      ],
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Map a file path to the canonical artifact name the registry is keyed by.
  * Acceptance-criteria files are named <AC>.json/.md but share the "ac.json"
  * contract, so any *.json under an `acs/` directory normalizes to "ac.json".
@@ -454,6 +522,25 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
         artifact: `${rel} -> architecture.json (NFR coverage)`,
         ok: cov.ok,
         violations: cov.ok ? [] : cov.violations,
+      });
+    }
+
+    // Layered-build enforcement: a service_backed feature must declare its layers
+    // (Gate 2), and its test-list must carry a fitness item (Gate 3). Both no-op
+    // for a non-service-backed feature, so trivial features are exempt.
+    const lay = checkLayeringDeclared(archContent);
+    entries.push({
+      artifact: "architecture.json (layering declared)",
+      ok: lay.ok,
+      violations: lay.ok ? [] : lay.violations,
+    });
+    const testListPath = join(featureDir, "test-list.json");
+    if (existsSync(testListPath)) {
+      const fit = checkFitnessCoverage(readFileSync(testListPath, "utf8"), archContent);
+      entries.push({
+        artifact: "test-list.json -> architecture.json (fitness coverage)",
+        ok: fit.ok,
+        violations: fit.ok ? [] : fit.violations,
       });
     }
   }

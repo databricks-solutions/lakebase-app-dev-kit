@@ -14,6 +14,8 @@ import {
   hasDeclaredFormat,
   ARTIFACT_FORMATS,
   scanFeatureConformance,
+  checkLayeringDeclared,
+  checkFitnessCoverage,
 } from "../../scripts/tdd/artifact-conformance";
 import { renderTestListMarkdown } from "../../scripts/tdd/test-list";
 
@@ -454,5 +456,57 @@ describe("scanFeatureConformance: checks every artifact that exists on disk", ()
     const bad = report.entries.find((e) => e.artifact.endsWith("feature-spec.json"));
     expect(bad?.ok).toBe(false);
     expect(bad?.violations.join(" ")).toMatch(/id|name|status|tdd_mode/);
+  });
+});
+
+describe("checkLayeringDeclared (Gate 2: a service-backed feature must declare its layers)", () => {
+  const arch = (o: object) => JSON.stringify({ feature_id: "F1-x", nfrs: [], ...o });
+  it("passes a service-backed feature with boundary+service+repository", () => {
+    const r = checkLayeringDeclared(
+      arch({
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes" },
+          { role: "service", module: "app/services" },
+          { role: "repository", module: "app/repositories" },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+  it("FAILS a service-backed feature missing the repository layer", () => {
+    const r = checkLayeringDeclared(
+      arch({ service_backed: true, layers: [{ role: "boundary", module: "app/main.py" }] }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/repository|service/);
+  });
+  it("EXEMPTS a non-service-backed feature (YAGNI), even with no layers", () => {
+    expect(checkLayeringDeclared(arch({ service_backed: false })).ok).toBe(true);
+    expect(checkLayeringDeclared(arch({})).ok).toBe(true); // service_backed omitted
+  });
+});
+
+describe("checkFitnessCoverage (Gate 3: a layered feature must have a fitness test)", () => {
+  const arch = JSON.stringify({ feature_id: "F1-x", nfrs: [], service_backed: true, layers: [{ role: "service", module: "app/services" }] });
+  const tl = (items: object[]) => JSON.stringify({ feature_id: "F1-x", items });
+  it("passes when the test-list has a kind:fitness item", () => {
+    const r = checkFitnessCoverage(
+      tl([
+        { id: "T1", description: "x", ac_id: "AC1", status: "pending", kind: "behavior" },
+        { id: "T2", description: "layering", ac_id: "AC1", status: "pending", kind: "fitness" },
+      ]),
+      arch,
+    );
+    expect(r.ok).toBe(true);
+  });
+  it("FAILS a service-backed feature whose test-list has only behavior items", () => {
+    const r = checkFitnessCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending" }]), arch);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/fitness/);
+  });
+  it("EXEMPTS a non-service-backed feature with no fitness item", () => {
+    const trivial = JSON.stringify({ feature_id: "F1-x", nfrs: [] });
+    expect(checkFitnessCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending" }]), trivial).ok).toBe(true);
   });
 });
