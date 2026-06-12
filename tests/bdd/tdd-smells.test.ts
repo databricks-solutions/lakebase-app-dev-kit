@@ -53,6 +53,7 @@ describe("smells catalog", () => {
         "cross-experiment-divergence",
         "cycle-stall",
         "dead-requirement-signal",
+        "e2e-inline-regex-flag",
         "e2e-row-perma-red",
         "fragility-ratio",
         "import-time-build-coupling",

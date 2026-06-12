@@ -18,6 +18,7 @@ export type SmellName =
   | "ac-overlap"
   | "layering-violation"
   | "ux-adherence"
+  | "e2e-inline-regex-flag"
   | "e2e-row-perma-red";
 
 export interface SmellDefinition {
@@ -161,6 +162,22 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with " +
       "its data-testid seams, and give every action a perceivable result. Refactor the UI to the " +
       "design guide; do not weaken the guide to match the drift.",
+  },
+  {
+    name: "e2e-inline-regex-flag",
+    description:
+      "An E2E Playwright matcher (to_contain_text/to_have_text/to_have_url/get_by_text) is " +
+      "built from a Python regex carrying INLINE FLAGS , re.compile(r\"(?i)summary\") and the " +
+      "like. Playwright forwards the pattern's `.pattern` string verbatim to the browser's " +
+      "JavaScript regex engine, which does NOT support inline-flag syntax `(?i)`/`(?s)`/`(?m)`, " +
+      "so the regex is invalid and the assertion can never match the running app. The test is " +
+      "structurally un-greenable: the honest-GREEN verify rejects it and the build raises to HIL. " +
+      "Caught deterministically + cheaply (no browser run) by the e2e-regex-clean static lint, " +
+      "which enriches the GREEN-verify failure with the exact file:line + fix.",
+    proposed_remediation:
+      "Pass the flag as a kwarg, not inline: re.compile(\"summary\", re.IGNORECASE) emits the " +
+      "valid JS regex /summary/i. Or, for a plain case-insensitive substring, use the bare string " +
+      "form Playwright already matches loosely. See the E2E rule in the Navigator role.",
   },
   {
     name: "e2e-row-perma-red",
