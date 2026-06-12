@@ -6943,6 +6943,54 @@ function checkNfrCoverage(nfrsMd, architectureJson) {
   }
   return finalize(violations);
 }
+function checkLayeringDeclared(architectureJson) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed !== true) return { ok: true };
+  const roles = new Set(
+    (parsed.layers ?? []).map((l) => l.role).filter((r) => typeof r === "string")
+  );
+  const missing = ["boundary", "service", "repository"].filter((r) => !roles.has(r));
+  if (missing.length) {
+    return {
+      ok: false,
+      violations: [
+        `service_backed feature must declare layers [${missing.join(", ")}] in architecture.json (layered architecture: boundary -> service -> repository -> ORM; the boundary never touches the DB session)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkFitnessCoverage(testListJson, architectureJson) {
+  let arch;
+  try {
+    arch = JSON.parse(architectureJson);
+  } catch {
+    return { ok: true };
+  }
+  const declaresConstraint = arch.service_backed === true || Array.isArray(arch.layers) && arch.layers.length > 0;
+  if (!declaresConstraint) return { ok: true };
+  let tl;
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const hasFitness = (tl.items ?? []).some((i) => i.kind === "fitness");
+  if (!hasFitness) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed/layered but the test-list has no kind:"fitness" item (every architectural constraint needs a fitness test, e.g. the layering contract; see test-strategy.md)`
+      ]
+    };
+  }
+  return { ok: true };
+}
 function canonicalArtifactName(path) {
   const base = (0, import_path2.basename)(path);
   if ((0, import_path2.basename)((0, import_path2.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
@@ -7001,6 +7049,21 @@ function scanFeatureConformance(tddDir, featureId) {
         artifact: `${rel} -> architecture.json (NFR coverage)`,
         ok: cov.ok,
         violations: cov.ok ? [] : cov.violations
+      });
+    }
+    const lay = checkLayeringDeclared(archContent);
+    entries.push({
+      artifact: "architecture.json (layering declared)",
+      ok: lay.ok,
+      violations: lay.ok ? [] : lay.violations
+    });
+    const testListPath = (0, import_path2.join)(featureDir, "test-list.json");
+    if ((0, import_fs2.existsSync)(testListPath)) {
+      const fit = checkFitnessCoverage((0, import_fs2.readFileSync)(testListPath, "utf8"), archContent);
+      entries.push({
+        artifact: "test-list.json -> architecture.json (fitness coverage)",
+        ok: fit.ok,
+        violations: fit.ok ? [] : fit.violations
       });
     }
   }

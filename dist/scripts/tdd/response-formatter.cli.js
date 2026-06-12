@@ -6993,7 +6993,7 @@ function checkSpecAuthor(args, v) {
     if (ids2.length > 1) {
       v.push({
         artifact: `stories/${story}/acs`,
-        problem: `ACs ${ids2.sort().join(", ")} share an identical \`then\` , each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`
+        problem: `ACs ${ids2.sort().join(", ")} share an identical \`then\`, each AC must be an independent observable behavior. Merge them or differentiate (ac-overlap).`
       });
     }
   }

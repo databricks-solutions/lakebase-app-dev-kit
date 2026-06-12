@@ -7104,7 +7104,13 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   // impossible. Flagged by the test-strategist at the design gate so it halts
   // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
   // overlap that stalled S1).
-  "ac-overlap"
+  "ac-overlap",
+  // The boundary/routes layer touching persistence directly (a fat controller),
+  // instead of delegating to a service + repository. A build-level structural
+  // defect; the Navigator flags it in REVIEW and the layering fitness test
+  // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
+  // than routing to a design author.
+  "layering-violation"
 ]);
 function recordBlockingSmellFlag(tddDir, smell, detail, scope) {
   if (!BLOCKING_SMELLS.has(smell)) return false;
@@ -7194,7 +7200,7 @@ Emit:
     --slot k=v fill one template slot (repeatable). A missing required slot is
                rejected (exit 3). The event NAME carries the phase; slots carry
                the specifics. NOTE: cycle.* events are CODE-emitted by the
-               orchestration , agents do not emit them.
+               orchestration, agents do not emit them.
     --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
 
 Read:

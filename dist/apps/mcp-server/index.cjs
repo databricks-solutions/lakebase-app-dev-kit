@@ -8661,6 +8661,7 @@ function writePlaywrightTemplates(args) {
 // scripts/lakebase/enable-e2e.ts
 var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
 var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
+var PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 function addPlaywrightToPackageJson(args) {
   const pkgPath = path9.join(args.projectDir, "package.json");
   if (!fs10.existsSync(pkgPath)) {
@@ -8689,17 +8690,16 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-function ensurePythonE2eDeps(args) {
-  const pyPath = path9.join(args.projectDir, "pyproject.toml");
+function addPythonDevDep(projectDir, pkg, range) {
+  const pyPath = path9.join(projectDir, "pyproject.toml");
   if (!fs10.existsSync(pyPath)) {
     return { patched: false, depAdded: false };
   }
   const original = fs10.readFileSync(pyPath, "utf8");
-  if (/["']pytest-playwright/.test(original)) {
+  if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
     return { patched: true, depAdded: false };
   }
-  const range = args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE;
-  const depLine = `    "pytest-playwright${range}",`;
+  const depLine = `    "${pkg}${range}",`;
   const devArray = /(\n[ \t]*dev[ \t]*=[ \t]*\[)([\s\S]*?)(\n[ \t]*\])/;
   if (devArray.test(original)) {
     const patched = original.replace(devArray, (_m, open, body, close) => {
@@ -8719,6 +8719,12 @@ ${depLine}
 `;
   fs10.writeFileSync(pyPath, trimmed + block, "utf8");
   return { patched: true, depAdded: true };
+}
+function ensurePythonE2eDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-playwright", args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE);
+}
+function ensurePythonBddDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-bdd", args.versionRange ?? PYTEST_BDD_VERSION_RANGE);
 }
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
@@ -8768,6 +8774,7 @@ function enableE2eForProject(args) {
       templatesDir: args.templatesDir,
       files: PYTHON_E2E_TEMPLATE_FILES
     }) : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
     return {
       templatesWritten: templates2.written,
       templatesSkipped: templates2.skipped,

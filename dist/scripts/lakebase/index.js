@@ -1190,6 +1190,7 @@ async function installPlaywright(args) {
 // scripts/lakebase/enable-e2e.ts
 var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
 var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
+var PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 function addPlaywrightToPackageJson(args) {
   const pkgPath = path9.join(args.projectDir, "package.json");
   if (!fs9.existsSync(pkgPath)) {
@@ -1218,17 +1219,16 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
-function ensurePythonE2eDeps(args) {
-  const pyPath = path9.join(args.projectDir, "pyproject.toml");
+function addPythonDevDep(projectDir, pkg, range) {
+  const pyPath = path9.join(projectDir, "pyproject.toml");
   if (!fs9.existsSync(pyPath)) {
     return { patched: false, depAdded: false };
   }
   const original = fs9.readFileSync(pyPath, "utf8");
-  if (/["']pytest-playwright/.test(original)) {
+  if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
     return { patched: true, depAdded: false };
   }
-  const range = args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE;
-  const depLine = `    "pytest-playwright${range}",`;
+  const depLine = `    "${pkg}${range}",`;
   const devArray = /(\n[ \t]*dev[ \t]*=[ \t]*\[)([\s\S]*?)(\n[ \t]*\])/;
   if (devArray.test(original)) {
     const patched = original.replace(devArray, (_m, open, body, close) => {
@@ -1248,6 +1248,12 @@ ${depLine}
 `;
   fs9.writeFileSync(pyPath, trimmed + block, "utf8");
   return { patched: true, depAdded: true };
+}
+function ensurePythonE2eDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-playwright", args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE);
+}
+function ensurePythonBddDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-bdd", args.versionRange ?? PYTEST_BDD_VERSION_RANGE);
 }
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
@@ -1297,6 +1303,7 @@ function enableE2eForProject(args) {
       templatesDir: args.templatesDir,
       files: PYTHON_E2E_TEMPLATE_FILES
     }) : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
     return {
       templatesWritten: templates2.written,
       templatesSkipped: templates2.skipped,
@@ -7228,10 +7235,21 @@ async function mergeFeature(args) {
         );
       }
     } else {
-      migrate = { waited: true, polls };
-      throw new ScmMergeError(
-        `Timed out after ${Math.round((args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3)}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastSeen?.status ?? "(no matching run)"}.`,
-        "migrate-timeout"
+      const budgetSec = Math.round(
+        (args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3
+      );
+      const lastStatus = lastSeen?.status ?? "(no matching run)";
+      const timeoutFatal = args.migrateTimeoutFatal !== false;
+      if (timeoutFatal) {
+        migrate = { waited: true, polls };
+        throw new ScmMergeError(
+          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+          "migrate-timeout"
+        );
+      }
+      migrate = { waited: true, polls, timedOut: true };
+      warnings.push(
+        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s (last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`
       );
     }
   } else {
@@ -8399,6 +8417,7 @@ export {
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
   PROJECT_SKILLS,
+  PYTEST_BDD_VERSION_RANGE,
   PYTEST_PLAYWRIGHT_VERSION_RANGE,
   PYTHON_E2E_TEMPLATE_FILES,
   SCM_STATES,
@@ -8470,6 +8489,7 @@ export {
   ensureEndpoint,
   ensureLakebaseSecretAuth,
   ensureProfilePinned,
+  ensurePythonBddDeps,
   ensurePythonE2eDeps,
   ensureSchemaAndVolume,
   extractPullNumber,

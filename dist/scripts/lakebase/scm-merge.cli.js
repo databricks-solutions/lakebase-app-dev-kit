@@ -921,10 +921,21 @@ async function mergeFeature(args) {
         );
       }
     } else {
-      migrate = { waited: true, polls };
-      throw new ScmMergeError(
-        `Timed out after ${Math.round((args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3)}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastSeen?.status ?? "(no matching run)"}.`,
-        "migrate-timeout"
+      const budgetSec = Math.round(
+        (args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3
+      );
+      const lastStatus = lastSeen?.status ?? "(no matching run)";
+      const timeoutFatal = args.migrateTimeoutFatal !== false;
+      if (timeoutFatal) {
+        migrate = { waited: true, polls };
+        throw new ScmMergeError(
+          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+          "migrate-timeout"
+        );
+      }
+      migrate = { waited: true, polls, timedOut: true };
+      warnings.push(
+        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s (last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`
       );
     }
   } else {
@@ -983,6 +994,9 @@ function parseArgs(argv) {
       case "--migrate-poll-sec":
         out.migratePollSec = Number.parseInt(argv[++i], 10);
         break;
+      case "--migrate-timeout-nonfatal":
+        out.migrateTimeoutNonfatal = true;
+        break;
       case "--json":
         out.json = true;
         break;
@@ -1019,6 +1033,15 @@ Flags:
   --migrate-timeout-sec <n>
                           Migrate poll budget (default: 1800 = 30 minutes)
   --migrate-poll-sec <n>  Seconds between migrate polls (default: 30)
+  --migrate-timeout-nonfatal
+                          Treat a migrate-poll TIMEOUT as a warning, not an
+                          error: the PR already merged + local synced, so a
+                          slow/absent downstream-migrate run becomes a warning
+                          (migrate.timedOut) and exit 0 instead of failing.
+                          A migrate run that COMPLETES with failure is still
+                          fatal. Used by fire-and-confirm callers (the TDD
+                          orchestrator) so a slow migrate run does not hang the
+                          whole drive.
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
@@ -1053,6 +1076,9 @@ function renderHuman(r) {
     }
     if (res.migrate.conclusion) {
       lines.push(`  migrate_conclusion   : ${res.migrate.conclusion}`);
+    }
+    if (res.migrate.timedOut) {
+      lines.push(`  migrate_timed_out    : true (advisory; merge already landed)`);
     }
     if (res.state.migrate_completed_at) {
       lines.push(
@@ -1095,7 +1121,8 @@ async function runScmMergeCli(argv) {
       skipLocalCleanup: args.skipLocalCleanup,
       waitMigrate: args.noWaitMigrate ? false : true,
       migrateTimeoutMs: args.migrateTimeoutSec ? args.migrateTimeoutSec * 1e3 : void 0,
-      migratePollMs: args.migratePollSec ? args.migratePollSec * 1e3 : void 0
+      migratePollMs: args.migratePollSec ? args.migratePollSec * 1e3 : void 0,
+      migrateTimeoutFatal: args.migrateTimeoutNonfatal ? false : void 0
     });
     const report = { ok: true, result };
     if (args.json) {
