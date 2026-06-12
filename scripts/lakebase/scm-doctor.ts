@@ -13,6 +13,7 @@ import * as path from "node:path";
 import {
   getBranchByName,
   listBranches,
+  DEFAULT_PROTECTED_TIER_NAMES,
   type LakebaseBranchInfo,
 } from "./branch-utils.js";
 import { getCurrentBranch } from "../git/inspect.js";
@@ -56,7 +57,9 @@ export interface DoctorReport {
 }
 
 const FEATURE_PREFIX = "feature/";
-const TIER_LEAFS = new Set(["staging", "dev"]);
+// Protected tier leaf names (shared default; main/master are also covered so a
+// trunk checkout is never misread as an orphan feature). DRY with branch-utils.
+const TIER_LEAFS = DEFAULT_PROTECTED_TIER_NAMES;
 
 function readEnv(projectDir: string): Map<string, string> {
   const envPath = path.join(projectDir, ".env");

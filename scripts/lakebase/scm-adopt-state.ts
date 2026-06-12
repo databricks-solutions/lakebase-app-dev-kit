@@ -18,6 +18,7 @@
 import {
   getBranchByName,
   listBranches,
+  protectedTierNamesFromEnv,
   type LakebaseBranchInfo,
 } from "./branch-utils.js";
 import { getCurrentBranch } from "../git/inspect.js";
@@ -114,7 +115,12 @@ function parentForTier(
 // works when invoked from a fresh clone whose git HEAD is "main"
 // (paired with Lakebase "production"). The defaultLeaf check below
 // catches custom-named pairings.
-const LONG_RUNNING_LEAFS = new Set(["staging", "dev", "main", "master"]);
+//
+// The protected tier-name set = the kit's fixed default (main/master/staging/
+// dev) UNION the project's configured names (LAKEBASE_TIER_NAMES +
+// trunk/staging/base), so a project whose staging tier is named "stg" adopts it
+// as a tier too. Single source of truth: branch-utils.protectedTierNamesFromEnv.
+const LONG_RUNNING_LEAFS = protectedTierNamesFromEnv();
 
 /**
  * Convert a Lakebase branch info into the leaf name (`feature-x` from

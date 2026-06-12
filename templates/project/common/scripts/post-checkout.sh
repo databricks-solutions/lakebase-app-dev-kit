@@ -245,6 +245,26 @@ TIER_BRANCH_NAMES="$(echo "$BRANCH_LIST_JSON" \
   | jq -r '(if type == "array" then . elif type == "object" then (.branches // .items // []) else [] end) | .[] | select(((.status.default == true) or (.is_default == true)) | not) | (if .name then (.name | split("/") | last) else (.uid // .id // empty) end)' \
   | grep -v '^$' || true)"
 
+# A checkout is a TIER checkout only when the branch is long-running (above)
+# AND its name is in the project's PROTECTED tier-name set: the fixed default
+# hierarchy (main/master/staging/dev) UNION the project's configured names
+# (LAKEBASE_TIER_NAMES + trunk/staging/base). A long-running branch with an
+# off-convention name (e.g. a `scratch` spike left no_expiry) is treated as an
+# ordinary branch, not a tier. Mirrors branch-utils.protectedTierNamesFromEnv.
+is_protected_tier_name() {
+  local name extra
+  name="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$name" in
+    main|master|staging|dev) return 0 ;;
+  esac
+  for extra in $(printf '%s' "${LAKEBASE_TIER_NAMES:-}" | tr ',' ' ') \
+               "${LAKEBASE_STAGING_BRANCH:-}" "${LAKEBASE_BASE_BRANCH:-}" "${LAKEBASE_TRUNK_BRANCH:-}"; do
+    [ -n "$extra" ] || continue
+    [ "$(printf '%s' "$extra" | tr '[:upper:]' '[:lower:]')" = "$name" ] && return 0
+  done
+  return 1
+}
+
 # --- Trunk path: git trunk → Lakebase default ---
 # Special-cased because the Lakebase default branch's name (e.g. `production`)
 # may differ from the git trunk name (`main`). TRUNK_ALIAS is auto-derived
@@ -281,7 +301,8 @@ fi
 # branch exists, this is a tier checkout. Tiers are never auto-created by
 # this hook – the architect bootstraps them deliberately (see
 # createLongRunningBranch in lakebase-app-dev-kit).
-if [ -n "$TIER_BRANCH_NAMES" ] && echo "$TIER_BRANCH_NAMES" | grep -qxF "$BRANCH"; then
+if [ -n "$TIER_BRANCH_NAMES" ] && echo "$TIER_BRANCH_NAMES" | grep -qxF "$BRANCH" \
+   && is_protected_tier_name "$BRANCH"; then
   echo "Lakebase: on $BRANCH, connecting to Lakebase tier '$BRANCH'..."
   BRANCH_PATH="${PROJ_PATH}/branches/${BRANCH}"
 
