@@ -6673,7 +6673,7 @@ function isCliEntry(importMetaUrl) {
 
 // scripts/tdd/human-proxy.ts
 init_esm_shims();
-import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync5, readdirSync as readdirSync5, rmSync } from "fs";
+import { existsSync as existsSync12, readFileSync as readFileSync13, writeFileSync as writeFileSync10, mkdirSync as mkdirSync6, readdirSync as readdirSync5, rmSync } from "fs";
 import { join as join12, dirname as dirname4, basename as basename2 } from "path";
 
 // scripts/tdd/approve-gate.ts
@@ -6706,12 +6706,17 @@ import { join } from "path";
 var featuresDir = (tdd) => join(tdd, "features");
 var planningDir = (tdd) => join(tdd, "planning");
 var sprintsDir = (tdd) => join(tdd, "sprints");
+var nfrsMd = (tdd) => join(tdd, "nfrs.md");
+var architectureDir = (tdd) => join(tdd, "architecture");
+var architectureConventionsJson = (tdd) => join(architectureDir(tdd), "conventions.json");
 var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureRequestMd = (tdd, f) => join(featureResolved(tdd, f), "feature-request.md");
+var architectureJson = (tdd, f) => join(featureResolved(tdd, f), "architecture.json");
 var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
 var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
+var featureNfrsMd = (tdd, f) => join(featureResolved(tdd, f), "nfrs.md");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
@@ -7263,6 +7268,196 @@ function checkTestListMd(content) {
   }
   return violations;
 }
+var REQUIRED_NFR_ITEM_RE = /^\s*[-*]\s+\*{0,2}(R\d+)\*{0,2}\s*[:.)\-]?\s*(.*)$/;
+var PLAIN_LIST_ITEM_RE = /^\s*[-*]\s+(.*\S)\s*$/;
+function parseRequiredNfrs(nfrsMd2) {
+  const lines = nfrsMd2.split("\n");
+  const out = [];
+  let inRequired = false;
+  for (const line of lines) {
+    const h = HEADING_RE.exec(line);
+    if (h) {
+      inRequired = h[2].trim().toLowerCase().startsWith("required");
+      continue;
+    }
+    if (!inRequired) continue;
+    const withId = REQUIRED_NFR_ITEM_RE.exec(line);
+    if (withId) {
+      out.push({ id: withId[1], text: withId[2].trim() });
+      continue;
+    }
+    const plain = PLAIN_LIST_ITEM_RE.exec(line);
+    if (plain) out.push({ id: null, text: plain[1].trim() });
+  }
+  return out;
+}
+function checkNfrCoverage(nfrsMd2, architectureJson2) {
+  const required = parseRequiredNfrs(nfrsMd2);
+  if (required.length === 0) return { ok: true };
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${cause}`] };
+  }
+  const briefRefs = new Set(
+    (parsed.nfrs ?? []).map((n) => n.brief_ref).filter((r) => typeof r === "string" && r.length > 0)
+  );
+  const violations = [];
+  for (const item of required) {
+    if (item.id === null) {
+      const preview = item.text.length > 50 ? `${item.text.slice(0, 50)}...` : item.text;
+      violations.push(`nfrs.md Required item has no R<n> id (cannot be coverage-tracked): "${preview}"`);
+      continue;
+    }
+    if (!briefRefs.has(item.id)) {
+      violations.push(
+        `Required NFR ${item.id} from nfrs.md is not covered by any architecture.json nfr (no matching brief_ref)`
+      );
+    }
+  }
+  return finalize(violations);
+}
+var PERSISTENCE_EVIDENCE_RE = /\b(migrat\w*|schema|persist\w*|stored|store|tables?|database|repositor\w*|\bORM\b)\b/i;
+function checkServiceBackedDeclaration(architectureJson2, evidence) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed === true) return { ok: true };
+  const infraAc = (evidence.acLayers ?? []).some((l) => l === "Infra");
+  const persistNfr = (evidence.nfrsText ?? []).some((t) => PERSISTENCE_EVIDENCE_RE.test(t));
+  if (!infraAc && !persistNfr) return { ok: true };
+  const why = [
+    infraAc ? "an AC is tagged layer:Infra (a data-store contract)" : "",
+    persistNfr ? "an NFR references persistence (migration/schema/storage)" : ""
+  ].filter(Boolean).join(" and ");
+  return {
+    ok: false,
+    violations: [
+      `architecture.json is not service_backed but shows persistence evidence (${why}); set service_backed:true + declare boundary/service/repository layers (a data-persisting feature MUST be layered), or remove the misleading signal if the feature is genuinely trivial`
+    ]
+  };
+}
+function checkLayeringDeclared(architectureJson2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed !== true) return { ok: true };
+  const roles = new Set(
+    (parsed.layers ?? []).map((l) => l.role).filter((r) => typeof r === "string")
+  );
+  const missing = ["boundary", "service", "repository"].filter((r) => !roles.has(r));
+  if (missing.length) {
+    return {
+      ok: false,
+      violations: [
+        `service_backed feature must declare layers [${missing.join(", ")}] in architecture.json (layered architecture: boundary -> service -> repository -> ORM; the boundary never touches the DB session)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkFitnessCoverage(testListJson, architectureJson2) {
+  let arch;
+  try {
+    arch = JSON.parse(architectureJson2);
+  } catch {
+    return { ok: true };
+  }
+  const declaresConstraint = arch.service_backed === true || Array.isArray(arch.layers) && arch.layers.length > 0;
+  if (!declaresConstraint) return { ok: true };
+  let tl;
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const hasFitness = (tl.items ?? []).some((i) => i.kind === "fitness");
+  if (!hasFitness) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed/layered but the test-list has no kind:"fitness" item (every architectural constraint needs a fitness test, e.g. the layering contract; see test-strategy.md)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkStoryIndependence(stories) {
+  const parsed = [];
+  for (const s of stories) {
+    let obj;
+    try {
+      obj = JSON.parse(s.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : s.name;
+    const m = /^S(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: s.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every story after the first must record independence.distinct_from_prior + rationale; apply the story-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this story's behavior is a subset of an earlier story; fold it into that story or re-scope it to a distinct, independently-RED-able slice)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct behavior this story adds beyond the prior stories)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkAcIndependence(acs) {
+  const parsed = [];
+  for (const a of acs) {
+    let obj;
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
 function canonicalArtifactName(path4) {
   const base = basename(path4);
   if (basename(dirname(path4)) === "acs" && base.endsWith(".json")) return "ac.json";
@@ -7390,9 +7585,59 @@ function emitAgentLogEvent(input, opts = {}) {
   return event;
 }
 
+// scripts/tdd/architecture-conventions.ts
+init_esm_shims();
+import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5, mkdirSync as mkdirSync3 } from "fs";
+function normModule(m) {
+  return m.replace(/\/+$/, "");
+}
+function readConventions(tddDir) {
+  const f = architectureConventionsJson(tddDir);
+  if (!existsSync6(f)) return void 0;
+  try {
+    return JSON.parse(readFileSync7(f, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function assertArchitectureConforms(conventions, architectureJsonContent) {
+  let doc;
+  try {
+    doc = JSON.parse(architectureJsonContent);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (doc.service_backed !== true) return { ok: true };
+  const featureLayers = (doc.layers ?? []).filter(
+    (l) => typeof l.role === "string" && typeof l.module === "string"
+  );
+  if (featureLayers.length === 0) return { ok: true };
+  const violations = [];
+  for (const conv of conventions.layers) {
+    const match = featureLayers.find((l) => l.role === conv.role);
+    if (!match) {
+      violations.push(
+        `architecture.json does not realize the established ${conv.role} layer (project convention pins ${conv.role} -> ${conv.module}, set by ${conventions.established_by})`
+      );
+      continue;
+    }
+    if (normModule(match.module) !== conv.module) {
+      violations.push(
+        `architecture.json remaps the ${conv.role} layer to "${normModule(match.module)}" but the project convention pins ${conv.role} -> "${conv.module}" (set by ${conventions.established_by}); reuse the established module path, do not diverge`
+      );
+    }
+    if (conv.renders_via && match.renders_via && match.renders_via !== conv.renders_via) {
+      violations.push(
+        `architecture.json renders the ${conv.role} layer via "${match.renders_via}" but the project convention pins "${conv.renders_via}" (set by ${conventions.established_by})`
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5, mkdirSync as mkdirSync3, readdirSync as readdirSync4, statSync as statSync2 } from "fs";
+import { existsSync as existsSync7, readFileSync as readFileSync8, writeFileSync as writeFileSync6, mkdirSync as mkdirSync4, readdirSync as readdirSync4, statSync as statSync2 } from "fs";
 import { dirname as dirname2, join as join8 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -7402,13 +7647,13 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync6(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync7(p, "utf8"));
+  if (!existsSync7(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync8(p, "utf8"));
 }
 function writePipeline(tddDir, pipeline) {
   const p = pipelinePath(tddDir, pipeline.feature_id);
-  mkdirSync3(dirname2(p), { recursive: true });
-  writeFileSync5(p, JSON.stringify(pipeline, null, 2) + "\n");
+  mkdirSync4(dirname2(p), { recursive: true });
+  writeFileSync6(p, JSON.stringify(pipeline, null, 2) + "\n");
 }
 function setStoryStatus(pipeline, storyId, status) {
   const existing = pipeline.stories[storyId];
@@ -7448,7 +7693,7 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/tdd/smells.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9 } from "fs";
 import { join as join11 } from "path";
 
 // scripts/tdd/run-cycle.ts
@@ -7556,6 +7801,13 @@ var execFileP4 = promisify4(execFile4);
 init_esm_shims();
 import { execFileSync as execFileSync2 } from "child_process";
 
+// scripts/git/status.ts
+init_esm_shims();
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp from "child_process";
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs2 from "fs";
@@ -7565,10 +7817,6 @@ import * as path2 from "path";
 init_esm_shims();
 import * as fs3 from "fs";
 
-// scripts/util/exec.ts
-init_esm_shims();
-import * as cp from "child_process";
-
 // scripts/tdd/smells.ts
 function smellMatches(entry, smell, story_id) {
   if (entry.smell !== smell) return false;
@@ -7577,13 +7825,13 @@ function smellMatches(entry, smell, story_id) {
 }
 function markSmellResolved(tddDir, smell, opts) {
   const file = join11(tddDir, "smells.json");
-  if (!existsSync10(file)) return false;
-  const log = JSON.parse(readFileSync11(file, "utf8"));
+  if (!existsSync11(file)) return false;
+  const log = JSON.parse(readFileSync12(file, "utf8"));
   const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
   if (!entry) return false;
   entry.resolution = opts.note ?? `${opts.kind} by PO`;
   entry.resolution_kind = opts.kind;
-  writeFileSync8(file, JSON.stringify(log, null, 2) + "\n");
+  writeFileSync9(file, JSON.stringify(log, null, 2) + "\n");
   return true;
 }
 
@@ -7620,21 +7868,21 @@ var HUMAN_PROXY = "human-proxy";
 function staleStoryArtifactsForRevise(tddDir, featureId, story, gate) {
   const acIds = new Set(storyAcIds(tddDir, featureId, story));
   const master = featureTestListJson(tddDir, featureId);
-  if (existsSync11(master)) {
+  if (existsSync12(master)) {
     try {
-      const data = JSON.parse(readFileSync12(master, "utf8"));
+      const data = JSON.parse(readFileSync13(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        writeFileSync9(master, JSON.stringify(data, null, 2) + "\n");
+        writeFileSync10(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(tddDir, featureId, story);
-  if (existsSync11(perStory)) rmSync(perStory, { force: true });
+  if (existsSync12(perStory)) rmSync(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(tddDir, featureId, story);
-    if (existsSync11(dir)) {
+    if (existsSync12(dir)) {
       for (const f of readdirSync5(dir)) {
         if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join12(dir, f), { force: true });
       }
@@ -7672,9 +7920,9 @@ function decideEscalationAsHumanProxy(args) {
   staleStoryArtifactsForRevise(tddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(tddDir, args.featureId, args.routedTo, args.story);
-    mkdirSync5(dirname4(hb), { recursive: true });
+    mkdirSync6(dirname4(hb), { recursive: true });
     const artifact = args.gate === "spec" ? "acceptance criteria" : "ordered test list";
-    writeFileSync9(
+    writeFileSync10(
       hb,
       `REVISE (Product Owner): ${args.reason}
 
@@ -7702,31 +7950,131 @@ function conformanceReason(inputs) {
 }
 function acsConformanceReason(fdir) {
   const stories = join12(fdir, "stories");
-  if (!existsSync11(stories)) return null;
+  if (!existsSync12(stories)) return null;
   const problems = [];
   for (const s of readdirSync5(stories)) {
     const acsDir2 = join12(stories, s, "acs");
-    if (!existsSync11(acsDir2)) continue;
+    if (!existsSync12(acsDir2)) continue;
+    const acs = [];
     for (const f of readdirSync5(acsDir2)) {
       if (!f.endsWith(".json")) continue;
       const p = join12(acsDir2, f);
       let content;
       try {
-        content = readFileSync12(p, "utf8");
+        content = readFileSync13(p, "utf8");
       } catch {
         continue;
       }
+      acs.push({ name: f.replace(/\.json$/, ""), content });
       const r = checkArtifactConformance(canonicalArtifactName(p), content);
       if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
     }
+    const indep = checkAcIndependence(acs);
+    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
   }
   return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
 }
-function resolveArtifactInputs(gate, fdir, promoteRef) {
+function storyIndependenceReason(fdir) {
+  const stories = join12(fdir, "stories");
+  if (!existsSync12(stories)) return null;
+  const storyJsons = [];
+  for (const s of readdirSync5(stories)) {
+    const p = join12(stories, s, "story.json");
+    if (!existsSync12(p)) continue;
+    try {
+      storyJsons.push({ name: s, content: readFileSync13(p, "utf8") });
+    } catch {
+      continue;
+    }
+  }
+  const r = checkStoryIndependence(storyJsons);
+  return r.ok ? null : `story independence failed: ${r.violations.join("; ")}`;
+}
+function architectureConventionsReason(tddDir, featureId) {
+  const conventions = readConventions(tddDir);
+  if (!conventions) return null;
+  const archFile = architectureJson(tddDir, featureId);
+  if (!existsSync12(archFile)) return null;
+  let content;
+  try {
+    content = readFileSync13(archFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = assertArchitectureConforms(conventions, content);
+  return r.ok ? null : `architecture conventions failed: ${r.violations.join("; ")}`;
+}
+function readArchitecture(tddDir, featureId) {
+  const f = architectureJson(tddDir, featureId);
+  if (!existsSync12(f)) return void 0;
+  try {
+    return readFileSync13(f, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function layeringDeclaredReason(tddDir, featureId) {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === void 0) return null;
+  const r = checkLayeringDeclared(arch);
+  return r.ok ? null : `layering declaration failed: ${r.violations.join("; ")}`;
+}
+function nfrCoverageReason(tddDir, featureId) {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === void 0) return null;
+  const featureNfrs = featureNfrsMd(tddDir, featureId);
+  const projectNfrs = nfrsMd(tddDir);
+  const nfrsFile = existsSync12(featureNfrs) ? featureNfrs : existsSync12(projectNfrs) ? projectNfrs : void 0;
+  if (nfrsFile === void 0) return null;
+  let nfrsContent;
+  try {
+    nfrsContent = readFileSync13(nfrsFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = checkNfrCoverage(nfrsContent, arch);
+  return r.ok ? null : `NFR coverage failed: ${r.violations.join("; ")}`;
+}
+function fitnessCoverageReason(tddDir, featureId, testListJson) {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === void 0) return null;
+  const r = checkFitnessCoverage(testListJson, arch);
+  return r.ok ? null : `fitness coverage failed: ${r.violations.join("; ")}`;
+}
+function serviceBackedReason(tddDir, featureId) {
+  const arch = readArchitecture(tddDir, featureId);
+  if (arch === void 0) return null;
+  const acLayers = [];
+  const fdir = featureDir2(tddDir, featureId);
+  const stories = join12(fdir, "stories");
+  if (existsSync12(stories)) {
+    for (const s of readdirSync5(stories)) {
+      const ad = join12(stories, s, "acs");
+      if (!existsSync12(ad)) continue;
+      for (const f of readdirSync5(ad)) {
+        if (!f.endsWith(".json")) continue;
+        try {
+          const layer = JSON.parse(readFileSync13(join12(ad, f), "utf8")).layer;
+          if (typeof layer === "string") acLayers.push(layer);
+        } catch {
+        }
+      }
+    }
+  }
+  const nfrsText = [];
+  try {
+    const nfrs = JSON.parse(arch).nfrs ?? [];
+    for (const n of nfrs) nfrsText.push(n.brief ?? "", n.requirement ?? "", n.notes ?? "");
+  } catch {
+  }
+  const r = checkServiceBackedDeclaration(arch, { acLayers, nfrsText });
+  return r.ok ? null : `service_backed declaration failed: ${r.violations.join("; ")}`;
+}
+function resolveArtifactInputs(gate, fdir, promoteRef, tddDir, featureId) {
   const readIfPresent = (name) => {
     const p = join12(fdir, name);
     try {
-      return existsSync11(p) ? readFileSync12(p, "utf8") : void 0;
+      return existsSync12(p) ? readFileSync13(p, "utf8") : void 0;
     } catch {
       return void 0;
     }
@@ -7752,7 +8100,17 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
       const conf = withConformance(inputs);
       if ("reason" in conf) return conf;
       const acReason = acsConformanceReason(fdir);
-      return acReason === null ? conf : { reason: acReason };
+      if (acReason !== null) return { reason: acReason };
+      const indepReason = storyIndependenceReason(fdir);
+      if (indepReason !== null) return { reason: indepReason };
+      const conventionsReason = architectureConventionsReason(tddDir, featureId);
+      if (conventionsReason !== null) return { reason: conventionsReason };
+      const serviceBacked = serviceBackedReason(tddDir, featureId);
+      if (serviceBacked !== null) return { reason: serviceBacked };
+      const layeringReason = layeringDeclaredReason(tddDir, featureId);
+      if (layeringReason !== null) return { reason: layeringReason };
+      const nfrReason = nfrCoverageReason(tddDir, featureId);
+      return nfrReason === null ? conf : { reason: nfrReason };
     }
     case "plan": {
       const planJson = readIfPresent("plan.json");
@@ -7770,7 +8128,13 @@ function resolveArtifactInputs(gate, fdir, promoteRef) {
       const inputs = {};
       if (tlJson !== void 0) inputs["test-list.json"] = tlJson;
       if (tlMd !== void 0) inputs["test-list.md"] = tlMd;
-      return withConformance(inputs);
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      if (tlJson !== void 0) {
+        const fitnessReason = fitnessCoverageReason(tddDir, featureId, tlJson);
+        if (fitnessReason !== null) return { reason: fitnessReason };
+      }
+      return conf;
     }
     case "promote": {
       if (promoteRef === void 0 || promoteRef.length === 0) {
@@ -7813,7 +8177,7 @@ function drainGatesAsHumanProxy(args) {
       skipped.push({ gate, reason: `status=${record.status}` });
       continue;
     }
-    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef);
+    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef, tddDir, args.featureId);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
       logHitlDecision(tddDir, args.featureId, approver, {
@@ -7861,16 +8225,16 @@ function supplyArtifact(args) {
     }
     return { ok: false, artifact, to: args.to, reason };
   };
-  if (!existsSync11(args.from)) {
+  if (!existsSync12(args.from)) {
     return refuse(`recorded source not found: ${args.from}`);
   }
-  const content = readFileSync12(args.from, "utf8");
+  const content = readFileSync13(args.from, "utf8");
   const conformance = checkArtifactConformance(artifact, content);
   if (!conformance.ok) {
     return refuse(`format conformance failed: ${conformance.violations.join("; ")}`);
   }
-  mkdirSync5(dirname4(args.to), { recursive: true });
-  writeFileSync9(args.to, content);
+  mkdirSync6(dirname4(args.to), { recursive: true });
+  writeFileSync10(args.to, content);
   try {
     emitAgentLogEvent(
       {
@@ -7916,7 +8280,7 @@ function supplyRequests(args = {}) {
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync12, mkdirSync as mkdirSync6, readFileSync as readFileSync13, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync10 } from "fs";
+import { existsSync as existsSync13, mkdirSync as mkdirSync7, readFileSync as readFileSync14, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync11 } from "fs";
 var SPRINT_GATES_SCHEMA_VERSION = 1;
 var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
@@ -7932,10 +8296,10 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync12(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync13(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync13(file, "utf8"));
+    parsed = JSON.parse(readFileSync14(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -7949,10 +8313,10 @@ function readSprintGates(sprint, opts = {}) {
 }
 function writeSprintGates(state, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
-  mkdirSync6(sprintDir(tddDir, state.sprint), { recursive: true });
+  mkdirSync7(sprintDir(tddDir, state.sprint), { recursive: true });
   const file = sprintGatesJson(tddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync10(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  writeFileSync11(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
     renameSync2(tmp, file);
   } catch (err) {
@@ -7968,10 +8332,10 @@ function approveSprintPlanGate(args) {
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const tddDir = args.tddDir ?? "./.tdd";
   const file = featureProposalsMd(tddDir);
-  if (!existsSync12(file)) {
+  if (!existsSync13(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }
-  const content = readFileSync13(file, "utf8");
+  const content = readFileSync14(file, "utf8");
   const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
   if (!conf.ok) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };

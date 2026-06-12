@@ -1648,14 +1648,51 @@ async function getDefaultBranch(opts) {
 function isLongRunningTierBranch(b) {
   return !b.isDefault && !b.expireTime;
 }
-function isTier(name, branches) {
+var DEFAULT_PROTECTED_TIER_NAMES = /* @__PURE__ */ new Set([
+  "main",
+  "master",
+  "staging",
+  "dev"
+]);
+function normalizeTierName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveProtectedTierNames(extra) {
+  const out = new Set(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) {
+      out.add(k);
+    }
+  }
+  return out;
+}
+function protectedTierNamesFromEnv(env = process.env) {
+  const extra = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) {
+      extra.push(part);
+    }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) {
+      extra.push(v);
+    }
+  }
+  return resolveProtectedTierNames(extra);
+}
+function isTier(name, branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
   if (!name) {
+    return false;
+  }
+  if (!protectedNames.has(normalizeTierName(name))) {
     return false;
   }
   return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
 }
-function tierBranchNames(branches) {
-  return branches.filter(isLongRunningTierBranch).map((b) => b.nameLeaf);
+function tierBranchNames(branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
+  return branches.filter((b) => isLongRunningTierBranch(b) && protectedNames.has(normalizeTierName(b.nameLeaf))).map((b) => b.nameLeaf);
 }
 async function resolveBranchPath(branchNameOrUid, opts) {
   if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
@@ -2163,6 +2200,39 @@ async function getCredential(args) {
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }
 
+// scripts/git/status.ts
+async function getAheadBehind(args) {
+  const { cwd } = args;
+  try {
+    const upstream = await exec2("git rev-parse --abbrev-ref @{u}", { cwd });
+    const raw = await exec2("git rev-list --left-right --count HEAD...@{u}", {
+      cwd
+    });
+    const parts = raw.trim().split(/\s+/);
+    return {
+      ahead: parseInt(parts[0], 10) || 0,
+      behind: parseInt(parts[1], 10) || 0,
+      upstream
+    };
+  } catch {
+    return { ahead: 0, behind: 0, upstream: "" };
+  }
+}
+async function isDirty(args) {
+  try {
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // scripts/lakebase/env-file.ts
 import * as fs12 from "fs";
 import * as path12 from "path";
@@ -2295,12 +2365,50 @@ function gitHasLocalBranch(cwd, branch) {
     return false;
   }
 }
-function gitCheckoutNewBranch(cwd, branch) {
-  execFileSync3("git", ["checkout", "-b", branch], {
+function gitCheckoutNewBranch(cwd, branch, startPoint) {
+  const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
+  execFileSync3("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
+}
+function gitFetchBranch(cwd, remote, branch) {
+  try {
+    execFileSync3("git", ["fetch", remote, branch], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitNetwork
+    });
+  } catch {
+  }
+}
+function gitRefExists(cwd, ref) {
+  try {
+    execFileSync3("git", ["rev-parse", "--verify", "--quiet", ref], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitDefault
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function resolveFeatureStartPoint(cwd, parentBranch) {
+  if (!parentBranch) return void 0;
+  gitFetchBranch(cwd, "origin", parentBranch);
+  if (gitRefExists(cwd, `origin/${parentBranch}`)) return `origin/${parentBranch}`;
+  if (gitRefExists(cwd, parentBranch)) return parentBranch;
+  return void 0;
+}
+async function assertCleanForFork(cwd, startPoint) {
+  if (!startPoint) return;
+  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+    throw new Error(
+      `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
+    );
+  }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
   execFileSync3("git", ["checkout", branch], {
@@ -2362,6 +2470,11 @@ async function createPairedBranch(args) {
   const createGitBranch = args.createGitBranch !== false;
   const syncEnv = args.syncEnv !== false;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
+  let gitStartPoint;
+  if (createGitBranch && !gitHasLocalBranch(args.cwd, sanitized)) {
+    gitStartPoint = resolveFeatureStartPoint(args.cwd, args.parentBranch);
+    await assertCleanForFork(args.cwd, gitStartPoint);
+  }
   const branch = await createBranch({
     instance: args.instance,
     branch: args.branch,
@@ -2389,7 +2502,7 @@ async function createPairedBranch(args) {
       if (gitHasLocalBranch(args.cwd, sanitized)) {
         gitCheckoutExistingBranch(args.cwd, sanitized);
       } else {
-        gitCheckoutNewBranch(args.cwd, sanitized);
+        gitCheckoutNewBranch(args.cwd, sanitized, gitStartPoint);
         gitBranchCreated = true;
       }
     } catch (err) {
@@ -2551,7 +2664,7 @@ async function checkoutPaired(args) {
   const isTrunkAlias = trunkAlias && rawBranch === trunkAlias;
   const isMainOrMaster = !trunkAlias && (rawBranch === "main" || rawBranch === "master");
   const lakebaseBranches = await listBranches({ instance });
-  const tierMatch = isTier(rawBranch, lakebaseBranches);
+  const tierMatch = isTier(rawBranch, lakebaseBranches, protectedTierNamesFromEnv());
   if (isTrunkAlias || isMainOrMaster) {
     mode = "trunk";
     const def = lakebaseBranches.find((b) => b.isDefault);
@@ -4776,7 +4889,7 @@ function defaultTddConfig() {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" }
   };
@@ -6616,7 +6729,7 @@ function parentForTier(topology, branches) {
   const def = branches.find((b) => b.isDefault === true);
   return def?.name.split("/").pop() ?? "main";
 }
-var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
+var LONG_RUNNING_LEAFS = protectedTierNamesFromEnv();
 function leafName(b) {
   return b.name.split("/").pop() ?? b.name;
 }
@@ -6694,39 +6807,6 @@ async function adoptScmState(args) {
     `Current branch "${currentBranch}" recognized as feature-claimed. Real claim time is unknown; recorded ${adopted.claimed_at} as adoption time.`
   );
   return { state: adopted, notes };
-}
-
-// scripts/git/status.ts
-async function getAheadBehind(args) {
-  const { cwd } = args;
-  try {
-    const upstream = await exec2("git rev-parse --abbrev-ref @{u}", { cwd });
-    const raw = await exec2("git rev-list --left-right --count HEAD...@{u}", {
-      cwd
-    });
-    const parts = raw.trim().split(/\s+/);
-    return {
-      ahead: parseInt(parts[0], 10) || 0,
-      behind: parseInt(parts[1], 10) || 0,
-      upstream
-    };
-  } catch {
-    return { ahead: 0, behind: 0, upstream: "" };
-  }
-}
-async function isDirty(args) {
-  try {
-    const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
-    if (ignore.length > 0) {
-      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
-    }
-    const out = await exec2(command, { cwd: args.cwd });
-    return out.trim().length > 0;
-  } catch {
-    return false;
-  }
 }
 
 // scripts/lakebase/scm-abandon-feature.ts
@@ -6843,7 +6923,7 @@ async function preparePr(args) {
     );
   }
   if (!args.force) {
-    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] });
     if (dirty) {
       throw new ScmPreparePrError(
         "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",
@@ -7561,7 +7641,7 @@ function findStaleBranches(tddDir) {
 
 // scripts/lakebase/scm-doctor.ts
 var FEATURE_PREFIX = "feature/";
-var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
+var TIER_LEAFS2 = DEFAULT_PROTECTED_TIER_NAMES;
 function readEnv(projectDir) {
   const envPath = path27.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
@@ -8407,6 +8487,7 @@ function escapeSingleQuoted2(s) {
 }
 export {
   CONVENTION_TIER_DEFAULTS,
+  DEFAULT_PROTECTED_TIER_NAMES,
   FIXABLE_FINDING_IDS,
   InitializrNetworkError,
   InitializrParseError,
@@ -8443,6 +8524,7 @@ export {
   adoptTdd,
   applySchemaMigrations,
   assertAdoptionPreflight,
+  assertCleanForFork,
   cacheProjectRetention,
   catalogExists,
   catalogExplorerUrl,
@@ -8536,6 +8618,7 @@ export {
   minLakebaseTtl,
   mintCredential,
   normalizeHost,
+  normalizeTierName,
   parseHostFromAuthDescribe,
   parseLakebaseTtl,
   parseTargetsYaml,
@@ -8543,6 +8626,7 @@ export {
   preparePr,
   projectPath,
   propagateCredentials,
+  protectedTierNamesFromEnv,
   queryBranchSchema,
   queryBranchTables,
   readTargets,
@@ -8555,11 +8639,13 @@ export {
   resolveCurrentUser,
   resolveDatabricksHost,
   resolveEndpointHost,
+  resolveFeatureStartPoint,
   resolveJavaHome,
   resolveLatestBootVersion,
   resolveLatestLtsJavaVersion,
   resolveParentBranch,
   resolveProfileForHost,
+  resolveProtectedTierNames,
   rollbackDeploy,
   rollbackSchemaMigration,
   runDoctor,

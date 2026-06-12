@@ -335,15 +335,15 @@ import { execFileSync } from "child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
+// scripts/util/exec.ts
+import * as cp from "child_process";
+
 // scripts/lakebase/env-file.ts
 import * as fs2 from "fs";
 import * as path2 from "path";
 
 // scripts/lakebase/databricks-profile.ts
 import * as fs3 from "fs";
-
-// scripts/util/exec.ts
-import * as cp from "child_process";
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {

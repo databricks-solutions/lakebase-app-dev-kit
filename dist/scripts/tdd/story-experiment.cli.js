@@ -6884,8 +6884,45 @@ async function getDefaultBranch(opts) {
 function isLongRunningTierBranch(b) {
   return !b.isDefault && !b.expireTime;
 }
-function isTier(name, branches) {
+var DEFAULT_PROTECTED_TIER_NAMES = /* @__PURE__ */ new Set([
+  "main",
+  "master",
+  "staging",
+  "dev"
+]);
+function normalizeTierName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveProtectedTierNames(extra) {
+  const out = new Set(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) {
+      out.add(k);
+    }
+  }
+  return out;
+}
+function protectedTierNamesFromEnv(env = process.env) {
+  const extra = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) {
+      extra.push(part);
+    }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) {
+      extra.push(v);
+    }
+  }
+  return resolveProtectedTierNames(extra);
+}
+function isTier(name, branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
   if (!name) {
+    return false;
+  }
+  if (!protectedNames.has(normalizeTierName(name))) {
     return false;
   }
   return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
@@ -7393,6 +7430,51 @@ async function ensureEndpoint(args) {
   );
 }
 
+// scripts/git/status.ts
+init_esm_shims();
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp from "child_process";
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+function exec2(command, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/git/status.ts
+async function isDirty(args) {
+  try {
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs from "fs";
@@ -7432,31 +7514,6 @@ ${block}` : block;
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
 import * as fs2 from "fs";
-
-// scripts/util/exec.ts
-init_esm_shims();
-import * as cp from "child_process";
-function exec2(command, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve(String(stdout).trim());
-    });
-  });
-}
-
-// scripts/lakebase/databricks-profile.ts
 function normalizeHost(host) {
   return host.trim().replace(/\/+$/, "").toLowerCase();
 }
@@ -7533,12 +7590,50 @@ function gitHasLocalBranch(cwd, branch) {
     return false;
   }
 }
-function gitCheckoutNewBranch(cwd, branch) {
-  execFileSync3("git", ["checkout", "-b", branch], {
+function gitCheckoutNewBranch(cwd, branch, startPoint) {
+  const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
+  execFileSync3("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
+}
+function gitFetchBranch(cwd, remote, branch) {
+  try {
+    execFileSync3("git", ["fetch", remote, branch], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitNetwork
+    });
+  } catch {
+  }
+}
+function gitRefExists(cwd, ref) {
+  try {
+    execFileSync3("git", ["rev-parse", "--verify", "--quiet", ref], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitDefault
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function resolveFeatureStartPoint(cwd, parentBranch) {
+  if (!parentBranch) return void 0;
+  gitFetchBranch(cwd, "origin", parentBranch);
+  if (gitRefExists(cwd, `origin/${parentBranch}`)) return `origin/${parentBranch}`;
+  if (gitRefExists(cwd, parentBranch)) return parentBranch;
+  return void 0;
+}
+async function assertCleanForFork(cwd, startPoint) {
+  if (!startPoint) return;
+  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+    throw new Error(
+      `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
+    );
+  }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
   execFileSync3("git", ["checkout", branch], {
@@ -7600,6 +7695,11 @@ async function createPairedBranch(args) {
   const createGitBranch = args.createGitBranch !== false;
   const syncEnv = args.syncEnv !== false;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
+  let gitStartPoint;
+  if (createGitBranch && !gitHasLocalBranch(args.cwd, sanitized)) {
+    gitStartPoint = resolveFeatureStartPoint(args.cwd, args.parentBranch);
+    await assertCleanForFork(args.cwd, gitStartPoint);
+  }
   const branch = await createBranch({
     instance: args.instance,
     branch: args.branch,
@@ -7627,7 +7727,7 @@ async function createPairedBranch(args) {
       if (gitHasLocalBranch(args.cwd, sanitized)) {
         gitCheckoutExistingBranch(args.cwd, sanitized);
       } else {
-        gitCheckoutNewBranch(args.cwd, sanitized);
+        gitCheckoutNewBranch(args.cwd, sanitized, gitStartPoint);
         gitBranchCreated = true;
       }
     } catch (err) {
@@ -7745,7 +7845,7 @@ async function checkoutPaired(args) {
   const isTrunkAlias = trunkAlias && rawBranch === trunkAlias;
   const isMainOrMaster = !trunkAlias && (rawBranch === "main" || rawBranch === "master");
   const lakebaseBranches = await listBranches({ instance });
-  const tierMatch = isTier(rawBranch, lakebaseBranches);
+  const tierMatch = isTier(rawBranch, lakebaseBranches, protectedTierNamesFromEnv());
   if (isTrunkAlias || isMainOrMaster) {
     mode = "trunk";
     const def = lakebaseBranches.find((b) => b.isDefault);

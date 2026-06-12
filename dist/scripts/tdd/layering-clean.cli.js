@@ -62,14 +62,117 @@ function layeringConfigFromArchitecture(architectureJson) {
   try {
     parsed = JSON.parse(architectureJson);
   } catch {
-    return { serviceBacked: false, boundaryModules: [], repositoryModules: [] };
+    return { serviceBacked: false, boundaryModules: [], repositoryModules: [], allModules: [] };
   }
-  const modulesByRole = (role) => (parsed.layers ?? []).filter((l) => l.role === role && typeof l.module === "string").map((l) => l.module);
+  const layers = parsed.layers ?? [];
+  const modulesByRole = (role) => layers.filter((l) => l.role === role && typeof l.module === "string").map((l) => l.module);
+  const allModules2 = layers.filter((l) => typeof l.role === "string" && typeof l.module === "string").map((l) => ({ role: l.role, module: l.module }));
+  const boundaryLayer = layers.find((l) => l.role === "boundary" && typeof l.renders_via === "string");
   return {
     serviceBacked: parsed.service_backed === true,
     boundaryModules: modulesByRole("boundary"),
-    repositoryModules: modulesByRole("repository")
+    repositoryModules: modulesByRole("repository"),
+    allModules: allModules2,
+    ...boundaryLayer?.renders_via ? { rendersVia: boundaryLayer.renders_via } : {}
   };
+}
+function checkModulePlacement(projectDir, allModules2) {
+  const violations = [];
+  const kindOf = (abs) => {
+    if (!existsSync(abs)) return "missing";
+    try {
+      return statSync(abs).isDirectory() ? "dir" : "file";
+    } catch {
+      return "missing";
+    }
+  };
+  for (const { role, module } of allModules2) {
+    const base = module.replace(/\/$/, "");
+    const wantDir = module.endsWith("/");
+    const wantFile = module.endsWith(".py");
+    const here = kindOf(join(projectDir, base));
+    if (wantDir) {
+      if (here === "dir") continue;
+      if (kindOf(join(projectDir, `${base}.py`)) === "file") {
+        violations.push(`declared ${role} layer "${module}" is a package directory but the build created a flat file ${base}.py (organize this layer under ${module})`);
+      } else {
+        violations.push(`declared ${role} layer module "${module}" not found (the build placed this layer's code elsewhere)`);
+      }
+    } else if (wantFile) {
+      if (here === "file") continue;
+      if (here === "dir") violations.push(`declared ${role} layer module "${module}" is a file but a directory exists there`);
+      else violations.push(`declared ${role} layer module "${module}" not found (the build placed this layer's code elsewhere)`);
+    } else {
+      if (here !== "missing" || kindOf(join(projectDir, `${base}.py`)) === "file") continue;
+      violations.push(`declared ${role} layer module "${module}" not found (the build placed this layer's code elsewhere)`);
+    }
+  }
+  return { ok: violations.length === 0, violations };
+}
+var INLINE_HTML = /<!DOCTYPE\b|<html[\s>]|HTMLResponse\s*\(\s*(?:content\s*=\s*)?["'`]\s*<|return\s+f?["'`]{1,3}\s*<(?:html|!DOCTYPE)/i;
+var TEMPLATE_SEAM = /\b(?:Jinja2Templates|TemplateResponse|render_template|templates\.TemplateResponse)\b/;
+var INLINE_RENDER_REMEDIATION = "The boundary renders HTML inline instead of through a templating framework. Render via the declared framework (e.g. Jinja2 TemplateResponse + a templates/ dir) with stable data-testid seams; the route returns a rendered template, never an inline HTML string. See the design-guide `UI Framework` section + @ui-ux-design-principles/testable-ui.";
+function checkInlineRendering(projectDir, boundaryModules, rendersVia2) {
+  const boundary2 = boundaryModules.length ? boundaryModules : DEFAULT_BOUNDARY;
+  const violations = [];
+  for (const rel of boundary2) {
+    for (const file of pyFilesFor(projectDir, rel)) {
+      const src = readFileSync(file, "utf8");
+      const hasInline = INLINE_HTML.test(src);
+      const hasSeam = TEMPLATE_SEAM.test(src);
+      if (hasInline && !hasSeam) {
+        const shown = file.startsWith(projectDir) ? file.slice(projectDir.length).replace(/^\//, "") : file;
+        violations.push(`${shown}: boundary emits inline HTML with no templating seam (use ${rendersVia2 ?? "the declared templating framework"})`);
+      }
+    }
+  }
+  return violations.length === 0 ? { ok: true, violations: [] } : { ok: false, violations, remediation: INLINE_RENDER_REMEDIATION };
+}
+function nontrivial(line) {
+  const t = line.trim();
+  return t.length > 0 && !t.startsWith("#") && t !== "}" && t !== "{" && t !== "return" && t !== "pass";
+}
+function checkCodeBudget(projectDir, sourcePaths, opts = {}) {
+  const maxFn = opts.maxFunctionLines ?? 60;
+  const dupWin = opts.dupWindow ?? 6;
+  const violations = [];
+  const files = [];
+  for (const rel of sourcePaths) files.push(...pyFilesFor(projectDir, rel));
+  for (const file of files) {
+    const shown = file.startsWith(projectDir) ? file.slice(projectDir.length).replace(/^\//, "") : file;
+    const lines = readFileSync(file, "utf8").split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(\s*)def\s+(\w+)/.exec(lines[i]);
+      if (!m) continue;
+      const indent = m[1].length;
+      let body = 0;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (lines[j].trim() === "") continue;
+        const ind = /^(\s*)/.exec(lines[j])[1].length;
+        if (ind <= indent) break;
+        body++;
+      }
+      if (body > maxFn) violations.push(`${shown}:${i + 1}  def ${m[2]} is ${body} lines (> ${maxFn}); extract helpers (clean-code / single responsibility)`);
+    }
+  }
+  const seen = /* @__PURE__ */ new Map();
+  const reported = /* @__PURE__ */ new Set();
+  for (const file of files) {
+    const shown = file.startsWith(projectDir) ? file.slice(projectDir.length).replace(/^\//, "") : file;
+    const lines = readFileSync(file, "utf8").split("\n").map((l) => l.trim()).filter(nontrivial);
+    for (let i = 0; i + dupWin <= lines.length; i++) {
+      const key = lines.slice(i, i + dupWin).join("");
+      if (key.length < dupWin * 3) continue;
+      const first = seen.get(key);
+      if (first === void 0) {
+        seen.set(key, shown);
+      } else if (!reported.has(key)) {
+        reported.add(key);
+        violations.push(`duplicated ${dupWin}-line block in ${first} and ${shown} (DRY: extract one shared helper)`);
+      }
+    }
+  }
+  return { ok: violations.length === 0, violations };
 }
 
 // scripts/tdd/layering-clean.cli.ts
@@ -106,6 +209,8 @@ var p = parse(process.argv.slice(2));
 var serviceBacked = p.serviceBacked ?? false;
 var boundary = p.boundary;
 var repository = p.repository;
+var allModules = [];
+var rendersVia;
 if (p.architecture) {
   let archJson = "";
   try {
@@ -119,27 +224,39 @@ if (p.architecture) {
   if (p.serviceBacked === void 0) serviceBacked = cfg.serviceBacked;
   if (boundary.length === 0) boundary = cfg.boundaryModules;
   if (repository.length === 0) repository = cfg.repositoryModules;
+  allModules = cfg.allModules;
+  rendersVia = cfg.rendersVia;
 }
 var callArgs = { projectDir: p.projectDir, serviceBacked };
 if (boundary.length > 0) callArgs.boundaryModules = boundary;
 if (repository.length > 0) callArgs.repositoryModules = repository;
-var result = checkLayeringClean(callArgs);
+var layering = checkLayeringClean(callArgs);
+var placement = serviceBacked && allModules.length ? checkModulePlacement(p.projectDir, allModules) : { ok: true, violations: [] };
+var rendering = serviceBacked ? checkInlineRendering(p.projectDir, boundary, rendersVia) : { ok: true, violations: [] };
+var budgetPaths = allModules.length ? allModules.map((m) => m.module) : ["app"];
+var budget = checkCodeBudget(p.projectDir, budgetPaths);
+var groups = [
+  { label: "layering (boundary vs persistence)", ok: layering.clean, violations: layering.violations, remediation: layering.remediation },
+  { label: "module placement (layers at declared paths)", ok: placement.ok, violations: placement.violations },
+  { label: "rendering (templating, not inline HTML)", ok: rendering.ok, violations: rendering.violations, remediation: rendering.remediation },
+  { label: "DRY + complexity budget", ok: budget.ok, violations: budget.violations }
+];
+var ok = groups.every((g) => g.ok);
 if (p.json) {
-  process.stdout.write(`${JSON.stringify(result)}
+  process.stdout.write(`${JSON.stringify({ ok, scanned: layering.scanned, groups })}
 `);
-} else if (result.clean) {
-  const what = serviceBacked ? result.scanned.length ? `boundary clean (scanned: ${result.scanned.join(", ")})` : "no boundary modules to scan" : "feature is not service-backed (layering not required)";
+} else if (ok) {
+  const what = serviceBacked ? layering.scanned.length ? `layered + rendered + within budget (boundary scanned: ${layering.scanned.join(", ")})` : "no boundary modules to scan" : "feature is not service-backed (layering not required)";
   process.stdout.write(`layering-clean: OK , ${what}
 `);
 } else {
-  process.stderr.write(
-    `layering-clean: FAILED , the boundary/routes layer is not cleanly separated from persistence.
+  const blocks = groups.filter((g) => !g.ok).map((g) => `  [${g.label}]
+${g.violations.map((v) => `    ${v}`).join("\n")}${g.remediation ? `
+    -> ${g.remediation}` : ""}`).join("\n\n");
+  process.stderr.write(`layering-clean: FAILED , architecture-quality checks did not pass.
 
-${result.violations.map((v) => `  ${v}`).join("\n")}
-
-Remediation: ${result.remediation}
-`
-  );
+${blocks}
+`);
 }
-process.exit(result.clean ? 0 : 1);
+process.exit(ok ? 0 : 1);
 //# sourceMappingURL=layering-clean.cli.js.map

@@ -6648,12 +6648,12 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/cycle.cli.ts
 init_esm_shims();
-import { join as join12 } from "path";
+import { join as join14 } from "path";
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync13, readdirSync as readdirSync7, statSync as statSync5, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8 } from "fs";
-import { join as join11, dirname as dirname4 } from "path";
+import { existsSync as existsSync13, readFileSync as readFileSync14, readdirSync as readdirSync8, statSync as statSync6, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8 } from "fs";
+import { join as join13, dirname as dirname4 } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
@@ -7024,14 +7024,8 @@ import { Client } from "pg";
 // scripts/lakebase/constants.ts
 init_esm_shims();
 
-// scripts/lakebase/env-file.ts
+// scripts/git/status.ts
 init_esm_shims();
-import * as fs2 from "fs";
-import * as path2 from "path";
-
-// scripts/lakebase/databricks-profile.ts
-init_esm_shims();
-import * as fs3 from "fs";
 
 // scripts/util/exec.ts
 init_esm_shims();
@@ -7058,6 +7052,15 @@ function exec2(command, opts = {}) {
     });
   });
 }
+
+// scripts/lakebase/env-file.ts
+init_esm_shims();
+import * as fs2 from "fs";
+import * as path2 from "path";
+
+// scripts/lakebase/databricks-profile.ts
+init_esm_shims();
+import * as fs3 from "fs";
 
 // scripts/tdd/experiment.ts
 function acLayerToTag(layer) {
@@ -7125,8 +7128,8 @@ function writeOutcomes(tddDir, featureId, storyId, slug, outcomes) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync12, rmSync, writeFileSync as writeFileSync9 } from "fs";
-import { dirname as dirname3, join as join10 } from "path";
+import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync13, rmSync, writeFileSync as writeFileSync9 } from "fs";
+import { dirname as dirname3, join as join11 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7471,6 +7474,70 @@ function readEscalationFile(file) {
   }
 }
 
+// scripts/tdd/e2e-regex-clean.ts
+init_esm_shims();
+import { readdirSync as readdirSync6, readFileSync as readFileSync12, statSync as statSync5 } from "fs";
+import { join as join10 } from "path";
+var INLINE_FLAG_RE = /\(\?[aiLmsux]*[-]?[aiLmsux]+\)/;
+var RE_COMPILE_RE = /re\.compile\(\s*[rRbuf]*(["'])((?:\\.|(?!\1).)*)\1/g;
+var E2E_REGEX_REMEDIATION = `A Playwright matcher uses a Python regex with inline flags (e.g. re.compile(r"(?i)summary")). Playwright forwards the pattern verbatim to the browser's JavaScript engine, which does not support inline-flag syntax , the assertion can never match. Pass the flag as a kwarg instead: re.compile("summary", re.IGNORECASE). See the E2E rule in the Navigator role + the e2e-inline-regex-flag bad smell.`;
+function findInlineFlagRegexes(source, file) {
+  const violations = [];
+  let m;
+  RE_COMPILE_RE.lastIndex = 0;
+  while ((m = RE_COMPILE_RE.exec(source)) !== null) {
+    const body = m[2];
+    if (!INLINE_FLAG_RE.test(body)) continue;
+    const line = source.slice(0, m.index).split("\n").length;
+    violations.push({ file, line, pattern: body });
+  }
+  return violations;
+}
+function pythonFilesUnder(dir, rootForRel) {
+  const out = [];
+  let entries;
+  try {
+    entries = readdirSync6(dir);
+  } catch {
+    return out;
+  }
+  for (const name of entries) {
+    if (name === "__pycache__" || name === ".pytest_cache") continue;
+    const abs = join10(dir, name);
+    let st;
+    try {
+      st = statSync5(abs);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) {
+      out.push(...pythonFilesUnder(abs, rootForRel));
+    } else if (name.endsWith(".py")) {
+      out.push({ abs, rel: abs.slice(rootForRel.length + 1) });
+    }
+  }
+  return out;
+}
+function checkE2eRegexClean(args) {
+  const e2eRoot = join10(args.projectDir, args.e2eDir ?? join10("tests", "e2e"));
+  const files = pythonFilesUnder(e2eRoot, args.projectDir);
+  const violations = [];
+  for (const f of files) {
+    let src;
+    try {
+      src = readFileSync12(f.abs, "utf8");
+    } catch {
+      continue;
+    }
+    violations.push(...findInlineFlagRegexes(src, f.rel));
+  }
+  if (violations.length === 0) return { clean: true, violations: [] };
+  return { clean: false, violations, remediation: E2E_REGEX_REMEDIATION };
+}
+function summarizeE2eRegexViolations(violations) {
+  return violations.map((v) => `${v.file}:${v.line} inline-flag regex \`${v.pattern}\` (invalid in Playwright/JS)`).join("; ");
+}
+
 // scripts/tdd/deploy.ts
 function resolveDeployTarget(projectDir, name) {
   const cfg = readTargets(projectDir);
@@ -7500,7 +7567,7 @@ async function probeReachable(url) {
   }
 }
 function pidFile(projectDir, target) {
-  return join10(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join11(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -7562,16 +7629,17 @@ async function ensureDeployedAndVerify(args) {
   } finally {
     stop(args.projectDir, targetName);
   }
-  return {
-    passed,
-    reachable: true,
-    summary: passed ? "GREEN verify passed against the running app" : "GREEN verify FAILED against the running app"
-  };
+  if (passed) {
+    return { passed, reachable: true, summary: "GREEN verify passed against the running app" };
+  }
+  const regexLint = checkE2eRegexClean({ projectDir: args.projectDir });
+  const summary = regexLint.clean ? "GREEN verify FAILED against the running app" : `GREEN verify FAILED against the running app: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;
+  return { passed, reachable: true, summary };
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
   if (!existsSync11(pf)) return { stopped: false };
-  const pid = Number(readFileSync12(pf, "utf8").trim());
+  const pid = Number(readFileSync13(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);
@@ -7588,20 +7656,25 @@ function stopLocal(projectDir, targetName) {
 
 // scripts/git/commits.ts
 init_esm_shims();
+import { existsSync as existsSync12 } from "fs";
+import { join as join12 } from "path";
 async function commitAllIfChanged(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
   }
   const exclude = args.exclude ?? [];
-  let addCmd = "git add -A";
-  let diffCmd = "git diff --cached --name-only";
   if (exclude.length > 0) {
     const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-    addCmd = `git add -A -- . ${ex}`;
-    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+    await exec2(`git add -A -- . ${ex}`, { cwd: args.cwd });
+  } else {
+    await exec2("git add -A", { cwd: args.cwd });
   }
-  await exec2(addCmd, { cwd: args.cwd });
-  const staged = await exec2(diffCmd, { cwd: args.cwd });
+  for (const inc of args.include ?? []) {
+    if (existsSync12(join12(args.cwd, inc))) {
+      await exec2(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
+    }
+  }
+  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
   if (!staged.trim()) return false;
   await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
   return true;
@@ -7610,7 +7683,16 @@ async function commitAllIfChanged(args) {
 // scripts/tdd/cycle-record.ts
 async function commitCycleWork(tddDir, message) {
   try {
-    await commitAllIfChanged({ cwd: dirname4(tddDir), message, exclude: [".tdd", ".lakebase"] });
+    await commitAllIfChanged({
+      cwd: dirname4(tddDir),
+      message,
+      // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
+      // observability it churns every run and is not feature code; committing it
+      // onto the experiment branch would diverge from the feature branch (and it
+      // already blocks the fork via assertCleanForFork). Gitignored too.
+      exclude: [".tdd", ".lakebase", ".claude/agent-memory"],
+      include: [".tdd/design", ".tdd/architecture"]
+    });
   } catch {
   }
 }
@@ -7622,10 +7704,10 @@ function logCycleEvent2(tddDir, event) {
 }
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync12(file)) {
+  if (!existsSync13(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse(readFileSync13(file, "utf8"));
+  const data = JSON.parse(readFileSync14(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyExperiment(tddDir, featureId, story) {
@@ -7634,20 +7716,20 @@ function storyExperiment(tddDir, featureId, story) {
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = join11(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync12(base)) return [];
+  const base = join13(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync13(base)) return [];
   const out = [];
-  for (const acDir of readdirSync7(base)) {
-    const dir = join11(base, acDir);
+  for (const acDir of readdirSync8(base)) {
+    const dir = join13(base, acDir);
     try {
-      if (!statSync5(dir).isDirectory()) continue;
+      if (!statSync6(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of readdirSync7(dir)) {
+    for (const f of readdirSync8(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(readFileSync13(join11(dir, f), "utf8")));
+        out.push(JSON.parse(readFileSync14(join13(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7769,9 +7851,9 @@ async function greenOpenCycle(args) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!existsSync12(f)) return {};
+  if (!existsSync13(f)) return {};
   try {
-    return JSON.parse(readFileSync13(f, "utf8"));
+    return JSON.parse(readFileSync14(f, "utf8"));
   } catch {
     return {};
   }
@@ -7816,9 +7898,9 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 function reviewAc(tddDir, featureId, story, acId) {
   let verdict = {};
   const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
-  if (existsSync12(vf)) {
+  if (existsSync13(vf)) {
     try {
-      verdict = JSON.parse(readFileSync13(vf, "utf8"));
+      verdict = JSON.parse(readFileSync14(vf, "utf8"));
     } catch {
       verdict = {};
     }
@@ -7919,7 +8001,7 @@ Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S
 async function main() {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? join12(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? join14(process.cwd(), ".tdd");
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {

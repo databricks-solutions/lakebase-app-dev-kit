@@ -59,6 +59,23 @@
       "type": "string",
       "pattern": "^S[0-9]+(-[a-z0-9-]+)?$"
     },
+    "independence": {
+      "type": "object",
+      "description": "Determination that this AC's `then` is NOT already delivered, implied, or duplicated by an earlier AC in the same story (the AC-independence test). Required for every AC after the first in a story (the spec gate hard-blocks a later AC that omits it or sets distinct_from_prior:false); the first AC has no prior and may omit it.",
+      "required": ["distinct_from_prior", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "distinct_from_prior": {
+          "type": "boolean",
+          "description": "True iff this AC can go RED while every earlier AC in the story is GREEN (and vice versa). False means its outcome is already produced by an earlier AC's build and must be folded or re-scoped."
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One line: the distinct, independently-RED-able outcome this AC adds beyond the earlier ACs."
+        }
+      }
+    },
     "external_ref": {
       "type": "object",
       "properties": {

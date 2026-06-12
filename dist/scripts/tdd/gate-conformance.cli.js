@@ -6983,6 +6983,74 @@ function checkFitnessCoverage(testListJson, architectureJson) {
   }
   return { ok: true };
 }
+function checkStoryIndependence(stories) {
+  const parsed = [];
+  for (const s of stories) {
+    let obj;
+    try {
+      obj = JSON.parse(s.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : s.name;
+    const m = /^S(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: s.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every story after the first must record independence.distinct_from_prior + rationale; apply the story-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this story's behavior is a subset of an earlier story; fold it into that story or re-scope it to a distinct, independently-RED-able slice)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct behavior this story adds beyond the prior stories)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkAcIndependence(acs) {
+  const parsed = [];
+  for (const a of acs) {
+    let obj;
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
 function canonicalArtifactName(path2) {
   const base = basename(path2);
   if (basename(dirname(path2)) === "acs" && base.endsWith(".json")) return "ac.json";
@@ -7008,16 +7076,32 @@ function scanFeatureConformance(tddDir, featureId) {
     pushIfExists(join3(featureDir, name));
   }
   const storiesDir = join3(featureDir, "stories");
+  const storyJsons = [];
+  const acsByStory = [];
   if (existsSync2(storiesDir)) {
     for (const storyName of readdirSync2(storiesDir)) {
       const storyDir = join3(storiesDir, storyName);
       if (!statSync2(storyDir).isDirectory()) continue;
-      pushIfExists(join3(storyDir, "story.json"));
+      const storyJsonPath = join3(storyDir, "story.json");
+      pushIfExists(storyJsonPath);
+      if (existsSync2(storyJsonPath)) {
+        try {
+          storyJsons.push({ name: storyName, content: readFileSync3(storyJsonPath, "utf8") });
+        } catch {
+        }
+      }
       const acsDir = join3(storyDir, "acs");
       if (existsSync2(acsDir)) {
+        const acs = [];
         for (const acFile of readdirSync2(acsDir).filter((f) => f.endsWith(".json"))) {
-          paths.push(join3(acsDir, acFile));
+          const acPath = join3(acsDir, acFile);
+          paths.push(acPath);
+          try {
+            acs.push({ name: acFile.replace(/\.json$/, ""), content: readFileSync3(acPath, "utf8") });
+          } catch {
+          }
         }
+        if (acs.length > 0) acsByStory.push({ story: storyName, acs });
       }
     }
   }
@@ -7030,6 +7114,23 @@ function scanFeatureConformance(tddDir, featureId) {
       violations: result.ok ? [] : result.violations
     };
   });
+  if (storyJsons.length >= 2) {
+    const indep = checkStoryIndependence(storyJsons);
+    entries.push({
+      artifact: "stories/*/story.json (story independence)",
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations
+    });
+  }
+  for (const { story, acs } of acsByStory) {
+    if (acs.length < 2) continue;
+    const indep = checkAcIndependence(acs);
+    entries.push({
+      artifact: `stories/${story}/acs/*.json (AC independence)`,
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations
+    });
+  }
   const archPath = join3(featureDir, "architecture.json");
   if (existsSync2(archPath)) {
     const archContent = readFileSync3(archPath, "utf8");

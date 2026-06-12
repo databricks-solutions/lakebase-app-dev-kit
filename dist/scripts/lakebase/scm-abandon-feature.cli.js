@@ -257,13 +257,6 @@ import { execFileSync } from "child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
-// scripts/lakebase/env-file.ts
-import * as fs from "fs";
-import * as path from "path";
-
-// scripts/lakebase/databricks-profile.ts
-import * as fs2 from "fs";
-
 // scripts/util/exec.ts
 import * as cp from "child_process";
 function shq(s) {
@@ -288,6 +281,29 @@ function exec2(command, opts = {}) {
     });
   });
 }
+
+// scripts/git/status.ts
+async function isDirty(args) {
+  try {
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// scripts/lakebase/env-file.ts
+import * as fs from "fs";
+import * as path from "path";
+
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
 
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
@@ -396,22 +412,6 @@ async function getCurrentBranch(args) {
     return name === "HEAD" ? "" : name;
   } catch {
     return "";
-  }
-}
-
-// scripts/git/status.ts
-async function isDirty(args) {
-  try {
-    const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
-    if (ignore.length > 0) {
-      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
-    }
-    const out = await exec2(command, { cwd: args.cwd });
-    return out.trim().length > 0;
-  } catch {
-    return false;
   }
 }
 

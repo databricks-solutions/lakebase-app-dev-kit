@@ -2474,7 +2474,7 @@ function defaultTddConfig() {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" }
   };

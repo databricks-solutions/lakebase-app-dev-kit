@@ -611,7 +611,7 @@ async function preparePr(args) {
     );
   }
   if (!args.force) {
-    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] });
     if (dirty) {
       throw new ScmPreparePrError(
         "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",

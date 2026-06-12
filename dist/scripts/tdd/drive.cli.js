@@ -6673,6 +6673,8 @@ var escalationFile = (tdd, id) => join(escalationsDir(tdd), `${id}.json`);
 var acReviewJson = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac, "review.json");
 var workflowStateJson = (tdd) => join(tdd, "workflow-state.json");
 var designGuideJson = (tdd) => join(tdd, "design", "design-guide.json");
+var architectureDir = (tdd) => join(tdd, "architecture");
+var architectureConventionsJson = (tdd) => join(architectureDir(tdd), "conventions.json");
 var featureProposalsMd = (tdd) => join(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
@@ -6755,6 +6757,22 @@ function readAcLayer(tdd, f, acId) {
     try {
       const ac = JSON.parse(fs.readFileSync(file, "utf8"));
       if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
+    } catch {
+    }
+  }
+  return void 0;
+}
+function readAcArchitecturalNotes(tdd, f, acId) {
+  const stories = storiesDir(tdd, f);
+  if (!fs.existsSync(stories)) return void 0;
+  for (const s of fs.readdirSync(stories)) {
+    const file = acJson(tdd, f, s, acId);
+    if (!fs.existsSync(file)) continue;
+    try {
+      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (typeof ac.architectural_notes === "string" && ac.architectural_notes.trim().length > 0) {
+        return ac.architectural_notes;
+      }
     } catch {
     }
   }
@@ -7698,6 +7716,13 @@ var execFileP4 = promisify4(execFile4);
 init_esm_shims();
 import { execFileSync as execFileSync2 } from "child_process";
 
+// scripts/git/status.ts
+init_esm_shims();
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp2 from "child_process";
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs2 from "fs";
@@ -7706,10 +7731,6 @@ import * as path2 from "path";
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
 import * as fs3 from "fs";
-
-// scripts/util/exec.ts
-init_esm_shims();
-import * as cp2 from "child_process";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
@@ -7945,6 +7966,16 @@ var SMELL_CATALOG = [
     proposed_remediation: "Extract a service (business logic) + a repository (the ONLY layer that touches the ORM/session); the route handler validates input + delegates. Defended by the layering fitness test (tests/architecture/test_layering.py)."
   },
   {
+    name: "ux-adherence",
+    description: "The rendered UI defines the design tokens on :root yet does not USE them at the element level: hardcoded hex colors / raw px where a var(--token) belongs, an ia.md data-testid seam that was never rendered, or an action surface (form/submit) with no feedback affordance (no silent failure / unacknowledged success). Token-level adherence (assertDesignAdherence) cannot see this; the element-level checks in design-adherence.ts do, and the UX Designer flags it in REVIEW. Distinct from `layering-violation` (engineering layering): this is the experience-lens gate.",
+    proposed_remediation: "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with its data-testid seams, and give every action a perceivable result. Refactor the UI to the design guide; do not weaken the guide to match the drift."
+  },
+  {
+    name: "e2e-inline-regex-flag",
+    description: "An E2E Playwright matcher (to_contain_text/to_have_text/to_have_url/get_by_text) is built from a Python regex carrying INLINE FLAGS , re.compile(r\"(?i)summary\") and the like. Playwright forwards the pattern's `.pattern` string verbatim to the browser's JavaScript regex engine, which does NOT support inline-flag syntax `(?i)`/`(?s)`/`(?m)`, so the regex is invalid and the assertion can never match the running app. The test is structurally un-greenable: the honest-GREEN verify rejects it and the build raises to HIL. Caught deterministically + cheaply (no browser run) by the e2e-regex-clean static lint, which enriches the GREEN-verify failure with the exact file:line + fix.",
+    proposed_remediation: 'Pass the flag as a kwarg, not inline: re.compile("summary", re.IGNORECASE) emits the valid JS regex /summary/i. Or, for a plain case-insensitive substring, use the bare string form Playwright already matches loosely. See the E2E rule in the Navigator role.'
+  },
+  {
     name: "e2e-row-perma-red",
     description: "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
     proposed_remediation: "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner."
@@ -7971,6 +8002,153 @@ function priorReviseCount(tddDir, smell, story_id) {
   ).length;
 }
 
+// scripts/tdd/cycle-record.ts
+init_esm_shims();
+import { existsSync as existsSync12, readFileSync as readFileSync12, readdirSync as readdirSync7, statSync as statSync6, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
+import { join as join13, dirname as dirname5 } from "path";
+
+// scripts/tdd/test-list.ts
+init_esm_shims();
+
+// scripts/tdd/deploy.ts
+init_esm_shims();
+import { execSync, spawn } from "child_process";
+import { existsSync as existsSync11, mkdirSync as mkdirSync6, readFileSync as readFileSync11, rmSync as rmSync2, writeFileSync as writeFileSync7 } from "fs";
+import { dirname as dirname4, join as join12 } from "path";
+
+// scripts/lakebase/deploy-targets.ts
+init_esm_shims();
+
+// scripts/tdd/e2e-regex-clean.ts
+init_esm_shims();
+import { readdirSync as readdirSync5, readFileSync as readFileSync10, statSync as statSync5 } from "fs";
+import { join as join11 } from "path";
+
+// scripts/tdd/deploy.ts
+function deployEvidencePasses(e) {
+  return e !== void 0 && e.reachable === true && e.verify?.passed === true;
+}
+function readDeployEvidence(file) {
+  if (!existsSync11(file)) return void 0;
+  try {
+    return JSON.parse(readFileSync11(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function storyDeployVerified(tddDir, featureId, storyId) {
+  const fdir = findFeatureDir(tddDir, featureId);
+  if (!fdir) return false;
+  return deployEvidencePasses(readDeployEvidence(join12(fdir, "stories", storyId, "deploy-evidence.json")));
+}
+
+// scripts/git/commits.ts
+init_esm_shims();
+
+// scripts/tdd/cycle-record.ts
+function readStoryItems(tddDir, featureId, story) {
+  const file = storyTestListJson(tddDir, featureId, story);
+  if (!existsSync12(file)) {
+    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
+  }
+  const data = JSON.parse(readFileSync12(file, "utf8"));
+  return Array.isArray(data.items) ? data.items : [];
+}
+function storyCycles(tddDir, featureId, story) {
+  const base = join13(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync12(base)) return [];
+  const out = [];
+  for (const acDir of readdirSync7(base)) {
+    const dir = join13(base, acDir);
+    try {
+      if (!statSync6(dir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    for (const f of readdirSync7(dir)) {
+      if (!/^cycle-\d+\.json$/.test(f)) continue;
+      try {
+        out.push(JSON.parse(readFileSync12(join13(dir, f), "utf8")));
+      } catch {
+      }
+    }
+  }
+  return out;
+}
+function storyTestProgress(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const cycles = storyCycles(tddDir, featureId, story);
+  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
+  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
+  const pending = items.filter((i) => !cycledTestIds.has(i.id));
+  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
+  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
+  return { total: items.length, pending, openRed, allGreen };
+}
+function pendingItemKind(tddDir, featureId, story) {
+  return storyTestProgress(tddDir, featureId, story).pending[0]?.kind;
+}
+var DEFAULT_BATCH_CAP = 3;
+function nextPendingBatch(tddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
+  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
+  const pending = storyTestProgress(tddDir, featureId, story).pending;
+  if (pending.length === 0) return [];
+  const layerOf = (acId) => readAcLayer2(tddDir, featureId, acId) ?? "_nolayer";
+  const headLayer = layerOf(pending[0].ac_id);
+  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
+}
+function readReview(tddDir, featureId, story, acId) {
+  const f = acReviewJson(tddDir, featureId, story, acId);
+  if (!existsSync12(f)) return {};
+  try {
+    return JSON.parse(readFileSync12(f, "utf8"));
+  } catch {
+    return {};
+  }
+}
+function acReviewStates(tddDir, featureId, story) {
+  let items = [];
+  try {
+    items = readStoryItems(tddDir, featureId, story);
+  } catch {
+    items = [];
+  }
+  const greenTestIds = new Set(
+    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c))
+  );
+  const acOrder = [];
+  const acTests = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    if (!acTests.has(it.ac_id)) {
+      acTests.set(it.ac_id, []);
+      acOrder.push(it.ac_id);
+    }
+    acTests.get(it.ac_id).push(it.id);
+  }
+  return acOrder.map((acId) => {
+    const tests = acTests.get(acId);
+    const r = readReview(tddDir, featureId, story, acId);
+    return {
+      acId,
+      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
+      reviewed: Boolean(r.reviewed_at),
+      refactorRequested: Boolean(r.refactor_requested),
+      refactored: Boolean(r.refactored_at)
+    };
+  });
+}
+function firstReviewPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+}
+function firstRefactorPendingAc(tddDir, featureId, story) {
+  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+}
+
 // scripts/tdd/escalation.ts
 var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   "test-list-drift",
@@ -7991,7 +8169,13 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   // defect; the Navigator flags it in REVIEW and the layering fitness test
   // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
   // than routing to a design author.
-  "layering-violation"
+  "layering-violation",
+  // The rendered UI does not USE the design tokens at the element level (hardcoded
+  // hex/px, a missing ia.md data-testid seam, or an action with no feedback), even
+  // though the :root tokens exist. The UX Designer flags it in REVIEW and the
+  // element-level design-adherence checks defend it. Build-level (a UI-quality
+  // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
+  "ux-adherence"
 ]);
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
@@ -8035,7 +8219,12 @@ function readEscalations(tddDir) {
 }
 function escalationsFromSmells(tddDir, featureId) {
   const log = readSmellsLog(tddDir);
-  return log.detected.filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell)).map((d) => ({
+  return log.detected.filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell)).filter((d) => {
+    if (d.smell !== "cycle-stall" || !featureId || !d.story_id) {
+      return true;
+    }
+    return pendingItemKind(tddDir, featureId, d.story_id) !== "fitness";
+  }).map((d) => ({
     id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
     source: `smell:${d.smell}`,
     reason: `blocking smell "${d.smell}": ${d.detail}`,
@@ -8129,149 +8318,10 @@ init_esm_shims();
 import * as fs7 from "fs";
 import * as path5 from "path";
 
-// scripts/tdd/cycle-record.ts
-init_esm_shims();
-import { existsSync as existsSync13, readFileSync as readFileSync12, readdirSync as readdirSync7, statSync as statSync5, writeFileSync as writeFileSync9, mkdirSync as mkdirSync8 } from "fs";
-import { join as join12, dirname as dirname5 } from "path";
-
-// scripts/tdd/test-list.ts
-init_esm_shims();
-
-// scripts/tdd/deploy.ts
-init_esm_shims();
-import { execSync, spawn } from "child_process";
-import { existsSync as existsSync12, mkdirSync as mkdirSync7, readFileSync as readFileSync11, rmSync as rmSync2, writeFileSync as writeFileSync8 } from "fs";
-import { dirname as dirname4, join as join11 } from "path";
-
-// scripts/lakebase/deploy-targets.ts
-init_esm_shims();
-
-// scripts/tdd/deploy.ts
-function deployEvidencePasses(e) {
-  return e !== void 0 && e.reachable === true && e.verify?.passed === true;
-}
-function readDeployEvidence(file) {
-  if (!existsSync12(file)) return void 0;
-  try {
-    return JSON.parse(readFileSync11(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function storyDeployVerified(tddDir, featureId, storyId) {
-  const fdir = findFeatureDir(tddDir, featureId);
-  if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence(join11(fdir, "stories", storyId, "deploy-evidence.json")));
-}
-
-// scripts/git/commits.ts
-init_esm_shims();
-
-// scripts/tdd/cycle-record.ts
-function readStoryItems(tddDir, featureId, story) {
-  const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync13(file)) {
-    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
-  }
-  const data = JSON.parse(readFileSync12(file, "utf8"));
-  return Array.isArray(data.items) ? data.items : [];
-}
-function storyCycles(tddDir, featureId, story) {
-  const base = join12(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync13(base)) return [];
-  const out = [];
-  for (const acDir of readdirSync7(base)) {
-    const dir = join12(base, acDir);
-    try {
-      if (!statSync5(dir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    for (const f of readdirSync7(dir)) {
-      if (!/^cycle-\d+\.json$/.test(f)) continue;
-      try {
-        out.push(JSON.parse(readFileSync12(join12(dir, f), "utf8")));
-      } catch {
-      }
-    }
-  }
-  return out;
-}
-function storyTestProgress(tddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(tddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const cycles = storyCycles(tddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
-  const pending = items.filter((i) => !cycledTestIds.has(i.id));
-  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
-  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
-  return { total: items.length, pending, openRed, allGreen };
-}
-var DEFAULT_BATCH_CAP = 3;
-function nextPendingBatch(tddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
-  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
-  const pending = storyTestProgress(tddDir, featureId, story).pending;
-  if (pending.length === 0) return [];
-  const layerOf = (acId) => readAcLayer2(tddDir, featureId, acId) ?? "_nolayer";
-  const headLayer = layerOf(pending[0].ac_id);
-  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
-}
-function readReview(tddDir, featureId, story, acId) {
-  const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!existsSync13(f)) return {};
-  try {
-    return JSON.parse(readFileSync12(f, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function acReviewStates(tddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(tddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const greenTestIds = new Set(
-    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c))
-  );
-  const acOrder = [];
-  const acTests = /* @__PURE__ */ new Map();
-  for (const it of items) {
-    if (!acTests.has(it.ac_id)) {
-      acTests.set(it.ac_id, []);
-      acOrder.push(it.ac_id);
-    }
-    acTests.get(it.ac_id).push(it.id);
-  }
-  return acOrder.map((acId) => {
-    const tests = acTests.get(acId);
-    const r = readReview(tddDir, featureId, story, acId);
-    return {
-      acId,
-      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
-      reviewed: Boolean(r.reviewed_at),
-      refactorRequested: Boolean(r.refactor_requested),
-      refactored: Boolean(r.refactored_at)
-    };
-  });
-}
-function firstReviewPendingAc(tddDir, featureId, story) {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
-}
-function firstRefactorPendingAc(tddDir, featureId, story) {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
-}
-
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync14, readFileSync as readFileSync13, renameSync, unlinkSync, writeFileSync as writeFileSync10 } from "fs";
-import { join as join13 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync14, renameSync, unlinkSync, writeFileSync as writeFileSync10 } from "fs";
+import { join as join14 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -8293,7 +8343,7 @@ function readGates(featureId, opts = {}) {
   if (!existsSync14(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync13(file, "utf8");
+  const raw = readFileSync14(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -8304,7 +8354,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return join13(requireFeatureDir(tddDir, featureId), "gates.json");
+  return join14(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -8621,7 +8671,9 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
     },
     architectAnnotated(story) {
       const acs = storyAcIds(tddDir, featureId, story);
-      return acs.length > 0 && acs.every((ac) => readAcLayer2(tddDir, featureId, ac) !== void 0);
+      if (acs.length === 0) return false;
+      const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(tddDir, featureId, ac) !== void 0);
+      return everyAcNoted && fs7.existsSync(architectureJson(tddDir, featureId));
     },
     testListReady(story) {
       const file = storyTestListJson(tddDir, featureId, story);
@@ -8690,7 +8742,7 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync17, readFileSync as readFileSync16, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10, readdirSync as readdirSync10, statSync as statSync7 } from "fs";
+import { existsSync as existsSync17, readFileSync as readFileSync17, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10, readdirSync as readdirSync11, statSync as statSync8 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -8700,7 +8752,20 @@ function pipelinePath(tddDir, featureId) {
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
   if (!existsSync17(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync16(p, "utf8"));
+  return JSON.parse(readFileSync17(p, "utf8"));
+}
+
+// scripts/tdd/architecture-conventions.ts
+init_esm_shims();
+import { existsSync as existsSync18, readFileSync as readFileSync18, writeFileSync as writeFileSync13, mkdirSync as mkdirSync11 } from "fs";
+function readConventions(tddDir) {
+  const f = architectureConventionsJson(tddDir);
+  if (!existsSync18(f)) return void 0;
+  try {
+    return JSON.parse(readFileSync18(f, "utf8"));
+  } catch {
+    return void 0;
+  }
 }
 
 // scripts/tdd/orchestrator-effects.ts
@@ -8788,6 +8853,14 @@ function consumeHandback(action, featureId, tddDir) {
 function roleTask(action, featureId, uiTrack, tddDir, build) {
   return consumeHandback(action, featureId, tddDir) + roleTaskBody(action, featureId, uiTrack, tddDir, build);
 }
+function architectConventionsDirective(tddDir) {
+  const conventions = readConventions(tddDir);
+  if (!conventions) {
+    return ` This is the first feature: the layered layout you declare in architecture.json (the role -> module paths) becomes the PROJECT-WIDE convention every later feature inherits, so choose the canonical layout deliberately.`;
+  }
+  const layout = conventions.layers.map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`).join(", ");
+  return ` REUSE the established project architecture conventions (set by ${conventions.established_by}): ${layout}. Declare the SAME role -> module paths in architecture.json, do NOT remap or rename an established layer; a divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
+}
 function roleTaskBody(action, featureId, uiTrack, tddDir, build) {
   if ("mode" in action) {
     switch (action.mode) {
@@ -8809,7 +8882,7 @@ function roleTaskBody(action, featureId, uiTrack, tddDir, build) {
     case "spec-author":
       return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(tddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files, the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
     case "architect-reviewer":
-      return `Annotate AC layers and nfrs.md coverage for story ${s}.`;
+      return `Annotate AC layers and nfrs.md coverage for story ${s}. In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary, service, and repository layers (plus a "models" PACKAGE app/models/ , one module per domain object, NOT a flat app/models.py , when it persists entities); set false ONLY for a trivial static/read-through endpoint. A not-service_backed declaration is cross-checked , an Infra-layer AC or a migration/schema/storage NFR while service_backed is false hard-blocks the gate.${architectConventionsDirective(tddDir)}`;
     case "test-strategist": {
       const acIds = storyAcIds(tddDir, featureId, s);
       const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
@@ -9046,7 +9119,18 @@ That command starts the app, polls it reachable, runs the verify suite, and writ
         }
       ];
     case "done":
-      return [{ kind: "set-phase", phase: "shipped" }];
+      return [
+        // Force the checkout: at `done` the feature has merged and its code is
+        // committed, but the per-run .tdd/.lakebase metadata (workflow-state.json,
+        // selection-log.md) is dirty + tracked, so a plain `git checkout` aborts
+        // ("local changes would be overwritten"). That churn is disposable here
+        // (the feature is shipped), and landing on the parent is the whole point,
+        // so -f discards it and switches. Mirrors the fork-guard ignoring the same
+        // metadata. (scm-merge attempts this switch too but non-fatally; this is
+        // the deterministic guarantee.)
+        ...cfg.parentBranch ? [{ kind: "cli", bin: "git", args: ["checkout", "-f", cfg.parentBranch] }] : [],
+        { kind: "set-phase", phase: "shipped" }
+      ];
     case "revise-route": {
       const smellName = action.source.startsWith("smell:") ? action.source.slice("smell:".length) : action.source;
       return [
@@ -9125,7 +9209,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync19, mkdirSync as mkdirSync12, readFileSync as readFileSync18, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync14 } from "fs";
+import { existsSync as existsSync20, mkdirSync as mkdirSync13, readFileSync as readFileSync20, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync15 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -9148,10 +9232,10 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync19(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync20(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync18(file, "utf8"));
+    parsed = JSON.parse(readFileSync20(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -9204,8 +9288,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync21, readFileSync as readFileSync19, writeFileSync as writeFileSync15, mkdirSync as mkdirSync13 } from "fs";
-import { dirname as dirname8, join as join16 } from "path";
+import { existsSync as existsSync22, readFileSync as readFileSync21, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14 } from "fs";
+import { dirname as dirname8, join as join17 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -9217,11 +9301,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join16(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join17(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = join16(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync21(p)) return void 0;
-  return JSON.parse(readFileSync19(p, "utf8"));
+  const p = join17(projectDir, AGENT_CONFIG_REL);
+  if (!existsSync22(p)) return void 0;
+  return JSON.parse(readFileSync21(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -9231,14 +9315,14 @@ function resolveModelForRole(role, projectDir) {
 
 // scripts/tdd/tdd-config.ts
 init_esm_shims();
-import { existsSync as existsSync22, readFileSync as readFileSync20, mkdirSync as mkdirSync14, writeFileSync as writeFileSync16 } from "fs";
-import { dirname as dirname9, join as join17 } from "path";
-var TDD_CONFIG_REL = join17(".lakebase", "tdd-config.json");
+import { existsSync as existsSync23, readFileSync as readFileSync22, mkdirSync as mkdirSync15, writeFileSync as writeFileSync17 } from "fs";
+import { dirname as dirname9, join as join18 } from "path";
+var TDD_CONFIG_REL = join18(".lakebase", "tdd-config.json");
 function loadTddConfig(projectDir) {
-  const f = join17(projectDir, TDD_CONFIG_REL);
-  if (!existsSync22(f)) return void 0;
+  const f = join18(projectDir, TDD_CONFIG_REL);
+  if (!existsSync23(f)) return void 0;
   try {
-    return JSON.parse(readFileSync20(f, "utf8"));
+    return JSON.parse(readFileSync22(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9278,7 +9362,6 @@ function resolveTddSettings(inputs) {
   const build = {
     loopGranularity: env.LAKEBASE_TDD_LOOP === "hybrid-a" ? "hybrid-a" : file?.build?.loopGranularity ?? "ac",
     batchCap: envBatchCap ?? file?.build?.batchCap,
-    batchFallback: env.LAKEBASE_TDD_BATCH_FALLBACK || file?.build?.batchFallback || "",
     sessionScope: env.LAKEBASE_TDD_BUILD_SESSION === "cycle" ? "cycle" : file?.build?.sessionScope ?? "story"
   };
   const project = {
@@ -9343,14 +9426,14 @@ function assistantTextFromLine(line) {
 
 // scripts/tdd/run-config.ts
 init_esm_shims();
-import { existsSync as existsSync23, mkdirSync as mkdirSync15, readFileSync as readFileSync21, writeFileSync as writeFileSync17 } from "fs";
-import { join as join18 } from "path";
-var RUN_CONFIG_REL = join18(".tdd", "run-config.json");
+import { existsSync as existsSync24, mkdirSync as mkdirSync16, readFileSync as readFileSync23, writeFileSync as writeFileSync18 } from "fs";
+import { join as join19 } from "path";
+var RUN_CONFIG_REL = join19(".tdd", "run-config.json");
 function readKitRef(projectDir) {
-  const f = join18(projectDir, ".lakebase", "kit-ref");
-  if (!existsSync23(f)) return void 0;
+  const f = join19(projectDir, ".lakebase", "kit-ref");
+  if (!existsSync24(f)) return void 0;
   try {
-    const v = readFileSync21(f, "utf8").trim();
+    const v = readFileSync23(f, "utf8").trim();
     return v.length > 0 ? v : void 0;
   } catch {
     return void 0;
@@ -9371,7 +9454,6 @@ function buildRunConfig(inputs) {
     build_session_scope: inputs.buildSessionScope ?? "story",
     review_effort: inputs.reviewEffort ?? "",
     loop_granularity: env.LAKEBASE_TDD_LOOP || "ac",
-    batch_fallback: env.LAKEBASE_TDD_BATCH_FALLBACK || "",
     deploy_target: inputs.deployTarget ?? "local",
     models
   };
@@ -9386,12 +9468,12 @@ function writeRunConfig(inputs) {
   const cfg = buildRunConfig(inputs);
   const body = JSON.stringify(cfg, null, 2) + "\n";
   try {
-    mkdirSync15(inputs.tddDir, { recursive: true });
-    writeFileSync17(join18(inputs.tddDir, "run-config.json"), body);
+    mkdirSync16(inputs.tddDir, { recursive: true });
+    writeFileSync18(join19(inputs.tddDir, "run-config.json"), body);
     const recordDir = (inputs.env ?? process.env).LAKEBASE_TDD_RECORD_DIR?.trim();
     if (recordDir) {
-      mkdirSync15(recordDir, { recursive: true });
-      writeFileSync17(join18(recordDir, "run-config.json"), body);
+      mkdirSync16(recordDir, { recursive: true });
+      writeFileSync18(join19(recordDir, "run-config.json"), body);
     }
   } catch {
   }
@@ -9772,6 +9854,7 @@ function buildCfg(args, featureId) {
     sprintName: args.sprint,
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
+    parentBranch: scm?.parent_branch,
     // Deploy target: the --deploy-target flag wins, else the config's default.
     deployTarget: args.deployTarget ?? settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",

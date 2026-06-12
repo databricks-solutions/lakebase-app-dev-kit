@@ -6851,8 +6851,8 @@ function readAgentLog(opts = {}) {
 
 // scripts/tdd/log-reconcile.ts
 init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
+var import_fs4 = require("fs");
+var import_path4 = require("path");
 
 // scripts/tdd/tdd-paths.ts
 init_cjs_shims();
@@ -6860,8 +6860,11 @@ var fs = __toESM(require("fs"), 1);
 var import_node_path = require("path");
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
+var architectureDir = (tdd) => (0, import_node_path.join)(tdd, "architecture");
+var architectureConventionsJson = (tdd) => (0, import_node_path.join)(architectureDir(tdd), "conventions.json");
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var architectureJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "architecture.json");
 var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
@@ -6883,32 +6886,91 @@ function findFeatureDir(tdd, featureId) {
   return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
 }
 
+// scripts/tdd/architecture-conventions.ts
+init_cjs_shims();
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+function normModule(m) {
+  return m.replace(/\/+$/, "");
+}
+function readConventions(tddDir) {
+  const f = architectureConventionsJson(tddDir);
+  if (!(0, import_fs3.existsSync)(f)) return void 0;
+  try {
+    return JSON.parse((0, import_fs3.readFileSync)(f, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function deriveConventions(architectureJsonContent, featureId, now = () => /* @__PURE__ */ new Date()) {
+  let doc;
+  try {
+    doc = JSON.parse(architectureJsonContent);
+  } catch {
+    return void 0;
+  }
+  if (doc.service_backed !== true) return void 0;
+  const layers = (doc.layers ?? []).filter(
+    (l) => typeof l.role === "string" && typeof l.module === "string"
+  ).map((l) => ({
+    role: l.role,
+    module: normModule(l.module),
+    ...typeof l.renders_via === "string" ? { renders_via: l.renders_via } : {}
+  }));
+  if (layers.length === 0) return void 0;
+  return {
+    established_by: featureId,
+    established_at: now().toISOString(),
+    service_backed: true,
+    layers
+  };
+}
+function establishConventionsIfAbsent(tddDir, featureId, now = () => /* @__PURE__ */ new Date()) {
+  const existing = readConventions(tddDir);
+  if (existing) return { established: false, conventions: existing };
+  const archFile = architectureJson(tddDir, featureId);
+  if (!(0, import_fs3.existsSync)(archFile)) return { established: false };
+  let content;
+  try {
+    content = (0, import_fs3.readFileSync)(archFile, "utf8");
+  } catch {
+    return { established: false };
+  }
+  const conventions = deriveConventions(content, featureId, now);
+  if (!conventions) return { established: false };
+  const out = architectureConventionsJson(tddDir);
+  (0, import_fs3.mkdirSync)((0, import_path3.dirname)(out), { recursive: true });
+  (0, import_fs3.writeFileSync)(out, JSON.stringify(conventions, null, 2) + "\n");
+  return { established: true, conventions };
+}
+
 // scripts/tdd/log-reconcile.ts
 function discoverArtifacts(tddDir, featureId) {
   const out = [];
   const fdir = featureResolved(tddDir, featureId);
-  if (!(0, import_fs3.existsSync)(fdir)) return out;
+  if (!(0, import_fs4.existsSync)(fdir)) return out;
   const add = (abs, role, message) => {
-    if ((0, import_fs3.existsSync)(abs)) out.push({ path: (0, import_path3.relative)(tddDir, abs), role, message });
+    if ((0, import_fs4.existsSync)(abs)) out.push({ path: (0, import_path4.relative)(tddDir, abs), role, message });
   };
-  add((0, import_path3.join)(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
-  add((0, import_path3.join)(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
-  add((0, import_path3.join)(fdir, "test-list.json"), "test-strategist", "test-list.json");
-  const designDir = (0, import_path3.dirname)(designGuideJson(tddDir));
-  add((0, import_path3.join)(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
-  add((0, import_path3.join)(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
-  add((0, import_path3.join)(designDir, "ia.md"), "ux-designer", "ia.md");
-  const sdir = (0, import_path3.join)(fdir, "stories");
-  if ((0, import_fs3.existsSync)(sdir)) {
-    for (const s of (0, import_fs3.readdirSync)(sdir).sort()) {
-      const storyDir2 = (0, import_path3.join)(sdir, s);
-      if (!(0, import_fs3.statSync)(storyDir2).isDirectory()) continue;
-      add((0, import_path3.join)(storyDir2, "story.json"), "spec-author", `story stub ${s}`);
-      const acsDir = (0, import_path3.join)(storyDir2, "acs");
-      if ((0, import_fs3.existsSync)(acsDir)) {
-        for (const ac of (0, import_fs3.readdirSync)(acsDir).sort()) {
+  add((0, import_path4.join)(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
+  add((0, import_path4.join)(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
+  add((0, import_path4.join)(fdir, "test-list.json"), "test-strategist", "test-list.json");
+  add(architectureConventionsJson(tddDir), "architect-reviewer", "architecture conventions (project)");
+  const designDir = (0, import_path4.dirname)(designGuideJson(tddDir));
+  add((0, import_path4.join)(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
+  add((0, import_path4.join)(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
+  add((0, import_path4.join)(designDir, "ia.md"), "ux-designer", "ia.md");
+  const sdir = (0, import_path4.join)(fdir, "stories");
+  if ((0, import_fs4.existsSync)(sdir)) {
+    for (const s of (0, import_fs4.readdirSync)(sdir).sort()) {
+      const storyDir2 = (0, import_path4.join)(sdir, s);
+      if (!(0, import_fs4.statSync)(storyDir2).isDirectory()) continue;
+      add((0, import_path4.join)(storyDir2, "story.json"), "spec-author", `story stub ${s}`);
+      const acsDir = (0, import_path4.join)(storyDir2, "acs");
+      if ((0, import_fs4.existsSync)(acsDir)) {
+        for (const ac of (0, import_fs4.readdirSync)(acsDir).sort()) {
           if (ac.endsWith(".json")) {
-            add((0, import_path3.join)(acsDir, ac), "spec-author", `AC ${ac.replace(/\.json$/, "")} for story ${s}`);
+            add((0, import_path4.join)(acsDir, ac), "spec-author", `AC ${ac.replace(/\.json$/, "")} for story ${s}`);
           }
         }
       }
@@ -6929,6 +6991,22 @@ function reconcileArtifactLog(opts) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const existing = readAgentLog({ tddDir, featureId: opts.featureId });
   const emitted = [];
+  const est = establishConventionsIfAbsent(tddDir, opts.featureId, opts.now);
+  if (est.established && est.conventions) {
+    const layout = est.conventions.layers.map((l) => `${l.role}=${l.module}`).join(", ");
+    const ev = emitAgentLogEvent(
+      {
+        role: "architect-reviewer",
+        level: "info",
+        event: "reasoning",
+        feature_id: opts.featureId,
+        slots: { note: `established project architecture conventions: ${layout}` }
+      },
+      { tddDir, now: opts.now }
+    );
+    existing.push(ev);
+    emitted.push(ev);
+  }
   for (const art of discoverArtifacts(tddDir, opts.featureId)) {
     if (alreadyLogged(existing, art.path)) continue;
     const ev = emitAgentLogEvent(
@@ -6953,8 +7031,8 @@ var fs5 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_fs5 = require("fs");
+var import_path5 = require("path");
 
 // scripts/tdd/run-cycle.ts
 init_cjs_shims();
@@ -7061,6 +7139,13 @@ var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process5.exe
 init_cjs_shims();
 var import_node_child_process6 = require("child_process");
 
+// scripts/git/status.ts
+init_cjs_shims();
+
+// scripts/util/exec.ts
+init_cjs_shims();
+var cp = __toESM(require("child_process"), 1);
+
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
 var fs2 = __toESM(require("fs"), 1);
@@ -7070,25 +7155,44 @@ var path = __toESM(require("path"), 1);
 init_cjs_shims();
 var fs3 = __toESM(require("fs"), 1);
 
-// scripts/util/exec.ts
-init_cjs_shims();
-var cp = __toESM(require("child_process"), 1);
-
 // scripts/tdd/smells.ts
 function writeSmellsLog(tddDir, hits) {
-  const file = (0, import_path4.join)(tddDir, "smells.json");
-  const existing = (0, import_fs4.existsSync)(file) ? JSON.parse((0, import_fs4.readFileSync)(file, "utf8")) : { detected: [] };
+  const file = (0, import_path5.join)(tddDir, "smells.json");
+  const existing = (0, import_fs5.existsSync)(file) ? JSON.parse((0, import_fs5.readFileSync)(file, "utf8")) : { detected: [] };
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const newEntries = hits.map((h) => ({ ...h, detected_at: ts }));
   const merged = { detected: [...existing.detected, ...newEntries] };
-  (0, import_fs4.writeFileSync)(file, JSON.stringify(merged, null, 2) + "\n");
+  (0, import_fs5.writeFileSync)(file, JSON.stringify(merged, null, 2) + "\n");
   return merged;
 }
 function readSmellsLog(tddDir) {
-  const file = (0, import_path4.join)(tddDir, "smells.json");
-  if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
-  return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
+  const file = (0, import_path5.join)(tddDir, "smells.json");
+  if (!(0, import_fs5.existsSync)(file)) return { detected: [] };
+  return JSON.parse((0, import_fs5.readFileSync)(file, "utf8"));
 }
+
+// scripts/tdd/cycle-record.ts
+init_cjs_shims();
+
+// scripts/tdd/test-list.ts
+init_cjs_shims();
+
+// scripts/tdd/deploy.ts
+init_cjs_shims();
+var import_node_child_process8 = require("child_process");
+var import_node_fs3 = require("fs");
+var import_node_path3 = require("path");
+
+// scripts/lakebase/deploy-targets.ts
+init_cjs_shims();
+
+// scripts/tdd/e2e-regex-clean.ts
+init_cjs_shims();
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+
+// scripts/git/commits.ts
+init_cjs_shims();
 
 // scripts/tdd/escalation.ts
 var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
@@ -7110,7 +7214,13 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
   // defect; the Navigator flags it in REVIEW and the layering fitness test
   // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
   // than routing to a design author.
-  "layering-violation"
+  "layering-violation",
+  // The rendered UI does not USE the design tokens at the element level (hardcoded
+  // hex/px, a missing ia.md data-testid seam, or an action with no feedback), even
+  // though the :root tokens exist. The UX Designer flags it in REVIEW and the
+  // element-level design-adherence checks defend it. Build-level (a UI-quality
+  // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
+  "ux-adherence"
 ]);
 function recordBlockingSmellFlag(tddDir, smell, detail, scope) {
   if (!BLOCKING_SMELLS.has(smell)) return false;
@@ -7234,10 +7344,13 @@ function runAgentLogCli(argv) {
         process.stdout.write(`${JSON.stringify(emitted)}
 `);
       } else {
-        process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}
+        process.stdout.write(`reconciled ${emitted.length} event(s) into the log for ${a.feature}
 `);
-        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.metadata?.path}
+        for (const e of emitted) {
+          const meta = e.metadata;
+          process.stdout.write(`  + [${e.role}] ${meta?.path ?? meta?.note ?? e.message}
 `);
+        }
       }
       return 0;
     } catch (e) {

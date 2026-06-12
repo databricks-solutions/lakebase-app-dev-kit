@@ -6674,8 +6674,8 @@ function isCliEntry(importMetaUrl) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync4, readFileSync as readFileSync9, rmSync, writeFileSync as writeFileSync6 } from "fs";
-import { dirname as dirname2, join as join7 } from "path";
+import { existsSync as existsSync8, mkdirSync as mkdirSync4, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync6 } from "fs";
+import { dirname as dirname2, join as join8 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -6877,6 +6877,13 @@ var execFileP4 = promisify4(execFile4);
 init_esm_shims();
 import { execFileSync as execFileSync2 } from "child_process";
 
+// scripts/git/status.ts
+init_esm_shims();
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp from "child_process";
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs2 from "fs";
@@ -6885,10 +6892,6 @@ import * as path2 from "path";
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
 import * as fs3 from "fs";
-
-// scripts/util/exec.ts
-init_esm_shims();
-import * as cp from "child_process";
 
 // scripts/tdd/agent-log.ts
 init_esm_shims();
@@ -7038,6 +7041,15 @@ function emitAgentLogEvent(input, opts = {}) {
   return event;
 }
 
+// scripts/tdd/cycle-record.ts
+init_esm_shims();
+
+// scripts/tdd/test-list.ts
+init_esm_shims();
+
+// scripts/git/commits.ts
+init_esm_shims();
+
 // scripts/tdd/escalation.ts
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
@@ -7068,6 +7080,11 @@ function readEscalationFile(file) {
     return void 0;
   }
 }
+
+// scripts/tdd/e2e-regex-clean.ts
+init_esm_shims();
+import { readdirSync as readdirSync3, readFileSync as readFileSync9, statSync as statSync2 } from "fs";
+import { join as join7 } from "path";
 
 // scripts/tdd/deploy.ts
 var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
@@ -7165,7 +7182,7 @@ function logReleaseEngineerDeployOutcome(ctx, result) {
   }
 }
 function pidFile(projectDir, target) {
-  return join7(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join8(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -7178,9 +7195,9 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? join7(fdir, "stories", evidence.story_id) : fdir;
+  const dir = evidence.story_id ? join8(fdir, "stories", evidence.story_id) : fdir;
   mkdirSync4(dir, { recursive: true });
-  const file = join7(dir, "deploy-evidence.json");
+  const file = join8(dir, "deploy-evidence.json");
   writeFileSync6(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
@@ -7211,7 +7228,7 @@ async function deployToTarget(args) {
     const verify2 = { passed: false, summary: reason };
     let evidencePath2;
     if (args.featureId) {
-      const tddDir = args.tddDir ?? join7(args.projectDir, ".tdd");
+      const tddDir = args.tddDir ?? join8(args.projectDir, ".tdd");
       const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
       evidencePath2 = writeDeployEvidence(tddDir, {
         schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7260,7 +7277,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? join7(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? join8(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7314,7 +7331,7 @@ async function deployToTarget(args) {
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
   if (!existsSync8(pf)) return { stopped: false };
-  const pid = Number(readFileSync9(pf, "utf8").trim());
+  const pid = Number(readFileSync10(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);
