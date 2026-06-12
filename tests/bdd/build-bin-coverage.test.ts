@@ -47,13 +47,23 @@ function parseTsupEntries(): Map<string, string> {
 }
 
 describe("build/bin coverage", () => {
-  const pkg = readJson<{ bin?: Record<string, string> }>(
-    path.join(REPO_ROOT, "package.json"),
-  );
+  const pkg = readJson<{
+    bin?: Record<string, string>;
+    exports?: Record<string, unknown>;
+  }>(path.join(REPO_ROOT, "package.json"));
   const tsupEntries = parseTsupEntries();
 
   it("package.json declares at least one bin", () => {
     expect(pkg.bin && Object.keys(pkg.bin).length > 0).toBe(true);
+  });
+
+  it("exports exposes ./package.json so consumers can require.resolve it", () => {
+    // The extension does require.resolve("@databricks-solutions/lakebase-app-dev-kit/package.json")
+    // to find the kit package root (then walks to templates/). With an `exports`
+    // field present, Node refuses any subpath not listed, so package.json must be
+    // explicitly exported or the resolve throws ERR_PACKAGE_PATH_NOT_EXPORTED at
+    // runtime (the "Install Reference Playwright Config" command failed this way).
+    expect(pkg.exports?.["./package.json"]).toBe("./package.json");
   });
 
   it("every script-side bin entry maps to a tsup entry", () => {

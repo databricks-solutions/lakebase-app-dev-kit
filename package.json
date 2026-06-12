@@ -25,6 +25,7 @@
   "module": "./dist/scripts/index.js",
   "types": "./dist/scripts/index.d.ts",
   "exports": {
+    "./package.json": "./package.json",
     ".": {
       "import": {
         "types": "./dist/scripts/index.d.ts",
