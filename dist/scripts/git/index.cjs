@@ -432,6 +432,8 @@ async function listMigrationsOnBranch(args) {
 }
 
 // scripts/git/commits.ts
+var import_fs = require("fs");
+var import_path = require("path");
 async function commit(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -454,15 +456,18 @@ async function commitAllIfChanged(args) {
     throw new Error("Commit message is required");
   }
   const exclude = args.exclude ?? [];
-  let addCmd = "git add -A";
-  let diffCmd = "git diff --cached --name-only";
   if (exclude.length > 0) {
     const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-    addCmd = `git add -A -- . ${ex}`;
-    diffCmd = `git diff --cached --name-only -- . ${ex}`;
+    await exec2(`git add -A -- . ${ex}`, { cwd: args.cwd });
+  } else {
+    await exec2("git add -A", { cwd: args.cwd });
   }
-  await exec2(addCmd, { cwd: args.cwd });
-  const staged = await exec2(diffCmd, { cwd: args.cwd });
+  for (const inc of args.include ?? []) {
+    if ((0, import_fs.existsSync)((0, import_path.join)(args.cwd, inc))) {
+      await exec2(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
+    }
+  }
+  const staged = await exec2("git diff --cached --name-only", { cwd: args.cwd });
   if (!staged.trim()) return false;
   await exec2(`git commit -m ${shq(args.message)}`, { cwd: args.cwd });
   return true;

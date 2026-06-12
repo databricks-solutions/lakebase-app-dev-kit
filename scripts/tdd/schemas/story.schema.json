@@ -33,6 +33,23 @@
       "pattern": "^F[0-9]+(-[a-z0-9-]+)?$",
       "description": "Parent feature ID."
     },
+    "independence": {
+      "type": "object",
+      "description": "Breakdown-time determination that this story delivers behavior NOT already delivered by an earlier story in the feature (the story-independence test). Required for every story after the first (the spec gate hard-blocks a later story that omits it or sets distinct_from_prior:false); the first story has no prior and may omit it.",
+      "required": ["distinct_from_prior", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "distinct_from_prior": {
+          "type": "boolean",
+          "description": "True iff building all earlier stories would leave this story's behavior genuinely unbuilt (independently RED-able). False means this story is a subset of an earlier one and must be folded or re-scoped."
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One line: the distinct, independently-RED-able behavior this story adds beyond the prior stories."
+        }
+      }
+    },
     "external_ref": {
       "type": "object",
       "properties": {

@@ -170,6 +170,153 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     expect(ok.approved).toContain("spec");
   });
 
+  it("hard-blocks spec when architecture.json diverges from the established project conventions; approves once it conforms", () => {
+    // Project conventions (set by an earlier feature) pin service -> app/services.
+    // A later feature that remaps it to app/logic must be hard-blocked at the spec
+    // gate, before it reaches build where it would mismatch the inherited code.
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    const acsDir = join(fdir, "stories", "S1-file-bug", "acs");
+    mkdirSync(acsDir, { recursive: true });
+    writeFileSync(
+      join(acsDir, "AC1-create.json"),
+      JSON.stringify({ id: "AC1-create", layer: "API", given: "a reporter", when: "they submit", then: "it persists", status: "draft" }),
+    );
+    // Established project conventions.
+    mkdirSync(join(tdd, "architecture"), { recursive: true });
+    writeFileSync(
+      join(tdd, "architecture", "conventions.json"),
+      JSON.stringify({
+        established_by: "F0-prior",
+        established_at: "2026-06-12T00:00:00.000Z",
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes" },
+          { role: "service", module: "app/services" },
+          { role: "repository", module: "app/repositories" },
+        ],
+      }),
+    );
+    // A DIVERGENT architecture.json (service remapped to app/logic).
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes" },
+          { role: "service", module: "app/logic" },
+          { role: "repository", module: "app/repositories" },
+        ],
+      }),
+    );
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(blocked.approved).not.toContain("spec");
+    expect(blocked.skipped.find((s) => s.gate === "spec")?.reason ?? "").toMatch(/architecture conventions failed.*service/i);
+    expect(readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.status).toBe("open");
+
+    // Conform the layout -> spec gate approves.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes" },
+          { role: "service", module: "app/services" },
+          { role: "repository", module: "app/repositories" },
+        ],
+      }),
+    );
+    const ok = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(ok.approved).toContain("spec");
+  });
+
+  it("hard-blocks spec when architecture under-declares service_backed despite persistence evidence (checkServiceBackedDeclaration); approves once declared+layered", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    const acsDir = join(fdir, "stories", "S1-file-bug", "acs");
+    mkdirSync(acsDir, { recursive: true });
+    writeFileSync(
+      join(acsDir, "AC1-create.json"),
+      JSON.stringify({ id: "AC1-create", layer: "API", given: "a reporter", when: "they submit", then: "it persists", status: "draft" }),
+    );
+    // service_backed:false BUT an NFR clearly about persistence -> contradiction.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({ feature_id: "F1-initial-domain", service_backed: false, nfrs: [{ category: "operability", requirement: "bugs survive every schema migration", hil_status: "accepted" }] }),
+    );
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(blocked.approved).not.toContain("spec");
+    expect(blocked.skipped.find((s) => s.gate === "spec")?.reason ?? "").toMatch(/service_backed declaration failed.*persistence evidence/i);
+
+    // Own it: service_backed:true + the 3 layers -> spec approves.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({
+        feature_id: "F1-initial-domain",
+        service_backed: true,
+        layers: [{ role: "boundary", module: "app/main.py" }, { role: "service", module: "app/services" }, { role: "repository", module: "app/repositories" }],
+        nfrs: [{ category: "operability", requirement: "bugs survive every schema migration", hil_status: "accepted" }],
+      }),
+    );
+    expect(drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd }).approved).toContain("spec");
+  });
+
+  it("hard-blocks spec when a service_backed architecture.json declares no layers (checkLayeringDeclared, previously unwired)", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    // service_backed but NO layers -> layering-declaration hard-block.
+    writeFileSync(join(fdir, "architecture.json"), JSON.stringify({ service_backed: true, layers: [] }));
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(blocked.approved).not.toContain("spec");
+    expect(blocked.skipped.find((s) => s.gate === "spec")?.reason ?? "").toMatch(/layering declaration failed/i);
+
+    // Declare the layers -> spec approves.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({ service_backed: true, layers: [{ role: "boundary", module: "app/routes" }, { role: "service", module: "app/services" }, { role: "repository", module: "app/repositories" }] }),
+    );
+    expect(drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd }).approved).toContain("spec");
+  });
+
+  it("hard-blocks spec when a Required nfrs.md item is uncovered by architecture.json (checkNfrCoverage, previously unwired)", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    writeFileSync(join(tdd, "nfrs.md"), "# NFRs\n## Required\n- R1: queries respond < 200ms\n");
+    // architecture.json covers NOTHING -> R1 uncovered -> hard-block.
+    writeFileSync(join(fdir, "architecture.json"), JSON.stringify({ nfrs: [] }));
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd });
+    expect(blocked.approved).not.toContain("spec");
+    expect(blocked.skipped.find((s) => s.gate === "spec")?.reason ?? "").toMatch(/NFR coverage failed.*R1/i);
+
+    // Cover R1 via a brief_ref -> spec approves.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({ nfrs: [{ category: "performance", requirement: "p95 < 200ms", brief_ref: "R1", hil_status: "accepted" }] }),
+    );
+    expect(drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd }).approved).toContain("spec");
+  });
+
+  it("hard-blocks test_list when a service_backed feature has no fitness item (checkFitnessCoverage, previously unwired)", () => {
+    writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
+    writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
+    writeFileSync(join(fdir, "architecture.json"), JSON.stringify({ service_backed: true, layers: [{ role: "boundary", module: "app/routes" }, { role: "service", module: "app/services" }, { role: "repository", module: "app/repositories" }] }));
+    // test-list with only behavior items -> fitness coverage hard-block.
+    writeFileSync(
+      join(fdir, "test-list.json"),
+      JSON.stringify({ feature_id: "F1-initial-domain", items: [{ id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" }] }),
+    );
+    const blocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "test_list" });
+    expect(blocked.approved).not.toContain("test_list");
+    expect(blocked.skipped.find((s) => s.gate === "test_list")?.reason ?? "").toMatch(/fitness coverage failed/i);
+
+    // Add a fitness item -> test_list approves.
+    writeFileSync(
+      join(fdir, "test-list.json"),
+      JSON.stringify({ feature_id: "F1-initial-domain", items: [{ id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" }, { id: "T2", description: "boundary does not touch the DB session", ac_id: "AC1", status: "pending", kind: "fitness" }] }),
+    );
+    expect(drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "test_list" }).approved).toContain("test_list");
+  });
+
   it("approves test_list only with a schema-valid test-list.json", () => {
     writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);

@@ -18,7 +18,8 @@ import {
   type AgentLogEvent,
   type AgentRole,
 } from "./agent-log.js";
-import { featureResolved, storyTestListJson, designGuideJson } from "./tdd-paths.js";
+import { featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./tdd-paths.js";
+import { establishConventionsIfAbsent } from "./architecture-conventions.js";
 
 export interface ReconcileOpts {
   /** Path to the .tdd/ root. Default: "./.tdd". */
@@ -48,6 +49,12 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
   add(join(fdir, "feature-spec.json"), "spec-author", "feature-spec.json");
   add(join(fdir, "architecture.json"), "architect-reviewer", "architecture.json");
   add(join(fdir, "test-list.json"), "test-strategist", "test-list.json");
+
+  // Project-level architecture conventions (the canonical role -> module layout).
+  // Like the design-guide, it lives outside the feature dir and is inherited
+  // across features, so reconcile it at its project path or a ux-style turn that
+  // produced/inherited it would log nothing for it.
+  add(architectureConventionsJson(tddDir), "architect-reviewer", "architecture conventions (project)");
 
   // UX design system , PROJECT-level, under .tdd/design/ (NOT the feature dir).
   // The ux-designer writes design-guide.{md,json} + ia.md there (designGuideJson
@@ -101,6 +108,33 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
   const tddDir = opts.tddDir ?? "./.tdd";
   const existing = readAgentLog({ tddDir, featureId: opts.featureId });
   const emitted: AgentLogEvent[] = [];
+
+  // Deterministically establish the project architecture conventions from this
+  // feature's architecture.json (a no-op once they exist, or when the feature is
+  // not service-backed). When it fires, code-EMIT the architect's layout decision
+  // as a `reasoning` event , the architect ran but its substantive output (the
+  // canonical role -> module layout) otherwise left no trace, so the design log
+  // showed it as silent. This makes the decision observable without depending on
+  // the role model remembering to emit (the same structural-observability intent
+  // as the artifact reconcile below). Idempotent: establish returns established
+  // only on the first reconcile that sees architecture.json.
+  const est = establishConventionsIfAbsent(tddDir, opts.featureId, opts.now);
+  if (est.established && est.conventions) {
+    const layout = est.conventions.layers.map((l) => `${l.role}=${l.module}`).join(", ");
+    const ev = emitAgentLogEvent(
+      {
+        role: "architect-reviewer",
+        level: "info",
+        event: "reasoning",
+        feature_id: opts.featureId,
+        slots: { note: `established project architecture conventions: ${layout}` },
+      },
+      { tddDir, now: opts.now },
+    );
+    existing.push(ev);
+    emitted.push(ev);
+  }
+
   for (const art of discoverArtifacts(tddDir, opts.featureId)) {
     if (alreadyLogged(existing, art.path)) continue;
     const ev = emitAgentLogEvent(

@@ -1,18 +1,19 @@
 // Escalations: the single "raise to the HIL" channel (follow-up).
 //
-// WHY: a live smoke shipped a false-GREEN on a self-contradictory test , the
+// WHY: a live smoke shipped a false-GREEN on a self-contradictory test, the
 // orchestration stamped green without a real run, ignored the Navigator's
 // contradiction smell, and then STALLED at await-acceptance. The fix is a
 // uniform rule: after ANY role/step surfaces a blocking problem (a failed honest
 // GREEN run, a blocking bad-smell, a deploy verify-fail), it writes an
 // escalation here, and the deterministic driver routes to a single `raise-to-hil`
-// halt while an unresolved escalation exists , it never advances past it and
+// halt while an unresolved escalation exists, it never advances past it and
 // never silently spins. Headless mode surfaces + halts (a human resumes); it
 // does not auto-decide.
 
 import * as fs from "node:fs";
 import { escalationsDir, escalationFile } from "./tdd-paths.js";
-import { readSmellsLog, type SmellName } from "./smells.js";
+import { readSmellsLog, writeSmellsLog, type SmellName } from "./smells.js";
+import { pendingItemKind } from "./cycle-record.js";
 
 /** A blocking problem raised to the HIL. Identity is `id` (derived from source +
  *  scope) so the same condition re-detected across driver iterations is the same
@@ -38,6 +39,27 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   "cycle-stall",
   "boundary-violation",
   "test-deletion-attempt",
+  // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
+  // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
+  // conftest defect (2026-06-11 smoke) traced to this not being blocking.
+  "scaffold-defect",
+  // Non-independent ACs (one AC's `then` implied by another) make a faithful RED
+  // impossible. Flagged by the test-strategist at the design gate so it halts
+  // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
+  // overlap that stalled S1).
+  "ac-overlap",
+  // The boundary/routes layer touching persistence directly (a fat controller),
+  // instead of delegating to a service + repository. A build-level structural
+  // defect; the Navigator flags it in REVIEW and the layering fitness test
+  // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
+  // than routing to a design author.
+  "layering-violation",
+  // The rendered UI does not USE the design tokens at the element level (hardcoded
+  // hex/px, a missing ia.md data-testid seam, or an action with no feedback), even
+  // though the :root tokens exist. The UX Designer flags it in REVIEW and the
+  // element-level design-adherence checks defend it. Build-level (a UI-quality
+  // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
+  "ux-adherence",
 ]);
 
 /** A stable, filesystem-safe escalation id from its source + scope, so the same
@@ -103,13 +125,61 @@ export function escalationsFromSmells(tddDir: string, featureId?: string): Escal
   const log = readSmellsLog(tddDir);
   return log.detected
     .filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell))
+    // Born-green fitness guard: a `cycle-stall` flagged while the story's next
+    // pending item is a `kind:"fitness"` test is NOT a stuck build , a fitness
+    // test that "can't go RED" is born-green (a regression guard that already
+    // holds). The GREEN run is the real arbiter (it greens a passing test;
+    // a genuinely failing behavior test still stalls). Drop such a cycle-stall
+    // so the loop proceeds to the GREEN turn instead of hard-halting to the HIL.
+    .filter((d) => {
+      if (d.smell !== "cycle-stall" || !featureId || !d.story_id) { return true; }
+      return pendingItemKind(tddDir, featureId, d.story_id) !== "fitness";
+    })
     .map((d) => ({
-      id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId }),
+      id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
       source: `smell:${d.smell}`,
       reason: `blocking smell "${d.smell}": ${d.detail}`,
       ...(featureId ? { feature_id: featureId } : {}),
+      ...(d.story_id ? { story_id: d.story_id } : {}),
+      ...(d.ac_id ? { ac_id: d.ac_id } : {}),
       raised_at: d.detected_at,
     }));
+}
+
+/** Mirror a role-flagged BLOCKING smell into `smells.json` so the driver's
+ *  `firstPendingEscalation` -> raise-to-hil picks it up and HALTS the loop.
+ *  A `smell.flagged` log event is observability only; persisting the blocking
+ *  ones here is what makes the navigator's "(blocking)" actually stop the build
+ *  (the driver-fabricated-conftest defect traced to this gap). No-op for
+ *  advisory/unknown smell names; idempotent (skips a still-unresolved dup of the
+ *  same smell). Returns true iff a new entry was written. */
+export function recordBlockingSmellFlag(
+  tddDir: string,
+  smell: string,
+  detail?: string,
+  scope?: { story_id?: string; ac_id?: string },
+): boolean {
+  if (!BLOCKING_SMELLS.has(smell as SmellName)) return false;
+  // Idempotent per (smell, story): a still-open flag of the same smell on the
+  // same story is a dup. A legacy entry with no story matches any story so a
+  // pre-scope flag is not re-raised.
+  const open = readSmellsLog(tddDir).detected.some(
+    (d) =>
+      d.smell === smell &&
+      !d.resolution &&
+      (scope?.story_id === undefined || d.story_id === undefined || d.story_id === scope.story_id),
+  );
+  if (open) return false;
+  writeSmellsLog(tddDir, [
+    {
+      smell: smell as SmellName,
+      cycle_ids: [],
+      detail: detail || `flagged blocking smell: ${smell}`,
+      ...(scope?.story_id ? { story_id: scope.story_id } : {}),
+      ...(scope?.ac_id ? { ac_id: scope.ac_id } : {}),
+    },
+  ]);
+  return true;
 }
 
 /** The first UNRESOLVED escalation for a feature (explicit files + blocking

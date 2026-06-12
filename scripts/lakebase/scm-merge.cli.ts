@@ -18,6 +18,7 @@ interface ParsedArgs {
   noWaitMigrate?: boolean;
   migrateTimeoutSec?: number;
   migratePollSec?: number;
+  migrateTimeoutNonfatal?: boolean;
   json?: boolean;
   pretty?: boolean;
   help?: boolean;
@@ -52,6 +53,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--migrate-poll-sec":
         out.migratePollSec = Number.parseInt(argv[++i], 10);
+        break;
+      case "--migrate-timeout-nonfatal":
+        out.migrateTimeoutNonfatal = true;
         break;
       case "--json":
         out.json = true;
@@ -90,6 +94,15 @@ Flags:
   --migrate-timeout-sec <n>
                           Migrate poll budget (default: 1800 = 30 minutes)
   --migrate-poll-sec <n>  Seconds between migrate polls (default: 30)
+  --migrate-timeout-nonfatal
+                          Treat a migrate-poll TIMEOUT as a warning, not an
+                          error: the PR already merged + local synced, so a
+                          slow/absent downstream-migrate run becomes a warning
+                          (migrate.timedOut) and exit 0 instead of failing.
+                          A migrate run that COMPLETES with failure is still
+                          fatal. Used by fire-and-confirm callers (the TDD
+                          orchestrator) so a slow migrate run does not hang the
+                          whole drive.
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
@@ -129,6 +142,9 @@ function renderHuman(r: Report): string {
     }
     if (res.migrate.conclusion) {
       lines.push(`  migrate_conclusion   : ${res.migrate.conclusion}`);
+    }
+    if (res.migrate.timedOut) {
+      lines.push(`  migrate_timed_out    : true (advisory; merge already landed)`);
     }
     if (res.state.migrate_completed_at) {
       lines.push(
@@ -177,6 +193,7 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
       migratePollMs: args.migratePollSec
         ? args.migratePollSec * 1000
         : undefined,
+      migrateTimeoutFatal: args.migrateTimeoutNonfatal ? false : undefined,
     });
     const report: Report = { ok: true, result };
     if (args.json) {

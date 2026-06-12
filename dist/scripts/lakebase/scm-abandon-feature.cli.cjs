@@ -296,13 +296,6 @@ var import_node_child_process5 = require("child_process");
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
 
-// scripts/lakebase/env-file.ts
-var fs = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
-
-// scripts/lakebase/databricks-profile.ts
-var fs2 = __toESM(require("fs"), 1);
-
 // scripts/util/exec.ts
 var cp = __toESM(require("child_process"), 1);
 function shq(s) {
@@ -327,6 +320,29 @@ function exec2(command, opts = {}) {
     });
   });
 }
+
+// scripts/git/status.ts
+async function isDirty(args) {
+  try {
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// scripts/lakebase/env-file.ts
+var fs = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+var fs2 = __toESM(require("fs"), 1);
 
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
@@ -435,22 +451,6 @@ async function getCurrentBranch(args) {
     return name === "HEAD" ? "" : name;
   } catch {
     return "";
-  }
-}
-
-// scripts/git/status.ts
-async function isDirty(args) {
-  try {
-    const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
-    if (ignore.length > 0) {
-      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
-    }
-    const out = await exec2(command, { cwd: args.cwd });
-    return out.trim().length > 0;
-  } catch {
-    return false;
   }
 }
 

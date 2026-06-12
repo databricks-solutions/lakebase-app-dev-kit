@@ -6809,6 +6809,13 @@ var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process5.exe
 init_cjs_shims();
 var import_node_child_process6 = require("child_process");
 
+// scripts/git/status.ts
+init_cjs_shims();
+
+// scripts/util/exec.ts
+init_cjs_shims();
+var cp = __toESM(require("child_process"), 1);
+
 // scripts/lakebase/env-file.ts
 init_cjs_shims();
 var fs2 = __toESM(require("fs"), 1);
@@ -6817,10 +6824,6 @@ var path = __toESM(require("path"), 1);
 // scripts/lakebase/databricks-profile.ts
 init_cjs_shims();
 var fs3 = __toESM(require("fs"), 1);
-
-// scripts/util/exec.ts
-init_cjs_shims();
-var cp = __toESM(require("child_process"), 1);
 
 // scripts/tdd/experiment.ts
 function experimentsRoot(tddDir, featureId, storyId) {

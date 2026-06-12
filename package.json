@@ -1,6 +1,6 @@
 {
   "name": "@databricks-solutions/lakebase-app-dev-kit",
-  "version": "0.3.0-beta.1",
+  "version": "0.3.0-beta.2",
   "description": "Lakebase-backed application development kit – shared scripts, agent skills (SCM today, TDD next), MCP server, and OpenAI Foundry tool spec. Consumed by lakebase-scm-extension and coding agents (Claude Code, Claude Desktop, OpenAI Codex, Cursor, Databricks Genie Code).",
   "type": "module",
   "private": false,
@@ -111,6 +111,7 @@
     "lakebase-tdd-log": "./dist/scripts/tdd/agent-log.cli.js",
     "lakebase-tdd-timing": "./dist/scripts/tdd/timing-report.cli.js",
     "lakebase-tdd-imports-clean": "./dist/scripts/tdd/imports-clean.cli.js",
+    "lakebase-tdd-layering-clean": "./dist/scripts/tdd/layering-clean.cli.js",
     "lakebase-tdd-agent-model": "./dist/scripts/tdd/agent-models.cli.js",
     "lakebase-tdd-pipeline": "./dist/scripts/tdd/story-pipeline.cli.js",
     "lakebase-tdd-experiment": "./dist/scripts/tdd/story-experiment.cli.js",

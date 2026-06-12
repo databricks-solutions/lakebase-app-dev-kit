@@ -100,7 +100,7 @@ export async function preparePr(
     // .lakebase/ workflow state). Those are not part of the PR's code, and the
     // driver legitimately dirties them on the very step that opens the PR; the
     // guard's intent is "do not PR uncommitted code", not "freeze workflow state".
-    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] });
     if (dirty) {
       throw new ScmPreparePrError(
         "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",

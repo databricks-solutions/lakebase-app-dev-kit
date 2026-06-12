@@ -31,15 +31,20 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var lakebase_exports = {};
 __export(lakebase_exports, {
   CONVENTION_TIER_DEFAULTS: () => CONVENTION_TIER_DEFAULTS,
+  DEFAULT_PROTECTED_TIER_NAMES: () => DEFAULT_PROTECTED_TIER_NAMES,
   FIXABLE_FINDING_IDS: () => FIXABLE_FINDING_IDS,
   InitializrNetworkError: () => InitializrNetworkError,
   InitializrParseError: () => InitializrParseError,
   LakebaseBranchError: () => LakebaseBranchError,
   LakebaseBranchTtlTooLongError: () => LakebaseBranchTtlTooLongError,
   LakebaseProjectError: () => LakebaseProjectError,
+  NODE_E2E_TEMPLATE_FILES: () => NODE_E2E_TEMPLATE_FILES,
   PLAYWRIGHT_TEMPLATE_FILES: () => PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE: () => PLAYWRIGHT_TEST_VERSION_RANGE,
   PROJECT_SKILLS: () => PROJECT_SKILLS,
+  PYTEST_BDD_VERSION_RANGE: () => PYTEST_BDD_VERSION_RANGE,
+  PYTEST_PLAYWRIGHT_VERSION_RANGE: () => PYTEST_PLAYWRIGHT_VERSION_RANGE,
+  PYTHON_E2E_TEMPLATE_FILES: () => PYTHON_E2E_TEMPLATE_FILES,
   SCM_STATES: () => SCM_STATES,
   STATE_FILE_REL: () => STATE_FILE_REL,
   SchemaMigrationError: () => SchemaMigrationError,
@@ -63,6 +68,7 @@ __export(lakebase_exports, {
   adoptTdd: () => adoptTdd,
   applySchemaMigrations: () => applySchemaMigrations,
   assertAdoptionPreflight: () => assertAdoptionPreflight,
+  assertCleanForFork: () => assertCleanForFork,
   cacheProjectRetention: () => cacheProjectRetention,
   catalogExists: () => catalogExists,
   catalogExplorerUrl: () => catalogExplorerUrl,
@@ -109,6 +115,8 @@ __export(lakebase_exports, {
   ensureEndpoint: () => ensureEndpoint,
   ensureLakebaseSecretAuth: () => ensureLakebaseSecretAuth,
   ensureProfilePinned: () => ensureProfilePinned,
+  ensurePythonBddDeps: () => ensurePythonBddDeps,
+  ensurePythonE2eDeps: () => ensurePythonE2eDeps,
   ensureSchemaAndVolume: () => ensureSchemaAndVolume,
   extractPullNumber: () => extractPullNumber,
   featureBranchName: () => featureBranchName,
@@ -154,6 +162,7 @@ __export(lakebase_exports, {
   minLakebaseTtl: () => minLakebaseTtl,
   mintCredential: () => mintCredential,
   normalizeHost: () => normalizeHost,
+  normalizeTierName: () => normalizeTierName,
   parseHostFromAuthDescribe: () => parseHostFromAuthDescribe,
   parseLakebaseTtl: () => parseLakebaseTtl,
   parseTargetsYaml: () => parseTargetsYaml,
@@ -161,6 +170,7 @@ __export(lakebase_exports, {
   preparePr: () => preparePr,
   projectPath: () => projectPath,
   propagateCredentials: () => propagateCredentials,
+  protectedTierNamesFromEnv: () => protectedTierNamesFromEnv,
   queryBranchSchema: () => queryBranchSchema,
   queryBranchTables: () => queryBranchTables,
   readTargets: () => readTargets,
@@ -173,11 +183,13 @@ __export(lakebase_exports, {
   resolveCurrentUser: () => resolveCurrentUser,
   resolveDatabricksHost: () => resolveDatabricksHost,
   resolveEndpointHost: () => resolveEndpointHost,
+  resolveFeatureStartPoint: () => resolveFeatureStartPoint,
   resolveJavaHome: () => resolveJavaHome,
   resolveLatestBootVersion: () => resolveLatestBootVersion,
   resolveLatestLtsJavaVersion: () => resolveLatestLtsJavaVersion,
   resolveParentBranch: () => resolveParentBranch,
   resolveProfileForHost: () => resolveProfileForHost,
+  resolveProtectedTierNames: () => resolveProtectedTierNames,
   rollbackDeploy: () => rollbackDeploy,
   rollbackSchemaMigration: () => rollbackSchemaMigration,
   runDoctor: () => runDoctor,
@@ -1347,21 +1359,22 @@ function findTemplatesDir4() {
 function commonDir2(opts) {
   return path7.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
 }
-var PLAYWRIGHT_TEMPLATE_FILES = [
+var NODE_E2E_TEMPLATE_FILES = [
   "playwright.config.ts",
-  path7.join("tests", "e2e", "smoke.spec.ts"),
-  // The canonical `live_server` fixture. Shipped (not agent-authored) so every
-  // UI project gets a fixture that inherits the env (CI's DATABASE_URL wins) +
-  // polls readiness, instead of a hand-rolled one that pins `--env-file .env`
-  // and sleeps a fixed time , the dev/prod CI-parity bug where E2E pass in the
-  // build lane (live local .env) but fail in PR CI with ERR_CONNECTION_REFUSED.
+  path7.join("tests", "e2e", "smoke.spec.ts")
+];
+var PYTHON_E2E_TEMPLATE_FILES = [
   path7.join("tests", "e2e", "conftest.py")
+];
+var PLAYWRIGHT_TEMPLATE_FILES = [
+  ...NODE_E2E_TEMPLATE_FILES,
+  ...PYTHON_E2E_TEMPLATE_FILES
 ];
 function writePlaywrightTemplates(args) {
   const src = commonDir2(args);
   const written = [];
   const skipped = [];
-  for (const rel of PLAYWRIGHT_TEMPLATE_FILES) {
+  for (const rel of args.files ?? PLAYWRIGHT_TEMPLATE_FILES) {
     const from = path7.join(src, rel);
     if (!fs8.existsSync(from)) {
       throw new Error(`Kit template missing: ${from}`);
@@ -1404,6 +1417,8 @@ async function installPlaywright(args) {
 
 // scripts/lakebase/enable-e2e.ts
 var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
+var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
+var PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 function addPlaywrightToPackageJson(args) {
   const pkgPath = path8.join(args.projectDir, "package.json");
   if (!fs9.existsSync(pkgPath)) {
@@ -1432,6 +1447,42 @@ function addPlaywrightToPackageJson(args) {
   }
   return { patched: true, scriptAdded, depAdded };
 }
+function addPythonDevDep(projectDir, pkg, range) {
+  const pyPath = path8.join(projectDir, "pyproject.toml");
+  if (!fs9.existsSync(pyPath)) {
+    return { patched: false, depAdded: false };
+  }
+  const original = fs9.readFileSync(pyPath, "utf8");
+  if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
+    return { patched: true, depAdded: false };
+  }
+  const depLine = `    "${pkg}${range}",`;
+  const devArray = /(\n[ \t]*dev[ \t]*=[ \t]*\[)([\s\S]*?)(\n[ \t]*\])/;
+  if (devArray.test(original)) {
+    const patched = original.replace(devArray, (_m, open, body, close) => {
+      const sep2 = body.trim() === "" || body.trimEnd().endsWith(",") ? "" : ",";
+      return `${open}${body}${sep2}
+${depLine}${close}`;
+    });
+    fs9.writeFileSync(pyPath, patched, "utf8");
+    return { patched: true, depAdded: true };
+  }
+  const trimmed = original.replace(/\n+$/, "\n");
+  const block = `
+[project.optional-dependencies]
+dev = [
+${depLine}
+]
+`;
+  fs9.writeFileSync(pyPath, trimmed + block, "utf8");
+  return { patched: true, depAdded: true };
+}
+function ensurePythonE2eDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-playwright", args.versionRange ?? PYTEST_PLAYWRIGHT_VERSION_RANGE);
+}
+function ensurePythonBddDeps(args) {
+  return addPythonDevDep(args.projectDir, "pytest-bdd", args.versionRange ?? PYTEST_BDD_VERSION_RANGE);
+}
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
   const scriptPath = path8.join(args.projectDir, "scripts", "run-tests.sh");
@@ -1453,6 +1504,16 @@ function addE2eToRunTestsScript(args) {
     "  else",
     '    (cd "$REPO_ROOT" && npx --yes playwright test)',
     "  fi",
+    // Python E2E: pytest-playwright + the shipped tests/e2e/conftest.py
+    // (live_server). Gated on the conftest + pyproject so it only fires for a
+    // Python project that has the E2E harness, never on a bare API project.
+    'elif [ -f "$REPO_ROOT/tests/e2e/conftest.py" ] && [ -f "$REPO_ROOT/pyproject.toml" ]; then',
+    '  echo "Running Python E2E tests (pytest tests/e2e)..."',
+    // pytest-playwright provides the `page` fixture but needs its browser
+    // binaries; install chromium first (idempotent, cached after the first
+    // run), then run the suite. && so a failed browser install fails loudly
+    // instead of letting pytest error with a bare "Executable doesn't exist".
+    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium && uv run --extra dev pytest tests/e2e)',
     "fi",
     ""
   ].join("\n");
@@ -1461,21 +1522,33 @@ function addE2eToRunTestsScript(args) {
 }
 function enableE2eForProject(args) {
   const rootPkg = path8.join(args.projectDir, "package.json");
-  if (!fs9.existsSync(rootPkg)) {
+  const isNode = args.language === "nodejs" || args.language === "node" || fs9.existsSync(rootPkg);
+  if (!isNode) {
+    const isPython = args.language === "python" || fs9.existsSync(path8.join(args.projectDir, "pyproject.toml"));
+    const templates2 = isPython ? writePlaywrightTemplates({
+      projectDir: args.projectDir,
+      force: args.force,
+      templatesDir: args.templatesDir,
+      files: PYTHON_E2E_TEMPLATE_FILES
+    }) : { written: [], skipped: [...PLAYWRIGHT_TEMPLATE_FILES] };
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
     return {
-      templatesWritten: [],
-      // Same shape as writePlaywrightTemplates would have returned; the
-      // template paths show up under skipped with the npm-wiring caveat
-      // captured in packageJson.patched=false.
-      templatesSkipped: [...PLAYWRIGHT_TEMPLATE_FILES],
+      templatesWritten: templates2.written,
+      templatesSkipped: templates2.skipped,
+      // No package.json to wire (the caveat the report surfaces).
       packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      // Python: declare the pytest-playwright runner in pyproject's dev extras
+      // so the shipped conftest + E2E specs' `page` fixture resolves. (Skipped
+      // for other non-Node shapes, which have no pyproject.)
+      pyproject: isPython ? ensurePythonE2eDeps({ projectDir: args.projectDir }) : { patched: false, depAdded: false },
       runTestsScript: addE2eToRunTestsScript({ projectDir: args.projectDir })
     };
   }
   const templates = writePlaywrightTemplates({
     projectDir: args.projectDir,
     force: args.force,
-    templatesDir: args.templatesDir
+    templatesDir: args.templatesDir,
+    files: NODE_E2E_TEMPLATE_FILES
   });
   const packageJson = addPlaywrightToPackageJson({
     projectDir: args.projectDir,
@@ -1486,6 +1559,8 @@ function enableE2eForProject(args) {
     templatesWritten: templates.written,
     templatesSkipped: templates.skipped,
     packageJson,
+    // Node project: no pyproject to patch.
+    pyproject: { patched: false, depAdded: false },
     runTestsScript
   };
 }
@@ -1801,14 +1876,51 @@ async function getDefaultBranch(opts) {
 function isLongRunningTierBranch(b) {
   return !b.isDefault && !b.expireTime;
 }
-function isTier(name, branches) {
+var DEFAULT_PROTECTED_TIER_NAMES = /* @__PURE__ */ new Set([
+  "main",
+  "master",
+  "staging",
+  "dev"
+]);
+function normalizeTierName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveProtectedTierNames(extra) {
+  const out = new Set(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) {
+      out.add(k);
+    }
+  }
+  return out;
+}
+function protectedTierNamesFromEnv(env = process.env) {
+  const extra = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) {
+      extra.push(part);
+    }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) {
+      extra.push(v);
+    }
+  }
+  return resolveProtectedTierNames(extra);
+}
+function isTier(name, branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
   if (!name) {
+    return false;
+  }
+  if (!protectedNames.has(normalizeTierName(name))) {
     return false;
   }
   return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
 }
-function tierBranchNames(branches) {
-  return branches.filter(isLongRunningTierBranch).map((b) => b.nameLeaf);
+function tierBranchNames(branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
+  return branches.filter((b) => isLongRunningTierBranch(b) && protectedNames.has(normalizeTierName(b.nameLeaf))).map((b) => b.nameLeaf);
 }
 async function resolveBranchPath(branchNameOrUid, opts) {
   if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
@@ -2316,6 +2428,39 @@ async function getCredential(args) {
   return mintCredential(`${branchPath}/endpoints/${endpointName}`);
 }
 
+// scripts/git/status.ts
+async function getAheadBehind(args) {
+  const { cwd } = args;
+  try {
+    const upstream = await exec2("git rev-parse --abbrev-ref @{u}", { cwd });
+    const raw = await exec2("git rev-list --left-right --count HEAD...@{u}", {
+      cwd
+    });
+    const parts = raw.trim().split(/\s+/);
+    return {
+      ahead: parseInt(parts[0], 10) || 0,
+      behind: parseInt(parts[1], 10) || 0,
+      upstream
+    };
+  } catch {
+    return { ahead: 0, behind: 0, upstream: "" };
+  }
+}
+async function isDirty(args) {
+  try {
+    const ignore = args.ignore ?? [];
+    let command = "git status --porcelain";
+    if (ignore.length > 0) {
+      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
+      command = `git status --porcelain -- . ${excludes}`;
+    }
+    const out = await exec2(command, { cwd: args.cwd });
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
 // scripts/lakebase/env-file.ts
 var fs12 = __toESM(require("fs"), 1);
 var path11 = __toESM(require("path"), 1);
@@ -2448,12 +2593,50 @@ function gitHasLocalBranch(cwd, branch) {
     return false;
   }
 }
-function gitCheckoutNewBranch(cwd, branch) {
-  (0, import_node_child_process7.execFileSync)("git", ["checkout", "-b", branch], {
+function gitCheckoutNewBranch(cwd, branch, startPoint) {
+  const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
+  (0, import_node_child_process7.execFileSync)("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
+}
+function gitFetchBranch(cwd, remote, branch) {
+  try {
+    (0, import_node_child_process7.execFileSync)("git", ["fetch", remote, branch], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitNetwork
+    });
+  } catch {
+  }
+}
+function gitRefExists(cwd, ref) {
+  try {
+    (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--verify", "--quiet", ref], {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: KIT_TIMEOUTS.gitDefault
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+function resolveFeatureStartPoint(cwd, parentBranch) {
+  if (!parentBranch) return void 0;
+  gitFetchBranch(cwd, "origin", parentBranch);
+  if (gitRefExists(cwd, `origin/${parentBranch}`)) return `origin/${parentBranch}`;
+  if (gitRefExists(cwd, parentBranch)) return parentBranch;
+  return void 0;
+}
+async function assertCleanForFork(cwd, startPoint) {
+  if (!startPoint) return;
+  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+    throw new Error(
+      `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
+    );
+  }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
   (0, import_node_child_process7.execFileSync)("git", ["checkout", branch], {
@@ -2515,6 +2698,11 @@ async function createPairedBranch(args) {
   const createGitBranch = args.createGitBranch !== false;
   const syncEnv = args.syncEnv !== false;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
+  let gitStartPoint;
+  if (createGitBranch && !gitHasLocalBranch(args.cwd, sanitized)) {
+    gitStartPoint = resolveFeatureStartPoint(args.cwd, args.parentBranch);
+    await assertCleanForFork(args.cwd, gitStartPoint);
+  }
   const branch = await createBranch({
     instance: args.instance,
     branch: args.branch,
@@ -2542,7 +2730,7 @@ async function createPairedBranch(args) {
       if (gitHasLocalBranch(args.cwd, sanitized)) {
         gitCheckoutExistingBranch(args.cwd, sanitized);
       } else {
-        gitCheckoutNewBranch(args.cwd, sanitized);
+        gitCheckoutNewBranch(args.cwd, sanitized, gitStartPoint);
         gitBranchCreated = true;
       }
     } catch (err) {
@@ -2704,7 +2892,7 @@ async function checkoutPaired(args) {
   const isTrunkAlias = trunkAlias && rawBranch === trunkAlias;
   const isMainOrMaster = !trunkAlias && (rawBranch === "main" || rawBranch === "master");
   const lakebaseBranches = await listBranches({ instance });
-  const tierMatch = isTier(rawBranch, lakebaseBranches);
+  const tierMatch = isTier(rawBranch, lakebaseBranches, protectedTierNamesFromEnv());
   if (isTrunkAlias || isMainOrMaster) {
     mode = "trunk";
     const def = lakebaseBranches.find((b) => b.isDefault);
@@ -4929,7 +5117,7 @@ function defaultTddConfig() {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, batchFallback: "", sessionScope: "story" },
+    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" }
   };
@@ -5035,7 +5223,7 @@ Last probe error:
   }
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir });
+    const e2e = enableE2eForProject({ projectDir, language });
     if (e2e.templatesWritten.length > 0) {
       report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
     }
@@ -5203,6 +5391,7 @@ Last probe error:
   if (enableTdd) {
     report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
   }
+  report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
@@ -6768,7 +6957,7 @@ function parentForTier(topology, branches) {
   const def = branches.find((b) => b.isDefault === true);
   return def?.name.split("/").pop() ?? "main";
 }
-var LONG_RUNNING_LEAFS = /* @__PURE__ */ new Set(["staging", "dev", "main", "master"]);
+var LONG_RUNNING_LEAFS = protectedTierNamesFromEnv();
 function leafName(b) {
   return b.name.split("/").pop() ?? b.name;
 }
@@ -6846,39 +7035,6 @@ async function adoptScmState(args) {
     `Current branch "${currentBranch}" recognized as feature-claimed. Real claim time is unknown; recorded ${adopted.claimed_at} as adoption time.`
   );
   return { state: adopted, notes };
-}
-
-// scripts/git/status.ts
-async function getAheadBehind(args) {
-  const { cwd } = args;
-  try {
-    const upstream = await exec2("git rev-parse --abbrev-ref @{u}", { cwd });
-    const raw = await exec2("git rev-list --left-right --count HEAD...@{u}", {
-      cwd
-    });
-    const parts = raw.trim().split(/\s+/);
-    return {
-      ahead: parseInt(parts[0], 10) || 0,
-      behind: parseInt(parts[1], 10) || 0,
-      upstream
-    };
-  } catch {
-    return { ahead: 0, behind: 0, upstream: "" };
-  }
-}
-async function isDirty(args) {
-  try {
-    const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
-    if (ignore.length > 0) {
-      const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
-    }
-    const out = await exec2(command, { cwd: args.cwd });
-    return out.trim().length > 0;
-  } catch {
-    return false;
-  }
 }
 
 // scripts/lakebase/scm-abandon-feature.ts
@@ -6995,7 +7151,7 @@ async function preparePr(args) {
     );
   }
   if (!args.force) {
-    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/"] });
+    const dirty = await isDirty({ cwd: args.projectDir, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] });
     if (dirty) {
       throw new ScmPreparePrError(
         "Working tree has uncommitted code changes; commit them before opening the PR (or pass --force).",
@@ -7279,6 +7435,20 @@ async function mergeFeature(args) {
           timeout: 1e4
         });
         headAfter = switchTo;
+        try {
+          await exec2(`git fetch origin ${shellEscape2(switchTo)}`, {
+            cwd: args.projectDir,
+            timeout: 3e4
+          });
+          await exec2(`git merge --ff-only ${shellEscape2(`origin/${switchTo}`)}`, {
+            cwd: args.projectDir,
+            timeout: 1e4
+          });
+        } catch (err) {
+          warnings.push(
+            `local fast-forward of ${switchTo} to origin/${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. The PR merged remotely; your local ${switchTo} may be stale, run \`git pull --ff-only\`.`
+          );
+        }
       } catch (err) {
         warnings.push(
           `git checkout ${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. Local branch was NOT deleted.`
@@ -7373,10 +7543,21 @@ async function mergeFeature(args) {
         );
       }
     } else {
-      migrate = { waited: true, polls };
-      throw new ScmMergeError(
-        `Timed out after ${Math.round((args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3)}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastSeen?.status ?? "(no matching run)"}.`,
-        "migrate-timeout"
+      const budgetSec = Math.round(
+        (args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1e3
+      );
+      const lastStatus = lastSeen?.status ?? "(no matching run)";
+      const timeoutFatal = args.migrateTimeoutFatal !== false;
+      if (timeoutFatal) {
+        migrate = { waited: true, polls };
+        throw new ScmMergeError(
+          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+          "migrate-timeout"
+        );
+      }
+      migrate = { waited: true, polls, timedOut: true };
+      warnings.push(
+        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s (last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`
       );
     }
   } else {
@@ -7688,7 +7869,7 @@ function findStaleBranches(tddDir) {
 
 // scripts/lakebase/scm-doctor.ts
 var FEATURE_PREFIX = "feature/";
-var TIER_LEAFS2 = /* @__PURE__ */ new Set(["staging", "dev"]);
+var TIER_LEAFS2 = DEFAULT_PROTECTED_TIER_NAMES;
 function readEnv(projectDir) {
   const envPath = path26.join(projectDir, ".env");
   const out = /* @__PURE__ */ new Map();
@@ -8535,15 +8716,20 @@ function escapeSingleQuoted2(s) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   CONVENTION_TIER_DEFAULTS,
+  DEFAULT_PROTECTED_TIER_NAMES,
   FIXABLE_FINDING_IDS,
   InitializrNetworkError,
   InitializrParseError,
   LakebaseBranchError,
   LakebaseBranchTtlTooLongError,
   LakebaseProjectError,
+  NODE_E2E_TEMPLATE_FILES,
   PLAYWRIGHT_TEMPLATE_FILES,
   PLAYWRIGHT_TEST_VERSION_RANGE,
   PROJECT_SKILLS,
+  PYTEST_BDD_VERSION_RANGE,
+  PYTEST_PLAYWRIGHT_VERSION_RANGE,
+  PYTHON_E2E_TEMPLATE_FILES,
   SCM_STATES,
   STATE_FILE_REL,
   SchemaMigrationError,
@@ -8567,6 +8753,7 @@ function escapeSingleQuoted2(s) {
   adoptTdd,
   applySchemaMigrations,
   assertAdoptionPreflight,
+  assertCleanForFork,
   cacheProjectRetention,
   catalogExists,
   catalogExplorerUrl,
@@ -8613,6 +8800,8 @@ function escapeSingleQuoted2(s) {
   ensureEndpoint,
   ensureLakebaseSecretAuth,
   ensureProfilePinned,
+  ensurePythonBddDeps,
+  ensurePythonE2eDeps,
   ensureSchemaAndVolume,
   extractPullNumber,
   featureBranchName,
@@ -8658,6 +8847,7 @@ function escapeSingleQuoted2(s) {
   minLakebaseTtl,
   mintCredential,
   normalizeHost,
+  normalizeTierName,
   parseHostFromAuthDescribe,
   parseLakebaseTtl,
   parseTargetsYaml,
@@ -8665,6 +8855,7 @@ function escapeSingleQuoted2(s) {
   preparePr,
   projectPath,
   propagateCredentials,
+  protectedTierNamesFromEnv,
   queryBranchSchema,
   queryBranchTables,
   readTargets,
@@ -8677,11 +8868,13 @@ function escapeSingleQuoted2(s) {
   resolveCurrentUser,
   resolveDatabricksHost,
   resolveEndpointHost,
+  resolveFeatureStartPoint,
   resolveJavaHome,
   resolveLatestBootVersion,
   resolveLatestLtsJavaVersion,
   resolveParentBranch,
   resolveProfileForHost,
+  resolveProtectedTierNames,
   rollbackDeploy,
   rollbackSchemaMigration,
   runDoctor,

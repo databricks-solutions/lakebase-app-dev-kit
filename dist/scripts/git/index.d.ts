@@ -292,13 +292,28 @@ interface CommitAllArgs extends CommitArgs {
      * `git checkout` of that branch , scope to code to avoid it.
      */
     exclude?: string[];
+    /**
+     * Repo-relative paths to FORCE-stage in addition to (and after) the
+     * exclude-aware `git add -A`, even when they sit UNDER an `exclude` prefix.
+     * The stable project-level `.tdd/design/` corpus is the motivating case: the
+     * broad `.tdd` exclude (churn control) would otherwise drop the design guide,
+     * so it never rides the feature branch's PR to the parent tier and the next
+     * feature re-authors the whole design system. The churny `.tdd` state
+     * (workflow-state.json, cycles/) must stay uncommitted so its copy doesn't
+     * diverge from the feature branch and break accept's `git checkout`; the
+     * design corpus is different, written ONCE in the design phase and never
+     * touched during build, so committing it is safe. A path that does not exist
+     * is skipped (git errors on an unmatched pathspec).
+     */
+    include?: string[];
 }
 /**
- * `git add -A` (optionally excluding path prefixes), then commit only if
- * something is actually staged. Returns true when a commit was made, false when
- * nothing matched (clean tree, or only excluded paths changed). Throws on a
- * genuine git failure (not a repo, detached HEAD, hook rejection); callers that
- * want best-effort behavior wrap it in try/catch.
+ * `git add -A` (optionally excluding path prefixes, then force-staging explicit
+ * `include` paths), then commit only if something is actually staged. Returns
+ * true when a commit was made, false when nothing matched (clean tree, or only
+ * excluded paths changed). Throws on a genuine git failure (not a repo,
+ * detached HEAD, hook rejection); callers that want best-effort behavior wrap it
+ * in try/catch.
  */
 declare function commitAllIfChanged(args: CommitAllArgs): Promise<boolean>;
 /** Commit with DCO sign-off. Throws when the message is empty. */

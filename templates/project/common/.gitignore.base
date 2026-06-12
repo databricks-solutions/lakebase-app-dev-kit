@@ -4,3 +4,19 @@ application-local.properties
 .tmp/
 *.log
 .DS_Store
+
+# TDD per-run observability (NOT planning corpus): the agent event log + the
+# resolved run-config snapshot are local to a single run/feature drive and are
+# re-initialized each run, so they must never enter git history (a stray
+# `git add -A` from a build commit would otherwise carry one feature's log onto
+# the next branch). The committed .tdd corpus (features/, planning/, sprints/,
+# workflow-state.json, product-overview.md, nfrs.md, design/) is unaffected.
+.tdd/agent-log.jsonl
+.tdd/run-config.json
+
+# Per-agent local memory: each role subagent (memory: project) persists its own
+# learnings here mid-run. It is local + churny (re-written every run), not feature
+# code, so it must never be committed nor count as a dirty working tree , an
+# untracked .claude/agent-memory/ otherwise blocks the experiment-branch fork
+# (assertCleanForFork) the moment a role saves a memory.
+.claude/agent-memory/

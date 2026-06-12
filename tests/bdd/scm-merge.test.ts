@@ -150,6 +150,23 @@ describe("mergeFeature happy path", () => {
     expect(result.localBranchDeleted).toBe(true);
   });
 
+  it("fast-forwards the local parent tier to the merged remote (post-merge checkout is not stale)", async () => {
+    // Regression: the PR merges SERVER-SIDE, so after `git checkout <parent>` the
+    // local <parent> is still pre-merge. Without a fetch + ff, a post-merge
+    // run-tests.sh / run-dev.sh runs stale code against the already-migrated DB
+    // and alembic fails "Can't locate revision". scm-merge must sync the local
+    // parent to origin/<parent>.
+    seedCiGreen();
+    await merge.mergeFeature({ projectDir: tmpDir, waitMigrate: false, now: () => new Date() });
+    const calls = mockExec.mock.calls.map((c) => String(c[0]));
+    const coIdx = calls.findIndex((c) => c.includes("git checkout") && c.includes("staging"));
+    const fetchIdx = calls.findIndex((c) => c.includes("git fetch origin") && c.includes("staging"));
+    const ffIdx = calls.findIndex((c) => /git merge --ff-only .*origin\/staging/.test(c));
+    expect(coIdx).toBeGreaterThanOrEqual(0);
+    expect(fetchIdx).toBeGreaterThan(coIdx); // fetch + ff happen AFTER the checkout
+    expect(ffIdx).toBeGreaterThan(fetchIdx);
+  });
+
   it("--method override is forwarded", async () => {
     seedCiGreen();
     await merge.mergeFeature({
@@ -301,6 +318,57 @@ describe("mergeFeature wait-migrate", () => {
         migrateTimeoutMs: 60_000,
       }),
     ).rejects.toMatchObject({ code: "migrate-timeout" });
+  });
+
+  it("with migrateTimeoutFatal=false, a never-completing run is a warning, not a throw (state stays merged)", async () => {
+    seedCiGreen();
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 30_000;
+      return out;
+    };
+    const fetchRuns = vi
+      .fn()
+      .mockResolvedValue([makeRun("in_progress", "", "2026-06-03T12:00:05Z")]);
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      fetchRuns,
+      sleep: () => Promise.resolve(),
+      now: clock,
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+      migrateTimeoutFatal: false,
+    });
+    expect(result.migrate?.waited).toBe(true);
+    expect(result.migrate?.timedOut).toBe(true);
+    expect(result.warnings.some((w) => /not confirmed within/.test(w))).toBe(true);
+    // The merge already landed; the state is merged regardless of the migrate wait.
+    expect(state.readWorkflowState(tmpDir)?.state).toBe("merged");
+  });
+
+  it("with migrateTimeoutFatal=false, a COMPLETED-but-FAILED run is still fatal (a real migration failure)", async () => {
+    seedCiGreen();
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 100;
+      return out;
+    };
+    const fetchRuns = vi
+      .fn()
+      .mockResolvedValue([makeRun("completed", "failure", "2026-06-03T12:00:05Z")]);
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        fetchRuns,
+        sleep: () => Promise.resolve(),
+        now: clock,
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+        migrateTimeoutFatal: false,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-failed" });
   });
 
   it("ignores non-push events on parent_branch (no false-positive workflow_dispatch match)", async () => {

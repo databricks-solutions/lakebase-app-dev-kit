@@ -118,6 +118,24 @@ describe("response-formatter: spec-author + architect-reviewer contracts", () =>
     expect(r.ok).toBe(false);
     expect(r.violations.some((v) => /missing\/invalid `layer`/.test(v.problem))).toBe(true);
   });
+
+  it("spec-author FLAGS two ACs with an identical `then` (ac-independence backstop)", () => {
+    // The AC2/AC3 overlap that stalled the 2026-06-11 smoke: a non-independent
+    // AC whose `then` matches another's can never go RED. Normalization is
+    // whitespace + case insensitive.
+    writeAc("AC1-submit-files-bug", { then: "Redirects to /bugs/{id}" });
+    writeAc("AC2-land-on-bug-url", { then: "redirects to  /bugs/{id}" });
+    const r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    expect(r.ok).toBe(false);
+    expect(r.violations.some((v) => /identical `then`/.test(v.problem))).toBe(true);
+  });
+
+  it("spec-author PASSES ACs with distinct `then` clauses", () => {
+    writeAc("AC1-shows-form", { then: "the create-bug form is shown" });
+    writeAc("AC2-files-bug", { then: "a new bug row is created" });
+    const r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    expect(r.ok).toBe(true);
+  });
 });
 
 describe("response-formatter: roles with no deterministic contract pass", () => {

@@ -256,7 +256,7 @@ export async function createProject(
   // ── Step 5c: Playwright E2E wire-up (phase 2) ────────
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir });
+    const e2e = enableE2eForProject({ projectDir, language });
     if (e2e.templatesWritten.length > 0) {
       report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
     }
@@ -354,7 +354,7 @@ export async function createProject(
   }
 
   // ── Step 7d: unified TDD run config ──────────
-  // Seed .lakebase/tdd-config.json , the one declarative source for the per-role
+  // Seed .lakebase/tdd-config.json, the one declarative source for the per-role
   // + per-turn model/effort matrix and the build/plan/project knobs (the
   // orchestrator resolves file -> LAKEBASE_TDD_* env -> default). Seeded with each
   // role's recommended model + any HIL model overrides chosen at setup, and the
@@ -488,6 +488,9 @@ export async function createProject(
     // scripts/tdd.sh): it drives the deterministic orchestrator.
     report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
   }
+  // Every project ships run-dev.sh so a human can open the running app in a
+  // browser to review it (the working-software review the deploy gate signs off).
+  report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
     projectDir,
     githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : undefined,

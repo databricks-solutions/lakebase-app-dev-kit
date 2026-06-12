@@ -2,7 +2,7 @@
 //
 // A live smoke shipped a FALSE-GREEN: greenOpenCycle stamped green without a real
 // run (it hardcoded passed:true), so a test that broke a sibling test was marked
-// green and only the deploy gate caught it , then the driver STALLED. These tests
+// green and only the deploy gate caught it, then the driver STALLED. These tests
 // pin the fix: GREEN reflects a real verify run; a failure leaves the cycle RED +
 // raises an escalation; the driver routes any unresolved escalation to a single
 // raise-to-hil halt (surface + halt) instead of advancing or spinning.
@@ -26,6 +26,7 @@ import {
   readEscalations,
   firstPendingEscalation,
   escalationsFromSmells,
+  recordBlockingSmellFlag,
   BLOCKING_SMELLS,
 } from "../../scripts/tdd/escalation.js";
 import { writeSmellsLog } from "../../scripts/tdd/smells.js";
@@ -156,6 +157,59 @@ describe("escalation module", () => {
     writeSmellsLog(tdd, [{ smell: "test-cost-spiral", cycle_ids: ["cycle-002"], detail: "tests doubling" }]);
     expect(escalationsFromSmells(tdd, F).length).toBe(0);
     expect(firstPendingEscalation(tdd, F)).toBeNull();
+  });
+
+  describe("born-green fitness guard: a cycle-stall while the next item is fitness is NOT a halt", () => {
+    const reseedFirstPendingKind = (kind: "behavior" | "fitness"): void => {
+      writeJson(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), {
+        feature_id: F,
+        story_id: S,
+        items: [{ id: "TF", description: "the guard", ac_id: "AC1", status: "pending", kind }],
+      });
+    };
+
+    it("DROPS a cycle-stall when the story's next pending item is kind:fitness (born-green regression guard)", () => {
+      expect(BLOCKING_SMELLS.has("cycle-stall")).toBe(true);
+      reseedFirstPendingKind("fitness");
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-003"], detail: "ORM-only test can't go RED", story_id: S }]);
+      // The smell is blocking + unresolved, but the pending item is a fitness
+      // guard, so it is filtered out: no escalation, the loop proceeds to GREEN.
+      expect(escalationsFromSmells(tdd, F).length).toBe(0);
+      expect(firstPendingEscalation(tdd, F)).toBeNull();
+    });
+
+    it("KEEPS a cycle-stall when the story's next pending item is a behavior test (a genuine stall halts)", () => {
+      reseedFirstPendingKind("behavior");
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-004"], detail: "behavior test never goes RED", story_id: S }]);
+      const escs = escalationsFromSmells(tdd, F);
+      expect(escs.length).toBe(1);
+      expect(escs[0].source).toBe("smell:cycle-stall");
+      expect(firstPendingEscalation(tdd, F)?.source).toBe("smell:cycle-stall");
+    });
+
+    it("KEEPS a cycle-stall with no story scope (cannot prove it is a fitness guard)", () => {
+      writeSmellsLog(tdd, [{ smell: "cycle-stall", cycle_ids: ["cycle-005"], detail: "stall, no story id" }]);
+      expect(escalationsFromSmells(tdd, F).length).toBe(1);
+    });
+  });
+
+  describe("recordBlockingSmellFlag (mirror a flagged blocking smell into smells.json so the loop halts)", () => {
+    it("persists a BLOCKING smell (scaffold-defect) -> firstPendingEscalation halts", () => {
+      expect(BLOCKING_SMELLS.has("scaffold-defect")).toBe(true);
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "tests/e2e/conftest.py missing")).toBe(true);
+      const e = firstPendingEscalation(tdd, F);
+      expect(e?.source).toBe("smell:scaffold-defect");
+      expect(e?.reason).toMatch(/conftest\.py missing/);
+    });
+
+    it("is idempotent (a still-open dup is not re-written) and ignores advisory/unknown names", () => {
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "first")).toBe(true);
+      expect(recordBlockingSmellFlag(tdd, "scaffold-defect", "second")).toBe(false); // dup
+      expect(recordBlockingSmellFlag(tdd, "test-cost-spiral", "advisory")).toBe(false); // not blocking
+      expect(recordBlockingSmellFlag(tdd, "not-a-real-smell", "x")).toBe(false); // unknown
+      // Only the one blocking entry made it in.
+      expect(escalationsFromSmells(tdd, F).length).toBe(1);
+    });
   });
 });
 

@@ -14,6 +14,7 @@ import {
   beginNextPendingCycle,
   greenOpenCycle,
   storyTestProgress,
+  pendingItemKind,
   firstReviewPendingAc,
   firstRefactorPendingAc,
   reviewAc,
@@ -192,6 +193,27 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     expect(p.allGreen).toBe(false); // NOT done , T2 unbuilt
     expect(p.pending.map((i) => i.id)).toEqual(["T2"]);
   });
+
+  it("pendingItemKind: reports the next pending item's kind (drives the born-green fitness guard)", async () => {
+    // The seeded list has no `kind` on T1/T2 (a behavior AC test): undefined.
+    expect(pendingItemKind(tdd, F, S)).toBeUndefined();
+    // A fitness-kind item that is already done, then a pending fitness guard,
+    // then a pending behavior test , pendingItemKind reads the FIRST pending.
+    const perStory = join(tdd, "features", F, "stories", S, "test-list-per-story.json");
+    writeJson(perStory, {
+      feature_id: F,
+      story_id: S,
+      items: [
+        { id: "TF", description: "service layer owns persistence", ac_id: "AC1", status: "pending", kind: "fitness" },
+        { id: "T2", description: "second thing fails", ac_id: "AC1", status: "pending", kind: "behavior" },
+      ],
+    });
+    expect(pendingItemKind(tdd, F, S)).toBe("fitness");
+    // pending = "items with no cycle yet". Once TF has a cycle, the next pending
+    // item is the behavior test, so the reported kind advances to "behavior".
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); // RED cycle for TF (the first pending)
+    expect(pendingItemKind(tdd, F, S)).toBe("behavior");
+  });
 });
 
 // Each GREEN and each completed REFACTOR commits the working tree on the
@@ -241,6 +263,39 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     expect(codeDirty()).toBe(""); // code committed => prepare-pr would pass
     // .tdd is intentionally NOT committed by the build (avoids the accept-checkout divergence).
     expect(execSync("git status --porcelain", { cwd: proj }).toString()).toMatch(/\.tdd\//);
+  });
+
+  it("commits the project-level .tdd/design corpus (so the next feature inherits it) but NOT the churny .tdd state", async () => {
+    // The persistence bug: F1 authored design/design-guide.json but the build's
+    // code-only commit excluded ALL of .tdd, so the design guide never rode F1's
+    // PR to the parent tier. F2 forked from the tier WITHOUT it, designGuideReady
+    // was false, and the UX designer re-authored the whole design system. The
+    // fix force-includes the STABLE design corpus while still excluding the
+    // churny state that would diverge from the feature branch.
+    const designDir = join(ptdd, "design");
+    mkdirSync(designDir, { recursive: true });
+    writeJson(join(designDir, "design-guide.json"), { tokens: { color: { primary: "#111" } } });
+    writeFileSync(join(designDir, "design-guide.md"), "# Design Guide\n");
+    writeFileSync(join(designDir, "ia.md"), "# Information Architecture\n");
+    // Churny per-run state that must stay OUT of the commit (committing it would
+    // diverge from the feature branch and break accept's `git checkout`).
+    writeJson(join(ptdd, "workflow-state.json"), { phase: "build" });
+
+    beginNextPendingCycle({ tddDir: ptdd, featureId: F, story: S });
+    writeFileSync(join(proj, "app.py"), "x = 1\n");
+    await greenOpenCycle({ tddDir: ptdd, featureId: F, story: S, verify: pass });
+
+    const tracked = execSync("git ls-files", { cwd: proj }).toString();
+    // The design corpus IS committed (rides the PR to the parent tier). It was
+    // created AFTER the seed commit, so its presence proves commitCycleWork
+    // force-included it past the broad `.tdd` exclude.
+    expect(tracked).toMatch(/\.tdd\/design\/design-guide\.json/);
+    expect(tracked).toMatch(/\.tdd\/design\/design-guide\.md/);
+    expect(tracked).toMatch(/\.tdd\/design\/ia\.md/);
+    // The churny state (also created after the seed) is NOT committed: it stays
+    // uncommitted so its copy never diverges from the feature branch.
+    expect(tracked).not.toMatch(/\.tdd\/workflow-state\.json/);
+    expect(execSync("git status --porcelain", { cwd: proj }).toString()).toMatch(/\.tdd\/workflow-state\.json/);
   });
 
   it("refactorAc commits the behavior-preserving refactor as its own commit", async () => {

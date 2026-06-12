@@ -45,6 +45,12 @@
             "type": "string",
             "description": "Relative path to the .feature or .test.ts file."
           },
+          "kind": {
+            "type": "string",
+            "enum": ["behavior", "fitness"],
+            "default": "behavior",
+            "description": "behavior = an AC scenario (BDD/pytest-bdd for Python). fitness = an architectural fitness test (layering contract, ORM-only, config-in-env, NFR budget). A service-backed feature must have >=1 fitness item or checkFitnessCoverage hard-blocks Gate 3."
+          },
           "notes": { "type": "string" }
         }
       }

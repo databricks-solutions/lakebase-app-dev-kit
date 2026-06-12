@@ -304,6 +304,34 @@ declare function getDefaultBranch(opts: BranchLookupOpts): Promise<LakebaseBranc
  */
 declare function isLongRunningTierBranch(b: LakebaseBranchInfo): boolean;
 /**
+ * The fixed default set of PROTECTED tier leaf names (the promotion
+ * hierarchy). A branch is a protected tier only if it is BOTH long-running
+ * ({@link isLongRunningTierBranch}) AND its leaf name is in the protected set
+ * , so a long-running branch with an off-convention name (e.g. a `scratch`
+ * spike left no_expiry) is treated as an ordinary branch, not a tier.
+ *
+ * Projects extend this per-project via {@link protectedTierNamesFromEnv}
+ * (LAKEBASE_TIER_NAMES + the configured trunk/staging/base names). The
+ * Lakebase DEFAULT branch (production) is always protected regardless of name,
+ * handled by callers via the isDefault / trunk-alias check, not this set.
+ */
+declare const DEFAULT_PROTECTED_TIER_NAMES: ReadonlySet<string>;
+/** Canonical comparison key for a tier name: trimmed + lowercased. */
+declare function normalizeTierName(name: string): string;
+/**
+ * The protected tier-name set = the fixed default UNION any per-project extra
+ * names (normalized). Pass the project's configured trunk/staging/base +
+ * LAKEBASE_TIER_NAMES here so off-default tier names (e.g. "qa") are protected.
+ */
+declare function resolveProtectedTierNames(extra?: Iterable<string>): Set<string>;
+/**
+ * Resolve the protected tier-name set for the current project from the
+ * environment: the fixed default plus `LAKEBASE_TIER_NAMES` (comma-separated)
+ * and the configured `LAKEBASE_TRUNK_BRANCH` / `LAKEBASE_STAGING_BRANCH` /
+ * `LAKEBASE_BASE_BRANCH`. The bash mirror lives in post-checkout.sh.
+ */
+declare function protectedTierNamesFromEnv(env?: Record<string, string | undefined>): Set<string>;
+/**
  * Tier check: returns true iff `name` matches a long-running tier
  * Lakebase branch by exact branchId leaf. See
  * {@link isLongRunningTierBranch} for the underlying classification.
@@ -311,7 +339,7 @@ declare function isLongRunningTierBranch(b: LakebaseBranchInfo): boolean;
  * Mirrors the post-checkout hook's auto-discovery model
  * (templates/project/common/scripts/post-checkout.sh:252-279).
  */
-declare function isTier(name: string, branches: LakebaseBranchInfo[]): boolean;
+declare function isTier(name: string, branches: LakebaseBranchInfo[], protectedNames?: ReadonlySet<string>): boolean;
 /**
  * Returns the names (branchId leaves) of every long-running tier
  * Lakebase branch in the project (staging, uat, perf, ...). Useful
@@ -321,7 +349,7 @@ declare function isTier(name: string, branches: LakebaseBranchInfo[]): boolean;
  * Filters on {@link isLongRunningTierBranch} so feature branches
  * (which are non-default but carry an expireTime) are excluded.
  */
-declare function tierBranchNames(branches: LakebaseBranchInfo[]): string[];
+declare function tierBranchNames(branches: LakebaseBranchInfo[], protectedNames?: ReadonlySet<string>): string[];
 /**
  * Resolve a branch reference to its full resource name (projects/.../branches/...).
  * Returns undefined when the branch can't be found.
@@ -445,6 +473,24 @@ interface DeleteBranchArgs extends BranchLookupOpts {
  */
 declare function deleteBranch(args: DeleteBranchArgs): Promise<void>;
 
+/**
+ * The git start-point a feature branch must fork from: the PARENT tier's pushed
+ * tip. Fetches `origin/<parentBranch>` and prefers it (the promoted state the
+ * paired Lakebase branch was cut from); falls back to a local `<parentBranch>`
+ * ref; returns undefined when neither resolves (no remote + no local parent),
+ * in which case the caller forks from HEAD (legacy behavior, e.g. tier-less /
+ * hermetic repos). Exported for hermetic testing.
+ */
+declare function resolveFeatureStartPoint(cwd: string, parentBranch?: string): string | undefined;
+/**
+ * Refuse to fork a feature branch from a parent ref while the working tree is
+ * dirty: `git checkout -b <branch> <parent>` silently carries non-conflicting
+ * uncommitted changes onto the new branch. Same convention as
+ * scm-abandon-feature. The kit never prompts (it is non-interactive); a human /
+ * the extension stashes or commits and retries. No-op when startPoint is
+ * undefined (forking from HEAD carries nothing new). Exported for testing.
+ */
+declare function assertCleanForFork(cwd: string, startPoint?: string): Promise<void>;
 interface CreatePairedBranchArgs {
     instance: string;
     branch: string;
@@ -1779,12 +1825,28 @@ interface InstallPlaywrightOptions {
     /** Override the templates/project root. Default: auto-detected. */
     templatesDir?: string;
 }
-/** Files this primitive drops into a project root, relative to projectDir. */
+/** Node-only E2E templates: the Playwright config + a TS smoke spec. These
+ *  write `playwright.config.*`, which CI gates its E2E step on, so they ship
+ *  ONLY into Node projects (a root package.json), never into Python/Java. */
+declare const NODE_E2E_TEMPLATE_FILES: readonly ["playwright.config.ts", string];
+/** Python-only E2E template: the canonical `live_server` fixture (a Python
+ *  file). Shipped (not agent-authored) so every Python UI project gets a fixture
+ *  that inherits the env (CI's DATABASE_URL wins) + polls readiness, instead of
+ *  a hand-rolled one that pins `--env-file .env` and sleeps a fixed time, the
+ *  dev/prod CI-parity bug where E2E pass in the build lane (live local .env) but
+ *  fail in PR CI with ERR_CONNECTION_REFUSED. It carries no `playwright.config.*`,
+ *  so it does not trip CI's Node E2E gate. */
+declare const PYTHON_E2E_TEMPLATE_FILES: readonly [string];
+/** All E2E templates this primitive can drop. Back-compat default for
+ *  writePlaywrightTemplates; callers should pass the language-specific set. */
 declare const PLAYWRIGHT_TEMPLATE_FILES: readonly ["playwright.config.ts", string, string];
 interface WritePlaywrightTemplatesArgs extends InstallPlaywrightOptions {
     projectDir: string;
     /** Overwrite an existing playwright.config.ts / smoke fixture. Default: false. */
     force?: boolean;
+    /** The template files to write (relative to projectDir). Defaults to the full
+     *  set; callers pass the language-specific subset (NODE_/PYTHON_E2E_TEMPLATE_FILES). */
+    files?: readonly string[];
 }
 interface WritePlaywrightTemplatesResult {
     /** Paths (relative to projectDir) that were newly written. */
@@ -1851,6 +1913,21 @@ declare function installPlaywright(args: InstallPlaywrightArgs): Promise<Install
  * a breaking release.
  */
 declare const PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
+/**
+ * Version range applied to `pytest-playwright` when patching a Python project's
+ * pyproject.toml. This is the Python-side analog of PLAYWRIGHT_TEST_VERSION_RANGE:
+ * `pytest-playwright` brings the `playwright` package + the `page` fixture the
+ * shipped tests/e2e/conftest.py and E2E specs depend on.
+ */
+declare const PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
+/**
+ * Version range applied to `pytest-bdd` when patching a Python project's
+ * pyproject.toml. The canon (test-strategy.md) authors AC behavior scenarios as
+ * pytest-bdd Gherkin (`.feature` + step defs); without the dep the navigator
+ * cannot `import pytest_bdd` and falls back to plain pytest, so it ships in the
+ * base Python scaffold AND is retrofit here.
+ */
+declare const PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 interface AddPlaywrightToPackageJsonArgs {
     projectDir: string;
     /** Override the version range stamped into devDependencies. */
@@ -1871,6 +1948,25 @@ interface AddPlaywrightToPackageJsonResult {
  * blindly invoke it after enabling E2E without language-gating.
  */
 declare function addPlaywrightToPackageJson(args: AddPlaywrightToPackageJsonArgs): AddPlaywrightToPackageJsonResult;
+interface AddPythonE2eDepsArgs {
+    projectDir: string;
+    /** Override the version range stamped into the dev extras. */
+    versionRange?: string;
+}
+interface AddPythonE2eDepsResult {
+    /** True iff pyproject.toml existed and was patched (or already had the dep). */
+    patched: boolean;
+    /** True iff `pytest-playwright` was newly added to the dev extras. */
+    depAdded: boolean;
+}
+declare function ensurePythonE2eDeps(args: AddPythonE2eDepsArgs): AddPythonE2eDepsResult;
+/**
+ * Idempotently add `pytest-bdd` to a Python project's dev extras, so the
+ * navigator can author AC behavior scenarios as Gherkin `.feature` + step defs
+ * (the canon's BDD test surface). Base Python scaffolds already declare it; this
+ * is the retrofit path for an existing project. No-ops if pyproject is absent.
+ */
+declare function ensurePythonBddDeps(args: AddPythonE2eDepsArgs): AddPythonE2eDepsResult;
 interface AddE2eToRunTestsScriptArgs {
     projectDir: string;
 }
@@ -1895,6 +1991,11 @@ interface EnableE2eForProjectArgs {
     templatesDir?: string;
     /** Override the @playwright/test version range. */
     versionRange?: string;
+    /** Project language. Decides which E2E templates ship: Node gets the
+     *  playwright.config + TS smoke; Python gets the `live_server` conftest.
+     *  When omitted, falls back to package.json (Node) / pyproject.toml (Python)
+     *  detection so retrofits work without it. */
+    language?: string;
 }
 interface EnableE2eForProjectResult {
     /** Paths (relative to projectDir) freshly written. */
@@ -1902,6 +2003,9 @@ interface EnableE2eForProjectResult {
     /** Paths skipped because they already existed (force=false). */
     templatesSkipped: string[];
     packageJson: AddPlaywrightToPackageJsonResult;
+    /** Python-only: the pyproject.toml dev-extras patch (pytest-playwright).
+     *  `{ patched: false }` for Node / non-Python projects. */
+    pyproject: AddPythonE2eDepsResult;
     runTestsScript: AddE2eToRunTestsScriptResult;
 }
 /**
@@ -2552,6 +2656,19 @@ interface MergeArgs {
     /** Interval between migrate polls, milliseconds. Default: 30 seconds. */
     migratePollMs?: number;
     /**
+     * Whether a migrate-poll TIMEOUT (the downstream run never completed within
+     * the budget, or no matching run ever appeared) is fatal. Default: true,
+     * the standalone "merge and confirm migrations" contract. Set false for
+     * fire-and-confirm callers (the TDD orchestrator's promote/merge step) where
+     * the GitHub merge + local fast-forward have ALREADY succeeded and the state
+     * is already `merged`: a slow/absent downstream-migrate run should then
+     * surface as a warning + `migrate.timedOut`, not hang then fail the whole
+     * drive 30 minutes in. A migrate run that completes with a FAILURE
+     * conclusion is still fatal regardless of this flag, that is a real
+     * migration failure, not a wait timeout.
+     */
+    migrateTimeoutFatal?: boolean;
+    /**
      * Predicate identifying the downstream migrate workflow run among
      * recent runs on parent_branch. Default: any push-event run on
      * parent_branch newer than the merge timestamp. Tests can pass a
@@ -2582,6 +2699,10 @@ interface MergeResult {
         runUrl?: string;
         conclusion?: string;
         polls: number;
+        /** True iff the poll budget elapsed without a completed run AND the caller
+         *  asked for a non-fatal timeout (migrateTimeoutFatal=false). The merge has
+         *  already landed; this records that migration confirmation was not observed. */
+        timedOut?: boolean;
     };
     warnings: string[];
 }
@@ -3529,4 +3650,4 @@ declare function applySchemaMigrations(args: ApplySchemaMigrationsArgs): Promise
 declare function rollbackSchemaMigration(args: RollbackSchemaMigrationArgs): Promise<RollbackSchemaMigrationResult>;
 declare function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Promise<SchemaMigrationStatusResult>;
 
-export { type AbandonFeatureArgs, type AbandonFeatureResult, type AddE2eToRunTestsScriptArgs, type AddE2eToRunTestsScriptResult, type AddInfraToPackageJsonArgs, type AddInfraToPackageJsonResult, type AddInfraToRunTestsScriptArgs, type AddInfraToRunTestsScriptResult, type AddPlaywrightToPackageJsonArgs, type AddPlaywrightToPackageJsonResult, type AdoptLakebaseProjectArgs, type AdoptLakebaseProjectResult, type AdoptStateArgs, type AdoptStateResult, type AdoptTddArgs, type AdoptTddResult, type AppServicePrincipal, type AppliedSchemaMigration, type ApplySchemaMigrationsArgs, type ApplySchemaMigrationsResult, type BranchLookupOpts, type BranchMetadata, CONVENTION_TIER_DEFAULTS, type CatalogExistsArgs, type CheckoutMode, type CheckoutPairedArgs, type CheckoutPairedResult, type ClaimFeatureBranchArgs, type ClaimFeatureBranchResult, type ClaimedOrphan, type CommandDriftReport, type CommandFileEntry, type CommandFileStatus, type CommandFileUpdate, type CommandUpdateOutcome, type ConnectionArgs, type CreateBranchArgs, type CreateConventionBranchArgs, type CreateConventionPairedBranchArgs, type CreateLongRunningBranchArgs, type CreateLongRunningBranchResult, type CreatePairedBranchArgs, type CreatePairedBranchResult, type CutBackupArgs, type CutBackupResult, type DatabricksProfile, type DeleteAppEndpointArgs, type DeleteAppEndpointResult, type DeleteBranchArgs, type DeletePairedBranchArgs, type DeletePairedBranchResult, type DeployClaudeCommandsOptions, type DeployClaudeCommandsResult, type DeployEnvExampleArgs, type DeployLanguageProjectArgs, type DeploySpringStarterArgs, type DeployTarget, type DeployTargetsConfig, type DetectCommandDriftArgs, type DetectScaffoldedDriftArgs, type DetectWorkflowDriftArgs, type DoctorArgs, type DoctorFinding, type DoctorReport, type DoctorSeverity, type DsnArgs, type DsnResult, type EnableE2eForProjectArgs, type EnableE2eForProjectResult, type EnableInfraForProjectArgs, type EnableInfraForProjectResult, type EndpointInfo, type EnsureAppEndpointArgs, type EnsureAppEndpointResult, type EnsureEndpointArgs, type EnsureLakebaseSecretAuthArgs, type EnsureLakebaseSecretAuthResult, type EnsureProfilePinnedArgs, type EnsureProfilePinnedResult, type EnsureSchemaAndVolumeArgs, type EnsureSchemaAndVolumeResult, FIXABLE_FINDING_IDS, type FixFindingArgs, type FixFindingResult, type FixableFindingId, type GateInvariant, type GateStatus, type GenerateAppYamlOptions, type GenerateMavenProjectOptions, type GetAppEndpointArgs, type GetAppEndpointResult, type GetAppServicePrincipalArgs, type GetCiAppEndpointArgs, type GetCiAppEndpointResult, type GetConnectionArgs, type GetCredentialArgs, type GetEndpointArgs, type GetSchemaDiffArgs, type GrantLakebasePermissionArgs, type GrantLakebasePermissionResult, type GrantUcCatalogPermissionArgs, type GrantUcCatalogPermissionResult, type HookVerification, type InfraCheckResult, type InfraSuiteResult, type InitWorkflowStateArgs, type InitializrMetadata, InitializrNetworkError, InitializrParseError, type InstallPlaywrightArgs, type InstallPlaywrightOptions, type InstallPlaywrightResult, LakebaseBranchError, type LakebaseBranchInfo, LakebaseBranchTtlTooLongError, type LakebasePermissionLevel, type LakebaseProjectArgs, LakebaseProjectError, type LakebaseProjectInfo, type LakebaseProjectMetadata, type ListSchemaMigrationsArgs, type MergeArgs, type MergePairedArgs, type MergePairedResult, type MergeResult, type ModifiedSchemaObject, type OrphanCandidate, PLAYWRIGHT_TEMPLATE_FILES, PLAYWRIGHT_TEST_VERSION_RANGE, PROJECT_SKILLS, type PendingSchemaMigration, type PoolArgs, type PreparePrArgs, type PreparePrResult, type ProjectLanguage, type PropagateCredentialsArgs, type PropagateCredentialsResult, type QueryBranchSchemaArgs, type RecoverOrphansArgs, type RecoverOrphansResult, type ReleaseArgs, type ReleaseResult, type RemoveRunnerArgs, type ResolveDatabricksHostArgs, type RollbackDeployArgs, type RollbackDeployResult, type RollbackSchemaMigrationArgs, type RollbackSchemaMigrationResult, type RunInfraSuiteArgs, type RunPlaywrightInstallArgs, type RunPlaywrightInstallResult, type RunnerInfo, type RunnerReportFn, type RunnerType, SCM_STATES, STATE_FILE_REL, type ScaffoldAllArgs, type ScaffoldOptions, type ScaffoldReportFn, type ScaffoldStaticAllArgs, type ScaffoldStaticAllResult, type ScaffoldedDriftReport, type SchemaColumn, type SchemaDiffResult, SchemaMigrationError, type SchemaMigrationFile, type SchemaMigrationLanguage, type SchemaMigrationStatusArgs, type SchemaMigrationStatusResult, type SchemaMigrationToolName, type SchemaObject, ScmAbandonError, ScmAdoptError, ScmClaimError, ScmDoctorFixError, ScmMergeError, ScmPreparePrError, ScmRecoverError, type ScmState, ScmWaitCiError, type ScmWorkflowState, type SetupRunnerArgs, SpringInitializrClient, type SpringJvmLanguage, type SyncEnvArgs, type SyncEnvResult, type TableSchema, type TierTopology, type TryCreateCatalogArgs, type TryCreateCatalogResult, type UcCatalogPermission, type UpdateCommandsArgs, type UpdateCommandsResult, type UpdateEnvConnectionArgs, type UpdateWorkflowsArgs, type UpdateWorkflowsResult, type UploadDirectoryArgs, type UploadDirectoryResult, type ValidateAppOptions, type ValidateAppResult, type ValidationError, type ValidationResult, type WaitCiArgs, type WaitCiResult, type WaitForBranchAuthReadyArgs, type WaitForBranchReadyArgs, type WorkflowDriftReport, type WorkflowFileStatus, type WorkflowFileUpdate, type WorkflowStatus, type WorkflowUpdateOutcome, type WorkflowVerification, type WriteEnvFileArgs, type WritePlaywrightTemplatesArgs, type WritePlaywrightTemplatesResult, _testMakeBrownfieldFixture, abandonFeatureBranch, addE2eToRunTestsScript, addInfraToPackageJson, addInfraToRunTestsScript, addPlaywrightToPackageJson, adoptLakebaseProject, adoptScmState, adoptTdd, applySchemaMigrations, assertAdoptionPreflight, cacheProjectRetention, catalogExists, catalogExplorerUrl, checkoutPaired, claimFeatureBranch, clearRetentionCache, createBranch, createFeaturePairedBranch, createLakebaseProject, createLongRunningBranch, createPairedBranch, createPerfPairedBranch, createProject, createTestPairedBranch, createUatPairedBranch, cutBackup, deleteAppEndpoint, deleteBranch, deleteLakebaseProject, deletePairedBranch, deployClaudeAgents, deployClaudeCommands, deployClaudeSkills, deployDeployTargets, deployEnv, deployEnvExample, deployGitignore, deployLanguageProject, deployScripts, deploySpringStarter, deployVscodeSettings, deployWorkflows, deriveCiAppName, describeGates, detectCommandDrift, detectLanguage, detectScaffoldedDrift, detectWorkflowDrift, enableE2eForProject, enableInfraForProject, endpointPath, ensureAppEndpoint, ensureCachedArchive, ensureEndpoint, ensureLakebaseSecretAuth, ensureProfilePinned, ensureSchemaAndVolume, extractPullNumber, featureBranchName, findDefaultBranchName, findHistoryRetentionDuration, fixFinding, formatJUnit, formatSchemaDiffAsMarkdown, generateAppYaml, getAppEndpoint, getAppServicePrincipal, getBranchByName, getCachedProjectRetention, getCiAppEndpoint, getConnection, getCredential, getDefaultBranch, getDefaultBranchId, getDefaultBranchName, getEndpoint, getProjectInfo, getProjectRetentionDuration, getRunnerInfo, getSchemaDiff, getTargetNames, grantLakebasePermission, grantUcCatalogPermission, inferTierTopology, initWorkflowState, installHooks, installPlaywright, isLongRunningTierBranch, isLtsJavaVersion, isPrereleaseBootVersion, isRunning, isTier, isTtlTooLongError, listAppDeployments, listBranches, listSchemaMigrations, mergeFeature, mergePaired, minLakebaseTtl, mintCredential, normalizeHost, parseHostFromAuthDescribe, parseLakebaseTtl, parseTargetsYaml, patchWorkflowsForRunnerType, preparePr, projectPath, propagateCredentials, queryBranchSchema, queryBranchTables, readTargets, readWorkflowState, recoverOrphans, release, removeRunner, resolveBranchId, resolveBranchPath, resolveCurrentUser, resolveDatabricksHost, resolveEndpointHost, resolveJavaHome, resolveLatestBootVersion, resolveLatestLtsJavaVersion, resolveParentBranch, resolveProfileForHost, rollbackDeploy, rollbackSchemaMigration, runDoctor, runInfraSuite, runPlaywrightInstall, runnerDir, runnerName, sanitizeFeatureSlug, scaffoldAll, scaffoldStaticAll, schemaMigrationStatus, selectProfileForHost, setupRunner, stateFilePath, stopRunner, syncEnvToCurrentBranch, tierBranchNames, toolForLanguage, tryCreateCatalog, updateCommands, updateEnvConnection, updateWorkflows, uploadDirectory, validateApp, validateWorkflowState, verifyHooks, verifyProject, verifyWorkflows, waitForBranchAuthReady, waitForBranchReady, waitForCi, workflowStateFileExists, writeEnvFile, writePlaywrightTemplates, writeTargets, writeWorkflowState };
+export { type AbandonFeatureArgs, type AbandonFeatureResult, type AddE2eToRunTestsScriptArgs, type AddE2eToRunTestsScriptResult, type AddInfraToPackageJsonArgs, type AddInfraToPackageJsonResult, type AddInfraToRunTestsScriptArgs, type AddInfraToRunTestsScriptResult, type AddPlaywrightToPackageJsonArgs, type AddPlaywrightToPackageJsonResult, type AddPythonE2eDepsArgs, type AddPythonE2eDepsResult, type AdoptLakebaseProjectArgs, type AdoptLakebaseProjectResult, type AdoptStateArgs, type AdoptStateResult, type AdoptTddArgs, type AdoptTddResult, type AppServicePrincipal, type AppliedSchemaMigration, type ApplySchemaMigrationsArgs, type ApplySchemaMigrationsResult, type BranchLookupOpts, type BranchMetadata, CONVENTION_TIER_DEFAULTS, type CatalogExistsArgs, type CheckoutMode, type CheckoutPairedArgs, type CheckoutPairedResult, type ClaimFeatureBranchArgs, type ClaimFeatureBranchResult, type ClaimedOrphan, type CommandDriftReport, type CommandFileEntry, type CommandFileStatus, type CommandFileUpdate, type CommandUpdateOutcome, type ConnectionArgs, type CreateBranchArgs, type CreateConventionBranchArgs, type CreateConventionPairedBranchArgs, type CreateLongRunningBranchArgs, type CreateLongRunningBranchResult, type CreatePairedBranchArgs, type CreatePairedBranchResult, type CutBackupArgs, type CutBackupResult, DEFAULT_PROTECTED_TIER_NAMES, type DatabricksProfile, type DeleteAppEndpointArgs, type DeleteAppEndpointResult, type DeleteBranchArgs, type DeletePairedBranchArgs, type DeletePairedBranchResult, type DeployClaudeCommandsOptions, type DeployClaudeCommandsResult, type DeployEnvExampleArgs, type DeployLanguageProjectArgs, type DeploySpringStarterArgs, type DeployTarget, type DeployTargetsConfig, type DetectCommandDriftArgs, type DetectScaffoldedDriftArgs, type DetectWorkflowDriftArgs, type DoctorArgs, type DoctorFinding, type DoctorReport, type DoctorSeverity, type DsnArgs, type DsnResult, type EnableE2eForProjectArgs, type EnableE2eForProjectResult, type EnableInfraForProjectArgs, type EnableInfraForProjectResult, type EndpointInfo, type EnsureAppEndpointArgs, type EnsureAppEndpointResult, type EnsureEndpointArgs, type EnsureLakebaseSecretAuthArgs, type EnsureLakebaseSecretAuthResult, type EnsureProfilePinnedArgs, type EnsureProfilePinnedResult, type EnsureSchemaAndVolumeArgs, type EnsureSchemaAndVolumeResult, FIXABLE_FINDING_IDS, type FixFindingArgs, type FixFindingResult, type FixableFindingId, type GateInvariant, type GateStatus, type GenerateAppYamlOptions, type GenerateMavenProjectOptions, type GetAppEndpointArgs, type GetAppEndpointResult, type GetAppServicePrincipalArgs, type GetCiAppEndpointArgs, type GetCiAppEndpointResult, type GetConnectionArgs, type GetCredentialArgs, type GetEndpointArgs, type GetSchemaDiffArgs, type GrantLakebasePermissionArgs, type GrantLakebasePermissionResult, type GrantUcCatalogPermissionArgs, type GrantUcCatalogPermissionResult, type HookVerification, type InfraCheckResult, type InfraSuiteResult, type InitWorkflowStateArgs, type InitializrMetadata, InitializrNetworkError, InitializrParseError, type InstallPlaywrightArgs, type InstallPlaywrightOptions, type InstallPlaywrightResult, LakebaseBranchError, type LakebaseBranchInfo, LakebaseBranchTtlTooLongError, type LakebasePermissionLevel, type LakebaseProjectArgs, LakebaseProjectError, type LakebaseProjectInfo, type LakebaseProjectMetadata, type ListSchemaMigrationsArgs, type MergeArgs, type MergePairedArgs, type MergePairedResult, type MergeResult, type ModifiedSchemaObject, NODE_E2E_TEMPLATE_FILES, type OrphanCandidate, PLAYWRIGHT_TEMPLATE_FILES, PLAYWRIGHT_TEST_VERSION_RANGE, PROJECT_SKILLS, PYTEST_BDD_VERSION_RANGE, PYTEST_PLAYWRIGHT_VERSION_RANGE, PYTHON_E2E_TEMPLATE_FILES, type PendingSchemaMigration, type PoolArgs, type PreparePrArgs, type PreparePrResult, type ProjectLanguage, type PropagateCredentialsArgs, type PropagateCredentialsResult, type QueryBranchSchemaArgs, type RecoverOrphansArgs, type RecoverOrphansResult, type ReleaseArgs, type ReleaseResult, type RemoveRunnerArgs, type ResolveDatabricksHostArgs, type RollbackDeployArgs, type RollbackDeployResult, type RollbackSchemaMigrationArgs, type RollbackSchemaMigrationResult, type RunInfraSuiteArgs, type RunPlaywrightInstallArgs, type RunPlaywrightInstallResult, type RunnerInfo, type RunnerReportFn, type RunnerType, SCM_STATES, STATE_FILE_REL, type ScaffoldAllArgs, type ScaffoldOptions, type ScaffoldReportFn, type ScaffoldStaticAllArgs, type ScaffoldStaticAllResult, type ScaffoldedDriftReport, type SchemaColumn, type SchemaDiffResult, SchemaMigrationError, type SchemaMigrationFile, type SchemaMigrationLanguage, type SchemaMigrationStatusArgs, type SchemaMigrationStatusResult, type SchemaMigrationToolName, type SchemaObject, ScmAbandonError, ScmAdoptError, ScmClaimError, ScmDoctorFixError, ScmMergeError, ScmPreparePrError, ScmRecoverError, type ScmState, ScmWaitCiError, type ScmWorkflowState, type SetupRunnerArgs, SpringInitializrClient, type SpringJvmLanguage, type SyncEnvArgs, type SyncEnvResult, type TableSchema, type TierTopology, type TryCreateCatalogArgs, type TryCreateCatalogResult, type UcCatalogPermission, type UpdateCommandsArgs, type UpdateCommandsResult, type UpdateEnvConnectionArgs, type UpdateWorkflowsArgs, type UpdateWorkflowsResult, type UploadDirectoryArgs, type UploadDirectoryResult, type ValidateAppOptions, type ValidateAppResult, type ValidationError, type ValidationResult, type WaitCiArgs, type WaitCiResult, type WaitForBranchAuthReadyArgs, type WaitForBranchReadyArgs, type WorkflowDriftReport, type WorkflowFileStatus, type WorkflowFileUpdate, type WorkflowStatus, type WorkflowUpdateOutcome, type WorkflowVerification, type WriteEnvFileArgs, type WritePlaywrightTemplatesArgs, type WritePlaywrightTemplatesResult, _testMakeBrownfieldFixture, abandonFeatureBranch, addE2eToRunTestsScript, addInfraToPackageJson, addInfraToRunTestsScript, addPlaywrightToPackageJson, adoptLakebaseProject, adoptScmState, adoptTdd, applySchemaMigrations, assertAdoptionPreflight, assertCleanForFork, cacheProjectRetention, catalogExists, catalogExplorerUrl, checkoutPaired, claimFeatureBranch, clearRetentionCache, createBranch, createFeaturePairedBranch, createLakebaseProject, createLongRunningBranch, createPairedBranch, createPerfPairedBranch, createProject, createTestPairedBranch, createUatPairedBranch, cutBackup, deleteAppEndpoint, deleteBranch, deleteLakebaseProject, deletePairedBranch, deployClaudeAgents, deployClaudeCommands, deployClaudeSkills, deployDeployTargets, deployEnv, deployEnvExample, deployGitignore, deployLanguageProject, deployScripts, deploySpringStarter, deployVscodeSettings, deployWorkflows, deriveCiAppName, describeGates, detectCommandDrift, detectLanguage, detectScaffoldedDrift, detectWorkflowDrift, enableE2eForProject, enableInfraForProject, endpointPath, ensureAppEndpoint, ensureCachedArchive, ensureEndpoint, ensureLakebaseSecretAuth, ensureProfilePinned, ensurePythonBddDeps, ensurePythonE2eDeps, ensureSchemaAndVolume, extractPullNumber, featureBranchName, findDefaultBranchName, findHistoryRetentionDuration, fixFinding, formatJUnit, formatSchemaDiffAsMarkdown, generateAppYaml, getAppEndpoint, getAppServicePrincipal, getBranchByName, getCachedProjectRetention, getCiAppEndpoint, getConnection, getCredential, getDefaultBranch, getDefaultBranchId, getDefaultBranchName, getEndpoint, getProjectInfo, getProjectRetentionDuration, getRunnerInfo, getSchemaDiff, getTargetNames, grantLakebasePermission, grantUcCatalogPermission, inferTierTopology, initWorkflowState, installHooks, installPlaywright, isLongRunningTierBranch, isLtsJavaVersion, isPrereleaseBootVersion, isRunning, isTier, isTtlTooLongError, listAppDeployments, listBranches, listSchemaMigrations, mergeFeature, mergePaired, minLakebaseTtl, mintCredential, normalizeHost, normalizeTierName, parseHostFromAuthDescribe, parseLakebaseTtl, parseTargetsYaml, patchWorkflowsForRunnerType, preparePr, projectPath, propagateCredentials, protectedTierNamesFromEnv, queryBranchSchema, queryBranchTables, readTargets, readWorkflowState, recoverOrphans, release, removeRunner, resolveBranchId, resolveBranchPath, resolveCurrentUser, resolveDatabricksHost, resolveEndpointHost, resolveFeatureStartPoint, resolveJavaHome, resolveLatestBootVersion, resolveLatestLtsJavaVersion, resolveParentBranch, resolveProfileForHost, resolveProtectedTierNames, rollbackDeploy, rollbackSchemaMigration, runDoctor, runInfraSuite, runPlaywrightInstall, runnerDir, runnerName, sanitizeFeatureSlug, scaffoldAll, scaffoldStaticAll, schemaMigrationStatus, selectProfileForHost, setupRunner, stateFilePath, stopRunner, syncEnvToCurrentBranch, tierBranchNames, toolForLanguage, tryCreateCatalog, updateCommands, updateEnvConnection, updateWorkflows, uploadDirectory, validateApp, validateWorkflowState, verifyHooks, verifyProject, verifyWorkflows, waitForBranchAuthReady, waitForBranchReady, waitForCi, workflowStateFileExists, writeEnvFile, writePlaywrightTemplates, writeTargets, writeWorkflowState };

@@ -105,7 +105,26 @@ function replayEffects(feature: string, stories: string[]) {
             mkdirSync(join(storyDir(feature, s), "acs"), { recursive: true });
             writeJson(join(storyDir(feature, s), "acs", `${ac(s)}.json`), { id: ac(s) });
           } else if (action.role === "architect-reviewer") {
-            writeJson(join(storyDir(feature, s), "acs", `${ac(s)}.json`), { id: ac(s), layer: "API" });
+            // The architect's distinctive output: architectural_notes on each AC
+            // (the spec-author already fills the schema-required `layer`) + the
+            // feature architecture.json. architectAnnotated keys on these, NOT on
+            // `layer`, so the architect actually runs (it was silently skipped
+            // when the probe keyed on the spec-author-provided layer).
+            writeJson(join(storyDir(feature, s), "acs", `${ac(s)}.json`), {
+              id: ac(s),
+              layer: "API",
+              architectural_notes: "boundary validates + delegates to the service; repository owns persistence",
+            });
+            writeJson(join(featureDir(feature), "architecture.json"), {
+              feature_id: feature,
+              service_backed: true,
+              layers: [
+                { role: "boundary", module: "app/main.py" },
+                { role: "service", module: "app/services" },
+                { role: "repository", module: "app/repositories" },
+              ],
+              nfrs: [],
+            });
           } else if (action.role === "test-strategist") {
             // The real flow: the role writes the feature master, then the
             // driver's deterministic scope step produces the canonical per-story

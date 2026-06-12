@@ -57,12 +57,34 @@ import type { AcLayer } from "./experiment.js";
  */
 async function commitCycleWork(tddDir: string, message: string): Promise<void> {
   try {
-    // Code only: exclude the orchestration metadata (.tdd churns every turn;
-    // .lakebase is SCM state). Committing those onto the experiment branch makes
-    // their committed copy diverge from the feature branch, which then breaks
-    // accept's `git checkout <feature>`. prepare-pr's dirty check ignores the
-    // same two prefixes, so a code-only commit leaves a clean CODE tree for promote.
-    await commitAllIfChanged({ cwd: dirname(tddDir), message, exclude: [".tdd", ".lakebase"] });
+    // Code + the stable design corpus. Exclude the churny orchestration metadata
+    // (.tdd state churns every turn; .lakebase is SCM state): committing those
+    // onto the experiment branch makes their committed copy diverge from the
+    // feature branch, which then breaks accept's `git checkout <feature>`.
+    // prepare-pr's dirty check ignores the same two prefixes, so this leaves a
+    // clean CODE tree for promote.
+    //
+    // BUT force-include the project-level design + architecture corpora:
+    //   `.tdd/design/`        , the design guide + IA (UX Designer).
+    //   `.tdd/architecture/`  , the architecture conventions (the canonical
+    //                           role -> module layout the first feature pins).
+    // Both are written ONCE in the design phase and never touched during build,
+    // so they do NOT churn or diverge. Committing them here carries them onto the
+    // feature branch's PR to the parent tier, so the NEXT feature (forked from
+    // that tier) inherits them , `designGuideReady` skips re-authoring the design
+    // system, and `conventionsReady` makes the architect inherit + conform to the
+    // established layout instead of re-deriving it. Without this, the broad `.tdd`
+    // exclude dropped both and every feature rebuilt them from scratch.
+    await commitAllIfChanged({
+      cwd: dirname(tddDir),
+      message,
+      // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
+      // observability it churns every run and is not feature code; committing it
+      // onto the experiment branch would diverge from the feature branch (and it
+      // already blocks the fork via assertCleanForFork). Gitignored too.
+      exclude: [".tdd", ".lakebase", ".claude/agent-memory"],
+      include: [".tdd/design", ".tdd/architecture"],
+    });
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
@@ -90,6 +112,11 @@ export interface StoryTestItem {
   description: string;
   ac_id: string;
   status?: string;
+  /** "behavior" (a pytest-bdd / behavior test, RED-first) or "fitness" (an
+   *  architectural constraint test). A fitness test MAY be born-green , a
+   *  regression guard that already holds , which is not a stall. Surfaced from
+   *  the per-story test-list JSON (the test-strategist writes it). */
+  kind?: "behavior" | "fitness";
 }
 
 function readStoryItems(tddDir: string, featureId: string, story: string): StoryTestItem[] {
@@ -171,6 +198,21 @@ export function storyTestProgress(tddDir: string, featureId: string, story: stri
   const openRed = cycles.filter((c) => c.red_at && !c.green_at);
   const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
   return { total: items.length, pending, openRed, allGreen };
+}
+
+/**
+ * The `kind` ("behavior" | "fitness") of the story's FIRST pending test-list item,
+ * or undefined when nothing is pending or the item omits it. Used by the
+ * escalation layer to recognize that a `cycle-stall` flagged while the next item
+ * is a fitness test is a born-green regression guard (not a stuck build), so it
+ * must not hard-halt , the GREEN run is the real arbiter.
+ */
+export function pendingItemKind(
+  tddDir: string,
+  featureId: string,
+  story: string,
+): "behavior" | "fitness" | undefined {
+  return storyTestProgress(tddDir, featureId, story).pending[0]?.kind;
 }
 
 export interface CycleRecordArgs {

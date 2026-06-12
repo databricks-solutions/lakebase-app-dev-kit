@@ -40,8 +40,6 @@ export interface RunConfig {
   loop_granularity: string;
   /** P8b: layer-batch cap, when batching. */
   batch_cap?: number;
-  /** P8b: batch partial-green fallback policy ("" = none / escalate). */
-  batch_fallback: string;
   /** The deploy target for the deploy phase. */
   deploy_target: string;
   /** The kit ref/SHA the run resolved against (.lakebase/kit-ref), if present. */
@@ -100,7 +98,6 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
     build_session_scope: inputs.buildSessionScope ?? "story",
     review_effort: inputs.reviewEffort ?? "",
     loop_granularity: env.LAKEBASE_TDD_LOOP || "ac",
-    batch_fallback: env.LAKEBASE_TDD_BATCH_FALLBACK || "",
     deploy_target: inputs.deployTarget ?? "local",
     models,
   };
@@ -168,7 +165,6 @@ export function formatRunConfig(cfg: RunConfig): string {
     `ui=${cfg.ui_track ? "on" : "off"}`,
     `deploy=${cfg.deploy_target}`,
     ...(cfg.batch_cap !== undefined ? [`batch-cap=${cfg.batch_cap}`] : []),
-    ...(cfg.batch_fallback ? [`batch-fallback=${cfg.batch_fallback}`] : []),
     ...(cfg.kit_ref ? [`kit=${cfg.kit_ref}`] : []),
     ...(cfg.run_label ? [`label=${cfg.run_label}`] : []),
   ].join("  ");

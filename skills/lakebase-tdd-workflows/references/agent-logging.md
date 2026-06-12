@@ -1,56 +1,41 @@
 # Agent logging (structured, centralized)
 
-The TDD workflow is a relay of role agents with isolated memory. To
-make a run observable, **each agent emits structured log events** describing
-what it is doing (and, at debug level, why), and a centralized logger collects
-them into one file. This is the audit + debug trail for the whole relay.
+The TDD workflow is a relay of role agents with isolated memory. To make a run observable, **each agent emits structured log events** (what it's doing, and at debug level why), collected into one file: the audit + debug trail for the whole relay.
 
 ## 1. Format
 
-One JSON object per line (JSON Lines) in `.tdd/agent-log.jsonl`, validated
-against `scripts/tdd/schemas/agent-log-event.schema.json`. Fields, in order:
+One JSON object per line (JSON Lines) in `.tdd/agent-log.jsonl`, validated against `scripts/tdd/schemas/agent-log-event.schema.json`. Fields, in order:
 
 | Field | Meaning |
 |---|---|
-| `timestamp` | ISO-8601 UTC timestamp (stamped by the logger) |
-| `level` | `debug` / `info` / `warn` / `error` (see below) |
-| `role` | the role performing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
-| `event` | dotted machine name (e.g. `phase.start`, `artifact.written`, `gate.surfaced`, `handoff`, `reasoning`, `smell.flagged`) |
-| `message` | human-readable one-liner |
-| `metadata` | optional structured payload |
+| `timestamp` | ISO-8601 UTC (stamped by the logger) |
+| `level` | `debug` / `info` / `warn` / `error` |
+| `role` | the role doing the work (orchestrator, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, product-owner, release-engineer) |
+| `event` | dotted machine name (`phase.start`, `artifact.written`, `gate.surfaced`, `handoff`, `reasoning`, `smell.flagged`) |
+| `message` | human-readable one-liner (rendered from the event template) |
+| `metadata` | optional payload; `feature_id` is its primary scope key, then `phase`, `cycle_id`, event-specific keys |
 
-`timestamp`, `level`, `role`, `event`, `message` are required. `metadata` is optional; when present, `feature_id` is its top-level attribute (the primary scope key), followed by `phase`, `cycle_id`, and any event-specific keys (artifact path, gate name, conformance violations, ...).
+`timestamp`, `level`, `role`, `event`, `message` are required; `metadata` optional.
 
-## 2. Levels (what to log at each)
+## 2. Levels
 
-- **`debug` , reasoning considerations.** Why a decision was made, alternatives weighed, open questions you held. The thinking, not just the result.
-- **`info` , outputs + decisions.** Phase started/ended, an artifact was written (with its path + conformance result), a gate was surfaced or approved, a handoff to the next role.
-- **`warn` , things the HIL should see.** A bad smell flagged, ambiguity surfaced to the PO, gate-integrity drift detected.
-- **`error` , hard stops.** A gate refused, conformance failed, a substrate call errored.
+- **`debug`:** reasoning, alternatives weighed, open questions. The thinking, not just the result.
+- **`info`:** outputs + decisions (phase start/end, artifact written with path + conformance, gate surfaced/approved, handoff).
+- **`warn`:** things the HIL should see (a bad smell, ambiguity surfaced, gate-integrity drift).
+- **`error`:** hard stops (a gate refused, conformance failed, a substrate call errored).
 
-## 2.5 Progress cadence (emit during long phases)
+## 2.5 Progress cadence
 
-A role's work between phase boundaries can take many minutes (an LLM drafting a dozen ACs, assigning layers, ordering tests, running a cycle). If you only emit at `phase.start` / `phase.end`, an observer sees a long silent block and cannot tell "working" from "stuck." So emit a `progress` event at each meaningful **sub-step**:
-
-- **Spec Author:** one per candidate feature proposed (planning); one per story and per AC drafted (drafting).
-- **Architect Reviewer:** one per AC layer assigned; one per `nfrs.md` Required item covered (`brief_ref`).
-- **Test Strategist:** one per test ordered into the list.
+A role's work between phase boundaries can take minutes; emitting only at `phase.start`/`phase.end` makes "working" indistinguishable from "stuck." Emit a `progress` event (at `debug`) per meaningful sub-step, so a gap in the log reliably means stuck:
+- **Spec Author:** one per candidate feature (planning); one per story + per AC (drafting).
+- **Architect:** one per AC layer assigned; one per Required NFR covered.
+- **Test Strategist:** one per test ordered.
 - **Navigator / Driver:** one per cycle step (PLAN / RED / REVIEW; GREEN / REFACTOR).
 - **Release Engineer:** one per deploy step (deploy / reachable / verify).
 
-```bash
-./scripts/lk lakebase-tdd-log --role spec-author --level debug --event progress \
-  --slot note="AC 4/11 drafted: bug is reachable by identifier after filing" --slot step=drafting \
-  --feature F1-initial-domain
-```
-
-The message is RENDERED from the event's template by filling its `{{ slot }}`s , you pass `--slot key=value` (repeatable), never a free-text `--message` (there is no such flag). A missing required slot is rejected.
-
-Use `debug` for sub-step progress (so `info` stays the outputs/decisions stream). The rule is cadence: roughly one line per sub-step, so a gap in the log reliably means stuck, not working.
-
 ## 3. How to emit
 
-Shell out to the kit CLI (works from a headless `claude -p` agent). Roles invoke it through the project's `./scripts/lk` resolver shim (fast; no npx), which is always present at the project root:
+Shell out through the project's `./scripts/lk` resolver (fast; no npx), always present at the project root:
 
 ```bash
 ./scripts/lk lakebase-tdd-log --role spec-author --level info \
@@ -58,108 +43,41 @@ Shell out to the kit CLI (works from a headless `claude -p` agent). Roles invoke
   --feature F1-initial-domain --data '{"path":"feature-spec.json","conformant":true}'
 ```
 
-Read / tail the centralized log:
+Read/tail: `./scripts/lk lakebase-tdd-log --read --feature F1-initial-domain --min-level info`. In-process callers use `emitAgentLogEvent` / `readAgentLog` from `scripts/tdd/agent-log.ts`.
 
-```bash
-./scripts/lk lakebase-tdd-log --read --feature F1-initial-domain --min-level info
-```
+`event` is a CLOSED vocabulary (`scripts/tdd/agent-log-events.ts`); each event has a fixed message TEMPLATE with `{{ slot }}` placeholders. You pass `--event <name>` + its slots as `--slot key=value` (repeatable); the logger renders the message and REJECTS (exit 3) an off-vocabulary event or a missing required slot. There is no free-text `--message` flag.
 
-In-process callers use `emitAgentLogEvent` / `readAgentLog` from
-`scripts/tdd/agent-log.ts`.
+**NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into `agent-log.jsonl` or invent fields: a model that hand-writes mangles the schema (e.g. a local wall-clock `timestamp` instead of the required UTC stamp). There is exactly ONE writer, `emitAgentLogEvent` (the CLI is its shell face); `role` is a parameter, not a function per agent. If a field isn't accepted by the CLI, it isn't in the schema.
 
-### One common function, two callers
+## 4. Who emits what
 
-There is exactly ONE logging function, `emitAgentLogEvent` (the `lakebase-tdd-log`
-CLI is its shell face); `role` is a parameter, not a function per agent. It is
-the only thing that may write `.tdd/agent-log.jsonl`: it stamps the canonical
-`timestamp`, validates against the schema, and atomically appends one line.
+- **The orchestrator owns the lifecycle as CODE.** The deterministic driver (`lakebase-tdd-drive`) emits `handoff`, the role's `phase.start`/`phase.end`, the gate events (`gate.surfaced`/`gate.approved`), `experiment.cut`/`experiment.accepted`, and the entire **`cycle.*` family** (`cycle.red`/`green`/`review`/`refactored`). Its post-role reconcile code-emits `artifact.written` for everything left on disk. These are guaranteed every run, regardless of model. Emitting them yourself double-logs.
+- **Each role adds only its in-flight JUDGMENT events** through the CLI: `progress`, `reasoning` (debug), `smell.flagged` (warn), and the recorded gate decision. The shared `.tdd/agent-log.jsonl` is the bus; a subagent only returns its completion, not events.
 
-**NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into
-`agent-log.jsonl`, and do not invent fields. A model that hand-writes invariably
-mangles the schema (the observed failure: a `timestamp` field with a local
-wall-clock instead of the required `timestamp` stamped in UTC). Always shell out to
-`lakebase-tdd-log`, which fills the required fields for you. If a field is not
-accepted by the CLI, it is not part of the schema.
+Per-role JUDGMENT events on top of the code-emitted skeleton:
 
-### Who emits what
+| Role | debug | warn / error |
+|---|---|---|
+| **Spec Author** | `reasoning` on scope calls | `open.question` |
+| **UX Designer** | `reasoning` on token/IA choices + provenance | `adherence.failed` |
+| **Architect** | `reasoning` on layer/NFR proposals | `concern.flagged` (cross-cutting concern, no owner) |
+| **Test Strategist** | `reasoning` on ordering | `smell.flagged` (a test needing impl-first) |
+| **Navigator** | `reasoning` on the design the test forces | `smell.flagged` |
+| **Driver** | `reasoning` on the change | `runner.missing` |
+| **Orchestrator** | (code-emits `phase.*`, `handoff`, `gate.*`, `experiment.*`, `cycle.*`) | `escalation.raised` |
 
-- The **orchestrator owns the lifecycle as CODE**: the deterministic driver
-  (`lakebase-tdd-drive`) emits `handoff` (which role it dispatched), the invoked
-  role's `phase.start`, the gate events (`gate.surfaced` / `gate.approved`),
-  `experiment.cut` / `experiment.accepted`, and `phase.end`. It also runs the
-  artifact **reconcile** after each role, which code-emits `artifact.written`
-  for everything the role left on disk. These are guaranteed every run,
-  regardless of model, with no agent action required.
-- Each **role** adds only its in-flight JUDGMENT events through the same CLI:
-  `progress` sub-steps, `reasoning` (debug), `smell.flagged` (warn), and the
-  human's recorded gate decision. You do not need to emit your own
-  `phase.start` / `phase.end` / `artifact.written`, the orchestrator already
-  does. The shared `.tdd/agent-log.jsonl` is the bus: you append to it as you
-  work; there is no need to return events to the orchestrator (a subagent only
-  returns its completion).
+## 4.5 HITL gates (the human is a logged participant)
 
-## 4. Per-role emit points (instrumentation)
-
-`event` is a CLOSED vocabulary (`scripts/tdd/agent-log-events.ts`); each event has
-a fixed message TEMPLATE with `{{ slot }}` placeholders. You do NOT write a
-message: you pass `--event <name>` + the template's slots as `--slot key=value`,
-and the logger renders the message and REJECTS (exit 3, nothing dropped) an
-off-vocabulary event or a missing required slot. The event NAME carries the phase;
-the slots carry the specifics you fill.
-
-The orchestration **code-emits** the lifecycle + cycle skeleton, and these are
-NOT yours to emit: `phase.start`/`phase.end`, `handoff`, `gate.*`, `experiment.*`,
-`deploy.*`/`verify.*`, `escalation.raised`, and the entire **`cycle.*` family
-(`cycle.red` / `cycle.green` / `cycle.review` / `cycle.refactored`)** plus
-`artifact.written` (via reconcile). The substrate stamps those with the right
-slots; emitting them yourself would double-log. The columns below are the
-JUDGMENT events each role adds ON TOP, via `lakebase-tdd-log`:
-
-| Role | info | debug | warn / error |
-|---|---|---|---|
-| **Spec Author** | `artifact.written` (auto via reconcile) | `reasoning` on scope calls | `open.question` left unresolved |
-| **UX Designer** | (artifacts auto-logged) | `reasoning` on token/IA choices, reference provenance | `adherence.failed` |
-| **Architect Reviewer** | (architecture auto-logged) | `reasoning` on layer/NFR proposals | `concern.flagged` (cross-cutting concern with no owner) |
-| **Test Strategist** | (test-list auto-logged) | `reasoning` on ordering rationale | `smell.flagged` (a test needing impl-first) |
-| **Orchestrator** (deterministic driver) | code-emits `phase.*`, `handoff`, `gate.approved`, `experiment.*`, `cycle.*` | , | `escalation.raised` |
-| **Navigator** | (the `cycle.red` / `cycle.review` are code-stamped) | `reasoning` on the design the test forces | `smell.flagged` |
-| **Driver** | (the `cycle.green` / `cycle.refactored` are code-stamped) | `reasoning` on the minimal change | `runner.missing` |
-
-The orchestrator may also emit `handoff` events at each role boundary so the
-log reads as a clean relay timeline.
-
-## 4.5 HITL interactions (the human is a logged participant)
-
-Every HITL gate is a two-sided, logged interaction: the workflow transitions
-TO the human, and the proceed is GATED BY their response. Both sides are
-recorded, the audit trail must show who was asked and what they decided.
-
-1. **Transition to the human** (the surfacing role, `info`):
-   `--event gate.surfaced --slot gate=<spec|plan|test_list|promote|deploy> --slot subject="<what they must decide>"`.
-   This marks that the workflow handed control to the human and is now waiting.
-
-2. **The human's response** (`--role product-owner`), recorded BEFORE the
-   workflow advances, the transition past the gate is gated by it:
+Every gate is two-sided and logged; the proceed is gated by the response:
+1. **Transition** (surfacing role, `info`): `--event gate.surfaced --slot gate=<spec|plan|test_list|promote|deploy> --slot subject="<what they decide>"`.
+2. **Response** (`--role product-owner`), recorded BEFORE the workflow advances:
    - `--event gate.approved --slot gate=<gate>`
-   - `--event gate.modified --slot gate=<gate> --slot change="<what they changed>"`
-   - `--event gate.rejected --slot gate=<gate> --slot reason="<why, what to revise>"`
-   Capture the human's ACTUAL decision in the slots (+ extra `--data` metadata), not a
-   paraphrase. If the human answered open questions, record their answers.
-   NOTE: in practice these gate events are emitted by the Human Proxy / the
-   deterministic driver, not hand-written by a role; the forms above are the
-   contract they follow.
+   - `--event gate.modified --slot gate=<gate> --slot change="<what changed>"`
+   - `--event gate.rejected --slot gate=<gate> --slot reason="<why>"`
+   Capture the actual decision (+ `--data`), not a paraphrase; record any answered open questions.
 
-So a normal (human) run logs: `gate.surfaced` (transition) then the human's
-`gate.approved`/`gate.modified`/`gate.rejected` (their response), and only then
-the next phase's `phase.start`. In **Human Proxy mode** the human is performed
-by `human-proxy`, which emits the SAME `product-owner` `gate.approved` /
-`gate.rejected` events (it validated the artifact's expected elements first). The
-log shape is identical; only the approver identity in `data.approver` differs,
-so an auditor sees exactly where a human was, or was not, in the loop.
+In practice these gate events are emitted by the Human Proxy / deterministic driver, not hand-written by a role. In Human Proxy mode the same `product-owner` `gate.*` events are emitted (after validating the artifact's expected elements); only `data.approver` differs, so an auditor sees exactly where a human was, or wasn't, in the loop.
 
 ## 5. Where it does NOT go
 
-This log is execution narrative, not workflow state. Gate state stays in
-`gates.json`; SCM state in `.lakebase/workflow-state.json`; spec artifacts in
-the `.tdd/` tree. The agent log records what the agents DID, in order, for
-debugging + audit.
+This log is execution narrative, not workflow state. Gate state lives in `gates.json`; SCM state in `.lakebase/workflow-state.json`; spec artifacts in the `.tdd/` tree. The agent log records what the agents DID, in order, for debugging + audit.

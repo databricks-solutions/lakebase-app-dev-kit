@@ -6943,6 +6943,122 @@ function checkNfrCoverage(nfrsMd, architectureJson) {
   }
   return finalize(violations);
 }
+function checkLayeringDeclared(architectureJson) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed !== true) return { ok: true };
+  const roles = new Set(
+    (parsed.layers ?? []).map((l) => l.role).filter((r) => typeof r === "string")
+  );
+  const missing = ["boundary", "service", "repository"].filter((r) => !roles.has(r));
+  if (missing.length) {
+    return {
+      ok: false,
+      violations: [
+        `service_backed feature must declare layers [${missing.join(", ")}] in architecture.json (layered architecture: boundary -> service -> repository -> ORM; the boundary never touches the DB session)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkFitnessCoverage(testListJson, architectureJson) {
+  let arch;
+  try {
+    arch = JSON.parse(architectureJson);
+  } catch {
+    return { ok: true };
+  }
+  const declaresConstraint = arch.service_backed === true || Array.isArray(arch.layers) && arch.layers.length > 0;
+  if (!declaresConstraint) return { ok: true };
+  let tl;
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const hasFitness = (tl.items ?? []).some((i) => i.kind === "fitness");
+  if (!hasFitness) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed/layered but the test-list has no kind:"fitness" item (every architectural constraint needs a fitness test, e.g. the layering contract; see test-strategy.md)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkStoryIndependence(stories) {
+  const parsed = [];
+  for (const s of stories) {
+    let obj;
+    try {
+      obj = JSON.parse(s.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : s.name;
+    const m = /^S(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: s.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every story after the first must record independence.distinct_from_prior + rationale; apply the story-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this story's behavior is a subset of an earlier story; fold it into that story or re-scope it to a distinct, independently-RED-able slice)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct behavior this story adds beyond the prior stories)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkAcIndependence(acs) {
+  const parsed = [];
+  for (const a of acs) {
+    let obj;
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
 function canonicalArtifactName(path) {
   const base = (0, import_path2.basename)(path);
   if ((0, import_path2.basename)((0, import_path2.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
@@ -6968,16 +7084,32 @@ function scanFeatureConformance(tddDir, featureId) {
     pushIfExists((0, import_path2.join)(featureDir, name));
   }
   const storiesDir = (0, import_path2.join)(featureDir, "stories");
+  const storyJsons = [];
+  const acsByStory = [];
   if ((0, import_fs2.existsSync)(storiesDir)) {
     for (const storyName of (0, import_fs2.readdirSync)(storiesDir)) {
       const storyDir = (0, import_path2.join)(storiesDir, storyName);
       if (!(0, import_fs2.statSync)(storyDir).isDirectory()) continue;
-      pushIfExists((0, import_path2.join)(storyDir, "story.json"));
+      const storyJsonPath = (0, import_path2.join)(storyDir, "story.json");
+      pushIfExists(storyJsonPath);
+      if ((0, import_fs2.existsSync)(storyJsonPath)) {
+        try {
+          storyJsons.push({ name: storyName, content: (0, import_fs2.readFileSync)(storyJsonPath, "utf8") });
+        } catch {
+        }
+      }
       const acsDir = (0, import_path2.join)(storyDir, "acs");
       if ((0, import_fs2.existsSync)(acsDir)) {
+        const acs = [];
         for (const acFile of (0, import_fs2.readdirSync)(acsDir).filter((f) => f.endsWith(".json"))) {
-          paths.push((0, import_path2.join)(acsDir, acFile));
+          const acPath = (0, import_path2.join)(acsDir, acFile);
+          paths.push(acPath);
+          try {
+            acs.push({ name: acFile.replace(/\.json$/, ""), content: (0, import_fs2.readFileSync)(acPath, "utf8") });
+          } catch {
+          }
         }
+        if (acs.length > 0) acsByStory.push({ story: storyName, acs });
       }
     }
   }
@@ -6990,6 +7122,23 @@ function scanFeatureConformance(tddDir, featureId) {
       violations: result.ok ? [] : result.violations
     };
   });
+  if (storyJsons.length >= 2) {
+    const indep = checkStoryIndependence(storyJsons);
+    entries.push({
+      artifact: "stories/*/story.json (story independence)",
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations
+    });
+  }
+  for (const { story, acs } of acsByStory) {
+    if (acs.length < 2) continue;
+    const indep = checkAcIndependence(acs);
+    entries.push({
+      artifact: `stories/${story}/acs/*.json (AC independence)`,
+      ok: indep.ok,
+      violations: indep.ok ? [] : indep.violations
+    });
+  }
   const archPath = (0, import_path2.join)(featureDir, "architecture.json");
   if ((0, import_fs2.existsSync)(archPath)) {
     const archContent = (0, import_fs2.readFileSync)(archPath, "utf8");
@@ -7001,6 +7150,21 @@ function scanFeatureConformance(tddDir, featureId) {
         artifact: `${rel} -> architecture.json (NFR coverage)`,
         ok: cov.ok,
         violations: cov.ok ? [] : cov.violations
+      });
+    }
+    const lay = checkLayeringDeclared(archContent);
+    entries.push({
+      artifact: "architecture.json (layering declared)",
+      ok: lay.ok,
+      violations: lay.ok ? [] : lay.violations
+    });
+    const testListPath = (0, import_path2.join)(featureDir, "test-list.json");
+    if ((0, import_fs2.existsSync)(testListPath)) {
+      const fit = checkFitnessCoverage((0, import_fs2.readFileSync)(testListPath, "utf8"), archContent);
+      entries.push({
+        artifact: "test-list.json -> architecture.json (fitness coverage)",
+        ok: fit.ok,
+        violations: fit.ok ? [] : fit.violations
       });
     }
   }

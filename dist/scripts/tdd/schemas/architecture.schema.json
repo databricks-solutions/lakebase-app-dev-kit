@@ -4,11 +4,44 @@
   "title": "Architecture",
   "description": "The Architect Reviewer's structured output for a feature, persisted as features/<F>/architecture.json (the machine-checkable companion to architecture.md). NFRs live HERE, not on the spec-author-owned, spec-gated feature-spec.json/story.json: the architect proposes them and the HIL (Product Owner) accepts or modifies them at Gate 2. Moving NFRs off feature-spec.json resolves the spec-gate integrity drift: the architect annotating feature-spec.json after the spec gate hashed it tripped verify-gate-integrity.",
   "type": "object",
-  "required": ["feature_id", "nfrs"],
+  "required": ["feature_id", "service_backed", "nfrs"],
   "properties": {
     "feature_id": {
       "type": "string",
       "pattern": "^F[0-9]+(-[a-z0-9-]+)?$"
+    },
+    "service_backed": {
+      "type": "boolean",
+      "description": "REQUIRED, explicit boolean (no silent omission): the architect must make a deliberate call. True when the feature persists data or carries business logic (anything beyond a trivial static/read-through endpoint); then it MUST declare layered `layers` (boundary+service+repository) and a layering fitness test, and checkLayeringDeclared/checkFitnessCoverage hard-block the gate. False ONLY for a trivial feature (the YAGNI guard). A false/absent declaration is cross-checked against evidence: checkServiceBackedDeclaration hard-blocks the gate when the feature shows persistence evidence (an Infra-layer AC, or an NFR about migrations/schema/storage), so under-declaration cannot silently disable layering enforcement."
+    },
+    "layers": {
+      "type": "array",
+      "description": "The module layering the build must realize (boundary -> service -> repository -> ORM, dependencies inward). Required in substance for a service_backed feature. The boundary never imports the DB session; persistence lives only in the repository; business logic only in the service.",
+      "items": {
+        "type": "object",
+        "required": ["role", "module"],
+        "properties": {
+          "name": { "type": "string" },
+          "role": {
+            "type": "string",
+            "enum": ["boundary", "service", "repository", "models", "infrastructure", "policy"]
+          },
+          "module": {
+            "type": "string",
+            "description": "Path/dotted-module this layer lives in (e.g. app/routes, app/services, app/repositories). For the `models` role declare a PACKAGE directory (app/models/, trailing slash), one module per domain object/aggregate, NOT a flat app/models.py; checkModulePlacement enforces the package shape and the architecture-conventions check keeps it consistent across features."
+          },
+          "may_import": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Layer roles this one is allowed to depend on (inward). Empty/omitted means it depends on nothing inward."
+          },
+          "renders_via": {
+            "type": "string",
+            "description": "Boundary layer only (UI features): the templating framework the boundary renders through (e.g. \"jinja2\" + a templates/ dir). The boundary returns a rendered template, never an inline HTML string; lakebase-tdd-layering-clean flags inline HTML with no templating seam. Omit for API/CLI/Infra boundaries that return data, not markup."
+          }
+        },
+        "additionalProperties": false
+      }
     },
     "nfrs": {
       "type": "array",

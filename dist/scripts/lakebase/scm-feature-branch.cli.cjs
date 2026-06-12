@@ -148,15 +148,15 @@ var import_node_child_process5 = require("child_process");
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
 
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+
 // scripts/lakebase/env-file.ts
 var fs = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 
 // scripts/lakebase/databricks-profile.ts
 var fs2 = __toESM(require("fs"), 1);
-
-// scripts/util/exec.ts
-var cp = __toESM(require("child_process"), 1);
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {

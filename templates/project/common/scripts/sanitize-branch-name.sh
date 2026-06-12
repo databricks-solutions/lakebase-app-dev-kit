@@ -31,5 +31,13 @@ ALT="$WORK_TREE/node_modules/@databricks-solutions/lakebase-app-dev-kit/dist/scr
 if [ -f "$ALT" ]; then
   exec node "$ALT" sanitize-name "$INPUT"
 fi
-echo "sanitize-branch-name: lakebase-app-dev-kit not installed. Run 'npm install'." >&2
+# No node_modules (a Python project never has one; a fresh CI checkout has none
+# either). Fall back to the canonical kit resolver scripts/lk, which finds the
+# kit via .lakebase/kit-ref + the shared cache (or LAKEBASE_KIT_DIR). This is the
+# substrate's standard resolution; node_modules is just the fast path when present.
+LK="$WORK_TREE/scripts/lk"
+if [ -f "$LK" ]; then
+  exec bash "$LK" lakebase-branch sanitize-name "$INPUT"
+fi
+echo "sanitize-branch-name: kit not resolvable (no node_modules and no scripts/lk)." >&2
 exit 1

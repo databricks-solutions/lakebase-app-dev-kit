@@ -20,6 +20,7 @@ import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
 import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js";
 import { firstPendingEscalation } from "./escalation.js";
+import { specLevelSmell, priorReviseCount } from "./smells.js";
 import {
   cyclesRootDir,
   workflowStateJson,
@@ -29,6 +30,8 @@ import {
   hasEstimates,
   storyAcIds,
   storyTestListJson,
+  readAcArchitecturalNotes,
+  architectureJson,
 } from "./tdd-paths.js";
 
 /** Every recorded cycle artifact for a story, across all of its ACs. */
@@ -137,8 +140,15 @@ function readGateApproved(featureId: string, tddDir: string, gate: "deploy" | "p
   }
 }
 
-/** Construct a probe bound to a project's .tdd dir + feature. */
-export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtifactProbe {
+/** Construct a probe bound to a project's .tdd dir + feature. `buildActive` (the
+ *  pipeline's currently-building story) is the fallback story scope for a
+ *  smell-derived escalation that did not carry one, so revise-routing knows which
+ *  story to send back (FEIP-7626). */
+export function diskArtifactProbe(
+  tddDir: string,
+  featureId: string,
+  buildActive?: string | null,
+): StoryArtifactProbe {
   return {
     hasAcs(story) {
       return storyAcIds(tddDir, featureId, story).length > 0;
@@ -146,9 +156,17 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
 
     architectAnnotated(story) {
       const acs = storyAcIds(tddDir, featureId, story);
-      // Annotated only once EVERY AC has a layer (API|E2E|Infra). No ACs yet
-      // means the Architect has nothing to annotate -> not annotated.
-      return acs.length > 0 && acs.every((ac) => readAcLayer(tddDir, featureId, ac) !== undefined);
+      if (acs.length === 0) return false; // no ACs yet -> nothing to annotate
+      // The Architect is "done" with a story only once its DISTINCTIVE outputs
+      // are on disk, NOT merely the AC `layer`. `layer` is a REQUIRED ac.schema
+      // field the SPEC-AUTHOR fills, so keying on it made architectAnnotated true
+      // the moment the spec-author wrote the ACs -> the architect-reviewer was
+      // ALWAYS skipped (no architecture.json, no architectural_notes, and the
+      // layering/NFR/service_backed gate checks had nothing to validate). Key on
+      // the architect's own products: architectural_notes on every AC + the
+      // feature architecture.json (service_backed + layers + nfrs).
+      const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(tddDir, featureId, ac) !== undefined);
+      return everyAcNoted && fs.existsSync(architectureJson(tddDir, featureId));
     },
 
     testListReady(story) {
@@ -210,7 +228,26 @@ export function diskArtifactProbe(tddDir: string, featureId: string): StoryArtif
     pendingEscalation(): DriveEscalation | null {
       const e = firstPendingEscalation(tddDir, featureId);
       if (!e) return null;
-      return { id: e.id, source: e.source, reason: e.reason, ...(e.story_id ? { story_id: e.story_id } : {}) };
+      const base: DriveEscalation = {
+        id: e.id,
+        source: e.source,
+        reason: e.reason,
+        ...(e.story_id ? { story_id: e.story_id } : {}),
+      };
+      // FEIP-7626 revise-routing: a smell-derived escalation (`smell:<name>`) for
+      // a SPEC-level smell is recoverable IF a story scope is known (the smell's
+      // own, else the active build story) AND the one-revise-per-(smell,story)
+      // budget is not yet spent. Explicit escalation files + build-level smells
+      // are never routable -> they keep the terminal raise-to-hil halt.
+      if (e.source.startsWith("smell:")) {
+        const name = e.source.slice("smell:".length);
+        const spec = specLevelSmell(name);
+        const story = e.story_id ?? buildActive ?? undefined;
+        if (spec && story && priorReviseCount(tddDir, name, story) < 1) {
+          base.routable = { story, owning_role: spec.owning_role, gate: spec.gate_to_rerun };
+        }
+      }
+      return base;
     },
   };
 }

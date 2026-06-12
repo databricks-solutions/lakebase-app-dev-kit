@@ -21,6 +21,7 @@ import {
   type AgentLogEventName,
 } from "./agent-log.js";
 import { reconcileArtifactLog } from "./log-reconcile.js";
+import { recordBlockingSmellFlag } from "./escalation.js";
 
 interface ParsedArgs {
   read?: boolean;
@@ -83,7 +84,7 @@ Emit:
     --slot k=v fill one template slot (repeatable). A missing required slot is
                rejected (exit 3). The event NAME carries the phase; slots carry
                the specifics. NOTE: cycle.* events are CODE-emitted by the
-               orchestration , agents do not emit them.
+               orchestration, agents do not emit them.
     --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
 
 Read:
@@ -118,8 +119,15 @@ export function runAgentLogCli(argv: string[]): number {
       if (a.json) {
         process.stdout.write(`${JSON.stringify(emitted)}\n`);
       } else {
-        process.stdout.write(`reconciled ${emitted.length} artifact(s) into the log for ${a.feature}\n`);
-        for (const e of emitted) process.stdout.write(`  + [${e.role}] ${e.metadata?.path}\n`);
+        process.stdout.write(`reconciled ${emitted.length} event(s) into the log for ${a.feature}\n`);
+        // Most reconciled events are artifact.written (a `path`); some are code-
+        // emitted reasoning (e.g. the architect's established-conventions note),
+        // which carries a `note`, not a `path`. Print whichever identifies it,
+        // never a bare `undefined`.
+        for (const e of emitted) {
+          const meta = e.metadata as { path?: string; note?: string } | undefined;
+          process.stdout.write(`  + [${e.role}] ${meta?.path ?? meta?.note ?? e.message}\n`);
+        }
       }
       return 0;
     } catch (e) {
@@ -169,6 +177,23 @@ export function runAgentLogCli(argv: string[]): number {
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });
+    // A role-flagged BLOCKING smell must HALT the loop, not just log: mirror it
+    // into smells.json so the driver's firstPendingEscalation -> raise-to-hil
+    // fires before the next dispatch. No-op for advisory/unknown smell names.
+    if (a.event === "smell.flagged" && typeof slots.smell === "string") {
+      // Carry story/ac scope when the role names it (slots), so revise-routing
+      // (FEIP-7626) knows which story to send back. The probe also falls back to
+      // the active build story when scope is absent.
+      recordBlockingSmellFlag(
+        a.tddDir ?? "./.tdd",
+        slots.smell,
+        typeof slots.detail === "string" ? slots.detail : undefined,
+        {
+          story_id: typeof slots.story === "string" ? slots.story : undefined,
+          ac_id: typeof slots.ac === "string" ? slots.ac : undefined,
+        },
+      );
+    }
     return 0;
   } catch (e) {
     process.stderr.write(`lakebase-tdd-log: ${(e as Error).message}\n`);

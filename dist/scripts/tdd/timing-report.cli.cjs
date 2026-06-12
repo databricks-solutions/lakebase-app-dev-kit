@@ -6971,7 +6971,6 @@ function formatRunConfig(cfg) {
     `ui=${cfg.ui_track ? "on" : "off"}`,
     `deploy=${cfg.deploy_target}`,
     ...cfg.batch_cap !== void 0 ? [`batch-cap=${cfg.batch_cap}`] : [],
-    ...cfg.batch_fallback ? [`batch-fallback=${cfg.batch_fallback}`] : [],
     ...cfg.kit_ref ? [`kit=${cfg.kit_ref}`] : [],
     ...cfg.run_label ? [`label=${cfg.run_label}`] : []
   ].join("  ");

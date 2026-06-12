@@ -67,7 +67,6 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
     expect(cfg.deploy_target).toBe("local");
     // Defaults when the env knobs are unset.
     expect(cfg.loop_granularity).toBe("ac");
-    expect(cfg.batch_fallback).toBe("");
     expect(cfg.batch_cap).toBeUndefined();
   });
 
@@ -77,14 +76,12 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
         env: {
           LAKEBASE_TDD_LOOP: "hybrid-a",
           LAKEBASE_TDD_BATCH_CAP: "3",
-          LAKEBASE_TDD_BATCH_FALLBACK: "per-ac",
           LAKEBASE_TDD_RUN_LABEL: "8b-vs-ac",
         },
       }),
     );
     expect(cfg.loop_granularity).toBe("hybrid-a");
     expect(cfg.batch_cap).toBe(3);
-    expect(cfg.batch_fallback).toBe("per-ac");
     expect(cfg.run_label).toBe("8b-vs-ac");
   });
 

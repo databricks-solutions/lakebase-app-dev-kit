@@ -146,7 +146,7 @@ mkdir -p "$(dirname "$PROJECT_DIR")"
 # Turn recording (code asset): the deterministic driver records EVERY state-
 # machine turn (design + build + gates + deploy + promote) into a replayable
 # corpus when LAKEBASE_TDD_RECORD_DIR is set. The test runner turns it on by
-# default , one corpus dir beside the project, surviving --keep-on-failure:
+# default, one corpus dir beside the project, surviving --keep-on-failure:
 #   <RECORD_DIR>/turns/<NNNN>-<label>/   per-turn manifest + the .tdd/code delta
 #   <RECORD_DIR>/turns/index.json        the ordered timeline of every step
 #   <RECORD_DIR>/recorded-artifacts/     cumulative .tdd mirror (replayDesignTurn)
@@ -351,24 +351,39 @@ scaffold_project() {
       --language python \
       --runner self-hosted \
       --tiers "$TIERS" \
-      `# Per-role model tiering for the smoke (speed): the smoke validates` \
-      `# workflow mechanics + migrations, not prose quality, so it runs leaner` \
-      `# models than the kit defaults and cuts per-turn generation latency. The` \
-      `# code-writers (navigator/driver, whose output must compile + pass tests)` \
-      `# stay on sonnet; the prose roles run haiku, still exercising the` \
-      `# per-project --agent-model override path. The test-strategist is the` \
-      `# EXCEPTION: its output is a structured test-list (every item's ac_id must` \
-      `# map to an exact AC), and haiku thrashed on that shape , one list took` \
-      `# ~200s, the design lane's worst turn (P1 of the agent-loop optimization).` \
-      `# It runs on its sonnet default. (If haiku ACs/layering degrade the build,` \
-      `# bump spec-author or the architect back to sonnet too.)` \
-      --agent-model spec-author=haiku \
-      --agent-model architect-reviewer=haiku \
-      --agent-model ux-designer=haiku \
-      --agent-model product-owner=haiku \
-      --agent-model release-engineer=haiku \
+      `# Per-role model/effort matrix for the smoke (perf experiment): pin the` \
+      `# capability-critical roles to opus, the navigator (writes the RED tests +` \
+      `# reviews the design), the test-strategist (the structured test-list whose` \
+      `# every ac_id must map to a real AC), and the ux-designer (the design system` \
+      `# + IA the UI build adheres to). Every other role keeps its kit-default model.` \
+      `# create-project takes only --agent-model (model), so effort=low for ALL` \
+      `# roles is patched into tdd-config.json right after scaffold.` \
+      --agent-model navigator=opus \
+      --agent-model test-strategist=opus \
+      --agent-model ux-designer=opus \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
+
+  # create-project seeds .lakebase/tdd-config.json with models but no effort
+  # (it takes only --agent-model). The smoke wants effort=low for speed/cost on
+  # MOST roles, but the two DESIGN-GATE gatekeepers for AC independence, the
+  # spec-author (runs the per-pair independence test + outcome-vs-mechanism
+  # delineation) and the test-strategist (flags ac-overlap semantically at Gate 3),
+  # need full default effort: their judgment is subtle and effort=low undercuts it.
+  # So patch effort=low on every role EXCEPT those two (left unset -> default
+  # effort). Models from --agent-model + the kit defaults are preserved.
+  local _tdc="$PROJECT_DIR/.lakebase/tdd-config.json"
+  if [[ -f "$_tdc" ]]; then
+    local _tmp; _tmp="$(mktemp)"
+    if jq '.roles |= with_entries(if (.key == "spec-author" or .key == "test-strategist") then . else .value.effort = "low" end)' "$_tdc" > "$_tmp" 2>/dev/null; then
+      mv "$_tmp" "$_tdc"
+      log "patched tdd-config.json: effort=low for all roles except spec-author + test-strategist (default effort; models: kit defaults, opus for navigator + test-strategist + ux-designer)"
+    else
+      rm -f "$_tmp"; log "WARNING: could not patch effort into $_tdc (jq failed); using config defaults"
+    fi
+  else
+    log "WARNING: $_tdc absent after scaffold; could not set effort=low"
+  fi
 
   log "scaffold complete. Project at $PROJECT_DIR."
 }
@@ -629,7 +644,7 @@ run_plan_sprint() {
   #
   # --no-sizing: each sprint is a SINGLE feature, so the Architect's t-shirt-sizing
   # (planning-poker) step adds nothing the PO needs to fit capacity. Skipping it
-  # drops one haiku turn per sprint and goes straight propose -> author-requests.
+  # drops one estimate turn per sprint and goes straight propose -> author-requests.
   log "  ${sprint_name}: lakebase-tdd-drive --sprint ${sprint_name} --plan-only --gates proxy --no-sizing"
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-drive \
     --sprint "${sprint_name}" --plan-only --gates proxy --no-sizing --project-dir "$PROJECT_DIR" \

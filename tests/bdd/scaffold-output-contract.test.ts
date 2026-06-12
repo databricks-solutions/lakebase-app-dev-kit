@@ -32,6 +32,31 @@ describe("scaffold output contract: alembic env.py", () => {
   });
 });
 
+describe("scaffold output contract: run-dev.sh", () => {
+  it("serves the app locally for a human reviewer, language-aware, with hot-reload", () => {
+    // Every scaffolded project ships a run-dev.sh so a human can open the
+    // running app in a browser and review it (the missing local-serve seam).
+    // It must source .env (branch DB creds the post-checkout hook wrote) and
+    // branch on all three project shapes.
+    const sh = readTemplate("common/scripts/run-dev.sh");
+    expect(sh).toMatch(/source \.env/);
+    // Python: uvicorn with --reload after migrating.
+    expect(sh).toMatch(/uvicorn app\.main:app[^\n]*--reload/);
+    expect(sh).toMatch(/alembic upgrade head/);
+    // Node + Java shapes are handled too.
+    expect(sh).toMatch(/npm run dev|npm start/);
+    expect(sh).toMatch(/spring-boot:run/);
+    // Prints a browser-friendly URL for the reviewer.
+    expect(sh).toMatch(/http:\/\//);
+  });
+
+  it("does NOT shell out to substrate directly (parity with the other scaffolded shells)", () => {
+    const sh = readTemplate("common/scripts/run-dev.sh");
+    expect(sh).not.toMatch(/databricks\s+postgres/);
+    expect(sh).not.toMatch(/projects\/[^/]*\/branches\//);
+  });
+});
+
 describe("scaffold output contract: connect-main-branch.sh", () => {
   it("delegates to the kit's lakebase-branch sync-env CLI (no inline substrate logic)", () => {
     // scaffolded shells that previously duplicated substrate

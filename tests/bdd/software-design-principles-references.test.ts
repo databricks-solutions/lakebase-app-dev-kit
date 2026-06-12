@@ -16,7 +16,6 @@ describe("software-design-principles skill", () => {
     const expected = [
       "solid.md",
       "dry.md",
-      "dtsttcpw.md",
       "clean-code.md",
       "layered-architecture.md",
       "cross-cutting-concerns.md",
@@ -30,7 +29,7 @@ describe("software-design-principles skill", () => {
 
   it("every reference file is non-empty and well-formed markdown", () => {
     const files = readdirSync(REFS_DIR).filter((f) => f.endsWith(".md"));
-    expect(files.length).toBeGreaterThanOrEqual(7);
+    expect(files.length).toBeGreaterThanOrEqual(6);
     for (const f of files) {
       const stat = statSync(join(REFS_DIR, f));
       expect(stat.size, `${f} should be non-empty`).toBeGreaterThan(100);

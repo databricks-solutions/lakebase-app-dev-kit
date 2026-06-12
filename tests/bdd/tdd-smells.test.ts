@@ -47,17 +47,22 @@ describe("smells catalog", () => {
     const names = SMELL_CATALOG.map((s) => s.name).sort();
     expect(names).toEqual(
       [
+        "ac-overlap",
         "api-coherence-drift",
         "boundary-violation",
         "cross-experiment-divergence",
         "cycle-stall",
         "dead-requirement-signal",
+        "e2e-inline-regex-flag",
         "e2e-row-perma-red",
         "fragility-ratio",
         "import-time-build-coupling",
+        "layering-violation",
+        "scaffold-defect",
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",
+        "ux-adherence",
       ].sort()
     );
   });

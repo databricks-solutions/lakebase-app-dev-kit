@@ -19,6 +19,7 @@ import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
 import { findFeatureDir } from "./tdd-paths.js";
 import { writeEscalation } from "./escalation.js";
+import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION } from "./e2e-regex-clean.js";
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
 import type { AgentLogEventName } from "./agent-log-events.js";
 
@@ -573,11 +574,19 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   } finally {
     stop(args.projectDir, targetName); // never leave the app on the port
   }
-  return {
-    passed,
-    reachable: true,
-    summary: passed ? "GREEN verify passed against the running app" : "GREEN verify FAILED against the running app",
-  };
+  if (passed) {
+    return { passed, reachable: true, summary: "GREEN verify passed against the running app" };
+  }
+  // The verify failed. Run the cheap, model-independent E2E regex lint so the
+  // failure (and the HIL escalation it raises) names a known structural cause
+  // precisely instead of the generic "verify FAILED": a Playwright matcher built
+  // from a Python inline-flag regex can never match the browser. Best-effort,
+  // only enriches the message.
+  const regexLint = checkE2eRegexClean({ projectDir: args.projectDir });
+  const summary = regexLint.clean
+    ? "GREEN verify FAILED against the running app"
+    : `GREEN verify FAILED against the running app: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;
+  return { passed, reachable: true, summary };
 }
 
 /** Tear down a previously-deployed local target (kills its process group). */

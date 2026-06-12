@@ -6814,6 +6814,13 @@ var execFileP4 = promisify4(execFile4);
 init_esm_shims();
 import { execFileSync as execFileSync2 } from "child_process";
 
+// scripts/git/status.ts
+init_esm_shims();
+
+// scripts/util/exec.ts
+init_esm_shims();
+import * as cp from "child_process";
+
 // scripts/lakebase/env-file.ts
 init_esm_shims();
 import * as fs2 from "fs";
@@ -6822,10 +6829,6 @@ import * as path2 from "path";
 // scripts/lakebase/databricks-profile.ts
 init_esm_shims();
 import * as fs3 from "fs";
-
-// scripts/util/exec.ts
-init_esm_shims();
-import * as cp from "child_process";
 
 // scripts/tdd/experiment.ts
 function experimentsRoot(tddDir, featureId, storyId) {

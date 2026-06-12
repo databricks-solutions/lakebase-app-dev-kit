@@ -65,6 +65,19 @@ export interface MergeArgs {
   /** Interval between migrate polls, milliseconds. Default: 30 seconds. */
   migratePollMs?: number;
   /**
+   * Whether a migrate-poll TIMEOUT (the downstream run never completed within
+   * the budget, or no matching run ever appeared) is fatal. Default: true,
+   * the standalone "merge and confirm migrations" contract. Set false for
+   * fire-and-confirm callers (the TDD orchestrator's promote/merge step) where
+   * the GitHub merge + local fast-forward have ALREADY succeeded and the state
+   * is already `merged`: a slow/absent downstream-migrate run should then
+   * surface as a warning + `migrate.timedOut`, not hang then fail the whole
+   * drive 30 minutes in. A migrate run that completes with a FAILURE
+   * conclusion is still fatal regardless of this flag, that is a real
+   * migration failure, not a wait timeout.
+   */
+  migrateTimeoutFatal?: boolean;
+  /**
    * Predicate identifying the downstream migrate workflow run among
    * recent runs on parent_branch. Default: any push-event run on
    * parent_branch newer than the merge timestamp. Tests can pass a
@@ -96,6 +109,10 @@ export interface MergeResult {
     runUrl?: string;
     conclusion?: string;
     polls: number;
+    /** True iff the poll budget elapsed without a completed run AND the caller
+     *  asked for a non-fatal timeout (migrateTimeoutFatal=false). The merge has
+     *  already landed; this records that migration confirmation was not observed. */
+    timedOut?: boolean;
   };
   warnings: string[];
 }
@@ -193,6 +210,31 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
           timeout: 10_000,
         });
         headAfter = switchTo;
+        // The PR merged SERVER-SIDE (into origin/<parent>), so the LOCAL <parent>
+        // ref is still at its pre-merge commit. Fast-forward it to the merged
+        // commit so the working tree carries what was merged (the feature's
+        // files, incl. its migration) and matches the parent's paired DB, which
+        // the downstream migrate just advanced. Without this, a post-merge
+        // `run-tests.sh` / `run-dev.sh` on <parent> runs STALE code against an
+        // already-migrated DB and alembic fails "Can't locate revision <id>".
+        // Best-effort: the merge already succeeded remotely, so a local sync
+        // failure is a warning (a human runs `git pull --ff-only`), not a throw.
+        try {
+          await exec(`git fetch origin ${shellEscape(switchTo)}`, {
+            cwd: args.projectDir,
+            timeout: 30_000,
+          });
+          await exec(`git merge --ff-only ${shellEscape(`origin/${switchTo}`)}`, {
+            cwd: args.projectDir,
+            timeout: 10_000,
+          });
+        } catch (err) {
+          warnings.push(
+            `local fast-forward of ${switchTo} to origin/${switchTo} failed: ` +
+              `${err instanceof Error ? err.message : String(err)}. The PR merged remotely; ` +
+              `your local ${switchTo} may be stale, run \`git pull --ff-only\`.`,
+          );
+        }
       } catch (err) {
         warnings.push(
           `git checkout ${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. Local branch was NOT deleted.`,
@@ -310,10 +352,27 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
         );
       }
     } else {
-      migrate = { waited: true, polls };
-      throw new ScmMergeError(
-        `Timed out after ${Math.round((args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1000)}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastSeen?.status ?? "(no matching run)"}.`,
-        "migrate-timeout",
+      const budgetSec = Math.round(
+        (args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS) / 1000,
+      );
+      const lastStatus = lastSeen?.status ?? "(no matching run)";
+      const timeoutFatal = args.migrateTimeoutFatal !== false;
+      if (timeoutFatal) {
+        migrate = { waited: true, polls };
+        throw new ScmMergeError(
+          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+          "migrate-timeout",
+        );
+      }
+      // Non-fatal: the GitHub merge + local fast-forward already landed and the
+      // state is already `merged`. Surface the unconfirmed downstream migrate as
+      // a warning + migrate.timedOut so the caller (e.g. the TDD drive) reaches
+      // `done` instead of failing 30 minutes in on a slow/absent migrate run.
+      migrate = { waited: true, polls, timedOut: true };
+      warnings.push(
+        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s ` +
+          `(last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; ` +
+          `the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`,
       );
     }
   } else {

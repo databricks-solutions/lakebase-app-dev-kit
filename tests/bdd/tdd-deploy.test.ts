@@ -9,6 +9,7 @@ import { join } from "node:path";
 import {
   resolveDeployTarget,
   deployToTarget,
+  ensureDeployedAndVerify,
   stopLocal,
   storyDeployVerified,
   logReleaseEngineerDeployStart,
@@ -208,6 +209,72 @@ describe("deployToTarget (local)", () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/unsupported target type/);
     expect(started).toBe(false);
+  });
+});
+
+describe("ensureDeployedAndVerify: GREEN-verify failure diagnostic", () => {
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+
+  it("enriches a verify FAILURE with the e2e-inline-regex-flag cause + file:line", async () => {
+    // A project whose E2E test uses a Playwright matcher built from an inline-flag
+    // regex , the exact un-greenable shape that raises to HIL with a generic message.
+    mkdirSync(join(dir, "tests", "e2e"), { recursive: true });
+    writeFileSync(
+      join(dir, "tests", "e2e", "test_file_bug.py"),
+      `import re\nexpect(e).to_contain_text(re.compile(r"(?i)summary"))\n`,
+    );
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv", // has a verify command
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => false, // honest GREEN verify failed against the running app
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(false);
+    expect(res.summary).toContain("e2e-inline-regex-flag");
+    expect(res.summary).toContain("tests/e2e/test_file_bug.py:2");
+    expect(res.summary).toMatch(/re\.IGNORECASE/);
+  });
+
+  it("leaves the generic message when a verify failure has no inline-flag regex", async () => {
+    mkdirSync(join(dir, "tests", "e2e"), { recursive: true });
+    writeFileSync(
+      join(dir, "tests", "e2e", "test_ok.py"),
+      `import re\nexpect(e).to_contain_text(re.compile("summary", re.IGNORECASE))\n`,
+    );
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => false,
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(false);
+    expect(res.summary).toBe("GREEN verify FAILED against the running app");
+  });
+
+  it("does not run the lint on a PASSING verify", async () => {
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: () => true,
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(true);
+    expect(res.summary).toBe("GREEN verify passed against the running app");
   });
 });
 
