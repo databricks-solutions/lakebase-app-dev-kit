@@ -41,12 +41,35 @@ A long-running branch whose name is NOT in `ProtectedNames` is treated as an **o
 5. Tests: `tier-discovery.test.ts` + branch-utils tests , off-convention long-running branch is NOT a tier; staging/dev still are; `tierNames`/config extension adds protection; default branch always protected.
 
 ## Extension changes (lakebase-scm-extension)
-1. `src/utils/config.ts`: add `tierNames: string[]` (from `lakebaseSync.tierNames` + `LAKEBASE_TIER_NAMES` csv).
-2. `src/utils/theme.ts`: align `TIER_FALLBACK_NAMES` to DEFAULT_SET { main, master, staging, dev }.
-3. `src/providers/branchTreeProvider.ts` `isLongRunningTier`: the single predicate = name ∈ (discovered cache ∪ DEFAULT_SET ∪ trunk/staging/base ∪ tierNames). The substrate cache is already name-filtered once the kit's `tierBranchNames` filters by name, so the extension auto-inherits.
-4. DRY: remove the duplicate local `isLongRunningTier` in `extension.ts` (~3381); import the provider one.
-5. `package.json`: contribute `lakebaseSync.tierNames` (array).
-6. Tests: tier classification , off-convention long-running = ordinary; staging/dev = tier; tierNames extends.
+ARCHITECTURE RULE (confirmed): the kit is the SINGLE source of truth for the
+default protected set + the matching logic. The extension does NOT duplicate
+either; it only supplies per-project OVERRIDE DATA and feeds it to the kit's
+resolver. "Overrides" are where a project/person legitimately deviates (a tier
+named `qa`, a renamed staging). The default set (uat NOT protected) + the
+named-AND-long-running predicate always come from the kit.
+
+1. `src/utils/config.ts`: add `tierNames: string[]` (from `lakebaseSync.tierNames`
+   + `LAKEBASE_TIER_NAMES` csv). This is OVERRIDE DATA, not logic , allowed.
+2. `src/utils/theme.ts`: DELETE the local `TIER_FALLBACK_NAMES` literal; re-export
+   the kit's `DEFAULT_PROTECTED_TIER_NAMES` under that name (single source). uat/perf
+   drop out automatically because the kit default is {main,master,staging,dev}.
+3. `src/services/lakebaseService.ts`: feed the tier cache via the kit's
+   `tierBranchNames(branches, resolveProtectedTierNames([trunkBranch, stagingBranch,
+   baseBranch, ...tierNames]))` , so the cache is exactly the kit-defined protected
+   tiers (named AND long-running). No extension-side name logic.
+4. `src/providers/branchTreeProvider.ts` `isLongRunningTier`: cache membership, with
+   the pre-list fallback computed by the kit's `resolveProtectedTierNames(overrides)`
+   + `normalizeTierName` (imported), not a local list/predicate.
+5. DRY: remove the duplicate local `isLongRunningTier` in `extension.ts` (~3381);
+   the schemaDiffService guard switches to the kit-derived check too.
+6. `package.json`: contribute `lakebaseSync.tierNames` (array) , the override knob.
+7. Tests: off-convention long-running = ordinary; staging/dev = tier; tierNames /
+   trunk-staging-base overrides extend; default-set + uat-excluded assertions.
+
+DELIVERY: the extension consumes the kit from its pinned dep, so this lands only
+after the kit change is published and the extension RE-PINS to it (the standard
+re-pin step) + `npm install`. The thin consumer change does not compile against
+the old pin (alpha.57). No extension-side duplication is added in the interim.
 
 ## Verification
 - Kit: `npm run typecheck` + full `vitest run` green; new tier-discovery cases pass.
