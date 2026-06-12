@@ -53,7 +53,7 @@ You do NOT write cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRe
 ## GREEN
 
 1. Read the failing test and the Navigator's `navigator_plan`.
-2. Write the code that makes the failing test pass. The test list is your horizon; the *current* test is your increment.
+2. Write the code that makes the failing test pass. The test list is your horizon; the *current* test is your increment. **When `architecture.json` declares `layers` (a service-backed feature), realize them , do NOT write a fat controller.** The route/boundary handler validates input + delegates to a **service** (business logic); the service calls a **repository** for persistence; the repository is the ONLY layer that touches the ORM/session (`db.query/add/commit`, `Session`). No `db.*` and no business logic in the route handler or templates. A layering `fitness` test (`tests/architecture/test_layering.py`) defends this and will stay RED until the service/repository are extracted, so build them as you go rather than inlining and refactoring later.
 3. **Dispatch on the AC's layer** to pick the runner:
    - `API` -> the project's primary runner (`npm test`, `./mvnw test`, `uv run pytest`).
    - `E2E` -> the project's e2e runner: `npm run test:e2e` (Node) or `uv run --extra dev pytest tests/e2e` (Python). First export `BASE_URL` at the paired-branch app endpoint. The shipped `tests/e2e/conftest.py` provides `live_server`; **if it's missing, flag `scaffold-defect` and STOP, never author your own conftest/fixture** (a hand-rolled one diverges from the shipped fixture + reintroduces the CI-parity bug). The scaffold (`--enable-e2e`) owns that file.
