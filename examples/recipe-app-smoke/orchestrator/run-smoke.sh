@@ -290,6 +290,21 @@ fi
 log() { printf '\n\033[1;34m[smoke]\033[0m %s\n' "$*" >&2; }
 err() { printf '\n\033[1;31m[smoke ERROR]\033[0m %s\n' "$*" >&2; }
 
+# The tier that features FORK FROM (the dev integration tier), where the project
+# intake + sprint backlog must live so each feature branch inherits its request.
+# This is NOT prod/trunk (main): in a 2-tier project features fork from staging,
+# and once the first feature merges to staging it diverges from main, so a
+# backlog committed to main would never reach the 2nd+ feature's staging-forked
+# branch. tiers 2 -> staging, tiers 3 -> dev. On --skip-scaffold (TIERS unset)
+# detect from the project's branches (highest non-prod tier present).
+parent_tier() {
+  if [[ "${TIERS:-}" == "3" ]]; then echo "dev"; return; fi
+  if [[ "${TIERS:-}" == "2" ]]; then echo "staging"; return; fi
+  if git -C "$PROJECT_DIR" rev-parse --verify --quiet dev >/dev/null 2>&1; then echo "dev"; return; fi
+  if git -C "$PROJECT_DIR" rev-parse --verify --quiet staging >/dev/null 2>&1; then echo "staging"; return; fi
+  echo "main"
+}
+
 iteration_branch() {
   # v1-initial-domain -> feature/initial-domain
   local iter="$1"
@@ -448,19 +463,21 @@ run_iteration() {
       || { err "abandon-feature failed; cannot start $iter on top of $current_state_before_iter"; exit 2; }
   fi
 
-  # 1. Return to trunk before staging the feature spec. The orchestrator
-  # does NOT do branch creation itself: that's the kit's responsibility
-  # via /design's mandatory Step 0 (see
-  # templates/project/common/.claude/commands/design.md). /design's
-  # body enforces the substrate-only-path invariant at the kit level;
-  # the smoke just invokes /design and trusts the contract.
-  log "  step 1: return to trunk; /design's Step 0 claims the paired branch via substrate"
-  git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
+  # 1. Return to the PARENT TIER (the branch /design Step 0 forks the feature
+  # from) before claiming. The orchestrator does NOT do branch creation itself:
+  # that's the kit's responsibility via /design's mandatory Step 0 (see
+  # templates/project/common/.claude/commands/design.md). /design's body
+  # enforces the substrate-only-path invariant at the kit level; the smoke just
+  # invokes /design and trusts the contract. We land on the parent tier (not
+  # trunk) so the feature forks from the tier that carries the backlog.
+  local _parent; _parent="$(parent_tier)"
+  log "  step 1: return to parent tier (${_parent}); /design's Step 0 claims the paired branch via substrate"
+  git checkout "$_parent" >/dev/null 2>&1 || git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1
   git pull --ff-only origin "$(git branch --show-current)" || true
 
   # 2. feature-request.md is NOT staged here: it was authored at /plan
-  # (run_plan_sprint) and committed to trunk, so /design's Step 0 branch
-  # (forked from main HEAD) already carries .tdd/features/<id>/feature-request.md.
+  # (run_plan_sprint) and committed to the parent tier, so /design's Step 0
+  # branch (forked from that tier) already carries .tdd/features/<id>/feature-request.md.
   # /design's Spec Author reads it as input and produces feature-spec.{md,json}.
 
   # 3. The deterministic orchestrator driver drives the WHOLE
@@ -580,19 +597,22 @@ proxy_supply() {
 stage_project_intake() {
   log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"
   cd "$PROJECT_DIR"
-  git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
+  local _parent; _parent="$(parent_tier)"
+  git checkout "$_parent" >/dev/null 2>&1 || git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
   proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
     || { echo "smoke: human-proxy refused product-overview.md (missing/non-conformant)" >&2; exit 2; }
   proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${PROJECT_DIR}/.tdd/nfrs.md" "nfrs.md" \
     || { echo "smoke: human-proxy refused nfrs.md (missing/non-conformant)" >&2; exit 2; }
   proxy_supply "${ORCHESTRATOR_DIR}/design-brief.md" "${PROJECT_DIR}/.tdd/design/design-brief.md" "design-brief.md" \
     || { echo "smoke: human-proxy refused design-brief.md (missing/non-conformant)" >&2; exit 2; }
-  # Commit project intake to trunk so every feature branch (forked from main
-  # HEAD by /design Step 0) inherits the HIL's project-level intent. The
-  # .tdd/ planning corpus is version-controlled on trunk; product code +
-  # migrations are what the SCM workflow keeps OFF main, not these artifacts.
+  # Commit project intake to the PARENT TIER (the branch features fork from), so
+  # every feature branch inherits the HIL's project-level intent , including the
+  # 2nd+ feature, whose branch forks from the parent tier AFTER the prior feature
+  # merged there (and the parent tier diverged from trunk). The .tdd/ planning
+  # corpus is version-controlled on the dev tier; product code + migrations are
+  # what the SCM workflow keeps OFF the release trunk, not these artifacts.
   git add .tdd/product-overview.md .tdd/nfrs.md .tdd/design/design-brief.md 2>/dev/null || true
-  git commit -m "intake: project product-overview + nfrs + design-brief" >/dev/null 2>&1 \
+  git commit -m "intake: project product-overview + nfrs + design-brief (on ${_parent})" >/dev/null 2>&1 \
     || log "  project intake already committed (nothing new)"
 }
 
@@ -611,7 +631,8 @@ run_plan_sprint() {
   local iters=("$@")
   log "▸ /plan ${sprint_name}: sprint planning (Spec Author proposes; PO authors requests; human-proxy supplies headless)"
   cd "$PROJECT_DIR"
-  git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
+  local _parent; _parent="$(parent_tier)"
+  git checkout "$_parent" >/dev/null 2>&1 || git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
 
   # a. /plan Step 0: project intake must be present + conformant (no --feature
   # means project-level only: product-overview.md + nfrs.md + design-brief.md).
@@ -668,10 +689,12 @@ run_plan_sprint() {
     --sprint "${sprint_name}" --plan-only --gates proxy --no-sizing --project-dir "$PROJECT_DIR" \
     || { err "/plan ${sprint_name}: planning driver failed"; exit 2; }
 
-  # d. Commit the sprint backlog + planning artifacts to trunk so each feature
-  # branch inherits its request. Idempotent on resume: nothing new to commit.
+  # d. Commit the sprint backlog + planning artifacts to the PARENT TIER (where
+  # features fork from), so this sprint's feature branch inherits its request
+  # even after earlier features merged into that tier + it diverged from trunk.
+  # Idempotent on resume: nothing new to commit. (We are on $_parent from above.)
   git add .tdd/features .tdd/planning .tdd/sprints 2>/dev/null || true
-  git commit -m "plan ${sprint_name}: commit backlog (${iters[*]})" >/dev/null 2>&1 \
+  git commit -m "plan ${sprint_name}: commit backlog on ${_parent} (${iters[*]})" >/dev/null 2>&1 \
     || log "  ${sprint_name}: backlog already committed (nothing new)"
 
   # Record the planning activity (the PO authored the sprint's requests).
