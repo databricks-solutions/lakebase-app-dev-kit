@@ -141,6 +141,11 @@ export interface StoryBuild {
   /** An AC the Navigator REVIEW asked to refactor, not yet refactored by the
    *  Driver, or null. Drives the per-AC REFACTOR. */
   refactorAc?: string | null;
+  /** An AC whose GREEN verify FAILED and has not yet been assessed, or null.
+   *  Drives the reactive Navigator ASSESS turn: flag prior tests the AC
+   *  supersedes (-> Driver permissive green) or confirm a genuine regression
+   *  (-> escalate). */
+  assessGreenAc?: string | null;
   /** The built story was deployed for the PO's acceptance review. */
   awaitingAcceptance: boolean;
   /** The story's deploy verified (reachable + verify.passed on its experiment
@@ -258,7 +263,7 @@ export type WorkflowAction =
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
   | { kind: "cut-experiment"; story: string }
-  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor"; ac?: string }
+  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor" | "assess"; ac?: string }
   | { kind: "await-acceptance"; story: string }
   | { kind: "accept"; story: string }
   | { kind: "complete"; story: string }
@@ -303,6 +308,12 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   // an AC whose tests are ALL green, so a half-built AC is never reviewed.
   if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
   if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  // Reactive supersession trigger: an open AC whose GREEN verify failed + has not
+  // been assessed routes the Navigator to ASSESS the failure (flag prior tests
+  // the AC supersedes -> the Driver then permissively greens them, OR confirm a
+  // genuine regression -> escalate). Pre-empts the Driver's plain green re-attempt
+  // below so the same failing verify is not blindly re-run.
+  if (b.assessGreenAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess", ac: b.assessGreenAc };
   // Test-list-driven RED/GREEN handoff for the current (un-reviewed) AC's tests:
   // !testsWritten -> Navigator writes the next pending RED; !codeWritten ->
   // Driver greens the open RED. With the AC-grouped list, "next pending" is

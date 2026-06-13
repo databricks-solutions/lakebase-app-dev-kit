@@ -14,6 +14,7 @@ import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
 import { storyTestProgress, firstReviewPendingAc, firstRefactorPendingAc } from "./cycle-record.js";
+import { needsGreenAssess } from "./supersession.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
@@ -219,6 +220,19 @@ export function diskArtifactProbe(
 
     refactorPendingAc(story) {
       return firstRefactorPendingAc(tddDir, featureId, story);
+    },
+
+    assessGreenFailureAc(story) {
+      // The open RED cycle's AC, when its GREEN verify failed + has NOT yet been
+      // assessed by the Navigator (a green-failure marker with assessed:false).
+      let acId: string | undefined;
+      try {
+        acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+      } catch {
+        acId = undefined;
+      }
+      if (!acId) return null;
+      return needsGreenAssess(tddDir, featureId, story, acId) ? acId : null;
     },
 
     storyDeployVerified(story) {

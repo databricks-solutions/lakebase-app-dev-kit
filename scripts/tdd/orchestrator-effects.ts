@@ -438,6 +438,21 @@ function roleTaskBody(
       );
     }
     case "navigator":
+      if (action.buildMode === "assess") {
+        return (
+          `ASSESS a failed honest-GREEN verify for AC ${action.ac} in story ${s}. The Driver made the current` +
+          ` test pass, but the full-suite verify against the running app FAILED, some OTHER test(s) now fail.` +
+          ` Inspect which tests fail and decide:\n` +
+          `(a) If the current AC INTENTIONALLY supersedes behavior those failing tests encode (the latest AC` +
+          ` wins; e.g. a prior feature's test asserts an outcome this AC deliberately changes), FLAG them so the` +
+          ` Driver may permissively refactor ONLY those:\n` +
+          `   lakebase-tdd-cycle flag-superseded --feature ${featureId} --story ${s} --ac ${action.ac}` +
+          ` --reason "<new AC + what changed>" --test <path_or_nodeid> [--test ...] --tdd-dir ${tddDir}\n` +
+          `(b) If instead the failure is a GENUINE REGRESSION (the AC does NOT intend to change that behavior;` +
+          ` the Driver's code is wrong), do NOT flag anything, write nothing; the orchestration will escalate.\n` +
+          `Flag ONLY tests the new AC truly supersedes; never flag a test just to make a red go away.`
+        );
+      }
       if (action.buildMode === "review") {
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
@@ -617,7 +632,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // this (vs the agent hand-writing cycle-NNN.json) is what keeps the
       // probe's red_at/green_at reading in lockstep with what was produced ,
       // the drift that stalled the live smoke.
-      if (!("mode" in action) && action.role === "navigator") {
+      if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess") {
+        // After the Navigator assesses a failed GREEN verify, finalize it: mark
+        // the green-failure assessed + (if the Navigator did NOT flag-supersede)
+        // record the genuine-regression escalation. Whether a flag was made is
+        // read from disk (superseded-tests.json), so the verdict is the role's.
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-green", "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+      } else if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
         // P8b: a `begin` (RED) under hybrid-a stamps a layer-batch cycle; pass the

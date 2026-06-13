@@ -22,7 +22,13 @@ import {
   firstReviewPendingAc,
   firstRefactorPendingAc,
 } from "./cycle-record.js";
-import { writeSupersededTests } from "./supersession.js";
+import {
+  writeSupersededTests,
+  readSupersededTests,
+  readGreenFailure,
+  writeGreenFailure,
+} from "./supersession.js";
+import { writeEscalation } from "./escalation.js";
 
 interface Args {
   cmd?: string;
@@ -95,7 +101,9 @@ async function main(): Promise<number> {
       // 0 (the escalation is recorded data, not a command crash) so the driver's
       // next readState routes to a clean raise-to-hil halt.
       const r = await greenOpenCycle(base);
-      if (r.escalated) {
+      if (r.needsAssess) {
+        process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}\n`);
+      } else if (r.escalated) {
         process.stdout.write(`cycle: GREEN BLOCKED for ${r.testId} -> raised to HIL: ${r.summary}\n`);
       } else {
         process.stdout.write(`cycle: GREEN ${r.cycleId} for ${r.testId}\n`);
@@ -141,6 +149,30 @@ async function main(): Promise<number> {
       if (!a.reason) return usage("flag-superseded: --reason is required.");
       writeSupersededTests(tddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
       process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}\n`);
+      return 0;
+    }
+    case "assess-green": {
+      // Finalize the Navigator's assessment of a failed GREEN verify: mark the
+      // green-failure assessed (so a still-failing verify next escalates rather
+      // than re-assessing). If the Navigator did NOT flag any superseded tests,
+      // the failure is a genuine regression -> record the escalation now.
+      const ac = a.ac;
+      if (!ac) return usage("assess-green: --ac is required.");
+      const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
+      writeGreenFailure(tddDir, a.feature, a.story, ac, { assessed: true, summary: gf?.summary ?? "" });
+      const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
+      if (flagged) {
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)\n`);
+      } else {
+        writeEscalation(tddDir, {
+          source: "driver-green",
+          reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression (no superseded tests flagged)${gf?.summary ? ` , ${gf.summary}` : ""}`,
+          feature_id: a.feature,
+          story_id: a.story,
+          ac_id: ac,
+        });
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL\n`);
+      }
       return 0;
     }
     default:

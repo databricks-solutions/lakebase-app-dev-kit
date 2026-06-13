@@ -45,6 +45,9 @@ export interface StoryArtifactProbe {
   reviewPendingAc(story: string): string | null;
   /** An AC the REVIEW asked to refactor, not yet Driver-refactored, or null. */
   refactorPendingAc(story: string): string | null;
+  /** The open AC whose GREEN verify failed + has not yet been assessed, or null
+   *  (drives the reactive Navigator assess turn). */
+  assessGreenFailureAc(story: string): string | null;
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
   storyDeployVerified(story: string): boolean;
@@ -95,6 +98,7 @@ function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryV
       codeWritten: probe.codeWritten(id),
       reviewAc: probe.reviewPendingAc(id),
       refactorAc: probe.refactorPendingAc(id),
+      assessGreenAc: probe.assessGreenFailureAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted,

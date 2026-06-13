@@ -91,3 +91,77 @@ export function markSupersessionRefactored(
   if (!s) return;
   writeSupersededTests(tdd, feature, story, ac, { ...s, refactored: true });
 }
+
+// ── Green-failure assessment marker (the reactive supersession trigger) ──────
+//
+// When the honest-GREEN verify FAILS, the break is often UNFORESEEN (only the
+// full-suite run reveals a prior test the new AC superseded). So instead of
+// escalating immediately, the first failure routes a NAVIGATOR assess turn: it
+// inspects the failing tests and either flag-supersedes them (-> the Driver's
+// permissive green) or confirms a genuine regression (-> escalate). This marker
+// records that a failure is awaiting / has had that one assessment, bounding the
+// loop so a still-failing verify after the assess escalates as a real regression.
+
+export interface GreenFailure {
+  /** True once the Navigator has assessed this failure (flagged or not). */
+  assessed: boolean;
+  /** The verify failure summary the Navigator assesses. */
+  summary: string;
+}
+
+export function greenFailureJson(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): string {
+  return join(cycleDir(tdd, feature, story, ac), "green-failure.json");
+}
+
+export function readGreenFailure(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): GreenFailure | undefined {
+  const file = greenFailureJson(tdd, feature, story, ac);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as GreenFailure;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeGreenFailure(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+  value: GreenFailure,
+): void {
+  fs.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs.writeFileSync(greenFailureJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
+}
+
+/** Remove the marker (the verify passed, or the cycle moved on). */
+export function clearGreenFailure(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): void {
+  fs.rmSync(greenFailureJson(tdd, feature, story, ac), { force: true });
+}
+
+/** An AC whose GREEN verify failed and has NOT yet been assessed by the
+ *  Navigator (drives the reactive assess turn). */
+export function needsGreenAssess(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): boolean {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  return gf !== undefined && gf.assessed !== true;
+}

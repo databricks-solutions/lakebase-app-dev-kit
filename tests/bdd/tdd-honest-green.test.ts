@@ -30,6 +30,12 @@ import {
   BLOCKING_SMELLS,
 } from "../../scripts/tdd/escalation.js";
 import { writeSmellsLog } from "../../scripts/tdd/smells.js";
+import {
+  readGreenFailure,
+  writeGreenFailure,
+  needsGreenAssess,
+  writeSupersededTests,
+} from "../../scripts/tdd/supersession.js";
 import { nextTransition, type DriveState, type WorkflowAction } from "../../scripts/tdd/orchestrator-drive.js";
 import { describeAction } from "../../scripts/tdd/orchestrator-logging.js";
 import { runDriver, type DriveEffects } from "../../scripts/tdd/orchestrator-run.js";
@@ -63,22 +69,48 @@ function cycle(ac: string): Record<string, unknown> {
 }
 
 describe("honest GREEN: greenOpenCycle runs a real verify before stamping green", () => {
-  it("a FAILING verify does NOT mark green, leaves the cycle RED, and raises an escalation", async () => {
+  it("the FIRST failing verify routes a Navigator ASSESS (no escalation yet), not an immediate HIL halt", async () => {
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
 
     expect(r.recorded).toBe(false);
-    expect(r.escalated).toBe(true);
-    // Cycle is still RED: no green_at stamped (the false-green that shipped before).
+    // Reactive supersession trigger: the break may be a prior test this AC
+    // supersedes, so the first failure asks for an assessment instead of halting.
+    expect(r.needsAssess).toBe(true);
+    expect(r.escalated).toBeFalsy();
+    // Cycle is still RED + a green-failure marker is written for the assess turn.
     expect(cycle("AC1").green_at).toBeFalsy();
-    expect(cycle("AC1").red_at).toBeTruthy();
-    // The test-list item stays pending (not falsely propagated to green).
+    expect(needsGreenAssess(tdd, F, S, "AC1")).toBe(true);
     expect(storyTestProgress(tdd, F, S).allGreen).toBe(false);
-    // An escalation was recorded for the HIL.
+    // No escalation yet (the Navigator has not assessed).
+    expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
+  });
+
+  it("a STILL-failing verify AFTER the Navigator assessed escalates (genuine regression)", async () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    // Simulate the assess turn finishing (the Navigator looked, did not flag).
+    writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x" });
+    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
+    expect(r.escalated).toBe(true);
     const escs = readEscalations(tdd).filter((e) => !e.resolved_at);
     expect(escs.length).toBe(1);
     expect(escs[0].source).toBe("driver-green");
-    expect(escs[0].reason).toMatch(/contradiction/);
+  });
+
+  it("after a supersession flag, a PASSING permissive verify marks green + clears the marker", async () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    // Navigator assessed + flagged the prior test as superseded; Driver refactored it.
+    writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x" });
+    writeSupersededTests(tdd, F, S, "AC1", { tests: ["tests/old_test.py"], reason: "superseded by AC1" });
+    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    expect(r.recorded).toBe(true);
+    expect(r.escalated).toBeFalsy();
+    expect(cycle("AC1").green_at).toBeTruthy();
+    // The marker is cleared on a passing verify; the supersession attempt is consumed.
+    expect(readGreenFailure(tdd, F, S, "AC1")).toBeUndefined();
+    expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
   });
 
   it("a PASSING verify marks green + propagates (the happy path is unchanged)", async () => {

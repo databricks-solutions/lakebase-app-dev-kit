@@ -26,6 +26,13 @@ import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
 import { readSmellsLog, markSmellResolved, isBuildRefactorRoutableSmell } from "./smells.js";
+import {
+  readGreenFailure,
+  writeGreenFailure,
+  clearGreenFailure,
+  readSupersededTests,
+  markSupersessionRefactored,
+} from "./supersession.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
 import {
@@ -328,6 +335,10 @@ export interface GreenResult {
   escalation?: Escalation;
   /** The GREEN verify summary (pass or the failure reason). */
   summary?: string;
+  /** Set when the verify failed for the FIRST time: the cycle stays RED + a
+   *  green-failure marker is written so the orchestration routes a Navigator
+   *  assess turn (supersession vs genuine regression) instead of escalating. */
+  needsAssess?: boolean;
 }
 
 /** Confirm a cycle is genuinely GREEN: returns true only when the project's
@@ -383,14 +394,30 @@ export async function greenOpenCycle(
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
   }
   if (!result.passed) {
+    const gf = readGreenFailure(tddDir, featureId, story, open.ac_id);
+    if (!gf?.assessed) {
+      // First failure: the break may be a PRIOR test the new AC legitimately
+      // supersedes (only the full-suite verify reveals it). Route a Navigator
+      // assess turn instead of escalating; the marker bounds it to one pass.
+      writeGreenFailure(tddDir, featureId, story, open.ac_id, { assessed: false, summary: result.summary });
+      return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
+    }
+    // Already assessed (the Navigator saw the failing tests) and STILL failing:
+    // a genuine regression the permissive refactor could not honestly green, or
+    // the Navigator confirmed it was no supersession. Escalate to the HIL.
     const escalation = writeEscalation(tddDir, {
       source: "driver-green",
-      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story}: ${result.summary}`,
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment: ${result.summary}`,
       feature_id: featureId,
       story_id: story,
       ac_id: open.ac_id,
     });
     return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
+  }
+  // Verify passed: clear the failure marker + consume any supersession attempt.
+  clearGreenFailure(tddDir, featureId, story, open.ac_id);
+  if (readSupersededTests(tddDir, featureId, story, open.ac_id)) {
+    markSupersessionRefactored(tddDir, featureId, story, open.ac_id);
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   // Propagate green to the artifacts the acceptance/deploy consumers read: the
