@@ -614,6 +614,11 @@ stage_project_intake() {
   git add .tdd/product-overview.md .tdd/nfrs.md .tdd/design/design-brief.md 2>/dev/null || true
   git commit -m "intake: project product-overview + nfrs + design-brief (on ${_parent})" >/dev/null 2>&1 \
     || log "  project intake already committed (nothing new)"
+  # Push the parent tier to origin: /design Step 0 forks the feature branch from
+  # origin/<parent> (resolveFeatureStartPoint prefers the pushed tip), so a
+  # local-only commit would never reach the feature branch. Unconditional (runs
+  # even when the commit was a no-op on resume). Non-fatal offline.
+  git push origin "$_parent" >/dev/null 2>&1 || log "  (could not push ${_parent} to origin; feature fork may miss intake)"
 }
 
 # ─── /plan: sprint planning (Human Proxy) ─────────────────────
@@ -696,6 +701,10 @@ run_plan_sprint() {
   git add .tdd/features .tdd/planning .tdd/sprints 2>/dev/null || true
   git commit -m "plan ${sprint_name}: commit backlog on ${_parent} (${iters[*]})" >/dev/null 2>&1 \
     || log "  ${sprint_name}: backlog already committed (nothing new)"
+  # Push the backlog to origin/<parent> so /design Step 0's fork (from
+  # origin/<parent>, the preferred start point) inherits this sprint's
+  # feature-request.md. Unconditional + non-fatal (see stage_project_intake).
+  git push origin "$_parent" >/dev/null 2>&1 || log "  ${sprint_name}: could not push ${_parent} backlog to origin"
 
   # Record the planning activity (the PO authored the sprint's requests).
   "$PROJECT_DIR/scripts/lk" lakebase-tdd-log \
