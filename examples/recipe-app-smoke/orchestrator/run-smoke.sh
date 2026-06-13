@@ -696,6 +696,21 @@ started=0
 run_sprint() {
   local sprint_name="$1"; shift
   local sprint_iters=("$@")
+  # --resume skips earlier sprints ENTIRELY, planning included: a sprint whose
+  # (single) feature is before the resume point already shipped, so re-running
+  # its /plan would re-author a request the backlog already has. One feature per
+  # sprint, so if we haven't started and this sprint's iter isn't the resume
+  # target, skip the whole sprint.
+  if [[ -n "$RESUME_AT" && "$started" -eq 0 ]]; then
+    local _at_resume=0 _it
+    for _it in "${sprint_iters[@]}"; do
+      [[ "$_it" == "$RESUME_AT"* ]] && _at_resume=1
+    done
+    if [[ "$_at_resume" -eq 0 ]]; then
+      log "skipping ${sprint_name} (--resume ${RESUME_AT}; sprint before resume point)"
+      return 0
+    fi
+  fi
   run_plan_sprint "$sprint_name" "${sprint_iters[@]}"
   local iter
   for iter in "${sprint_iters[@]}"; do
