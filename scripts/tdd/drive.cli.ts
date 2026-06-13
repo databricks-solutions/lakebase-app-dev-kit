@@ -28,6 +28,7 @@ import { recordTurn, seedRecorderBaseline } from "./turn-recorder.js";
 import { runDriver, driverBoundOptions, ProtocolViolationError, UnexpectedCallbackError, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { writeEscalation } from "./escalation.js";
 import { emitAgentLogEvent } from "./agent-log.js";
+import { writeWorkflowPhase, resetStaleTerminalPhase } from "./workflow-phase.js";
 import {
   isHitlGateAction,
   isHumanInputAction,
@@ -136,17 +137,6 @@ Flags:
                        Sizing is ON by default. Aliases: --no-planning-poker,
                        --no-t-shirt-sizing.
 `;
-}
-
-function writeWorkflowPhase(tddDir: string, phase: string): void {
-  const file = path.join(tddDir, "workflow-state.json");
-  let state: Record<string, unknown> = {};
-  if (fs.existsSync(file)) {
-    try { state = JSON.parse(fs.readFileSync(file, "utf8")); } catch { state = {}; }
-  }
-  state.phase = phase;
-  fs.mkdirSync(tddDir, { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 
 function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
@@ -740,6 +730,12 @@ async function main(): Promise<number> {
   const confirmContinue = pauseMilestone ? makeConfirmContinue() : undefined;
 
   const cfg = buildCfg(args, args.feature);
+
+  // A fresh --feature invocation must not inherit a PRIOR feature's terminal
+  // TDD phase (the per-project .tdd/workflow-state.json carries "shipped"/"done"
+  // from the last feature). Clear it so the feature being driven now re-derives
+  // its phase from disk artifacts instead of exiting "done in 1".
+  resetStaleTerminalPhase(cfg.tddDir);
 
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);
