@@ -10,6 +10,7 @@ import {
   ExpectationLedger,
   ProtocolViolationError,
   UnexpectedCallbackError,
+  handbackMessage,
 } from "../../scripts/tdd/orchestrator-expect";
 import type { DriveState, WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
 
@@ -134,6 +135,46 @@ describe("ExpectationLedger: pop on a met contract, abort on a null return", () 
   it("reconcile reports `idle` when nothing is outstanding", () => {
     const q = new ExpectationLedger();
     expect(q.reconcile(baseState()).kind).toBe("idle");
+  });
+});
+
+describe("handbackMessage: filesystem-grounded, anti-rationalization retry note", () => {
+  // The F4-draft-recipes live failure: the (opus) spec-author emitted PROSE
+  // claiming it wrote the breakdown, wrote nothing, and on the informed retry
+  // declared "the breakdown already exists on disk, no further artifacts needed."
+  // The hand-back must forbid that rationalization and ground the role in disk.
+  const breakdown = expectationFor({
+    kind: "invoke-role",
+    role: "spec-author",
+    mode: "breakdown",
+  } as unknown as WorkflowAction)!;
+
+  it("forbids the 'already exists / no work needed' rationalization", () => {
+    const note = handbackMessage(breakdown, 1);
+    expect(note).toMatch(/HANDBACK/);
+    expect(note).toMatch(/already exist/i);
+    expect(note).toMatch(/prose .* is NOT the artifact/i);
+    expect(note).toMatch(/WRITE the artifact this turn/i);
+  });
+
+  it("appends a handoff's concrete remediation when present (breakdown names feature-spec.json + stories)", () => {
+    expect(breakdown.remediation).toBeTruthy();
+    const note = handbackMessage(breakdown, 1);
+    expect(note).toMatch(/feature-spec\.json/);
+    expect(note).toMatch(/stories/);
+  });
+
+  it("omits the remediation clause cleanly when a handoff carries none", () => {
+    const noRemediation = {
+      signature: "x",
+      responder: "driver" as const,
+      expected: "something",
+      satisfiedBy: () => false,
+    };
+    const note = handbackMessage(noRemediation, 1);
+    expect(note).toMatch(/HANDBACK/);
+    // No dangling whitespace artifacts from an absent remediation.
+    expect(note).not.toMatch(/ {2,}/);
   });
 });
 

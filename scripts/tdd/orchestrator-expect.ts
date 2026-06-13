@@ -43,6 +43,11 @@ export interface Handoff {
   /** The non-null contract: true once the responder delivered its artifact. A
    *  null/empty/nonconformant return leaves this false (the violation signal). */
   satisfiedBy(state: DriveState): boolean;
+  /** Optional concrete, filesystem-grounded directive appended to the retry
+   *  hand-back: the exact file(s) the responder must write. Removes the room a
+   *  role has to rationalize "it already exists" by naming what is actually
+   *  missing on disk (the F4-draft-recipes breakdown failure). */
+  remediation?: string;
 }
 
 /** Raised when a handoff's contract is not met: the expected responder returned
@@ -108,7 +113,13 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
   // Planning + design-lane roles: the contract is the explicit DriveState field
   // the transition checks to advance past the role. False = null/empty return.
   if (responder === "spec-author" && "mode" in action && action.mode === "breakdown") {
-    return { ...base, expected: "a feature breakdown (≥1 story)", satisfiedBy: (s) => s.breakdownDone === true };
+    return {
+      ...base,
+      expected: "a feature breakdown (≥1 story)",
+      satisfiedBy: (s) => s.breakdownDone === true,
+      remediation:
+        "Write feature-spec.json with a NON-EMPTY `stories[]` array and create the story stub dirs under .tdd/features/<feature>/stories/. The feature dir currently holds only feature-request.md; a prose list of stories in your reply is NOT the breakdown.",
+    };
   }
   if (responder === "spec-author" && "mode" in action && action.mode === "propose") {
     return { ...base, expected: "feature proposals", satisfiedBy: (s) => s.planning?.proposed === true };
@@ -168,12 +179,15 @@ export type ReconcileResult =
  *  to fix it. Threaded into the role's next prompt so the retry is informed, not
  *  a blind re-run. */
 export function handbackMessage(h: Handoff, attempt: number): string {
-  return (
+  return [
     `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}` +
-    `${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}. ` +
-    `The expected artifact is absent / null / empty / nonconformant. ` +
-    `Produce it now , this is a retry; the workflow aborts if it is still missing.`
-  );
+      `${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}.`,
+    `The expected artifact is absent / null / empty / nonconformant ON DISK (the orchestrator verified it).`,
+    `Do NOT claim it "already exists" or that "no further artifacts are needed": prose describing the artifact is NOT the artifact.`,
+    `Re-inspect the filesystem yourself, then WRITE the artifact this turn.`,
+    ...(h.remediation ? [h.remediation] : []),
+    `This is a retry; the workflow aborts if it is still missing.`,
+  ].join(" ");
 }
 
 /**
