@@ -19,7 +19,8 @@ export type SmellName =
   | "layering-violation"
   | "ux-adherence"
   | "e2e-inline-regex-flag"
-  | "e2e-row-perma-red";
+  | "e2e-row-perma-red"
+  | "superseded-tests";
 
 export interface SmellDefinition {
   name: SmellName;
@@ -48,6 +49,14 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     level: "spec",
     owning_role: "test-strategist",
     gate_to_rerun: "test_list",
+  },
+  {
+    name: "superseded-tests",
+    description:
+      "A new AC intentionally supersedes behavior encoded in PRIOR tests (often from earlier features); the Navigator flagged them in a superseded-tests allowlist. NOT a contradiction to block (that is test-list-drift), the latest AC wins and the accumulated tests must follow it.",
+    proposed_remediation:
+      "Driver permissively refactors ONLY the flagged tests (and the code) to the new AC, then the honest-GREEN verify re-runs. Bounded to one attempt; an unflagged regression escalates.",
+    level: "build",
   },
   {
     name: "cycle-stall",
@@ -240,6 +249,12 @@ const BUILD_REFACTOR_ROUTABLE = new Set<string>([
   "layering-violation",
   "ux-adherence",
   "import-time-build-coupling",
+  // A new AC supersedes behavior encoded in PRIOR tests the Navigator flagged
+  // (superseded-tests allowlist). The Driver's refactor turn permissively
+  // refactors ONLY those flagged tests + the code, then the honest-GREEN verify
+  // re-runs. Bounded to one attempt by supersession.refactored; an unflagged
+  // regression never reaches here (it escalates), so the backstop stays intact.
+  "superseded-tests",
 ]);
 
 export function isBuildRefactorRoutableSmell(name: string): boolean {

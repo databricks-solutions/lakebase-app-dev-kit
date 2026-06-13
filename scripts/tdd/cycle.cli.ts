@@ -22,6 +22,7 @@ import {
   firstReviewPendingAc,
   firstRefactorPendingAc,
 } from "./cycle-record.js";
+import { writeSupersededTests } from "./supersession.js";
 
 interface Args {
   cmd?: string;
@@ -33,6 +34,10 @@ interface Args {
   loop?: string;
   /** P8b: layer-batch cap for `begin --loop hybrid-a`. */
   batchCap?: number;
+  /** flag-superseded: prior test files/node-ids the current AC supersedes. */
+  tests?: string[];
+  /** flag-superseded: why the prior tests are superseded (new AC + change). */
+  reason?: string;
 }
 
 function parse(argv: string[]): Args {
@@ -44,6 +49,8 @@ function parse(argv: string[]): Args {
       case "--ac": out.ac = argv[++i]; break;
       case "--tdd-dir": out.tddDir = argv[++i]; break;
       case "--loop": out.loop = argv[++i]; break;
+      case "--test": (out.tests ??= []).push(argv[++i]); break;
+      case "--reason": out.reason = argv[++i]; break;
       case "--batch-cap": {
         const n = Number(argv[++i]);
         if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
@@ -123,6 +130,17 @@ async function main(): Promise<number> {
       } else {
         process.stdout.write(`cycle: REFACTORED ${ac}\n`);
       }
+      return 0;
+    }
+    case "flag-superseded": {
+      // The Navigator flags PRIOR tests the current AC supersedes, so the Driver
+      // may permissively refactor ONLY those when the honest-GREEN verify breaks
+      // them. Requires --ac, at least one --test, and a --reason.
+      if (!a.ac) return usage("flag-superseded: --ac is required.");
+      if (!a.tests || a.tests.length === 0) return usage("flag-superseded: at least one --test is required.");
+      if (!a.reason) return usage("flag-superseded: --reason is required.");
+      writeSupersededTests(tddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
+      process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}\n`);
       return 0;
     }
     default:

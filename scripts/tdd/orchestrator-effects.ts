@@ -25,6 +25,7 @@ import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
+import { readSupersededTests } from "./supersession.js";
 import { readConventions } from "./architecture-conventions.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
@@ -257,6 +258,34 @@ function nextPendingTestDirective(
 }
 
 /**
+ * The permissive-refactor directive for the Driver's GREEN turn when the
+ * Navigator has flagged PRIOR tests as superseded by the AC being greened. The
+ * latest AC wins: the Driver may refactor ONLY the flagged tests (alongside the
+ * code) so the honest-GREEN verify holds, and must leave every other test
+ * untouched (an unflagged regression must stay failing and escalate). Empty when
+ * no allowlist exists for the open AC, so a normal GREEN turn is unaffected.
+ */
+function supersededTestsDirective(tddDir: string, featureId: string, story: string): string {
+  let acId: string | undefined;
+  try {
+    const prog = storyTestProgress(tddDir, featureId, story);
+    acId = (prog.openRed[0] ?? prog.pending[0])?.ac_id;
+  } catch {
+    acId = undefined;
+  }
+  if (!acId) return "";
+  const sup = readSupersededTests(tddDir, featureId, story, acId);
+  if (!sup) return "";
+  const list = sup.tests.map((t) => `  - ${t}`).join("\n");
+  return (
+    `\n\nSUPERSEDED TESTS: this AC (${acId}) supersedes behavior encoded in PRIOR tests the Navigator flagged` +
+    ` (${sup.reason}). The latest AC wins. You MAY refactor ONLY these flagged tests to the new behavior` +
+    ` (alongside the production code) so the honest-GREEN verify holds:\n${list}\n` +
+    `Do NOT touch any other test; an UNflagged failing test is a genuine regression that must stay red and escalate.`
+  );
+}
+
+/**
  * Consume a pending hand-back note for this role's retry: read it, delete it
  * (consume-once), and return it as a prompt PREFIX. Empty when none is pending.
  * The orchestrator wrote it (via DriveEffects.onHandback) when the role's prior
@@ -435,7 +464,9 @@ function roleTaskBody(
       return (
         (build?.loop === "hybrid-a"
           ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
-          : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? UI_TRACK_BUILD : "")
+          : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
+        (uiTrack ? UI_TRACK_BUILD : "") +
+        supersededTestsDirective(tddDir, featureId, s)
       );
     default:
       return `Work story ${s}.`;

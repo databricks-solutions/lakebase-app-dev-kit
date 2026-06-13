@@ -59,6 +59,7 @@ describe("smells catalog", () => {
         "import-time-build-coupling",
         "layering-violation",
         "scaffold-defect",
+        "superseded-tests",
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",

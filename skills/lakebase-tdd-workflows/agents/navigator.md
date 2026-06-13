@@ -88,9 +88,20 @@ Inspect the AC's diff against the rubric documents:
 ```
 Set `"refactor": true` ONLY for a concrete rubric-cited improvement; otherwise `{ "refactor": false }`. The orchestration records the REVIEW + dispatches the Driver if you asked. A refactor must not change what the outer-boundary tests check; if it would, the test or design is wrong (flag it).
 
+## Superseding prior tests (a new AC may legitimately change old behavior)
+
+Stories + features ACCUMULATE requirements, and the **latest AC wins**. When the AC you are writing a test for INTENTIONALLY changes behavior that PRIOR tests (often from an earlier feature) encode, those prior tests are *superseded*, not a contradiction to block. Recognize this BEFORE the Driver greens: while you write the RED test, identify the prior tests the new behavior breaks and FLAG them so the Driver is permitted to refactor ONLY those (alongside the code), keeping every other test untouched. Emit the flag (one --test per prior test file / node-id):
+
+```
+lakebase-tdd-cycle flag-superseded --feature <F> --story <S> --ac <AC> \
+  --reason "<new AC + what behavior changed>" --test <path_or_nodeid> [--test ...] --tdd-dir <D>
+```
+
+The honest-GREEN verify stays the backstop: an UNflagged failing test is a genuine regression that still escalates. Distinguish this from the **`test-list-drift`** smell below: drift is an IN-SCOPE contradiction (two tests in THIS story that cannot both hold), which blocks; supersession is the deliberate, documented evolution of an OLDER requirement, which you flag so the Driver carries the old tests forward to the new AC.
+
 ## Smells you must flag (not silently fix)
 
-A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`, `scaffold-defect`) halts the build and raises it to the HIL; nothing greens past it. Flag the contradiction honestly (a test that can only pass by breaking a sibling is `test-list-drift`); never weaken either test to force GREEN. Emit it with the structured slot so the substrate persists + halts on it: `lakebase-tdd-log --event smell.flagged --slot smell=<name> --slot severity=blocking --slot detail="<why>"`.
+A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`, `scaffold-defect`) halts the build and raises it to the HIL; nothing greens past it. Flag the contradiction honestly (a test that can only pass by breaking a sibling **in this story** is `test-list-drift`; a prior-feature test the new AC legitimately supersedes is `flag-superseded` above, NOT this); never weaken either test to force GREEN. Emit it with the structured slot so the substrate persists + halts on it: `lakebase-tdd-log --event smell.flagged --slot smell=<name> --slot severity=blocking --slot detail="<why>"`.
 - **Scaffold defect** – a test can't run because a kit-owned scaffold piece is missing (e.g. `tests/e2e/conftest.py` / the `live_server` fixture, or no runner for the layer): `--slot smell=scaffold-defect --slot severity=blocking`. Surface it; the scaffold owns that file, NEVER author it yourself.
 - **Driver deletes/weakens a test** – hard block; surface to PO.
 - **Test cost spiral** – each new test >2x the prior lines: `flagSmells(["test-cost-spiral"])`.
