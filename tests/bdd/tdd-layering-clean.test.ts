@@ -13,6 +13,7 @@ import {
   checkModulePlacement,
   checkInlineRendering,
   checkCodeBudget,
+  checkDuplicateClasses,
   layeringConfigFromArchitecture,
 } from "../../scripts/tdd/layering-clean.js";
 
@@ -262,6 +263,61 @@ describe("checkModulePlacement (A1): layers live at their declared module paths"
     const dir = mkProject();
     write(dir, "app/models/recipe.py", "class Recipe: ...\n");
     const r = checkModulePlacement(dir, [{ role: "models", module: "app/models/" }]);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("checkDuplicateClasses (A4): no class is defined in two modules", () => {
+  it("flags the same top-level class defined in two modules (the F5 Recipe orphan)", () => {
+    const dir = mkProject();
+    write(dir, "app/models/recipe.py", "class Recipe(Base):\n    __tablename__ = 'recipes'\n");
+    write(dir, "app/models.py", "class Recipe(Base):\n    __tablename__ = 'recipes'\n"); // stale orphan
+    const r = checkDuplicateClasses(dir);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/class Recipe is defined in 2 modules/);
+    expect(r.violations.join(" ")).toMatch(/app\/models\.py/);
+    expect(r.violations.join(" ")).toMatch(/app\/models\/recipe\.py/);
+    expect(r.remediation).toBeTruthy();
+  });
+
+  it("catches the duplicate even when NO architecture/layers are declared (declaration-independent)", () => {
+    // This is the resiliency the placement check lacks: it needs no `models` layer
+    // declaration , it scans source directly, so an architect omitting the layer
+    // cannot let a duplicate class slip through.
+    const dir = mkProject();
+    write(dir, "app/models.py", "class Recipe:\n    pass\n");
+    write(dir, "app/domain/recipe.py", "class Recipe:\n    pass\n");
+    // no architecture.json anywhere; the gate still fires
+    const r = checkDuplicateClasses(dir);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/class Recipe is defined in 2 modules/);
+  });
+
+  it("passes when each class is defined in exactly one module", () => {
+    const dir = mkProject();
+    write(dir, "app/models/recipe.py", "class Recipe(Base):\n    pass\n");
+    write(dir, "app/models/cuisine.py", "class Cuisine(Base):\n    pass\n");
+    write(dir, "app/models/__init__.py", "from .recipe import Recipe\nfrom .cuisine import Cuisine\n"); // re-export, not a def
+    const r = checkDuplicateClasses(dir);
+    expect(r.ok).toBe(true);
+    expect(r.violations).toEqual([]);
+  });
+
+  it("ignores nested Config/Meta classes (only column-0 defs count)", () => {
+    const dir = mkProject();
+    write(dir, "app/schemas/recipe.py", "class RecipeIn(BaseModel):\n    name: str\n    class Config:\n        orm_mode = True\n");
+    write(dir, "app/schemas/cuisine.py", "class CuisineIn(BaseModel):\n    name: str\n    class Config:\n        orm_mode = True\n");
+    const r = checkDuplicateClasses(dir);
+    expect(r.ok).toBe(true); // two nested `Config` classes are NOT a duplicate
+  });
+
+  it("ignores test files and migration dirs (legit repeated names there)", () => {
+    const dir = mkProject();
+    write(dir, "app/models/recipe.py", "class Recipe(Base):\n    pass\n");
+    write(dir, "tests/test_recipe.py", "class Recipe:\n    pass\n"); // test fixture, skipped
+    write(dir, "alembic/versions/0001_init.py", "class Recipe:\n    pass\n"); // migration dir, skipped
+    write(dir, "app/conftest.py", "class Recipe:\n    pass\n"); // conftest, skipped
+    const r = checkDuplicateClasses(dir);
     expect(r.ok).toBe(true);
   });
 });

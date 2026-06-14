@@ -24,6 +24,7 @@ import {
   checkModulePlacement,
   checkInlineRendering,
   checkCodeBudget,
+  checkDuplicateClasses,
   layeringConfigFromArchitecture,
   type LayeringCleanArgs,
 } from "./layering-clean.js";
@@ -101,12 +102,16 @@ const rendering = serviceBacked ? checkInlineRendering(p.projectDir, boundary, r
 // Budget over the declared layer modules (or `app` by default) , broad clean-code check.
 const budgetPaths = allModules.length ? allModules.map((m) => m.module) : ["app"];
 const budget = checkCodeBudget(p.projectDir, budgetPaths);
+// Duplicate-class invariant: runs UNCONDITIONALLY (independent of service_backed
+// and of declared layers) , a repo cannot hold the same class in two modules.
+const duplicates = checkDuplicateClasses(p.projectDir);
 
 const groups: Array<{ label: string; ok: boolean; violations: string[]; remediation?: string }> = [
   { label: "layering (boundary vs persistence)", ok: layering.clean, violations: layering.violations, remediation: layering.remediation },
   { label: "module placement (layers at declared paths)", ok: placement.ok, violations: placement.violations },
   { label: "rendering (templating, not inline HTML)", ok: rendering.ok, violations: rendering.violations, remediation: rendering.remediation },
   { label: "DRY + complexity budget", ok: budget.ok, violations: budget.violations },
+  { label: "no duplicate class definitions", ok: duplicates.ok, violations: duplicates.violations, remediation: duplicates.remediation },
 ];
 const ok = groups.every((g) => g.ok);
 

@@ -19,6 +19,105 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+// ─── A4: no duplicate class definitions (declaration-independent) ──
+// A repo-wide invariant: a top-level class name is defined in exactly one module.
+// Two modules defining the same top-level class (e.g. `Recipe` in both a leftover
+// flat app/models.py and the app/models/recipe.py package) is the flat->package
+// migration orphan in its most general form. Unlike checkModulePlacement, this does
+// NOT depend on the architect declaring a `models` layer (models is an optional
+// role), so it catches the duplicate even when placement cannot inspect that path.
+// Duplicate ORM model classes also risk a double SQLAlchemy table registration.
+// Nested classes (Pydantic `Config`, Django `Meta`) are intentionally ignored ,
+// only column-0 `class` defs count, so common nested helpers never false-positive.
+
+/** Directory names that are never application source (vendor / test / migration). */
+const SOURCE_SKIP_DIRS = new Set([
+  "node_modules", "__pycache__", ".venv", "venv", ".git", "build", "dist",
+  ".tdd", ".lakebase", "alembic", "migrations", "tests", "test",
+  ".mypy_cache", ".pytest_cache", ".ruff_cache",
+]);
+
+/** A test module (its classes legitimately repeat names across files). */
+function isTestFile(name: string): boolean {
+  return /^test_.*\.py$/.test(name) || /_test\.py$/.test(name) || name === "conftest.py";
+}
+
+/** Recursively collect application source *.py files under `dir`, skipping
+ *  vendor/test/migration dirs and test files. */
+function sourcePyFilesRec(dir: string, out: string[]): void {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (!SOURCE_SKIP_DIRS.has(e.name)) sourcePyFilesRec(join(dir, e.name), out);
+    } else if (e.isFile() && e.name.endsWith(".py") && !isTestFile(e.name)) {
+      out.push(join(dir, e.name));
+    }
+  }
+}
+
+export interface DuplicateClassResult {
+  ok: boolean;
+  violations: string[];
+  remediation?: string;
+}
+
+const DUP_CLASS_REMEDIATION =
+  "The same class is defined in more than one module. Keep ONE canonical definition " +
+  "(usually the package that owns the layer) and delete the duplicate; re-export from the " +
+  "package __init__ if a stable import path is needed. Duplicate ORM model classes also risk " +
+  "a double table registration. See the `layering-violation` smell + DRY (one source of truth).";
+
+// Column-0 `class Name:` or `class Name(Base):` , a top-level definition only
+// (no leading whitespace, so nested Config/Meta classes are excluded).
+const TOP_LEVEL_CLASS = /^class\s+([A-Za-z_]\w*)\s*[:(]/;
+
+/**
+ * Flag any top-level class name defined in 2+ source modules across the project.
+ * Declaration-independent (does not read architecture.json): a repo-wide DRY/clean
+ * invariant. Scans `roots` (default the existing of ["app", "src"]) recursively,
+ * skipping vendor/test/migration dirs and test files. Only column-0 `class` defs
+ * count, so nested Config/Meta classes never false-positive.
+ */
+export function checkDuplicateClasses(projectDir: string, roots: string[] = ["app", "src"]): DuplicateClassResult {
+  const files: string[] = [];
+  for (const r of roots) {
+    const abs = join(projectDir, r);
+    if (!existsSync(abs)) continue;
+    try {
+      if (statSync(abs).isDirectory()) sourcePyFilesRec(abs, files);
+      else if (abs.endsWith(".py") && !isTestFile(r)) files.push(abs);
+    } catch {
+      /* skip unreadable root */
+    }
+  }
+  // class name -> set of project-relative modules that define it at top level.
+  const defs = new Map<string, Set<string>>();
+  for (const file of files) {
+    const shown = file.startsWith(projectDir) ? file.slice(projectDir.length).replace(/^\//, "") : file;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const m = TOP_LEVEL_CLASS.exec(line);
+      if (!m) continue;
+      const set = defs.get(m[1]) ?? new Set<string>();
+      set.add(shown);
+      defs.set(m[1], set);
+    }
+  }
+  const violations: string[] = [];
+  for (const [name, modules] of [...defs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (modules.size > 1) {
+      violations.push(
+        `class ${name} is defined in ${modules.size} modules: ${[...modules].sort().join(", ")} (keep one canonical definition, delete the duplicate)`,
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true, violations: [] } : { ok: false, violations, remediation: DUP_CLASS_REMEDIATION };
+}
+
 export interface LayeringCleanArgs {
   projectDir: string;
   /** From architecture.json `service_backed`. A false/absent value exempts the
