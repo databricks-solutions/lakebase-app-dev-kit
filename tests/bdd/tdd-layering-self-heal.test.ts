@@ -76,6 +76,20 @@ describe("pendingEscalation: layering-violation self-heals while a refactor is p
     expect(probe.pendingEscalation()).toBeNull(); // NOT a HIL halt , the driver handles it
   });
 
+  it("self-heals on a gate-blocking smell even when the Navigator verdict was refactor:false (the F5 bug)", () => {
+    writeSmellsLog(tdd, [{ smell: "layering-violation", cycle_ids: [], detail: "duplicated render/error block across routes" }]);
+    // The Navigator REVIEWed AC1 and recorded "looks good" (refactor:false), yet the
+    // deterministic layering gate flagged a BLOCKING violation. Before the fix this
+    // left no refactor pending, so the blocking smell escalated straight to HIL.
+    writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: false, notes: "AC behavior is correct" });
+    reviewAc(tdd, F, S, "AC1");
+    // The gate IS the refactor signal: a reviewed-but-unrefactored AC is now treated
+    // as refactor-pending, so the Driver's refactor turn is dispatched...
+    expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1");
+    // ...and the escalation is suppressed (no HIL halt) while that refactor is pending.
+    expect(diskArtifactProbe(tdd, F, S).pendingEscalation()).toBeNull();
+  });
+
   it("still HALTS (terminal) when the same smell has no refactor pending", () => {
     writeSmellsLog(tdd, [{ smell: "layering-violation", cycle_ids: [], detail: "flat app/models.py vs declared app/models/ package" }]);
     // no review / refactor pending
