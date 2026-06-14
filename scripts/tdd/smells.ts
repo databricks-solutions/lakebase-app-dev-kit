@@ -261,6 +261,25 @@ export function isBuildRefactorRoutableSmell(name: string): boolean {
   return BUILD_REFACTOR_ROUTABLE.has(name);
 }
 
+/**
+ * True iff an OPEN (unresolved) build-refactor-routable smell is recorded for
+ * this story (or feature-wide, for a legacy story-less entry). The deterministic
+ * gate that raised it (layering-clean, ux-adherence, import-time-build-coupling)
+ * IS the refactor signal, so a reviewed AC should be routed to the Driver's
+ * REFACTOR even when the Navigator's verdict said refactor:false. The refactor
+ * then resolves the smell (refactorAc) and the post-refactor verify preserves
+ * behavior; if a residual violation remains it re-surfaces with no refactor
+ * pending and escalates (the backstop stays intact).
+ */
+export function hasOpenBuildRefactorRoutableSmell(tddDir: string, story_id?: string): boolean {
+  return readSmellsLog(tddDir).detected.some(
+    (d) =>
+      !d.resolution &&
+      isBuildRefactorRoutableSmell(d.smell) &&
+      (story_id === undefined || d.story_id === undefined || d.story_id === story_id),
+  );
+}
+
 const CYCLE_STALL_THRESHOLD = 3;
 const FRAGILITY_RATIO_FAILED_TESTS = 3;
 const TEST_COST_SPIRAL_FACTOR = 2;

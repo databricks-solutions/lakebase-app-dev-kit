@@ -514,6 +514,10 @@ function roleTaskBody(
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
           ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
           ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+          ` If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering /` +
+          ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
+          ` (e.g. \`lakebase-tdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
+          ` duplicated/misplaced code into one shared helper in its correct layer.` +
           ` Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.`
         );
       }

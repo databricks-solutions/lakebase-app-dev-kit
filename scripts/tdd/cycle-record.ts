@@ -25,7 +25,7 @@ import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
 import { writeEscalation, type Escalation } from "./escalation.js";
-import { readSmellsLog, markSmellResolved, isBuildRefactorRoutableSmell } from "./smells.js";
+import { readSmellsLog, markSmellResolved, isBuildRefactorRoutableSmell, hasOpenBuildRefactorRoutableSmell } from "./smells.js";
 import {
   readGreenFailure,
   writeGreenFailure,
@@ -529,9 +529,28 @@ export function firstReviewPendingAc(tddDir: string, featureId: string, story: s
   return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
 }
 
-/** First AC REVIEWed with a refactor request not yet satisfied (-> Driver REFACTOR). */
+/** First AC REVIEWed with a refactor request not yet satisfied (-> Driver REFACTOR).
+ *
+ * Two sources of "refactor pending":
+ *  1. The Navigator's REVIEW verdict explicitly requested it (refactor_requested).
+ *  2. A deterministic build-refactor-routable gate (layering-clean / ux-adherence /
+ *     import-time-build-coupling) raised a still-open BLOCKING smell for this story.
+ *     That gate IS the refactor signal, so a reviewed-but-unrefactored AC must route
+ *     to the Driver's REFACTOR even when the Navigator's verdict said refactor:false
+ *     (the bug that stalled F5: the gate blocked, the verdict said "looks good", so
+ *     no refactor was queued and the smell escalated straight to HIL instead of
+ *     self-healing). refactorAc resolves the smell + the post-refactor verify
+ *     preserves behavior; one attempt per AC, after which a residual violation
+ *     re-surfaces with no refactor pending and escalates (backstop intact).
+ */
 export function firstRefactorPendingAc(tddDir: string, featureId: string, story: string): string | null {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.reviewed && a.refactorRequested && !a.refactored)?.acId ?? null;
+  const states = acReviewStates(tddDir, featureId, story);
+  const explicit = states.find((a) => a.reviewed && a.refactorRequested && !a.refactored);
+  if (explicit) return explicit.acId;
+  if (hasOpenBuildRefactorRoutableSmell(tddDir, story)) {
+    return states.find((a) => a.reviewed && !a.refactored)?.acId ?? null;
+  }
+  return null;
 }
 
 /**
