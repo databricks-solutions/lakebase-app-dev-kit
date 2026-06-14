@@ -188,7 +188,19 @@ export function checkModulePlacement(projectDir: string, allModules: Array<{ rol
     const wantFile = module.endsWith(".py");
     const here = kindOf(join(projectDir, base));
     if (wantDir) {
-      if (here === "dir") continue;
+      if (here === "dir") {
+        // The package exists as declared, but a stale flat `<base>.py` ALONGSIDE
+        // it is a shadow-duplicate: an orphan from a flat->package migration that
+        // was never deleted (e.g. v1's app/models.py left behind when a later
+        // feature introduced the app/models/ package). Python shadows the flat
+        // module with the package, so it is dead code, but it can re-register a
+        // duplicate ORM table if imported directly and it confuses the build.
+        // Flag it so the Driver deletes the orphan.
+        if (kindOf(join(projectDir, `${base}.py`)) === "file") {
+          violations.push(`declared ${role} layer "${module}" is a package, but a stale flat ${base}.py also exists alongside it (an orphan from a flat->package migration, shadowed + duplicating this layer); delete ${base}.py so only the package defines this layer`);
+        }
+        continue;
+      }
       // The telling case: declared a package dir but the build made a flat
       // `<base>.py` (e.g. app/services/ declared, app/services.py built).
       if (kindOf(join(projectDir, `${base}.py`)) === "file") {

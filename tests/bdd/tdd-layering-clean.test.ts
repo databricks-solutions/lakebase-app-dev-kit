@@ -245,6 +245,25 @@ describe("checkModulePlacement (A1): layers live at their declared module paths"
     expect(r.ok).toBe(false);
     expect(r.violations.join(" ")).toMatch(/not found/i);
   });
+
+  it("flags a STALE flat module shadowing a correctly-built package (the F5 orphan)", () => {
+    // The package exists as declared AND a leftover flat app/models.py sits
+    // alongside it (an orphan from a flat->package migration that was never
+    // deleted). The package is correct; the flat shadow is the violation.
+    const dir = mkProject();
+    write(dir, "app/models/recipe.py", "class Recipe: ...\n");
+    write(dir, "app/models.py", "class Recipe: ...\n"); // stale orphan
+    const r = checkModulePlacement(dir, [{ role: "models", module: "app/models/" }]);
+    expect(r.ok).toBe(false);
+    expect(r.violations.join(" ")).toMatch(/stale flat app\/models\.py.*alongside|orphan.*flat->package/i);
+  });
+
+  it("passes a declared package with NO flat shadow alongside it", () => {
+    const dir = mkProject();
+    write(dir, "app/models/recipe.py", "class Recipe: ...\n");
+    const r = checkModulePlacement(dir, [{ role: "models", module: "app/models/" }]);
+    expect(r.ok).toBe(true);
+  });
 });
 
 describe("checkInlineRendering (A2): boundary renders via a framework, not inline HTML", () => {
