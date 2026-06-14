@@ -25,7 +25,7 @@ import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
-import { readSupersededTests } from "./supersession.js";
+import { readSupersededTests, readGreenFailure } from "./supersession.js";
 import { readConventions } from "./architecture-conventions.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
@@ -286,6 +286,35 @@ function supersededTestsDirective(tddDir: string, featureId: string, story: stri
 }
 
 /**
+ * The Driver's REPAIR directive: the Navigator assessed the green-failure as a
+ * driver-fixable regression and recorded a diagnosis + fix directive on the
+ * green-failure marker. Inject both so the Driver fixes the ROOT CAUSE this turn
+ * rather than re-running the same failing verify blind. Empty when the open AC
+ * has no such marker.
+ */
+function regressionRepairDirective(tddDir: string, featureId: string, story: string): string {
+  let acId: string | undefined;
+  try {
+    acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+  } catch {
+    acId = undefined;
+  }
+  if (!acId) return "";
+  const gf = readGreenFailure(tddDir, featureId, story, acId);
+  if (!gf?.fixDirective) return "";
+  return (
+    `REPAIR a driver-fixable regression in AC ${acId} (story ${story}). The honest-GREEN verify against the` +
+    ` running app FAILED and the Navigator diagnosed it as a genuine regression in the code (NOT a superseded` +
+    ` test):\n` +
+    `  DIAGNOSIS: ${gf.diagnosis ?? gf.summary}\n` +
+    `  FIX: ${gf.fixDirective}\n` +
+    `Apply that fix to the PRODUCTION code (you may not edit prior tests, this is a regression, not a` +
+    ` supersession). Keep the AC's own tests green. This is your ONE repair attempt: if the verify still fails` +
+    ` after it, the orchestration escalates to a human with the diagnosis.`
+  );
+}
+
+/**
  * Consume a pending hand-back note for this role's retry: read it, delete it
  * (consume-once), and return it as a prompt PREFIX. Empty when none is pending.
  * The orchestrator wrote it (via DriveEffects.onHandback) when the role's prior
@@ -449,8 +478,17 @@ function roleTaskBody(
           `   lakebase-tdd-cycle flag-superseded --feature ${featureId} --story ${s} --ac ${action.ac}` +
           ` --reason "<new AC + what changed>" --test <path_or_nodeid> [--test ...] --tdd-dir ${tddDir}\n` +
           `(b) If instead the failure is a GENUINE REGRESSION (the AC does NOT intend to change that behavior;` +
-          ` the Driver's code is wrong), do NOT flag anything, write nothing; the orchestration will escalate.\n` +
-          `Flag ONLY tests the new AC truly supersedes; never flag a test just to make a red go away.`
+          ` the Driver's code is wrong), record your ROOT-CAUSE diagnosis so it travels to the Driver / the human` +
+          ` instead of being lost. When the Driver can fix it, ALSO give a concrete repair directive (this routes a` +
+          ` bounded Driver repair turn):\n` +
+          `   lakebase-tdd-cycle assess-regression --feature ${featureId} --story ${s} --ac ${action.ac}` +
+          ` --diagnosis "<the WHY: which behavior broke + the root cause>" [--fix "<what the Driver should change>"]` +
+          ` --tdd-dir ${tddDir}\n` +
+          `   Include --fix ONLY when the fix is clear + within the Driver's reach (e.g. a wrong default, a missing` +
+          ` filter, an off-by-one); OMIT --fix when it needs a human / a design or spec change (the orchestration` +
+          ` then escalates carrying your diagnosis).\n` +
+          `Flag ONLY tests the new AC truly supersedes; never flag a test just to make a red go away. For a` +
+          ` regression, always write a diagnosis , never nothing.`
         );
       }
       if (action.buildMode === "review") {
@@ -468,6 +506,9 @@ function roleTaskBody(
       }
       return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
+      if (action.buildMode === "repair") {
+        return regressionRepairDirective(tddDir, featureId, s);
+      }
       if (action.buildMode === "refactor") {
         return (
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
@@ -653,8 +694,13 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       }
       if (!("mode" in action) && action.role === "driver") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const isRepair = "buildMode" in action && action.buildMode === "repair";
         const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+        // A repair turn re-verifies via GREEN, but with --repair so the substrate
+        // consumes the one repair attempt (a still-failing verify then escalates
+        // with the Navigator's diagnosis instead of routing another repair).
+        const repairFlag = isRepair ? ["--repair"] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,

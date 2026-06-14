@@ -32,6 +32,7 @@ import {
   clearGreenFailure,
   readSupersededTests,
   markSupersessionRefactored,
+  markRegressionFixAttempted,
 } from "./supersession.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
@@ -366,13 +367,19 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
  * RED cycle (the Driver was dispatched with nothing to green , a real defect).
  */
 export async function greenOpenCycle(
-  args: CycleRecordArgs & { driverChanges?: string; verify?: GreenVerifier },
+  args: CycleRecordArgs & { driverChanges?: string; verify?: GreenVerifier; repair?: boolean },
 ): Promise<GreenResult> {
   const { tddDir, featureId, story } = args;
   const open = storyTestProgress(tddDir, featureId, story).openRed
     .sort((a, b) => (a.red_at! < b.red_at! ? 1 : -1))[0];
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
+  }
+  // This green is the Driver's bounded REPAIR re-verify (the Navigator diagnosed a
+  // driver-fixable regression). Consume the one repair attempt up front so a still-
+  // failing verify escalates instead of routing another repair turn.
+  if (args.repair) {
+    markRegressionFixAttempted(tddDir, featureId, story, open.ac_id);
   }
   const scope: CycleScope = {
     tddDir,
@@ -403,11 +410,13 @@ export async function greenOpenCycle(
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
     // Already assessed (the Navigator saw the failing tests) and STILL failing:
-    // a genuine regression the permissive refactor could not honestly green, or
-    // the Navigator confirmed it was no supersession. Escalate to the HIL.
+    // a genuine regression the permissive refactor / repair could not honestly
+    // green, or the Navigator confirmed it was no supersession. Escalate to the
+    // HIL, carrying the Navigator's diagnosis when it recorded one (so the human
+    // gets the WHY, not just the verify summary).
     const escalation = writeEscalation(tddDir, {
       source: "driver-green",
-      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment: ${result.summary}`,
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
       feature_id: featureId,
       story_id: story,
       ac_id: open.ac_id,

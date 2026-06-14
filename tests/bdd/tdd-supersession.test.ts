@@ -13,6 +13,12 @@ import {
   hasPendingSupersession,
   markSupersessionRefactored,
   supersededTestsJson,
+  writeGreenFailure,
+  readGreenFailure,
+  readRegressionAssessment,
+  writeRegressionAssessment,
+  hasPendingRegressionFix,
+  markRegressionFixAttempted,
 } from "../../scripts/tdd/supersession.js";
 import { isBuildRefactorRoutableSmell, SMELL_CATALOG } from "../../scripts/tdd/smells.js";
 
@@ -70,5 +76,46 @@ describe("superseded-tests smell taxonomy", () => {
     expect(entry).toBeTruthy();
     expect(entry?.level).toBe("build");
     expect(entry?.description).toMatch(/supersed/i);
+  });
+});
+
+// ── Navigator->Driver regression-diagnosis handoff ───────────────────────────
+// The genuine-regression counterpart of supersession: the Navigator records a
+// root-cause diagnosis (and, when driver-fixable, a repair directive) so it
+// reaches the Driver / the human instead of being lost to a generic "verify
+// FAILED". These pin the store + the one-attempt bound.
+describe("regression assessment + driver-fix handoff", () => {
+  it("records the Navigator's diagnosis + fix directive (regression-assessment.json)", () => {
+    writeRegressionAssessment(tdd, F, S, AC, { diagnosis: "review_state model default is 'submitted'", fixDirective: "default it to 'approved'" });
+    const r = readRegressionAssessment(tdd, F, S, AC);
+    expect(r?.diagnosis).toMatch(/review_state/);
+    expect(r?.fixDirective).toMatch(/approved/);
+  });
+
+  it("ignores a diagnosis-less assessment (empty diagnosis => undefined)", () => {
+    writeRegressionAssessment(tdd, F, S, AC, { diagnosis: "" });
+    expect(readRegressionAssessment(tdd, F, S, AC)).toBeUndefined();
+  });
+
+  it("hasPendingRegressionFix is true only for an ASSESSED green-failure carrying a fixDirective, not yet repaired", () => {
+    // not assessed yet -> not pending
+    writeGreenFailure(tdd, F, S, AC, { assessed: false, summary: "x", fixDirective: "do y" });
+    expect(hasPendingRegressionFix(tdd, F, S, AC)).toBe(false);
+    // assessed + fixDirective -> pending (routes the Driver repair)
+    writeGreenFailure(tdd, F, S, AC, { assessed: true, summary: "x", diagnosis: "why", fixDirective: "do y" });
+    expect(hasPendingRegressionFix(tdd, F, S, AC)).toBe(true);
+    // assessed but NO fixDirective (not driver-fixable) -> not pending (escalates instead)
+    writeGreenFailure(tdd, F, S, AC, { assessed: true, summary: "x", diagnosis: "why" });
+    expect(hasPendingRegressionFix(tdd, F, S, AC)).toBe(false);
+  });
+
+  it("markRegressionFixAttempted consumes the one repair (pending -> not pending)", () => {
+    writeGreenFailure(tdd, F, S, AC, { assessed: true, summary: "x", diagnosis: "why", fixDirective: "do y" });
+    expect(hasPendingRegressionFix(tdd, F, S, AC)).toBe(true);
+    markRegressionFixAttempted(tdd, F, S, AC);
+    expect(hasPendingRegressionFix(tdd, F, S, AC)).toBe(false);
+    expect(readGreenFailure(tdd, F, S, AC)?.repairAttempted).toBe(true);
+    // diagnosis + directive are preserved (the escalation still carries the WHY)
+    expect(readGreenFailure(tdd, F, S, AC)?.diagnosis).toBe("why");
   });
 });

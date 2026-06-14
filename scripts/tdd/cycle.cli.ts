@@ -27,6 +27,8 @@ import {
   readSupersededTests,
   readGreenFailure,
   writeGreenFailure,
+  readRegressionAssessment,
+  writeRegressionAssessment,
 } from "./supersession.js";
 import { writeEscalation } from "./escalation.js";
 
@@ -44,6 +46,12 @@ interface Args {
   tests?: string[];
   /** flag-superseded: why the prior tests are superseded (new AC + change). */
   reason?: string;
+  /** assess-regression: the Navigator's root-cause finding for a genuine regression. */
+  diagnosis?: string;
+  /** assess-regression: the repair directive when the regression is driver-fixable. */
+  fixDirective?: string;
+  /** green: this green is the Driver's bounded REPAIR re-verify (consume the attempt). */
+  repair?: boolean;
 }
 
 function parse(argv: string[]): Args {
@@ -57,6 +65,9 @@ function parse(argv: string[]): Args {
       case "--loop": out.loop = argv[++i]; break;
       case "--test": (out.tests ??= []).push(argv[++i]); break;
       case "--reason": out.reason = argv[++i]; break;
+      case "--diagnosis": out.diagnosis = argv[++i]; break;
+      case "--fix": out.fixDirective = argv[++i]; break;
+      case "--repair": out.repair = true; break;
       case "--batch-cap": {
         const n = Number(argv[++i]);
         if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
@@ -100,7 +111,7 @@ async function main(): Promise<number> {
       // app. On failure it leaves the cycle RED + raises an escalation; we exit
       // 0 (the escalation is recorded data, not a command crash) so the driver's
       // next readState routes to a clean raise-to-hil halt.
-      const r = await greenOpenCycle(base);
+      const r = await greenOpenCycle({ ...base, repair: a.repair });
       if (r.needsAssess) {
         process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}\n`);
       } else if (r.escalated) {
@@ -151,27 +162,62 @@ async function main(): Promise<number> {
       process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}\n`);
       return 0;
     }
+    case "assess-regression": {
+      // The Navigator records its root-cause finding for a GENUINE regression
+      // (not a supersession), so the diagnosis travels to the Driver / the HIL
+      // instead of being lost. With --fix the regression is driver-fixable: the
+      // directive routes a bounded Driver repair turn. Without --fix it is not
+      // driver-fixable and assess-green will escalate carrying the diagnosis.
+      if (!a.ac) return usage("assess-regression: --ac is required.");
+      if (!a.diagnosis) return usage("assess-regression: --diagnosis is required.");
+      writeRegressionAssessment(tddDir, a.feature, a.story, a.ac, {
+        diagnosis: a.diagnosis,
+        ...(a.fixDirective ? { fixDirective: a.fixDirective } : {}),
+      });
+      process.stdout.write(
+        `cycle: regression assessed for ${a.story}/${a.ac}${a.fixDirective ? " (driver-fixable; repair directive recorded)" : " (not driver-fixable; will escalate with diagnosis)"}\n`,
+      );
+      return 0;
+    }
     case "assess-green": {
-      // Finalize the Navigator's assessment of a failed GREEN verify: mark the
+      // Finalize the Navigator's assessment of a failed GREEN verify. Mark the
       // green-failure assessed (so a still-failing verify next escalates rather
-      // than re-assessing). If the Navigator did NOT flag any superseded tests,
-      // the failure is a genuine regression -> record the escalation now.
+      // than re-assessing). The verdict is READ from disk , the role's output:
+      //   - superseded-tests.json present  -> supersession (Driver permissive green);
+      //   - regression-assessment.json + fixDirective -> driver-fixable regression:
+      //       record the diagnosis + directive on the marker; a Driver REPAIR turn
+      //       is routed (no escalation yet);
+      //   - regression-assessment.json, no fixDirective -> not driver-fixable:
+      //       escalate carrying the Navigator's diagnosis;
+      //   - nothing written -> genuine regression with no diagnosis: escalate with
+      //       the bare verify summary (the prior, diagnosis-free fallback).
       const ac = a.ac;
       if (!ac) return usage("assess-green: --ac is required.");
       const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
-      writeGreenFailure(tddDir, a.feature, a.story, ac, { assessed: true, summary: gf?.summary ?? "" });
       const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
+      const regression = readRegressionAssessment(tddDir, a.feature, a.story, ac);
+      writeGreenFailure(tddDir, a.feature, a.story, ac, {
+        assessed: true,
+        summary: gf?.summary ?? "",
+        ...(regression?.diagnosis ? { diagnosis: regression.diagnosis } : {}),
+        ...(regression?.fixDirective ? { fixDirective: regression.fixDirective } : {}),
+      });
       if (flagged) {
         process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)\n`);
+      } else if (regression?.fixDirective) {
+        // Driver-fixable regression: a bounded Driver repair turn is routed next
+        // (the orchestration sees the fixDirective on the marker). No escalation.
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> driver-fixable regression; routing Driver repair: ${regression.diagnosis}\n`);
       } else {
+        const why = regression?.diagnosis ?? gf?.summary ?? "";
         writeEscalation(tddDir, {
           source: "driver-green",
-          reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression (no superseded tests flagged)${gf?.summary ? ` , ${gf.summary}` : ""}`,
+          reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression${regression ? " (not driver-fixable)" : " (no superseded tests flagged)"}${why ? ` , ${why}` : ""}`,
           feature_id: a.feature,
           story_id: a.story,
           ac_id: ac,
         });
-        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL\n`);
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL${regression ? " with diagnosis" : ""}\n`);
       }
       return 0;
     }

@@ -99,6 +99,16 @@ lakebase-tdd-cycle flag-superseded --feature <F> --story <S> --ac <AC> \
 
 The honest-GREEN verify stays the backstop: an UNflagged failing test is a genuine regression that still escalates. Distinguish this from the **`test-list-drift`** smell below: drift is an IN-SCOPE contradiction (two tests in THIS story that cannot both hold), which blocks; supersession is the deliberate, documented evolution of an OLDER requirement, which you flag so the Driver carries the old tests forward to the new AC.
 
+**When you ASSESS a failed honest-GREEN verify and it is a GENUINE regression (not a supersession), never just walk away , record your diagnosis so it reaches the Driver / the human instead of being lost.** A diagnosis-free escalation forces the human to re-derive what you already found, and a bare re-drive cannot fix what it was never told. Write your root-cause finding, and , when the fix is clear + within the Driver's reach (a wrong default, a missing filter, an off-by-one) , a concrete repair directive that routes a bounded Driver REPAIR turn:
+
+```
+lakebase-tdd-cycle assess-regression --feature <F> --story <S> --ac <AC> \
+  --diagnosis "<the WHY: which behavior broke + the root cause>" \
+  [--fix "<what the Driver should change>"]
+```
+
+Include `--fix` ONLY when the Driver can honestly fix it in one pass; OMIT it when it needs a human, a design change, or a spec change (the orchestration then escalates carrying your diagnosis). The repair is bounded to ONE attempt: if the verify still fails after it, the honest-GREEN backstop escalates to the HIL , with your diagnosis attached.
+
 ## Smells you must flag (not silently fix)
 
 A **blocking** smell (`test-list-drift`, `cycle-stall`, `boundary-violation`, `test-deletion-attempt`, `scaffold-defect`) halts the build and raises it to the HIL; nothing greens past it. Flag the contradiction honestly (a test that can only pass by breaking a sibling **in this story** is `test-list-drift`; a prior-feature test the new AC legitimately supersedes is `flag-superseded` above, NOT this); never weaken either test to force GREEN. Emit it with the structured slot so the substrate persists + halts on it: `lakebase-tdd-log --event smell.flagged --slot smell=<name> --slot severity=blocking --slot detail="<why>"`.

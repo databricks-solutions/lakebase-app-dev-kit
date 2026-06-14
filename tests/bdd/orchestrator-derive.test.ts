@@ -27,6 +27,7 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     reviewPendingAc: () => null,
     refactorPendingAc: () => null,
     assessGreenFailureAc: () => null,
+    repairRegressionFixAc: () => null,
     // No blocking escalation by default (raise-to-hil routing tested separately).
     pendingEscalation: () => null,
   };
@@ -116,6 +117,26 @@ describe("deriveDriveState + nextTransition: realistic on-disk situations", () =
     );
     const state = deriveDriveState(p, fakeProbe({ S1: { testsWritten: true } }), FEATURE);
     expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "driver", story: "S1" });
+  });
+
+  it("build lane: a Navigator-assessed driver-fixable regression routes a bounded Driver REPAIR turn", () => {
+    const p = pipeline(
+      {
+        S1: {
+          status: "building",
+          gate: { status: "approved", history: [] },
+          experiment: { slug: "e", branch: "exp/s1", parent: "feat", n: 1, status: "active" },
+        },
+      },
+      { build_active: "S1" },
+    );
+    // The Navigator assessed the green-failure as driver-fixable (probe surfaces
+    // the AC via repairRegressionFixAc); the orchestration routes the Driver to
+    // REPAIR it (diagnosis injected by the effect), NOT a plain green re-attempt
+    // and NOT an escalation.
+    const probe = { ...fakeProbe({ S1: { testsWritten: true } }), repairRegressionFixAc: (s: string) => (s === "S1" ? "AC1" : null) };
+    const state = deriveDriveState(p, probe, FEATURE);
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "repair", ac: "AC1" });
   });
 
   it("breakdownDone is derived from the pipeline having stories (post sync-breakdown)", () => {

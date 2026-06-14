@@ -14,7 +14,7 @@ import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
 import { storyTestProgress, firstReviewPendingAc, firstRefactorPendingAc } from "./cycle-record.js";
-import { needsGreenAssess } from "./supersession.js";
+import { needsGreenAssess, hasPendingRegressionFix } from "./supersession.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
@@ -233,6 +233,20 @@ export function diskArtifactProbe(
       }
       if (!acId) return null;
       return needsGreenAssess(tddDir, featureId, story, acId) ? acId : null;
+    },
+
+    repairRegressionFixAc(story) {
+      // The open RED cycle's AC, when the Navigator assessed its green-failure as
+      // a DRIVER-FIXABLE regression (recorded a fix directive) and the one repair
+      // attempt has not been consumed. Routes a bounded Driver repair turn.
+      let acId: string | undefined;
+      try {
+        acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+      } catch {
+        acId = undefined;
+      }
+      if (!acId) return null;
+      return hasPendingRegressionFix(tddDir, featureId, story, acId) ? acId : null;
     },
 
     storyDeployVerified(story) {

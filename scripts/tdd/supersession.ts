@@ -107,6 +107,18 @@ export interface GreenFailure {
   assessed: boolean;
   /** The verify failure summary the Navigator assesses. */
   summary: string;
+  /** The Navigator's root-cause diagnosis recorded at assess time (the WHY the
+   *  verify failed), so a regression escalation , and any Driver repair , carries
+   *  the finding instead of the generic "verify FAILED". */
+  diagnosis?: string;
+  /** When the Navigator judged the regression DRIVER-FIXABLE: the concrete repair
+   *  directive handed to a bounded Driver repair turn. Absent => not driver-fixable
+   *  (escalate to HIL with the diagnosis). */
+  fixDirective?: string;
+  /** True once the Driver has consumed its one repair attempt (bounds the
+   *  navigator->driver repair to a single pass before the honest-GREEN backstop
+   *  escalates, symmetric to SupersededTests.refactored). */
+  repairAttempted?: boolean;
 }
 
 export function greenFailureJson(
@@ -164,4 +176,89 @@ export function needsGreenAssess(
 ): boolean {
   const gf = readGreenFailure(tdd, feature, story, ac);
   return gf !== undefined && gf.assessed !== true;
+}
+
+/**
+ * A genuine regression the Navigator assessed AND judged driver-fixable (it
+ * recorded a `fixDirective`), whose one bounded repair attempt has not been
+ * consumed. This routes a Driver REPAIR turn (the diagnosis + directive injected)
+ * instead of a terminal escalation. Symmetric to {@link hasPendingSupersession}:
+ * the genuine-regression counterpart that the Driver can act on. An assessed
+ * regression WITHOUT a fixDirective (not driver-fixable) escalates to the HIL.
+ */
+export function hasPendingRegressionFix(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): boolean {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  return gf !== undefined && gf.assessed === true && typeof gf.fixDirective === "string" && gf.fixDirective.length > 0 && gf.repairAttempted !== true;
+}
+
+/** Mark the regression-fix as attempted (consume the one Driver repair). */
+export function markRegressionFixAttempted(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): void {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  if (!gf) return;
+  writeGreenFailure(tdd, feature, story, ac, { ...gf, repairAttempted: true });
+}
+
+// ── Navigator's regression assessment (the diagnosis hand-off) ───────────────
+//
+// When the Navigator assesses a green-failure as a GENUINE regression (not a
+// supersession), it records its root-cause diagnosis here , and, when it judges
+// the Driver can fix it, a concrete repair directive. This is the inter-agent API
+// for the regression path, exactly as superseded-tests.json is for supersession:
+// the Navigator WRITES it, and the deterministic `assess-green` effect READS it to
+// either route a bounded Driver repair turn (fixDirective present) or escalate to
+// the HIL carrying the diagnosis (absent). Without it, assess-green escalates with
+// the bare verify summary (the prior, diagnosis-free behavior).
+
+export interface RegressionAssessment {
+  /** The Navigator's root-cause finding (the WHY the honest-GREEN verify failed). */
+  diagnosis: string;
+  /** When the Driver can fix it: what to change. Absent => not driver-fixable. */
+  fixDirective?: string;
+}
+
+export function regressionAssessmentJson(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): string {
+  return join(cycleDir(tdd, feature, story, ac), "regression-assessment.json");
+}
+
+export function readRegressionAssessment(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): RegressionAssessment | undefined {
+  const file = regressionAssessmentJson(tdd, feature, story, ac);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as RegressionAssessment;
+    if (typeof parsed.diagnosis !== "string" || parsed.diagnosis.length === 0) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeRegressionAssessment(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+  value: RegressionAssessment,
+): void {
+  fs.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs.writeFileSync(regressionAssessmentJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
 }

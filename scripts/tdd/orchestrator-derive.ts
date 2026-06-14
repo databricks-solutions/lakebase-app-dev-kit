@@ -48,6 +48,9 @@ export interface StoryArtifactProbe {
   /** The open AC whose GREEN verify failed + has not yet been assessed, or null
    *  (drives the reactive Navigator assess turn). */
   assessGreenFailureAc(story: string): string | null;
+  /** The open AC the Navigator assessed as a DRIVER-FIXABLE regression (recorded a
+   *  fix directive), repair not yet consumed, or null (drives the Driver repair turn). */
+  repairRegressionFixAc(story: string): string | null;
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
   storyDeployVerified(story: string): boolean;
@@ -99,6 +102,7 @@ function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryV
       reviewAc: probe.reviewPendingAc(id),
       refactorAc: probe.refactorPendingAc(id),
       assessGreenAc: probe.assessGreenFailureAc(id),
+      repairRegressionAc: probe.repairRegressionFixAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted,

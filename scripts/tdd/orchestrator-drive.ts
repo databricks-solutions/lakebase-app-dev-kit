@@ -146,6 +146,11 @@ export interface StoryBuild {
    *  supersedes (-> Driver permissive green) or confirm a genuine regression
    *  (-> escalate). */
   assessGreenAc?: string | null;
+  /** An AC whose green-failure the Navigator assessed as a DRIVER-FIXABLE genuine
+   *  regression (it recorded a fix directive), with its one repair not yet
+   *  consumed, or null. Drives a bounded Driver REPAIR turn (the diagnosis +
+   *  directive injected) before the honest-GREEN backstop escalates. */
+  repairRegressionAc?: string | null;
   /** The built story was deployed for the PO's acceptance review. */
   awaitingAcceptance: boolean;
   /** The story's deploy verified (reachable + verify.passed on its experiment
@@ -263,7 +268,7 @@ export type WorkflowAction =
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
   | { kind: "cut-experiment"; story: string }
-  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor" | "assess"; ac?: string }
+  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor" | "assess" | "repair"; ac?: string }
   | { kind: "await-acceptance"; story: string }
   | { kind: "accept"; story: string }
   | { kind: "complete"; story: string }
@@ -314,6 +319,11 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   // genuine regression -> escalate). Pre-empts the Driver's plain green re-attempt
   // below so the same failing verify is not blindly re-run.
   if (b.assessGreenAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess", ac: b.assessGreenAc };
+  // The Navigator assessed a driver-fixable regression + recorded a fix directive:
+  // route a bounded Driver REPAIR turn (diagnosis + directive injected). One shot,
+  // then the honest-GREEN backstop escalates with the diagnosis. Pre-empts the
+  // Driver's plain green re-attempt below.
+  if (b.repairRegressionAc) return { kind: "invoke-role", role: "driver", story, buildMode: "repair", ac: b.repairRegressionAc };
   // Test-list-driven RED/GREEN handoff for the current (un-reviewed) AC's tests:
   // !testsWritten -> Navigator writes the next pending RED; !codeWritten ->
   // Driver greens the open RED. With the AC-grouped list, "next pending" is
