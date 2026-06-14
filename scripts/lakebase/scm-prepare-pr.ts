@@ -143,8 +143,9 @@ export async function preparePr(
         { cwd: args.projectDir, timeout: 60_000 },
       );
     } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
       throw new ScmPreparePrError(
-        `git push failed: ${err instanceof Error ? err.message : String(err)}`,
+        `git push failed: ${raw}${pushFailureHint(raw)}`,
         "push-failed",
       );
     }
@@ -217,6 +218,33 @@ async function ensureAheadOfParent(
       return ab.ahead;
     }
   }
+}
+
+/**
+ * Append actionable guidance to a `git push` failure when the message looks
+ * like an auth / access problem. The highest-confusion case: pushing to a
+ * PRIVATE repo while authenticated as a GitHub account that cannot see it.
+ * GitHub deliberately returns "Repository not found" (not a 403) so it does
+ * not leak the repo's existence, which reads like a wrong-URL error when it is
+ * actually a wrong-account error. Returns "" for unrelated push failures.
+ */
+export function pushFailureHint(rawMessage: string): string {
+  const looksLikeAccess =
+    /repository not found|not found|\b403\b|\b401\b|permission denied|access denied|could not read (?:username|password)|authentication failed|fatal: could not read/i.test(
+      rawMessage,
+    );
+  if (!looksLikeAccess) return "";
+  return [
+    "",
+    "",
+    "  The remote rejected the push. For a PRIVATE repo this usually means git",
+    "  authenticated as a GitHub account WITHOUT access - GitHub returns",
+    '  "Repository not found" rather than a permission error, so it looks like a',
+    "  wrong URL when it is really the wrong account. Check `gh auth status`; if",
+    "  the repo lives under an org only one of your accounts can see, make that",
+    "  account active (`gh auth switch --user <account>`) or fix the `origin`",
+    "  remote, then re-run prepare-pr.",
+  ].join("\n");
 }
 
 function defaultBody(featureId: string, parentBranch: string): string {

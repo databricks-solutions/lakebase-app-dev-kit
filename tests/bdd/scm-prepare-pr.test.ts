@@ -151,6 +151,29 @@ describe("preparePr precondition", () => {
     ).rejects.toMatchObject({ code: "no-commits-ahead" });
   });
 
+  it("fails push-failed AND carries an account-mismatch hint when the remote rejects the push", async () => {
+    seedClaim();
+    mockExec.mockImplementation((cmd: string) => {
+      if (cmd.includes("rev-list --count")) return Promise.resolve("3\n");
+      if (cmd.includes("git push")) {
+        return Promise.reject(
+          new Error(
+            "remote: Repository not found.\nfatal: repository 'https://github.com/org/repo.git/' not found",
+          ),
+        );
+      }
+      return Promise.resolve("");
+    });
+    const err = (await prep
+      .preparePr({ projectDir: tmpDir })
+      .catch((e: unknown) => e)) as { code?: string; message?: string };
+    expect(err.code).toBe("push-failed");
+    // the opaque "Repository not found" gets the wrong-account remediation appended
+    expect(err.message).toMatch(/gh auth switch/);
+    // and the state is NOT advanced to pr-ready on a failed push
+    expect(state.readWorkflowState(tmpDir)?.state).toBe("feature-claimed");
+  });
+
   it("refuses when origin is not a github.com remote", async () => {
     seedClaim();
     mockGetOwnerRepo.mockResolvedValue("");
@@ -201,5 +224,18 @@ describe("preparePr happy path", () => {
     expect(result.prCreated).toBe(false);
     expect(result.prUrl).toBe("https://github.com/kevin-hartman/demo/pull/5");
     expect(mockCreatePr).not.toHaveBeenCalled();
+  });
+});
+
+describe("pushFailureHint", () => {
+  it("adds wrong-account guidance for an access-shaped rejection", () => {
+    expect(prep.pushFailureHint("remote: Repository not found.")).toMatch(/gh auth switch/);
+    expect(prep.pushFailureHint("fatal: Authentication failed for 'https://...'")).toMatch(/gh auth switch/);
+    expect(prep.pushFailureHint("could not read Password for 'https://...'")).toMatch(/gh auth switch/);
+  });
+
+  it("stays silent on unrelated push failures (no misleading guidance)", () => {
+    expect(prep.pushFailureHint("error: failed to push some refs (non-fast-forward)")).toBe("");
+    expect(prep.pushFailureHint("fatal: unable to access: Could not resolve host: github.com")).toBe("");
   });
 });
