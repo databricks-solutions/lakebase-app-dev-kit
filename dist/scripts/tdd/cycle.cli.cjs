@@ -6643,12 +6643,12 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/cycle.cli.ts
 init_cjs_shims();
-var import_path9 = require("path");
+var import_path10 = require("path");
 
 // scripts/tdd/cycle-record.ts
 init_cjs_shims();
-var import_fs8 = require("fs");
-var import_path8 = require("path");
+var import_fs9 = require("fs");
+var import_path9 = require("path");
 
 // scripts/tdd/tdd-paths.ts
 init_cjs_shims();
@@ -6678,6 +6678,7 @@ var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s
 var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
 var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
 var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+var cycleDir = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac);
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -7164,6 +7165,8 @@ var fs5 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
+var import_fs7 = require("fs");
+var import_path7 = require("path");
 
 // scripts/tdd/run-cycle.ts
 init_cjs_shims();
@@ -7438,6 +7441,43 @@ function markGreen(scope, cycleId, driverChanges) {
   return a;
 }
 
+// scripts/tdd/smells.ts
+var BUILD_REFACTOR_ROUTABLE = /* @__PURE__ */ new Set([
+  "layering-violation",
+  "ux-adherence",
+  "import-time-build-coupling",
+  // A new AC supersedes behavior encoded in PRIOR tests the Navigator flagged
+  // (superseded-tests allowlist). The Driver's refactor turn permissively
+  // refactors ONLY those flagged tests + the code, then the honest-GREEN verify
+  // re-runs. Bounded to one attempt by supersession.refactored; an unflagged
+  // regression never reaches here (it escalates), so the backstop stays intact.
+  "superseded-tests"
+]);
+function isBuildRefactorRoutableSmell(name) {
+  return BUILD_REFACTOR_ROUTABLE.has(name);
+}
+function readSmellsLog(tddDir) {
+  const file = (0, import_path7.join)(tddDir, "smells.json");
+  if (!(0, import_fs7.existsSync)(file)) return { detected: [] };
+  return JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
+}
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function markSmellResolved(tddDir, smell, opts) {
+  const file = (0, import_path7.join)(tddDir, "smells.json");
+  if (!(0, import_fs7.existsSync)(file)) return false;
+  const log = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
+  const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
+  if (!entry) return false;
+  entry.resolution = opts.note ?? `${opts.kind} by PO`;
+  entry.resolution_kind = opts.kind;
+  (0, import_fs7.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
+  return true;
+}
+
 // scripts/tdd/escalation.ts
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
@@ -7649,10 +7689,81 @@ function stopLocal(projectDir, targetName) {
   return { stopped: true };
 }
 
+// scripts/tdd/supersession.ts
+init_cjs_shims();
+var fs6 = __toESM(require("fs"), 1);
+var import_node_path4 = require("path");
+function supersededTestsJson(tdd, feature, story, ac) {
+  return (0, import_node_path4.join)(cycleDir(tdd, feature, story, ac), "superseded-tests.json");
+}
+function readSupersededTests(tdd, feature, story, ac) {
+  const file = supersededTestsJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    const parsed = JSON.parse(fs6.readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed.tests) || parsed.tests.length === 0) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function writeSupersededTests(tdd, feature, story, ac, value) {
+  const file = supersededTestsJson(tdd, feature, story, ac);
+  fs6.mkdirSync((0, import_node_path4.join)(cycleDir(tdd, feature, story, ac)), { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
+}
+function markSupersessionRefactored(tdd, feature, story, ac) {
+  const s = readSupersededTests(tdd, feature, story, ac);
+  if (!s) return;
+  writeSupersededTests(tdd, feature, story, ac, { ...s, refactored: true });
+}
+function greenFailureJson(tdd, feature, story, ac) {
+  return (0, import_node_path4.join)(cycleDir(tdd, feature, story, ac), "green-failure.json");
+}
+function readGreenFailure(tdd, feature, story, ac) {
+  const file = greenFailureJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs6.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function writeGreenFailure(tdd, feature, story, ac, value) {
+  fs6.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs6.writeFileSync(greenFailureJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
+}
+function clearGreenFailure(tdd, feature, story, ac) {
+  fs6.rmSync(greenFailureJson(tdd, feature, story, ac), { force: true });
+}
+function markRegressionFixAttempted(tdd, feature, story, ac) {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  if (!gf) return;
+  writeGreenFailure(tdd, feature, story, ac, { ...gf, repairAttempted: true });
+}
+function regressionAssessmentJson(tdd, feature, story, ac) {
+  return (0, import_node_path4.join)(cycleDir(tdd, feature, story, ac), "regression-assessment.json");
+}
+function readRegressionAssessment(tdd, feature, story, ac) {
+  const file = regressionAssessmentJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    const parsed = JSON.parse(fs6.readFileSync(file, "utf8"));
+    if (typeof parsed.diagnosis !== "string" || parsed.diagnosis.length === 0) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function writeRegressionAssessment(tdd, feature, story, ac, value) {
+  fs6.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs6.writeFileSync(regressionAssessmentJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
+}
+
 // scripts/git/commits.ts
 init_cjs_shims();
-var import_fs7 = require("fs");
-var import_path7 = require("path");
+var import_fs8 = require("fs");
+var import_path8 = require("path");
 async function commitAllIfChanged(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -7665,7 +7776,7 @@ async function commitAllIfChanged(args) {
     await exec2("git add -A", { cwd: args.cwd });
   }
   for (const inc of args.include ?? []) {
-    if ((0, import_fs7.existsSync)((0, import_path7.join)(args.cwd, inc))) {
+    if ((0, import_fs8.existsSync)((0, import_path8.join)(args.cwd, inc))) {
       await exec2(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
     }
   }
@@ -7679,7 +7790,7 @@ async function commitAllIfChanged(args) {
 async function commitCycleWork(tddDir, message) {
   try {
     await commitAllIfChanged({
-      cwd: (0, import_path8.dirname)(tddDir),
+      cwd: (0, import_path9.dirname)(tddDir),
       message,
       // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
       // observability it churns every run and is not feature code; committing it
@@ -7699,10 +7810,10 @@ function logCycleEvent2(tddDir, event) {
 }
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!(0, import_fs8.existsSync)(file)) {
+  if (!(0, import_fs9.existsSync)(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse((0, import_fs8.readFileSync)(file, "utf8"));
+  const data = JSON.parse((0, import_fs9.readFileSync)(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyExperiment(tddDir, featureId, story) {
@@ -7711,20 +7822,20 @@ function storyExperiment(tddDir, featureId, story) {
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = (0, import_path8.join)(cyclesRootDir(tddDir), featureId, story);
-  if (!(0, import_fs8.existsSync)(base)) return [];
+  const base = (0, import_path9.join)(cyclesRootDir(tddDir), featureId, story);
+  if (!(0, import_fs9.existsSync)(base)) return [];
   const out = [];
-  for (const acDir of (0, import_fs8.readdirSync)(base)) {
-    const dir = (0, import_path8.join)(base, acDir);
+  for (const acDir of (0, import_fs9.readdirSync)(base)) {
+    const dir = (0, import_path9.join)(base, acDir);
     try {
-      if (!(0, import_fs8.statSync)(dir).isDirectory()) continue;
+      if (!(0, import_fs9.statSync)(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    for (const f of (0, import_fs8.readdirSync)(dir)) {
+    for (const f of (0, import_fs9.readdirSync)(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse((0, import_fs8.readFileSync)((0, import_path8.join)(dir, f), "utf8")));
+        out.push(JSON.parse((0, import_fs9.readFileSync)((0, import_path9.join)(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7809,6 +7920,9 @@ async function greenOpenCycle(args) {
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
   }
+  if (args.repair) {
+    markRegressionFixAttempted(tddDir, featureId, story, open.ac_id);
+  }
   const scope = {
     tddDir,
     feature_id: featureId,
@@ -7818,19 +7932,28 @@ async function greenOpenCycle(args) {
     branch_id: open.branch_id
   };
   const verify = args.verify ?? defaultGreenVerifier;
-  const result = await verify({ projectDir: (0, import_path8.dirname)(tddDir), tddDir, featureId, story, branchId: open.branch_id });
+  const result = await verify({ projectDir: (0, import_path9.dirname)(tddDir), tddDir, featureId, story, branchId: open.branch_id });
   if (open.layer && open.experiment_slug) {
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
   }
   if (!result.passed) {
+    const gf = readGreenFailure(tddDir, featureId, story, open.ac_id);
+    if (!gf?.assessed) {
+      writeGreenFailure(tddDir, featureId, story, open.ac_id, { assessed: false, summary: result.summary });
+      return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
+    }
     const escalation = writeEscalation(tddDir, {
       source: "driver-green",
-      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story}: ${result.summary}`,
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
       feature_id: featureId,
       story_id: story,
       ac_id: open.ac_id
     });
     return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
+  }
+  clearGreenFailure(tddDir, featureId, story, open.ac_id);
+  if (readSupersededTests(tddDir, featureId, story, open.ac_id)) {
+    markSupersessionRefactored(tddDir, featureId, story, open.ac_id);
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   for (const tid of coveredTestIds(open)) {
@@ -7846,9 +7969,9 @@ async function greenOpenCycle(args) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!(0, import_fs8.existsSync)(f)) return {};
+  if (!(0, import_fs9.existsSync)(f)) return {};
   try {
-    return JSON.parse((0, import_fs8.readFileSync)(f, "utf8"));
+    return JSON.parse((0, import_fs9.readFileSync)(f, "utf8"));
   } catch {
     return {};
   }
@@ -7893,9 +8016,9 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 function reviewAc(tddDir, featureId, story, acId) {
   let verdict = {};
   const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
-  if ((0, import_fs8.existsSync)(vf)) {
+  if ((0, import_fs9.existsSync)(vf)) {
     try {
-      verdict = JSON.parse((0, import_fs8.readFileSync)(vf, "utf8"));
+      verdict = JSON.parse((0, import_fs9.readFileSync)(vf, "utf8"));
     } catch {
       verdict = {};
     }
@@ -7903,8 +8026,8 @@ function reviewAc(tddDir, featureId, story, acId) {
   const refactorRequested = verdict.refactor === true;
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  (0, import_fs8.mkdirSync)((0, import_path8.dirname)(file), { recursive: true });
-  (0, import_fs8.writeFileSync)(
+  (0, import_fs9.mkdirSync)((0, import_path9.dirname)(file), { recursive: true });
+  (0, import_fs9.writeFileSync)(
     file,
     JSON.stringify(
       { ...prior, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), refactor_requested: refactorRequested, ...verdict.notes ? { refactor_notes: verdict.notes } : {} },
@@ -7929,7 +8052,7 @@ function reviewAc(tddDir, featureId, story, acId) {
 async function refactorAc(tddDir, featureId, story, acId, opts) {
   const exp = storyExperiment(tddDir, featureId, story);
   const verify = opts?.verify ?? defaultGreenVerifier;
-  const result = await verify({ projectDir: (0, import_path8.dirname)(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  const result = await verify({ projectDir: (0, import_path9.dirname)(tddDir), tddDir, featureId, story, branchId: exp.branch });
   if (!result.passed) {
     const escalation = writeEscalation(tddDir, {
       source: "driver-refactor",
@@ -7942,8 +8065,13 @@ async function refactorAc(tddDir, featureId, story, acId, opts) {
   }
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  (0, import_fs8.mkdirSync)((0, import_path8.dirname)(file), { recursive: true });
-  (0, import_fs8.writeFileSync)(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  (0, import_fs9.mkdirSync)((0, import_path9.dirname)(file), { recursive: true });
+  (0, import_fs9.writeFileSync)(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  for (const d of readSmellsLog(tddDir).detected) {
+    if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === void 0 || d.story_id === story)) {
+      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored: ${acId}` });
+    }
+  }
   const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0 ? `addressed: ${prior.refactor_notes}` : "structure improved";
   logCycleEvent2(tddDir, {
     role: "driver",
@@ -7976,6 +8104,21 @@ function parse(argv) {
       case "--loop":
         out.loop = argv[++i];
         break;
+      case "--test":
+        (out.tests ??= []).push(argv[++i]);
+        break;
+      case "--reason":
+        out.reason = argv[++i];
+        break;
+      case "--diagnosis":
+        out.diagnosis = argv[++i];
+        break;
+      case "--fix":
+        out.fixDirective = argv[++i];
+        break;
+      case "--repair":
+        out.repair = true;
+        break;
       case "--batch-cap": {
         const n = Number(argv[++i]);
         if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
@@ -7996,7 +8139,7 @@ Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S
 async function main() {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? (0, import_path9.join)(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? (0, import_path10.join)(process.cwd(), ".tdd");
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {
@@ -8009,8 +8152,11 @@ async function main() {
       return 0;
     }
     case "green": {
-      const r = await greenOpenCycle(base);
-      if (r.escalated) {
+      const r = await greenOpenCycle({ ...base, repair: a.repair });
+      if (r.needsAssess) {
+        process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}
+`);
+      } else if (r.escalated) {
         process.stdout.write(`cycle: GREEN BLOCKED for ${r.testId} -> raised to HIL: ${r.summary}
 `);
       } else {
@@ -8044,6 +8190,60 @@ async function main() {
 `);
       } else {
         process.stdout.write(`cycle: REFACTORED ${ac}
+`);
+      }
+      return 0;
+    }
+    case "flag-superseded": {
+      if (!a.ac) return usage("flag-superseded: --ac is required.");
+      if (!a.tests || a.tests.length === 0) return usage("flag-superseded: at least one --test is required.");
+      if (!a.reason) return usage("flag-superseded: --reason is required.");
+      writeSupersededTests(tddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
+      process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}
+`);
+      return 0;
+    }
+    case "assess-regression": {
+      if (!a.ac) return usage("assess-regression: --ac is required.");
+      if (!a.diagnosis) return usage("assess-regression: --diagnosis is required.");
+      writeRegressionAssessment(tddDir, a.feature, a.story, a.ac, {
+        diagnosis: a.diagnosis,
+        ...a.fixDirective ? { fixDirective: a.fixDirective } : {}
+      });
+      process.stdout.write(
+        `cycle: regression assessed for ${a.story}/${a.ac}${a.fixDirective ? " (driver-fixable; repair directive recorded)" : " (not driver-fixable; will escalate with diagnosis)"}
+`
+      );
+      return 0;
+    }
+    case "assess-green": {
+      const ac = a.ac;
+      if (!ac) return usage("assess-green: --ac is required.");
+      const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
+      const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
+      const regression = readRegressionAssessment(tddDir, a.feature, a.story, ac);
+      writeGreenFailure(tddDir, a.feature, a.story, ac, {
+        assessed: true,
+        summary: gf?.summary ?? "",
+        ...regression?.diagnosis ? { diagnosis: regression.diagnosis } : {},
+        ...regression?.fixDirective ? { fixDirective: regression.fixDirective } : {}
+      });
+      if (flagged) {
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)
+`);
+      } else if (regression?.fixDirective) {
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> driver-fixable regression; routing Driver repair: ${regression.diagnosis}
+`);
+      } else {
+        const why = regression?.diagnosis ?? gf?.summary ?? "";
+        writeEscalation(tddDir, {
+          source: "driver-green",
+          reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression${regression ? " (not driver-fixable)" : " (no superseded tests flagged)"}${why ? ` , ${why}` : ""}`,
+          feature_id: a.feature,
+          story_id: a.story,
+          ac_id: ac
+        });
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL${regression ? " with diagnosis" : ""}
 `);
       }
       return 0;

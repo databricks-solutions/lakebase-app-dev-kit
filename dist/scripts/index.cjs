@@ -266,6 +266,7 @@ __export(scripts_exports, {
   pullRebase: () => pullRebase,
   push: () => push,
   pushCurrentBranchForPr: () => pushCurrentBranchForPr,
+  pushFailureHint: () => pushFailureHint,
   pushTo: () => pushTo,
   queryBranchSchema: () => queryBranchSchema,
   queryBranchTables: () => queryBranchTables,
@@ -7480,8 +7481,9 @@ async function preparePr(args) {
         { cwd: args.projectDir, timeout: 6e4 }
       );
     } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
       throw new ScmPreparePrError(
-        `git push failed: ${err instanceof Error ? err.message : String(err)}`,
+        `git push failed: ${raw}${pushFailureHint(raw)}`,
         "push-failed"
       );
     }
@@ -7534,6 +7536,23 @@ async function ensureAheadOfParent(cwd, branch, parent) {
       return ab.ahead;
     }
   }
+}
+function pushFailureHint(rawMessage) {
+  const looksLikeAccess = /repository not found|not found|\b403\b|\b401\b|permission denied|access denied|could not read (?:username|password)|authentication failed|fatal: could not read/i.test(
+    rawMessage
+  );
+  if (!looksLikeAccess) return "";
+  return [
+    "",
+    "",
+    "  The remote rejected the push. For a PRIVATE repo this usually means git",
+    "  authenticated as a GitHub account WITHOUT access - GitHub returns",
+    '  "Repository not found" rather than a permission error, so it looks like a',
+    "  wrong URL when it is really the wrong account. Check `gh auth status`; if",
+    "  the repo lives under an org only one of your accounts can see, make that",
+    "  account active (`gh auth switch --user <account>`) or fix the `origin`",
+    "  remote, then re-run prepare-pr."
+  ].join("\n");
 }
 function defaultBody(featureId, parentBranch) {
   return [
@@ -9787,6 +9806,7 @@ function withProxyEnv(base = {}) {
   pullRebase,
   push,
   pushCurrentBranchForPr,
+  pushFailureHint,
   pushTo,
   queryBranchSchema,
   queryBranchTables,

@@ -6648,12 +6648,12 @@ var require_ajv = __commonJS({
 
 // scripts/tdd/cycle.cli.ts
 init_esm_shims();
-import { join as join14 } from "path";
+import { join as join16 } from "path";
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync13, readFileSync as readFileSync14, readdirSync as readdirSync8, statSync as statSync6, writeFileSync as writeFileSync10, mkdirSync as mkdirSync8 } from "fs";
-import { join as join13, dirname as dirname4 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync16, readdirSync as readdirSync8, statSync as statSync6, writeFileSync as writeFileSync12, mkdirSync as mkdirSync9 } from "fs";
+import { join as join15, dirname as dirname4 } from "path";
 
 // scripts/tdd/tdd-paths.ts
 init_esm_shims();
@@ -6683,6 +6683,7 @@ var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s
 var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
 var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
 var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var cycleDir = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac);
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -7128,8 +7129,8 @@ function writeOutcomes(tddDir, featureId, storyId, slug, outcomes) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync13, rmSync, writeFileSync as writeFileSync9 } from "fs";
-import { dirname as dirname3, join as join11 } from "path";
+import { existsSync as existsSync12, mkdirSync as mkdirSync7, readFileSync as readFileSync14, rmSync, writeFileSync as writeFileSync10 } from "fs";
+import { dirname as dirname3, join as join12 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7169,6 +7170,8 @@ import * as fs5 from "fs";
 
 // scripts/tdd/smells.ts
 init_esm_shims();
+import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync8 } from "fs";
+import { join as join10 } from "path";
 
 // scripts/tdd/run-cycle.ts
 init_esm_shims();
@@ -7443,6 +7446,43 @@ function markGreen(scope, cycleId, driverChanges) {
   return a;
 }
 
+// scripts/tdd/smells.ts
+var BUILD_REFACTOR_ROUTABLE = /* @__PURE__ */ new Set([
+  "layering-violation",
+  "ux-adherence",
+  "import-time-build-coupling",
+  // A new AC supersedes behavior encoded in PRIOR tests the Navigator flagged
+  // (superseded-tests allowlist). The Driver's refactor turn permissively
+  // refactors ONLY those flagged tests + the code, then the honest-GREEN verify
+  // re-runs. Bounded to one attempt by supersession.refactored; an unflagged
+  // regression never reaches here (it escalates), so the backstop stays intact.
+  "superseded-tests"
+]);
+function isBuildRefactorRoutableSmell(name) {
+  return BUILD_REFACTOR_ROUTABLE.has(name);
+}
+function readSmellsLog(tddDir) {
+  const file = join10(tddDir, "smells.json");
+  if (!existsSync10(file)) return { detected: [] };
+  return JSON.parse(readFileSync11(file, "utf8"));
+}
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function markSmellResolved(tddDir, smell, opts) {
+  const file = join10(tddDir, "smells.json");
+  if (!existsSync10(file)) return false;
+  const log = JSON.parse(readFileSync11(file, "utf8"));
+  const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
+  if (!entry) return false;
+  entry.resolution = opts.note ?? `${opts.kind} by PO`;
+  entry.resolution_kind = opts.kind;
+  writeFileSync8(file, JSON.stringify(log, null, 2) + "\n");
+  return true;
+}
+
 // scripts/tdd/escalation.ts
 function escalationId(parts) {
   return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
@@ -7476,8 +7516,8 @@ function readEscalationFile(file) {
 
 // scripts/tdd/e2e-regex-clean.ts
 init_esm_shims();
-import { readdirSync as readdirSync6, readFileSync as readFileSync12, statSync as statSync5 } from "fs";
-import { join as join10 } from "path";
+import { readdirSync as readdirSync6, readFileSync as readFileSync13, statSync as statSync5 } from "fs";
+import { join as join11 } from "path";
 var INLINE_FLAG_RE = /\(\?[aiLmsux]*[-]?[aiLmsux]+\)/;
 var RE_COMPILE_RE = /re\.compile\(\s*[rRbuf]*(["'])((?:\\.|(?!\1).)*)\1/g;
 var E2E_REGEX_REMEDIATION = `A Playwright matcher uses a Python regex with inline flags (e.g. re.compile(r"(?i)summary")). Playwright forwards the pattern verbatim to the browser's JavaScript engine, which does not support inline-flag syntax , the assertion can never match. Pass the flag as a kwarg instead: re.compile("summary", re.IGNORECASE). See the E2E rule in the Navigator role + the e2e-inline-regex-flag bad smell.`;
@@ -7503,7 +7543,7 @@ function pythonFilesUnder(dir, rootForRel) {
   }
   for (const name of entries) {
     if (name === "__pycache__" || name === ".pytest_cache") continue;
-    const abs = join10(dir, name);
+    const abs = join11(dir, name);
     let st;
     try {
       st = statSync5(abs);
@@ -7519,13 +7559,13 @@ function pythonFilesUnder(dir, rootForRel) {
   return out;
 }
 function checkE2eRegexClean(args) {
-  const e2eRoot = join10(args.projectDir, args.e2eDir ?? join10("tests", "e2e"));
+  const e2eRoot = join11(args.projectDir, args.e2eDir ?? join11("tests", "e2e"));
   const files = pythonFilesUnder(e2eRoot, args.projectDir);
   const violations = [];
   for (const f of files) {
     let src;
     try {
-      src = readFileSync12(f.abs, "utf8");
+      src = readFileSync13(f.abs, "utf8");
     } catch {
       continue;
     }
@@ -7567,7 +7607,7 @@ async function probeReachable(url) {
   }
 }
 function pidFile(projectDir, target) {
-  return join11(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join12(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -7607,7 +7647,7 @@ async function ensureDeployedAndVerify(args) {
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, targetName);
   mkdirSync7(dirname3(pf), { recursive: true });
-  writeFileSync9(pf, String(pid));
+  writeFileSync10(pf, String(pid));
   const poll = await pollUntil({
     probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
     timeoutMs: cfg.readyTimeoutSeconds * 1e3,
@@ -7638,8 +7678,8 @@ async function ensureDeployedAndVerify(args) {
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
-  if (!existsSync11(pf)) return { stopped: false };
-  const pid = Number(readFileSync13(pf, "utf8").trim());
+  if (!existsSync12(pf)) return { stopped: false };
+  const pid = Number(readFileSync14(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);
@@ -7654,10 +7694,81 @@ function stopLocal(projectDir, targetName) {
   return { stopped: true };
 }
 
+// scripts/tdd/supersession.ts
+init_esm_shims();
+import * as fs6 from "fs";
+import { join as join13 } from "path";
+function supersededTestsJson(tdd, feature, story, ac) {
+  return join13(cycleDir(tdd, feature, story, ac), "superseded-tests.json");
+}
+function readSupersededTests(tdd, feature, story, ac) {
+  const file = supersededTestsJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    const parsed = JSON.parse(fs6.readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed.tests) || parsed.tests.length === 0) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function writeSupersededTests(tdd, feature, story, ac, value) {
+  const file = supersededTestsJson(tdd, feature, story, ac);
+  fs6.mkdirSync(join13(cycleDir(tdd, feature, story, ac)), { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
+}
+function markSupersessionRefactored(tdd, feature, story, ac) {
+  const s = readSupersededTests(tdd, feature, story, ac);
+  if (!s) return;
+  writeSupersededTests(tdd, feature, story, ac, { ...s, refactored: true });
+}
+function greenFailureJson(tdd, feature, story, ac) {
+  return join13(cycleDir(tdd, feature, story, ac), "green-failure.json");
+}
+function readGreenFailure(tdd, feature, story, ac) {
+  const file = greenFailureJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs6.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function writeGreenFailure(tdd, feature, story, ac, value) {
+  fs6.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs6.writeFileSync(greenFailureJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
+}
+function clearGreenFailure(tdd, feature, story, ac) {
+  fs6.rmSync(greenFailureJson(tdd, feature, story, ac), { force: true });
+}
+function markRegressionFixAttempted(tdd, feature, story, ac) {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  if (!gf) return;
+  writeGreenFailure(tdd, feature, story, ac, { ...gf, repairAttempted: true });
+}
+function regressionAssessmentJson(tdd, feature, story, ac) {
+  return join13(cycleDir(tdd, feature, story, ac), "regression-assessment.json");
+}
+function readRegressionAssessment(tdd, feature, story, ac) {
+  const file = regressionAssessmentJson(tdd, feature, story, ac);
+  if (!fs6.existsSync(file)) return void 0;
+  try {
+    const parsed = JSON.parse(fs6.readFileSync(file, "utf8"));
+    if (typeof parsed.diagnosis !== "string" || parsed.diagnosis.length === 0) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function writeRegressionAssessment(tdd, feature, story, ac, value) {
+  fs6.mkdirSync(cycleDir(tdd, feature, story, ac), { recursive: true });
+  fs6.writeFileSync(regressionAssessmentJson(tdd, feature, story, ac), JSON.stringify(value, null, 2) + "\n");
+}
+
 // scripts/git/commits.ts
 init_esm_shims();
-import { existsSync as existsSync12 } from "fs";
-import { join as join12 } from "path";
+import { existsSync as existsSync14 } from "fs";
+import { join as join14 } from "path";
 async function commitAllIfChanged(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -7670,7 +7781,7 @@ async function commitAllIfChanged(args) {
     await exec2("git add -A", { cwd: args.cwd });
   }
   for (const inc of args.include ?? []) {
-    if (existsSync12(join12(args.cwd, inc))) {
+    if (existsSync14(join14(args.cwd, inc))) {
       await exec2(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
     }
   }
@@ -7704,10 +7815,10 @@ function logCycleEvent2(tddDir, event) {
 }
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync13(file)) {
+  if (!existsSync15(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse(readFileSync14(file, "utf8"));
+  const data = JSON.parse(readFileSync16(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyExperiment(tddDir, featureId, story) {
@@ -7716,11 +7827,11 @@ function storyExperiment(tddDir, featureId, story) {
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = join13(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync13(base)) return [];
+  const base = join15(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync15(base)) return [];
   const out = [];
   for (const acDir of readdirSync8(base)) {
-    const dir = join13(base, acDir);
+    const dir = join15(base, acDir);
     try {
       if (!statSync6(dir).isDirectory()) continue;
     } catch {
@@ -7729,7 +7840,7 @@ function storyCycles(tddDir, featureId, story) {
     for (const f of readdirSync8(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(readFileSync14(join13(dir, f), "utf8")));
+        out.push(JSON.parse(readFileSync16(join15(dir, f), "utf8")));
       } catch {
       }
     }
@@ -7814,6 +7925,9 @@ async function greenOpenCycle(args) {
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
   }
+  if (args.repair) {
+    markRegressionFixAttempted(tddDir, featureId, story, open.ac_id);
+  }
   const scope = {
     tddDir,
     feature_id: featureId,
@@ -7828,14 +7942,23 @@ async function greenOpenCycle(args) {
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
   }
   if (!result.passed) {
+    const gf = readGreenFailure(tddDir, featureId, story, open.ac_id);
+    if (!gf?.assessed) {
+      writeGreenFailure(tddDir, featureId, story, open.ac_id, { assessed: false, summary: result.summary });
+      return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
+    }
     const escalation = writeEscalation(tddDir, {
       source: "driver-green",
-      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story}: ${result.summary}`,
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
       feature_id: featureId,
       story_id: story,
       ac_id: open.ac_id
     });
     return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
+  }
+  clearGreenFailure(tddDir, featureId, story, open.ac_id);
+  if (readSupersededTests(tddDir, featureId, story, open.ac_id)) {
+    markSupersessionRefactored(tddDir, featureId, story, open.ac_id);
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   for (const tid of coveredTestIds(open)) {
@@ -7851,9 +7974,9 @@ async function greenOpenCycle(args) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!existsSync13(f)) return {};
+  if (!existsSync15(f)) return {};
   try {
-    return JSON.parse(readFileSync14(f, "utf8"));
+    return JSON.parse(readFileSync16(f, "utf8"));
   } catch {
     return {};
   }
@@ -7898,9 +8021,9 @@ function firstRefactorPendingAc(tddDir, featureId, story) {
 function reviewAc(tddDir, featureId, story, acId) {
   let verdict = {};
   const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
-  if (existsSync13(vf)) {
+  if (existsSync15(vf)) {
     try {
-      verdict = JSON.parse(readFileSync14(vf, "utf8"));
+      verdict = JSON.parse(readFileSync16(vf, "utf8"));
     } catch {
       verdict = {};
     }
@@ -7908,8 +8031,8 @@ function reviewAc(tddDir, featureId, story, acId) {
   const refactorRequested = verdict.refactor === true;
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  mkdirSync8(dirname4(file), { recursive: true });
-  writeFileSync10(
+  mkdirSync9(dirname4(file), { recursive: true });
+  writeFileSync12(
     file,
     JSON.stringify(
       { ...prior, reviewed_at: (/* @__PURE__ */ new Date()).toISOString(), refactor_requested: refactorRequested, ...verdict.notes ? { refactor_notes: verdict.notes } : {} },
@@ -7947,8 +8070,13 @@ async function refactorAc(tddDir, featureId, story, acId, opts) {
   }
   const file = acReviewJson(tddDir, featureId, story, acId);
   const prior = readReview(tddDir, featureId, story, acId);
-  mkdirSync8(dirname4(file), { recursive: true });
-  writeFileSync10(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  mkdirSync9(dirname4(file), { recursive: true });
+  writeFileSync12(file, JSON.stringify({ ...prior, refactored_at: (/* @__PURE__ */ new Date()).toISOString() }, null, 2) + "\n");
+  for (const d of readSmellsLog(tddDir).detected) {
+    if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === void 0 || d.story_id === story)) {
+      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored: ${acId}` });
+    }
+  }
   const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0 ? `addressed: ${prior.refactor_notes}` : "structure improved";
   logCycleEvent2(tddDir, {
     role: "driver",
@@ -7981,6 +8109,21 @@ function parse(argv) {
       case "--loop":
         out.loop = argv[++i];
         break;
+      case "--test":
+        (out.tests ??= []).push(argv[++i]);
+        break;
+      case "--reason":
+        out.reason = argv[++i];
+        break;
+      case "--diagnosis":
+        out.diagnosis = argv[++i];
+        break;
+      case "--fix":
+        out.fixDirective = argv[++i];
+        break;
+      case "--repair":
+        out.repair = true;
+        break;
       case "--batch-cap": {
         const n = Number(argv[++i]);
         if (Number.isFinite(n) && n > 0) out.batchCap = Math.floor(n);
@@ -8001,7 +8144,7 @@ Usage: lakebase-tdd-cycle <begin|green|review|refactor> --feature <F> --story <S
 async function main() {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? join14(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? join16(process.cwd(), ".tdd");
   const base = { tddDir, featureId: a.feature, story: a.story };
   switch (a.cmd) {
     case "begin": {
@@ -8014,8 +8157,11 @@ async function main() {
       return 0;
     }
     case "green": {
-      const r = await greenOpenCycle(base);
-      if (r.escalated) {
+      const r = await greenOpenCycle({ ...base, repair: a.repair });
+      if (r.needsAssess) {
+        process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}
+`);
+      } else if (r.escalated) {
         process.stdout.write(`cycle: GREEN BLOCKED for ${r.testId} -> raised to HIL: ${r.summary}
 `);
       } else {
@@ -8049,6 +8195,60 @@ async function main() {
 `);
       } else {
         process.stdout.write(`cycle: REFACTORED ${ac}
+`);
+      }
+      return 0;
+    }
+    case "flag-superseded": {
+      if (!a.ac) return usage("flag-superseded: --ac is required.");
+      if (!a.tests || a.tests.length === 0) return usage("flag-superseded: at least one --test is required.");
+      if (!a.reason) return usage("flag-superseded: --reason is required.");
+      writeSupersededTests(tddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
+      process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}
+`);
+      return 0;
+    }
+    case "assess-regression": {
+      if (!a.ac) return usage("assess-regression: --ac is required.");
+      if (!a.diagnosis) return usage("assess-regression: --diagnosis is required.");
+      writeRegressionAssessment(tddDir, a.feature, a.story, a.ac, {
+        diagnosis: a.diagnosis,
+        ...a.fixDirective ? { fixDirective: a.fixDirective } : {}
+      });
+      process.stdout.write(
+        `cycle: regression assessed for ${a.story}/${a.ac}${a.fixDirective ? " (driver-fixable; repair directive recorded)" : " (not driver-fixable; will escalate with diagnosis)"}
+`
+      );
+      return 0;
+    }
+    case "assess-green": {
+      const ac = a.ac;
+      if (!ac) return usage("assess-green: --ac is required.");
+      const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
+      const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
+      const regression = readRegressionAssessment(tddDir, a.feature, a.story, ac);
+      writeGreenFailure(tddDir, a.feature, a.story, ac, {
+        assessed: true,
+        summary: gf?.summary ?? "",
+        ...regression?.diagnosis ? { diagnosis: regression.diagnosis } : {},
+        ...regression?.fixDirective ? { fixDirective: regression.fixDirective } : {}
+      });
+      if (flagged) {
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)
+`);
+      } else if (regression?.fixDirective) {
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> driver-fixable regression; routing Driver repair: ${regression.diagnosis}
+`);
+      } else {
+        const why = regression?.diagnosis ?? gf?.summary ?? "";
+        writeEscalation(tddDir, {
+          source: "driver-green",
+          reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression${regression ? " (not driver-fixable)" : " (no superseded tests flagged)"}${why ? ` , ${why}` : ""}`,
+          feature_id: a.feature,
+          story_id: a.story,
+          ac_id: ac
+        });
+        process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL${regression ? " with diagnosis" : ""}
 `);
       }
       return 0;

@@ -6650,7 +6650,7 @@ var require_ajv = __commonJS({
 init_esm_shims();
 import { spawn as spawn2 } from "child_process";
 import { randomUUID } from "crypto";
-import * as fs10 from "fs";
+import * as fs12 from "fs";
 import * as path6 from "path";
 import * as readline from "readline";
 
@@ -6699,6 +6699,7 @@ var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
 var acJson = (tdd, f, s, ac) => join(acsDir(tdd, f, s), `${ac}.json`);
 var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
 var handbackFile = (tdd, f, role, story) => join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
+var cycleDir = (tdd, f, s, ac) => join(cyclesRootDir(tdd), f, s, ac);
 var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
 var backlogJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "backlog.json");
@@ -7231,6 +7232,8 @@ function nextBuildAction(story, b) {
   if (!b.experimentCut) return { kind: "cut-experiment", story };
   if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
   if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  if (b.assessGreenAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess", ac: b.assessGreenAc };
+  if (b.repairRegressionAc) return { kind: "invoke-role", role: "driver", story, buildMode: "repair", ac: b.repairRegressionAc };
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
@@ -7405,7 +7408,12 @@ function expectationFor(action) {
   const base = { signature, responder, ...story ? { story } : {} };
   const storyView2 = (s) => story ? s.stories[story] : void 0;
   if (responder === "spec-author" && "mode" in action && action.mode === "breakdown") {
-    return { ...base, expected: "a feature breakdown (\u22651 story)", satisfiedBy: (s) => s.breakdownDone === true };
+    return {
+      ...base,
+      expected: "a feature breakdown (\u22651 story)",
+      satisfiedBy: (s) => s.breakdownDone === true,
+      remediation: "Write feature-spec.json with a NON-EMPTY `stories[]` array and create the story stub dirs under .tdd/features/<feature>/stories/. The feature dir currently holds only feature-request.md; a prose list of stories in your reply is NOT the breakdown."
+    };
   }
   if (responder === "spec-author" && "mode" in action && action.mode === "propose") {
     return { ...base, expected: "feature proposals", satisfiedBy: (s) => s.planning?.proposed === true };
@@ -7437,7 +7445,14 @@ function expectationFor(action) {
   return null;
 }
 function handbackMessage(h, attempt) {
-  return `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}. The expected artifact is absent / null / empty / nonconformant. Produce it now , this is a retry; the workflow aborts if it is still missing.`;
+  return [
+    `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}.`,
+    `The expected artifact is absent / null / empty / nonconformant ON DISK (the orchestrator verified it).`,
+    `Do NOT claim it "already exists" or that "no further artifacts are needed": prose describing the artifact is NOT the artifact.`,
+    `Re-inspect the filesystem yourself, then WRITE the artifact this turn.`,
+    ...h.remediation ? [h.remediation] : [],
+    `This is a retry; the workflow aborts if it is still missing.`
+  ].join(" ");
 }
 var ExpectationLedger = class {
   constructor(maxRetries = 1) {
@@ -7599,7 +7614,7 @@ async function runDriver(effects, options = {}) {
 
 // scripts/tdd/escalation.ts
 init_esm_shims();
-import * as fs5 from "fs";
+import * as fs6 from "fs";
 
 // scripts/tdd/smells.ts
 init_esm_shims();
@@ -7902,6 +7917,12 @@ var SMELL_CATALOG = [
     gate_to_rerun: "test_list"
   },
   {
+    name: "superseded-tests",
+    description: "A new AC intentionally supersedes behavior encoded in PRIOR tests (often from earlier features); the Navigator flagged them in a superseded-tests allowlist. NOT a contradiction to block (that is test-list-drift), the latest AC wins and the accumulated tests must follow it.",
+    proposed_remediation: "Driver permissively refactors ONLY the flagged tests (and the code) to the new AC, then the honest-GREEN verify re-runs. Bounded to one attempt; an unflagged regression escalates.",
+    level: "build"
+  },
+  {
     name: "cycle-stall",
     description: "N cycles in a row with no GREEN.",
     proposed_remediation: "Re-examine test ordering or spec ambiguity."
@@ -7986,6 +8007,20 @@ function specLevelSmell(name) {
   if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
   return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
 }
+var BUILD_REFACTOR_ROUTABLE = /* @__PURE__ */ new Set([
+  "layering-violation",
+  "ux-adherence",
+  "import-time-build-coupling",
+  // A new AC supersedes behavior encoded in PRIOR tests the Navigator flagged
+  // (superseded-tests allowlist). The Driver's refactor turn permissively
+  // refactors ONLY those flagged tests + the code, then the honest-GREEN verify
+  // re-runs. Bounded to one attempt by supersession.refactored; an unflagged
+  // regression never reaches here (it escalates), so the backstop stays intact.
+  "superseded-tests"
+]);
+function isBuildRefactorRoutableSmell(name) {
+  return BUILD_REFACTOR_ROUTABLE.has(name);
+}
 function readSmellsLog(tddDir) {
   const file = join10(tddDir, "smells.json");
   if (!existsSync10(file)) return { detected: [] };
@@ -8004,8 +8039,8 @@ function priorReviseCount(tddDir, smell, story_id) {
 
 // scripts/tdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync12, readdirSync as readdirSync7, statSync as statSync6, writeFileSync as writeFileSync8, mkdirSync as mkdirSync7 } from "fs";
-import { join as join13, dirname as dirname5 } from "path";
+import { existsSync as existsSync13, readFileSync as readFileSync13, readdirSync as readdirSync7, statSync as statSync6, writeFileSync as writeFileSync9, mkdirSync as mkdirSync8 } from "fs";
+import { join as join14, dirname as dirname5 } from "path";
 
 // scripts/tdd/test-list.ts
 init_esm_shims();
@@ -8042,24 +8077,63 @@ function storyDeployVerified(tddDir, featureId, storyId) {
   return deployEvidencePasses(readDeployEvidence(join12(fdir, "stories", storyId, "deploy-evidence.json")));
 }
 
+// scripts/tdd/supersession.ts
+init_esm_shims();
+import * as fs5 from "fs";
+import { join as join13 } from "path";
+function supersededTestsJson(tdd, feature, story, ac) {
+  return join13(cycleDir(tdd, feature, story, ac), "superseded-tests.json");
+}
+function readSupersededTests(tdd, feature, story, ac) {
+  const file = supersededTestsJson(tdd, feature, story, ac);
+  if (!fs5.existsSync(file)) return void 0;
+  try {
+    const parsed = JSON.parse(fs5.readFileSync(file, "utf8"));
+    if (!Array.isArray(parsed.tests) || parsed.tests.length === 0) return void 0;
+    return parsed;
+  } catch {
+    return void 0;
+  }
+}
+function greenFailureJson(tdd, feature, story, ac) {
+  return join13(cycleDir(tdd, feature, story, ac), "green-failure.json");
+}
+function readGreenFailure(tdd, feature, story, ac) {
+  const file = greenFailureJson(tdd, feature, story, ac);
+  if (!fs5.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs5.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function needsGreenAssess(tdd, feature, story, ac) {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  return gf !== void 0 && gf.assessed !== true;
+}
+function hasPendingRegressionFix(tdd, feature, story, ac) {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  return gf !== void 0 && gf.assessed === true && typeof gf.fixDirective === "string" && gf.fixDirective.length > 0 && gf.repairAttempted !== true;
+}
+
 // scripts/git/commits.ts
 init_esm_shims();
 
 // scripts/tdd/cycle-record.ts
 function readStoryItems(tddDir, featureId, story) {
   const file = storyTestListJson(tddDir, featureId, story);
-  if (!existsSync12(file)) {
+  if (!existsSync13(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
-  const data = JSON.parse(readFileSync12(file, "utf8"));
+  const data = JSON.parse(readFileSync13(file, "utf8"));
   return Array.isArray(data.items) ? data.items : [];
 }
 function storyCycles(tddDir, featureId, story) {
-  const base = join13(cyclesRootDir(tddDir), featureId, story);
-  if (!existsSync12(base)) return [];
+  const base = join14(cyclesRootDir(tddDir), featureId, story);
+  if (!existsSync13(base)) return [];
   const out = [];
   for (const acDir of readdirSync7(base)) {
-    const dir = join13(base, acDir);
+    const dir = join14(base, acDir);
     try {
       if (!statSync6(dir).isDirectory()) continue;
     } catch {
@@ -8068,7 +8142,7 @@ function storyCycles(tddDir, featureId, story) {
     for (const f of readdirSync7(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(readFileSync12(join13(dir, f), "utf8")));
+        out.push(JSON.parse(readFileSync13(join14(dir, f), "utf8")));
       } catch {
       }
     }
@@ -8104,9 +8178,9 @@ function nextPendingBatch(tddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
 }
 function readReview(tddDir, featureId, story, acId) {
   const f = acReviewJson(tddDir, featureId, story, acId);
-  if (!existsSync12(f)) return {};
+  if (!existsSync13(f)) return {};
   try {
-    return JSON.parse(readFileSync12(f, "utf8"));
+    return JSON.parse(readFileSync13(f, "utf8"));
   } catch {
     return {};
   }
@@ -8194,23 +8268,23 @@ function writeEscalation(tddDir, esc) {
     ...esc.ac_id ? { ac_id: esc.ac_id } : {},
     raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
-  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
+  fs6.mkdirSync(escalationsDir(tddDir), { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
   return full;
 }
 function readEscalationFile(file) {
-  if (!fs5.existsSync(file)) return void 0;
+  if (!fs6.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs5.readFileSync(file, "utf8"));
+    return JSON.parse(fs6.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
 }
 function readEscalations(tddDir) {
   const dir = escalationsDir(tddDir);
-  if (!fs5.existsSync(dir)) return [];
+  if (!fs6.existsSync(dir)) return [];
   const out = [];
-  for (const f of fs5.readdirSync(dir)) {
+  for (const f of fs6.readdirSync(dir)) {
     if (!f.endsWith(".json")) continue;
     const e = readEscalationFile(`${dir}/${f}`);
     if (e) out.push(e);
@@ -8244,9 +8318,44 @@ function firstPendingEscalation(tddDir, featureId) {
   return fromSmells.length > 0 ? fromSmells.sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0] : null;
 }
 
+// scripts/tdd/workflow-phase.ts
+init_esm_shims();
+import * as fs7 from "fs";
+var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
+function writeWorkflowPhase(tddDir, phase) {
+  const file = workflowStateJson(tddDir);
+  let state = {};
+  if (fs7.existsSync(file)) {
+    try {
+      state = JSON.parse(fs7.readFileSync(file, "utf8"));
+    } catch {
+      state = {};
+    }
+  }
+  state.phase = phase;
+  fs7.mkdirSync(tddDir, { recursive: true });
+  fs7.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+function resetStaleTerminalPhase(tddDir) {
+  const file = workflowStateJson(tddDir);
+  if (!fs7.existsSync(file)) return false;
+  let state;
+  try {
+    state = JSON.parse(fs7.readFileSync(file, "utf8"));
+  } catch {
+    return false;
+  }
+  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
+    delete state.phase;
+    fs7.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+    return true;
+  }
+  return false;
+}
+
 // scripts/tdd/orchestrator-effects.ts
 init_esm_shims();
-import * as fs8 from "fs";
+import * as fs10 from "fs";
 import { dirname as dirname7 } from "path";
 
 // scripts/tdd/orchestrator-derive.ts
@@ -8272,6 +8381,8 @@ function storyView(id, e, probe) {
       codeWritten: probe.codeWritten(id),
       reviewAc: probe.reviewPendingAc(id),
       refactorAc: probe.refactorPendingAc(id),
+      assessGreenAc: probe.assessGreenFailureAc(id),
+      repairRegressionAc: probe.repairRegressionFixAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
       accepted
@@ -8315,13 +8426,13 @@ function driverPhaseForTdd(tddPhase) {
 
 // scripts/tdd/orchestrator-probe.ts
 init_esm_shims();
-import * as fs7 from "fs";
+import * as fs9 from "fs";
 import * as path5 from "path";
 
 // scripts/tdd/gates.ts
 init_esm_shims();
-import { existsSync as existsSync14, readFileSync as readFileSync14, renameSync, unlinkSync, writeFileSync as writeFileSync10 } from "fs";
-import { join as join14 } from "path";
+import { existsSync as existsSync16, readFileSync as readFileSync16, renameSync, unlinkSync, writeFileSync as writeFileSync12 } from "fs";
+import { join as join15 } from "path";
 var GATES_SCHEMA_VERSION = 1;
 var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
 function defaultGatesState(featureId) {
@@ -8340,10 +8451,10 @@ function defaultGatesState(featureId) {
 function readGates(featureId, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = gatesFilePath(tddDir, featureId);
-  if (!existsSync14(file)) {
+  if (!existsSync16(file)) {
     return defaultGatesState(featureId);
   }
-  const raw = readFileSync14(file, "utf8");
+  const raw = readFileSync16(file, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -8354,7 +8465,7 @@ function readGates(featureId, opts = {}) {
   return validateGatesState(parsed, file);
 }
 function gatesFilePath(tddDir, featureId) {
-  return join14(requireFeatureDir(tddDir, featureId), "gates.json");
+  return join15(requireFeatureDir(tddDir, featureId), "gates.json");
 }
 function validateGatesState(parsed, file) {
   if (typeof parsed !== "object" || parsed === null) {
@@ -8414,7 +8525,7 @@ function validateGateRecord(parsed, gateName, file) {
 
 // scripts/lakebase/scm-workflow-state.ts
 init_esm_shims();
-import * as fs6 from "fs";
+import * as fs8 from "fs";
 import * as path4 from "path";
 var SCM_STATES = [
   "scaffold-complete",
@@ -8433,8 +8544,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs6.existsSync(p)) return null;
-  const raw = fs6.readFileSync(p, "utf8");
+  if (!fs8.existsSync(p)) return null;
+  const raw = fs8.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -8592,21 +8703,21 @@ function validateWorkflowState(value) {
 // scripts/tdd/orchestrator-probe.ts
 function storyCycles2(tddDir, featureId, story) {
   const base = path5.join(cyclesRootDir(tddDir), featureId, story);
-  if (!fs7.existsSync(base)) return [];
+  if (!fs9.existsSync(base)) return [];
   const out = [];
-  for (const acDir of fs7.readdirSync(base)) {
+  for (const acDir of fs9.readdirSync(base)) {
     const dir = path5.join(base, acDir);
     let isDir = false;
     try {
-      isDir = fs7.statSync(dir).isDirectory();
+      isDir = fs9.statSync(dir).isDirectory();
     } catch {
       isDir = false;
     }
     if (!isDir) continue;
-    for (const f of fs7.readdirSync(dir)) {
+    for (const f of fs9.readdirSync(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(fs7.readFileSync(path5.join(dir, f), "utf8")));
+        out.push(JSON.parse(fs9.readFileSync(path5.join(dir, f), "utf8")));
       } catch {
       }
     }
@@ -8614,9 +8725,9 @@ function storyCycles2(tddDir, featureId, story) {
   return out;
 }
 function readJson(file) {
-  if (!fs7.existsSync(file)) return void 0;
+  if (!fs9.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs7.readFileSync(file, "utf8"));
+    return JSON.parse(fs9.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -8627,8 +8738,8 @@ function readDriveContext(tddDir, featureId, projectDir) {
   const spec = readJson(featureSpecJson(tddDir, featureId));
   const proposed = spec !== void 0;
   const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs7.existsSync(featureRequestMd(tddDir, featureId));
-  const deployed = fs7.existsSync(featureDeployEvidenceJson(tddDir, featureId));
+  const requestsAuthored = fs9.existsSync(featureRequestMd(tddDir, featureId));
+  const deployed = fs9.existsSync(featureDeployEvidenceJson(tddDir, featureId));
   const gateApproved = readGateApproved(featureId, tddDir, "deploy");
   const proj = projectDir ?? path5.dirname(tddDir);
   let scmState;
@@ -8673,13 +8784,13 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
       const acs = storyAcIds(tddDir, featureId, story);
       if (acs.length === 0) return false;
       const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(tddDir, featureId, ac) !== void 0);
-      return everyAcNoted && fs7.existsSync(architectureJson(tddDir, featureId));
+      return everyAcNoted && fs9.existsSync(architectureJson(tddDir, featureId));
     },
     testListReady(story) {
       const file = storyTestListJson(tddDir, featureId, story);
-      if (!fs7.existsSync(file)) return false;
+      if (!fs9.existsSync(file)) return false;
       try {
-        const data = JSON.parse(fs7.readFileSync(file, "utf8"));
+        const data = JSON.parse(fs9.readFileSync(file, "utf8"));
         return Array.isArray(data.items) && data.items.length > 0;
       } catch {
         return false;
@@ -8715,6 +8826,26 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
     refactorPendingAc(story) {
       return firstRefactorPendingAc(tddDir, featureId, story);
     },
+    assessGreenFailureAc(story) {
+      let acId;
+      try {
+        acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+      } catch {
+        acId = void 0;
+      }
+      if (!acId) return null;
+      return needsGreenAssess(tddDir, featureId, story, acId) ? acId : null;
+    },
+    repairRegressionFixAc(story) {
+      let acId;
+      try {
+        acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+      } catch {
+        acId = void 0;
+      }
+      if (!acId) return null;
+      return hasPendingRegressionFix(tddDir, featureId, story, acId) ? acId : null;
+    },
     storyDeployVerified(story) {
       return storyDeployVerified(tddDir, featureId, story);
     },
@@ -8729,8 +8860,11 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
       };
       if (e.source.startsWith("smell:")) {
         const name = e.source.slice("smell:".length);
-        const spec = specLevelSmell(name);
         const story = e.story_id ?? buildActive ?? void 0;
+        if (isBuildRefactorRoutableSmell(name) && story && firstRefactorPendingAc(tddDir, featureId, story)) {
+          return null;
+        }
+        const spec = specLevelSmell(name);
         if (spec && story && priorReviseCount(tddDir, name, story) < 1) {
           base.routable = { story, owning_role: spec.owning_role, gate: spec.gate_to_rerun };
         }
@@ -8742,7 +8876,7 @@ function diskArtifactProbe(tddDir, featureId, buildActive) {
 
 // scripts/tdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync17, readFileSync as readFileSync17, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10, readdirSync as readdirSync11, statSync as statSync8 } from "fs";
+import { existsSync as existsSync19, readFileSync as readFileSync19, writeFileSync as writeFileSync14, mkdirSync as mkdirSync12, readdirSync as readdirSync11, statSync as statSync8 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -8751,18 +8885,18 @@ function pipelinePath(tddDir, featureId) {
 }
 function readPipeline(tddDir, featureId) {
   const p = pipelinePath(tddDir, featureId);
-  if (!existsSync17(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync17(p, "utf8"));
+  if (!existsSync19(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync19(p, "utf8"));
 }
 
 // scripts/tdd/architecture-conventions.ts
 init_esm_shims();
-import { existsSync as existsSync18, readFileSync as readFileSync18, writeFileSync as writeFileSync13, mkdirSync as mkdirSync11 } from "fs";
+import { existsSync as existsSync20, readFileSync as readFileSync20, writeFileSync as writeFileSync15, mkdirSync as mkdirSync13 } from "fs";
 function readConventions(tddDir) {
   const f = architectureConventionsJson(tddDir);
-  if (!existsSync18(f)) return void 0;
+  if (!existsSync20(f)) return void 0;
   try {
-    return JSON.parse(readFileSync18(f, "utf8"));
+    return JSON.parse(readFileSync20(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -8775,7 +8909,7 @@ var UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design 
 var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
 function storyStubScope(tddDir, featureId, storyId) {
   try {
-    const stub = JSON.parse(fs8.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
+    const stub = JSON.parse(fs10.readFileSync(storyJson(tddDir, featureId, storyId), "utf8"));
     const parts = [
       stub.asA ? `As a ${stub.asA}` : "",
       stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
@@ -8791,7 +8925,7 @@ function reviewRubric(tddDir, featureId, story, ac) {
   const layer = readAcLayer(tddDir, featureId, ac);
   if (layer) parts.push(`layer=${layer}`);
   try {
-    const arch = JSON.parse(fs8.readFileSync(architectureJson(tddDir, featureId), "utf8"));
+    const arch = JSON.parse(fs10.readFileSync(architectureJson(tddDir, featureId), "utf8"));
     const nfrs = (arch.nfrs ?? []).filter(
       (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
     );
@@ -8802,7 +8936,7 @@ function reviewRubric(tddDir, featureId, story, ac) {
   }
   if (layer === "E2E") {
     try {
-      const dg = JSON.parse(fs8.readFileSync(designGuideJson(tddDir), "utf8"));
+      const dg = JSON.parse(fs10.readFileSync(designGuideJson(tddDir), "utf8"));
       const groups = Object.keys(dg.tokens ?? dg);
       if (groups.length) parts.push(`design-token groups, ${groups.join(", ")}`);
     } catch {
@@ -8835,14 +8969,47 @@ function nextPendingTestDirective(tddDir, featureId, story, loop, cap) {
   }
   return `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}". Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item, the orchestration stamps the RED cycle for ${next.id}, and a mismatch between the test you write and ${next.id} is a defect.`;
 }
+function supersededTestsDirective(tddDir, featureId, story) {
+  let acId;
+  try {
+    const prog = storyTestProgress(tddDir, featureId, story);
+    acId = (prog.openRed[0] ?? prog.pending[0])?.ac_id;
+  } catch {
+    acId = void 0;
+  }
+  if (!acId) return "";
+  const sup = readSupersededTests(tddDir, featureId, story, acId);
+  if (!sup) return "";
+  const list = sup.tests.map((t) => `  - ${t}`).join("\n");
+  return `
+
+SUPERSEDED TESTS: this AC (${acId}) supersedes behavior encoded in PRIOR tests the Navigator flagged (${sup.reason}). The latest AC wins. You MAY refactor ONLY these flagged tests to the new behavior (alongside the production code) so the honest-GREEN verify holds:
+${list}
+Do NOT touch any other test; an UNflagged failing test is a genuine regression that must stay red and escalate.`;
+}
+function regressionRepairDirective(tddDir, featureId, story) {
+  let acId;
+  try {
+    acId = storyTestProgress(tddDir, featureId, story).openRed[0]?.ac_id;
+  } catch {
+    acId = void 0;
+  }
+  if (!acId) return "";
+  const gf = readGreenFailure(tddDir, featureId, story, acId);
+  if (!gf?.fixDirective) return "";
+  return `REPAIR a driver-fixable regression in AC ${acId} (story ${story}). The honest-GREEN verify against the running app FAILED and the Navigator diagnosed it as a genuine regression in the code (NOT a superseded test):
+  DIAGNOSIS: ${gf.diagnosis ?? gf.summary}
+  FIX: ${gf.fixDirective}
+Apply that fix to the PRODUCTION code (you may not edit prior tests, this is a regression, not a supersession). Keep the AC's own tests green. This is your ONE repair attempt: if the verify still fails after it, the orchestration escalates to a human with the diagnosis.`;
+}
 function consumeHandback(action, featureId, tddDir) {
   const story = "story" in action ? action.story : void 0;
   const file = handbackFile(tddDir, featureId, action.role, story);
-  if (!fs8.existsSync(file)) return "";
+  if (!fs10.existsSync(file)) return "";
   let note = "";
   try {
-    note = fs8.readFileSync(file, "utf8").trim();
-    fs8.rmSync(file, { force: true });
+    note = fs10.readFileSync(file, "utf8").trim();
+    fs10.rmSync(file, { force: true });
   } catch {
     return "";
   }
@@ -8889,15 +9056,27 @@ function roleTaskBody(action, featureId, uiTrack, tddDir, build) {
       return `Produce story ${s}'s ordered tests and APPEND them to the feature master test list .tdd/features/${featureId}/test-list.json, keep every item already there for the other stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration generates the per-story + per-AC views from the master).${acScope}`;
     }
     case "navigator":
+      if (action.buildMode === "assess") {
+        return `ASSESS a failed honest-GREEN verify for AC ${action.ac} in story ${s}. The Driver made the current test pass, but the full-suite verify against the running app FAILED, some OTHER test(s) now fail. Inspect which tests fail and decide:
+(a) If the current AC INTENTIONALLY supersedes behavior those failing tests encode (the latest AC wins; e.g. a prior feature's test asserts an outcome this AC deliberately changes), FLAG them so the Driver may permissively refactor ONLY those:
+   lakebase-tdd-cycle flag-superseded --feature ${featureId} --story ${s} --ac ${action.ac} --reason "<new AC + what changed>" --test <path_or_nodeid> [--test ...] --tdd-dir ${tddDir}
+(b) If instead the failure is a GENUINE REGRESSION (the AC does NOT intend to change that behavior; the Driver's code is wrong), record your ROOT-CAUSE diagnosis so it travels to the Driver / the human instead of being lost. When the Driver can fix it, ALSO give a concrete repair directive (this routes a bounded Driver repair turn):
+   lakebase-tdd-cycle assess-regression --feature ${featureId} --story ${s} --ac ${action.ac} --diagnosis "<the WHY: which behavior broke + the root cause>" [--fix "<what the Driver should change>"] --tdd-dir ${tddDir}
+   Include --fix ONLY when the fix is clear + within the Driver's reach (e.g. a wrong default, a missing filter, an off-by-one); OMIT --fix when it needs a human / a design or spec change (the orchestration then escalates carrying your diagnosis).
+Flag ONLY tests the new AC truly supersedes; never flag a test just to make a red go away. For a regression, always write a diagnosis , never nothing.`;
+      }
       if (action.buildMode === "review") {
         return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` + reviewRubric(tddDir, featureId, s, action.ac ?? "") + ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open those full files ONLY if you need more detail than it carries (do not re-read them by default). Write your verdict to .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
       }
       return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
+      if (action.buildMode === "repair") {
+        return regressionRepairDirective(tddDir, featureId, s);
+      }
       if (action.buildMode === "refactor") {
         return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md). Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.`;
       }
-      return (build?.loop === "hybrid-a" ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.` : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? UI_TRACK_BUILD : "");
+      return (build?.loop === "hybrid-a" ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.` : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? UI_TRACK_BUILD : "") + supersededTestsDirective(tddDir, featureId, s);
     default:
       return `Work story ${s}.`;
   }
@@ -8966,7 +9145,10 @@ function commandsForAction(action, cfg) {
       if (!("mode" in action) && action.role === "test-strategist") {
         cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.tddDir, f, action.story] });
       }
-      if (!("mode" in action) && action.role === "navigator") {
+      if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess") {
+        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-green", "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+      } else if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
         const loopFlag = verb === "begin" && cfg.loopGranularity === "hybrid-a" ? ["--loop", "hybrid-a", ...cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : []] : [];
@@ -8974,8 +9156,10 @@ function commandsForAction(action, cfg) {
       }
       if (!("mode" in action) && action.role === "driver") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
+        const isRepair = "buildMode" in action && action.buildMode === "repair";
         const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir] });
+        const repairFlag = isRepair ? ["--repair"] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag] });
       }
       const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
@@ -9180,7 +9364,7 @@ function buildDriveEffects(cfg) {
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId, cfg.projectDir);
       const state = deriveDriveState(pipeline, probe, ctx);
       state.uiTrack = cfg.uiTrack ?? false;
-      state.designGuideReady = fs8.existsSync(designGuideJson(cfg.tddDir));
+      state.designGuideReady = fs10.existsSync(designGuideJson(cfg.tddDir));
       return state;
     },
     async perform(action) {
@@ -9195,8 +9379,8 @@ function buildDriveEffects(cfg) {
     onHandback(handoff, detail) {
       const file = handbackFile(cfg.tddDir, cfg.featureId, handoff.responder, handoff.story);
       try {
-        fs8.mkdirSync(dirname7(file), { recursive: true });
-        fs8.writeFileSync(file, `${detail}
+        fs10.mkdirSync(dirname7(file), { recursive: true });
+        fs10.writeFileSync(file, `${detail}
 `, "utf8");
       } catch {
       }
@@ -9209,7 +9393,7 @@ init_esm_shims();
 
 // scripts/tdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync20, mkdirSync as mkdirSync13, readFileSync as readFileSync20, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync15 } from "fs";
+import { existsSync as existsSync22, mkdirSync as mkdirSync15, readFileSync as readFileSync22, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync17 } from "fs";
 
 // scripts/tdd/gate-hash.ts
 init_esm_shims();
@@ -9232,10 +9416,10 @@ function sprintGatesFile(tddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const tddDir = opts.tddDir ?? "./.tdd";
   const file = sprintGatesFile(tddDir, sprint);
-  if (!existsSync20(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync22(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync20(file, "utf8"));
+    parsed = JSON.parse(readFileSync22(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -9249,9 +9433,9 @@ function readSprintGates(sprint, opts = {}) {
 }
 
 // scripts/tdd/orchestrator-sprint.ts
-import * as fs9 from "fs";
+import * as fs11 from "fs";
 function deriveSprintPlanningState(tddDir, sprint, opts = {}) {
-  const proposed = fs9.existsSync(featureProposalsMd(tddDir));
+  const proposed = fs11.existsSync(featureProposalsMd(tddDir));
   const estimated = hasEstimates(tddDir);
   const backlog = readBacklog(tddDir, sprint).features;
   const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
@@ -9288,8 +9472,8 @@ async function runSprint(effects) {
 
 // scripts/tdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync22, readFileSync as readFileSync21, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14 } from "fs";
-import { dirname as dirname8, join as join17 } from "path";
+import { existsSync as existsSync24, readFileSync as readFileSync23, writeFileSync as writeFileSync18, mkdirSync as mkdirSync16 } from "fs";
+import { dirname as dirname8, join as join18 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -9301,11 +9485,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join17(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join18(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = join17(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync22(p)) return void 0;
-  return JSON.parse(readFileSync21(p, "utf8"));
+  const p = join18(projectDir, AGENT_CONFIG_REL);
+  if (!existsSync24(p)) return void 0;
+  return JSON.parse(readFileSync23(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -9315,14 +9499,14 @@ function resolveModelForRole(role, projectDir) {
 
 // scripts/tdd/tdd-config.ts
 init_esm_shims();
-import { existsSync as existsSync23, readFileSync as readFileSync22, mkdirSync as mkdirSync15, writeFileSync as writeFileSync17 } from "fs";
-import { dirname as dirname9, join as join18 } from "path";
-var TDD_CONFIG_REL = join18(".lakebase", "tdd-config.json");
+import { existsSync as existsSync25, readFileSync as readFileSync24, mkdirSync as mkdirSync17, writeFileSync as writeFileSync19 } from "fs";
+import { dirname as dirname9, join as join19 } from "path";
+var TDD_CONFIG_REL = join19(".lakebase", "tdd-config.json");
 function loadTddConfig(projectDir) {
-  const f = join18(projectDir, TDD_CONFIG_REL);
-  if (!existsSync23(f)) return void 0;
+  const f = join19(projectDir, TDD_CONFIG_REL);
+  if (!existsSync25(f)) return void 0;
   try {
-    return JSON.parse(readFileSync22(f, "utf8"));
+    return JSON.parse(readFileSync24(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9424,16 +9608,30 @@ function assistantTextFromLine(line) {
   return parts.join("");
 }
 
+// scripts/tdd/context-budget.ts
+init_esm_shims();
+var CONTEXT_FREE_FRACTION_REQUIRED = 0.4;
+function contextWindowFor(model) {
+  return /(^|[^0-9])1m([^0-9]|$)|\[1m\]/i.test(model) ? 1e6 : 2e5;
+}
+function turnContextTokens(u) {
+  return (u.inputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheCreationTokens || 0) + (u.outputTokens || 0);
+}
+function resumeFitsBudget(priorContextTokens, model) {
+  const window = contextWindowFor(model);
+  return priorContextTokens <= window * (1 - CONTEXT_FREE_FRACTION_REQUIRED);
+}
+
 // scripts/tdd/run-config.ts
 init_esm_shims();
-import { existsSync as existsSync24, mkdirSync as mkdirSync16, readFileSync as readFileSync23, writeFileSync as writeFileSync18 } from "fs";
-import { join as join19 } from "path";
-var RUN_CONFIG_REL = join19(".tdd", "run-config.json");
+import { existsSync as existsSync26, mkdirSync as mkdirSync18, readFileSync as readFileSync25, writeFileSync as writeFileSync20 } from "fs";
+import { join as join20 } from "path";
+var RUN_CONFIG_REL = join20(".tdd", "run-config.json");
 function readKitRef(projectDir) {
-  const f = join19(projectDir, ".lakebase", "kit-ref");
-  if (!existsSync24(f)) return void 0;
+  const f = join20(projectDir, ".lakebase", "kit-ref");
+  if (!existsSync26(f)) return void 0;
   try {
-    const v = readFileSync23(f, "utf8").trim();
+    const v = readFileSync25(f, "utf8").trim();
     return v.length > 0 ? v : void 0;
   } catch {
     return void 0;
@@ -9468,12 +9666,12 @@ function writeRunConfig(inputs) {
   const cfg = buildRunConfig(inputs);
   const body = JSON.stringify(cfg, null, 2) + "\n";
   try {
-    mkdirSync16(inputs.tddDir, { recursive: true });
-    writeFileSync18(join19(inputs.tddDir, "run-config.json"), body);
+    mkdirSync18(inputs.tddDir, { recursive: true });
+    writeFileSync20(join20(inputs.tddDir, "run-config.json"), body);
     const recordDir = (inputs.env ?? process.env).LAKEBASE_TDD_RECORD_DIR?.trim();
     if (recordDir) {
-      mkdirSync16(recordDir, { recursive: true });
-      writeFileSync18(join19(recordDir, "run-config.json"), body);
+      mkdirSync18(recordDir, { recursive: true });
+      writeFileSync20(join20(recordDir, "run-config.json"), body);
     }
   } catch {
   }
@@ -9683,20 +9881,6 @@ Flags:
                        --no-t-shirt-sizing.
 `;
 }
-function writeWorkflowPhase(tddDir, phase) {
-  const file = path6.join(tddDir, "workflow-state.json");
-  let state = {};
-  if (fs10.existsSync(file)) {
-    try {
-      state = JSON.parse(fs10.readFileSync(file, "utf8"));
-    } catch {
-      state = {};
-    }
-  }
-  state.phase = phase;
-  fs10.mkdirSync(tddDir, { recursive: true });
-  fs10.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve2, reject) => {
     const child = spawn2(bin, args, { cwd, stdio: "inherit" });
@@ -9727,7 +9911,7 @@ var kitBinMap = null;
 function resolveKitBinJs(bin) {
   if (kitBinMap === null) {
     try {
-      const pkg = JSON.parse(fs10.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
+      const pkg = JSON.parse(fs12.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
       kitBinMap = pkg.bin ?? {};
     } catch {
       kitBinMap = {};
@@ -9738,6 +9922,7 @@ function resolveKitBinJs(bin) {
 }
 function execRunner(cfg) {
   const sessions = /* @__PURE__ */ new Map();
+  const sessionContext = /* @__PURE__ */ new Map();
   const buildTurns = /* @__PURE__ */ new Map();
   return {
     async run(cmd) {
@@ -9797,16 +9982,26 @@ function execRunner(cfg) {
         if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
-          if (existing) {
+          const priorCtx = sessionContext.get(cmd.resumeKey) ?? 0;
+          const wouldFit = resumeFitsBudget(priorCtx, cmd.model);
+          if (existing && wouldFit) {
             args.push("--resume", existing);
           } else {
+            if (existing && !wouldFit) {
+              process.stderr.write(
+                `[drive] context guard: ${cmd.role} resume context ~${priorCtx} tok would leave < ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% free of the ${cmd.model} window; starting a FRESH session.
+`
+              );
+            }
             const id = randomUUID();
             sessions.set(cmd.resumeKey, id);
+            sessionContext.delete(cmd.resumeKey);
             args.push("--session-id", id);
           }
         }
         const usage = await spawnClaudeStreaming(args, cfg.projectDir);
         if (usage) {
+          if (cmd.resumeKey) sessionContext.set(cmd.resumeKey, turnContextTokens(usage));
           try {
             emitAgentLogEvent(
               {
@@ -9932,14 +10127,14 @@ function makeConfirmContinue() {
       const poll = setInterval(() => {
         let raw;
         try {
-          raw = fs10.readFileSync(answerFile, "utf8");
+          raw = fs12.readFileSync(answerFile, "utf8");
         } catch {
           return;
         }
         const a = raw.trim().toLowerCase();
         if (a === "") return;
         try {
-          fs10.rmSync(answerFile, { force: true });
+          fs12.rmSync(answerFile, { force: true });
         } catch {
         }
         if (a === "y" || a === "yes") {
@@ -10169,6 +10364,7 @@ ${help()}`);
   const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : void 0;
   const confirmContinue = pauseMilestone ? makeConfirmContinue() : void 0;
   const cfg = buildCfg(args, args.feature);
+  resetStaleTerminalPhase(cfg.tddDir);
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);
     process.stdout.write(JSON.stringify(plan, null, 2) + "\n");

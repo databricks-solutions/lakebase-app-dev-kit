@@ -6683,7 +6683,7 @@ function isCliEntry(importMetaUrl2) {
 init_cjs_shims();
 var import_node_child_process8 = require("child_process");
 var import_node_fs3 = require("fs");
-var import_node_path3 = require("path");
+var import_node_path4 = require("path");
 
 // scripts/lakebase/deploy-targets.ts
 init_cjs_shims();
@@ -6781,7 +6781,7 @@ function findFeatureDir(tdd, featureId) {
 
 // scripts/tdd/escalation.ts
 init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
+var fs6 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
@@ -7055,6 +7055,11 @@ init_cjs_shims();
 // scripts/tdd/test-list.ts
 init_cjs_shims();
 
+// scripts/tdd/supersession.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+var import_node_path2 = require("path");
+
 // scripts/git/commits.ts
 init_cjs_shims();
 
@@ -7076,14 +7081,14 @@ function writeEscalation(tddDir, esc) {
     ...esc.ac_id ? { ac_id: esc.ac_id } : {},
     raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
-  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
+  fs6.mkdirSync(escalationsDir(tddDir), { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
   return full;
 }
 function readEscalationFile(file) {
-  if (!fs5.existsSync(file)) return void 0;
+  if (!fs6.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs5.readFileSync(file, "utf8"));
+    return JSON.parse(fs6.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -7092,7 +7097,7 @@ function readEscalationFile(file) {
 // scripts/tdd/e2e-regex-clean.ts
 init_cjs_shims();
 var import_node_fs2 = require("fs");
-var import_node_path2 = require("path");
+var import_node_path3 = require("path");
 
 // scripts/tdd/deploy.ts
 var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
@@ -7190,7 +7195,7 @@ function logReleaseEngineerDeployOutcome(ctx, result) {
   }
 }
 function pidFile(projectDir, target) {
-  return (0, import_node_path3.join)(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return (0, import_node_path4.join)(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -7203,9 +7208,9 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? (0, import_node_path3.join)(fdir, "stories", evidence.story_id) : fdir;
+  const dir = evidence.story_id ? (0, import_node_path4.join)(fdir, "stories", evidence.story_id) : fdir;
   (0, import_node_fs3.mkdirSync)(dir, { recursive: true });
-  const file = (0, import_node_path3.join)(dir, "deploy-evidence.json");
+  const file = (0, import_node_path4.join)(dir, "deploy-evidence.json");
   (0, import_node_fs3.writeFileSync)(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
@@ -7236,7 +7241,7 @@ async function deployToTarget(args) {
     const verify2 = { passed: false, summary: reason };
     let evidencePath2;
     if (args.featureId) {
-      const tddDir = args.tddDir ?? (0, import_node_path3.join)(args.projectDir, ".tdd");
+      const tddDir = args.tddDir ?? (0, import_node_path4.join)(args.projectDir, ".tdd");
       const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
       evidencePath2 = writeDeployEvidence(tddDir, {
         schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7261,7 +7266,7 @@ async function deployToTarget(args) {
   const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
-  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)(pf), { recursive: true });
+  (0, import_node_fs3.mkdirSync)((0, import_node_path4.dirname)(pf), { recursive: true });
   (0, import_node_fs3.writeFileSync)(pf, String(pid));
   const poll = await pollUntil({
     probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
@@ -7285,7 +7290,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? (0, import_node_path3.join)(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? (0, import_node_path4.join)(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,

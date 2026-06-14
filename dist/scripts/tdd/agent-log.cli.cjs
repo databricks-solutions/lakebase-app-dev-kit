@@ -7027,7 +7027,7 @@ function reconcileArtifactLog(opts) {
 
 // scripts/tdd/escalation.ts
 init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
+var fs6 = __toESM(require("fs"), 1);
 
 // scripts/tdd/smells.ts
 init_cjs_shims();
@@ -7190,6 +7190,11 @@ init_cjs_shims();
 init_cjs_shims();
 var import_node_fs2 = require("fs");
 var import_node_path2 = require("path");
+
+// scripts/tdd/supersession.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+var import_node_path4 = require("path");
 
 // scripts/git/commits.ts
 init_cjs_shims();

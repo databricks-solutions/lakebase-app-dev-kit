@@ -6,6 +6,76 @@ import { readFileSync as readFileSync2 } from "fs";
 // scripts/tdd/layering-clean.ts
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
+var SOURCE_SKIP_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  "__pycache__",
+  ".venv",
+  "venv",
+  ".git",
+  "build",
+  "dist",
+  ".tdd",
+  ".lakebase",
+  "alembic",
+  "migrations",
+  "tests",
+  "test",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache"
+]);
+function isTestFile(name) {
+  return /^test_.*\.py$/.test(name) || /_test\.py$/.test(name) || name === "conftest.py";
+}
+function sourcePyFilesRec(dir, out) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (!SOURCE_SKIP_DIRS.has(e.name)) sourcePyFilesRec(join(dir, e.name), out);
+    } else if (e.isFile() && e.name.endsWith(".py") && !isTestFile(e.name)) {
+      out.push(join(dir, e.name));
+    }
+  }
+}
+var DUP_CLASS_REMEDIATION = "The same class is defined in more than one module. Keep ONE canonical definition (usually the package that owns the layer) and delete the duplicate; re-export from the package __init__ if a stable import path is needed. Duplicate ORM model classes also risk a double table registration. See the `layering-violation` smell + DRY (one source of truth).";
+var TOP_LEVEL_CLASS = /^class\s+([A-Za-z_]\w*)\s*[:(]/;
+function checkDuplicateClasses(projectDir, roots = ["app", "src"]) {
+  const files = [];
+  for (const r of roots) {
+    const abs = join(projectDir, r);
+    if (!existsSync(abs)) continue;
+    try {
+      if (statSync(abs).isDirectory()) sourcePyFilesRec(abs, files);
+      else if (abs.endsWith(".py") && !isTestFile(r)) files.push(abs);
+    } catch {
+    }
+  }
+  const defs = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const shown = file.startsWith(projectDir) ? file.slice(projectDir.length).replace(/^\//, "") : file;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const m = TOP_LEVEL_CLASS.exec(line);
+      if (!m) continue;
+      const set = defs.get(m[1]) ?? /* @__PURE__ */ new Set();
+      set.add(shown);
+      defs.set(m[1], set);
+    }
+  }
+  const violations = [];
+  for (const [name, modules] of [...defs.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (modules.size > 1) {
+      violations.push(
+        `class ${name} is defined in ${modules.size} modules: ${[...modules].sort().join(", ")} (keep one canonical definition, delete the duplicate)`
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true, violations: [] } : { ok: false, violations, remediation: DUP_CLASS_REMEDIATION };
+}
 var SESSION_OP = /\b(?:db|session|_session|self\._?session)\s*\.\s*(query|add|add_all|commit|delete|merge|flush|execute|refresh|scalars|scalar)\s*\(/;
 var REMEDIATION = "The boundary/routes layer calls the DB session directly (a fat controller). Extract a service (business logic) + a repository (the ONLY layer that touches the ORM/session); the route handler validates input + delegates to the service. See the `layering-violation` smell + @architectural-design-principles layered-architecture.";
 var DEFAULT_BOUNDARY = ["app/main.py", "app/routes"];
@@ -92,7 +162,12 @@ function checkModulePlacement(projectDir, allModules2) {
     const wantFile = module.endsWith(".py");
     const here = kindOf(join(projectDir, base));
     if (wantDir) {
-      if (here === "dir") continue;
+      if (here === "dir") {
+        if (kindOf(join(projectDir, `${base}.py`)) === "file") {
+          violations.push(`declared ${role} layer "${module}" is a package, but a stale flat ${base}.py also exists alongside it (an orphan from a flat->package migration, shadowed + duplicating this layer); delete ${base}.py so only the package defines this layer`);
+        }
+        continue;
+      }
       if (kindOf(join(projectDir, `${base}.py`)) === "file") {
         violations.push(`declared ${role} layer "${module}" is a package directory but the build created a flat file ${base}.py (organize this layer under ${module})`);
       } else {
@@ -235,11 +310,13 @@ var placement = serviceBacked && allModules.length ? checkModulePlacement(p.proj
 var rendering = serviceBacked ? checkInlineRendering(p.projectDir, boundary, rendersVia) : { ok: true, violations: [] };
 var budgetPaths = allModules.length ? allModules.map((m) => m.module) : ["app"];
 var budget = checkCodeBudget(p.projectDir, budgetPaths);
+var duplicates = checkDuplicateClasses(p.projectDir);
 var groups = [
   { label: "layering (boundary vs persistence)", ok: layering.clean, violations: layering.violations, remediation: layering.remediation },
   { label: "module placement (layers at declared paths)", ok: placement.ok, violations: placement.violations },
   { label: "rendering (templating, not inline HTML)", ok: rendering.ok, violations: rendering.violations, remediation: rendering.remediation },
-  { label: "DRY + complexity budget", ok: budget.ok, violations: budget.violations }
+  { label: "DRY + complexity budget", ok: budget.ok, violations: budget.violations },
+  { label: "no duplicate class definitions", ok: duplicates.ok, violations: duplicates.violations, remediation: duplicates.remediation }
 ];
 var ok = groups.every((g) => g.ok);
 if (p.json) {

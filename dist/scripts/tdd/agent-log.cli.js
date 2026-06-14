@@ -7019,7 +7019,7 @@ function reconcileArtifactLog(opts) {
 
 // scripts/tdd/escalation.ts
 init_esm_shims();
-import * as fs5 from "fs";
+import * as fs6 from "fs";
 
 // scripts/tdd/smells.ts
 init_esm_shims();
@@ -7182,6 +7182,11 @@ init_esm_shims();
 init_esm_shims();
 import { readdirSync as readdirSync3, readFileSync as readFileSync9, statSync as statSync3 } from "fs";
 import { join as join8 } from "path";
+
+// scripts/tdd/supersession.ts
+init_esm_shims();
+import * as fs5 from "fs";
+import { join as join10 } from "path";
 
 // scripts/git/commits.ts
 init_esm_shims();

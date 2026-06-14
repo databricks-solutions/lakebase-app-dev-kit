@@ -6674,8 +6674,8 @@ function isCliEntry(importMetaUrl) {
 // scripts/tdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync4, readFileSync as readFileSync10, rmSync, writeFileSync as writeFileSync6 } from "fs";
-import { dirname as dirname2, join as join8 } from "path";
+import { existsSync as existsSync9, mkdirSync as mkdirSync5, readFileSync as readFileSync11, rmSync as rmSync2, writeFileSync as writeFileSync7 } from "fs";
+import { dirname as dirname2, join as join9 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -6773,7 +6773,7 @@ function findFeatureDir(tdd, featureId) {
 
 // scripts/tdd/escalation.ts
 init_esm_shims();
-import * as fs5 from "fs";
+import * as fs6 from "fs";
 
 // scripts/tdd/smells.ts
 init_esm_shims();
@@ -7047,6 +7047,11 @@ init_esm_shims();
 // scripts/tdd/test-list.ts
 init_esm_shims();
 
+// scripts/tdd/supersession.ts
+init_esm_shims();
+import * as fs5 from "fs";
+import { join as join7 } from "path";
+
 // scripts/git/commits.ts
 init_esm_shims();
 
@@ -7068,14 +7073,14 @@ function writeEscalation(tddDir, esc) {
     ...esc.ac_id ? { ac_id: esc.ac_id } : {},
     raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs5.mkdirSync(escalationsDir(tddDir), { recursive: true });
-  fs5.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
+  fs6.mkdirSync(escalationsDir(tddDir), { recursive: true });
+  fs6.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
   return full;
 }
 function readEscalationFile(file) {
-  if (!fs5.existsSync(file)) return void 0;
+  if (!fs6.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs5.readFileSync(file, "utf8"));
+    return JSON.parse(fs6.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -7083,8 +7088,8 @@ function readEscalationFile(file) {
 
 // scripts/tdd/e2e-regex-clean.ts
 init_esm_shims();
-import { readdirSync as readdirSync3, readFileSync as readFileSync9, statSync as statSync2 } from "fs";
-import { join as join7 } from "path";
+import { readdirSync as readdirSync3, readFileSync as readFileSync10, statSync as statSync2 } from "fs";
+import { join as join8 } from "path";
 
 // scripts/tdd/deploy.ts
 var DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
@@ -7182,7 +7187,7 @@ function logReleaseEngineerDeployOutcome(ctx, result) {
   }
 }
 function pidFile(projectDir, target) {
-  return join8(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join9(projectDir, ".tdd", "deploy", `${target}.pid`);
 }
 function defaultRunVerify(cmd, cwd, env) {
   try {
@@ -7195,10 +7200,10 @@ function defaultRunVerify(cmd, cwd, env) {
 function writeDeployEvidence(tddDir, evidence) {
   const fdir = findFeatureDir(tddDir, evidence.feature_id);
   if (!fdir) return void 0;
-  const dir = evidence.story_id ? join8(fdir, "stories", evidence.story_id) : fdir;
-  mkdirSync4(dir, { recursive: true });
-  const file = join8(dir, "deploy-evidence.json");
-  writeFileSync6(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
+  const dir = evidence.story_id ? join9(fdir, "stories", evidence.story_id) : fdir;
+  mkdirSync5(dir, { recursive: true });
+  const file = join9(dir, "deploy-evidence.json");
+  writeFileSync7(file, JSON.stringify(evidence, null, 2) + "\n", "utf8");
   return file;
 }
 function defaultStart(cmd, cwd, env) {
@@ -7228,7 +7233,7 @@ async function deployToTarget(args) {
     const verify2 = { passed: false, summary: reason };
     let evidencePath2;
     if (args.featureId) {
-      const tddDir = args.tddDir ?? join8(args.projectDir, ".tdd");
+      const tddDir = args.tddDir ?? join9(args.projectDir, ".tdd");
       const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
       evidencePath2 = writeDeployEvidence(tddDir, {
         schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7253,8 +7258,8 @@ async function deployToTarget(args) {
   const env = args.lakebaseBranch ? { ...process.env, LAKEBASE_BRANCH_ID: args.lakebaseBranch } : void 0;
   const pid = start(cfg.run, args.projectDir, env);
   const pf = pidFile(args.projectDir, args.targetName);
-  mkdirSync4(dirname2(pf), { recursive: true });
-  writeFileSync6(pf, String(pid));
+  mkdirSync5(dirname2(pf), { recursive: true });
+  writeFileSync7(pf, String(pid));
   const poll = await pollUntil({
     probe: async () => await reachable(url) ? { done: true, value: true } : { done: false },
     timeoutMs: cfg.readyTimeoutSeconds * 1e3,
@@ -7277,7 +7282,7 @@ async function deployToTarget(args) {
   }
   let evidencePath;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? join8(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? join9(args.projectDir, ".tdd");
     const at = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -7330,8 +7335,8 @@ async function deployToTarget(args) {
 }
 function stopLocal(projectDir, targetName) {
   const pf = pidFile(projectDir, targetName);
-  if (!existsSync8(pf)) return { stopped: false };
-  const pid = Number(readFileSync10(pf, "utf8").trim());
+  if (!existsSync9(pf)) return { stopped: false };
+  const pid = Number(readFileSync11(pf, "utf8").trim());
   if (Number.isFinite(pid) && pid > 0) {
     try {
       process.kill(-pid);
@@ -7342,7 +7347,7 @@ function stopLocal(projectDir, targetName) {
       }
     }
   }
-  rmSync(pf, { force: true });
+  rmSync2(pf, { force: true });
   return { stopped: true };
 }
 
