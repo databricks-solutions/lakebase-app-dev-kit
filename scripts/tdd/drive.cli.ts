@@ -55,6 +55,7 @@ import {
 import { resolveModelForRole } from "./agent-models.js";
 import { resolveTddSettings } from "./tdd-config.js";
 import { parseTurnUsage, assistantTextFromLine, type TurnUsage } from "./claude-usage.js";
+import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
@@ -147,6 +148,7 @@ function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
   });
 }
 
+
 /**
  * Spawn a `claude -p --output-format stream-json --verbose` turn, TEE the
  * human-readable assistant text to stderr (so the live console still shows the
@@ -213,6 +215,12 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
   // of the artifact-as-API contract: each role still reads/writes its artifacts,
   // so correctness never depends on the retained session, only speed.
   const sessions = new Map<string, string>();
+  // Per-resumeKey running CONTEXT SIZE (the last turn's total prompt tokens:
+  // input + cache + the response it added). The context-budget guard reads this
+  // to decide whether a RESUME would blow the model window; a fresh session
+  // resets it. Keeps the warm-resume optimization while never starting a turn
+  // that cannot fit, the "Prompt is too long" failure that killed F5.
+  const sessionContext = new Map<string, number>();
   // Per-story Navigator/Driver turn ordinal, for per-turn build replay: the Kth
   // build turn of this story maps to the Kth recorded turn dir in the corpus.
   const buildTurns = new Map<string, number>();
@@ -293,11 +301,24 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
         if (cmd.resumeKey) {
           const existing = sessions.get(cmd.resumeKey);
-          if (existing) {
+          // Context-budget guard: only resume when the warm session still leaves
+          // >= the required free fraction of the model window; otherwise the turn
+          // would risk "Prompt is too long". When it would not fit, start FRESH
+          // (new session-id, reset the tracked size) instead of failing the turn.
+          const priorCtx = sessionContext.get(cmd.resumeKey) ?? 0;
+          const wouldFit = resumeFitsBudget(priorCtx, cmd.model);
+          if (existing && wouldFit) {
             args.push("--resume", existing);
           } else {
+            if (existing && !wouldFit) {
+              process.stderr.write(
+                `[drive] context guard: ${cmd.role} resume context ~${priorCtx} tok would leave ` +
+                  `< ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% free of the ${cmd.model} window; starting a FRESH session.\n`,
+              );
+            }
             const id = randomUUID();
             sessions.set(cmd.resumeKey, id);
+            sessionContext.delete(cmd.resumeKey);
             args.push("--session-id", id);
           }
         }
@@ -306,6 +327,9 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // + effort after role; the token counts in metadata). Best-effort: never
         // let a logging hiccup break the turn.
         if (usage) {
+          // Record this turn's total context so the next resume decision for this
+          // session can apply the context-budget guard above.
+          if (cmd.resumeKey) sessionContext.set(cmd.resumeKey, turnContextTokens(usage));
           try {
             emitAgentLogEvent(
               {
