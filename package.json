@@ -137,8 +137,8 @@
     "test:live": "bash scripts/run-live-tests.sh"
   },
   "dependencies": {
-    "@databricks/appkit": "*",
-    "@databricks/lakebase": "*",
+    "@databricks/appkit": "^0.38.1",
+    "@databricks/lakebase": "^0.4.0",
     "adm-zip": "^0.5.16",
     "find-java-home": "^2.0.0",
     "octokit": "^4.0.0",
