@@ -253,66 +253,6 @@ jobs:
           BODY="⚠️ **No Lakebase CI branch** was created. This run is not using a dedicated database branch. Open the [workflow run](${RUN_URL}), expand **Create CI database branch (Lakebase)** and check the step **Summary** (or log) for the reason and how to fix it."
           gh pr comment "$PR" --body "$BODY" 2>/dev/null || true
 
-      - name: Install PostgreSQL client
-        if: steps.lakebase-db.outputs.url != ''
-        run: |
-          if command -v psql >/dev/null 2>&1; then
-            echo "psql already on PATH"; psql --version
-          elif command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
-          elif command -v brew >/dev/null 2>&1; then
-            brew install libpq
-            echo "PATH=$(brew --prefix libpq)/bin:$PATH" >> $GITHUB_ENV
-          else
-            echo "Could not install psql; repair step may be skipped."
-          fi
-
-      - name: Repair flyway_schema_history (remove bogus entries when objects missing)
-        id: flyway-repair
-        if: steps.detect-lang.outputs.lang == 'java' && steps.lakebase-db.outputs.url != ''
-        env:
-          FLYWAY_URL: ${{ steps.lakebase-db.outputs.url }}
-          FLYWAY_USER: ${{ env.DB_USERNAME }}
-          FLYWAY_PASS: ${{ env.DB_PASSWORD }}
-        run: |
-          set +e
-          if ! command -v psql >/dev/null 2>&1; then
-            echo "psql not found; skipping flyway_schema_history repair."
-            exit 0
-          fi
-          FLYWAY_PASS_TRIMMED="$(printf '%s' "$FLYWAY_PASS" | tr -d '\n')"
-          HOST="$(echo "$FLYWAY_URL" | sed -n 's|.*://\([^:/]*\):.*|\1|p')"
-          DB="$(echo "$FLYWAY_URL" | sed -n 's|.*/\([^/?]*\).*|\1|p')"
-          if [ -z "$HOST" ] || [ -z "$DB" ]; then
-            echo "Could not parse JDBC URL; skipping repair."
-            exit 0
-          fi
-          export PGHOST="$HOST" PGPORT="5432" PGDATABASE="$DB" PGUSER="$FLYWAY_USER" PGPASSWORD="$FLYWAY_PASS_TRIMMED" PGSSLMODE=require
-          psql -c "SELECT 1 AS connected" 2>/dev/null || { echo "Connection failed; skipping repair."; unset PGPASSWORD PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE; exit 0; }
-          FLYWAY_SCHEMA="$(psql -t -A -c "SELECT table_schema FROM information_schema.tables WHERE table_name = 'flyway_schema_history' LIMIT 1" 2>/dev/null | tr -d '\r\n')"
-          [ -z "$FLYWAY_SCHEMA" ] && FLYWAY_SCHEMA="public"
-          echo "flyway_schema_history schema: $FLYWAY_SCHEMA"
-          MIGRATION_DIR="src/main/resources/db/migration"
-          for f in "$MIGRATION_DIR"/V*.sql; do
-            [ -f "$f" ] || continue
-            version="$(basename "$f" | sed -n 's/^V\([0-9]*\)__.*/\1/p')"
-            [ -n "$version" ] || continue
-            tables="$(grep -oE 'CREATE TABLE (IF NOT EXISTS )?[a-zA-Z_][a-zA-Z0-9_]*' "$f" 2>/dev/null | awk '{print $NF}' | tr '[:upper:]' '[:lower:]' | sort -u)"
-            [ -n "$tables" ] || continue
-            missing=""
-            for t in $tables; do
-              [ -z "$t" ] && continue
-              exists="$(psql -t -A -c "SELECT 1 FROM information_schema.tables WHERE table_name = '$t'" 2>/dev/null | tr -d ' \r\n')"
-              [ -z "$exists" ] && missing="$missing $t"
-            done
-            if [ -n "$missing" ]; then
-              echo "Version $version: missing table(s):$missing; removing from flyway_schema_history."
-              psql -c "DELETE FROM \"$FLYWAY_SCHEMA\".flyway_schema_history WHERE version = '$version'" 2>/dev/null || true
-            fi
-          done
-          unset PGPASSWORD PGHOST PGPORT PGDATABASE PGUSER PGSSLMODE
-          exit 0
-
       # Install Flyway CLI for Java/Kotlin projects only. The substrate's
       # migrate runner spawns the standalone `flyway` binary; non-Java
       # projects don't need it. Runtime-gated on pom.xml so the YAML is
@@ -497,18 +437,6 @@ jobs:
             npx --yes playwright test
           fi
 
-      - name: Install PostgreSQL client (for schema dump)
-        if: success() && steps.datasource.outputs.ci_branch_used == 'true'
-        run: |
-          if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y postgresql-client
-          elif command -v brew >/dev/null 2>&1; then
-            brew install libpq
-            echo "PATH=$(brew --prefix libpq)/bin:$PATH" >> $GITHUB_ENV
-          else
-            echo "Neither apt-get nor brew found; pg_dump may be missing for schema diff."
-          fi
-
       - name: Schema diff (CI branch vs parent)
         if: success() && steps.datasource.outputs.ci_branch_used == 'true'
         id: schema-diff
@@ -577,30 +505,15 @@ jobs:
                     LAKEBASE_USERNAME LAKEBASE_PASSWORD DATABASE_URL JDBC_URL
             fi
           fi
-          # Parse JDBC URL to host, port, db (for pg_dump)
-          parse_jdbc() {
-            local url="$1"
-            local rest="${url#jdbc:postgresql://}"
-            local hostport="${rest%%/*}"
-            local path="${rest#*/}"
-            local db="${path%%\?*}"
-            local host="${hostport%:*}"
-            local port="${hostport##*:}"
-            [ "$port" = "$host" ] && port=5432
-            echo "$host|$port|$db"
-          }
           # Schema diff: substrate-only via lakebase-schema-diff --format markdown.
           # The TS substrate queries information_schema directly on both Lakebase
-          # branches (target = CI ci-pr-N, parent = PR_BASE_REF), so no pg_dump
-          # or format-schema-diff.sh is needed. The pg_dump preamble below is
-          # retained for fallback parity with the older workflow but is
-          # only used when the substrate call fails for any reason.
+          # branches (target = CI ci-pr-N, parent = PR_BASE_REF), so no pg_dump or
+          # format-schema-diff.sh is needed.
           # Target Lakebase branch = the CI branch ci-pr-N ($BRANCH). LAKEBASE_BRANCH_NAME
           # is intentionally unset above (it was eval'd to the PARENT during parent-
           # credential resolution, then cleared), so gate on $BRANCH and pass it as
-          # --branch; gating on LAKEBASE_BRANCH_NAME left this path dead, so every PR
-          # fell to the pg_dump fallback + "no formatter" stub. Resolve the kit via the
-          # GitHub ref (it is NOT published to npm; the @org@version registry form 404s).
+          # --branch. Resolve the kit via the GitHub ref (it is NOT published to npm;
+          # the @org@version registry form 404s).
           if [ -n "$PRODUCTION_DATASOURCE_URL" ] && [ -n "$BRANCH" ]; then
             echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
             echo "" >> "$MD"
@@ -615,72 +528,6 @@ jobs:
               [ -s "$MD.err" ] && sed 's/^/  > /' "$MD.err" >> "$MD"
             fi
             rm -f "$MD.err"
-          elif [ -n "$PRODUCTION_DATASOURCE_URL" ] && command -v pg_dump >/dev/null 2>&1; then
-            # Legacy fallback (kept for runners that pre-date): pg_dump
-            # both branches into .tmp/*.sql for downstream comparison. After
-            # lands this path is dead; remove in a future PR.
-            PROD_HP=$(parse_jdbc "$PRODUCTION_DATASOURCE_URL")
-            CI_HP=$(parse_jdbc "$CI_JDBC_URL")
-            PROD_HOST=$(echo "$PROD_HP" | cut -d'|' -f1); PROD_PORT=$(echo "$PROD_HP" | cut -d'|' -f2); PROD_DB=$(echo "$PROD_HP" | cut -d'|' -f3)
-            CI_HOST=$(echo "$CI_HP" | cut -d'|' -f1); CI_PORT=$(echo "$CI_HP" | cut -d'|' -f2); CI_DB=$(echo "$CI_HP" | cut -d'|' -f3)
-            export PGSSLMODE=require
-            mkdir -p .tmp
-            PROD_ERR=$(mktemp); CI_ERR=$(mktemp); trap "rm -f '$PROD_ERR' '$CI_ERR'" EXIT
-            PGPASSWORD="${PRODUCTION_DATASOURCE_PASSWORD:-}" pg_dump -h "$PROD_HOST" -p "$PROD_PORT" -U "${PRODUCTION_DATASOURCE_USERNAME:-}" -d "$PROD_DB" --schema-only --no-owner --no-privileges 2>"$PROD_ERR" | grep -v '^--' | grep -v '^$' > .tmp/prod-schema.sql || true
-            PGPASSWORD="${CI_DB_PASSWORD:-}" pg_dump -h "$CI_HOST" -p "$CI_PORT" -U "${CI_DB_USERNAME:-}" -d "$CI_DB" --schema-only --no-owner --no-privileges 2>"$CI_ERR" | grep -v '^--' | grep -v '^$' > .tmp/ci-schema.sql || true
-            if [ -s .tmp/prod-schema.sql ] && [ -s .tmp/ci-schema.sql ]; then
-              trap - EXIT; rm -f "$PROD_ERR" "$CI_ERR"
-              echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
-              echo "" >> "$MD"
-              # Legacy formatter was templates/.../scripts/format-schema-diff.sh (deleted in
-              #). Reach into kit dist if available; otherwise emit a table.
-              if [ -x ./node_modules/.bin/lakebase-schema-diff ]; then
-                ./node_modules/.bin/lakebase-schema-diff --instance "$LAKEBASE_PROJECT_ID" --branch "$LAKEBASE_BRANCH_NAME" --against "$PR_BASE_REF" --format markdown >> "$MD" 2>/dev/null || true
-              else
-                echo "# (pg_dump captured to .tmp/, but no formatter available; install kit)" >> "$MD"
-              fi
-            else
-              echo "# pg_dump failed or empty; falling back to migration version comparison." >> "$MD"
-              if [ ! -s .tmp/prod-schema.sql ] && [ -s "$PROD_ERR" ]; then echo "# Production: $(head -1 "$PROD_ERR" 2>/dev/null)" >> "$MD"; fi
-              if [ ! -s .tmp/ci-schema.sql ] && [ -s "$CI_ERR" ]; then echo "# CI branch: $(head -1 "$CI_ERR" 2>/dev/null)" >> "$MD"; fi
-              [ ! -s .tmp/prod-schema.sql ] && echo "# Tip: ensure parent branch \`${PR_BASE_REF}\` exists in Lakebase and its endpoint is ACTIVE." >> "$MD"
-              [ ! -s .tmp/ci-schema.sql ] && echo "# Tip: CI branch credentials are generated in this run; transient failures can be retried." >> "$MD"
-              trap - EXIT; rm -f "$PROD_ERR" "$CI_ERR"
-              echo "pg_dump failed; falling back to table comparison via psql." >> "$MD"
-              # Compare tables directly via psql (language-independent)
-              if command -v psql >/dev/null 2>&1; then
-                CI_TABLES="$(PGPASSWORD="${CI_DB_PASSWORD:-}" psql "host=$CI_HOST port=$CI_PORT dbname=$CI_DB user=$CI_DB_USERNAME sslmode=require" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename" 2>/dev/null || true)"
-                PROD_TABLES="$(PGPASSWORD="${PRODUCTION_DATASOURCE_PASSWORD:-}" psql "host=$PROD_HOST port=$PROD_PORT dbname=$PROD_DB user=$PRODUCTION_DATASOURCE_USERNAME sslmode=require" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename" 2>/dev/null || true)"
-                for t in $CI_TABLES; do echo " $PROD_TABLES " | grep -q " $t " || echo "**New on this PR:** \`$t\`" >> "$MD"; done
-                for t in $PROD_TABLES; do echo " $CI_TABLES " | grep -q " $t " || echo "**Only on parent (\`${PR_BASE_REF}\`):** \`$t\`" >> "$MD"; done
-              fi
-            fi
-          elif [ -n "$PRODUCTION_DATASOURCE_URL" ]; then
-            echo "### Schema diff vs parent \`${PR_BASE_REF}\` (table comparison)" >> "$MD"
-            # Compare tables directly via psql (language-independent, no flyway:info needed)
-            PROD_HP=$(parse_jdbc "$PRODUCTION_DATASOURCE_URL")
-            CI_HP=$(parse_jdbc "$CI_JDBC_URL")
-            PROD_HOST=$(echo "$PROD_HP" | cut -d'|' -f1); PROD_PORT=$(echo "$PROD_HP" | cut -d'|' -f2); PROD_DB=$(echo "$PROD_HP" | cut -d'|' -f3)
-            CI_HOST=$(echo "$CI_HP" | cut -d'|' -f1); CI_PORT=$(echo "$CI_HP" | cut -d'|' -f2); CI_DB=$(echo "$CI_HP" | cut -d'|' -f3)
-            if command -v psql >/dev/null 2>&1; then
-              export PGSSLMODE=require
-              CI_TABLES="$(PGPASSWORD="${CI_DB_PASSWORD:-}" psql "host=$CI_HOST port=$CI_PORT dbname=$CI_DB user=$CI_DB_USERNAME sslmode=require" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename" 2>/dev/null || true)"
-              PROD_TABLES="$(PGPASSWORD="${PRODUCTION_DATASOURCE_PASSWORD:-}" psql "host=$PROD_HOST port=$PROD_PORT dbname=$PROD_DB user=$PRODUCTION_DATASOURCE_USERNAME sslmode=require" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename" 2>/dev/null || true)"
-              NEW_ON_CI=""; ONLY_PROD=""
-              for t in $CI_TABLES; do
-                [ "$t" = "flyway_schema_history" ] || [ "$t" = "alembic_version" ] || [ "$t" = "knex_migrations" ] || [ "$t" = "knex_migrations_lock" ] && continue
-                echo " $PROD_TABLES " | grep -q " $t " || NEW_ON_CI="$NEW_ON_CI \`$t\`"
-              done
-              for t in $PROD_TABLES; do
-                [ "$t" = "flyway_schema_history" ] || [ "$t" = "alembic_version" ] || [ "$t" = "knex_migrations" ] || [ "$t" = "knex_migrations_lock" ] && continue
-                echo " $CI_TABLES " | grep -q " $t " || ONLY_PROD="$ONLY_PROD \`$t\`"
-              done
-              [ -n "$NEW_ON_CI" ] && echo "**New on this PR:**$NEW_ON_CI" >> "$MD"
-              [ -n "$ONLY_PROD" ] && echo "**Only on parent (\`${PR_BASE_REF}\`):**$ONLY_PROD" >> "$MD"
-              [ -z "$NEW_ON_CI" ] && [ -z "$ONLY_PROD" ] && echo "**In sync:** CI and parent (\`${PR_BASE_REF}\`) have the same tables." >> "$MD"
-            else
-              echo "psql not available; cannot compare tables." >> "$MD"
-            fi
           else
             echo "### Schema diff vs parent \`${PR_BASE_REF}\`" >> "$MD"
             echo "Parent branch URL could not be resolved from Lakebase. Check that the Lakebase branch paired with git \`${PR_BASE_REF}\` exists, and that \`LAKEBASE_PROJECT_ID\`, \`DATABRICKS_HOST\`, \`DATABRICKS_TOKEN\` are set." >> "$MD"
