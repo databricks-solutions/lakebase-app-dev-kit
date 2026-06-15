@@ -20,10 +20,20 @@ name: Merge
 
 on:
   push:
-    # Add every promotion target here. 'main' is the production boundary; 'staging'
-    # is the pre-prod boundary for two-tier projects. Feature branches don't
-    # trigger this – they use pr.yml's CI branch.
-    branches: [main, staging]
+    # Migrate on a push to ANY long-living PARENT tier, not a hardcoded list.
+    # A PR merge pushes to its base (the parent), so migrating github.ref_name on
+    # every non-ephemeral push covers every promotion regardless of the tier's
+    # name (main / master / staging / a custom tier). Only ephemeral branches are
+    # excluded - they use pr.yml's CI branch and never receive promotions.
+    # migrate-target is push-gated (its `if` requires event_name==push), so a PR
+    # merge migrates the parent exactly once (on the push to base.ref). The
+    # pull_request:closed trigger below drives only cleanup-lakebase-branches.
+    branches-ignore:
+      - 'feature-**'
+      - 'feature/**'
+      - 'experiment-**'
+      - 'experiment/**'
+      - 'ci-pr-**'
   pull_request:
     types: [closed]
 
@@ -46,7 +56,10 @@ jobs:
     # the runner queue for subsequent real promotion merges. Any
     # real merge to main/staging (PR-merge or direct push) has
     # before != 0000... and runs normally.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging') && github.event.before != '0000000000000000000000000000000000000000'
+    # Run for any non-ephemeral parent push (the trigger's branches-ignore already
+    # scoped this to tier branches); skip only the ref-creation push (all-zeros
+    # before-SHA), which carries only the V1 placeholder already on the default branch.
+    if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
     steps:
       - uses: actions/checkout@v4
         with:
