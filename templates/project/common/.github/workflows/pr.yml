@@ -595,13 +595,19 @@ jobs:
           # or format-schema-diff.sh is needed. The pg_dump preamble below is
           # retained for fallback parity with the older workflow but is
           # only used when the substrate call fails for any reason.
-          if [ -n "$PRODUCTION_DATASOURCE_URL" ] && [ -n "$LAKEBASE_BRANCH_NAME" ]; then
+          # Target Lakebase branch = the CI branch ci-pr-N ($BRANCH). LAKEBASE_BRANCH_NAME
+          # is intentionally unset above (it was eval'd to the PARENT during parent-
+          # credential resolution, then cleared), so gate on $BRANCH and pass it as
+          # --branch; gating on LAKEBASE_BRANCH_NAME left this path dead, so every PR
+          # fell to the pg_dump fallback + "no formatter" stub. Resolve the kit via the
+          # GitHub ref (it is NOT published to npm; the @org@version registry form 404s).
+          if [ -n "$PRODUCTION_DATASOURCE_URL" ] && [ -n "$BRANCH" ]; then
             echo "### Schema diff: \`${BRANCH}\` vs parent (\`${PR_BASE_REF}\`)" >> "$MD"
             echo "" >> "$MD"
-            if ! npx --yes --package=@databricks-solutions/lakebase-app-dev-kit@{{LAKEBASE_KIT_VERSION}} \
+            if ! npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit#v{{LAKEBASE_KIT_VERSION}} \
                  lakebase-schema-diff \
                  --instance "$LAKEBASE_PROJECT_ID" \
-                 --branch "$LAKEBASE_BRANCH_NAME" \
+                 --branch "$BRANCH" \
                  --against "$PR_BASE_REF" \
                  --format markdown >> "$MD" 2>>"$MD.err"; then
               echo "" >> "$MD"
