@@ -339,103 +339,32 @@ jobs:
             echo "The snapshot will auto-expire in 24 hours." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Verify schema (post-migrate)
+      # Post-migrate verification via the substrate. lakebase-schema-migrate
+      # status reports the applied version + any pending migrations on the
+      # target branch, replacing the previous hand-rolled psql + grep-the-
+      # migration-files table check. The substrate is the single source of
+      # truth for migration state across every language, so the verify path
+      # stays one shape (no per-language CREATE/DROP TABLE parsing).
+      - name: Verify migrations applied (substrate status)
         env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-          DB_USERNAME: ${{ env.DB_USERNAME }}
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_AUTH_TYPE: pat
+          LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "::warning::No DATABASE_URL; skipping schema verification."
+          if [ -z "$LAKEBASE_BRANCH_NAME" ]; then
+            echo "::warning::LAKEBASE_BRANCH_NAME not set; skipping post-migrate status."
             exit 0
           fi
-          if ! command -v psql >/dev/null 2>&1; then
-            echo "::warning::psql not found; skipping schema verification."
-            exit 0
-          fi
-
-          # Parse postgresql:// URL into psql connection params
-          URL_NO_SCHEME="${DATABASE_URL#postgresql://}"
-          URL_AFTER_AT="${URL_NO_SCHEME##*@}"
-          PG_HOST="$(echo "$URL_AFTER_AT" | sed -n 's|\([^:/]*\).*|\1|p')"
-          PG_PORT="$(echo "$URL_AFTER_AT" | sed -n 's|[^:]*:\([0-9]*\)/.*|\1|p')"
-          PG_DB="$(echo "$URL_AFTER_AT" | sed -n 's|[^/]*/\([^?]*\).*|\1|p')"
-          [ -z "$PG_PORT" ] && PG_PORT="5432"
-
-          echo "Verifying schema on ${PG_HOST}:${PG_PORT}/${PG_DB}..."
-
-          # Extract expected tables from migration files (language-aware)
-          LANG="${{ steps.detect-lang.outputs.lang }}"
-          CREATED_TABLES=""
-          DROPPED_TABLES=""
-          if [ "$LANG" = "java" ]; then
-            CREATED_TABLES="$(grep -rhi 'CREATE TABLE' src/main/resources/db/migration/*.sql 2>/dev/null \
-              | sed -n 's/.*CREATE TABLE[^[:alnum:]]*\(IF NOT EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p' \
-              | sort -u)"
-            DROPPED_TABLES="$(grep -rhi 'DROP TABLE' src/main/resources/db/migration/*.sql 2>/dev/null \
-              | sed -n 's/.*DROP TABLE[^[:alnum:]]*\(IF EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p' \
-              | sort -u)"
-          elif [ "$LANG" = "python" ]; then
-            CREATED_TABLES="$(grep -rhi 'op.create_table\|CREATE TABLE' alembic/versions/*.py 2>/dev/null \
-              | sed -n "s/.*op.create_table(['\"][[:space:]]*\([a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p; s/.*CREATE TABLE[^[:alnum:]]*\(IF NOT EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p" \
-              | sort -u)"
-            DROPPED_TABLES="$(grep -rhi 'op.drop_table\|DROP TABLE' alembic/versions/*.py 2>/dev/null \
-              | sed -n "s/.*op.drop_table(['\"][[:space:]]*\([a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p; s/.*DROP TABLE[^[:alnum:]]*\(IF EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p" \
-              | sort -u)"
-          elif [ "$LANG" = "nodejs" ]; then
-            CREATED_TABLES="$(grep -rhi 'createTable\|CREATE TABLE' migrations/*.js 2>/dev/null \
-              | sed -n "s/.*createTable(['\"][[:space:]]*\([a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p; s/.*CREATE TABLE[^[:alnum:]]*\(IF NOT EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p" \
-              | sort -u)"
-            DROPPED_TABLES="$(grep -rhi 'dropTable\|DROP TABLE' migrations/*.js 2>/dev/null \
-              | sed -n "s/.*dropTable(['\"][[:space:]]*\([a-zA-Z_][a-zA-Z0-9_]*\).*/\1/p; s/.*DROP TABLE[^[:alnum:]]*\(IF EXISTS[[:space:]]*\)\{0,1\}\(public\.\)\{0,1\}\([a-zA-Z_][a-zA-Z0-9_]*\).*/\3/p" \
-              | sort -u)"
-          fi
-
-          # Remove dropped tables from expected list
-          EXPECTED_TABLES=""
-          for table in $CREATED_TABLES; do
-            if ! echo "$DROPPED_TABLES" | grep -qw "$table"; then
-              EXPECTED_TABLES="$(printf '%s\n%s' "$EXPECTED_TABLES" "$table")"
-            fi
-          done
-          EXPECTED_TABLES="$(echo "$EXPECTED_TABLES" | sed '/^$/d')"
-
-          if [ -z "$EXPECTED_TABLES" ]; then
-            echo "No tables expected on target after accounting for DROP TABLE migrations; nothing to verify."
-            exit 0
-          fi
-
-          # Query actual tables from target Lakebase branch
-          ACTUAL_TABLES="$(PGPASSWORD="$DB_PASSWORD" psql \
-            "host=$PG_HOST port=$PG_PORT dbname=$PG_DB user=$DB_USERNAME sslmode=require" \
-            -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>&1)"
-
-          MISSING=""
-          for table in $EXPECTED_TABLES; do
-            # Skip migration tracking tables
-            [ "$table" = "flyway_schema_history" ] && continue
-            [ "$table" = "alembic_version" ] && continue
-            [ "$table" = "knex_migrations" ] && continue
-            [ "$table" = "knex_migrations_lock" ] && continue
-            if ! echo "$ACTUAL_TABLES" | grep -qw "$table"; then
-              MISSING="${MISSING} ${table}"
-            fi
-          done
-
-          if [ -n "$MISSING" ]; then
-            echo "::error::Schema verification failed. Tables missing on target '${LAKEBASE_BRANCH_NAME}':${MISSING}"
-            echo ""
-            echo "Expected tables from migrations:"
-            echo "$EXPECTED_TABLES"
-            echo ""
-            echo "Actual tables on target (${LAKEBASE_BRANCH_NAME}):"
-            echo "$ACTUAL_TABLES"
-            echo ""
-            echo "To fix: manually run the missing migration SQL against '${LAKEBASE_BRANCH_NAME}', or re-run the merge workflow."
-            exit 1
-          fi
-
-          echo "Schema verification passed. All $(echo "$EXPECTED_TABLES" | wc -l | tr -d ' ') expected tables exist on target '${LAKEBASE_BRANCH_NAME}'."
+          echo "Reporting applied migrations on '$LAKEBASE_BRANCH_NAME' via the substrate"
+          echo "  kit version: {{LAKEBASE_KIT_VERSION}}"
+          echo "  instance:    $LAKEBASE_PROJECT_ID"
+          echo "  branch:      $LAKEBASE_BRANCH_NAME"
+          npx --yes --package=github:databricks-solutions/lakebase-app-dev-kit#v{{LAKEBASE_KIT_VERSION}} \
+            lakebase-schema-migrate status \
+            --instance "$LAKEBASE_PROJECT_ID" \
+            --branch "$LAKEBASE_BRANCH_NAME" \
+            --pretty | tee -a $GITHUB_STEP_SUMMARY
 
   # Separate job: branch cleanup runs only on PR merge (not direct pushes to main).
   # Uses PR event data directly – no commit message parsing needed.
