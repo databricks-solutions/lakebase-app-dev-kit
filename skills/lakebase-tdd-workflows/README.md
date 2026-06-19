@@ -1,6 +1,13 @@
 # lakebase-tdd-workflows
 
-Substrate for test-driven development on paired Lakebase branches. Canonical Beck-style RED → GREEN → REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases) and HITL gates at every phase boundary.
+Substrate for spec-driven, test-driven development on paired Lakebase branches. Canonical Beck-style RED → GREEN → REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases) and HITL gates at every phase boundary.
+
+**Two disciplines, back to back.** The kit runs the design lane as **Spec Driven Development (SDD)** and the build lane as **Test Driven Development (TDD)**:
+
+- **Design lane = SDD** (`/design`). Spec Author, Architect Reviewer, and Test Strategist turn intent into a gated, executable spec – feature spec, stories, ACs, architecture notes, and a Beck-ordered test list – before any product code exists. The spec is the artifact that drives everything downstream.
+- **Build lane = TDD** (`/build`). RED → GREEN → REFACTOR cycles turn that approved spec into working software on a paired branch, one test-list item at a time. The test list authored by SDD is the build lane's horizon.
+
+SDD produces the spec; TDD consumes it. The HITL gates between them (`spec`, `test_list`) are where the spec is frozen before a single line of product code is written.
 
 This README is the human-facing overview. The agent's operating contract – hard rules, function names, code patterns – lives in [`SKILL.md`](SKILL.md).
 
@@ -50,15 +57,17 @@ The substrate API keeps "experiment" as the noun for the rigorous TDD branch; it
 
 ## Phases and gates
 
-| Phase | Output | HITL gate |
-|---|---|---|
-| 0 Discovery | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
-| 1 Architectural review | Layer + architectural_notes populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
-| 2 Test-list construction | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
-| 3 Design-spec gate | Experiment plan in `selection-log.md` (N, strategies, budget) | **Gate 4 – Experiment plan** |
-| 4 Implementation | Per-experiment cycles producing tests + code | Continuous: smells; final: promote / synthesize choice |
+Phases 0–3 are the **SDD (Spec Driven Development)** lane: they produce and freeze the spec. Phase 4 is the **TDD (Test Driven Development)** lane: it builds against that frozen spec.
 
-Each phase has a defined predecessor + artifact contract. The orchestrator refuses to transition if prior artifacts are missing or invalid.
+| Phase | Lane | Output | HITL gate |
+|---|---|---|---|
+| 0 Discovery | SDD | Draft `feature-spec.{md,json}` + `story.{md,json}` + `ac.{md,json}` per AC | **Gate 1 – Draft spec** |
+| 1 Architectural review | SDD | Layer + architectural_notes populated; `architecture.md` summary | **Gate 2 – Architectural lens** |
+| 2 Test-list construction | SDD | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
+| 3 Design-spec gate | SDD | Experiment plan in `selection-log.md` (N, strategies, budget) | **Gate 4 – Experiment plan** |
+| 4 Implementation | TDD | Per-experiment cycles producing tests + code | Continuous: smells; final: promote / synthesize choice |
+
+Each phase has a defined predecessor + artifact contract. The orchestrator refuses to transition if prior artifacts are missing or invalid. The SDD-to-TDD handoff is hard: the build lane cannot start until the `spec` and `test_list` gates are approved, so TDD always builds against a frozen, reviewed spec.
 
 ## Operations
 
@@ -150,9 +159,9 @@ Three flows – shown as what you'd prompt your agent to do, using a cart-checko
 
 The project-level slash commands `/design` and `/build` are the canonical entry points. They're thin wrappers around this substrate, scaffolded into new projects by `lakebase-create-project` under `.claude/commands/` (opt-out via `--skip-commands`). Projects extend them with their own concerns (JIRA hierarchy, IDE branch suggestions, manual review gates) by dropping sibling `design.{pre,post}-hook.md` or `build.{pre,post}-hook.md` files next to the scaffolded command. If a slash command isn't installed in your project, just describe what you want to your agent directly; the prompts below work either way.
 
-### 1. Author a feature spec
+### 1. Author a feature spec (the SDD lane)
 
-Just describe what you want to build. The design agent walks Spec Author → Architect Reviewer → Test Strategist and asks you to sign off at each HITL gate; you don't need to tell it about schemas, file layout, IDs, or which questions to ask – that's its job.
+This is Spec Driven Development: you produce the spec before any product code. Just describe what you want to build. The design agent walks Spec Author → Architect Reviewer → Test Strategist and asks you to sign off at each HITL gate; you don't need to tell it about schemas, file layout, IDs, or which questions to ask – that's its job.
 
 > `/design`
 
@@ -162,9 +171,9 @@ Just describe what you want to build. The design agent walks Spec Author → Arc
 
 When you're done, your `.tdd/features/F1-checkout/` tree has the feature, stories, ACs, architecture notes, and an ordered test list. If you'd rather author by hand, copy `templates/tdd-bootstrap/.tdd/` into your project and edit the files using [`references/spec-format.md`](references/spec-format.md) as the layout reference.
 
-### 2. Build a feature end-to-end (the N=1 default)
+### 2. Build a feature end-to-end (the TDD lane, N=1 default)
 
-The most common flow. One feature, one branch, iterative refinement. The branch IS the feature.
+This is Test Driven Development against the spec the SDD lane froze. The most common flow. One feature, one branch, iterative refinement. The branch IS the feature.
 
 > `/build F1-checkout`
 
@@ -203,8 +212,8 @@ For when you want to run something directly without the agent. Most TDD work goe
 
 ## Project-level entry points
 
-- **`/design`** – wraps Spec Author + Architect Reviewer + Test Strategist phases. Scaffolded into new projects by `lakebase-create-project`. Project-specific JIRA hierarchy creation lives in `design.pre-hook.md`.
-- **`/build`** – wraps Orchestrator. Scaffolded into new projects by `lakebase-create-project`. Project-specific PR/merge ceremony lives in `build.post-hook.md`.
+- **`/design`** – the **SDD (Spec Driven Development)** lane: wraps Spec Author + Architect Reviewer + Test Strategist phases to produce the gated, executable spec. Scaffolded into new projects by `lakebase-create-project`. Project-specific JIRA hierarchy creation lives in `design.pre-hook.md`.
+- **`/build`** – the **TDD (Test Driven Development)** lane: wraps the Orchestrator running RED → GREEN → REFACTOR against the frozen spec. Scaffolded into new projects by `lakebase-create-project`. Project-specific PR/merge ceremony lives in `build.post-hook.md`.
 - **`/ship`** – lives in `lakebase-release-workflows`. Not part of this skill.
 
 The substrate itself ships no installed slash commands; the scaffolder writes the command files into the project at `lakebase-create-project` time (templated, with a kit-version pin). The substrate's runtime surface stays skills + agents + scripts + CLI bins. The MCP server (`apps/mcp-server/`) exposes the tool surface for MCP-capable consumers.

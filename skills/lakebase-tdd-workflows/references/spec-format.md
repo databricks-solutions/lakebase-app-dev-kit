@@ -2,6 +2,8 @@
 
 The on-disk `.tdd/` layout that the lakebase-tdd-workflows substrate reads and writes. Portable, tool-agnostic. Every structured element has both a markdown narrative (for humans) and a JSON contract (for agents, validation, and adapter sync).
 
+This `.tdd/` tree is the artifact of **Spec Driven Development (SDD)**: the design lane (`/design`) writes the feature spec, stories, ACs, architecture, and ordered test list here, and freezes them at the `spec` + `test_list` gates. The **Test Driven Development (TDD)** build lane (`/build`) then reads this tree as its source of truth, never the other way around: the spec drives the code.
+
 ## Directory layout
 
 ```

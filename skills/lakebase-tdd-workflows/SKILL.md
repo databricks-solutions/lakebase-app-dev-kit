@@ -1,6 +1,6 @@
 ---
 name: lakebase-tdd-workflows
-description: "Test-driven development against paired Lakebase branches. Canonical Beck-style RED-GREEN-REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows."
+description: "Spec-driven, test-driven development against paired Lakebase branches. The design lane is Spec Driven Development (SDD); the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows."
 user-invocable: true
 ---
 
@@ -28,7 +28,9 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 
 ## Phases and gates
 
-Gates are keyed (not numbered): `spec` / `plan` / `test_list` / `promote` / `deploy`. The design lane runs PER STORY (it streams), and experiments + plans are per-story.
+The kit composes two disciplines: the **design lane is Spec Driven Development (SDD)** – spec drafting, architectural review, test-list construction, all driven by `/design` – and the **build lane is Test Driven Development (TDD)** – the RED → GREEN → REVIEW → REFACTOR cycles driven by `/build`. SDD freezes the spec at the `spec` + `test_list` gates; TDD only starts once they are approved, so the build always runs against a reviewed spec.
+
+Gates are keyed (not numbered): `spec` / `plan` / `test_list` / `promote` / `deploy`. The SDD lane runs PER STORY (it streams), and experiments + plans are per-story.
 
 | Step (per story unless noted) | Output | HITL gate |
 |---|---|---|
@@ -56,8 +58,8 @@ Tier 2:  /plan  /design  /build  /deploy   (run ONE phase, then stop + suggest n
 
 - **`/sprint [name]`** (Tier 1, the top-level orchestrator): runs the whole sprint as one continuous flow, plan to the plan gate, then claim + drive each backlog feature `design` -> `build` -> `deploy`. Re-invoked per cycle; resumable (halts at the next HITL gate for the human, continues on re-run). `lakebase-tdd-drive --sprint <name>`.
 - **`/plan [name]`** (Tier 2, sprint planning, ABOVE the per-feature loop): the **Spec Author** proposes the candidate breakdown (`.tdd/planning/feature-proposals.md`); the **Architect** t-shirt-sizes the candidates (`.tdd/planning/estimates.json`, XS/S/M/L/XL); the **Product Owner** commits the backlog by authoring a `feature-request.md` per feature that fits sprint capacity; the deterministic `sync-backlog` step projects `.tdd/sprints/<name>/backlog.json` (committed ids + sizes); the **sprint plan gate** is the HITL checkpoint. Stops there (does not flow into design). Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition. `--sprint <name> --plan-only`.
-- **`/design <feature-id>`**: claims the paired branch (Step 0), enforces the feature's `feature-request.md` + project intake (Step 0.5, a precondition, NOT a gate), then drives the per-story design lane to the spec gates. `--only design`.
-- **`/build <feature-id>`**: the TDD cycles + per-story acceptance, to ready-for-review (requires design done). `--only build`.
+- **`/design <feature-id>`**: the **SDD (Spec Driven Development)** lane. Claims the paired branch (Step 0), enforces the feature's `feature-request.md` + project intake (Step 0.5, a precondition, NOT a gate), then drives the per-story design lane (Spec Author -> Architect Reviewer -> Test Strategist) to the spec + test_list gates, producing the executable spec. `--only design`.
+- **`/build <feature-id>`**: the **TDD (Test Driven Development)** lane. RED -> GREEN -> REVIEW -> REFACTOR cycles + per-story acceptance against the frozen spec, to ready-for-review (requires the SDD lane done). `--only build`.
 - **`/deploy <feature-id> [--target local] [--story <s>]`**: deploys the merged feature (or one story's branch) + verifies reachable + feature-verify; the **deploy gate** is the working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`). `--only deploy`. For a hands-on review the human can run `./scripts/run-dev.sh` to serve the app locally (migrates + hot-reload) and open it in a browser.
 - **`/spike <slug> [--for <feature>]`**: throwaway exploration on its own paired branch, OUTSIDE the workflow (no gates). Notes carry forward into a feature's design-spec gate; code is never promoted. `lakebase-tdd-spike`.
 

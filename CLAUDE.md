@@ -22,6 +22,6 @@ When editing scripts, always run `npm run typecheck` before committing. When add
 
 ## When proposing changes
 
-Follow `lakebase-tdd-workflows` for TDD on Lakebase-paired projects: spec → architectural review → test list → design-spec gate → cycles. The orchestrator is a deterministic driver (`lakebase-tdd-drive`), not an LLM agent: it routes phase transitions over `workflow-state.json`, spawns the role agents, and surfaces bad smells. Every gate is HITL.
+Follow `lakebase-tdd-workflows` for spec-driven, test-driven development on Lakebase-paired projects. Two lanes: the design lane is **Spec Driven Development (SDD)** (`/design`: spec → architectural review → test list → design-spec gate) and the build lane is **Test Driven Development (TDD)** (`/build`: RED → GREEN → REFACTOR cycles). SDD freezes the spec at the `spec` + `test_list` gates; TDD only builds once they pass. The orchestrator is a deterministic driver (`lakebase-tdd-drive`), not an LLM agent: it routes phase transitions over `workflow-state.json`, spawns the role agents, and surfaces bad smells. Every gate is HITL.
 
 For non-TDD work in this substrate repo itself, follow the conventions in [`CONTRIBUTING.md`](CONTRIBUTING.md): tier 1 hermetic tests required, tier 2 live tests for `scripts/lakebase/*` changes, single-seam credential rules enforced by CI grep guards.
