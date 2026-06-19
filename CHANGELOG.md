@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Spec Driven Development (SDD) framing.** `lakebase-tdd-workflows` docs now name
+  the two lanes explicitly: the design lane (`/design`) is Spec Driven Development
+  (SDD), which produces and freezes the executable spec at the `spec` + `test_list`
+  gates; the build lane (`/build`) is Test Driven Development (TDD), which builds
+  against that frozen spec. Narrative added to the skill README + SKILL, the
+  spec-format reference, the design-lane agent prompts (spec-author,
+  architect-reviewer, test-strategist), and the kit README + CLAUDE.
+
 ## [0.3.0-beta.1] - 2026-06-10
 
 Second beta on the 0.3.0 line. Consume via
