@@ -15,7 +15,7 @@ import {
   scaffoldStaticAll,
   PROJECT_SKILLS,
 } from "../../scripts/lakebase/scaffold";
-import { ALL_AGENT_ROLES } from "../../scripts/tdd/agent-models";
+import { ALL_AGENT_ROLES } from "../../scripts/sftdd/agent-models";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, "..", "..");
@@ -130,9 +130,9 @@ describe("deployClaudeSkills", () => {
       expect(fs.existsSync(path.join(targetDir, skillRel(skill), "SKILL.md")), `${skill}/SKILL.md`).toBe(true);
     }
     expect(fs.existsSync(path.join(targetDir, REL, "references"))).toBe(true);
-    // lakebase-tdd-workflows ships its agents/ subtree so @lakebase-tdd-workflows/agents/* resolves.
+    // lakebase-sftdd-workflows ships its agents/ subtree so @lakebase-sftdd-workflows/agents/* resolves.
     expect(
-      fs.existsSync(path.join(targetDir, skillRel("lakebase-tdd-workflows"), "agents", "navigator.md"))
+      fs.existsSync(path.join(targetDir, skillRel("lakebase-sftdd-workflows"), "agents", "navigator.md"))
     ).toBe(true);
   });
 

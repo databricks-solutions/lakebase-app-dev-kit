@@ -45,10 +45,10 @@ describe("npx-tax guard: scaffolded command templates use ./scripts/lk", () => {
 
 describe("npx-tax guard: the canonical logging doc + smoke use lk", () => {
   it("agent-logging.md shows the logger invoked via ./scripts/lk", () => {
-    const body = read("skills/lakebase-tdd-workflows/references/agent-logging.md");
-    expect(body).toMatch(/\.\/scripts\/lk lakebase-tdd-log/);
-    // No bare command-line `lakebase-tdd-log` invocation (start of a bash line).
-    expect(body).not.toMatch(/^\s*lakebase-tdd-log /m);
+    const body = read("skills/lakebase-sftdd-workflows/references/agent-logging.md");
+    expect(body).toMatch(/\.\/scripts\/lk lakebase-sftdd-log/);
+    // No bare command-line `lakebase-sftdd-log` invocation (start of a bash line).
+    expect(body).not.toMatch(/^\s*lakebase-sftdd-log /m);
   });
 
   it("the smokes bootstrap create-project through the kit's lk (no npx --package), for determinism", () => {

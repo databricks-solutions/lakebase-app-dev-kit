@@ -1,6 +1,6 @@
 // Contract test: the driver's emitted experiment-CLI commands are COMPLETE.
 //
-// The deterministic driver (commandsForAction) emits `lakebase-tdd-experiment`
+// The deterministic driver (commandsForAction) emits `lakebase-sftdd-experiment`
 // CLI invocations; the CLI (story-experiment.cli) validates required args. A
 // previous e2e tested experiment.ts DIRECTLY, so the driver->CLI glue was never
 // checked and a `cut` command missing --slug/--branch/--parent/--instance
@@ -10,11 +10,11 @@
 // shortcut. If the driver emits an incomplete command, this fails here.
 
 import { describe, it, expect } from "vitest";
-import { commandsForAction, type DriveEffectsConfig } from "../../scripts/tdd/orchestrator-effects";
-import { parseExperimentArgs, validateExperimentArgs } from "../../scripts/tdd/experiment-args";
-import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
+import { commandsForAction, type DriveEffectsConfig } from "../../scripts/sftdd/orchestrator-effects";
+import { parseExperimentArgs, validateExperimentArgs } from "../../scripts/sftdd/experiment-args";
+import type { WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
 
-const EXPERIMENT_BIN = "lakebase-tdd-experiment";
+const EXPERIMENT_BIN = "lakebase-sftdd-experiment";
 
 function cfg(over: Partial<DriveEffectsConfig> = {}): DriveEffectsConfig {
   return {
@@ -31,7 +31,7 @@ function cfg(over: Partial<DriveEffectsConfig> = {}): DriveEffectsConfig {
   };
 }
 
-/** The args of the single lakebase-tdd-experiment command the action emits. */
+/** The args of the single lakebase-sftdd-experiment command the action emits. */
 function experimentArgs(action: WorkflowAction, c: DriveEffectsConfig): string[] {
   const cmd = commandsForAction(action, c).find(
     (x): x is { kind: "cli"; bin: string; args: string[] } => x.kind === "cli" && x.bin === EXPERIMENT_BIN,

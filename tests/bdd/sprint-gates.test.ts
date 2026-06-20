@@ -13,7 +13,7 @@ import {
   defaultSprintGatesState,
   sprintDir,
   PLAN_GATE_ARTIFACT,
-} from "../../scripts/tdd/sprint-gates";
+} from "../../scripts/sftdd/sprint-gates";
 
 const SPRINT = "sprint-1";
 const PROPOSAL = ["# Sprint 1 backlog", "", "## Proposed features", "- v1 initial domain", ""].join("\n");

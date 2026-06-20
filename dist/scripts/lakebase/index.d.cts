@@ -130,7 +130,7 @@ interface AdoptTddArgs {
      */
     dryRun?: boolean;
     /**
-     * Override the kit's `templates/tdd-bootstrap/.tdd` source. The BDD
+     * Override the kit's `templates/sftdd-bootstrap/.tdd` source. The BDD
      * harness uses this to drive against a fixture; production callers
      * always let the substrate auto-locate.
      */
@@ -149,7 +149,7 @@ interface AdoptTddResult {
     noChanges: boolean;
 }
 /**
- * Drop the `templates/tdd-bootstrap/.tdd` tree into `projectDir/.tdd`.
+ * Drop the `templates/sftdd-bootstrap/.tdd` tree into `projectDir/.tdd`.
  *
  * Default mode: refuses if `.tdd/` already exists. The caller is told
  * to re-run with `update: true` if they want a brownfield refresh.
@@ -1753,7 +1753,7 @@ interface CreateProjectArgs {
      * branch exists.
      */
     tiers?: 1 | 2 | 3;
-    /** Lay down the .tdd/ scaffold from templates/tdd-bootstrap/ (default: true). */
+    /** Lay down the .tdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
     enableTdd?: boolean;
     /**
      * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
@@ -2903,9 +2903,9 @@ declare function deployClaudeCommands(targetDir: string, opts?: DeployClaudeComm
 /**
  * Deploy the TDD-workflow role agent definitions into the project's
  * `.claude/agents/` so Claude Code can discover + spawn them. The
- * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
+ * canonical source is the skill at `<kitRoot>/skills/lakebase-sftdd-workflows/agents/`;
  * this copies each `<role>.md` verbatim (the bodies are the system prompts).
- * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
+ * Discoverability is required for the deterministic orchestrator (`lakebase-sftdd-drive`)
  * to spawn the roles via `claude -p --agent <role>`. Skips files that
  * already exist unless `force: true`.
  */
@@ -2919,14 +2919,14 @@ declare function deployClaudeAgents(targetDir: string, opts?: DeployClaudeComman
  * parents (the `parent:` chain `lakebase-{scm,release}-workflows` -> `databricks-lakebase`):
  *
  * - `software-design-principles` , registered by the Navigator/Driver/Architect.
- * - `lakebase-tdd-workflows` , the `@lakebase-tdd-workflows/...` target the commands
+ * - `lakebase-sftdd-workflows` , the `@lakebase-sftdd-workflows/...` target the commands
  *   + agent docs reference (SKILL.md, references/, agents/).
  * - `lakebase-scm-workflows` / `lakebase-release-workflows` , the human SCM + release
  *   surface the Release Engineer composes on.
  * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
  *   compose on (`parent: databricks-lakebase`).
  */
-declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-tdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
+declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-sftdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
 /**
  * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
  * so the scaffolded project is self-contained: the deployed agents + commands can

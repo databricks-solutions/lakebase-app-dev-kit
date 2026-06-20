@@ -20,16 +20,16 @@ Planning reads the HIL's intent from the PROJECT-level intake artifacts (`produc
 
 ```bash
 UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-./scripts/lk lakebase-tdd-intake $UI_FLAG
+./scripts/lk lakebase-sftdd-intake $UI_FLAG
 ```
 
-Note: no `--feature`. `lakebase-tdd-intake` without a feature checks only the project-level artifacts (`product-overview.md` + `nfrs.md`, plus `design-brief.md` when `--ui`). It exits non-zero (5) and names what is missing or non-conformant if intake is incomplete. If it fails, the orchestrator facilitates project intake first (the interviews documented in `/design` Step 0.5: Product, NFR, and UX for UI projects), or, headless, the Human Proxy supplies the pre-recorded answers. Do not plan against missing intent.
+Note: no `--feature`. `lakebase-sftdd-intake` without a feature checks only the project-level artifacts (`product-overview.md` + `nfrs.md`, plus `design-brief.md` when `--ui`). It exits non-zero (5) and names what is missing or non-conformant if intake is incomplete. If it fails, the orchestrator facilitates project intake first (the interviews documented in `/design` Step 0.5: Product, NFR, and UX for UI projects), or, headless, the Human Proxy supplies the pre-recorded answers. Do not plan against missing intent.
 
 ## Phase 1: Spec Author proposes the feature breakdown (the BA)
 
 The Spec Author reads `product-overview.md` + `nfrs.md` (and `design-brief.md` for UI projects) and proposes the candidate features for **the next sprint only**, the next coherent, usable increment, NOT the whole product. Do not decompose or spec features beyond this sprint: the team folds what each sprint's working software reveals into the next `/plan`, so proposing the entire roadmap up front wastes work and pre-commits decisions the PO has not made. Later sprints get their own `/plan`.
 
-Invoke `@lakebase-tdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.tdd/planning/feature-proposals.md`: a short list of **this sprint's** candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
+Invoke `@lakebase-sftdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.tdd/planning/feature-proposals.md`: a short list of **this sprint's** candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
 
 ## Phase 2: the Product Owner prioritizes and authors the requests
 
@@ -38,7 +38,7 @@ The orchestrator presents the Spec Author's proposals to the Product Owner. The 
 Each `feature-request.md` is the open-ended, plain-English ask in the PO's voice (an H1 title + a non-empty body, no rigid structure by design). It is what `/design`'s Spec Author later reads as input and never overwrites. Confirm each conforms:
 
 ```bash
-./scripts/lk lakebase-tdd-intake --feature "<feature-id>"
+./scripts/lk lakebase-sftdd-intake --feature "<feature-id>"
 ```
 
 (With `--feature`, the precondition additionally requires that feature's `feature-request.md` to exist and conform, the same check `/design <feature-id>` runs at its Step 0.5.)
@@ -48,7 +48,7 @@ Each `feature-request.md` is the open-ended, plain-English ask in the PO's voice
 There is no human to interview. The Human Proxy stands in for the PO and SUPPLIES each sprint item's `feature-request.md` from the pre-recorded sprint backlog (`$LAKEBASE_TDD_RECORDED_INTAKE_DIR`): the recorded files ARE the PO's groomed, prioritized sprint. Validate-then-place; it refuses a missing or non-conformant recording.
 
 ```bash
-./scripts/lk lakebase-tdd-human-proxy supply \
+./scripts/lk lakebase-sftdd-human-proxy supply \
   --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/<feature-id>.md" \
   --to ".tdd/features/<feature-id>/feature-request.md" \
   --artifact feature-request.md --feature "<feature-id>"
@@ -62,7 +62,7 @@ The Spec Author's proposal step may still run headless (it is deterministic from
 
 ## Human Proxy (headless) mode
 
-Headless, the Human Proxy plays the PO at this activity: it supplies the sprint's `feature-request.md` files from the recorded backlog and refuses anything missing or non-conformant, so planning never silently produces an empty or malformed sprint. See `@lakebase-tdd-workflows/SKILL.md` "Headless / Human Proxy mode".
+Headless, the Human Proxy plays the PO at this activity: it supplies the sprint's `feature-request.md` files from the recorded backlog and refuses anything missing or non-conformant, so planning never silently produces an empty or malformed sprint. See `@lakebase-sftdd-workflows/SKILL.md` "Headless / Human Proxy mode".
 
 ## How it runs: the deterministic driver
 
@@ -73,7 +73,7 @@ gates so YOU answer the sprint plan gate (headless: the Human Proxy):
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
-  lakebase-tdd-drive --sprint "<sprint-name>" --plan-only --gates "$GATES" --project-dir "$PWD"
+  lakebase-sftdd-drive --sprint "<sprint-name>" --plan-only --gates "$GATES" --project-dir "$PWD"
 ```
 
 The driver routes planning to the role agents, at their resolved per-role models:
@@ -91,7 +91,7 @@ and execution). `--plan-only` STOPS there, it does not enter design/build/deploy
 
 **Gate.** Interactive: the driver stops at the plan gate + prints a `GATE` marker.
 Surface the proposed backlog to the human; on approval record it
-(`lakebase-tdd-human-proxy --sprint <name> --gate plan --approver <human>`), then
+(`lakebase-sftdd-human-proxy --sprint <name> --gate plan --approver <human>`), then
 re-run to confirm planning complete. Headless (`--gates proxy`): the Human Proxy
 approves once `feature-proposals.md` exists + conforms. "Passing" on a re-plan =
 approving the standing backlog as-is. The driver emits the planning log as code.

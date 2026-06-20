@@ -11,7 +11,7 @@ But its routing is deterministic. Given the recorded state, the next action is a
 pure function of priors:
 
 - `workflow-state.json`: the current phase.
-- `pipeline.json` (`scripts/tdd/story-pipeline.ts`): each story's status
+- `pipeline.json` (`scripts/sftdd/story-pipeline.ts`): each story's status
   (`designing | awaiting-gate | ready | building | awaiting-acceptance | done |
   discarded`), the FIFO `build_queue`, the single `build_active`, the per-story
   spec gate, the experiment + acceptance records.
@@ -24,7 +24,7 @@ Making it an LLM cost us three things, all observed live in the TDD-workflow smo
    Its first turn ran ~99s on the inherited opus model; even sonnet/haiku pay
    per-turn model latency on routing that should be instant.
 2. Observability. Its `phase.start` / `handoff` / `phase.end` events are
-   prose-instructed `lakebase-tdd-log` calls, which haiku drops entirely (a
+   prose-instructed `lakebase-sftdd-log` calls, which haiku drops entirely (a
    whole `/plan` produced one `phase.end`) and sonnet does only because it
    happens to follow instructions. These events are NOT artifact-backed, so the
    reconcile backstop cannot reconstruct them.
@@ -36,7 +36,7 @@ Making it an LLM cost us three things, all observed live in the TDD-workflow smo
 ## Design
 
 Reimplement the orchestrator as a deterministic driver: a kit TS loop
-(`lakebase-tdd-drive`) that owns sequencing, and uses the LLM ONLY for the role
+(`lakebase-sftdd-drive`) that owns sequencing, and uses the LLM ONLY for the role
 work where judgment is genuinely required.
 
 ```
@@ -47,11 +47,11 @@ drive(feature):
     emit(action.event)                                     # phase.start/handoff/phase.end as CODE
     switch action.kind:
       INVOKE_ROLE   -> claude -p --agent <role>            # the only LLM call
-      SURFACE_GATE  -> lakebase-tdd-pipeline surface       # Human Proxy approves headless
-      APPROVE_GATE  -> lakebase-tdd-pipeline approve-gate
-      DISPATCH      -> lakebase-tdd-pipeline dispatch + regenerate per-story test list
-      EXPERIMENT    -> lakebase-tdd-experiment cut/merge/discard
-      DEPLOY        -> lakebase-tdd-deploy
+      SURFACE_GATE  -> lakebase-sftdd-pipeline surface       # Human Proxy approves headless
+      APPROVE_GATE  -> lakebase-sftdd-pipeline approve-gate
+      DISPATCH      -> lakebase-sftdd-pipeline dispatch + regenerate per-story test list
+      EXPERIMENT    -> lakebase-sftdd-experiment cut/merge/discard
+      DEPLOY        -> lakebase-sftdd-deploy
       DONE          -> return
     record(action.result)
 ```
@@ -85,7 +85,7 @@ either runtime:
 |--------------|------------------------------------|------------------------------------------|
 | invoke-role  | shell `claude -p --agent <role>`   | spawn via the session's Agent tool (warm) |
 | surface-gate | Human Proxy auto-approves          | ask the human in the conversation (real HITL) |
-| log          | `lakebase-tdd-log` (code)          | same (code)                              |
+| log          | `lakebase-sftdd-log` (code)          | same (code)                              |
 
 The interactive runtime is the important unlock: the human's OWN Claude Code
 session becomes the driver's runtime. The session calls `nextTransition`, spawns
@@ -102,7 +102,7 @@ The scrum-master is removed entirely, as an agent and as a concept the human
 invokes. There is no `claude --agent scrum-master`, no `agents/scrum-master.md`
 scaffolded into projects, and nothing that spawns it. The orchestrator is the
 deterministic driver binary; the human's control surface is a two-tier set of
-slash commands, each a thin invocation of `lakebase-tdd-drive` scoped to a phase
+slash commands, each a thin invocation of `lakebase-sftdd-drive` scoped to a phase
 range. Role subagents and the Human Proxy are unchanged.
 
 A HITL gate ALWAYS pauses for a human decision (plan gate, per-story spec gate,
@@ -117,7 +117,7 @@ The top-level continuous run. It FLOWS forward: propose + author the backlog ->
 [PLAN GATE] -> for each backlog feature: claim -> design -> [SPEC GATE per
 story] -> build -> deploy -> [DEPLOY GATE] -> cycle ends. Re-invoked each cycle
 for story refinement. Pauses at every gate (human live / Proxy headless), never
-between phases. CLI scope: `lakebase-tdd-drive --sprint <name>` owns the
+between phases. CLI scope: `lakebase-sftdd-drive --sprint <name>` owns the
 per-feature loop (claim + drive each feature) in one process.
 
 ### Tier 2, single-step control (run one phase, then stop + suggest next)
@@ -133,12 +133,12 @@ chose manual control by picking a Tier-2 command).
 | `/design <feature>` | `--feature <id> --only design` | design-complete (all spec gates) | `/build <feature>` |
 | `/build <feature>` | `--feature <id> --only build` (requires design done) | feature built + accepted | `/deploy <feature>` |
 | `/deploy <feature>` | `--feature <id> --only deploy` | deploy gate | (shipped) |
-| `/spike <slug> [--for <feature>]` | not a driver phase: `lakebase-tdd-spike cut` | throwaway branch + carry-forward notes | `/design <feature>` |
+| `/spike <slug> [--for <feature>]` | not a driver phase: `lakebase-sftdd-spike cut` | throwaway branch + carry-forward notes | `/design <feature>` |
 
 `/plan` does NOT flow onward: it stops at the plan gate so the human reviews /
 refines the backlog. `/sprint` is the only command that flows plan -> design ->
 build -> deploy. Spikes are throwaway exploration outside the TDD loop; the new
-`/spike` command + `lakebase-tdd-spike` CLI wrap the existing `spike.ts` +
+`/spike` command + `lakebase-sftdd-spike` CLI wrap the existing `spike.ts` +
 `spike-carryforward.ts` substrate.
 
 ### Driver scopes (one binary)
@@ -188,7 +188,7 @@ sprint plan gate.
   claim + drive (design -> build -> deploy) in one process. Sprint-level
   readState/context. Hermetic full-sprint e2e.
 
-- **Phase 5, `/spike`.** `lakebase-tdd-spike` CLI wrapping `spike.ts`
+- **Phase 5, `/spike`.** `lakebase-sftdd-spike` CLI wrapping `spike.ts`
   (cut/list/delete) + carry-forward; the `/spike <slug> [--for <feature>]`
   command. Throwaway, outside the driver phases.
 
@@ -226,7 +226,7 @@ sprint plan gate.
 
 ## Phases (each a commit, TDD, green suite)
 
-1. Pure core. `scripts/tdd/orchestrator-drive.ts`: `nextTransition(state):
+1. Pure core. `scripts/sftdd/orchestrator-drive.ts`: `nextTransition(state):
    Action` over workflow-state + pipeline + gates, with an `Action` union.
    Exhaustive unit tests for every state to action (planning, per-story design
    streaming, gate ordering, build-lane serialization, experiment lifecycle,
@@ -234,9 +234,9 @@ sprint plan gate.
 2. Effect seams. Inject the effectful ops (invoke role, run gate CLI, cut/merge
    experiment, deploy, log) behind interfaces so the loop is testable with
    fakes; an integration test drives a whole feature with stubbed roles.
-3. Real wiring + CLI. `lakebase-tdd-drive --feature <id>` wires the real effects
+3. Real wiring + CLI. `lakebase-sftdd-drive --feature <id>` wires the real effects
    (claude -p --agent, the kit CLIs). Deterministic logging built in.
-4. Smoke adoption. The smoke drives via `lakebase-tdd-drive` instead of
+4. Smoke adoption. The smoke drives via `lakebase-sftdd-drive` instead of
    `claude -p --agent scrum-master`; measure latency + confirm full logging.
 5. Docs. SKILL + command bodies describe the driver as the headless
    orchestrator; scrum-master.md reframed (interactive narrator; the driver is

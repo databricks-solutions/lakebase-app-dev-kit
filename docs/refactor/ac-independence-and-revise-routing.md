@@ -90,7 +90,7 @@ How Part B maps onto the deterministic driver (the resume reuses the standing la
 - **Story scope + budget** on `smells.json`: a `SmellHit` carries `story_id`; `markSmellResolved(...,{kind:"revised"})` + `priorReviseCount` enforce the one-revise-per-(smell,story) bound.
 - **Routability** is computed in the disk probe (`orchestrator-probe.ts` `pendingEscalation`): a `smell:<name>` escalation that is spec-level, has a story (its own, else the active build story), and has revise budget left gets `escalation.routable = { story, owning_role, gate }`. Everything else leaves it unset.
 - **The pure transition** (`orchestrator-drive.ts` `nextTransition`): `escalation.routable` -> `revise-route` (lane `design`); else the byte-identical `raise-to-hil`. Gated behind `routable` so every existing escalation path is unchanged.
-- **The effect** (`orchestrator-effects.ts`): `revise-route` emits ONE `lakebase-tdd-human-proxy decide-escalation` command (atomic, no inter-command readState window).
+- **The effect** (`orchestrator-effects.ts`): `revise-route` emits ONE `lakebase-sftdd-human-proxy decide-escalation` command (atomic, no inter-command readState window).
 - **The self-heal** (`human-proxy.ts` `decideEscalationAsHumanProxy`): records the PO's `revise` decision as a `gate.modified` event (auditable), `reviseStory` (discard experiment + reopen gate + free lane -> `designing`), and resolves the smell as `revised` (spends the budget). The standing design lane then re-runs Gate 1->2->3 at the owning author and the build resumes.
 
 ## Phasing

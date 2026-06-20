@@ -14,7 +14,7 @@ import {
   tagRunCount,
   writeOutcomes,
   type ExperimentOutcomes,
-} from "../../scripts/tdd/experiment";
+} from "../../scripts/sftdd/experiment";
 import {
   beginCycle,
   markGreen,
@@ -22,7 +22,7 @@ import {
   readCycleArtifact,
   recordRunnerOutcome,
   type CycleScope,
-} from "../../scripts/tdd/run-cycle";
+} from "../../scripts/sftdd/run-cycle";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, "..", "..");
@@ -327,7 +327,7 @@ describe("markGreen runner-contract", () => {
 describe("SKILL.md + driver.md: tagToRunner documentation", () => {
   it("SKILL.md includes a tag-to-runner table with API / E2E / Infra rows", () => {
     const skill = fs.readFileSync(
-      path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "SKILL.md"),
+      path.join(REPO_ROOT, "skills", "lakebase-sftdd-workflows", "SKILL.md"),
       "utf8"
     );
     expect(skill).toMatch(/tag\s*→?\s*runner map/i);
@@ -340,7 +340,7 @@ describe("SKILL.md + driver.md: tagToRunner documentation", () => {
 
   it("driver.md keeps the Driver pure: it runs the layer runner, the orchestration records the cycle", () => {
     const driver = fs.readFileSync(
-      path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "agents", "driver.md"),
+      path.join(REPO_ROOT, "skills", "lakebase-sftdd-workflows", "agents", "driver.md"),
       "utf8"
     );
     // The Driver still dispatches on the AC layer + runs the project's test command.

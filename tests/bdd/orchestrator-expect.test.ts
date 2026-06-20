@@ -11,8 +11,8 @@ import {
   ProtocolViolationError,
   UnexpectedCallbackError,
   handbackMessage,
-} from "../../scripts/tdd/orchestrator-expect";
-import type { DriveState, WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
+} from "../../scripts/sftdd/orchestrator-expect";
+import type { DriveState, WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
 
 function baseState(over: Partial<DriveState> = {}): DriveState {
   return {

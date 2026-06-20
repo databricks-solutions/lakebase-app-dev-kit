@@ -13,13 +13,13 @@ import {
   DriverStalledError,
   ProtocolViolationError,
   type DriveEffects,
-} from "../../scripts/tdd/orchestrator-run";
+} from "../../scripts/sftdd/orchestrator-run";
 import {
   pauseBeforeMilestone,
   type DriveState,
   type StoryView,
   type WorkflowAction,
-} from "../../scripts/tdd/orchestrator-drive";
+} from "../../scripts/sftdd/orchestrator-drive";
 
 function freshStory(): StoryView {
   return {

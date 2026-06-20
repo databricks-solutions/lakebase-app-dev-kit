@@ -8,13 +8,13 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { findTool } from "../../apps/mcp-server/tools";
-import { writeMasterTestList } from "../../scripts/tdd/test-list";
+import { writeMasterTestList } from "../../scripts/sftdd/test-list";
 import {
   writePlan,
   recordPlan,
   type ExperimentPlan,
-} from "../../scripts/tdd/design-spec-gate";
-import type { FeatureStatusSnapshot } from "../../scripts/tdd/feature-status";
+} from "../../scripts/sftdd/design-spec-gate";
+import type { FeatureStatusSnapshot } from "../../scripts/sftdd/feature-status";
 
 let tdd: string;
 const FEATURE_ID = "F1-checkout";

@@ -2,10 +2,10 @@
 set -euo pipefail
 cd "/Users/kevin.hartman/code/databricks-solutions/lakebase-app-dev-kit"
 
-echo "=== Validating: create_driver_agent (CREATE skills/lakebase-tdd-workflows/agents/driver.md) ==="
+echo "=== Validating: create_driver_agent (CREATE skills/lakebase-sftdd-workflows/agents/driver.md) ==="
 
 echo "CHECK 1: Running validation command..."
-if test -f skills/lakebase-tdd-workflows/agents/driver.md; then
+if test -f skills/lakebase-sftdd-workflows/agents/driver.md; then
   echo "  PASS: file exists"
 else
   echo "  FAIL: file exists"

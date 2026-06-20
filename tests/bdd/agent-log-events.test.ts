@@ -13,7 +13,7 @@ import {
   requiredSlots,
   renderEventMessage,
   AgentLogEventError,
-} from "../../scripts/tdd/agent-log-events";
+} from "../../scripts/sftdd/agent-log-events";
 
 describe("agent-log-events vocabulary", () => {
   it("renders a template by substituting its slots", () => {
@@ -57,7 +57,7 @@ describe("agent-log-events vocabulary", () => {
 
   it("the JSON-schema event enum stays in sync with the TS vocabulary", () => {
     const schema = JSON.parse(
-      readFileSync(join(__dirname, "..", "..", "scripts", "tdd", "schemas", "agent-log-event.schema.json"), "utf8"),
+      readFileSync(join(__dirname, "..", "..", "scripts", "sftdd", "schemas", "agent-log-event.schema.json"), "utf8"),
     );
     const schemaEnum: string[] = schema.properties.event.enum;
     expect(schemaEnum.slice().sort()).toEqual(AGENT_LOG_EVENT_NAMES.slice().sort());

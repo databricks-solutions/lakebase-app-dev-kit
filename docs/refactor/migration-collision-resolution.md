@@ -3,7 +3,7 @@
 **Status**: Design proposal, 2026-06-07 (supersedes the rebase-resolver draft)
 **Primary FEIP**: (per-story experiments + tier merge correctness)
 **Builds on**: the schema-migration adapter (ADR-0005), the create-adapter
-(`lakebase-tdd-new-migration`), `scm-merge` (feature -> tier).
+(`lakebase-sftdd-new-migration`), `scm-merge` (feature -> tier).
 **Cross-ref**: per-story-experiments.md, orchestrator-deterministic-driver.md
 (this is the migration half of the driver's "merge" build effect).
 
@@ -143,7 +143,7 @@ have no equivalent failure mode.
    Hermetic dispatcher-no-op + capability-presence tests; the live Alembic
    two-head merge is exercised by the phase 5 smoke (no local `alembic` to test
    it in the hermetic suite).
-3. **CLI (LANDED).** `lakebase-tdd-collapse-heads` ([--dry-run]) wraps
+3. **CLI (LANDED).** `lakebase-sftdd-collapse-heads` ([--dry-run]) wraps
    `collapseMigrationHeads` so any caller (CI, the driver's merge effect,
    scm-doctor, a human) can invoke it. Runtime-verified: no-op for Flyway/Knex.
 4. **scm-doctor detection + --fix (LANDED).** Best-effort, non-mutating dry-run

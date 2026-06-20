@@ -21,10 +21,10 @@ import {
   checkArtifactConformance,
   canonicalArtifactName,
   type ConformanceResult,
-} from "../../scripts/tdd/artifact-conformance.js";
-import type { AgentRole } from "../../scripts/tdd/agent-log.js";
+} from "../../scripts/sftdd/artifact-conformance.js";
+import type { AgentRole } from "../../scripts/sftdd/agent-log.js";
 
-const SKILL_DIR = path.resolve(__dirname, "..", "..", "skills", "lakebase-tdd-workflows");
+const SKILL_DIR = path.resolve(__dirname, "..", "..", "skills", "lakebase-sftdd-workflows");
 export const FIXTURES_DIR = path.resolve(__dirname, "fixtures");
 
 /** One produced artifact to validate after the role runs. */

@@ -1,6 +1,6 @@
 # /design : feature design pipeline
 
-Drives a feature from idea to spec to architect review to test list. This wraps the canonical lakebase-tdd-workflows design phases as a single one-shot you can invoke from Claude Code in a Lakebase-paired project.
+Drives a feature from idea to spec to architect review to test list. This wraps the canonical lakebase-sftdd-workflows design phases as a single one-shot you can invoke from Claude Code in a Lakebase-paired project.
 
 ## Usage
 
@@ -52,7 +52,7 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
 - **Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_TDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
 
   ```bash
-  ./scripts/lk lakebase-tdd-human-proxy supply \
+  ./scripts/lk lakebase-sftdd-human-proxy supply \
     --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".tdd/nfrs.md" --artifact nfrs.md
   ```
 
@@ -62,10 +62,10 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
 
 ```bash
 UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-./scripts/lk lakebase-tdd-intake --feature "<feature-id>" $UI_FLAG
+./scripts/lk lakebase-sftdd-intake --feature "<feature-id>" $UI_FLAG
 ```
 
-`lakebase-tdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.
+`lakebase-sftdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.
 
 ## How it runs: the deterministic driver
 
@@ -77,7 +77,7 @@ gates so YOU answer each per-story spec gate (headless: the Human Proxy answers)
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
-  lakebase-tdd-drive --feature "<feature-id>" --only design --gates "$GATES" --project-dir "$PWD"
+  lakebase-sftdd-drive --feature "<feature-id>" --only design --gates "$GATES" --project-dir "$PWD"
 ```
 
 The driver:
@@ -89,14 +89,14 @@ The driver:
   Author and Architect for UI projects.
 - **Routes deterministically** (routing is code, not an LLM orchestrator): it spawns each role as a
   subagent (`claude -p --agent <role>`, at the resolved per-role model via
-  `lakebase-tdd-agent-model`) and emits the phase/handoff log to
-  `.tdd/agent-log.jsonl` as code. Tail it: `lakebase-tdd-log --read --feature <id> --min-level info`.
+  `lakebase-sftdd-agent-model`) and emits the phase/handoff log to
+  `.tdd/agent-log.jsonl` as code. Tail it: `lakebase-sftdd-log --read --feature <id> --min-level info`.
 - `--only design` STOPS when every story's spec gate is approved, without
-  building. The roles are `@lakebase-tdd-workflows/agents/{spec-author,ux-designer,architect-reviewer,test-strategist}`.
+  building. The roles are `@lakebase-sftdd-workflows/agents/{spec-author,ux-designer,architect-reviewer,test-strategist}`.
 
 **Gates.** Interactive: at each per-story spec gate the driver stops and prints a
 `GATE` marker with the pending action. Surface that story's spec to the human; on
-their approval record it (`lakebase-tdd-pipeline approve-gate --story <s>
+their approval record it (`lakebase-sftdd-pipeline approve-gate --story <s>
 --approver <human>`), then re-run the command to resume past it. Headless
 (`--gates proxy`, `LAKEBASE_TDD_HUMAN_PROXY=1`): the Human Proxy validates each
 gate's artifacts EXIST + carry their EXPECTED ELEMENTS and approves only then. A

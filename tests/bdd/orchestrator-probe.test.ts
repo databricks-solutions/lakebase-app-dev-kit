@@ -7,8 +7,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { diskArtifactProbe, readDriveContext } from "../../scripts/tdd/orchestrator-probe";
-import { writeCycleArtifact, type CycleArtifact } from "../../scripts/tdd/run-cycle";
+import { diskArtifactProbe, readDriveContext } from "../../scripts/sftdd/orchestrator-probe";
+import { writeCycleArtifact, type CycleArtifact } from "../../scripts/sftdd/run-cycle";
 
 let tddDir: string;
 const FEATURE = "F1";

@@ -131,7 +131,7 @@ Until the named orchestrator primitives land, follow the manual procedure docume
 ## Integration with sibling skills
 
 - [`lakebase-scm-workflows`](../lakebase-scm-workflows/README.md): provides `createBranch`, `createPairedBranch`, `getSchemaDiff`, `applySchemaMigrations`, and `cutBackup`. Release-workflows uses these primitives; it does not duplicate them.
-- [`lakebase-tdd-workflows`](../lakebase-tdd-workflows/README.md): the TDD workflow ends at "PR opened against `staging`." Release-workflows takes over from there. No overlap; the handoff is the PR.
+- [`lakebase-sftdd-workflows`](../lakebase-sftdd-workflows/README.md): the TDD workflow ends at "PR opened against `staging`." Release-workflows takes over from there. No overlap; the handoff is the PR.
 - `databricks-lakebase` (dev-hub): the parent skill. Lakebase Postgres CLI basics (project / branch / endpoint shapes, "never delete the production branch" rule). This skill composes on top of it.
 
 ## When to load the full reference

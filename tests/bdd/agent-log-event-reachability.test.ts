@@ -14,7 +14,7 @@
 //   - CODE_EMITTED   : a deterministic substrate path emits it. Asserted: a
 //                      TS `event: "<name>"` producer exists in scripts/ (outside
 //                      the logging plumbing itself).
-//   - AGENT_EMITTED  : a role emits it via the lakebase-tdd-log CLI as a JUDGMENT
+//   - AGENT_EMITTED  : a role emits it via the lakebase-sftdd-log CLI as a JUDGMENT
 //                      (smell/concern/open question/progress, or a role-observed
 //                      verify/deploy/adherence outcome). Asserted: at least one
 //                      agent doc instructs it. (Weaker than CODE_EMITTED: a role
@@ -33,7 +33,7 @@ import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { AGENT_LOG_EVENT_NAMES } from "../../scripts/tdd/agent-log-events";
+import { AGENT_LOG_EVENT_NAMES } from "../../scripts/sftdd/agent-log-events";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -111,7 +111,7 @@ const AGENT_EMITTED = new Set<string>([
 // adherence.passed: assertDesignAdherence runs in the PROJECT's browser Playwright
 //   context (it throws on failure, is silent on pass), so there is no kit-side
 //   node logger in scope to emit the SUCCESS event from. Wiring needs the
-//   adherence runner to shell out to lakebase-tdd-log or a kit-side adherence
+//   adherence runner to shell out to lakebase-sftdd-log or a kit-side adherence
 //   entrypoint; flagged for a decision rather than force-wired wrongly.
 const KNOWN_DEAD = new Set<string>([
   "adherence.passed",

@@ -32,4 +32,4 @@ Show what the current step needs; defer the rest behind intent (an "Advanced" se
 
 ## Enforcement
 
-E2E-testable: the behavior scenario for a data-changing AC asserts the visible success path AND a failure path (forced error -> visible, readable message, no layout shift). See [test-strategy](../../lakebase-tdd-workflows/references/test-strategy.md).
+E2E-testable: the behavior scenario for a data-changing AC asserts the visible success path AND a failure path (forced error -> visible, readable message, no layout shift). See [test-strategy](../../lakebase-sftdd-workflows/references/test-strategy.md).

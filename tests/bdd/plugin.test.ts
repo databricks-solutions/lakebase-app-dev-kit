@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ALL_AGENT_ROLES } from "../../scripts/tdd/agent-models";
+import { ALL_AGENT_ROLES } from "../../scripts/sftdd/agent-models";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, "..", "..");
@@ -31,7 +31,7 @@ describe("plugin manifest (.claude-plugin/plugin.json)", () => {
     expect(manifest.agents).toBeUndefined();
     // The canonical role-agent source (what create-project scaffolds into a
     // project's .claude/agents/) still resolves to exactly the AgentRole defs.
-    const agentSourceDir = path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "agents");
+    const agentSourceDir = path.join(REPO_ROOT, "skills", "lakebase-sftdd-workflows", "agents");
     expect(fs.existsSync(agentSourceDir)).toBe(true);
     const onDisk = fs
       .readdirSync(agentSourceDir)
@@ -55,8 +55,8 @@ describe("marketplace catalog (.claude-plugin/marketplace.json)", () => {
   });
 });
 
-describe("/lakebase-app-dev-kit:tdd launcher command (commands/tdd.md)", () => {
-  const tdd = fs.readFileSync(path.join(REPO_ROOT, "commands", "tdd.md"), "utf8");
+describe("/lakebase-app-dev-kit:sftdd launcher command (commands/sftdd.md)", () => {
+  const tdd = fs.readFileSync(path.join(REPO_ROOT, "commands", "sftdd.md"), "utf8");
 
   it("has a frontmatter description", () => {
     expect(tdd).toMatch(/^---\n[\s\S]*?\bdescription:/);
@@ -70,7 +70,7 @@ describe("/lakebase-app-dev-kit:tdd launcher command (commands/tdd.md)", () => {
   });
 
   it("drives via the deterministic orchestrator + the scaffolded role agents, coordinates only", () => {
-    expect(tdd).toMatch(/lakebase-tdd-drive|deterministic orchestrator/); // the driver, not an LLM scrum-master
+    expect(tdd).toMatch(/lakebase-sftdd-drive|deterministic orchestrator/); // the driver, not an LLM scrum-master
     expect(tdd).not.toMatch(/scrum-master/);
     expect(tdd).toMatch(/claude --agent <role>/); // documents how the driver spawns roles
     expect(tdd).toMatch(/coordinate only/i);

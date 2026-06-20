@@ -27,4 +27,4 @@ Smells: an external call with no timeout; a retry loop with no backoff (DDoSes t
 A 10-minute conversation, not a 200-item form: name each category's answer in one sentence ("no requirement here" is valid); anything you can't answer in one sentence is a follow-up.
 
 - **Release gate** (`lakebase-release-workflows`): the NFR baseline gates promote-to-prod, every row has a recorded answer in the release ticket (or "N/A: reason").
-- **Feature-level** (`lakebase-tdd-workflows`): NFRs live in the feature's `architecture.json` (`nfrs[]`, scoped via `applies_to`), not on `feature-spec.json`/`story.json`. The Architect Reviewer populates them during review, covering every Required item via `brief_ref`. Empty is allowed; unaddressed is not.
+- **Feature-level** (`lakebase-sftdd-workflows`): NFRs live in the feature's `architecture.json` (`nfrs[]`, scoped via `applies_to`), not on `feature-spec.json`/`story.json`. The Architect Reviewer populates them during review, covering every Required item via `brief_ref`. Empty is allowed; unaddressed is not.

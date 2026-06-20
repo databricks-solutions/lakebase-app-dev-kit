@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLI: collapse multiple migration heads into one via the project's tool adapter.
 //
-//   lakebase-tdd-collapse-heads [--project-dir <dir>] [--language <lang>]
+//   lakebase-sftdd-collapse-heads [--project-dir <dir>] [--language <lang>]
 //                               [--message "<msg>"] [--dry-run]
 //
 // Only DAG tools (Alembic) can have multiple heads; for Flyway / Knex (flat
@@ -57,7 +57,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const BIN_NAME = "lakebase-tdd-collapse-heads";
+const BIN_NAME = "lakebase-sftdd-collapse-heads";
 
 function help(): string {
   return `${BIN_NAME} (unify multiple migration heads at a sibling-merge boundary)

@@ -144,7 +144,7 @@ separately; it is named here so the orchestration covers the full lifecycle.
 ## Implementation plan (pending the 3 decisions)
 
 1. Rename `ci-mock-approver` -> **Human Proxy** (`human-proxy` /
-   `lakebase-tdd-human-proxy`), and `LAKEBASE_TDD_AUTO_APPROVE` ->
+   `lakebase-sftdd-human-proxy`), and `LAKEBASE_TDD_AUTO_APPROVE` ->
    `LAKEBASE_TDD_HUMAN_PROXY`; make it gate/step-aware (receives stage context,
    supplies recorded artifact OR approves).
 2. `product-overview.md`, `nfrs.md`, `design-brief.md` formats + templates +

@@ -21,7 +21,7 @@ import {
   listSchemaMigrations,
   type SchemaMigrationLanguage,
 } from "../../scripts/lakebase/schema-migrate.js";
-import { getFeatureStatus } from "../../scripts/tdd/feature-status.js";
+import { getFeatureStatus } from "../../scripts/sftdd/feature-status.js";
 // PR-flow MCP tools.
 import {
   createPullRequest,
@@ -331,7 +331,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     name: "lakebase_feature_status",
     description:
-      "One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). Reads .tdd/ on disk; no Lakebase or network calls. See skills/lakebase-tdd-workflows/references/feature-status-schema.md for the stable payload contract.",
+      "One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). Reads .tdd/ on disk; no Lakebase or network calls. See skills/lakebase-sftdd-workflows/references/feature-status-schema.md for the stable payload contract.",
     inputSchema: {
       type: "object",
       properties: {

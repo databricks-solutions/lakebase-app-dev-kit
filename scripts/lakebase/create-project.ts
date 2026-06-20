@@ -29,8 +29,8 @@ import {
   initWorkflowState,
   writeWorkflowState,
 } from "./scm-workflow-state.js";
-import type { AgentRole } from "../tdd/agent-log.js";
-import { defaultTddConfig, writeTddConfig } from "../tdd/tdd-config.js";
+import type { AgentRole } from "../sftdd/agent-log.js";
+import { defaultTddConfig, writeTddConfig } from "../sftdd/tdd-config.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -70,7 +70,7 @@ export interface CreateProjectArgs {
    * branch exists.
    */
   tiers?: 1 | 2 | 3;
-  /** Lay down the .tdd/ scaffold from templates/tdd-bootstrap/ (default: true). */
+  /** Lay down the .tdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
   enableTdd?: boolean;
   /**
    * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
@@ -247,7 +247,7 @@ export async function createProject(
     report: (m, d) => report(m, d),
   });
 
-  // ── Step 5b: .tdd/ scaffold (lakebase-tdd-workflows bootstrap) ────────
+  // ── Step 5b: .tdd/ scaffold (lakebase-sftdd-workflows bootstrap) ────────
   if (enableTdd) {
     report("Scaffolding .tdd/ workflow directory...");
     layDownTddScaffold(projectDir);
@@ -485,8 +485,8 @@ export async function createProject(
   report("Project created successfully!");
   if (enableTdd) {
     // Point the user at the convenient workflow launcher (scaffolded into
-    // scripts/tdd.sh): it drives the deterministic orchestrator.
-    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+    // scripts/sftdd.sh): it drives the deterministic orchestrator.
+    report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
   }
   // Every project ships run-dev.sh so a human can open the running app in a
   // browser to review it (the working-software review the deploy gate signs off).
@@ -504,7 +504,7 @@ export async function createProject(
 export { writeEnvFile, verifyHooks, verifyWorkflows, verifyProject };
 
 /**
- * Copy templates/tdd-bootstrap/.tdd/ into <targetDir>/.tdd/.
+ * Copy templates/sftdd-bootstrap/.tdd/ into <targetDir>/.tdd/.
  *
  * Resolves the bootstrap source relative to this script's location so it works
  * both when the substrate is consumed via git URL (dist + src co-located) and
@@ -519,12 +519,12 @@ export function layDownTddScaffold(targetDir: string): void {
   // require of 'fs' is not supported"); tsup's shims: true gives us
   // __dirname-equivalent semantics via the top-of-file imports.
   const candidates = [
-    path.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
-    path.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd"),
+    path.resolve(__dirname, "../../templates/sftdd-bootstrap/.tdd"),
+    path.resolve(__dirname, "../../../templates/sftdd-bootstrap/.tdd"),
   ];
   const source = candidates.find((c) => fs.existsSync(c));
   if (!source) {
-    throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
+    throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
   const dest = path.join(targetDir, ".tdd");
   if (fs.existsSync(dest)) {

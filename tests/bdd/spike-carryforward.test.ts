@@ -8,7 +8,7 @@ import * as path from "node:path";
 import {
   attachSpikeInputs,
   collectSpikeInputs,
-} from "../../scripts/tdd/spike-carryforward";
+} from "../../scripts/sftdd/spike-carryforward";
 
 function mkTempTdd(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `spike-carryforward-${prefix}-`));
@@ -178,8 +178,8 @@ function seedFeatureDir(tddDir: string, featureId: string): void {
 
 describe("analyzeForGate populates spike_inputs when spikes match", () => {
   it("returns proposed_plan.spike_inputs containing the matching spikes", async () => {
-    const { analyzeForGate } = await import("../../scripts/tdd/design-spec-gate");
-    const { writeMasterTestList } = await import("../../scripts/tdd/test-list");
+    const { analyzeForGate } = await import("../../scripts/sftdd/design-spec-gate");
+    const { writeMasterTestList } = await import("../../scripts/sftdd/test-list");
     const tddDir = mkTempTdd("analyze");
     try {
       seedFeatureDir(tddDir, "F1");
@@ -197,8 +197,8 @@ describe("analyzeForGate populates spike_inputs when spikes match", () => {
   });
 
   it("omits spike_inputs from the proposed plan when no spike matches", async () => {
-    const { analyzeForGate } = await import("../../scripts/tdd/design-spec-gate");
-    const { writeMasterTestList } = await import("../../scripts/tdd/test-list");
+    const { analyzeForGate } = await import("../../scripts/sftdd/design-spec-gate");
+    const { writeMasterTestList } = await import("../../scripts/sftdd/test-list");
     const tddDir = mkTempTdd("analyze-none");
     try {
       seedFeatureDir(tddDir, "F1");

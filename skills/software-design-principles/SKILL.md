@@ -1,6 +1,6 @@
 ---
 name: software-design-principles
-description: "Foundational engineering canon – SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when designing a module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape."
+description: "Foundational engineering canon – SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when designing a module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape."
 ---
 
 # software-design-principles
@@ -41,10 +41,10 @@ Layered architecture lives in the architectural skill ([reference](../architectu
 4. **No duplicated logic.** Before writing a block, look for an existing copy and extract one shared helper; fix every call site of a bug together.
 5. **NFR baseline before done.** Skim performance / scalability / security / observability / operability / resilience.
 6. **Public boundary tests, private refactors.** A correct refactor never changes the outer-boundary tests.
-7. **No import-time coupling to an optional build artifact.** A module must import in every environment it ships to. An unconditional `StaticFiles` mount / asset read at import scope greens where the artifact exists and crashes everywhere it does not (backend-only tests, CI before the client build, fresh clones). Mount/read it only when present; degrade clearly (a 503 "not built") when absent. The `import-time-build-coupling` smell, enforced by `lakebase-tdd-imports-clean`.
+7. **No import-time coupling to an optional build artifact.** A module must import in every environment it ships to. An unconditional `StaticFiles` mount / asset read at import scope greens where the artifact exists and crashes everywhere it does not (backend-only tests, CI before the client build, fresh clones). Mount/read it only when present; degrade clearly (a 503 "not built") when absent. The `import-time-build-coupling` smell, enforced by `lakebase-sftdd-imports-clean`.
 
 ## Composition
 
-- **`lakebase-tdd-workflows`** – Architect Reviewer imports this in per-story review; Navigator in PLAN; Driver in REFACTOR.
+- **`lakebase-sftdd-workflows`** – Architect Reviewer imports this in per-story review; Navigator in PLAN; Driver in REFACTOR.
 - **`lakebase-scm-workflows`** – PRs reviewed against the layered-architecture + cross-cutting checks.
 - **`lakebase-release-workflows`** – the NFR baseline is the release gate.

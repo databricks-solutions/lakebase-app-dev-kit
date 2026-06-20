@@ -45,10 +45,10 @@ import {
   deleteLakebaseProject,
 } from "../../scripts/lakebase/lakebase-project.js";
 import { createPairedBranch } from "../../scripts/lakebase/paired-branch.js";
-import { approveGate } from "../../scripts/tdd/approve-gate.js";
-import { defaultGatesState, GATE_NAMES, readGates, writeGates } from "../../scripts/tdd/gates.js";
-import { verifyGateIntegrity } from "../../scripts/tdd/verify-gate-integrity.js";
-import { withdrawGate } from "../../scripts/tdd/withdraw-gate.js";
+import { approveGate } from "../../scripts/sftdd/approve-gate.js";
+import { defaultGatesState, GATE_NAMES, readGates, writeGates } from "../../scripts/sftdd/gates.js";
+import { verifyGateIntegrity } from "../../scripts/sftdd/verify-gate-integrity.js";
+import { withdrawGate } from "../../scripts/sftdd/withdraw-gate.js";
 import { createPullRequest, mergePairedPullRequest } from "../../scripts/github/pr.js";
 
 const E2E = process.env.LAKEBASE_TEST_E2E === "1";

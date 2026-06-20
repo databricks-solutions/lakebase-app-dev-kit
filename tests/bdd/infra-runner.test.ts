@@ -225,7 +225,7 @@ describe("enableInfraForProject orchestrator", () => {
 describe("SKILL.md tag-to-runner table includes the Infra row", () => {
   it("documents `npm run test:infra` and the substrate runner bin", () => {
     const skill = fs.readFileSync(
-      path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "SKILL.md"),
+      path.join(REPO_ROOT, "skills", "lakebase-sftdd-workflows", "SKILL.md"),
       "utf8"
     );
     expect(skill).toMatch(/\| `Infra` \| `infra` \|/);
@@ -235,7 +235,7 @@ describe("SKILL.md tag-to-runner table includes the Infra row", () => {
 
   it("spec-format.md defines the [Infra] semantics and the three v1 checks", () => {
     const ref = fs.readFileSync(
-      path.join(REPO_ROOT, "skills", "lakebase-tdd-workflows", "references", "spec-format.md"),
+      path.join(REPO_ROOT, "skills", "lakebase-sftdd-workflows", "references", "spec-format.md"),
       "utf8"
     );
     expect(ref).toMatch(/AC layer semantics/);

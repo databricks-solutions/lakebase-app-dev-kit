@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "/Users/kevin.hartman/code/databricks-solutions/lakebase-app-dev-kit"
 
-echo "=== Validating: create_spec_sync (CREATE scripts/tdd/spec-sync.ts) ==="
+echo "=== Validating: create_spec_sync (CREATE scripts/sftdd/spec-sync.ts) ==="
 
 echo "CHECK 1: Running validation command..."
 if npm run typecheck; then

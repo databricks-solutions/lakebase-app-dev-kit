@@ -4,7 +4,7 @@ Create a migration with the kit's tool-agnostic command (run in the project
 root):
 
 ```bash
-lakebase-tdd-new-migration --name "<description>"
+lakebase-sftdd-new-migration --name "<description>"
 ```
 
 This writes a timestamp-versioned skeleton (`V<timestamp>__<slug>.sql`, a UTC

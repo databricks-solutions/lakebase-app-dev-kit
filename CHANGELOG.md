@@ -8,7 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- **Spec Driven Development (SDD) framing.** `lakebase-tdd-workflows` docs now name
+- **Spec Driven Development (SDD) framing.** `lakebase-sftdd-workflows` docs now name
   the two lanes explicitly: the design lane (`/design`) is Spec Driven Development
   (SDD), which produces and freezes the executable spec at the `spec` + `test_list`
   gates; the build lane (`/build`) is Test Driven Development (TDD), which builds
@@ -32,7 +32,7 @@ Second beta on the 0.3.0 line. Consume via
   per-turn corpus: `turns/<NNNN>-<label>/` (manifest + the .tdd/code delta that
   turn produced) + `turns/index.json`, plus the cumulative `recorded-artifacts`
   and `recorded-build` mirrors the existing replay engine consumes.
-- **imports-clean gate** (`lakebase-tdd-imports-clean`): the app entry must import
+- **imports-clean gate** (`lakebase-sftdd-imports-clean`): the app entry must import
   without an optional build artifact (e.g. `client/dist`) present, catching
   import-time coupling before deploy. New `import-time-build-coupling` bad smell
   plus a dev/prod-parity rule in the `software-design-principles` canon.
@@ -59,12 +59,12 @@ Second beta on the 0.3.0 line. Consume via
   and the promote phase opens a clean PR. CI now builds the client before tests
   (dev/CI parity).
 - **Agent-loop performance (P0-P7).** Per-turn timing report
-  (`lakebase-tdd-timing`), a leaner pre-digested REVIEW rubric, a fresh-per-story
+  (`lakebase-sftdd-timing`), a leaner pre-digested REVIEW rubric, a fresh-per-story
   build session, a low-effort REVIEW turn, and reduced inter-phase shell overhead.
 - **Kit CLIs resolve through a project's `scripts/lk`** (ref-keyed cache or
   `LAKEBASE_KIT_DIR`) instead of per-call `npx` git resolution.
 - The orchestrator is a **deterministic state-machine driver**
-  (`lakebase-tdd-drive`), not an LLM agent.
+  (`lakebase-sftdd-drive`), not an LLM agent.
 
 ## [0.3.0-beta.0] - 2026-06-05
 
@@ -80,10 +80,10 @@ First beta on the 0.3.0 line, graduating from the alpha series. Consume via
 - New schemas shipped in `dist`: `agent-log-event`, `architecture`,
   `design-guide`, `plan`. Shared schema loader removes duplicated validation
   wiring.
-- `lakebase-tdd-gate-conformance` CLI to scan a feature's artifacts for
+- `lakebase-sftdd-gate-conformance` CLI to scan a feature's artifacts for
   conformance.
 - **Structured agent logging.** JSON-lines events (role, timestamp, level,
-  event) written to `.tdd/agent-log.jsonl`, with the `lakebase-tdd-log` CLI.
+  event) written to `.tdd/agent-log.jsonl`, with the `lakebase-sftdd-log` CLI.
   HITL decisions are recorded (the mock reviewer validates expected elements and
   the human response is captured).
 - **Per-role-agent contracts.** Relay headers on every role agent; a

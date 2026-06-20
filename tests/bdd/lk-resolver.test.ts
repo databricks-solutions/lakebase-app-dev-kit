@@ -29,7 +29,7 @@ function fakeKitDir(dir: string): string {
   mkdirSync(join(dir, "dist"), { recursive: true });
   writeFileSync(
     join(dir, "package.json"),
-    JSON.stringify({ name: PKG, bin: { "lakebase-tdd-log": "dist/echo.js" } }),
+    JSON.stringify({ name: PKG, bin: { "lakebase-sftdd-log": "dist/echo.js" } }),
   );
   writeFileSync(join(dir, "dist", "echo.js"), "process.stdout.write(JSON.stringify(process.argv.slice(2)));\n");
   return dir;
@@ -46,7 +46,7 @@ function runLk(args: string[], env: Record<string, string>, cwd = work) {
 describe("lk resolver shim", () => {
   it("execs the bin's dist JS and forwards args (LAKEBASE_KIT_DIR override)", () => {
     const kit = fakeKitDir(join(work, "kit"));
-    const r = runLk(["lakebase-tdd-log", "--read", "--feature", "F1"], { LAKEBASE_KIT_DIR: kit });
+    const r = runLk(["lakebase-sftdd-log", "--read", "--feature", "F1"], { LAKEBASE_KIT_DIR: kit });
     expect(r.status, r.stderr).toBe(0);
     // The stub echoes its received args, proving node ran the mapped dist file
     // with everything after the bin name forwarded.
@@ -57,7 +57,7 @@ describe("lk resolver shim", () => {
     const cache = join(work, "cache");
     const kit = fakeKitDir(join(cache, "lakebase-app-dev-kit", "myref", "node_modules", PKG));
     void kit;
-    const r = runLk(["lakebase-tdd-log", "--x"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "myref" });
+    const r = runLk(["lakebase-sftdd-log", "--x"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "myref" });
     expect(r.status, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual(["--x"]);
   });
@@ -68,7 +68,7 @@ describe("lk resolver shim", () => {
     const proj = join(work, "proj");
     mkdirSync(join(proj, ".lakebase"), { recursive: true });
     writeFileSync(join(proj, ".lakebase", "kit-ref"), "fileref\n");
-    const r = runLk(["lakebase-tdd-log"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "" }, proj);
+    const r = runLk(["lakebase-sftdd-log"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "" }, proj);
     expect(r.status, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual([]);
   });

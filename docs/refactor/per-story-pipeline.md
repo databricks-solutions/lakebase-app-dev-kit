@@ -51,7 +51,7 @@ deploy:                    per the working-software gate once the feature's stor
 
 1. **[done] Orchestration layer (docs).** Scrum-Master pipelines per story + manages the ready queue + single build lane; Spec Author / Architect / Test Strategist operate at story scope and hand off per story; per-story HIL gate (Human Proxy headless); concurrent design-ahead. (skills/.../agents/*.md + design.md/build.md.)
 2. **[done] Substrate.** Landed isolated in `.tdd/features/<F>/pipeline.json` (NOT overloading the per-feature `gates.json`):
-   - 2a pipeline state + single-lane FIFO ready queue (`story-pipeline.ts`, `lakebase-tdd-pipeline` CLI, schema).
+   - 2a pipeline state + single-lane FIFO ready queue (`story-pipeline.ts`, `lakebase-sftdd-pipeline` CLI, schema).
    - 2b formal per-story spec gate (surface -> approve-gate -> ready; withdraw-gate rescinds), recorded per story alongside its status.
    - 2c per-story test-list scoping (`scopeToStory` / `writeStoryTestList` -> `stories/<story>/test-list-per-story.json`, the build lane's per-story input).
    Each with unit tests.

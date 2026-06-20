@@ -2,7 +2,7 @@
 
 An architecture is not a diagram drawn once; it's a set of properties kept true as the system changes. A **fitness function** is an executable test that measures whether the architecture still has a property you care about. Break the property, the fitness function fails, the same way a unit test fails when behavior breaks.
 
-This turns an architectural *principle* (advisory, easily eroded) into a *constraint* (enforced, part of the build). Here, fitness functions are first-class TDD tests: the Test Strategist authors them, they go RED before the code satisfies them, and they stay GREEN through every later refactor. See [test-strategy](../lakebase-tdd-workflows/references/test-strategy.md).
+This turns an architectural *principle* (advisory, easily eroded) into a *constraint* (enforced, part of the build). Here, fitness functions are first-class TDD tests: the Test Strategist authors them, they go RED before the code satisfies them, and they stay GREEN through every later refactor. See [test-strategy](../lakebase-sftdd-workflows/references/test-strategy.md).
 
 ## A good fitness function
 

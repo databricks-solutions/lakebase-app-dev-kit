@@ -12,7 +12,7 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ALL_AGENT_ROLES } from "../../scripts/tdd/agent-models";
+import { ALL_AGENT_ROLES } from "../../scripts/sftdd/agent-models";
 import { CAPABILITY_CASES, } from "./cases";
 import { runAgentCapability, recordTiming, FIXTURES_DIR } from "./harness";
 

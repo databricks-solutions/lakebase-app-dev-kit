@@ -5,9 +5,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { MarkdownAdapter, markdownAdapter } from "../../scripts/tdd/adapters/markdown";
-import type { AdapterContext } from "../../scripts/tdd/adapters/types";
-import type { Feature, Story, AC } from "../../scripts/tdd/spec-sync";
+import { MarkdownAdapter, markdownAdapter } from "../../scripts/sftdd/adapters/markdown";
+import type { AdapterContext } from "../../scripts/sftdd/adapters/types";
+import type { Feature, Story, AC } from "../../scripts/sftdd/spec-sync";
 
 function mkTempTdd(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `markdown-adapter-${prefix}-`));

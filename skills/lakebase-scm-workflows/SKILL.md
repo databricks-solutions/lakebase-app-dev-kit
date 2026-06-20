@@ -508,11 +508,11 @@ Hermetic BDD covers every code path; the end-to-end smoke is what proves the sub
 6. Add a hook file: `echo '# project hook' > /tmp/drift-smoke/.claude/commands/design.pre-hook.md`.
 7. Re-run `lakebase-update-commands --project-dir /tmp/drift-smoke --force`. Expected: no entry for `design.pre-hook.md`; the file is byte-identical before and after.
 
-For the `[E2E]`-tag testing story that ships alongside scaffolded Playwright projects, the drift loop matters because the same `--enable-e2e`-installed `playwright.config.ts` + smoke fixture could fall behind as the kit evolves; running `lakebase-update-commands --dry-run` in CI catches that surface drifting alongside `/design` and `/build`. See [`../lakebase-tdd-workflows/SKILL.md`](../lakebase-tdd-workflows/SKILL.md) for the runner contract that ties an `[E2E]` AC's outcome back to `outcomes.json`.
+For the `[E2E]`-tag testing story that ships alongside scaffolded Playwright projects, the drift loop matters because the same `--enable-e2e`-installed `playwright.config.ts` + smoke fixture could fall behind as the kit evolves; running `lakebase-update-commands --dry-run` in CI catches that surface drifting alongside `/design` and `/build`. See [`../lakebase-sftdd-workflows/SKILL.md`](../lakebase-sftdd-workflows/SKILL.md) for the runner contract that ties an `[E2E]` AC's outcome back to `outcomes.json`.
 
 ## References
 
 - [`references/get-connection.md`](references/get-connection.md) – Lakebase credential seam (DSN + Pool, OAuth refresh, fallback chain).
 - [`references/github-auth.md`](references/github-auth.md) – GitHub token seam (env → VS Code session → `gh auth token`).
 - Parent skill: [`databricks-lakebase`](https://github.com/databricks/databricks-agent-skills) – Postgres CLI surface this skill composes on.
-- Sibling skill: [`../lakebase-tdd-workflows/SKILL.md`](../lakebase-tdd-workflows/SKILL.md) – TDD workflow on paired branches; consumes `createBranch`, `getSchemaDiff`, `getConnection` from this skill.
+- Sibling skill: [`../lakebase-sftdd-workflows/SKILL.md`](../lakebase-sftdd-workflows/SKILL.md) – TDD workflow on paired branches; consumes `createBranch`, `getSchemaDiff`, `getConnection` from this skill.

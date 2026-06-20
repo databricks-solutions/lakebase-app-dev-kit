@@ -7,7 +7,7 @@ import { layDownTddScaffold } from "../../scripts/lakebase/create-project";
 let projectDir: string;
 
 beforeEach(() => {
-  projectDir = mkdtempSync(join(tmpdir(), "tdd-bootstrap-project-"));
+  projectDir = mkdtempSync(join(tmpdir(), "sftdd-bootstrap-project-"));
 });
 
 afterEach(() => {

@@ -25,7 +25,7 @@ import {
   type TierTopology,
 } from "./scm-workflow-state.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
-import { findStaleBranches } from "../tdd/stale-branches.js";
+import { findStaleBranches } from "../sftdd/stale-branches.js";
 import { exec } from "../util/exec.js";
 import { collapseMigrationHeads } from "./schema-migrate.js";
 import { updateEnvConnection } from "./env-file.js";
@@ -100,8 +100,8 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
       message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
       suggestion:
         stale.kind === "experiment"
-          ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"`
-          : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward",
+          ? `lakebase-sftdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"`
+          : "lakebase-sftdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward",
     });
   }
 
@@ -250,7 +250,7 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
         id: "multiple-migration-heads",
         severity: "fail",
         message: `Migrations have ${heads.headsBefore.length} heads (${heads.headsBefore.join(", ")}); a sibling-feature merge left them un-collapsed. \`upgrade head\` will refuse until they are unified.`,
-        suggestion: "lakebase-tdd-collapse-heads",
+        suggestion: "lakebase-sftdd-collapse-heads",
       });
     }
   } catch {

@@ -10,11 +10,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { orchestratorLogEvents, makeOnAction } from "../../scripts/tdd/orchestrator-logging";
-import { renderEventMessage } from "../../scripts/tdd/agent-log-events";
-import { readAgentLog } from "../../scripts/tdd/agent-log";
-import { ALL_AGENT_ROLES } from "../../scripts/tdd/agent-models";
-import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
+import { orchestratorLogEvents, makeOnAction } from "../../scripts/sftdd/orchestrator-logging";
+import { renderEventMessage } from "../../scripts/sftdd/agent-log-events";
+import { readAgentLog } from "../../scripts/sftdd/agent-log";
+import { ALL_AGENT_ROLES } from "../../scripts/sftdd/agent-models";
+import type { WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
 
 describe("orchestratorLogEvents: pure action -> canonical log events", () => {
   it("invoke-role emits an orchestrator handoff + a phase.start for the invoked role", () => {

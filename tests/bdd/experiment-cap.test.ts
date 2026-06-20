@@ -8,8 +8,8 @@ import {
   checkPerExperimentCap,
   clearExperimentCap,
   recordExperimentCap,
-} from "../../scripts/tdd/experiment-cap";
-import { readOutcomes } from "../../scripts/tdd/experiment";
+} from "../../scripts/sftdd/experiment-cap";
+import { readOutcomes } from "../../scripts/sftdd/experiment";
 
 function mkTempTdd(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `experiment-cap-${prefix}-`));
@@ -258,8 +258,8 @@ describe("recordExperimentCap + clearExperimentCap", () => {
 
 describe("analyzeForGate populates a default per-experiment cap", () => {
   it("proposed_plan.budget.per_experiment carries default max_cycles + max_wall_clock_minutes", async () => {
-    const { analyzeForGate } = await import("../../scripts/tdd/design-spec-gate");
-    const { writeMasterTestList } = await import("../../scripts/tdd/test-list");
+    const { analyzeForGate } = await import("../../scripts/sftdd/design-spec-gate");
+    const { writeMasterTestList } = await import("../../scripts/sftdd/test-list");
     const tddDir = mkTempTdd("analyze");
     try {
       fs.mkdirSync(path.join(tddDir, "features", "F1"), { recursive: true });
@@ -279,7 +279,7 @@ describe("analyzeForGate populates a default per-experiment cap", () => {
 
 describe("compareExperiments surfaces capped outcomes", () => {
   it("classifies signal as 'capped' and copies the cap onto the experiment row", async () => {
-    const { compareExperiments } = await import("../../scripts/tdd/compare-experiments");
+    const { compareExperiments } = await import("../../scripts/sftdd/compare-experiments");
     const tddDir = mkTempTdd("compare");
     try {
       seedExperiment(tddDir, "F1", "exp-a");
@@ -302,7 +302,7 @@ describe("compareExperiments surfaces capped outcomes", () => {
 
 describe("comparison-report renders the cap status", () => {
   it("includes a Cap column in the per-experiment table and a remediation line in the decision block", async () => {
-    const { renderComparisonReport } = await import("../../scripts/tdd/comparison-report");
+    const { renderComparisonReport } = await import("../../scripts/sftdd/comparison-report");
     const md = renderComparisonReport({
       feature_id: "F1",
       story_id: "S1",

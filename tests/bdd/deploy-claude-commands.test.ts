@@ -113,10 +113,10 @@ describe("deployClaudeCommands", () => {
     }
   });
 
-  it("design.md drives via lakebase-tdd-drive --only design + names the design roles + the pre/post-hook convention", async () => {
+  it("design.md drives via lakebase-sftdd-drive --only design + names the design roles + the pre/post-hook convention", async () => {
     await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     const design = fs.readFileSync(path.join(targetDir, ".claude", "commands", "design.md"), "utf8");
-    expect(design).toMatch(/lakebase-tdd-drive.*--only design/);
+    expect(design).toMatch(/lakebase-sftdd-drive.*--only design/);
     expect(design).toMatch(/spec-author/);
     expect(design).toMatch(/architect-reviewer/);
     expect(design).toMatch(/test-strategist/);
@@ -125,10 +125,10 @@ describe("deployClaudeCommands", () => {
     expect(design).not.toMatch(/scrum-master/); // orchestration is the deterministic driver now
   });
 
-  it("build.md drives via lakebase-tdd-drive --only build + names navigator/driver (no scrum-master)", async () => {
+  it("build.md drives via lakebase-sftdd-drive --only build + names navigator/driver (no scrum-master)", async () => {
     await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     const build = fs.readFileSync(path.join(targetDir, ".claude", "commands", "build.md"), "utf8");
-    expect(build).toMatch(/lakebase-tdd-drive.*--only build/);
+    expect(build).toMatch(/lakebase-sftdd-drive.*--only build/);
     expect(build).toMatch(/navigator/);
     expect(build).toMatch(/\bdriver\b/);
     expect(build).toMatch(/build\.pre-hook\.md/);
@@ -140,9 +140,9 @@ describe("deployClaudeCommands", () => {
     await deployClaudeCommands(targetDir, { templatesDir: REPO_TEMPLATES });
     const sprint = fs.readFileSync(path.join(targetDir, ".claude", "commands", "sprint.md"), "utf8");
     const spike = fs.readFileSync(path.join(targetDir, ".claude", "commands", "spike.md"), "utf8");
-    expect(sprint).toMatch(/lakebase-tdd-drive --sprint/);
+    expect(sprint).toMatch(/lakebase-sftdd-drive --sprint/);
     expect(sprint).not.toMatch(/scrum-master/);
-    expect(spike).toMatch(/lakebase-tdd-spike/);
+    expect(spike).toMatch(/lakebase-sftdd-spike/);
   });
 });
 

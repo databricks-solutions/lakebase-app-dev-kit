@@ -13,12 +13,12 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runDriver, type DriveEffects } from "../../scripts/tdd/orchestrator-run";
-import { deriveDriveState } from "../../scripts/tdd/orchestrator-derive";
-import { diskArtifactProbe, readDriveContext } from "../../scripts/tdd/orchestrator-probe";
-import type { WorkflowAction } from "../../scripts/tdd/orchestrator-drive";
-import { writeCycleArtifact } from "../../scripts/tdd/run-cycle";
-import { acReviewJson } from "../../scripts/tdd/tdd-paths";
+import { runDriver, type DriveEffects } from "../../scripts/sftdd/orchestrator-run";
+import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
+import { diskArtifactProbe, readDriveContext } from "../../scripts/sftdd/orchestrator-probe";
+import type { WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
+import { writeCycleArtifact } from "../../scripts/sftdd/run-cycle";
+import { acReviewJson } from "../../scripts/sftdd/tdd-paths";
 import {
   readPipeline,
   writePipeline,
@@ -30,7 +30,7 @@ import {
   completeActive,
   cutStoryExperiment,
   syncBreakdownToPipeline,
-} from "../../scripts/tdd/story-pipeline";
+} from "../../scripts/sftdd/story-pipeline";
 
 const AT = "2026-06-07T00:00:00.000Z";
 
