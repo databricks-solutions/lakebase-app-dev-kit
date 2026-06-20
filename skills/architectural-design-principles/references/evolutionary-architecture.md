@@ -39,6 +39,7 @@ Starting points, not a fixed list. State a new architectural rule, name its fitn
 - **`software-design-principles`** governs the inside of a module (SOLID, clean code); fitness functions govern relationships *between* modules and between the app and its platform.
 - **Layering** ([layered-architecture](layered-architecture.md)) is the most important property to defend, because it erodes silently: one convenient wrong-direction import at a time.
 - **Twelve-factor** ([twelve-factor](twelve-factor.md)) properties (config, backing services, statelessness, parity) each map to a fitness function above.
+- **Evolutionary database design** ([evolutionary-database-design](evolutionary-database-design.md)) applies the same idea to the schema: it evolves by migration on a paired branch, defended by the migrations-clean / schema-diff / connection-reachable fitness functions.
 
 ## The one rule
 

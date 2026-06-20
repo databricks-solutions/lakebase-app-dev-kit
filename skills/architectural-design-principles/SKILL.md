@@ -1,6 +1,6 @@
 ---
 name: architectural-design-principles
-description: "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, and evolutionary architecture with fitness functions. Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves."
+description: "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, evolutionary architecture with fitness functions, and evolutionary database design (schema that evolves by migration on paired branches). Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves."
 ---
 
 # architectural-design-principles
@@ -36,6 +36,7 @@ A property with no clear owner or no fitness function: resolve it before merging
 - [Layered architecture](references/layered-architecture.md) – the four layers, the cardinal dependency rule, ports and adapters, the repository + ORM persistence boundary. The canonical home for layering.
 - [Twelve-factor app](references/twelve-factor.md) – the twelve factors mapped to this substrate (paired Lakebase branch as attached backing service, config in the environment, stateless processes, dev/prod parity).
 - [Evolutionary architecture](references/evolutionary-architecture.md) – fitness functions: how an architectural rule becomes an executable test that fails the build on violation, plus the catalog this kit expects.
+- [Evolutionary database design](references/evolutionary-database-design.md) – the schema evolves increment by increment: migrations as the unit of change, the paired branch as a disposable test bed, parent-aware schema diff, and expand/contract for safe change.
 
 ## Hard rules
 

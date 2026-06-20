@@ -5,7 +5,7 @@ Lakebase-backed application development kit. The shared foundation that the [`la
 **Workflow domains** (kit-authored, one skill each, hosted under `skills/`):
 - **[`lakebase-scm-workflows`](skills/lakebase-scm-workflows/README.md)** – paired-branch source control, schema diff, PR flow, runner setup.
 - **[`lakebase-release-workflows`](skills/lakebase-release-workflows/SKILL.md)** – branching + release methodology for Lakebase-paired projects.
-- **[`lakebase-sftdd-workflows`](skills/lakebase-sftdd-workflows/README.md)** – Spec-First Test-Driven Development (SFTDD) against paired branches: Spec Driven Development (SDD) for the design lane (`/design`) and Test Driven Development (TDD) for the build lane (`/build`), with a deterministic orchestrator and HITL gates at every phase boundary.
+- **[`lakebase-sftdd-workflows`](skills/lakebase-sftdd-workflows/README.md)** – Spec-First Test-Driven Development (SFTDD) with evolutionary design, against paired branches: Spec Driven Development (SDD) for the design lane (`/design`) and Test Driven Development (TDD) for the build lane (`/build`), with a deterministic orchestrator and HITL gates at every phase boundary. Specs, architecture, and database all evolve increment over increment.
 - Future domains include deploying to Databricks Apps and beyond.
 
 **Shared canon** (kit-authored, unprefixed because not Lakebase-specific):
