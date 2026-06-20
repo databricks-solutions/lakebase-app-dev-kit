@@ -1,6 +1,6 @@
 # lakebase-sftdd-workflows
 
-Substrate for **Spec-First Test-Driven Development (SFTDD)** on paired Lakebase branches. Canonical Beck-style RED → GREEN → REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases) and HITL gates at every phase boundary.
+Substrate for **Spec-First Test-Driven Development (SFTDD) with evolutionary design** on paired Lakebase branches. Canonical Beck-style RED → GREEN → REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases) and HITL gates at every phase boundary.
 
 **Spec-first: two disciplines, back to back.** SFTDD runs the design lane as **Spec Driven Development (SDD)** and the build lane as **Test Driven Development (TDD)**:
 
@@ -8,6 +8,8 @@ Substrate for **Spec-First Test-Driven Development (SFTDD)** on paired Lakebase 
 - **Build lane = TDD** (`/build`). RED → GREEN → REFACTOR cycles turn that approved spec into working software on a paired branch, one test-list item at a time. The test list authored by SDD is the build lane's horizon.
 
 SDD produces the spec; TDD consumes it. The HITL gates between them (`spec`, `test_list`) are where the spec is frozen before a single line of product code is written.
+
+**Iterative and evolutionary.** That freeze is per increment, not forever. Specs and features are living, not static: each sprint the PO re-plans, folding in what the last working software revealed. The architecture evolves under fitness functions, and the database schema evolves by migration on the paired branch (see `architectural-design-principles`: evolutionary architecture + evolutionary database design). Spec-first within an increment; evolutionary across increments.
 
 This README is the human-facing overview. The agent's operating contract – hard rules, function names, code patterns – lives in [`SKILL.md`](SKILL.md).
 

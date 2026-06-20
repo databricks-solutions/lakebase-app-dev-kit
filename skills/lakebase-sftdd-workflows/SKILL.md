@@ -1,6 +1,6 @@
 ---
 name: lakebase-sftdd-workflows
-description: "Spec-First Test-Driven Development (SFTDD) against paired Lakebase branches: the design lane is Spec Driven Development (SDD) and the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Spec-first means the spec is drafted, reviewed, and frozen at gates before any build cycle runs. Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows."
+description: "Spec-First Test-Driven Development (SFTDD) with evolutionary design, against paired Lakebase branches: the design lane is Spec Driven Development (SDD) and the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Spec-first means the spec is drafted, reviewed, and frozen at gates before any build cycle runs; evolutionary means the spec, the architecture, and the database all evolve increment over increment. Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows."
 user-invocable: true
 ---
 
@@ -29,6 +29,8 @@ See [`agents/navigator.md`](agents/navigator.md) and [`agents/driver.md`](agents
 ## Phases and gates
 
 The kit is **Spec-First Test-Driven Development (SFTDD)**: it composes two disciplines back to back. The **design lane is Spec Driven Development (SDD)** – spec drafting, architectural review, test-list construction, all driven by `/design` – and the **build lane is Test Driven Development (TDD)** – the RED → GREEN → REVIEW → REFACTOR cycles driven by `/build`. Spec-first means SDD freezes the spec at the `spec` + `test_list` gates; TDD only starts once they are approved, so the build always runs against a reviewed spec.
+
+**Iterative and evolutionary.** The freeze is per increment, not forever. Across increments, all three dimensions evolve and are never treated as static: the **spec and features** are living , each sprint the PO re-plans, folding in what the last working software revealed; the **architecture** evolves under fitness functions (`@architectural-design-principles/evolutionary-architecture.md`); and the **database** evolves by migration on the paired branch, diffed against its parent (`@architectural-design-principles/evolutionary-database-design.md`). The rule is: spec-first within an increment, evolutionary across increments.
 
 Gates are keyed (not numbered): `spec` / `plan` / `test_list` / `promote` / `deploy`. The SDD lane runs PER STORY (it streams), and experiments + plans are per-story.
 

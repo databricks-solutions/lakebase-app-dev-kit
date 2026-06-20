@@ -1,15 +1,16 @@
 {
   "version": "2",
-  "updated_at": "2026-06-20T21:58:33Z",
+  "updated_at": "2026-06-20T22:19:10Z",
   "skills": {
     "architectural-design-principles": {
       "version": "0.0.0",
-      "description": "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, and evolutionary architecture with fitness functions. Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves.",
+      "description": "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, evolutionary architecture with fitness functions, and evolutionary database design (schema that evolves by migration on paired branches). Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves.",
       "experimental": false,
-      "updated_at": "2026-06-20T21:52:27Z",
+      "updated_at": "2026-06-20T22:16:04Z",
       "files": [
         "SKILL.md",
         "references/evolutionary-architecture.md",
+        "references/evolutionary-database-design.md",
         "references/layered-architecture.md",
         "references/twelve-factor.md"
       ]
@@ -64,9 +65,9 @@
     },
     "lakebase-sftdd-workflows": {
       "version": "0.0.0",
-      "description": "Spec-First Test-Driven Development (SFTDD) against paired Lakebase branches: the design lane is Spec Driven Development (SDD) and the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Spec-first means the spec is drafted, reviewed, and frozen at gates before any build cycle runs. Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
+      "description": "Spec-First Test-Driven Development (SFTDD) with evolutionary design, against paired Lakebase branches: the design lane is Spec Driven Development (SDD) and the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Spec-first means the spec is drafted, reviewed, and frozen at gates before any build cycle runs; evolutionary means the spec, the architecture, and the database all evolve increment over increment. Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
       "experimental": false,
-      "updated_at": "2026-06-20T21:56:32Z",
+      "updated_at": "2026-06-20T22:18:54Z",
       "files": [
         "README.md",
         "SKILL.md",
