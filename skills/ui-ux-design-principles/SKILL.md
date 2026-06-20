@@ -1,6 +1,6 @@
 ---
 name: ui-ux-design-principles
-description: "Experience-level engineering canon, the UI/UX counterpart to software-design-principles (code-level) and architectural-design-principles (system-level). Usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems and tokens, and testable UI. Imported by the lakebase-tdd-workflows UX Designer (authoring design-guide.{md,json} + ia.md and the adherence gate) and by the Driver building UI. Use when: shaping a design guide or information architecture, reviewing a user-facing surface, choosing a UI framework, or making the UI testable."
+description: "Experience-level engineering canon, the UI/UX counterpart to software-design-principles (code-level) and architectural-design-principles (system-level). Usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems and tokens, and testable UI. Imported by the lakebase-sftdd-workflows UX Designer (authoring design-guide.{md,json} + ia.md and the adherence gate) and by the Driver building UI. Use when: shaping a design guide or information architecture, reviewing a user-facing surface, choosing a UI framework, or making the UI testable."
 ---
 
 # ui-ux-design-principles
@@ -15,7 +15,7 @@ The project's `design-guide.{md,json}` and `ia.md` are the per-project *instanti
 
 ## When to use
 
-- The `lakebase-tdd-workflows` UX Designer imports it to author `design-guide.{md,json}` + `ia.md` and define the adherence gate.
+- The `lakebase-sftdd-workflows` UX Designer imports it to author `design-guide.{md,json}` + `ia.md` and define the adherence gate.
 - The Driver imports it when building UI that must adhere to the design guide.
 - You're reviewing a user-facing change and need a shared vocabulary (heuristics, hierarchy, accessibility) rather than taste.
 - You're choosing how the UI is built and need the testability rules (framework choice, stable seams).
@@ -58,6 +58,6 @@ A property with no owner or no check: resolve it before merging.
 
 ## Composition
 
-- **`lakebase-tdd-workflows`** – UX Designer authors `design-guide.{md,json}` + `ia.md` and sets the adherence contract; Test Strategist writes E2E scenarios + a11y checks against it (see [test-strategy](../lakebase-tdd-workflows/references/test-strategy.md)); Driver builds UI that adheres.
+- **`lakebase-sftdd-workflows`** – UX Designer authors `design-guide.{md,json}` + `ia.md` and sets the adherence contract; Test Strategist writes E2E scenarios + a11y checks against it (see [test-strategy](../lakebase-sftdd-workflows/references/test-strategy.md)); Driver builds UI that adheres.
 - **`architectural-design-principles`** – [testable-ui](references/testable-ui.md) shares the boundary-layer rule (templating is a boundary adapter) and the fitness-function model.
 - **`software-design-principles`** – clean-code naming applies to components and template partials too.

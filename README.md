@@ -5,7 +5,7 @@ Lakebase-backed application development kit. The shared foundation that the [`la
 **Workflow domains** (kit-authored, one skill each, hosted under `skills/`):
 - **[`lakebase-scm-workflows`](skills/lakebase-scm-workflows/README.md)** – paired-branch source control, schema diff, PR flow, runner setup.
 - **[`lakebase-release-workflows`](skills/lakebase-release-workflows/SKILL.md)** – branching + release methodology for Lakebase-paired projects.
-- **[`lakebase-tdd-workflows`](skills/lakebase-tdd-workflows/README.md)** – spec-driven, test-driven development against paired branches: Spec Driven Development (SDD) for the design lane (`/design`) and Test Driven Development (TDD) for the build lane (`/build`), with a deterministic orchestrator and HITL gates at every phase boundary.
+- **[`lakebase-sftdd-workflows`](skills/lakebase-sftdd-workflows/README.md)** – Spec-First Test-Driven Development (SFTDD) against paired branches: Spec Driven Development (SDD) for the design lane (`/design`) and Test Driven Development (TDD) for the build lane (`/build`), with a deterministic orchestrator and HITL gates at every phase boundary.
 - Future domains include deploying to Databricks Apps and beyond.
 
 **Shared canon** (kit-authored, unprefixed because not Lakebase-specific):
@@ -107,7 +107,7 @@ Install is user-scoped and persists across sessions (one-time). Then, in any ses
 /lakebase-app-dev-kit:tdd
 ```
 
-In a folder with a `.tdd/` directory this resumes the `/plan -> /design -> /build -> /deploy` loop; elsewhere it guides you through creating a project, then resumes. The workflow is driven by the deterministic orchestrator (`lakebase-tdd-drive`), which spawns the role agents (product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer) scaffolded into the project's `.claude/agents/` and invoked as `claude --agent <role>`, and pauses at every HITL gate. The plugin ships the command + skills + MCP server; the role agents come from the scaffolded project, not the plugin.
+In a folder with a `.tdd/` directory this resumes the `/plan -> /design -> /build -> /deploy` loop; elsewhere it guides you through creating a project, then resumes. The workflow is driven by the deterministic orchestrator (`lakebase-sftdd-drive`), which spawns the role agents (product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer) scaffolded into the project's `.claude/agents/` and invoked as `claude --agent <role>`, and pauses at every HITL gate. The plugin ships the command + skills + MCP server; the role agents come from the scaffolded project, not the plugin.
 
 ## Imports
 
@@ -121,7 +121,7 @@ The root barrel `@databricks-solutions/lakebase-app-dev-kit` re-exports everythi
 
 ## CLIs
 
-The package exposes many bins (the full set is the `bin` map in `package.json`; the groups below are representative, not exhaustive , the `lakebase-scm-*` SCM-workflow and `lakebase-tdd-*` TDD-workflow families are bins too). Run any of them with `--help` for full subcommand + flag reference.
+The package exposes many bins (the full set is the `bin` map in `package.json`; the groups below are representative, not exhaustive , the `lakebase-scm-*` SCM-workflow and `lakebase-sftdd-*` TDD-workflow families are bins too). Run any of them with `--help` for full subcommand + flag reference.
 
 **Project + connection**
 - `lakebase-create-project` – end-to-end Lakebase-paired project bootstrap (10-step QuickPick equivalent)

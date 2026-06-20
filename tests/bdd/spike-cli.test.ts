@@ -1,4 +1,4 @@
-// lakebase-tdd-spike: cut/list/delete throwaway spike branches.
+// lakebase-sftdd-spike: cut/list/delete throwaway spike branches.
 // cut/delete touch live Lakebase (covered by the live smoke); here we test the
 // hermetic parts: the carry-forward note tagging, list, and arg validation.
 
@@ -7,9 +7,9 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { spikeNotes } from "../../scripts/tdd/spike";
-import { collectSpikeInputs } from "../../scripts/tdd/spike-carryforward";
-import { runSpikeCli } from "../../scripts/tdd/spike.cli";
+import { spikeNotes } from "../../scripts/sftdd/spike";
+import { collectSpikeInputs } from "../../scripts/sftdd/spike-carryforward";
+import { runSpikeCli } from "../../scripts/sftdd/spike.cli";
 
 let tdd: string;
 beforeEach(() => {

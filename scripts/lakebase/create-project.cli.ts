@@ -7,7 +7,7 @@
 // stderr.
 
 import { createProject, CreateProjectArgs } from "./create-project.js";
-import { ALL_AGENT_ROLES, type SpawnableAgentRole } from "../tdd/agent-models.js";
+import { ALL_AGENT_ROLES, type SpawnableAgentRole } from "../sftdd/agent-models.js";
 
 interface ParsedArgs {
   jsonInput?: string;

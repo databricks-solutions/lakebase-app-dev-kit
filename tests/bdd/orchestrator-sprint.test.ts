@@ -14,9 +14,9 @@ import {
   syncBacklog,
   deriveSprintPlanningState,
   type SprintEffects,
-} from "../../scripts/tdd/orchestrator-sprint";
-import { writeEstimates } from "../../scripts/tdd/tdd-paths";
-import { writeSprintGates } from "../../scripts/tdd/sprint-gates";
+} from "../../scripts/sftdd/orchestrator-sprint";
+import { writeEstimates } from "../../scripts/sftdd/tdd-paths";
+import { writeSprintGates } from "../../scripts/sftdd/sprint-gates";
 
 const SPRINT = "sprint-1";
 

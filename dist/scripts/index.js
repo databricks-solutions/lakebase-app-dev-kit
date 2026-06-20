@@ -1588,7 +1588,7 @@ async function deployClaudeCommands(targetDir, opts) {
 }
 async function deployClaudeAgents(targetDir, opts) {
   const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
-  const src = path6.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  const src = path6.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
   if (!fs6.existsSync(src)) {
     return { written: [], skipped: [] };
   }
@@ -1613,7 +1613,7 @@ var PROJECT_SKILLS = [
   "software-design-principles",
   "architectural-design-principles",
   "ui-ux-design-principles",
-  "lakebase-tdd-workflows",
+  "lakebase-sftdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
   "databricks-lakebase",
@@ -1857,7 +1857,7 @@ async function scaffoldAll(args) {
   return staticResult;
 }
 
-// scripts/lakebase/adopt-tdd.ts
+// scripts/lakebase/adopt-sftdd.ts
 import * as fs7 from "fs";
 import * as path7 from "path";
 import { fileURLToPath as fileURLToPath5 } from "url";
@@ -1919,7 +1919,7 @@ function adoptTdd(args) {
 }
 function walkTemplateTree(root) {
   if (!fs7.existsSync(root)) {
-    throw new Error(`tdd-bootstrap template tree missing: ${root}`);
+    throw new Error(`sftdd-bootstrap template tree missing: ${root}`);
   }
   const out = [];
   const stack = [""];
@@ -1945,7 +1945,7 @@ function findBootstrapDir() {
   const here = path7.dirname(fileURLToPath5(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path7.join(dir, "templates", "tdd-bootstrap", ".tdd");
+    const candidate = path7.join(dir, "templates", "sftdd-bootstrap", ".tdd");
     if (fs7.existsSync(candidate)) {
       cachedBootstrapDir = candidate;
       return cachedBootstrapDir;
@@ -1955,7 +1955,7 @@ function findBootstrapDir() {
     dir = parent;
   }
   throw new Error(
-    `Could not locate templates/tdd-bootstrap/.tdd relative to ${here}. Pass explicit { bootstrapDir } to override.`
+    `Could not locate templates/sftdd-bootstrap/.tdd relative to ${here}. Pass explicit { bootstrapDir } to override.`
   );
 }
 
@@ -5003,11 +5003,11 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 import { existsSync as existsSync17, readFileSync as readFileSync14, mkdirSync as mkdirSync10, writeFileSync as writeFileSync12 } from "fs";
 import { dirname as dirname8, join as join19 } from "path";
 
-// scripts/tdd/agent-models.ts
+// scripts/sftdd/agent-models.ts
 import { dirname as dirname7, join as join18 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -5022,7 +5022,7 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = join18(".lakebase", "agent-config.json");
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 var TDD_CONFIG_REL = join19(".lakebase", "tdd-config.json");
 function defaultTddConfig() {
   const roles = {};
@@ -5304,7 +5304,7 @@ Last probe error:
   }
   report("Project created successfully!");
   if (enableTdd) {
-    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+    report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
   }
   report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
@@ -5317,12 +5317,12 @@ Last probe error:
 }
 function layDownTddScaffold(targetDir) {
   const candidates = [
-    path17.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
-    path17.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd")
+    path17.resolve(__dirname, "../../templates/sftdd-bootstrap/.tdd"),
+    path17.resolve(__dirname, "../../../templates/sftdd-bootstrap/.tdd")
   ];
   const source = candidates.find((c) => fs18.existsSync(c));
   if (!source) {
-    throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
+    throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
   const dest = path17.join(targetDir, ".tdd");
   if (fs18.existsSync(dest)) {
@@ -7765,14 +7765,14 @@ function parentForTopology(t, defaultLeaf) {
 import * as fs28 from "fs";
 import * as path27 from "path";
 
-// scripts/tdd/stale-branches.ts
+// scripts/sftdd/stale-branches.ts
 import { existsSync as existsSync29, readdirSync as readdirSync15, statSync as statSync9 } from "fs";
 import { join as join31 } from "path";
 
-// scripts/tdd/story-pipeline.ts
+// scripts/sftdd/story-pipeline.ts
 import { existsSync as existsSync27, readFileSync as readFileSync16, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
 
-// scripts/tdd/tdd-paths.ts
+// scripts/sftdd/tdd-paths.ts
 import * as fs27 from "fs";
 import { join as join29 } from "path";
 var featuresDir = (tdd) => join29(tdd, "features");
@@ -7788,7 +7788,7 @@ function findFeatureDir(tdd, featureId) {
   return matches.length === 1 ? join29(root, matches[0]) : void 0;
 }
 
-// scripts/tdd/story-pipeline.ts
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7801,7 +7801,7 @@ function readPipeline(tddDir, featureId) {
   return JSON.parse(readFileSync16(p, "utf8"));
 }
 
-// scripts/tdd/spike.ts
+// scripts/sftdd/spike.ts
 import { existsSync as existsSync28, mkdirSync as mkdirSync16, readdirSync as readdirSync14, readFileSync as readFileSync17, statSync as statSync8, writeFileSync as writeFileSync18 } from "fs";
 import { join as join30 } from "path";
 function listSpikes(tddDir) {
@@ -7823,7 +7823,7 @@ function listSpikes(tddDir) {
   return out;
 }
 
-// scripts/tdd/stale-branches.ts
+// scripts/sftdd/stale-branches.ts
 function listPipelineFeatures(tddDir) {
   const featuresDir2 = featuresDir(tddDir);
   if (!existsSync29(featuresDir2)) return [];
@@ -7894,7 +7894,7 @@ async function runDoctor(args) {
       id: `stale-${stale.kind}`,
       severity: "warn",
       message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
-      suggestion: stale.kind === "experiment" ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
+      suggestion: stale.kind === "experiment" ? `lakebase-sftdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-sftdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
     });
   }
   if (!workflowStatePresent) {
@@ -8013,7 +8013,7 @@ async function runDoctor(args) {
         id: "multiple-migration-heads",
         severity: "fail",
         message: `Migrations have ${heads.headsBefore.length} heads (${heads.headsBefore.join(", ")}); a sibling-feature merge left them un-collapsed. \`upgrade head\` will refuse until they are unified.`,
-        suggestion: "lakebase-tdd-collapse-heads"
+        suggestion: "lakebase-sftdd-collapse-heads"
       });
     }
   } catch {

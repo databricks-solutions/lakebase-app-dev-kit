@@ -60,14 +60,14 @@ Each operation has a CLI bin AND a matching MCP tool. JS/TS callers can also imp
 **Backup** (`lakebase-cut-backup`)
 - Cut a no-expiry backup branch off a source branch
 
-**TDD adoption** (`lakebase-adopt-tdd`)
+**TDD adoption** (`lakebase-adopt-sftdd`)
 - Brownfield-only sibling to `lakebase-create-project`. Drops the `.tdd/` workflow tree into an existing repo, reports drift on re-runs (`--update`), and can overwrite drifted templates (`--force`) or preview without writing (`--dry-run`).
 
 **Infra test runner** (`lakebase-infra-runner`)
 - Runs the `[Infra]`-tag suite for a Lakebase branch (schema-diff, migration status, endpoint readiness). Reads `--instance` / `--branch` flags first, then falls back to `LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` so the same invocation works in a fresh dev shell (env set by the post-checkout hook) and in CI (env set by the resolve-credentials step). Exit codes: 0 = pass, 1 = check failed, 2 = input-validation. `--junit-output <path>` emits a JUnit XML report.
 
 **Feature status** (`lakebase-feature-status`)
-- One-screen snapshot of a feature's TDD workflow state. Reads `.tdd/<feature-id>/...` and renders either human-readable or `--json` output. The TDD-paired companion command for `lakebase-tdd-workflows` consumers; see that skill for the experiment / cycle / synthesis surface this drives.
+- One-screen snapshot of a feature's TDD workflow state. Reads `.tdd/<feature-id>/...` and renders either human-readable or `--json` output. The TDD-paired companion command for `lakebase-sftdd-workflows` consumers; see that skill for the experiment / cycle / synthesis surface this drives.
 
 **Workflow drift** (`lakebase_workflow_drift` MCP tool, `verifyProject` JS export)
 - Checks that a project's `.githooks/` and `.github/workflows/*.yml` match the templates `lakebase-create-project` would lay down today. Exposed as an MCP tool and via `verifyProject(projectDir)` / `verifyHooks(projectDir)` / `verifyWorkflows(projectDir)` from the package; `lakebase-doctor` rolls this into its overall health check.
@@ -102,7 +102,7 @@ When create-project finishes you get a scaffolded layout shaped like:
   playwright.config.ts                     ← Playwright config (only with --enable-e2e; default-on for nodejs)
   tests/e2e/smoke.spec.ts                  ← Playwright smoke fixture, same gate as the config
   .claude/commands/                        ← /design + /build slash commands (opt-out via --skip-commands)
-  .tdd/                                    ← lakebase-tdd-workflows scaffold (opt-out via --enable-tdd false)
+  .tdd/                                    ← lakebase-sftdd-workflows scaffold (opt-out via --enable-tdd false)
   README.md, .gitignore, package.json/pom.xml/pyproject.toml, ...
 ```
 
@@ -148,7 +148,7 @@ Four flows – shown as what you'd prompt your agent to do, using a running cart
 
 The agent runs `lakebase-create-project` under the hood. When it returns you have a GitHub repo at `my-org/proj-checkout`, a Lakebase project with `production` as the default branch, a local clone with the language scaffold, `.github/workflows/{pr,merge}.yml`, `.githooks/` (post-checkout + prepare-commit-msg), `.env.example`, and `.tdd/` (the TDD workflow scaffold). Initial commit pushed, CI auth secrets synced, runner registered.
 
-Add "skip the .tdd scaffold" to the prompt to opt out for projects that won't use `lakebase-tdd-workflows`.
+Add "skip the .tdd scaffold" to the prompt to opt out for projects that won't use `lakebase-sftdd-workflows`.
 
 ### 2. Cut a feature branch and inspect schema-diff against the parent
 
@@ -208,7 +208,7 @@ lakebase-update-commands --project-dir /tmp/drift-smoke --force
 diff <(echo '# project hook') /tmp/drift-smoke/.claude/commands/design.pre-hook.md
 ```
 
-The same flow applies to the `--enable-e2e`-scaffolded `playwright.config.ts` + `tests/e2e/smoke.spec.ts`: a future drift on those files will surface here once they're brought under the detector's umbrella. For the `[E2E]`-tag agent contract (which connects an `[E2E]` AC's outcome back to `outcomes.json`), see [`../lakebase-tdd-workflows/`](../lakebase-tdd-workflows/) under "Comparison, promote, synthesize".
+The same flow applies to the `--enable-e2e`-scaffolded `playwright.config.ts` + `tests/e2e/smoke.spec.ts`: a future drift on those files will surface here once they're brought under the detector's umbrella. For the `[E2E]`-tag agent contract (which connects an `[E2E]` AC's outcome back to `outcomes.json`), see [`../lakebase-sftdd-workflows/`](../lakebase-sftdd-workflows/) under "Comparison, promote, synthesize".
 
 ## CLI cheat sheet
 
@@ -224,10 +224,10 @@ The same flow applies to the `--enable-e2e`-scaffolded `playwright.config.ts` + 
 | `lakebase-cut-backup` | Cut a no-expiry backup branch off a source branch. |
 | `lakebase-detect-language` | Detect project language for CI step outputs (`java` / `kotlin` / `python` / `nodejs`). |
 | `lakebase-github-token` | Resolve / diagnose the GitHub token via the same auth chain CI uses. |
-| `lakebase-adopt-tdd` | Drop the `.tdd/` workflow tree into an existing repo. Supports `--update`, `--force`, `--dry-run`. |
+| `lakebase-adopt-sftdd` | Drop the `.tdd/` workflow tree into an existing repo. Supports `--update`, `--force`, `--dry-run`. |
 | `lakebase-infra-runner` | Run the `[Infra]`-tag suite (schema-diff + migration status + endpoint readiness) for a branch. Used by scaffolded `test:infra` scripts. |
 | `lakebase-update-commands` | Refresh a scaffolded project's `.claude/commands/{design,build}.md` from the kit's current templates. Interactive per-file confirm by default; `--force` skips prompts, `--dry-run` previews, `--json` emits a structured report. Hook files (`<name>.{pre,post}-hook.md`) are NEVER touched. |
-| `lakebase-feature-status` | One-screen snapshot of a TDD feature's workflow state. Pairs with `lakebase-tdd-workflows`. |
+| `lakebase-feature-status` | One-screen snapshot of a TDD feature's workflow state. Pairs with `lakebase-sftdd-workflows`. |
 | `lakebase-mcp-server` | Stdio MCP server exposing the full tool surface (parity with the CLI bins). For Claude Desktop / OpenAI Codex / Cursor-via-MCP / Genie Code consumers. |
 
 ## JS/TS exports
@@ -309,5 +309,5 @@ Subpath imports (`@databricks-solutions/lakebase-app-dev-kit/lakebase`, `/github
 
 ## Composition
 
-- **TDD on Lakebase-paired projects**: paired with [`lakebase-tdd-workflows`](../lakebase-tdd-workflows/README.md). This skill owns branch + schema + PR plumbing; TDD-workflows layers experiment / cycle / synthesis on top.
+- **TDD on Lakebase-paired projects**: paired with [`lakebase-sftdd-workflows`](../lakebase-sftdd-workflows/README.md). This skill owns branch + schema + PR plumbing; TDD-workflows layers experiment / cycle / synthesis on top.
 - **Inside VS Code/Cursor**: the [`lakebase-scm-extension`](https://github.com/databricks-solutions/lakebase-scm-extension) consumes the same substrate via npm dep – same operations, different presentation layer.

@@ -149,9 +149,9 @@ export async function deployClaudeCommands(
 /**
  * Deploy the TDD-workflow role agent definitions into the project's
  * `.claude/agents/` so Claude Code can discover + spawn them. The
- * canonical source is the skill at `<kitRoot>/skills/lakebase-tdd-workflows/agents/`;
+ * canonical source is the skill at `<kitRoot>/skills/lakebase-sftdd-workflows/agents/`;
  * this copies each `<role>.md` verbatim (the bodies are the system prompts).
- * Discoverability is required for the deterministic orchestrator (`lakebase-tdd-drive`)
+ * Discoverability is required for the deterministic orchestrator (`lakebase-sftdd-drive`)
  * to spawn the roles via `claude -p --agent <role>`. Skips files that
  * already exist unless `force: true`.
  */
@@ -160,7 +160,7 @@ export async function deployClaudeAgents(
   opts?: DeployClaudeCommandsOptions
 ): Promise<DeployClaudeCommandsResult> {
   const kitRoot = path.dirname(path.dirname(templatesRoot(opts)));
-  const src = path.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  const src = path.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
   if (!fs.existsSync(src)) {
     return { written: [], skipped: [] };
   }
@@ -191,7 +191,7 @@ export async function deployClaudeAgents(
  * parents (the `parent:` chain `lakebase-{scm,release}-workflows` -> `databricks-lakebase`):
  *
  * - `software-design-principles` , registered by the Navigator/Driver/Architect.
- * - `lakebase-tdd-workflows` , the `@lakebase-tdd-workflows/...` target the commands
+ * - `lakebase-sftdd-workflows` , the `@lakebase-sftdd-workflows/...` target the commands
  *   + agent docs reference (SKILL.md, references/, agents/).
  * - `lakebase-scm-workflows` / `lakebase-release-workflows` , the human SCM + release
  *   surface the Release Engineer composes on.
@@ -202,7 +202,7 @@ export const PROJECT_SKILLS = [
   "software-design-principles",
   "architectural-design-principles",
   "ui-ux-design-principles",
-  "lakebase-tdd-workflows",
+  "lakebase-sftdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
   "databricks-lakebase",

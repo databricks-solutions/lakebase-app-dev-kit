@@ -19,7 +19,7 @@ Never anchor to a brittle CSS path (`div > div:nth-child(3) > span`) or to user-
 
 ## Deterministic rendering
 
-Same inputs, same output. Non-determinism (unseeded ordering, embedded timestamps, random ids in markup) makes both behavior tests and design-adherence flaky. Push the variable parts (clock, random) behind a seam a test can pin, the UI mock policy: the DB is real (paired branch), but the clock may be faked. See [test-strategy](../../lakebase-tdd-workflows/references/test-strategy.md).
+Same inputs, same output. Non-determinism (unseeded ordering, embedded timestamps, random ids in markup) makes both behavior tests and design-adherence flaky. Push the variable parts (clock, random) behind a seam a test can pin, the UI mock policy: the DB is real (paired branch), but the clock may be faked. See [test-strategy](../../lakebase-sftdd-workflows/references/test-strategy.md).
 
 ## Rendering lives in the boundary layer
 

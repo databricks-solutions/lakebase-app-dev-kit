@@ -27,7 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createLakebaseProject, getDefaultBranchId } from "./lakebase-project.js";
 import { deployEnv, deployEnvExample } from "./scaffold.js";
-import { adoptTdd } from "./adopt-tdd.js";
+import { adoptTdd } from "./adopt-sftdd.js";
 import { enableE2eForProject } from "./enable-e2e.js";
 import { enableInfraForProject } from "./enable-infra.js";
 

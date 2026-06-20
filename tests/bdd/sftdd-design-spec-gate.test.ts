@@ -1,0 +1,110 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { writeMasterTestList } from "../../scripts/sftdd/test-list";
+import { analyzeForGate, recordPlan, writePlan, readPlan } from "../../scripts/sftdd/design-spec-gate";
+
+let tdd: string;
+const FEATURE_DIR = "features/F1-test-feature";
+const STORY = "S1";
+
+beforeEach(() => {
+  tdd = mkdtempSync(join(tmpdir(), "tdd-gate-"));
+  mkdirSync(join(tdd, FEATURE_DIR), { recursive: true });
+});
+
+// Experiments + plans are story-scoped: the analyzer scopes the
+// master test list to the story's ACs, so a test must seed those AC files.
+function seedAcs(...acIds: string[]): void {
+  const acsDir = join(tdd, FEATURE_DIR, "stories", STORY, "acs");
+  mkdirSync(acsDir, { recursive: true });
+  for (const ac of acIds) writeFileSync(join(acsDir, `${ac}.json`), JSON.stringify({ id: ac }));
+}
+
+afterEach(() => {
+  rmSync(tdd, { recursive: true, force: true });
+});
+
+describe("design-spec-gate", () => {
+  it("proposes N=1 when fewer than 2 opinion gaps are detected", () => {
+    writeMasterTestList(tdd, {
+      feature_id: "F1",
+      items: [
+        { id: "T1", description: "happy path returns 200", ac_id: "AC1", status: "pending" },
+        { id: "T2", description: "rejects invalid input with 400", ac_id: "AC1", status: "pending" },
+      ],
+    });
+    seedAcs("AC1");
+    const analysis = analyzeForGate(tdd, "F1", STORY);
+    expect(analysis.proposed_plan.mode).toBe("N=1");
+    expect(analysis.proposed_plan.N).toBe(1);
+    expect(analysis.proposed_plan.strategies.length).toBe(1);
+  });
+
+  it("proposes N>=2 when opinion-gap keywords appear in 2+ items", () => {
+    writeMasterTestList(tdd, {
+      feature_id: "F1",
+      items: [
+        { id: "T1", description: "either postgres arrays or json blob – decide", ac_id: "AC1", status: "pending" },
+        { id: "T2", description: "consider whether to denormalize", ac_id: "AC1", status: "pending" },
+        { id: "T3", description: "happy path", ac_id: "AC2", status: "pending" },
+      ],
+    });
+    seedAcs("AC1", "AC2");
+    const analysis = analyzeForGate(tdd, "F1", STORY);
+    expect(analysis.proposed_plan.mode).toBe("N>=2");
+    expect(analysis.proposed_plan.N).toBeGreaterThanOrEqual(2);
+    expect(analysis.opinion_gaps.length).toBeGreaterThanOrEqual(2);
+    expect(analysis.proposed_plan.strategies.length).toBe(analysis.proposed_plan.N);
+  });
+
+  it("caps strategies at 3 even with more gaps detected", () => {
+    writeMasterTestList(tdd, {
+      feature_id: "F1",
+      items: Array.from({ length: 5 }, (_, i) => ({
+        id: `T${i + 1}`,
+        description: `consider option ${i} or alternatively...`,
+        ac_id: "AC1",
+        status: "pending" as const,
+      })),
+    });
+    seedAcs("AC1");
+    const analysis = analyzeForGate(tdd, "F1", STORY);
+    expect(analysis.proposed_plan.N).toBeLessThanOrEqual(3);
+    expect(analysis.proposed_plan.strategies.length).toBeLessThanOrEqual(3);
+  });
+
+  it("recordPlan appends a structured entry to selection-log.md", () => {
+    writeMasterTestList(tdd, {
+      feature_id: "F1",
+      items: [{ id: "T1", description: "happy path", ac_id: "AC1", status: "pending" }],
+    });
+    seedAcs("AC1");
+    const analysis = analyzeForGate(tdd, "F1", STORY);
+    recordPlan(tdd, analysis.proposed_plan, "kevin.hartman@databricks.com");
+    const log = readFileSync(join(tdd, "selection-log.md"), "utf8");
+    expect(log).toContain("Experiment plan for F1");
+    expect(log).toContain("Mode:");
+    expect(log).toContain("kevin.hartman@databricks.com");
+  });
+
+  it("writePlan/readPlan round-trip persists plan to features/<F>/stories/<story>/plan.json", () => {
+    writeMasterTestList(tdd, {
+      feature_id: "F1",
+      items: [{ id: "T1", description: "happy path", ac_id: "AC1", status: "pending" }],
+    });
+    seedAcs("AC1");
+    const analysis = analyzeForGate(tdd, "F1", STORY);
+    writePlan(tdd, analysis.proposed_plan);
+    // plan.json lands in the feature's resolved dir (the <id>-<slug> dir where
+    // its ACs live), co-located with what readPlan reads back , not a bare F1 dir.
+    expect(existsSync(join(tdd, FEATURE_DIR, "stories", STORY, "plan.json"))).toBe(true);
+    const round = readPlan(tdd, "F1", STORY);
+    expect(round).toEqual(analysis.proposed_plan);
+  });
+
+  it("readPlan returns null when no plan has been written", () => {
+    expect(readPlan(tdd, "F1", STORY)).toBeNull();
+  });
+});

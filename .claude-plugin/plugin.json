@@ -1,6 +1,6 @@
 {
   "name": "lakebase-app-dev-kit",
-  "description": "Opinionated workflows for agentic software development on paired Lakebase branches: a TDD state-machine (role agents + HITL gates), an SCM branch-lifecycle workflow (claim, PR, CI, merge), and a release workflow (promotion across tiers). Every git branch is paired with a Lakebase branch.",
+  "description": "Opinionated workflows for agentic software development on paired Lakebase branches: a Spec-First Test-Driven Development (SFTDD) state-machine (role agents + HITL gates), an SCM branch-lifecycle workflow (claim, PR, CI, merge), and a release workflow (promotion across tiers). Every git branch is paired with a Lakebase branch.",
   "version": "0.1.0",
   "author": {
     "name": "Databricks"

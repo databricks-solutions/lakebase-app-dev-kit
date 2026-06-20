@@ -19,18 +19,18 @@ for a free-standing exploration.
 
 ## How it runs
 
-`/spike` wraps the `lakebase-tdd-spike` CLI (it does NOT go through the driver,
+`/spike` wraps the `lakebase-sftdd-spike` CLI (it does NOT go through the driver,
 a spike is outside the workflow state machine):
 
 ```bash
 # cut a spike (its own paired branch spike/<slug> + a notes.md)
-./scripts/lk lakebase-tdd-spike cut \
+./scripts/lk lakebase-sftdd-spike cut \
   --slug "<slug>" --instance "<lakebase-project>" \
   ${FEATURE:+--for "$FEATURE"} --project-dir "$PWD" --json
 
 # list spikes / delete one when done (drops the branch unless --keep-branch)
-./scripts/lk lakebase-tdd-spike list --project-dir "$PWD"
-./scripts/lk lakebase-tdd-spike delete --slug "<slug>" --instance "<lakebase-project>" --project-dir "$PWD"
+./scripts/lk lakebase-sftdd-spike list --project-dir "$PWD"
+./scripts/lk lakebase-sftdd-spike delete --slug "<slug>" --instance "<lakebase-project>" --project-dir "$PWD"
 ```
 
 After cutting, explore freely on the spike branch. Capture what you learned in

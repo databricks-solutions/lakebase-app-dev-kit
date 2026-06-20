@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "/Users/kevin.hartman/code/databricks-solutions/lakebase-app-dev-kit"
 
-echo "=== Validating: create_smells_catalog (CREATE scripts/tdd/smells.ts) ==="
+echo "=== Validating: create_smells_catalog (CREATE scripts/sftdd/smells.ts) ==="
 
 echo "CHECK 1: Running validation command..."
 if npm run typecheck; then

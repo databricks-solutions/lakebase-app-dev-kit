@@ -24,11 +24,11 @@ FEATURE_ID="${2:?usage: verify-story-pipeline.sh <project-dir> <feature-id>}"
 warn() { echo "verify-story-pipeline: WARNING: $*" >&2; }
 ok()   { echo "verify-story-pipeline: ✓ $*"; }
 
-# lakebase-tdd-pipeline status --json returns an empty pipeline (stories={})
+# lakebase-sftdd-pipeline status --json returns an empty pipeline (stories={})
 # when no pipeline.json exists, so absence manifests as a zero-story payload.
 PIPELINE_JSON="$(
   "$PROJECT_DIR/scripts/lk" \
-    lakebase-tdd-pipeline status --feature "$FEATURE_ID" --tdd-dir "$PROJECT_DIR/.tdd" --json 2>/dev/null
+    lakebase-sftdd-pipeline status --feature "$FEATURE_ID" --tdd-dir "$PROJECT_DIR/.tdd" --json 2>/dev/null
 )"
 
 if [[ -z "$PIPELINE_JSON" ]] || ! echo "$PIPELINE_JSON" | jq -e . >/dev/null 2>&1; then

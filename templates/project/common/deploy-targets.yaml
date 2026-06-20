@@ -2,7 +2,7 @@
 #
 # Each target carries a `type` discriminator. Only `local` is implemented today
 # (run the app on this machine and verify it is reachable); remote types
-# (databricks-app, vercel) are declared here but deferred, lakebase-tdd-deploy
+# (databricks-app, vercel) are declared here but deferred, lakebase-sftdd-deploy
 # exits cleanly with "unsupported target type" until they land.
 #
 # /deploy <feature-id> --target local        (the orchestrated deploy phase)

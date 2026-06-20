@@ -19,7 +19,7 @@ acceptance (headless: the Human Proxy answers):
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
-  lakebase-tdd-drive --feature "<feature-id>" --only build --gates "$GATES" --project-dir "$PWD"
+  lakebase-sftdd-drive --feature "<feature-id>" --only build --gates "$GATES" --project-dir "$PWD"
 ```
 
 The driver:
@@ -28,9 +28,9 @@ The driver:
   (PLAN + RED) -> Driver (GREEN + REFACTOR) -> deploy the story for the PO's
   acceptance review (the story's deploy must be reachable + verify-green, the
   teeth) -> **accept** (merge the experiment) -> pull the next ready story.
-- routes deterministically (routing is code, not an LLM orchestrator): spawns `@lakebase-tdd-workflows/agents/{navigator,driver,release-engineer}`
+- routes deterministically (routing is code, not an LLM orchestrator): spawns `@lakebase-sftdd-workflows/agents/{navigator,driver,release-engineer}`
   at their resolved per-role models, emits the cycle/handoff log as code. Tail:
-  `lakebase-tdd-log --read --feature <id>`.
+  `lakebase-sftdd-log --read --feature <id>`.
 - **requires design done**: `--only build` REFUSES (stops at iteration 0) if a
   story is not yet designed (its spec gate unapproved). If it refuses, run
   `/design <feature-id>` first.
@@ -38,8 +38,8 @@ The driver:
 
 **Gates.** Interactive: the driver stops at each per-story acceptance (and any
 test-list / promote gate) and prints a `GATE` marker. Surface the running story
-to the human; on accept, record it (`lakebase-tdd-experiment merge` +
-`lakebase-tdd-pipeline accept --story <s> --approver <human>`), then re-run to
+to the human; on accept, record it (`lakebase-sftdd-experiment merge` +
+`lakebase-sftdd-pipeline accept --story <s> --approver <human>`), then re-run to
 resume. Headless (`--gates proxy`): the Human Proxy validates + approves. A story
 that is not reachable + verify-green cannot be accepted (never a silent merge).
 

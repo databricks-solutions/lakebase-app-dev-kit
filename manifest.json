@@ -1,12 +1,12 @@
 {
   "version": "2",
-  "updated_at": "2026-06-11T07:38:26Z",
+  "updated_at": "2026-06-20T21:58:33Z",
   "skills": {
     "architectural-design-principles": {
       "version": "0.0.0",
-      "description": "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, and evolutionary architecture with fitness functions. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves.",
+      "description": "System-level engineering canon, the architecture counterpart to software-design-principles. Layered architecture + dependency direction, ports and adapters (repository / ORM-as-adapter), the twelve-factor app for cloud-native development, and evolutionary architecture with fitness functions. Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when: shaping a system boundary, deciding what is a backing service, mapping config to the environment, or authoring the fitness functions that keep the architecture honest as it evolves.",
       "experimental": false,
-      "updated_at": "2026-06-11T05:20:00Z",
+      "updated_at": "2026-06-20T21:52:27Z",
       "files": [
         "SKILL.md",
         "references/evolutionary-architecture.md",
@@ -18,7 +18,7 @@
       "version": "0.1.0",
       "description": "Databricks CLI operations: auth, profiles, data exploration, and bundles. Contains up-to-date guidelines for Databricks-related CLI tasks.",
       "experimental": false,
-      "updated_at": "2026-06-04T06:42:27Z",
+      "updated_at": "2026-06-14T04:05:42Z",
       "files": [
         "SKILL.md",
         "data-exploration.md",
@@ -31,7 +31,7 @@
       "version": "0.1.0",
       "description": "Manage Lakebase Postgres Autoscaling projects, branches, and endpoints via Databricks CLI. Use when asked to create, configure, or manage Lakebase Postgres databases, projects, branches, computes, or endpoints.",
       "experimental": false,
-      "updated_at": "2026-06-04T06:42:28Z",
+      "updated_at": "2026-06-14T04:05:43Z",
       "files": [
         "SKILL.md"
       ]
@@ -51,7 +51,7 @@
       "version": "0.1.0",
       "description": "Opinionated git-Lakebase branch-pairing workflows. Use when scaffolding a Lakebase-paired project, creating/deleting Lakebase branches in lockstep with git branches, diffing parent-aware schemas, opening or merging PRs that touch Lakebase, or running the same operations the lakebase-scm-extension exposes in VS Code.",
       "experimental": false,
-      "updated_at": "2026-06-04T17:16:43Z",
+      "updated_at": "2026-06-20T21:52:27Z",
       "files": [
         "README.md",
         "SKILL.md",
@@ -62,11 +62,11 @@
         "references/github-auth.md"
       ]
     },
-    "lakebase-tdd-workflows": {
+    "lakebase-sftdd-workflows": {
       "version": "0.0.0",
-      "description": "Test-driven development against paired Lakebase branches. Canonical Beck-style RED-GREEN-REFACTOR composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
+      "description": "Spec-First Test-Driven Development (SFTDD) against paired Lakebase branches: the design lane is Spec Driven Development (SDD) and the build lane is canonical Beck-style Test Driven Development (RED-GREEN-REFACTOR), composed with paired-branch primitives (cheap experiments, parent-aware schema diff, real per-branch databases). Spec-first means the spec is drafted, reviewed, and frozen at gates before any build cycle runs. Use when planning a new feature, running design-spec gates, running TDD cycles, comparing parallel experiments, or detecting workflow bad smells. Imports software-design-principles canon. Builds on lakebase-scm-workflows + lakebase-release-workflows.",
       "experimental": false,
-      "updated_at": "2026-06-11T07:19:00Z",
+      "updated_at": "2026-06-20T21:56:32Z",
       "files": [
         "README.md",
         "SKILL.md",
@@ -88,9 +88,9 @@
     },
     "software-design-principles": {
       "version": "0.0.0",
-      "description": "Foundational engineering canon \u2013 SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-tdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when designing a module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape.",
+      "description": "Foundational engineering canon \u2013 SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs. Imported by workflow skills (lakebase-sftdd-workflows, lakebase-scm-workflows, lakebase-release-workflows). Use when designing a module, reviewing a PR, planning a refactor, mapping cross-cutting concerns to layers, or arguing about API shape.",
       "experimental": false,
-      "updated_at": "2026-06-11T05:17:13Z",
+      "updated_at": "2026-06-20T21:52:27Z",
       "files": [
         "SKILL.md",
         "references/clean-code.md",
@@ -103,9 +103,9 @@
     },
     "ui-ux-design-principles": {
       "version": "0.0.0",
-      "description": "Experience-level engineering canon, the UI/UX counterpart to software-design-principles (code-level) and architectural-design-principles (system-level). Usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems and tokens, and testable UI. Imported by the lakebase-tdd-workflows UX Designer (authoring design-guide.{md,json} + ia.md and the adherence gate) and by the Driver building UI. Use when: shaping a design guide or information architecture, reviewing a user-facing surface, choosing a UI framework, or making the UI testable.",
+      "description": "Experience-level engineering canon, the UI/UX counterpart to software-design-principles (code-level) and architectural-design-principles (system-level). Usability heuristics, visual hierarchy, accessibility, interaction and feedback, information architecture, design systems and tokens, and testable UI. Imported by the lakebase-sftdd-workflows UX Designer (authoring design-guide.{md,json} + ia.md and the adherence gate) and by the Driver building UI. Use when: shaping a design guide or information architecture, reviewing a user-facing surface, choosing a UI framework, or making the UI testable.",
       "experimental": false,
-      "updated_at": "2026-06-11T05:21:45Z",
+      "updated_at": "2026-06-20T21:52:27Z",
       "files": [
         "SKILL.md",
         "references/accessibility.md",

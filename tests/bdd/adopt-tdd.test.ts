@@ -7,14 +7,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { adoptTdd } from "../../scripts/lakebase/adopt-tdd";
+import { adoptTdd } from "../../scripts/lakebase/adopt-sftdd";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(here, "..", "..");
-const REAL_BOOTSTRAP = path.join(REPO_ROOT, "templates", "tdd-bootstrap", ".tdd");
+const REAL_BOOTSTRAP = path.join(REPO_ROOT, "templates", "sftdd-bootstrap", ".tdd");
 
 function mkRepo(prefix: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `adopt-tdd-${prefix}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `adopt-sftdd-${prefix}-`));
   execSync("git init --quiet", { cwd: dir, stdio: "pipe" });
   return dir;
 }
@@ -56,12 +56,12 @@ describe("adoptTdd: fresh adoption", () => {
 
 describe("adoptTdd: pre-flight checks", () => {
   it("refuses when the project dir is missing", () => {
-    const missing = path.join(os.tmpdir(), `adopt-tdd-missing-${Date.now()}`);
+    const missing = path.join(os.tmpdir(), `adopt-sftdd-missing-${Date.now()}`);
     expect(() => adoptTdd({ projectDir: missing })).toThrow(/does not exist/i);
   });
 
   it("refuses when the project dir is not a git repo", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "adopt-tdd-nogit-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "adopt-sftdd-nogit-"));
     try {
       expect(() => adoptTdd({ projectDir: dir })).toThrow(/Not a git repo/i);
     } finally {
@@ -173,7 +173,7 @@ describe("adoptTdd: bootstrap-dir override", () => {
   it("honors an explicit bootstrapDir and skips the auto-locate walk", () => {
     // Synthesize a minimal fixture (a single file) and assert the
     // override is the source of truth.
-    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "adopt-tdd-fixture-"));
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "adopt-sftdd-fixture-"));
     try {
       fs.writeFileSync(path.join(fixture, "README.md"), "# fixture-only\n");
       const result = adoptTdd({ projectDir: repo, bootstrapDir: fixture });
@@ -197,7 +197,7 @@ describe("adoptTdd: bootstrap-dir override", () => {
 describe("adoptTdd: canonical bootstrap inspection", () => {
   it("the kit ships every file the docs reference", () => {
     // Spot-check the bootstrap-dir auto-located via the real kit. If
-    // a future change reorganizes templates/tdd-bootstrap/.tdd the
+    // a future change reorganizes templates/sftdd-bootstrap/.tdd the
     // contract here breaks loudly instead of silently shrinking.
     expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "product-overview.md"))).toBe(true);
     expect(fs.existsSync(path.join(REAL_BOOTSTRAP, "workflow-state.json"))).toBe(true);

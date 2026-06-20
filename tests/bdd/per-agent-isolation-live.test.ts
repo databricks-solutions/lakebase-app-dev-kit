@@ -20,9 +20,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployClaudeAgents, deployClaudeSkills } from "../../scripts/lakebase/scaffold";
-import { checkArtifactConformance } from "../../scripts/tdd/artifact-conformance";
-import { resolveModelForRole } from "../../scripts/tdd/agent-models";
-import { storyAcIds, readAcLayer } from "../../scripts/tdd/tdd-paths";
+import { checkArtifactConformance } from "../../scripts/sftdd/artifact-conformance";
+import { resolveModelForRole } from "../../scripts/sftdd/agent-models";
+import { storyAcIds, readAcLayer } from "../../scripts/sftdd/tdd-paths";
 
 // Input fixtures = the LAST live run's real artifacts (snapshotted), not the
 // hand-curated corpus , this is what the agents actually produce today, junk

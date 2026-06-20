@@ -1582,14 +1582,14 @@ function parentForTopology(t, defaultLeaf) {
   return defaultLeaf || "main";
 }
 
-// scripts/tdd/stale-branches.ts
+// scripts/sftdd/stale-branches.ts
 var import_fs3 = require("fs");
 var import_path2 = require("path");
 
-// scripts/tdd/story-pipeline.ts
+// scripts/sftdd/story-pipeline.ts
 var import_fs = require("fs");
 
-// scripts/tdd/tdd-paths.ts
+// scripts/sftdd/tdd-paths.ts
 var fs5 = __toESM(require("fs"), 1);
 var import_node_path = require("path");
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
@@ -1605,7 +1605,7 @@ function findFeatureDir(tdd, featureId) {
   return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
 }
 
-// scripts/tdd/story-pipeline.ts
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -1618,7 +1618,7 @@ function readPipeline(tddDir, featureId) {
   return JSON.parse((0, import_fs.readFileSync)(p, "utf8"));
 }
 
-// scripts/tdd/spike.ts
+// scripts/sftdd/spike.ts
 var import_fs2 = require("fs");
 var import_path = require("path");
 function listSpikes(tddDir) {
@@ -1640,7 +1640,7 @@ function listSpikes(tddDir) {
   return out;
 }
 
-// scripts/tdd/stale-branches.ts
+// scripts/sftdd/stale-branches.ts
 function listPipelineFeatures(tddDir) {
   const featuresDir2 = featuresDir(tddDir);
   if (!(0, import_fs3.existsSync)(featuresDir2)) return [];
@@ -2646,7 +2646,7 @@ async function runDoctor(args) {
       id: `stale-${stale.kind}`,
       severity: "warn",
       message: `Stale ${stale.kind}${where} "${stale.slug}"${stale.branch ? ` (branch ${stale.branch})` : ""}: ${stale.reason}.`,
-      suggestion: stale.kind === "experiment" ? `lakebase-tdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-tdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
+      suggestion: stale.kind === "experiment" ? `lakebase-sftdd-experiment discard --feature ${stale.feature_id} --story ${stale.story_id} --slug ${stale.slug} --instance <id> --approver <you> --reason "doctor: stale experiment"` : "lakebase-sftdd-spike teardown (or delete the spike's paired branch) once its learning has carried forward"
     });
   }
   if (!workflowStatePresent) {
@@ -2765,7 +2765,7 @@ async function runDoctor(args) {
         id: "multiple-migration-heads",
         severity: "fail",
         message: `Migrations have ${heads.headsBefore.length} heads (${heads.headsBefore.join(", ")}); a sibling-feature merge left them un-collapsed. \`upgrade head\` will refuse until they are unified.`,
-        suggestion: "lakebase-tdd-collapse-heads"
+        suggestion: "lakebase-sftdd-collapse-heads"
       });
     }
   } catch {

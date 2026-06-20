@@ -19,7 +19,7 @@ Only a **failing test** or a **hard gate** reliably changes LLM build output. Ad
 
 Three enforcement surfaces, increasing strength:
 - prompt/canon (`agents/*.md`, `references/*.md`): weak, advisory.
-- artifact-conformance gate (`scripts/tdd/artifact-conformance.ts` -> `human-proxy.ts`): hard-blocks a HITL gate when an artifact's shape is wrong. Deterministic, fires before any code is built.
+- artifact-conformance gate (`scripts/sftdd/artifact-conformance.ts` -> `human-proxy.ts`): hard-blocks a HITL gate when an artifact's shape is wrong. Deterministic, fires before any code is built.
 - fitness test / deterministic CI gate (a shipped RED test + an `imports-clean.ts`-style gate): a real failing test the Driver must satisfy. Strongest, model-independent.
 
 ## Key decisions
@@ -45,19 +45,19 @@ Three enforcement surfaces, increasing strength:
 
 ### Increment 3: schemas (additive, optional)
 - Change:
-  - `scripts/tdd/schemas/architecture.schema.json`: add optional `service_backed: boolean` + `layers: [{ name, role: boundary|service|repository|infrastructure|policy, module, may_import: [] }]`.
-  - `scripts/tdd/schemas/test-list.schema.json`: add optional `kind: "behavior" | "fitness"` (default behavior) to items; mirror in `TestListItem` (`scripts/tdd/test-list.ts`).
+  - `scripts/sftdd/schemas/architecture.schema.json`: add optional `service_backed: boolean` + `layers: [{ name, role: boundary|service|repository|infrastructure|policy, module, may_import: [] }]`.
+  - `scripts/sftdd/schemas/test-list.schema.json`: add optional `kind: "behavior" | "fitness"` (default behavior) to items; mirror in `TestListItem` (`scripts/sftdd/test-list.ts`).
 - Verify: hermetic , a fixture architecture.json with `layers` + `service_backed` validates; a test-list with `kind` validates; existing fixtures (no layers / no kind) still validate (additive). `npm run typecheck` + the schema-loader/conformance tests green.
 
 ### Increment 4: hard conformance gates
-- Change in `scripts/tdd/artifact-conformance.ts` (mirror `checkNfrCoverage`):
+- Change in `scripts/sftdd/artifact-conformance.ts` (mirror `checkNfrCoverage`):
   - `checkLayeringDeclared(architectureJson)`: if `service_backed === true`, `layers` must declare at least a boundary + service + repository; else a violation. Wire into `scanFeatureConformance` + `human-proxy.ts` `conformanceReason` so **Gate 2 (architecture/spec)** hard-blocks.
   - `checkFitnessCoverage(testListJson, architectureJson)`: if the architecture declares any constraint (service_backed or >=1 layer or an NFR), the test-list must contain >=1 `kind:"fitness"` item; else a violation. Wire so **Gate 3 (test_list)** hard-blocks.
 - Verify: hermetic tests in `tests/bdd/` mirroring the existing artifact-conformance NFR-coverage test: (a) service_backed + no layers -> violation; service_backed + full layers -> ok; service_backed:false -> no-op. (b) constraint declared + no fitness item -> violation; with a fitness item -> ok; nothing declared -> no-op. Full suite green (the rules no-op on existing fixtures because none declare service_backed/layers).
 
 ### Increment 5: layering fitness test + smell (the real teeth on the BUILD)
 - Change:
-  - Ship a Python fitness-test template `tests/architecture/test_layering.py` (ast/import scan: the boundary/routes module must NOT import the SQLAlchemy session/`db`; a repository module must exist) , and/or a deterministic `scripts/tdd/layering-clean.ts` + `layering-clean.cli.ts` mirroring `imports-clean.ts`.
+  - Ship a Python fitness-test template `tests/architecture/test_layering.py` (ast/import scan: the boundary/routes module must NOT import the SQLAlchemy session/`db`; a repository module must exist) , and/or a deterministic `scripts/sftdd/layering-clean.ts` + `layering-clean.cli.ts` mirroring `imports-clean.ts`.
   - Add a `layering-violation` smell to `smells.ts` SMELL_CATALOG (blocking), so the navigator REVIEW flags ORM access in a route handler (distinct from today's test-only `boundary-violation`).
   - test-strategist emits the layering fitness item; navigator writes the file; it goes RED (fat controller fails) then GREEN (Driver extracts service/repository).
 - Verify: hermetic , `layering-clean` flags a fixture where a route module imports the session, passes a layered fixture; `smells.test.ts` lists `layering-violation`. LIVE , a service-backed feature build produces `app/services/*` + `app/repositories/*` (or equivalent), the route handler has no `db.*`, and `tests/architecture/test_layering.py` is GREEN.

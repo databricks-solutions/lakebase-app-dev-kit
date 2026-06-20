@@ -2,10 +2,10 @@
 set -euo pipefail
 cd "/Users/kevin.hartman/code/databricks-solutions/lakebase-app-dev-kit"
 
-echo "=== Validating: create_story_schema (CREATE scripts/tdd/schemas/story.schema.json) ==="
+echo "=== Validating: create_story_schema (CREATE scripts/sftdd/schemas/story.schema.json) ==="
 
 echo "CHECK 1: Running validation command..."
-if node -e "JSON.parse(require('fs').readFileSync('scripts/tdd/schemas/story.schema.json','utf8'))"; then
+if node -e "JSON.parse(require('fs').readFileSync('scripts/sftdd/schemas/story.schema.json','utf8'))"; then
   echo "  PASS: file is valid JSON Schema"
 else
   echo "  FAIL: file is valid JSON Schema"

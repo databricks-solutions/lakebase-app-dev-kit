@@ -8090,7 +8090,7 @@ async function deployClaudeCommands(targetDir, opts) {
 }
 async function deployClaudeAgents(targetDir, opts) {
   const kitRoot = path7.dirname(path7.dirname(templatesRoot(opts)));
-  const src = path7.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  const src = path7.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
   if (!fs8.existsSync(src)) {
     return { written: [], skipped: [] };
   }
@@ -8115,7 +8115,7 @@ var PROJECT_SKILLS = [
   "software-design-principles",
   "architectural-design-principles",
   "ui-ux-design-principles",
-  "lakebase-tdd-workflows",
+  "lakebase-sftdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
   "databricks-lakebase",
@@ -9501,12 +9501,12 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 init_cjs_shims();
 var import_fs = require("fs");
 var import_path2 = require("path");
 
-// scripts/tdd/agent-models.ts
+// scripts/sftdd/agent-models.ts
 init_cjs_shims();
 var import_path = require("path");
 var RECOMMENDED_MODELS = {
@@ -9522,7 +9522,7 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path.join)(".lakebase", "agent-config.json");
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 var TDD_CONFIG_REL = (0, import_path2.join)(".lakebase", "tdd-config.json");
 function defaultTddConfig() {
   const roles = {};
@@ -9804,7 +9804,7 @@ Last probe error:
   }
   report("Project created successfully!");
   if (enableTdd) {
-    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+    report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
   }
   report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
@@ -9817,12 +9817,12 @@ Last probe error:
 }
 function layDownTddScaffold(targetDir) {
   const candidates = [
-    path13.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
-    path13.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd")
+    path13.resolve(__dirname, "../../templates/sftdd-bootstrap/.tdd"),
+    path13.resolve(__dirname, "../../../templates/sftdd-bootstrap/.tdd")
   ];
   const source = candidates.find((c) => fs14.existsSync(c));
   if (!source) {
-    throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
+    throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
   const dest = path13.join(targetDir, ".tdd");
   if (fs14.existsSync(dest)) {
@@ -10902,16 +10902,16 @@ function migrationSlug2(description) {
   return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
 }
 
-// scripts/tdd/feature-status.ts
+// scripts/sftdd/feature-status.ts
 init_cjs_shims();
 var import_fs7 = require("fs");
 var import_path7 = require("path");
 
-// scripts/tdd/test-list.ts
+// scripts/sftdd/test-list.ts
 init_cjs_shims();
 var import_fs2 = require("fs");
 
-// scripts/tdd/tdd-paths.ts
+// scripts/sftdd/tdd-paths.ts
 init_cjs_shims();
 var fs21 = __toESM(require("fs"), 1);
 var import_node_path = require("path");
@@ -10945,7 +10945,7 @@ function requireFeatureDir(tdd, featureId) {
   return dir;
 }
 
-// scripts/tdd/test-list.ts
+// scripts/sftdd/test-list.ts
 function readMasterTestList(tddDir, featureId) {
   requireFeatureDir(tddDir, featureId);
   const file = featureTestListJson(tddDir, featureId);
@@ -10956,14 +10956,14 @@ function readMasterTestList(tddDir, featureId) {
   return { ...parsed, items: Array.isArray(parsed.items) ? parsed.items : [] };
 }
 
-// scripts/tdd/design-spec-gate.ts
+// scripts/sftdd/design-spec-gate.ts
 init_cjs_shims();
 var import_fs4 = require("fs");
 
-// scripts/tdd/run-cycle.ts
+// scripts/sftdd/run-cycle.ts
 init_cjs_shims();
 
-// scripts/tdd/experiment.ts
+// scripts/sftdd/experiment.ts
 init_cjs_shims();
 var import_fs3 = require("fs");
 var import_path3 = require("path");
@@ -11577,7 +11577,7 @@ async function resolveFeatureParent(args) {
   return void 0;
 }
 
-// scripts/tdd/experiment.ts
+// scripts/sftdd/experiment.ts
 function experimentsRoot(tddDir, featureId, storyId) {
   return (0, import_path3.join)(tddDir, "experiments", featureId, storyId);
 }
@@ -11615,17 +11615,17 @@ function readOutcomes(tddDir, featureId, storyId, slug) {
   return JSON.parse((0, import_fs3.readFileSync)(file, "utf8"));
 }
 
-// scripts/tdd/agent-log.ts
+// scripts/sftdd/agent-log.ts
 init_cjs_shims();
 
-// scripts/tdd/schema-loader.ts
+// scripts/sftdd/schema-loader.ts
 init_cjs_shims();
 var import_path4 = require("path");
 var import_ajv = __toESM(require_ajv(), 1);
 var SCHEMA_DIR = (0, import_path4.join)(__dirname, "schemas");
 var ajv = new import_ajv.default({ allErrors: true, strict: false });
 
-// scripts/tdd/agent-log-events.ts
+// scripts/sftdd/agent-log-events.ts
 init_cjs_shims();
 var EVENT_TEMPLATES = {
   // Orchestration lifecycle (code-emitted)
@@ -11678,17 +11678,17 @@ var EVENT_TEMPLATES = {
 };
 var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
 
-// scripts/tdd/spike-carryforward.ts
+// scripts/sftdd/spike-carryforward.ts
 init_cjs_shims();
 
-// scripts/tdd/design-spec-gate.ts
+// scripts/sftdd/design-spec-gate.ts
 function readPlan(tddDir, featureId, storyId) {
   const planPath = storyPlanJson(tddDir, featureId, storyId);
   if (!(0, import_fs4.existsSync)(planPath)) return null;
   return JSON.parse((0, import_fs4.readFileSync)(planPath, "utf8"));
 }
 
-// scripts/tdd/smells.ts
+// scripts/sftdd/smells.ts
 init_cjs_shims();
 var import_fs5 = require("fs");
 var import_path5 = require("path");
@@ -11698,7 +11698,7 @@ function readSmellsLog(tddDir) {
   return JSON.parse((0, import_fs5.readFileSync)(file, "utf8"));
 }
 
-// scripts/tdd/gates.ts
+// scripts/sftdd/gates.ts
 init_cjs_shims();
 var import_fs6 = require("fs");
 var import_path6 = require("path");
@@ -11793,7 +11793,7 @@ function validateGateRecord(parsed, gateName, file) {
   };
 }
 
-// scripts/tdd/feature-status.ts
+// scripts/sftdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path24) {
   if (!(0, import_fs7.existsSync)(path24)) return null;
@@ -12907,7 +12907,7 @@ var TOOLS = [
   },
   {
     name: "lakebase_feature_status",
-    description: "One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). Reads .tdd/ on disk; no Lakebase or network calls. See skills/lakebase-tdd-workflows/references/feature-status-schema.md for the stable payload contract.",
+    description: "One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). Reads .tdd/ on disk; no Lakebase or network calls. See skills/lakebase-sftdd-workflows/references/feature-status-schema.md for the stable payload contract.",
     inputSchema: {
       type: "object",
       properties: {

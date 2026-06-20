@@ -6,8 +6,8 @@
 # the kit ONCE per ref into a shared cache and runs the bin via `node dist/...`
 # (~0.09s). Use it everywhere a kit CLI is invoked from a scaffolded project:
 #
-#   ./scripts/lk lakebase-tdd-log --role spec-author --event progress --slot note="…" --slot step=drafting
-#   "$(git rev-parse --show-toplevel)/scripts/lk" lakebase-tdd-intake --feature F1
+#   ./scripts/lk lakebase-sftdd-log --role spec-author --event progress --slot note="…" --slot step=drafting
+#   "$(git rev-parse --show-toplevel)/scripts/lk" lakebase-sftdd-intake --feature F1
 #
 # Ref resolution (so it works inside a `claude -p` agent's Bash tool, which does
 # NOT reliably inherit env vars): $LAKEBASE_KIT_REF -> .lakebase/kit-ref -> "main".
@@ -16,7 +16,7 @@ set -euo pipefail
 
 bin="${1:-}"
 if [ -z "$bin" ]; then
-  echo "usage: lk <kit-bin> [args...]   (e.g. lk lakebase-tdd-log --read)" >&2
+  echo "usage: lk <kit-bin> [args...]   (e.g. lk lakebase-sftdd-log --read)" >&2
   exit 2
 fi
 shift

@@ -8,8 +8,8 @@ import * as path from "node:path";
 import {
   renderComparisonReport,
   writeComparisonReport,
-} from "../../scripts/tdd/comparison-report";
-import type { ComparisonReport, ExperimentRow, TagMatrixRow } from "../../scripts/tdd/compare-experiments";
+} from "../../scripts/sftdd/comparison-report";
+import type { ComparisonReport, ExperimentRow, TagMatrixRow } from "../../scripts/sftdd/compare-experiments";
 
 const FIXED_TIMESTAMP = "2026-06-02T08:15:00.000Z";
 

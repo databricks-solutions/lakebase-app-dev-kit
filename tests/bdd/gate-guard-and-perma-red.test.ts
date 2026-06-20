@@ -10,14 +10,14 @@ import * as path from "node:path";
 import {
   analyzeForGate,
   checkE2eGate,
-} from "../../scripts/tdd/design-spec-gate";
+} from "../../scripts/sftdd/design-spec-gate";
 import {
   SMELL_CATALOG,
   detectAll,
   detectE2eRowPermaRed,
-} from "../../scripts/tdd/smells";
-import type { CycleArtifact, CycleScope } from "../../scripts/tdd/run-cycle";
-import type { TestList } from "../../scripts/tdd/test-list";
+} from "../../scripts/sftdd/smells";
+import type { CycleArtifact, CycleScope } from "../../scripts/sftdd/run-cycle";
+import type { TestList } from "../../scripts/sftdd/test-list";
 
 function mkTempProject(prefix: string): { projectDir: string; tddDir: string } {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), `feip7094-p4-${prefix}-`));

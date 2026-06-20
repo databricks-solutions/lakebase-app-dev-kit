@@ -18,7 +18,7 @@ import {
   type DriveState,
   type StoryView,
   type WorkflowAction,
-} from "../../scripts/tdd/orchestrator-drive";
+} from "../../scripts/sftdd/orchestrator-drive";
 
 /** A story fully through design + gate (so the loop skips it). */
 function gated(): DesignDriveState["stories"][string] {

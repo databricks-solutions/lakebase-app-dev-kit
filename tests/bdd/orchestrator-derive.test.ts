@@ -9,9 +9,9 @@ import {
   assertStoryOrderCoversPipeline,
   type StoryArtifactProbe,
   type DriveContext,
-} from "../../scripts/tdd/orchestrator-derive";
-import { nextTransition } from "../../scripts/tdd/orchestrator-drive";
-import type { StoryPipeline, StoryEntry } from "../../scripts/tdd/story-pipeline";
+} from "../../scripts/sftdd/orchestrator-derive";
+import { nextTransition } from "../../scripts/sftdd/orchestrator-drive";
+import type { StoryPipeline, StoryEntry } from "../../scripts/sftdd/story-pipeline";
 
 /** A probe driven by per-story boolean maps; absent story => all false. */
 function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe, boolean>>>): StoryArtifactProbe {

@@ -27,7 +27,7 @@ from the recorded backlog).
 ```bash
 GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
-  lakebase-tdd-drive --sprint "<sprint-name>" --gates "$GATES" --project-dir "$PWD"
+  lakebase-sftdd-drive --sprint "<sprint-name>" --gates "$GATES" --project-dir "$PWD"
 ```
 
 It FLOWS: plan -> **[PLAN GATE]** -> for each backlog feature: claim its branch

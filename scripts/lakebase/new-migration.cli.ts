@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLI: create a new, correctly-named migration via the project's tool adapter.
 //
-//   lakebase-tdd-new-migration --name "<description>" [--project-dir <dir>]
+//   lakebase-sftdd-new-migration --name "<description>" [--project-dir <dir>]
 //                              [--language <lang>] [--autogenerate
 //                               --instance <id> --branch <name> ...]
 //
@@ -81,7 +81,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const BIN_NAME = "lakebase-tdd-new-migration";
+const BIN_NAME = "lakebase-sftdd-new-migration";
 
 function help(): string {
   return `${BIN_NAME} (create a tool-native, sequentially-named migration)

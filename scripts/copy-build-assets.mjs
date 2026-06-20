@@ -3,7 +3,7 @@
 //
 // tsup compiles TS -> JS but does NOT copy sibling data files. Several
 // substrate modules read JSON Schemas at runtime by path relative to their
-// compiled location (schema-loader.ts -> scripts/tdd/schemas/*.schema.json;
+// compiled location (schema-loader.ts -> scripts/sftdd/schemas/*.schema.json;
 // scm-workflow-state + uc-resources read their schemas similarly). Without
 // this copy, dist/scripts/.../*.schema.json are absent and a CONSUMER install
 // (which ships pre-built dist/ and never rebuilds) hits ENOENT at runtime.

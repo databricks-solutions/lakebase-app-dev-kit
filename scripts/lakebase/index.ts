@@ -6,7 +6,7 @@
 // canonical owner files (env-file.ts, project-verify.ts) export those names.
 
 export * from "./adopt-lakebase-project.js";
-export * from "./adopt-tdd.js";
+export * from "./adopt-sftdd.js";
 export * from "./branch-create.js";
 export * from "./branch-delete.js";
 export * from "./convention-branches.js";

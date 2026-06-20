@@ -7,7 +7,7 @@
 #
 # The two entry scripts set three vars, then call `replay_smoke "$@"`:
 #   SMOKE_NAME    label for logs + the usage line (e.g. run-to-navigator.sh)
-#   PAUSE_BEFORE  navigator | release-engineer  (lakebase-tdd-drive --pause-before)
+#   PAUSE_BEFORE  navigator | release-engineer  (lakebase-sftdd-drive --pause-before)
 #   REPLAY_BUILD  0 | 1  (1 also restores the recorded code tree + green cycles,
 #                 so the run skips the live build and reaches the RE handoff)
 #
@@ -107,7 +107,7 @@ replay_smoke() {
   log "staging project intake (product-overview + nfrs + design-brief) via human-proxy"
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
   proxy_supply() {
-    lk lakebase-tdd-human-proxy supply --from "$1" --to "$2" --artifact "$3" --tdd-dir "${PROJECT_DIR}/.tdd"
+    lk lakebase-sftdd-human-proxy supply --from "$1" --to "$2" --artifact "$3" --tdd-dir "${PROJECT_DIR}/.tdd"
   }
   proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
     || { err "human-proxy refused product-overview.md"; return 2; }
@@ -144,8 +144,8 @@ replay_smoke() {
   else
     log "design REPLAYED (corpus: ${CORPUS_DIR}); pausing at the ${PAUSE_BEFORE} handoff"
   fi
-  lk lakebase-tdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --pause-before "$PAUSE_BEFORE" \
-    || { err "lakebase-tdd-drive failed for ${FEATURE_ID}"; return 2; }
+  lk lakebase-sftdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --pause-before "$PAUSE_BEFORE" \
+    || { err "lakebase-sftdd-drive failed for ${FEATURE_ID}"; return 2; }
 
   log "✓ ${SMOKE_NAME} complete (paused at the ${PAUSE_BEFORE} handoff, resumed on your Y). Project: ${PROJECT_DIR}"
 }

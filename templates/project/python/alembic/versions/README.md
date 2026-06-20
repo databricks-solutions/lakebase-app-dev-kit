@@ -4,7 +4,7 @@ Add your migrations here. Create one with the kit's tool-agnostic command (run
 in the project root):
 
 ```bash
-lakebase-tdd-new-migration --name "<description>"
+lakebase-sftdd-new-migration --name "<description>"
 ```
 
 This assigns a UTC timestamp rev-id (`YYYYMMDDHHMMSS`), so the file is

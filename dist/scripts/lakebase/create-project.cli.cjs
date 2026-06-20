@@ -953,7 +953,7 @@ async function deployClaudeCommands(targetDir, opts) {
 }
 async function deployClaudeAgents(targetDir, opts) {
   const kitRoot = path7.dirname(path7.dirname(templatesRoot(opts)));
-  const src = path7.join(kitRoot, "skills", "lakebase-tdd-workflows", "agents");
+  const src = path7.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
   if (!fs8.existsSync(src)) {
     return { written: [], skipped: [] };
   }
@@ -978,7 +978,7 @@ var PROJECT_SKILLS = [
   "software-design-principles",
   "architectural-design-principles",
   "ui-ux-design-principles",
-  "lakebase-tdd-workflows",
+  "lakebase-sftdd-workflows",
   "lakebase-scm-workflows",
   "lakebase-release-workflows",
   "databricks-lakebase",
@@ -2465,11 +2465,11 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 var import_fs = require("fs");
 var import_path2 = require("path");
 
-// scripts/tdd/agent-models.ts
+// scripts/sftdd/agent-models.ts
 var import_path = require("path");
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
@@ -2484,7 +2484,7 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path.join)(".lakebase", "agent-config.json");
 
-// scripts/tdd/tdd-config.ts
+// scripts/sftdd/tdd-config.ts
 var TDD_CONFIG_REL = (0, import_path2.join)(".lakebase", "tdd-config.json");
 function defaultTddConfig() {
   const roles = {};
@@ -2766,7 +2766,7 @@ Last probe error:
   }
   report("Project created successfully!");
   if (enableTdd) {
-    report(`Next: cd ${projectDir} && ./scripts/tdd.sh plan`);
+    report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
   }
   report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
   return {
@@ -2779,12 +2779,12 @@ Last probe error:
 }
 function layDownTddScaffold(targetDir) {
   const candidates = [
-    path13.resolve(__dirname, "../../templates/tdd-bootstrap/.tdd"),
-    path13.resolve(__dirname, "../../../templates/tdd-bootstrap/.tdd")
+    path13.resolve(__dirname, "../../templates/sftdd-bootstrap/.tdd"),
+    path13.resolve(__dirname, "../../../templates/sftdd-bootstrap/.tdd")
   ];
   const source = candidates.find((c) => fs14.existsSync(c));
   if (!source) {
-    throw new Error(`tdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
+    throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
   const dest = path13.join(targetDir, ".tdd");
   if (fs14.existsSync(dest)) {
