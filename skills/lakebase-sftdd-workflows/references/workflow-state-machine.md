@@ -231,13 +231,13 @@ flowchart LR
     GREEN -->|review| REVIEW
     NAV3(("Navigator")) -. responsible .-> REVIEW
     REVIEW -->|cleanup needed| REFACTOR
-    NAV4(("Navigator")) -. responsible .-> REFACTOR
+    DRV2(("Driver")) -. responsible .-> REFACTOR
     REFACTOR -->|next item| PLANb
     REVIEW -->|next item, no refactor| PLANb
 
     classDef role fill:#FFE9E4,stroke:#FF5F46,stroke-width:2px,color:#0B2026;
     classDef orch fill:#C9D2D4,stroke:#3D4A4F,stroke-width:2px,color:#0B2026;
-    class NAV1,NAV2,NAV3,NAV4,DRV role;
+    class NAV1,NAV2,NAV3,DRV,DRV2 role;
     class ORCH orch;
 ```
 
