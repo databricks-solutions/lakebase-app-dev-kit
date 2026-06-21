@@ -23,14 +23,14 @@ interface FeatureStatusSnapshot {
 | Field | Type | Meaning |
 |---|---|---|
 | `feature_id` | string | Echo of the queried feature id. |
-| `current_workflow_phase` | string \| null | Phase from `.tdd/workflow-state.json` (`discovery` / `architectural-review` / `test-list-construction` / `design-spec-gate` / `implementation` / `synthesis` / `review` / `shipped` / `abandoned`). `null` when `workflow-state.json` is missing. |
+| `current_workflow_phase` | string \| null | Phase from `.sftdd/workflow-state.json` (`discovery` / `architectural-review` / `test-list-construction` / `design-spec-gate` / `implementation` / `synthesis` / `review` / `shipped` / `abandoned`). `null` when `workflow-state.json` is missing. |
 | `current_workflow_pointer` | object \| null | Active workflow locus (feature/story/ac/cycle/experiment ids). `null` when `workflow-state.json` is missing. The pointer's `feature_id` may differ from the queried `feature_id` (the workflow may be focused elsewhere). |
-| `plans` | array | Per-story experiment plans, one entry `{story_id, plan}` per `.tdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
-| `test_list` | object \| null | Aggregated counts from `.tdd/features/<F>/test-list.json`. `null` when the test list has not been authored yet. |
-| `experiments` | array | One entry per directory under `.tdd/experiments/<F>/`. Empty when no experiments have been cut. |
-| `selection_log_recent` | array | Up to the last 5 entries from `.tdd/selection-log.md`, oldest-first. |
-| `open_smells` | array | Unresolved entries from `.tdd/smells.json` (entries with no `resolution` field). Global to the `.tdd/` tree; not filtered per feature in this version. |
-| `gates` | object \| null | Compact view of `.tdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all four gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/sftdd/gates.readGates()` for the full state including history + artifact_hashes. |
+| `plans` | array | Per-story experiment plans, one entry `{story_id, plan}` per `.sftdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
+| `test_list` | object \| null | Aggregated counts from `.sftdd/features/<F>/test-list.json`. `null` when the test list has not been authored yet. |
+| `experiments` | array | One entry per directory under `.sftdd/experiments/<F>/`. Empty when no experiments have been cut. |
+| `selection_log_recent` | array | Up to the last 5 entries from `.sftdd/selection-log.md`, oldest-first. |
+| `open_smells` | array | Unresolved entries from `.sftdd/smells.json` (entries with no `resolution` field). Global to the `.sftdd/` tree; not filtered per feature in this version. |
+| `gates` | object \| null | Compact view of `.sftdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all four gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/sftdd/gates.readGates()` for the full state including history + artifact_hashes. |
 
 ## Nested types
 
@@ -48,7 +48,7 @@ interface WorkflowPointer {
 
 ### ExperimentPlan
 
-See `scripts/sftdd/design-spec-gate.ts`. Persisted at `.tdd/features/<F>/plan.json`.
+See `scripts/sftdd/design-spec-gate.ts`. Persisted at `.sftdd/features/<F>/plan.json`.
 
 ```ts
 interface ExperimentPlan {

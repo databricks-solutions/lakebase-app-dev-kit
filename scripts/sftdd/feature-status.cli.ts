@@ -2,6 +2,7 @@
 // Thin CLI wrapper around getFeatureStatus + renderFeatureStatus.
 
 import { getFeatureStatus, renderFeatureStatus } from "./feature-status.js";
+import { resolveTddDir } from "./sftdd-paths.js";
 
 interface ParsedArgs {
   featureId?: string;
@@ -61,7 +62,7 @@ function main(): number {
     process.stderr.write(`Error: feature-id is required.\n\n${HELP}`);
     return 2;
   }
-  const tddDir = args.tdd ?? "./.tdd";
+  const tddDir = args.tdd ?? resolveTddDir();
   const snapshot = getFeatureStatus(tddDir, args.featureId);
   if (args.json) {
     process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");

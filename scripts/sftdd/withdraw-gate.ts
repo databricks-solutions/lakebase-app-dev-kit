@@ -20,6 +20,7 @@
 // schema_version bump).
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { join } from "path";
 import { withGatesLock } from "./gates-lock";
 import {
@@ -75,7 +76,7 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
     throw new Error("withdrawGate: reason must not be empty");
   }
 
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 

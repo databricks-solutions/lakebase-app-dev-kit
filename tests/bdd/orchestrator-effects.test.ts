@@ -16,7 +16,7 @@ import {
   type CommandRunner,
 } from "../../scripts/sftdd/orchestrator-effects";
 import { existsSync, readFileSync } from "node:fs";
-import { handbackFile } from "../../scripts/sftdd/tdd-paths";
+import { handbackFile } from "../../scripts/sftdd/sftdd-paths";
 
 function recordingRunner(): { runner: CommandRunner; calls: DriveCommand[] } {
   const calls: DriveCommand[] = [];

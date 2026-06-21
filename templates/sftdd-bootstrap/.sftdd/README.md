@@ -1,4 +1,4 @@
-# .tdd/
+# .sftdd/
 
 This directory is the canonical home for this project's TDD workflow state. It is read and written by `lakebase-sftdd-workflows` (`skills/lakebase-sftdd-workflows/`).
 

@@ -67,7 +67,8 @@ import {
   architectureJson,
   nfrsMd,
   featureNfrsMd,
-} from "./tdd-paths.js";
+  resolveTddDir,
+} from "./sftdd-paths.js";
 import { readConventions, assertArchitectureConforms } from "./architecture-conventions.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
 import { markSmellResolved } from "./smells.js";
@@ -197,7 +198,7 @@ export interface DecideEscalationResult {
  * spends from 0 -> 1.
  */
 export function decideEscalationAsHumanProxy(args: DecideEscalationArgs): DecideEscalationResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const approver = args.approver ?? HUMAN_PROXY;
   const at = new Date().toISOString();
 
@@ -631,7 +632,7 @@ function resolveArtifactInputs(
 }
 
 export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const approver = args.approver ?? HUMAN_PROXY;
   const fdir = featureDir(tddDir, args.featureId);
 
@@ -718,7 +719,7 @@ export interface SupplyResult {
 export function supplyArtifact(args: SupplyArgs): SupplyResult {
   const approver = args.approver ?? HUMAN_PROXY;
   const artifact = args.artifact ?? basename(args.to);
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
 
   const refuse = (reason: string): SupplyResult => {
     try {
@@ -815,7 +816,7 @@ function recordedRequestPairs(): Array<{ featureId: string; from: string }> {
  * interaction. Returns what was supplied + skipped.
  */
 export function supplyRequests(args: SupplyRequestsArgs = {}): SupplyRequestsResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const pairs = args.pairs ?? recordedRequestPairs();
   const supplied: string[] = [];
   const skipped: SupplyRequestsResult["skipped"] = [];

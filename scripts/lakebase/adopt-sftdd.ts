@@ -13,6 +13,7 @@
 // drive every behavior without spawning a process.
 
 import * as fs from "node:fs";
+import { ARTIFACT_ROOT } from "../sftdd/sftdd-paths.js";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -83,11 +84,11 @@ export function adoptTdd(args: AdoptTddArgs): AdoptTddResult {
       `Not a git repo root: ${args.projectDir}. Run \`git init\` first, or pass a path that already has \`.git/\`.`
     );
   }
-  const dest = path.join(args.projectDir, ".tdd");
+  const dest = path.join(args.projectDir, ARTIFACT_ROOT);
   const update = args.update === true || args.force === true;
   if (fs.existsSync(dest) && !update) {
     throw new Error(
-      `.tdd/ already exists at ${dest}. Re-run with --update to refresh missing files (drift is reported, not overwritten) or --update --force to overwrite drifted ones.`
+      `${ARTIFACT_ROOT}/ already exists at ${dest}. Re-run with --update to refresh missing files (drift is reported, not overwritten) or --update --force to overwrite drifted ones.`
     );
   }
 
@@ -168,7 +169,7 @@ function findBootstrapDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path.join(dir, "templates", "sftdd-bootstrap", ".tdd");
+    const candidate = path.join(dir, "templates", "sftdd-bootstrap", ARTIFACT_ROOT);
     if (fs.existsSync(candidate)) {
       cachedBootstrapDir = candidate;
       return cachedBootstrapDir;

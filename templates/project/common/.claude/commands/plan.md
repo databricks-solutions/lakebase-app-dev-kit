@@ -12,7 +12,7 @@ There is no feature request to begin with. A feature has to be teased out of the
 
 `/plan` does NOT create branches and does NOT enter the TDD phases. It produces `feature-request.md` files; `/design <feature-id>` is what claims the paired branch (its Step 0) and consumes one request.
 
-If `.tdd/` does not exist, this command hard-fails with the same setup hint `/design` gives: run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh. `/plan` does not lazy-initialize `.tdd/`.
+If `.sftdd/` does not exist, this command hard-fails with the same setup hint `/design` gives: run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh. `/plan` does not lazy-initialize `.sftdd/`.
 
 ## Step 0 (cannot skip): project intake is a precondition
 
@@ -29,11 +29,11 @@ Note: no `--feature`. `lakebase-sftdd-intake` without a feature checks only the 
 
 The Spec Author reads `product-overview.md` + `nfrs.md` (and `design-brief.md` for UI projects) and proposes the candidate features for **the next sprint only**, the next coherent, usable increment, NOT the whole product. Do not decompose or spec features beyond this sprint: the team folds what each sprint's working software reveals into the next `/plan`, so proposing the entire roadmap up front wastes work and pre-commits decisions the PO has not made. Later sprints get their own `/plan`.
 
-Invoke `@lakebase-sftdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.tdd/planning/feature-proposals.md`: a short list of **this sprint's** candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
+Invoke `@lakebase-sftdd-workflows/agents/spec-author` in its planning mode. It writes a proposal to `.sftdd/planning/feature-proposals.md`: a short list of **this sprint's** candidate features, each with a stable id, a one-line ask, the rationale (which part of the overview / which NFR it serves), and a rough priority. The proposal is the PO's INPUT; it is not a gate deliverable and is never a feature-request itself.
 
 ## Phase 2: the Product Owner prioritizes and authors the requests
 
-The orchestrator presents the Spec Author's proposals to the Product Owner. The PO decides which features go into THIS sprint and authors a `feature-request.md` for each, into `.tdd/features/<feature-id>/feature-request.md`. The orchestrator may draft each request from the matching proposal, but the PO owns the content and the prioritization: they keep, drop, reorder, and reword. They are encouraged to scope the sprint small and revisit after working software.
+The orchestrator presents the Spec Author's proposals to the Product Owner. The PO decides which features go into THIS sprint and authors a `feature-request.md` for each, into `.sftdd/features/<feature-id>/feature-request.md`. The orchestrator may draft each request from the matching proposal, but the PO owns the content and the prioritization: they keep, drop, reorder, and reword. They are encouraged to scope the sprint small and revisit after working software.
 
 Each `feature-request.md` is the open-ended, plain-English ask in the PO's voice (an H1 title + a non-empty body, no rigid structure by design). It is what `/design`'s Spec Author later reads as input and never overwrites. Confirm each conforms:
 
@@ -50,7 +50,7 @@ There is no human to interview. The Human Proxy stands in for the PO and SUPPLIE
 ```bash
 ./scripts/lk lakebase-sftdd-human-proxy supply \
   --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/<feature-id>.md" \
-  --to ".tdd/features/<feature-id>/feature-request.md" \
+  --to ".sftdd/features/<feature-id>/feature-request.md" \
   --artifact feature-request.md --feature "<feature-id>"
 ```
 
@@ -77,9 +77,9 @@ GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ```
 
 The driver routes planning to the role agents, at their resolved per-role models:
-- **spec-author** proposes the feature breakdown (`.tdd/sprints/<name>/feature-proposals.md`).
+- **spec-author** proposes the feature breakdown (`.sftdd/sprints/<name>/feature-proposals.md`).
 - **architect-reviewer** t-shirt-sizes the candidates
-  (`.tdd/planning/estimates.json`) so the PO can commit a backlog that fits sprint
+  (`.sftdd/planning/estimates.json`) so the PO can commit a backlog that fits sprint
   capacity. **Sizing is ON by default.** Opt OUT with `--no-sizing` (aliases
   `--no-planning-poker`, `--no-t-shirt-sizing`) when the candidate set is small
   enough not to need it, planning then goes straight propose -> author-requests.

@@ -9,10 +9,10 @@ application-local.properties
 # resolved run-config snapshot are local to a single run/feature drive and are
 # re-initialized each run, so they must never enter git history (a stray
 # `git add -A` from a build commit would otherwise carry one feature's log onto
-# the next branch). The committed .tdd corpus (features/, planning/, sprints/,
+# the next branch). The committed .sftdd corpus (features/, planning/, sprints/,
 # workflow-state.json, product-overview.md, nfrs.md, design/) is unaffected.
-.tdd/agent-log.jsonl
-.tdd/run-config.json
+.sftdd/agent-log.jsonl
+.sftdd/run-config.json
 
 # Per-agent local memory: each role subagent (memory: project) persists its own
 # learnings here mid-run. It is local + churny (re-written every run), not feature

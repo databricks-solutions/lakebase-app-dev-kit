@@ -9,7 +9,7 @@
 // so the honest-GREEN backstop still halts on any UNflagged regression.
 
 import * as fs from "node:fs";
-import { cycleDir } from "./tdd-paths.js";
+import { cycleDir } from "./sftdd-paths.js";
 import { join } from "node:path";
 
 export interface SupersededTests {

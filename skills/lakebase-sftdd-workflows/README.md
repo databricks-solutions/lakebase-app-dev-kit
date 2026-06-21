@@ -82,7 +82,7 @@ Once the test list is approved (Gate 3), the agent runs the design-spec gate ana
 The proposal is conservative by design: the analyzer's job is to surface the choice to the PO, not to decide. The PO signs off at Gate 4. The plan and the decision are persisted here:
 
 ```
-.tdd/
+.sftdd/
   features/
     F1-checkout/
       plan.json                  ← { feature_id, N, mode, strategies[], budget, rationale }
@@ -94,7 +94,7 @@ The proposal is conservative by design: the analyzer's job is to surface the cho
 With a story's plan approved, the agent cuts branches per the plan – one for N=1, multiple for N≥2 – forked from feature HEAD, and runs cycles against them in phase 4 (Implementation). Experiments are scoped to the story: `experiments/<feature>/<story>/<slug>/`.
 
 ```
-.tdd/
+.sftdd/
   experiments/
     F1-checkout/
       S1-submit/                 ← the story
@@ -118,7 +118,7 @@ Teardown is HITL-gated: the experiment record is preserved on disk by default ev
 Side-mode for exploration that sits outside the main flow. No test list, no gates, no rigor. The agent runs this when you ask to "spike X" or "explore whether Y is possible" – typically before authoring a spec, to de-risk a choice you'll later put into the design-spec gate.
 
 ```
-.tdd/
+.sftdd/
   spikes/
     explore-cart-storage/
       branch.txt                 ← Lakebase branch id (often deleted shortly after)
@@ -133,11 +133,11 @@ Before cutting any new experiment, the orchestrator checks the budget – at the
 
 ### 4. Cycle (RED / GREEN / REFACTOR)
 
-Inside an experiment branch the orchestrator advances one test-list item at a time through a Beck-style cycle. Each cycle is persisted as a JSON artifact under `.tdd/experiments/<feature>/<slug>/cycles/<cycleId>.json`, with stage transitions (`PLAN` → `RED` → `GREEN` → `REFACTOR`), the verdict (`passed | failed | skipped`), runner output, and any smells flagged during the cycle. The cycle primitives (`beginCycle`, `recordRunnerOutcome`, `markGreen`, `markRefactored`, `flagSmells`) are the only sanctioned way to write that history – the agent never edits cycle JSON by hand.
+Inside an experiment branch the orchestrator advances one test-list item at a time through a Beck-style cycle. Each cycle is persisted as a JSON artifact under `.sftdd/experiments/<feature>/<slug>/cycles/<cycleId>.json`, with stage transitions (`PLAN` → `RED` → `GREEN` → `REFACTOR`), the verdict (`passed | failed | skipped`), runner output, and any smells flagged during the cycle. The cycle primitives (`beginCycle`, `recordRunnerOutcome`, `markGreen`, `markRefactored`, `flagSmells`) are the only sanctioned way to write that history – the agent never edits cycle JSON by hand.
 
 ### 5. Smells
 
-After every cycle, and at each gate transition, the orchestrator runs the detector catalog (`detectAll`) over the feature state and writes any hits to `.tdd/features/<feature>/smells.json`. A hit surfaces a proposed remediation to the HITL – the orchestrator does not auto-fix. The catalog covers: cycle stall, fragility ratio, test cost spiral, test deletion attempts, boundary violations, test-list drift, API coherence drift, cross-experiment divergence, dead-requirement signal, and E2E-row perma-red.
+After every cycle, and at each gate transition, the orchestrator runs the detector catalog (`detectAll`) over the feature state and writes any hits to `.sftdd/features/<feature>/smells.json`. A hit surfaces a proposed remediation to the HITL – the orchestrator does not auto-fix. The catalog covers: cycle stall, fragility ratio, test cost spiral, test deletion attempts, boundary violations, test-list drift, API coherence drift, cross-experiment divergence, dead-requirement signal, and E2E-row perma-red.
 
 ### 6. Comparison, promote, synthesize (N≥2)
 
@@ -153,7 +153,7 @@ Experiments that hit a per-experiment cap (`max_cycles` or `max_wall_clock_minut
 
 ### 7. Gates and integrity
 
-Every HITL decision is recorded in `.tdd/features/<feature>/gates.json` via `approveGate` / `withdrawGate`. `verifyGateIntegrity` hashes the artifacts referenced by an approved gate (`hashArtifact`, `normalizeForHash`) and reports drift if the underlying files have changed since approval. `withGatesLock` serializes concurrent writes to the gates file so two agents (e.g. Navigator + Driver running in parallel) cannot corrupt state. `migrateGatesFromSelectionLog` upgrades legacy projects that pre-date the gates schema.
+Every HITL decision is recorded in `.sftdd/features/<feature>/gates.json` via `approveGate` / `withdrawGate`. `verifyGateIntegrity` hashes the artifacts referenced by an approved gate (`hashArtifact`, `normalizeForHash`) and reports drift if the underlying files have changed since approval. `withGatesLock` serializes concurrent writes to the gates file so two agents (e.g. Navigator + Driver running in parallel) cannot corrupt state. `migrateGatesFromSelectionLog` upgrades legacy projects that pre-date the gates schema.
 
 ## How to use
 
@@ -171,7 +171,7 @@ This is Spec Driven Development: you produce the spec before any product code. J
 
 > "I want to build a checkout flow. A shopper should be able to submit their cart and get back an order id with a 201. Empty carts should be rejected with a 400. There'll be more behaviors later (inventory checks, payment) but start with just place-order. Walk me through drafting the spec."
 
-When you're done, your `.tdd/features/F1-checkout/` tree has the feature, stories, ACs, architecture notes, and an ordered test list. If you'd rather author by hand, copy `templates/sftdd-bootstrap/.tdd/` into your project and edit the files using [`references/spec-format.md`](references/spec-format.md) as the layout reference.
+When you're done, your `.sftdd/features/F1-checkout/` tree has the feature, stories, ACs, architecture notes, and an ordered test list. If you'd rather author by hand, copy `templates/sftdd-bootstrap/.sftdd/` into your project and edit the files using [`references/spec-format.md`](references/spec-format.md) as the layout reference.
 
 ### 2. Build a feature end-to-end (the TDD lane, N=1 default)
 
@@ -208,7 +208,7 @@ For when you want to run something directly without the agent. Most TDD work goe
 |---|---|
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state (phase, plan, test-list completion, experiments, recent decisions, open smells). |
 | `lakebase-infra-runner [--instance <id>] [--branch <id>] [--project-dir <path>] [--comparison-branch <id>] [--junit-output <file>]` | Run the `[Infra]`-tag suite against a paired Lakebase branch. Backs the scaffolded `test:infra` script; reads `LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` when flags are absent. Emits JUnit XML when `--junit-output` is set. |
-| `node dist/scripts/sftdd/spec-sync.cli.js <tddDir>` | Walk the `.tdd/` tree and print drift reports. Exit 0 even when reports exist (warn-only by design). |
+| `node dist/scripts/sftdd/spec-sync.cli.js <tddDir>` | Walk the `.sftdd/` tree and print drift reports. Exit 0 even when reports exist (warn-only by design). |
 | `node dist/scripts/sftdd/test-list.cli.js <tddDir> <featureId> [storyId]` | Regenerate per-AC views from the feature-level master test list. With a `storyId`, instead write that story's scoped per-story test list (`stories/<story>/test-list-per-story.json`), the streaming build lane's per-story input. |
 | `bash tests/run_all.sh` (per scaffolded project) | Run every `validate_*.sh` in the project's `tests/` directory (the project's full validation suite). |
 
@@ -243,13 +243,13 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `cutExperiment(args)` | Cut a paired Lakebase branch for an experiment and write its record under `.tdd/experiments/<feature>/<slug>/`. |
+| `cutExperiment(args)` | Cut a paired Lakebase branch for an experiment and write its record under `.sftdd/experiments/<feature>/<slug>/`. |
 | `listExperiments(tddDir, featureId)` | Enumerate experiment records for a feature. |
 | `readOutcomes(tddDir, featureId, slug)` / `writeOutcomes(...)` | Read/write the per-experiment `outcomes.json` (tag matrix, tests passed/failed, schema diff summary). |
 | `recordTagRun(outcomes, tag, verdict)` / `tagRunCount(outcomes, tag)` / `acLayerToTag(layer)` | Helpers for maintaining the tag-matrix bookkeeping on `outcomes.json`. |
 | `deleteExperiment(args)` | Tear down a Lakebase branch and (optionally) the on-disk experiment record. HITL-gated. |
-| `cutSpike(args)` / `listSpikes(tddDir)` / `deleteSpike(args)` | Same lifecycle for the spike side-mode under `.tdd/spikes/`. |
-| `collectSpikeInputs({ tddDir, featureId })` / `attachSpikeInputs(args)` | Scan `.tdd/spikes/` for notes tagged with a feature id (via YAML frontmatter or body line) and persist the resolved inputs onto the feature's `plan.json`. |
+| `cutSpike(args)` / `listSpikes(tddDir)` / `deleteSpike(args)` | Same lifecycle for the spike side-mode under `.sftdd/spikes/`. |
+| `collectSpikeInputs({ tddDir, featureId })` / `attachSpikeInputs(args)` | Scan `.sftdd/spikes/` for notes tagged with a feature id (via YAML frontmatter or body line) and persist the resolved inputs onto the feature's `plan.json`. |
 | `archiveExperiment(args)` | Move an experiment record into `_archive/` without tearing down its branch. |
 | `checkPerExperimentCap(args)` / `recordExperimentCap(args)` / `clearExperimentCap(args)` | Per-experiment cap helpers. `checkPerExperimentCap` is a pure read; `recordExperimentCap` writes `outcomes.capped`; `clearExperimentCap` removes it on the PO's `extend` reply. |
 
@@ -279,7 +279,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget incl. `per_experiment` default cap, rationale, plus `spike_inputs[]` populated automatically from any tagged spike under `.tdd/spikes/`). |
+| `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget incl. `per_experiment` default cap, rationale, plus `spike_inputs[]` populated automatically from any tagged spike under `.sftdd/spikes/`). |
 | `recordPlan(tddDir, plan, deciderEmail?)` | Persist an approved plan to `plan.json` and append the decision to `selection-log.md`. |
 | `readPlan(tddDir, featureId)` / `writePlan(tddDir, plan)` | Direct plan IO. |
 | `checkE2eGate({ tddDir, featureId })` | Pre-merge guard: refuses to advance if any `[E2E]`-tagged AC is still red. |
@@ -327,10 +327,10 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `readFeature(tddDir, featureId)` / `writeFeature(tddDir, feature)` | Read/write the feature record (`.tdd/features/<id>/feature-spec.json`). |
+| `readFeature(tddDir, featureId)` / `writeFeature(tddDir, feature)` | Read/write the feature record (`.sftdd/features/<id>/feature-spec.json`). |
 | `readWorkflowState(tddDir)` / `writeWorkflowState(tddDir, state)` | Cross-feature workflow pointer (which feature is "current", last gate, etc.). |
-| `validateSpec(tddDir)` | Walk the `.tdd/` tree and return `DriftReport[]`. Backs `spec-sync.cli.js`. |
-| `writeArtifact(args)` / `listArtifacts(tddDir, featureId, kind?)` / `readArtifact(args)` | Generic artifact IO under `.tdd/features/<id>/artifacts/`. |
+| `validateSpec(tddDir)` | Walk the `.sftdd/` tree and return `DriftReport[]`. Backs `spec-sync.cli.js`. |
+| `writeArtifact(args)` / `listArtifacts(tddDir, featureId, kind?)` / `readArtifact(args)` | Generic artifact IO under `.sftdd/features/<id>/artifacts/`. |
 
 ### Status
 
@@ -347,7 +347,7 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 ### Spec adapters
 
-`SpecAdapter` is the pluggable surface that syncs `.tdd/` entities to/from an external tracker. The skill ships two implementations:
+`SpecAdapter` is the pluggable surface that syncs `.sftdd/` entities to/from an external tracker. The skill ships two implementations:
 
 - `markdownAdapter` (instance) / `MarkdownAdapter` (class) – the default; treats the on-disk Markdown + JSON pair as the source of truth. `pushFeature` / `pushStory` / `pushAC` emit typed external_ids (`markdown:feature:<id>` / `markdown:story:<feature>:<id>` / `markdown:ac:_:<story>:<id>`). `pull(externalId, ctx)` resolves the matching entity from disk and also accepts the legacy `markdown:<id>` shape via a tree scan for backward compatibility.
 - `JiraAdapter` (constructed with `JiraAdapterConfig`) – mirrors features/stories/ACs to JIRA hierarchy. Configured by the project's `design.pre-hook.md` in scaffolded projects.

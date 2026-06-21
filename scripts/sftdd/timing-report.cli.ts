@@ -8,6 +8,7 @@
 // Exit codes: 0 ok; 2 bad args.
 
 import { join } from "path";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { isCliEntry } from "../util/cli-entry.js";
 import { timingReportFromLog, formatTimingReport } from "./timing-report.js";
 import { readRunConfig, formatRunConfig } from "./run-config.js";
@@ -70,7 +71,7 @@ export function runTimingCli(argv: string[]): number {
   );
   // P0.1: pair the timing with the run's model + option matrix so it is
   // self-describing and two reports are A/B-comparable. Read from the same .tdd.
-  const tddDir = parsed.tddDir ?? join(process.cwd(), ".tdd");
+  const tddDir = parsed.tddDir ?? resolveTddDir();
   const config = readRunConfig(tddDir) ?? null;
   if (parsed.json) {
     process.stdout.write(`${JSON.stringify({ config, timing: report }, null, 2)}\n`);

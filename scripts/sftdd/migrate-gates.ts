@@ -27,7 +27,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { hashArtifact } from "./gate-hash";
-import { findFeatureDir } from "./tdd-paths.js";
+import { resolveTddDir, findFeatureDir } from "./sftdd-paths.js";
 import {
   defaultGatesState,
   readGates,
@@ -79,7 +79,7 @@ const APPROVED_BY_RE = /\*\*(?:Approved|Withdrawn) by:\*\*\s*(\S.*?)\s*$/;
 export function migrateGatesFromSelectionLog(
   args: MigrateGatesArgs
 ): MigrateGatesResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
 
   // Refusal: existing gates.json without force.
   try {
@@ -160,7 +160,7 @@ export function migrateGatesFromSelectionLog(
 }
 
 function gatesFileExists(tddDir: string, featureId: string): boolean {
-  // One feature-dir resolution rule (tdd-paths), not a local copy.
+  // One feature-dir resolution rule (sftdd-paths), not a local copy.
   const dir = findFeatureDir(tddDir, featureId);
   return dir ? existsSync(join(dir, "gates.json")) : false;
 }

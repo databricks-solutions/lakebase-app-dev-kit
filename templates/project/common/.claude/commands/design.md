@@ -8,7 +8,7 @@ Drives a feature from idea to spec to architect review to test list. This wraps 
 /design <feature-id> [--reviewer @user] [--test-strategist @user]
 ```
 
-If `.tdd/` does not exist in the project root, this command hard-fails with a setup hint instead of lazy-initializing: the TDD workflow has invariants (`.tdd/` shape, `selection-log.md`) a lazy bootstrap cannot reconstruct. Run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh.
+If `.sftdd/` does not exist in the project root, this command hard-fails with a setup hint instead of lazy-initializing: the TDD workflow has invariants (`.sftdd/` shape, `selection-log.md`) a lazy bootstrap cannot reconstruct. Run the project's TDD adoption bin first, or `lakebase-create-project` when starting fresh.
 
 ## Step 0 (cannot skip): claim the paired branch via the SCM workflow
 
@@ -39,21 +39,21 @@ If step 0 cannot complete, REFUSE to proceed to phase 1. Do not work around. The
 
 ## Step 0.5 (cannot skip): HIL intake, a hard precondition
 
-The design phases READ the HIL's intent from intake artifacts (`product-overview.md`, `nfrs.md`, the feature's `feature-request.md`, and `design-brief.md` for UI projects). These are not gate deliverables, they are PRECONDITIONS: `/design` MUST NOT enter phase 1 until they exist and conform. `product-overview.md` and `nfrs.md` are PROJECT-level (`.tdd/`), living, and refined across features; `feature-request.md` is per-feature; `design-brief.md` is project-level under `.tdd/design/`.
+The design phases READ the HIL's intent from intake artifacts (`product-overview.md`, `nfrs.md`, the feature's `feature-request.md`, and `design-brief.md` for UI projects). These are not gate deliverables, they are PRECONDITIONS: `/design` MUST NOT enter phase 1 until they exist and conform. `product-overview.md` and `nfrs.md` are PROJECT-level (`.sftdd/`), living, and refined across features; `feature-request.md` is per-feature; `design-brief.md` is project-level under `.sftdd/design/`.
 
 The per-feature `feature-request.md` is NOT authored here. It is the Product Owner's prioritized ask, authored upstream by `/plan` (sprint planning, where the Spec Author proposes the feature breakdown and the PO authors the requests for the sprint). `/design <feature-id>` only REQUIRES that feature's request to already exist and conform; if it is missing, run `/plan` first. The project-level intake (`product-overview.md` / `nfrs.md` / `design-brief.md`) is facilitated below by whoever reaches it first, `/plan` or `/design`.
 
 **The orchestrator owns facilitating intake from the human.** Before phase 1, for each required artifact that is absent or non-conformant, the orchestrator obtains it:
 
 - **Interactive (a human is present):** run the intake interview, draft the artifact, and present it for the HIL to review and edit. The interviews:
-  1. **Product -> `.tdd/product-overview.md`** (Product Owner): what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Open-ended product intent, no implementation detail.
-  2. **NFR -> `.tdd/nfrs.md`** (the Architect's intake): walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL gives a hard requirement, a preference, "N/A", or "out of bounds". Write `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref`.
-  3. **UX -> `.tdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra): name 1-3 reference websites and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Write the required `## References` section.
+  1. **Product -> `.sftdd/product-overview.md`** (Product Owner): what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Open-ended product intent, no implementation detail.
+  2. **NFR -> `.sftdd/nfrs.md`** (the Architect's intake): walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL gives a hard requirement, a preference, "N/A", or "out of bounds". Write `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref`.
+  3. **UX -> `.sftdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra): name 1-3 reference websites and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Write the required `## References` section.
 - **Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_TDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
 
   ```bash
   ./scripts/lk lakebase-sftdd-human-proxy supply \
-    --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".tdd/nfrs.md" --artifact nfrs.md
+    --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".sftdd/nfrs.md" --artifact nfrs.md
   ```
 
 **UI projects:** a project is UI when `LAKEBASE_TDD_UI=1` (set by the orchestrator / smoke) or the feature has a user-facing surface. For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless) and pass `--ui` to the precondition so it requires the brief; the UX Designer phase then runs. For API / CLI / Infra projects, skip the UX track entirely.
@@ -90,7 +90,7 @@ The driver:
 - **Routes deterministically** (routing is code, not an LLM orchestrator): it spawns each role as a
   subagent (`claude -p --agent <role>`, at the resolved per-role model via
   `lakebase-sftdd-agent-model`) and emits the phase/handoff log to
-  `.tdd/agent-log.jsonl` as code. Tail it: `lakebase-sftdd-log --read --feature <id> --min-level info`.
+  `.sftdd/agent-log.jsonl` as code. Tail it: `lakebase-sftdd-log --read --feature <id> --min-level info`.
 - `--only design` STOPS when every story's spec gate is approved, without
   building. The roles are `@lakebase-sftdd-workflows/agents/{spec-author,ux-designer,architect-reviewer,test-strategist}`.
 

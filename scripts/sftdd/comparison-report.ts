@@ -10,7 +10,7 @@
 
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { featureResolved } from "./tdd-paths.js";
+import { featureResolved } from "./sftdd-paths.js";
 import type { ComparisonReport, ExperimentRow, TagMatrixRow } from "./compare-experiments.js";
 
 export interface WriteComparisonReportArgs {

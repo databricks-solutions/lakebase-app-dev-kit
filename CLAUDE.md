@@ -7,9 +7,9 @@ This repo is the Lakebase-backed application development kit. See [`README.md`](
 Every project created with `lakebase-create-project` gets two top-level scaffolds:
 
 - **`scripts/`** – kit-provided substrate (consumed via git URL pin in the project's package.json).
-- **`.tdd/`** – TDD workflow state read and written by `lakebase-sftdd-workflows`. Layout: `features/<F>/`, `experiments/<F>/<exp>/`, `spikes/<slug>/`, `synthesis/<F>/`, `cycles/<F>/<S>/<AC>/`, `selection-log.md`, `smells.json`, `workflow-state.json`. See [`templates/sftdd-bootstrap/.tdd/README.md`](templates/sftdd-bootstrap/.tdd/README.md) for the canonical reference.
+- **`.sftdd/`** – TDD workflow state read and written by `lakebase-sftdd-workflows`. Layout: `features/<F>/`, `experiments/<F>/<exp>/`, `spikes/<slug>/`, `synthesis/<F>/`, `cycles/<F>/<S>/<AC>/`, `selection-log.md`, `smells.json`, `workflow-state.json`. See [`templates/sftdd-bootstrap/.sftdd/README.md`](templates/sftdd-bootstrap/.sftdd/README.md) for the canonical reference.
 
-The `.tdd/` directory is created at scaffold time by `layDownTddScaffold()` in `scripts/lakebase/create-project.ts`. Pass `enableTdd: false` to opt out.
+The `.sftdd/` directory is created at scaffold time by `layDownTddScaffold()` in `scripts/lakebase/create-project.ts`. Pass `enableTdd: false` to opt out.
 
 ## When working in this repo
 

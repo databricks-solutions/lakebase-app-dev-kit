@@ -1,7 +1,7 @@
 // observability: a centralized structured logger for the TDD-workflow
 // role agents. The workflow is a relay of isolated-memory agents; each emits
 // what it is doing (and why, at debug level) so the whole run is
-// reconstructable from one file: .tdd/agent-log.jsonl (JSON Lines).
+// reconstructable from one file: .sftdd/agent-log.jsonl (JSON Lines).
 //
 // emitAgentLogEvent validates against agent-log-event.schema.json, stamps the
 // timestamp, and atomically appends a single line. readAgentLog parses + filters.
@@ -11,6 +11,7 @@
 // at line boundaries without corrupting each other (log lines are small).
 
 import { appendFileSync, existsSync, readFileSync } from "fs";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { join } from "path";
 import { getValidator, formatSchemaErrors } from "./schema-loader";
 import { renderEventMessage, type AgentLogEventName } from "./agent-log-events.js";
@@ -89,7 +90,7 @@ export interface AgentLogEventInput {
 }
 
 export interface AgentLogIoOpts {
-  /** Path to the .tdd/ root. Default: "./.tdd". */
+  /** Path to the .sftdd/ root. Default: "./.sftdd". */
   tddDir?: string;
   /** Test seam for a deterministic clock. */
   now?: () => Date;
@@ -106,7 +107,7 @@ function logFilePath(tddDir: string): string {
  * full event that was written.
  */
 export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const now = opts.now ?? (() => new Date());
   const slots = input.slots ?? {};
   // The message is RENDERED from the event's template + the render context (the
@@ -163,7 +164,7 @@ export interface ReadAgentLogOpts extends AgentLogIoOpts {
  * Malformed lines are skipped (a partially-written tail never throws).
  */
 export function readAgentLog(opts: ReadAgentLogOpts = {}): AgentLogEvent[] {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const file = logFilePath(tddDir);
   if (!existsSync(file)) return [];
 

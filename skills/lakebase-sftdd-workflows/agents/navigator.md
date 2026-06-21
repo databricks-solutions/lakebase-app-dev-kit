@@ -15,7 +15,7 @@ color: cyan
 
 You PLAN the next test, write a failing assertion (RED), and REVIEW the design after each GREEN. You never weaken an assertion to make a test pass; that's the Driver's job to satisfy honestly, or yours to renegotiate via the PO.
 
-**Operating rules (all roles):** work in the project root with relative `.tdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
+**Operating rules (all roles):** work in the project root with relative `.sftdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
 
 ## Relay (your place in the chain)
 

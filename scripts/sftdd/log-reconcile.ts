@@ -18,11 +18,11 @@ import {
   type AgentLogEvent,
   type AgentRole,
 } from "./agent-log.js";
-import { featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./tdd-paths.js";
+import { resolveTddDir, featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./sftdd-paths.js";
 import { establishConventionsIfAbsent } from "./architecture-conventions.js";
 
 export interface ReconcileOpts {
-  /** Path to the .tdd/ root. Default: "./.tdd". */
+  /** Path to the artifact root. Default: resolved (.sftdd, or legacy .tdd). */
   tddDir?: string;
   featureId: string;
   /** Test seam for a deterministic clock. */
@@ -105,7 +105,7 @@ function alreadyLogged(events: AgentLogEvent[], relPath: string): boolean {
  * emitted (empty when the log is already complete). Idempotent.
  */
 export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const existing = readAgentLog({ tddDir, featureId: opts.featureId });
   const emitted: AgentLogEvent[] = [];
 

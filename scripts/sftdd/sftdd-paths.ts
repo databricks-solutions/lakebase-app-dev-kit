@@ -11,6 +11,30 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
 
+// ── Artifact root name (single source of truth) ───────────────────
+//
+// The on-disk directory that holds all workflow artifacts + logs. Named
+// ".sftdd" to match the lakebase-sftdd-workflows skill. It was historically
+// ".tdd" and that name was copy-pasted as a default across ~20 call sites; this
+// is the one place the name is now defined. Existing projects keep their legacy
+// ".tdd" (dual-read via resolveTddDir) and are auto-migrated to ".sftdd" by the
+// orchestrator on the next run (see migrate-artifact-dir.ts).
+export const ARTIFACT_ROOT = ".sftdd";
+export const LEGACY_ARTIFACT_ROOT = ".tdd";
+
+/** Resolve the artifact-root path for a project. Prefers the current
+ *  ".sftdd"; honors a legacy ".tdd" when that is what exists on disk; defaults
+ *  to ".sftdd" for a fresh project. Pure read: never creates or renames. Pass
+ *  the project dir (defaults to the current working directory) and use the
+ *  result anywhere a ".tdd"/"./.tdd" default literal used to be hardcoded. */
+export function resolveTddDir(projectDir: string = process.cwd()): string {
+  const next = join(projectDir, ARTIFACT_ROOT);
+  if (fs.existsSync(next)) return next;
+  const legacy = join(projectDir, LEGACY_ARTIFACT_ROOT);
+  if (fs.existsSync(legacy)) return legacy;
+  return next;
+}
+
 // ── Top-level dirs ────────────────────────────────────────────────
 export const featuresDir = (tdd: string): string => join(tdd, "features");
 export const planningDir = (tdd: string): string => join(tdd, "planning");

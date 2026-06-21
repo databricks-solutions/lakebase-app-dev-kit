@@ -4,7 +4,7 @@ Cross-cutting rules for all TDD-workflow role agents (Product Owner, Spec Author
 
 ## 1. Work within the project, never scan the filesystem
 
-Your working directory is the project root. Read + write artifacts under `.tdd/` (and the project source tree) using **relative** paths. **Never run a filesystem-wide scan** (`find /`, `grep -r /`, walking from `/` or `$HOME`): it stalls for minutes, can hang on network mounts, and is never necessary. If something isn't under the project root, surface that, don't go hunting.
+Your working directory is the project root. Read + write artifacts under `.sftdd/` (and the project source tree) using **relative** paths. **Never run a filesystem-wide scan** (`find /`, `grep -r /`, walking from `/` or `$HOME`): it stalls for minutes, can hang on network mounts, and is never necessary. If something isn't under the project root, surface that, don't go hunting.
 
 ## 2. Produce conformant artifacts from your prompt, not by reading schemas
 
@@ -12,7 +12,7 @@ The shape of every artifact you write is in your role doc + [spec-format.md](spe
 
 ## 3. The artifact on disk is the only channel between roles
 
-Roles share no memory. The next role sees only what you wrote to `.tdd/`. Put your reasoning + recommended resolutions **inside** the artifact, not in a message that evaporates.
+Roles share no memory. The next role sees only what you wrote to `.sftdd/`. Put your reasoning + recommended resolutions **inside** the artifact, not in a message that evaporates.
 
 ## 4. Emit progress as you work
 

@@ -13,7 +13,7 @@ import {
   acsDir,
   acJson,
   handbackFile,
-} from "../../scripts/sftdd/tdd-paths";
+} from "../../scripts/sftdd/sftdd-paths";
 
 import {
   SMELL_CATALOG,

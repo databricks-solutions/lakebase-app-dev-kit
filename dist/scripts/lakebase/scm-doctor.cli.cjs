@@ -66,6 +66,33 @@ function isCliEntry(importMetaUrl2) {
 
 // scripts/lakebase/scm-doctor.ts
 var fs12 = __toESM(require("fs"), 1);
+
+// scripts/sftdd/sftdd-paths.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_path = require("path");
+var ARTIFACT_ROOT = ".sftdd";
+var LEGACY_ARTIFACT_ROOT = ".tdd";
+function resolveTddDir(projectDir = process.cwd()) {
+  const next = (0, import_node_path.join)(projectDir, ARTIFACT_ROOT);
+  if (fs.existsSync(next)) return next;
+  const legacy = (0, import_node_path.join)(projectDir, LEGACY_ARTIFACT_ROOT);
+  if (fs.existsSync(legacy)) return legacy;
+  return next;
+}
+var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
+var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
+function findFeatureDir(tdd, featureId) {
+  const root = featuresDir(tdd);
+  if (!fs.existsSync(root)) return void 0;
+  const exact = (0, import_node_path.join)(root, featureId);
+  if (fs.existsSync(exact)) return exact;
+  const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
+  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
+}
+
+// scripts/lakebase/scm-doctor.ts
 var path11 = __toESM(require("path"), 1);
 
 // scripts/lakebase/branch-utils.ts
@@ -367,7 +394,7 @@ async function getCurrentBranch(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-var fs = __toESM(require("fs"), 1);
+var fs2 = __toESM(require("fs"), 1);
 var path = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
@@ -386,8 +413,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs.existsSync(p)) return null;
-  const raw = fs.readFileSync(p, "utf8");
+  if (!fs2.existsSync(p)) return null;
+  const raw = fs2.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -416,13 +443,13 @@ function writeWorkflowState(projectDir, state) {
 ${summary}`);
   }
   const dir = path.join(projectDir, ".lakebase");
-  fs.mkdirSync(dir, { recursive: true });
+  fs2.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs2.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs.renameSync(tmp, target);
+  fs2.renameSync(tmp, target);
 }
 function initWorkflowState(args) {
   return {
@@ -699,7 +726,7 @@ async function adoptScmState(args) {
 }
 
 // scripts/lakebase/paired-branch.ts
-var fs4 = __toESM(require("fs"), 1);
+var fs5 = __toESM(require("fs"), 1);
 var path3 = __toESM(require("path"), 1);
 var import_node_child_process7 = require("child_process");
 
@@ -1132,7 +1159,7 @@ async function isDirty(args) {
 }
 
 // scripts/lakebase/env-file.ts
-var fs2 = __toESM(require("fs"), 1);
+var fs3 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
 var CONNECTION_KEYS = [
   "DATABASE_URL",
@@ -1142,7 +1169,7 @@ var CONNECTION_KEYS = [
   "LAKEBASE_HOST"
 ];
 function updateEnvConnection(args) {
-  const existing = fs2.existsSync(args.envPath) ? fs2.readFileSync(args.envPath, "utf-8") : "";
+  const existing = fs3.existsSync(args.envPath) ? fs3.readFileSync(args.envPath, "utf-8") : "";
   const preserved = existing.split("\n").filter((line) => {
     const trimmed = line.trimStart();
     return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
@@ -1162,12 +1189,12 @@ function updateEnvConnection(args) {
   const block = lines.join("\n");
   const content = preserved ? `${preserved}
 ${block}` : block;
-  fs2.mkdirSync(path2.dirname(args.envPath), { recursive: true });
-  fs2.writeFileSync(args.envPath, content);
+  fs3.mkdirSync(path2.dirname(args.envPath), { recursive: true });
+  fs3.writeFileSync(args.envPath, content);
 }
 
 // scripts/lakebase/databricks-profile.ts
-var fs3 = __toESM(require("fs"), 1);
+var fs4 = __toESM(require("fs"), 1);
 function normalizeHost(host) {
   return host.trim().replace(/\/+$/, "").toLowerCase();
 }
@@ -1204,8 +1231,8 @@ async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) 
 }
 async function ensureProfilePinned(args) {
   const { envPath } = args;
-  if (!fs3.existsSync(envPath)) return { reason: "no-env" };
-  const lines = fs3.readFileSync(envPath, "utf-8").split("\n");
+  if (!fs4.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs4.readFileSync(envPath, "utf-8").split("\n");
   const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
   if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
     return { reason: "already-pinned" };
@@ -1219,7 +1246,7 @@ async function ensureProfilePinned(args) {
   const profile = await resolve2(host);
   if (!profile) return { reason: "no-match" };
   lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
-  fs3.writeFileSync(envPath, lines.join("\n"));
+  fs4.writeFileSync(envPath, lines.join("\n"));
   return { pinned: profile };
 }
 
@@ -1275,7 +1302,7 @@ function resolveFeatureStartPoint(cwd, parentBranch) {
 }
 async function assertCleanForFork(cwd, startPoint) {
   if (!startPoint) return;
-  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
     );
@@ -1588,24 +1615,6 @@ var import_path2 = require("path");
 
 // scripts/sftdd/story-pipeline.ts
 var import_fs = require("fs");
-
-// scripts/sftdd/tdd-paths.ts
-var fs5 = __toESM(require("fs"), 1);
-var import_node_path = require("path");
-var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
-var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
-var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
-function findFeatureDir(tdd, featureId) {
-  const root = featuresDir(tdd);
-  if (!fs5.existsSync(root)) return void 0;
-  const exact = (0, import_node_path.join)(root, featureId);
-  if (fs5.existsSync(exact)) return exact;
-  const matches = fs5.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
-  return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
-}
-
-// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -2640,7 +2649,7 @@ async function runDoctor(args) {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
-  for (const stale of findStaleBranches(path11.join(projectDir, ".tdd"))) {
+  for (const stale of findStaleBranches(resolveTddDir(projectDir))) {
     const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
     findings.push({
       id: `stale-${stale.kind}`,

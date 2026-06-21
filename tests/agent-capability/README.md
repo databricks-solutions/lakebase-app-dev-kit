@@ -19,7 +19,7 @@ end-to-end smoke. (It is exactly what caught the spec-author shipping
   `claude -p "<task>" --agent <role> --model <m> --strict-mcp-config`, then
   conformance-checks each produced artifact with `checkArtifactConformance`.
 - `fixtures/<role>/` , the committed inputs for a case, laid out as the role
-  expects (e.g. `.tdd/product-overview.md`, `.tdd/features/<F>/feature-request.md`).
+  expects (e.g. `.sftdd/product-overview.md`, `.sftdd/features/<F>/feature-request.md`).
 - `agents-capability.test.ts` , the runner.
 
 ## Running

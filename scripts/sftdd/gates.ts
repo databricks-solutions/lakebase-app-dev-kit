@@ -1,6 +1,6 @@
 // Structured HITL gate state for the TDD workflow.
 //
-// On-disk: .tdd/features/<F>/gates.json
+// On-disk: .sftdd/features/<F>/gates.json
 //
 // gates.json is the substrate's authoritative gate state. selection-log.md
 // stays as narrative-of-record (humans grep it when debugging). The
@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
-import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
+import { resolveTddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
 
 export const GATES_SCHEMA_VERSION = 1;
 
@@ -57,7 +57,7 @@ export interface GatesState {
 }
 
 export interface GatesIoOpts {
-  /** Path to the .tdd/ root. Default: "./.tdd". */
+  /** Path to the .sftdd/ root. Default: "./.sftdd". */
   tddDir?: string;
 }
 
@@ -84,7 +84,7 @@ export function defaultGatesState(featureId: string): GatesState {
  * exists but is malformed.
  */
 export function readGates(featureId: string, opts: GatesIoOpts = {}): GatesState {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const file = gatesFilePath(tddDir, featureId);
   if (!existsSync(file)) {
     return defaultGatesState(featureId);
@@ -114,7 +114,7 @@ export function writeGates(state: GatesState, opts: GatesIoOpts = {}): void {
   if (state.feature_id.length === 0) {
     throw new Error("writeGates: state.feature_id must not be empty");
   }
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const file = gatesFilePath(tddDir, state.feature_id);
   const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
   const payload = JSON.stringify(state, null, 2) + "\n";

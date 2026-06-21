@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { readMasterTestList, type TestListItem } from "./test-list";
 import { readPlan, type ExperimentPlan } from "./design-spec-gate";
-import { storiesDir as storiesDirOf } from "./tdd-paths.js";
+import { storiesDir as storiesDirOf } from "./sftdd-paths.js";
 import {
   listExperiments,
   listExperimentStories,

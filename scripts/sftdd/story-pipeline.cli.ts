@@ -54,6 +54,7 @@ import {
   type StoryPipeline,
 } from "./story-pipeline";
 import { join } from "path";
+import { resolveTddDir } from "./sftdd-paths.js";
 
 interface Args {
   cmd?: string;
@@ -144,7 +145,7 @@ function rejectBatchedDraft(
 
 function main(): number {
   const args = parse(process.argv.slice(2));
-  const tddDir = args.tddDir ?? join(process.cwd(), ".tdd");
+  const tddDir = args.tddDir ?? resolveTddDir();
   if (!args.cmd) return usage("missing subcommand");
   if (!args.feature && args.cmd !== "help") return usage("missing --feature");
   const feature = args.feature as string;

@@ -1,13 +1,13 @@
 # Spec format
 
-The on-disk `.tdd/` layout that the lakebase-sftdd-workflows substrate reads and writes. Portable, tool-agnostic. Every structured element has both a markdown narrative (for humans) and a JSON contract (for agents, validation, and adapter sync).
+The on-disk `.sftdd/` layout that the lakebase-sftdd-workflows substrate reads and writes. Portable, tool-agnostic. Every structured element has both a markdown narrative (for humans) and a JSON contract (for agents, validation, and adapter sync).
 
-This `.tdd/` tree is the artifact of **Spec Driven Development (SDD)**: the design lane (`/design`) writes the feature spec, stories, ACs, architecture, and ordered test list here, and freezes them at the `spec` + `test_list` gates. The **Test Driven Development (TDD)** build lane (`/build`) then reads this tree as its source of truth, never the other way around: the spec drives the code.
+This `.sftdd/` tree is the artifact of **Spec Driven Development (SDD)**: the design lane (`/design`) writes the feature spec, stories, ACs, architecture, and ordered test list here, and freezes them at the `spec` + `test_list` gates. The **Test Driven Development (TDD)** build lane (`/build`) then reads this tree as its source of truth, never the other way around: the spec drives the code.
 
 ## Directory layout
 
 ```
-.tdd/
+.sftdd/
   product-overview.md                ← Product Owner's project-level overview (open-ended; software is a product)
   nfrs.md                            ← non-functional-requirements brief; the Architect's intake (project-level)
   workflow-state.json                ← current phase + locus (feature/story/ac/cycle/experiment)
@@ -70,9 +70,9 @@ Requester's original ask is `feature-request.md` and is never overwritten.
 
 | Artifact | Author | Scope |
 |---|---|---|
-| `product-overview.md` | Product Owner | Project-level (`.tdd/` root). Open-ended intent; not part of the per-feature spec gate. |
-| `nfrs.md` | Product Owner / HIL | Non-functional-requirements brief; the Architect's intake. Project-level (`.tdd/nfrs.md`) + optional per-feature (`.tdd/features/<F>/nfrs.md`). Each Required item has an `R<n>` id the Architect covers via `brief_ref`. |
-| `feature-proposals.md` | Spec Author | Project-level (`.tdd/planning/`). The Spec Author's sprint-planning proposal of how to divide the work into features (`/plan` phase 1), the PO's INPUT. Not a per-feature spec-gate deliverable. |
+| `product-overview.md` | Product Owner | Project-level (`.sftdd/` root). Open-ended intent; not part of the per-feature spec gate. |
+| `nfrs.md` | Product Owner / HIL | Non-functional-requirements brief; the Architect's intake. Project-level (`.sftdd/nfrs.md`) + optional per-feature (`.sftdd/features/<F>/nfrs.md`). Each Required item has an `R<n>` id the Architect covers via `brief_ref`. |
+| `feature-proposals.md` | Spec Author | Project-level (`.sftdd/planning/`). The Spec Author's sprint-planning proposal of how to divide the work into features (`/plan` phase 1), the PO's INPUT. Not a per-feature spec-gate deliverable. |
 | `feature-request.md` | Product Owner (as Feature Requester) | Per-feature. The PO's prioritized ask, authored at `/plan` (sprint planning) from the Spec Author's proposal; the Spec Author's `/design` INPUT, read but never overwritten. |
 | `feature-spec.md` | Spec Author | Per-feature narrative draft-spec (Summary, Stories, Out of scope, Open questions). |
 | `feature-spec.json` | Spec Author | Per-feature machine contract (validated against `feature.schema.json`). |

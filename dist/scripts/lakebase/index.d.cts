@@ -1753,7 +1753,7 @@ interface CreateProjectArgs {
      * branch exists.
      */
     tiers?: 1 | 2 | 3;
-    /** Lay down the .tdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
+    /** Lay down the .sftdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
     enableTdd?: boolean;
     /**
      * Wire Playwright into the project so `[E2E]`-tagged AC rows have a

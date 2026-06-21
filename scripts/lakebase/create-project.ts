@@ -6,6 +6,7 @@
 // from the extension; sync back to the extension via.
 
 import * as fs from "node:fs";
+import { ARTIFACT_ROOT } from "../sftdd/sftdd-paths.js";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { writeEnvFile } from "./env-file.js";
@@ -70,7 +71,7 @@ export interface CreateProjectArgs {
    * branch exists.
    */
   tiers?: 1 | 2 | 3;
-  /** Lay down the .tdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
+  /** Lay down the .sftdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
   enableTdd?: boolean;
   /**
    * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
@@ -247,7 +248,7 @@ export async function createProject(
     report: (m, d) => report(m, d),
   });
 
-  // ── Step 5b: .tdd/ scaffold (lakebase-sftdd-workflows bootstrap) ────────
+  // ── Step 5b: .sftdd/ scaffold (lakebase-sftdd-workflows bootstrap) ────────
   if (enableTdd) {
     report("Scaffolding .tdd/ workflow directory...");
     layDownTddScaffold(projectDir);
@@ -504,13 +505,13 @@ export async function createProject(
 export { writeEnvFile, verifyHooks, verifyWorkflows, verifyProject };
 
 /**
- * Copy templates/sftdd-bootstrap/.tdd/ into <targetDir>/.tdd/.
+ * Copy templates/sftdd-bootstrap/.sftdd/ into <targetDir>/.sftdd/.
  *
  * Resolves the bootstrap source relative to this script's location so it works
  * both when the substrate is consumed via git URL (dist + src co-located) and
  * when it's invoked directly from a dev clone.
  *
- * Safe to call when <targetDir>/.tdd/ already exists – existing files are not
+ * Safe to call when <targetDir>/.sftdd/ already exists – existing files are not
  * overwritten so a project that already started TDD work is preserved.
  */
 export function layDownTddScaffold(targetDir: string): void {
@@ -519,14 +520,14 @@ export function layDownTddScaffold(targetDir: string): void {
   // require of 'fs' is not supported"); tsup's shims: true gives us
   // __dirname-equivalent semantics via the top-of-file imports.
   const candidates = [
-    path.resolve(__dirname, "../../templates/sftdd-bootstrap/.tdd"),
-    path.resolve(__dirname, "../../../templates/sftdd-bootstrap/.tdd"),
+    path.resolve(__dirname, `../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`),
+    path.resolve(__dirname, `../../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`),
   ];
   const source = candidates.find((c) => fs.existsSync(c));
   if (!source) {
     throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
-  const dest = path.join(targetDir, ".tdd");
+  const dest = path.join(targetDir, ARTIFACT_ROOT);
   if (fs.existsSync(dest)) {
     return;
   }

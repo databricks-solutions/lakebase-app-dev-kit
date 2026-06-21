@@ -20,7 +20,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, statSync } from "fs";
 import { join, dirname } from "path";
-import { featuresDir, planningDir } from "./tdd-paths.js";
+import { featuresDir, planningDir } from "./sftdd-paths.js";
 
 export interface ReplayTurn {
   role: string;

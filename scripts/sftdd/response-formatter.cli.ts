@@ -11,6 +11,7 @@
 // Exit: 0 conforms; 1 violations (printed to stderr); 2 bad args.
 
 import { join } from "path";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { formatRoleResponse, FORMATTED_ROLES } from "./response-formatter.js";
 
 interface Args {
@@ -45,7 +46,7 @@ function main(): number {
   const a = parse(process.argv.slice(2));
   if (!a.role) return usage("Error: --role is required.");
   if (!a.feature) return usage("Error: --feature is required.");
-  const tddDir = a.tddDir ?? join(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? resolveTddDir();
 
   const result = formatRoleResponse({ role: a.role, tddDir, featureId: a.feature, story: a.story });
   if (result.ok) {

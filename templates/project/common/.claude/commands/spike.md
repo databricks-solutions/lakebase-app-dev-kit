@@ -34,7 +34,7 @@ a spike is outside the workflow state machine):
 ```
 
 After cutting, explore freely on the spike branch. Capture what you learned in
-`.tdd/spikes/<slug>/notes.md` BEFORE deleting the branch, the notes survive the
+`.sftdd/spikes/<slug>/notes.md` BEFORE deleting the branch, the notes survive the
 teardown and (with `--for`) feed the next design's spec gate. Then delete the
 spike to drop its throwaway branch.
 

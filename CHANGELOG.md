@@ -6,8 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Artifact-root resolution + auto-migration.** The on-disk artifact/log directory
+  name now lives in one place (`scripts/sftdd/sftdd-paths.ts`: `ARTIFACT_ROOT`,
+  `resolveTddDir`) instead of being a `"./.tdd"` default copy-pasted across ~20 call
+  sites. `resolveTddDir` is dual-read: it prefers `.sftdd`, falls back to a legacy
+  `.tdd` when that is what exists, and defaults a fresh project to `.sftdd`. The
+  orchestrator (`lakebase-sftdd-drive`) auto-migrates a legacy `.tdd` to `.sftdd` on
+  its next run (`git mv` to preserve history when possible, else a filesystem
+  rename), and rewrites the project `.gitignore` entries to match.
+
 ### Changed
 
+- **Artifact directory renamed `.tdd` -> `.sftdd`.** New projects (and the
+  `sftdd-bootstrap` template) scaffold a `.sftdd/` directory to match the
+  `lakebase-sftdd-workflows` naming. Existing `.tdd` projects keep working (dual-read)
+  and are auto-migrated on the next orchestrated run, so no manual action is required.
+  The `tdd-paths.ts` module was renamed to `sftdd-paths.ts`.
 - **Spec Driven Development (SDD) framing.** `lakebase-sftdd-workflows` docs now name
   the two lanes explicitly: the design lane (`/design`) is Spec Driven Development
   (SDD), which produces and freezes the executable spec at the `spec` + `test_list`

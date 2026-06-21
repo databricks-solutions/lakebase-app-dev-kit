@@ -10,7 +10,7 @@
 
 import { existsSync, cpSync, mkdirSync } from "fs";
 import { join } from "path";
-import { featuresDir, cyclesRootDir, experimentsRootDir } from "./tdd-paths.js";
+import { featuresDir, cyclesRootDir, experimentsRootDir } from "./sftdd-paths.js";
 import { codeTreeFilter } from "./replay-build.js";
 
 export interface RecordBuildTurnArgs {

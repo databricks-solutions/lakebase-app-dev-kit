@@ -1,4 +1,4 @@
-// tdd-paths is the single source of truth for .tdd layout + format accessors.
+// sftdd-paths is the single source of truth for .tdd layout + format accessors.
 // These tests pin the canonical behaviors that the scattered copies disagreed
 // on (especially findFeatureDir's ambiguity handling and the disk-truth
 // accessors), so a regression here is caught before it desyncs a producer from
@@ -9,11 +9,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import * as P from "../../scripts/sftdd/tdd-paths";
+import * as P from "../../scripts/sftdd/sftdd-paths";
 
 let tdd: string;
 beforeEach(() => {
-  tdd = mkdtempSync(join(tmpdir(), "tdd-paths-"));
+  tdd = mkdtempSync(join(tmpdir(), "sftdd-paths-"));
 });
 afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 

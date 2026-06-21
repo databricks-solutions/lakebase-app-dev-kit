@@ -11,7 +11,7 @@
 // does not auto-decide.
 
 import * as fs from "node:fs";
-import { escalationsDir, escalationFile } from "./tdd-paths.js";
+import { escalationsDir, escalationFile } from "./sftdd-paths.js";
 import { readSmellsLog, writeSmellsLog, type SmellName } from "./smells.js";
 import { pendingItemKind } from "./cycle-record.js";
 

@@ -16,6 +16,8 @@
 // run, then exits (no execution) - a safe "what will the driver do next?".
 
 import { spawn } from "node:child_process";
+import { resolveTddDir, ARTIFACT_ROOT, LEGACY_ARTIFACT_ROOT } from "./sftdd-paths.js";
+import { migrateLegacyArtifactDir } from "./migrate-artifact-dir.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -373,7 +375,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
 /** Build a DriveEffectsConfig for a feature (or planning, featureId ""). */
 function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
+  const tddDir = args.tddDir ?? resolveTddDir(projectDir);
   // Resolve the Lakebase instance + the feature's branch from the SCM workflow
   // state (.lakebase/workflow-state.json, written at claim). The per-story
   // experiment ops need both: the instance to create/merge the paired branch,
@@ -615,7 +617,7 @@ function reportGate(gate: WorkflowAction): void {
 async function runSprintMode(args: ParsedArgs): Promise<number> {
   const sprint = args.sprint as string;
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? path.join(projectDir, ".tdd");
+  const tddDir = args.tddDir ?? resolveTddDir(projectDir);
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
@@ -714,6 +716,18 @@ async function main(): Promise<number> {
   if (args.help) {
     process.stdout.write(help());
     return 0;
+  }
+  // Auto-migrate a legacy ".tdd" artifact dir to ".sftdd" before any mode runs,
+  // so existing projects move to the current name on their next orchestrated run
+  // (no-op once ".sftdd" exists). History follows via git mv when possible.
+  if (!args.tddDir) {
+    const projectDir = args.projectDir ?? process.cwd();
+    const m = migrateLegacyArtifactDir(projectDir);
+    if (m.migrated) {
+      process.stderr.write(
+        `lakebase-sftdd-drive: migrated legacy ${LEGACY_ARTIFACT_ROOT}/ to ${ARTIFACT_ROOT}/ (via ${m.via}).\n`,
+      );
+    }
   }
   // Tier-1: `--sprint <name>` with no `--feature` runs the whole-sprint orchestrator.
   if (args.sprint && !args.feature) {

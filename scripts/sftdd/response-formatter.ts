@@ -16,7 +16,7 @@
 // every item maps to one of the story's ACs (the S2 live-stall bug).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { storyAcIds, readAcLayer, storyTestListJson, acsDir } from "./tdd-paths.js";
+import { storyAcIds, readAcLayer, storyTestListJson, acsDir } from "./sftdd-paths.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 
 export interface FormatViolation {

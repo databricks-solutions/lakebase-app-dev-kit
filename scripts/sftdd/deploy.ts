@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join } from "node:path";
 import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
-import { findFeatureDir } from "./tdd-paths.js";
+import { resolveTddDir, findFeatureDir } from "./sftdd-paths.js";
 import { writeEscalation } from "./escalation.js";
 import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION } from "./e2e-regex-clean.js";
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
@@ -231,7 +231,7 @@ export function logReleaseEngineerDeployOutcome(ctx: ReleaseEngineerLogCtx, resu
 }
 
 function pidFile(projectDir: string, target: string): string {
-  return join(projectDir, ".tdd", "deploy", `${target}.pid`);
+  return join(resolveTddDir(projectDir), "deploy", `${target}.pid`);
 }
 
 /** Resolve the feature dir under tddDir/features by id prefix (mirrors gates.ts). */
@@ -356,7 +356,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     const verify: VerifyResult = { passed: false, summary: reason };
     let evidencePath: string | undefined;
     if (args.featureId) {
-      const tddDir = args.tddDir ?? join(args.projectDir, ".tdd");
+      const tddDir = args.tddDir ?? resolveTddDir(args.projectDir);
       const at = (args.now ?? (() => new Date()))().toISOString();
       evidencePath = writeDeployEvidence(tddDir, {
         schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,
@@ -423,7 +423,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
   // (the gate refuses anything but reachable + verify.passed).
   let evidencePath: string | undefined;
   if (args.featureId) {
-    const tddDir = args.tddDir ?? join(args.projectDir, ".tdd");
+    const tddDir = args.tddDir ?? resolveTddDir(args.projectDir);
     const at = (args.now ?? (() => new Date()))().toISOString();
     evidencePath = writeDeployEvidence(tddDir, {
       schema_version: DEPLOY_EVIDENCE_SCHEMA_VERSION,

@@ -33,7 +33,7 @@ import { join } from "node:path";
 /** Directory names that are never application source (vendor / test / migration). */
 const SOURCE_SKIP_DIRS = new Set([
   "node_modules", "__pycache__", ".venv", "venv", ".git", "build", "dist",
-  ".tdd", ".lakebase", "alembic", "migrations", "tests", "test",
+  ".sftdd", ".tdd", ".lakebase", "alembic", "migrations", "tests", "test",
   ".mypy_cache", ".pytest_cache", ".ruff_cache",
 ]);
 

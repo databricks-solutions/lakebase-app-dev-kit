@@ -23,7 +23,7 @@ import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./tdd-paths.js";
+import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./sftdd-paths.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
 import { readSupersededTests, readGreenFailure } from "./supersession.js";
 import { readConventions } from "./architecture-conventions.js";
@@ -46,7 +46,7 @@ export type DriveCommand =
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
   // commits its requests, project backlog.json from the on-disk feature-request
   // set + the Architect's estimates. Handled in-process by the runner (no CLI),
-  // mirroring set-phase. See syncBacklog in tdd-paths.
+  // mirroring set-phase. See syncBacklog in sftdd-paths.
   | { kind: "sync-backlog"; sprint: string };
 
 export interface CommandRunner {

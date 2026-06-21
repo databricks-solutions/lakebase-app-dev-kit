@@ -107,7 +107,7 @@ Install is user-scoped and persists across sessions (one-time). Then, in any ses
 /lakebase-app-dev-kit:tdd
 ```
 
-In a folder with a `.tdd/` directory this resumes the `/plan -> /design -> /build -> /deploy` loop; elsewhere it guides you through creating a project, then resumes. The workflow is driven by the deterministic orchestrator (`lakebase-sftdd-drive`), which spawns the role agents (product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer) scaffolded into the project's `.claude/agents/` and invoked as `claude --agent <role>`, and pauses at every HITL gate. The plugin ships the command + skills + MCP server; the role agents come from the scaffolded project, not the plugin.
+In a folder with a `.sftdd/` directory this resumes the `/plan -> /design -> /build -> /deploy` loop; elsewhere it guides you through creating a project, then resumes. The workflow is driven by the deterministic orchestrator (`lakebase-sftdd-drive`), which spawns the role agents (product-owner, spec-author, ux-designer, architect-reviewer, test-strategist, navigator, driver, release-engineer) scaffolded into the project's `.claude/agents/` and invoked as `claude --agent <role>`, and pauses at every HITL gate. The plugin ships the command + skills + MCP server; the role agents come from the scaffolded project, not the plugin.
 
 ## Imports
 

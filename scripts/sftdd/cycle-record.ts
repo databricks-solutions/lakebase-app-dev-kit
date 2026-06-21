@@ -20,7 +20,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./tdd-paths.js";
+import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./sftdd-paths.js";
 import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
@@ -91,8 +91,8 @@ async function commitCycleWork(tddDir: string, message: string): Promise<void> {
       // observability it churns every run and is not feature code; committing it
       // onto the experiment branch would diverge from the feature branch (and it
       // already blocks the fork via assertCleanForFork). Gitignored too.
-      exclude: [".tdd", ".lakebase", ".claude/agent-memory"],
-      include: [".tdd/design", ".tdd/architecture"],
+      exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
+      include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
     });
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
