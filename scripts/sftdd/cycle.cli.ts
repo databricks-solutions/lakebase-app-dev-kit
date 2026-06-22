@@ -22,6 +22,7 @@ import {
   refactorAc,
   firstReviewPendingAc,
   firstRefactorPendingAc,
+  greenVerifierForEnv,
 } from "./cycle-record.js";
 import {
   writeSupersededTests,
@@ -112,7 +113,11 @@ async function main(): Promise<number> {
       // app. On failure it leaves the cycle RED + raises an escalation; we exit
       // 0 (the escalation is recorded data, not a command crash) so the driver's
       // next readState routes to a clean raise-to-hil halt.
-      const r = await greenOpenCycle({ ...base, repair: a.repair });
+      // In a build replay (LAKEBASE_TDD_REPLAY_BUILD_DIR set) the per-turn
+      // full-suite honest-GREEN is invalid (a later AC's test is legitimately RED
+      // while only the current AC's code is overlaid), so trust the recorded GREEN
+      // for this turn; the final all-ACs state is verified at the deploy gate (FEIP-7702).
+      const r = await greenOpenCycle({ ...base, repair: a.repair, verify: greenVerifierForEnv() });
       if (r.needsAssess) {
         process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}\n`);
       } else if (r.escalated) {
@@ -144,7 +149,8 @@ async function main(): Promise<number> {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
         return 0;
       }
-      const r = await refactorAc(tddDir, a.feature, a.story, ac);
+      // Same replay-build trust applies to the refactor re-verify (FEIP-7702).
+      const r = await refactorAc(tddDir, a.feature, a.story, ac, { verify: greenVerifierForEnv() });
       if (r.escalated) {
         process.stdout.write(`cycle: REFACTOR BLOCKED for ${ac} -> raised to HIL: ${r.summary}\n`);
       } else {

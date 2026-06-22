@@ -19,6 +19,8 @@ import {
   reviewAc,
   refactorAc,
   firstRefactorPendingAc,
+  replayTrustVerifier,
+  greenVerifierForEnv,
   type GreenVerifier,
 } from "../../scripts/sftdd/cycle-record.js";
 import {
@@ -120,6 +122,36 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
     expect(r.escalated).toBeFalsy();
     expect(cycle("AC1").green_at).toBeTruthy();
     expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
+  });
+});
+
+// FEIP-7702: in replay-build mode the per-turn honest-GREEN full-suite verify is
+// invalid mid-build (a later AC's test is legitimately RED while its code is not
+// yet overlaid), so it must NOT fail the cycle. The replay trusts the recorded
+// GREEN per turn; the final all-ACs state is still verified at the deploy gate.
+describe("replay-build: per-turn green trusts the recorded outcome (FEIP-7702)", () => {
+  it("replayTrustVerifier passes without running a real verify (no deploy)", async () => {
+    const r = await replayTrustVerifier({ projectDir: "/does/not/exist", tddDir: tdd, featureId: F, story: S });
+    expect(r.passed).toBe(true);
+    expect(r.summary).toMatch(/replay-build/i);
+  });
+
+  it("greenOpenCycle with the replay verifier greens an open RED cycle where a real full-suite verify would fail", async () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: replayTrustVerifier });
+    expect(r.recorded).toBe(true);
+    expect(r.escalated).toBeFalsy();
+    expect(r.needsAssess).toBeFalsy();
+    expect(cycle("AC1").green_at).toBeTruthy();
+    expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
+  });
+
+  it("greenVerifierForEnv returns the replay verifier ONLY when LAKEBASE_TDD_REPLAY_BUILD_DIR is set", async () => {
+    expect(greenVerifierForEnv({})).toBeUndefined();
+    const v = greenVerifierForEnv({ LAKEBASE_TDD_REPLAY_BUILD_DIR: "/corpus" });
+    expect(v).toBeDefined();
+    const r = await v!({ projectDir: "/x", tddDir: tdd, featureId: F, story: S });
+    expect(r.passed).toBe(true);
   });
 });
 

@@ -359,6 +359,31 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
 };
 
 /**
+ * Replay-build verifier (FEIP-7702): trust the recorded GREEN for this turn
+ * instead of re-running the full-suite honest-GREEN against the overlaid code.
+ * During a build replay the project tree at an intermediate turn carries the
+ * WHOLE recorded test set while only the current AC's code is in place, so a
+ * later AC's test is legitimately RED , re-running the full suite per turn would
+ * fail the cycle on a not-yet-built AC, which is not a regression. The corpus is
+ * the source of truth that the turn was green when recorded; the final all-ACs
+ * state is still honestly verified at the deploy gate. No deploy, no I/O.
+ */
+export const replayTrustVerifier: GreenVerifier = async () => ({
+  passed: true,
+  summary: "replay-build: trusting recorded GREEN (per-turn verify skipped; final state verified at the deploy gate)",
+});
+
+/**
+ * Pick the GREEN/REFACTOR verifier for the current environment: the
+ * replay-trust verifier when a build replay is in flight
+ * (LAKEBASE_TDD_REPLAY_BUILD_DIR set), else undefined so greenOpenCycle /
+ * refactorAc fall back to the real defaultGreenVerifier.
+ */
+export function greenVerifierForEnv(env: NodeJS.ProcessEnv = process.env): GreenVerifier | undefined {
+  return env.LAKEBASE_TDD_REPLAY_BUILD_DIR ? replayTrustVerifier : undefined;
+}
+
+/**
  * Record the runner outcome + stamp GREEN on the story's open RED cycle (red_at
  * set, green_at not). Per the "driver runs, orchestration records" contract the
  * Driver already ran the project's test command in its loop; this records that
