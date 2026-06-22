@@ -34,7 +34,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { GatesIoOpts } from "./gates";
-import { requireFeatureDir as findFeatureDir } from "./tdd-paths.js";
+import { resolveTddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
 
 export interface WithGatesLockOpts extends GatesIoOpts {
   /** Max retry attempts before giving up. Default 5. */
@@ -76,7 +76,7 @@ export function withGatesLock<T>(
   fn: () => T,
   opts: WithGatesLockOpts = {}
 ): T {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const maxRetries = opts.maxRetries ?? 5;
   const initialBackoffMs = opts.initialBackoffMs ?? 20;
   const sleep = opts.sleep ?? defaultSleep;

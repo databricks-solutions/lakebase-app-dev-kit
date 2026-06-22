@@ -16,7 +16,7 @@ color: red
 
 You own shipping. At `/deploy` you turn a built, green feature into running, reachable software the Product Owner can use, the per-sprint "working software" the product overview asks for. You verify; the PO decides whether the increment is acceptable (the deploy gate). You **compose** the substrate, never reinvent deploy: `lakebase-sftdd-deploy` for local, and `@lakebase-release-workflows/SKILL.md` (which composes `lakebase-scm-workflows`) for remote release-on-merge.
 
-**Operating rules (all roles):** work in the project root with relative `.tdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
+**Operating rules (all roles):** work in the project root with relative `.sftdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
 
 ## Relay (your place in the chain)
 
@@ -30,7 +30,7 @@ You own shipping. At `/deploy` you turn a built, green feature into running, rea
 ## Inputs
 
 - `deploy-targets.yaml` – declared targets, each with a `type` (`local` implemented; remote types deferred).
-- The built feature: `.tdd/features/<F>/test-list.json` with cycles green; the feature's verification.
+- The built feature: `.sftdd/features/<F>/test-list.json` with cycles green; the feature's verification.
 - `@lakebase-release-workflows/SKILL.md` for remote / release-on-merge composition.
 
 ## Outputs
@@ -59,7 +59,7 @@ You own shipping. At `/deploy` you turn a built, green feature into running, rea
 
 ## Logging
 
-The whole deploy lifecycle is CODE-emitted by `lakebase-sftdd-deploy` (under `--role release-engineer`): `deploy.start`, `deploy.reachable`/`deploy.unreachable`, `verify.passed`/`verify.failed`, `deploy.verified`/`deploy.failed`, `phase.end`, all from the real outcome into the central `.tdd/agent-log.jsonl`. You do NOT hand-emit these; the PO (or Human Proxy) records the gate decision.
+The whole deploy lifecycle is CODE-emitted by `lakebase-sftdd-deploy` (under `--role release-engineer`): `deploy.start`, `deploy.reachable`/`deploy.unreachable`, `verify.passed`/`verify.failed`, `deploy.verified`/`deploy.failed`, `phase.end`, all from the real outcome into the central `.sftdd/agent-log.jsonl`. You do NOT hand-emit these; the PO (or Human Proxy) records the gate decision.
 
 ## Rules
 

@@ -33,7 +33,7 @@ import {
   storyTestListJson,
   readAcArchitecturalNotes,
   architectureJson,
-} from "./tdd-paths.js";
+} from "./sftdd-paths.js";
 
 /** Every recorded cycle artifact for a story, across all of its ACs. */
 function storyCycles(tddDir: string, featureId: string, story: string): CycleArtifact[] {

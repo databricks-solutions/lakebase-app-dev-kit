@@ -245,7 +245,7 @@ const result = await createProject({
   githubOwner: "my-org",
   language: "java",
   runnerType: "self-hosted",
-  enableTdd: true,                // default: true – lays down .tdd/ scaffold
+  enableTdd: true,                // default: true – lays down .sftdd/ scaffold
   enableE2e: undefined,           // default: true for nodejs, false otherwise.
                                   // Explicit boolean overrides the language default.
   skipCommands: false,            // default: false – writes .claude/commands/{design,build}.md

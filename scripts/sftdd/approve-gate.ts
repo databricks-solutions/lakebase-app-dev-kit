@@ -22,6 +22,7 @@
 //     the log see the same approval the structured state records.
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { join } from "path";
 import { hashArtifact } from "./gate-hash";
 import { withGatesLock } from "./gates-lock";
@@ -88,7 +89,7 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
     );
   }
 
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 

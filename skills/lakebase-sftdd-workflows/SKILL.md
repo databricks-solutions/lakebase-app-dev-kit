@@ -65,7 +65,7 @@ Tier 2:  /plan  /design  /build  /deploy   (run ONE phase, then stop + suggest n
 ```
 
 - **`/sprint [name]`** (Tier 1, the top-level orchestrator): runs the whole sprint as one continuous flow, plan to the plan gate, then claim + drive each backlog feature `design` -> `build` -> `deploy`. Re-invoked per cycle; resumable (halts at the next HITL gate for the human, continues on re-run). `lakebase-sftdd-drive --sprint <name>`.
-- **`/plan [name]`** (Tier 2, sprint planning, ABOVE the per-feature loop): the **Spec Author** proposes the candidate breakdown (`.tdd/planning/feature-proposals.md`); the **Architect** t-shirt-sizes the candidates (`.tdd/planning/estimates.json`, XS/S/M/L/XL); the **Product Owner** commits the backlog by authoring a `feature-request.md` per feature that fits sprint capacity; the deterministic `sync-backlog` step projects `.tdd/sprints/<name>/backlog.json` (committed ids + sizes); the **sprint plan gate** is the HITL checkpoint. Stops there (does not flow into design). Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition. `--sprint <name> --plan-only`.
+- **`/plan [name]`** (Tier 2, sprint planning, ABOVE the per-feature loop): the **Spec Author** proposes the candidate breakdown (`.sftdd/planning/feature-proposals.md`); the **Architect** t-shirt-sizes the candidates (`.sftdd/planning/estimates.json`, XS/S/M/L/XL); the **Product Owner** commits the backlog by authoring a `feature-request.md` per feature that fits sprint capacity; the deterministic `sync-backlog` step projects `.sftdd/sprints/<name>/backlog.json` (committed ids + sizes); the **sprint plan gate** is the HITL checkpoint. Stops there (does not flow into design). Requires project intake (`product-overview.md` + `nfrs.md`, +`design-brief.md` for UI) as a precondition. `--sprint <name> --plan-only`.
 - **`/design <feature-id>`**: the **SDD (Spec Driven Development)** lane. Claims the paired branch (Step 0), enforces the feature's `feature-request.md` + project intake (Step 0.5, a precondition, NOT a gate), then drives the per-story design lane (Spec Author -> Architect Reviewer -> Test Strategist) to the spec + test_list gates, producing the executable spec. `--only design`.
 - **`/build <feature-id>`**: the **TDD (Test Driven Development)** lane. RED -> GREEN -> REVIEW -> REFACTOR cycles + per-story acceptance against the frozen spec, to ready-for-review (requires the SDD lane done). `--only build`.
 - **`/deploy <feature-id> [--target local] [--story <s>]`**: deploys the merged feature (or one story's branch) + verifies reachable + feature-verify; the **deploy gate** is the working-software review the PO signs off (the local target is the only one implemented; remote release is the scaffolded `merge.yml`). `--only deploy`. For a hands-on review the human can run `./scripts/run-dev.sh` to serve the app locally (migrates + hot-reload) and open it in a browser.
@@ -106,8 +106,8 @@ The **orchestrator** is the deterministic driver (`lakebase-sftdd-drive`), **not
 
 ## References
 
-- [`references/spec-format.md`](references/spec-format.md) – full `.tdd/` directory layout + markdown ↔ JSON contract.
-- [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-sftdd-log` (debug = reasoning, info = outputs) to the centralized `.tdd/agent-log.jsonl`.
+- [`references/spec-format.md`](references/spec-format.md) – full `.sftdd/` directory layout + markdown ↔ JSON contract.
+- [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-sftdd-log` (debug = reasoning, info = outputs) to the centralized `.sftdd/agent-log.jsonl`.
 - `scripts/sftdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
 - [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
 
@@ -144,24 +144,24 @@ import { analyzeForGate, recordPlan, writePlan } from "@databricks-solutions/lak
 import { canCutAnotherExperiment } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/budget";
 import { attachSpikeInputs } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/spike-carryforward";
 
-const analysis = analyzeForGate(".tdd", "F1");
+const analysis = analyzeForGate(".sftdd", "F1");
 // analysis.opinion_gaps[]            – items the analyzer flagged as opinion gaps
 // analysis.proposed_plan              – { mode: "N=1" | "N>=2", N, strategies[], budget, rationale }
 // analysis.proposed_plan.budget.per_experiment
 //                                     – default cap { max_cycles: 30, max_wall_clock_minutes: 60 }
 //                                       the orchestrator can override before writePlan
-// analysis.proposed_plan.spike_inputs – auto-populated from `.tdd/spikes/<slug>/notes.md`
+// analysis.proposed_plan.spike_inputs – auto-populated from `.sftdd/spikes/<slug>/notes.md`
 //                                       entries tagged with `for_feature: F1` (frontmatter
 //                                       or body line). Surface to PO at Gate 4; pass the
 //                                       kept slugs to attachSpikeInputs.
 
 // Surface to PO. On Gate 4 approval, persist:
-recordPlan(".tdd", analysis.proposed_plan, "kevin@example.com");
-writePlan(".tdd", analysis.proposed_plan);
-attachSpikeInputs({ tddDir: ".tdd", featureId: "F1", slugs: ["explore-cart-storage"] });
+recordPlan(".sftdd", analysis.proposed_plan, "kevin@example.com");
+writePlan(".sftdd", analysis.proposed_plan);
+attachSpikeInputs({ tddDir: ".sftdd", featureId: "F1", slugs: ["explore-cart-storage"] });
 
 // Before cutting any experiment, check the budget:
-const ok = canCutAnotherExperiment(".tdd", "F1");
+const ok = canCutAnotherExperiment(".sftdd", "F1");
 if (!ok.ok) throw new Error(`budget: ${ok.reason}`);
 ```
 
@@ -174,23 +174,23 @@ import { cutExperiment, listExperiments, readOutcomes, writeOutcomes, deleteExpe
 // N=1 – one experiment for story S1, forked from the feature branch.
 const exp = await cutExperiment({
   instance: "proj-checkout",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   storyId: "S1-submit",
   experimentSlug: "s1-submit",
   branch: "exp/F1/S1-submit",
   parentBranch: "feature/F1",       // forks from feature HEAD, not staging
 });
-// exp.dir === ".tdd/experiments/F1/S1-submit/s1-submit"
+// exp.dir === ".sftdd/experiments/F1/S1-submit/s1-submit"
 // Writes branch.txt, notes.md, outcomes.json (status: "running"), timeline.json.
 
-writeOutcomes(".tdd", "F1", "S1-submit", "s1-submit", { status: "succeeded", tests_passed: 2 });
+writeOutcomes(".sftdd", "F1", "S1-submit", "s1-submit", { status: "succeeded", tests_passed: 2 });
 
 // Teardown is HITL-gated. deleteBranchToo defaults to false – record survives.
 // (The lakebase-sftdd-experiment CLI's merge/discard drive this for the PO.)
 await deleteExperiment({
   instance: "proj-checkout",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   storyId: "S1-submit",
   experimentSlug: "s1-submit",
@@ -208,7 +208,7 @@ import { collectSpikeInputs, attachSpikeInputs }
 
 await cutSpike({
   instance: "proj-checkout",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   spikeSlug: "explore-cart-storage",
   branch: "spike-explore-cart-storage",
   parentBranch: "staging",
@@ -219,14 +219,14 @@ await cutSpike({
 // Notes captured, branch deleted by default (throwaway).
 await deleteSpike({
   instance: "proj-checkout",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   spikeSlug: "explore-cart-storage",
 });
-// Notes preserved at .tdd/spikes/explore-cart-storage/notes.md.
+// Notes preserved at .sftdd/spikes/explore-cart-storage/notes.md.
 
 // When the related feature shows up at the design-spec gate, surface
 // the spike's learning to the PO:
-const inputs = collectSpikeInputs({ tddDir: ".tdd", featureId: "F1-checkout" });
+const inputs = collectSpikeInputs({ tddDir: ".sftdd", featureId: "F1-checkout" });
 // inputs[].slug, .notes_path, .preview (capped at ~200 chars), .matched_marker
 // Accepts YAML frontmatter (for_feature / feature_id / feature) and body lines
 // (`For feature:`, `feature:`, `feature_id:`, `for_feature:`, tolerant of
@@ -234,7 +234,7 @@ const inputs = collectSpikeInputs({ tddDir: ".tdd", featureId: "F1-checkout" });
 // prefix match.
 
 // On PO approval, persist the kept slugs onto plan.json:
-attachSpikeInputs({ tddDir: ".tdd", featureId: "F1-checkout", slugs: ["explore-cart-storage"] });
+attachSpikeInputs({ tddDir: ".sftdd", featureId: "F1-checkout", slugs: ["explore-cart-storage"] });
 ```
 
 ### Cycle (RED → GREEN → REFACTOR)
@@ -244,7 +244,7 @@ import { beginCycle, markGreen, markRefactored, flagSmells, listCycles, openBran
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/run-cycle";
 
 const scope = {
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   feature_id: "F1",
   story_id: "S1",
   ac_id: "AC1",
@@ -279,9 +279,9 @@ flagSmells(scope, c1.cycle_id, ["test-deletion-attempt"]);
 import { runDetectorsForScope, writeSmellsLog, readSmellsLog, SMELL_CATALOG }
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/smells";
 
-const hits = runDetectorsForScope(".tdd", scope);
+const hits = runDetectorsForScope(".sftdd", scope);
 if (hits.length) {
-  writeSmellsLog(".tdd", hits);
+  writeSmellsLog(".sftdd", hits);
   // Surface each hit + the SMELL_CATALOG remediation to the PO.
   // Never auto-apply remediations.
 }
@@ -296,9 +296,9 @@ import { readPlan } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/desig
 
 // Each cycle, after recording the runner outcome and before queuing
 // the next one, ask the substrate if this experiment is over its cap.
-const plan = readPlan(".tdd", "F1");
+const plan = readPlan(".sftdd", "F1");
 const check = checkPerExperimentCap({
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   experimentSlug: "exp-postgres-arrays",
   cap: plan?.budget.per_experiment,
@@ -307,7 +307,7 @@ const check = checkPerExperimentCap({
 });
 if (check.capped) {
   recordExperimentCap({
-    tddDir: ".tdd",
+    tddDir: ".sftdd",
     featureId: "F1",
     experimentSlug: "exp-postgres-arrays",
     hit: check.hit!,
@@ -321,7 +321,7 @@ if (check.capped) {
 
 // On the PO's "extend" reply, raise the cap and clear the capped record:
 clearExperimentCap({
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   experimentSlug: "exp-postgres-arrays",
 });
@@ -337,7 +337,7 @@ import { compareExperiments }
 import { renderComparisonReport, writeComparisonReport }
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/comparison-report";
 
-const report = compareExperiments(".tdd", "F1");
+const report = compareExperiments(".sftdd", "F1");
 // report.rows[].signal       – "winning" | "stalled" | "abandoned" | "running"
 //                              | "capped" | "unknown"
 // report.rows[].capped       – populated when a per-experiment cap fired:
@@ -350,7 +350,7 @@ const report = compareExperiments(".tdd", "F1");
 // file end-to-end (the HITL decision block lists any capped experiments
 // with the extend / abandon / continue-suite reply options inline).
 const md = renderComparisonReport(report);
-writeComparisonReport({ tddDir: ".tdd", featureId: "F1", report });
+writeComparisonReport({ tddDir: ".sftdd", featureId: "F1", report });
 ```
 
 ### Promote (N≥2, single winner)
@@ -361,7 +361,7 @@ import { promoteExperiment }
 
 // Refuses to run without hitlApproved: true (PO gate enforced at the function boundary).
 const result = promoteExperiment({
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   winnerSlug: "exp-postgres-arrays",
   hitlApproved: true,
@@ -380,7 +380,7 @@ import { synthesizeExperiments }
 // Refuses to run without hitlApproved: true.
 const result = await synthesizeExperiments({
   instance: "proj-checkout",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   featureId: "F1",
   picks: [
     { source_slug: "exp-postgres-arrays", capability: "storage schema" },
@@ -402,7 +402,7 @@ const result = await synthesizeExperiments({
 import { validateSpec, readFeature, writeFeature, readWorkflowState, writeWorkflowState }
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/spec-sync";
 
-const drift = validateSpec(".tdd");
+const drift = validateSpec(".sftdd");
 // drift[].kind – "schema" | "pair-missing" | "narrative-empty" | "id-mismatch"
 // Warn-only; do not auto-correct narrative drift.
 ```
@@ -413,16 +413,16 @@ const drift = validateSpec(".tdd");
 import { readMasterTestList, writeMasterTestList, viewByAc, viewsForAllAcs, writePerAcViews }
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/test-list";
 
-const list = readMasterTestList(".tdd", "F1");
-writePerAcViews(".tdd", "F1", list);
-// Emits .tdd/features/<F>/stories/<S>/test-list-per-ac.json under each story dir.
+const list = readMasterTestList(".sftdd", "F1");
+writePerAcViews(".sftdd", "F1", list);
+// Emits .sftdd/features/<F>/stories/<S>/test-list-per-ac.json under each story dir.
 ```
 
 ### Gates state machine (structured HITL approvals)
 
 Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md).
 
-`.tdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
+`.sftdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
 
 Named gates: `spec` / `plan` / `test_list` / `promote`. Statuses: `open` / `approved` / `superseded` / `withdrawn`. Each gate's record carries the approver, timestamp, captured artifact hashes (sha256 of normalized content), and a `history[]` log of every action.
 
@@ -437,7 +437,7 @@ import { verifyGateIntegrity } from "@databricks-solutions/lakebase-app-dev-kit/
 import { withdrawGate } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/withdraw-gate";
 
 // Read current state (returns default-open shape when gates.json absent).
-const state = readGates("F1", { tddDir: ".tdd" });
+const state = readGates("F1", { tddDir: ".sftdd" });
 
 // Approve a gate (HITL-gated at the function boundary).
 approveGate({
@@ -446,7 +446,7 @@ approveGate({
   approver: "po@example.com",
   hitlApproved: true,
   artifactInputs: { "feature-spec.md": specContent, "feature-spec.json": featureJsonContent },
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
 });
 
 // Verify integrity: did the artifact change since approval?
@@ -454,7 +454,7 @@ const v = verifyGateIntegrity({
   featureId: "F1",
   gate: "spec",
   currentInputs: { "feature-spec.md": currentSpec, "feature-spec.json": currentFeatureJson },
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
 });
 // v.status: "ok" | "drift" | "gate-not-approved"
 // Hash normalization survives CRLF/LF + trailing-whitespace + blank-line edits;
@@ -466,7 +466,7 @@ withdrawGate({
   gate: "spec",
   approver: "po@example.com",
   reason: "scope rewrite",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
 });
 ```
 
@@ -490,7 +490,7 @@ import { migrateGatesFromSelectionLog } from "@databricks-solutions/lakebase-app
 
 migrateGatesFromSelectionLog({
   featureId: "F1",
-  tddDir: ".tdd",
+  tddDir: ".sftdd",
   // Optional: pass current artifact content so the synthesized state has
   // hashes that future verifyGateIntegrity() calls can match against.
   currentInputsByGate: {
@@ -519,7 +519,7 @@ import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { validateSpec } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/spec-sync";
 
-const tdd = ".tdd";
+const tdd = ".sftdd";
 const fdir = join(tdd, "features", "F1-checkout");
 const sdir = join(fdir, "stories", "S1-place-order");
 mkdirSync(join(sdir, "acs"), { recursive: true });
@@ -554,7 +554,7 @@ import { cutExperiment, writeOutcomes } from "@databricks-solutions/lakebase-app
 import { beginCycle, markGreen } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/run-cycle";
 import { runDetectorsForScope, writeSmellsLog } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/smells";
 
-const tdd = ".tdd"; const featureId = "F1"; const storyId = "S1-submit";
+const tdd = ".sftdd"; const featureId = "F1"; const storyId = "S1-submit";
 
 writeMasterTestList(tdd, { feature_id: featureId, ordered_for: "design-momentum", items: [
   { id: "T1", description: "POST /orders returns 201 on valid cart", ac_id: "AC1", status: "pending" },
@@ -592,7 +592,7 @@ import { compareExperiments } from "@databricks-solutions/lakebase-app-dev-kit/s
 import { promoteExperiment } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/promote-experiment";
 import { synthesizeExperiments } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/synthesis";
 
-const tdd = ".tdd"; const featureId = "F1";
+const tdd = ".sftdd"; const featureId = "F1";
 
 await cutExperiment({ instance: "proj-checkout", tddDir: tdd, featureId,
   experimentSlug: "exp-postgres-arrays", branch: "checkout-pg-arrays", parentBranch: "staging" });
@@ -625,7 +625,7 @@ if (report.recommendation === "promote") {
 
 ## Adapters
 
-Bundled: `markdown.ts` (no-op default – the spec IS the tracking), `jira.ts` (stub). Project skills wire in the adapter they want via `.tdd/adapters/<name>.json` config.
+Bundled: `markdown.ts` (no-op default – the spec IS the tracking), `jira.ts` (stub). Project skills wire in the adapter they want via `.sftdd/adapters/<name>.json` config.
 
 The `SpecAdapter` interface extends `SyncEventHooks` – implementations may opt into `onPhaseTransition`, `onCycleComplete`, `onSmellDetected` hooks for status-mirroring to external trackers. Adapter failures must degrade gracefully – the on-disk spec is the source of truth.
 
@@ -636,5 +636,5 @@ For non-agent invocation (debugging, CI introspection):
 | Command | Purpose |
 |---|---|
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state. Use `--json` for machine-readable payload. |
-| `node dist/scripts/sftdd/spec-sync.cli.js <tddDir>` | Walk the `.tdd/` tree and print drift reports. Exits 0 even when reports exist (warn-only). |
+| `node dist/scripts/sftdd/spec-sync.cli.js <tddDir>` | Walk the `.sftdd/` tree and print drift reports. Exits 0 even when reports exist (warn-only). |
 | `node dist/scripts/sftdd/test-list.cli.js <tddDir> <featureId> [storyId]` | Regenerate per-AC views from the feature-level master test list. With a `storyId`, instead write that story's scoped per-story test list (`stories/<story>/test-list-per-story.json`), the streaming build lane's per-story input. |

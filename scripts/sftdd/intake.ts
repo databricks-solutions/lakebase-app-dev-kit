@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { checkArtifactConformance } from "./artifact-conformance.js";
-import { featureRequestMd } from "./tdd-paths.js";
+import { resolveTddDir, featureRequestMd } from "./sftdd-paths.js";
 
 export interface IntakeCheckArgs {
   /** .tdd/ root. Default ./.tdd */
@@ -48,7 +48,7 @@ export interface IntakeCheckResult {
  * Returns the per-artifact status plus the missing / non-conformant lists.
  */
 export function checkIntakePreconditions(args: IntakeCheckArgs = {}): IntakeCheckResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
 
   const required: Array<{ artifact: string; path: string }> = [
     { artifact: "product-overview.md", path: join(tddDir, "product-overview.md") },

@@ -13,6 +13,7 @@
 // Exit: 0 ok; 2 bad args; 1 op failure (e.g. no open RED cycle to green).
 
 import { join } from "path";
+import { resolveTddDir } from "./sftdd-paths.js";
 import {
   beginNextPendingCycle,
   beginNextPendingBatch,
@@ -88,7 +89,7 @@ function usage(msg: string): number {
 async function main(): Promise<number> {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? join(process.cwd(), ".tdd");
+  const tddDir = a.tddDir ?? resolveTddDir();
   const base = { tddDir, featureId: a.feature, story: a.story };
 
   switch (a.cmd) {

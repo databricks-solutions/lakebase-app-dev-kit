@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname, join } from "path";
 import { readMasterTestList, scopeToStory, acsForStory } from "./test-list";
-import { storyPlanJson } from "./tdd-paths.js";
+import { storyPlanJson } from "./sftdd-paths.js";
 import type { TestList, TestListItem } from "./test-list";
 import { readAcLayer } from "./run-cycle";
 import type { AcLayer } from "./experiment";
@@ -57,7 +57,7 @@ export interface ExperimentPlan {
   rationale: string;
   /**
    * Spike notes that reference this feature, surfaced from
-   * `.tdd/spikes/<slug>/notes.md` by `collectSpikeInputs`. The gate
+   * `.sftdd/spikes/<slug>/notes.md` by `collectSpikeInputs`. The gate
    * analyzer populates this automatically when matching spikes exist;
    * the orchestrator presents them to the PO at Gate 4 and the PO
    * decides which to keep via `attachSpikeInputs`.
@@ -106,7 +106,7 @@ export interface AnalyzeForGateOptions {
   /**
    * Project root that holds `playwright.config.ts` etc. Defaults to the
    * directory above tddDir, which matches the canonical convention
-   * (`<projectRoot>/.tdd/`). Pass explicitly when tddDir lives outside
+   * (`<projectRoot>/.sftdd/`). Pass explicitly when tddDir lives outside
    * the project root (BDD harness, non-standard layouts).
    */
   projectDir?: string;

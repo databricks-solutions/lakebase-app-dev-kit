@@ -3,9 +3,10 @@
 // exist — warn-only by design (spec-sync surfaces drift; it doesn't fail CI).
 
 import { validateSpec } from "./spec-sync.js";
+import { resolveTddDir } from "./sftdd-paths.js";
 
 function main(): number {
-  const tddDir = process.argv[2] || ".tdd";
+  const tddDir = process.argv[2] || resolveTddDir();
   const reports = validateSpec(tddDir);
   if (reports.length === 0) {
     process.stdout.write(`spec-sync: OK (${tddDir})\n`);

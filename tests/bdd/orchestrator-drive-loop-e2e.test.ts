@@ -18,7 +18,7 @@ import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
 import { diskArtifactProbe, readDriveContext } from "../../scripts/sftdd/orchestrator-probe";
 import type { WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
 import { writeCycleArtifact } from "../../scripts/sftdd/run-cycle";
-import { acReviewJson } from "../../scripts/sftdd/tdd-paths";
+import { acReviewJson } from "../../scripts/sftdd/sftdd-paths";
 import {
   readPipeline,
   writePipeline,

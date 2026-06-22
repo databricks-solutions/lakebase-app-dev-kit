@@ -14,6 +14,7 @@
 // Exit codes: 0 ok, 2 bad args, 7 substrate failure.
 
 import * as path from "node:path";
+import { resolveTddDir } from "./sftdd-paths.js";
 
 import { isCliEntry } from "../util/cli-entry.js";
 import { cutSpike, listSpikes, deleteSpike, spikeNotes } from "./spike.js";
@@ -61,8 +62,8 @@ A spike is throwaway exploration outside the TDD loop. --for <feature> tags the
 notes so the learning carries forward into that feature's design-spec gate.
 `;
 
-function resolveTddDir(args: ParsedArgs): string {
-  return args.tddDir ?? path.join(args.projectDir ?? ".", ".tdd");
+function tddDirFor(args: ParsedArgs): string {
+  return args.tddDir ?? resolveTddDir(args.projectDir ?? ".");
 }
 
 export async function runSpikeCli(argv: string[]): Promise<number> {
@@ -72,7 +73,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
     return sub ? 0 : 2;
   }
   const args = parseArgs(argv.slice(1));
-  const tddDir = resolveTddDir(args);
+  const tddDir = tddDirFor(args);
 
   try {
     if (sub === "cut") {

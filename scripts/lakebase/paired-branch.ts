@@ -130,7 +130,7 @@ export async function assertCleanForFork(cwd: string, startPoint?: string): Prom
   // mid-run (`.tdd/` log + state pointers, `.lakebase/` workflow state), matching
   // scm-prepare-pr. Only real source changes that would be carried onto the new
   // branch count.
-  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} ` +
         `(they would be carried onto the new branch). Commit or stash first.`,

@@ -7,7 +7,7 @@
 // A/B-compared (the promote3 baseline differed from the original in BOTH the
 // build model and P2/P5/P6, recoverable only by reading git branches).
 //
-// The driver writes .tdd/run-config.json ONCE at startup (the common path for
+// The driver writes .sftdd/run-config.json ONCE at startup (the common path for
 // both the interactive `/` commands and the smoke runners), capturing the
 // RESOLVED matrix (not just the override list). The timing report prints it as a
 // `config:` header and nests it in --json, so a comparison is a self-describing
@@ -15,6 +15,7 @@
 // is mirrored to the corpus root so a replay carries its own provenance.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { ARTIFACT_ROOT } from "./sftdd-paths.js";
 import { join } from "path";
 import { ALL_AGENT_ROLES } from "./agent-models.js";
 
@@ -48,8 +49,8 @@ export interface RunConfig {
   models: Record<string, string>;
 }
 
-/** Project-relative path of the run-config snapshot. */
-export const RUN_CONFIG_REL = join(".tdd", "run-config.json");
+/** Artifact-root-relative path of the run-config snapshot. */
+export const RUN_CONFIG_REL = join(ARTIFACT_ROOT, "run-config.json");
 
 /** Inputs the snapshot needs, kept narrow so this module does not depend on the
  *  full DriveEffectsConfig (and stays trivially unit-testable). */
@@ -110,7 +111,7 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
 }
 
 /**
- * Write the run-config snapshot to `.tdd/run-config.json`, and , when recording
+ * Write the run-config snapshot to `.sftdd/run-config.json`, and , when recording
  * (LAKEBASE_TDD_RECORD_DIR set) , mirror a copy to the corpus root so a replay
  * carries its own provenance. Best-effort: a write failure never breaks a run
  * (the snapshot is observability, like the agent log).
@@ -132,7 +133,7 @@ export function writeRunConfig(inputs: RunConfigInputs): RunConfig {
   return cfg;
 }
 
-/** Read `.tdd/run-config.json` for a project (or undefined when absent). */
+/** Read `.sftdd/run-config.json` for a project (or undefined when absent). */
 export function readRunConfig(tddDir: string): RunConfig | undefined {
   const f = join(tddDir, "run-config.json");
   if (!existsSync(f)) return undefined;

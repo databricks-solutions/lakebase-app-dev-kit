@@ -17,6 +17,7 @@
 // flows.
 
 import { hashArtifact } from "./gate-hash";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { readGates, type GateName, type GateStatus } from "./gates";
 
 export interface VerifyGateIntegrityArgs {
@@ -41,7 +42,7 @@ export type VerifyGateIntegrityResult =
 export function verifyGateIntegrity(
   args: VerifyGateIntegrityArgs
 ): VerifyGateIntegrityResult {
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const state = readGates(args.featureId, { tddDir });
   const record = state.gates[args.gate];
 

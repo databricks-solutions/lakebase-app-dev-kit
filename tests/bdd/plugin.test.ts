@@ -62,8 +62,8 @@ describe("/lakebase-app-dev-kit:sftdd launcher command (commands/sftdd.md)", () 
     expect(tdd).toMatch(/^---\n[\s\S]*?\bdescription:/);
   });
 
-  it("branches on .tdd/: resume an existing project, or guide creation", () => {
-    expect(tdd).toMatch(/\.tdd\//);
+  it("branches on .sftdd/: resume an existing project, or guide creation", () => {
+    expect(tdd).toMatch(/\.sftdd\//);
     expect(tdd).toMatch(/lakebase-create-project/); // create path
     expect(tdd).toMatch(/\/plan\b/); // resume path drives the loop
     expect(tdd).toMatch(/\/deploy\b/);

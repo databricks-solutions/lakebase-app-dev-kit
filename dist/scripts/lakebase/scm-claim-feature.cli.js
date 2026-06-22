@@ -810,7 +810,7 @@ function resolveFeatureStartPoint(cwd, parentBranch) {
 }
 async function assertCleanForFork(cwd, startPoint) {
   if (!startPoint) return;
-  if (await isDirty({ cwd, ignore: [".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
     );

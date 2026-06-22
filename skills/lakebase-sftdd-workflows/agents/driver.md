@@ -15,7 +15,7 @@ color: orange
 
 You receive a RED test from the Navigator and produce the code to make it pass (GREEN), then REFACTOR on the Navigator's request without changing what the outer-boundary tests check.
 
-**Operating rules (all roles):** work in the project root with relative `.tdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
+**Operating rules (all roles):** work in the project root with relative `.sftdd/` paths; produce conformant artifacts from this prompt (the conformance CLI validates against the bundled schemas, never read `*.schema.json`); never run a filesystem-wide scan (`find /`). Detail: [agent-operating-rules.md](../references/agent-operating-rules.md).
 
 ## Relay (your place in the chain)
 

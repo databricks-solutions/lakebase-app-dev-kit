@@ -17,14 +17,14 @@
 
 import { existsSync, cpSync, readdirSync, statSync } from "fs";
 import { join } from "path";
-import { featuresDir, cyclesRootDir } from "./tdd-paths.js";
+import { featuresDir, cyclesRootDir } from "./sftdd-paths.js";
 
 /** Project paths the scaffold owns , never overwrite them from the snapshot, or
  *  the fresh run's kit resolver / pin / hooks break (on replay), and never
  *  capture them into a snapshot (on record) , they are scaffold, not build output.
  *  Matched on the first path segment relative to the code root. */
 export const SCAFFOLD_OWNED = new Set([
-  ".git", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules",
+  ".git", ".sftdd", ".tdd", ".lakebase", "scripts", ".claude", ".github", "node_modules",
 ]);
 
 /** Runtime/build junk that must never enter a snapshot or overlay, matched at ANY

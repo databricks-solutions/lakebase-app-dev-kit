@@ -9,6 +9,7 @@
 // an error rather than performing a related-but-different remediation.
 
 import * as fs from "node:fs";
+import { resolveTddDir } from "../sftdd/sftdd-paths.js";
 import * as path from "node:path";
 import {
   getBranchByName,
@@ -92,7 +93,7 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
 
   // 0. Stale spikes + experiments, named distinctly. Hermetic
   // (reads .tdd records only), so it runs even without a Lakebase instance.
-  for (const stale of findStaleBranches(path.join(projectDir, ".tdd"))) {
+  for (const stale of findStaleBranches(resolveTddDir(projectDir))) {
     const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
     findings.push({
       id: `stale-${stale.kind}`,

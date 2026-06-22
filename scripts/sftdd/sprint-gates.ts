@@ -16,11 +16,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileS
 import type { GateRecord } from "./gates.js";
 import { hashArtifact } from "./gate-hash.js";
 import { checkArtifactConformance } from "./artifact-conformance.js";
-import { sprintDir, sprintGatesJson, featureProposalsMd } from "./tdd-paths.js";
+import { resolveTddDir, sprintDir, sprintGatesJson, featureProposalsMd } from "./sftdd-paths.js";
 
-// sprintDir lives in tdd-paths now (single source of truth); re-exported for
+// sprintDir lives in sftdd-paths now (single source of truth); re-exported for
 // the existing public API.
-export { sprintDir } from "./tdd-paths.js";
+export { sprintDir } from "./sftdd-paths.js";
 
 export const SPRINT_GATES_SCHEMA_VERSION = 1;
 
@@ -34,7 +34,7 @@ export interface SprintGatesState {
 }
 
 export interface SprintGatesIoOpts {
-  /** Path to the .tdd/ root. Default: "./.tdd". */
+  /** Path to the artifact root. Default: resolved (.sftdd, or legacy .tdd). */
   tddDir?: string;
 }
 
@@ -55,7 +55,7 @@ function sprintGatesFile(tddDir: string, sprint: string): string {
  * gates.json exists yet. Does not create the file; read is non-mutating.
  */
 export function readSprintGates(sprint: string, opts: SprintGatesIoOpts = {}): SprintGatesState {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   const file = sprintGatesFile(tddDir, sprint);
   if (!existsSync(file)) return defaultSprintGatesState(sprint);
   let parsed: { gates?: { plan?: GateRecord }; schema_version?: number };
@@ -75,7 +75,7 @@ export function readSprintGates(sprint: string, opts: SprintGatesIoOpts = {}): S
 
 /** Write a sprint's gate state, atomic via temp-file + rename. */
 export function writeSprintGates(state: SprintGatesState, opts: SprintGatesIoOpts = {}): void {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   mkdirSync(sprintDir(tddDir, state.sprint), { recursive: true });
   const file = sprintGatesJson(tddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
@@ -115,7 +115,7 @@ export function approveSprintPlanGate(args: ApproveSprintPlanArgs): ApproveSprin
   if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
 
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const file = featureProposalsMd(tddDir);
   if (!existsSync(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };

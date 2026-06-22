@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
 function writeProposal(content = PROPOSAL): void {
-  // The proposal's ONE canonical location (project-level planning/), per tdd-paths.
+  // The proposal's ONE canonical location (project-level planning/), per sftdd-paths.
   const dir = join(tdd, "planning");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "feature-proposals.md"), content);

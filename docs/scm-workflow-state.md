@@ -56,7 +56,7 @@ stateDiagram-v2
 |---|---|---|---|
 | (none) | `lakebase-create-project` | `scaffold-complete` | seeds the state row + tier topology |
 | `scaffold-complete` or `merged` | `lakebase-scm-claim-feature-branch <id>` | `feature-claimed` | forks the paired (git + Lakebase) feature branch from the tier parent; refuses if a feature is already mid-flight |
-| `feature-claimed` | `lakebase-scm-prepare-pr` | `pr-ready` | refuses a dirty CODE working tree (ignores `.tdd/` + `.lakebase/`); pushes the branch + opens the PR |
+| `feature-claimed` | `lakebase-scm-prepare-pr` | `pr-ready` | refuses a dirty CODE working tree (ignores `.sftdd/` + `.lakebase/`); pushes the branch + opens the PR |
 | `pr-ready` | `lakebase-scm-wait-ci` | `ci-green` | polls the PR's `pr.yml` regression gate; advances only on green (errors / stays on failure) |
 | `ci-green` | `lakebase-scm-merge --wait-migrate` | `merged` | merges the PR; the parent's `merge.yml` applies migrations; stamps `merged_at` |
 | `feature-claimed` | `lakebase-scm-abandon-feature` | `scaffold-complete` | only `feature-claimed` is abandonable; deletes the paired branch + resets the row |

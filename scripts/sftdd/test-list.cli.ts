@@ -4,9 +4,10 @@
 // streaming build lane's per-story input).
 
 import { readMasterTestList, writePerAcViews, writeStoryTestList } from "./test-list.js";
+import { resolveTddDir } from "./sftdd-paths.js";
 
 function main(): number {
-  const [tddDir = ".tdd", featureId, storyId] = process.argv.slice(2);
+  const [tddDir = resolveTddDir(), featureId, storyId] = process.argv.slice(2);
   if (!featureId) {
     process.stderr.write("usage: test-list <tddDir> <featureId> [storyId]\n");
     return 1;

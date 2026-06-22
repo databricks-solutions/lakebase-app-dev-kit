@@ -8,7 +8,7 @@ Drives a designed feature through TDD cycles to ready-for-review by delegating t
 /build <feature-id> [--parallel-experiments N]
 ```
 
-Requires `.tdd/features/<feature-id>/test-list.json` to exist (the artifact `/design` produces). If the test list is missing, this command stops with a pointer back to `/design <feature-id>`.
+Requires `.sftdd/features/<feature-id>/test-list.json` to exist (the artifact `/design` produces). If the test list is missing, this command stops with a pointer back to `/design <feature-id>`.
 
 ## How it runs: the deterministic driver
 

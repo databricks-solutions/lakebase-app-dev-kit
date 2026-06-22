@@ -12,6 +12,7 @@
 // Exit codes: 0 ok; 2 bad args; 3 emit/validation failure.
 
 import { isCliEntry } from "../util/cli-entry.js";
+import { resolveTddDir } from "./sftdd-paths.js";
 import {
   emitAgentLogEvent,
   readAgentLog,
@@ -185,7 +186,7 @@ export function runAgentLogCli(argv: string[]): number {
       // (FEIP-7626) knows which story to send back. The probe also falls back to
       // the active build story when scope is absent.
       recordBlockingSmellFlag(
-        a.tddDir ?? "./.tdd",
+        a.tddDir ?? resolveTddDir(),
         slots.smell,
         typeof slots.detail === "string" ? slots.detail : undefined,
         {

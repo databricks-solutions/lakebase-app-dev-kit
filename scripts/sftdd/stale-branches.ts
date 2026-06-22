@@ -15,7 +15,7 @@ import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { readPipeline } from "./story-pipeline";
 import { listSpikes } from "./spike";
-import { featuresDir as featuresDirOf } from "./tdd-paths.js";
+import { featuresDir as featuresDirOf } from "./sftdd-paths.js";
 
 export interface StaleBranchFinding {
   kind: "experiment" | "spike";

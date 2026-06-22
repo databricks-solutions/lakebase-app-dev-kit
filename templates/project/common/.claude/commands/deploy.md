@@ -15,7 +15,7 @@ also deploy automatically during `/build` for the PO's per-story acceptance, so
 `--story` is for re-reviewing one on demand. A sprint is never deployed as a
 unit, `/sprint` runs each feature's `/deploy`.
 
-Requires the feature to be built: `.tdd/features/<feature-id>/test-list.json` with its TDD cycles green (what `/build` produces). If the build is absent, stop with a pointer back to `/build <feature-id>`.
+Requires the feature to be built: `.sftdd/features/<feature-id>/test-list.json` with its TDD cycles green (what `/build` produces). If the build is absent, stop with a pointer back to `/build <feature-id>`.
 
 ## Targets
 

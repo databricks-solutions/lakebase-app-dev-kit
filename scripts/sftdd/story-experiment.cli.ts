@@ -21,6 +21,7 @@
 // Exit: 0 ok; 2 bad args; 1 op failure.
 
 import { cutExperiment, deleteExperiment } from "./experiment";
+import { resolveTddDir } from "./sftdd-paths.js";
 import {
   mergeExperimentIntoFeature,
   discardExperimentBranch,
@@ -81,7 +82,7 @@ const realOps: ExperimentBranchOps = {
 
 async function main(): Promise<number> {
   const args = parseExperimentArgs(process.argv.slice(2));
-  const tddDir = args.tddDir ?? join(process.cwd(), ".tdd");
+  const tddDir = args.tddDir ?? resolveTddDir();
   const projectDir = args.projectDir ?? process.cwd();
   const invalid = validateExperimentArgs(args);
   if (invalid) return usage(invalid);

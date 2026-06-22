@@ -12,7 +12,7 @@ import {
   type ExperimentTag,
 } from "./experiment";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log";
-import { readAcLayer as readAcLayerFromPaths } from "./tdd-paths.js";
+import { readAcLayer as readAcLayerFromPaths } from "./sftdd-paths.js";
 
 /**
  * Emit a cycle event to the centralized agent log from the SUBSTRATE, not
@@ -80,7 +80,7 @@ export interface CycleArtifact {
  * layer enum).
  */
 export function readAcLayer(tddDir: string, featureId: string, acId: string): AcLayer | undefined {
-  // Single source of truth: delegate to tdd-paths so the AC-layer read lives in
+  // Single source of truth: delegate to sftdd-paths so the AC-layer read lives in
   // exactly one place. Re-exported under this name for the existing importers.
   return readAcLayerFromPaths(tddDir, featureId, acId);
 }

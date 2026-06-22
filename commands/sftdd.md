@@ -1,13 +1,13 @@
 ---
-description: Launch the Lakebase SFTDD (Spec-First Test-Driven Development) workflow. In a scaffolded .tdd/ project, takes stock and resumes the /plan -> /design -> /build -> /deploy loop; elsewhere, guides you through creating a project, then resumes.
+description: Launch the Lakebase SFTDD (Spec-First Test-Driven Development) workflow. In a scaffolded .sftdd/ project, takes stock and resumes the /plan -> /design -> /build -> /deploy loop; elsewhere, guides you through creating a project, then resumes.
 ---
 
 # /lakebase-app-dev-kit:sftdd : launch the SFTDD workflow
 
 You are the entry point to the kit's SFTDD (Spec-First Test-Driven Development) state-machine workflow. First detect where you are, then branch.
 
-**Check the current project root for a `.tdd/` directory.**
-- If `.tdd/` exists, go to **A. Resume**.
+**Check the current project root for a `.sftdd/` directory.**
+- If `.sftdd/` exists, go to **A. Resume**.
 - If it does not, go to **B. Create**.
 
 ---
@@ -16,7 +16,7 @@ You are the entry point to the kit's SFTDD (Spec-First Test-Driven Development) 
 
 Drive the workflow through the **deterministic orchestrator** (`lakebase-sftdd-drive`), invoked by the slash commands below. You coordinate only: run the right command for the project's state, and surface every gate to the human. The driver spawns the role agents (`product-owner`, `spec-author`, `ux-designer`, `architect-reviewer`, `test-strategist`, `navigator`, `driver`, or `release-engineer`), which are scaffolded into the project's `.claude/agents/` and invoked as `claude --agent <role>`, and obeys the state machine; the orchestrator is not an LLM agent. You write no spec, code, test, or deploy yourself.
 
-1. **Take stock** (read, then summarize back): `.tdd/product-overview.md` (what the product is), `.tdd/nfrs.md`, `.tdd/design/design-brief.md` (if UI), `.tdd/workflow-state.json` (current `phase` + locus, your source of truth), `.tdd/planning/feature-proposals.md`, and each `.tdd/features/*/` (feature-request, feature-spec, architecture, test-list, gates.json). Confirm SCM state via `lakebase-scm-state`. Give the human a short situation report: what the project is about, the current phase, and each feature's status.
+1. **Take stock** (read, then summarize back): `.sftdd/product-overview.md` (what the product is), `.sftdd/nfrs.md`, `.sftdd/design/design-brief.md` (if UI), `.sftdd/workflow-state.json` (current `phase` + locus, your source of truth), `.sftdd/planning/feature-proposals.md`, and each `.sftdd/features/*/` (feature-request, feature-spec, architecture, test-list, gates.json). Confirm SCM state via `lakebase-scm-state`. Give the human a short situation report: what the project is about, the current phase, and each feature's status.
 2. **Continue the loop.** Offer the human the autonomous path or a single step:
    - **Whole sprint (autonomous):** **`/sprint [name]`** flows plan -> per feature `design` -> `build` -> `deploy`, pausing only at gates. Resumable; re-invoke to continue past an approved gate.
    - Or one phase at a time (lowest-ready first):
@@ -33,7 +33,7 @@ The commands (`/sprint`, `/plan`, `/design`, `/build`, `/deploy`, `/spike`) are 
 
 ## B. Create a new project, then resume
 
-There is no `.tdd/` here, so bootstrap one. Walk the user through it (ask, do not assume; offer the noted defaults):
+There is no `.sftdd/` here, so bootstrap one. Walk the user through it (ask, do not assume; offer the noted defaults):
 
 - **Project name** (kebab-case, the Lakebase id + dir name); **parent directory** (default: parent of cwd or `~/code`); **Databricks host** (offer `DATABRICKS_HOST` / `~/.databrickscfg` if present); **GitHub owner** (or `--no-github`); **tiers** (`1` prod / `2` prod+staging / `3` prod+staging+dev, surface this, do not pick silently); **language** (`python`/`nodejs`/`java`/`kotlin`); **E2E/Infra** (default on for nodejs); **model profile** (see "Per-role model profile" just below).
 
@@ -65,7 +65,7 @@ On success, tell the user to enter the new project and resume:
 cd <parent-dir>/<name>
 ```
 
-then re-run **`/lakebase-app-dev-kit:sftdd`** there (it will find `.tdd/` and resume at `/plan`), or `./scripts/sftdd.sh plan` to open the orchestrator session directly. Do not start the workflow from the current directory, the project is elsewhere.
+then re-run **`/lakebase-app-dev-kit:sftdd`** there (it will find `.sftdd/` and resume at `/plan`), or `./scripts/sftdd.sh plan` to open the orchestrator session directly. Do not start the workflow from the current directory, the project is elsewhere.
 
 ---
 

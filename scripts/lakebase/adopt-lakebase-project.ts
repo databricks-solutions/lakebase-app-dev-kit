@@ -23,6 +23,7 @@
 //   - A CLI bin (future) for the same flow from a plain shell.
 
 import * as cp from "node:child_process";
+import { ARTIFACT_ROOT } from "../sftdd/sftdd-paths.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createLakebaseProject, getDefaultBranchId } from "./lakebase-project.js";
@@ -178,7 +179,7 @@ export async function adoptLakebaseProject(
     if (!dryRun) {
       const result = adoptTdd({ projectDir: args.projectDir });
       for (const rel of result.added) {
-        filesWritten.push(path.join(".tdd", rel));
+        filesWritten.push(path.join(ARTIFACT_ROOT, rel));
       }
     } else {
       warnings.push("dryRun: skipped enableTdd. Re-run without --dry-run to drop the .tdd/ scaffold.");

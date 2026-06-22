@@ -15,7 +15,7 @@ import {
   deriveSprintPlanningState,
   type SprintEffects,
 } from "../../scripts/sftdd/orchestrator-sprint";
-import { writeEstimates } from "../../scripts/sftdd/tdd-paths";
+import { writeEstimates } from "../../scripts/sftdd/sftdd-paths";
 import { writeSprintGates } from "../../scripts/sftdd/sprint-gates";
 
 const SPRINT = "sprint-1";
@@ -49,7 +49,7 @@ describe("deriveSprintPlanningState", () => {
     return join(tdd, "sprints", SPRINT);
   }
   function writeProposal(): void {
-    // Canonical proposal location (project-level planning/), per tdd-paths.
+    // Canonical proposal location (project-level planning/), per sftdd-paths.
     const dir = join(tdd, "planning");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "feature-proposals.md"), "# Backlog\n\n## Features\n- F1\n");

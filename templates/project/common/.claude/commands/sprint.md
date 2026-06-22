@@ -15,9 +15,9 @@ This is the autonomous path. The Tier-2 commands (`/plan`, `/design`, `/build`,
 /sprint [<sprint-name>]
 ```
 
-Requires `.tdd/` + project intake (the same precondition `/plan` enforces). The
+Requires `.sftdd/` + project intake (the same precondition `/plan` enforces). The
 sprint backlog (which features are in the sprint) is the PO's call, recorded at
-`.tdd/sprints/<name>/backlog.json`, produced by `/plan`'s authoring (headless,
+`.sftdd/sprints/<name>/backlog.json`, produced by `/plan`'s authoring (headless,
 from the recorded backlog).
 
 ## How it runs: the deterministic driver
@@ -36,7 +36,7 @@ not own) -> design (per-story **spec gates**) -> build (per-story **acceptance**
 -> deploy (**deploy gate**) -> next feature. Routing is code (not an LLM
 orchestrator); each role is spawned as a subagent at its resolved per-role model;
 the per-story pipeline streams within each feature. The phase/handoff log is
-emitted as code to `.tdd/agent-log.jsonl`.
+emitted as code to `.sftdd/agent-log.jsonl`.
 
 **Gates + resume (interactive).** The run never skips a gate. It stops at the
 next HITL gate, prints a `GATE` marker, and exits so YOU surface it to the human.

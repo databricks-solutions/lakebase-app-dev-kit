@@ -4,7 +4,7 @@ The TDD workflow is a relay of role agents with isolated memory. To make a run o
 
 ## 1. Format
 
-One JSON object per line (JSON Lines) in `.tdd/agent-log.jsonl`, validated against `scripts/sftdd/schemas/agent-log-event.schema.json`. Fields, in order:
+One JSON object per line (JSON Lines) in `.sftdd/agent-log.jsonl`, validated against `scripts/sftdd/schemas/agent-log-event.schema.json`. Fields, in order:
 
 | Field | Meaning |
 |---|---|
@@ -52,7 +52,7 @@ Read/tail: `./scripts/lk lakebase-sftdd-log --read --feature F1-initial-domain -
 ## 4. Who emits what
 
 - **The orchestrator owns the lifecycle as CODE.** The deterministic driver (`lakebase-sftdd-drive`) emits `handoff`, the role's `phase.start`/`phase.end`, the gate events (`gate.surfaced`/`gate.approved`), `experiment.cut`/`experiment.accepted`, and the entire **`cycle.*` family** (`cycle.red`/`green`/`review`/`refactored`). Its post-role reconcile code-emits `artifact.written` for everything left on disk. These are guaranteed every run, regardless of model. Emitting them yourself double-logs.
-- **Each role adds only its in-flight JUDGMENT events** through the CLI: `progress`, `reasoning` (debug), `smell.flagged` (warn), and the recorded gate decision. The shared `.tdd/agent-log.jsonl` is the bus; a subagent only returns its completion, not events.
+- **Each role adds only its in-flight JUDGMENT events** through the CLI: `progress`, `reasoning` (debug), `smell.flagged` (warn), and the recorded gate decision. The shared `.sftdd/agent-log.jsonl` is the bus; a subagent only returns its completion, not events.
 
 Per-role JUDGMENT events on top of the code-emitted skeleton:
 
@@ -80,4 +80,4 @@ In practice these gate events are emitted by the Human Proxy / deterministic dri
 
 ## 5. Where it does NOT go
 
-This log is execution narrative, not workflow state. Gate state lives in `gates.json`; SCM state in `.lakebase/workflow-state.json`; spec artifacts in the `.tdd/` tree. The agent log records what the agents DID, in order, for debugging + audit.
+This log is execution narrative, not workflow state. Gate state lives in `gates.json`; SCM state in `.lakebase/workflow-state.json`; spec artifacts in the `.sftdd/` tree. The agent log records what the agents DID, in order, for debugging + audit.

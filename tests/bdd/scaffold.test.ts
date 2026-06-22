@@ -56,16 +56,16 @@ describe("deployGitignore", () => {
     // Regression guard: agent-log.jsonl + run-config.json are local to a single
     // feature drive and re-initialized each run. They must be gitignored so a
     // build's `git add -A` never carries one feature's log onto the next branch.
-    // The committed .tdd corpus (features/, planning/, workflow-state.json, ...)
+    // The committed .sftdd corpus (features/, planning/, workflow-state.json, ...)
     // must stay trackable.
     const dir = mkTmp();
     await deployGitignore(dir, "python");
     const content = fs.readFileSync(path.join(dir, ".gitignore"), "utf-8");
-    expect(content).toMatch(/^\.tdd\/agent-log\.jsonl$/m);
-    expect(content).toMatch(/^\.tdd\/run-config\.json$/m);
-    // The corpus is NOT blanket-ignored (no bare `.tdd/` or `.tdd/**` rule).
-    expect(content).not.toMatch(/^\.tdd\/?\s*$/m);
-    expect(content).not.toMatch(/^\.tdd\/\*/m);
+    expect(content).toMatch(/^\.sftdd\/agent-log\.jsonl$/m);
+    expect(content).toMatch(/^\.sftdd\/run-config\.json$/m);
+    // The corpus is NOT blanket-ignored (no bare `.sftdd/` or `.sftdd/**` rule).
+    expect(content).not.toMatch(/^\.sftdd\/?\s*$/m);
+    expect(content).not.toMatch(/^\.sftdd\/\*/m);
   });
 
   it("merges python extras when language=python", async () => {

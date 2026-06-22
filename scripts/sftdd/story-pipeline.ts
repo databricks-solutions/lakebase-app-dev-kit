@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { dirname, join } from "path";
-import { pipelineJson, storiesDir as storiesDirOf, acsDir as acsDirOf } from "./tdd-paths.js";
+import { pipelineJson, storiesDir as storiesDirOf, acsDir as acsDirOf } from "./sftdd-paths.js";
 
 export const STORY_STATUSES = [
   "designing",

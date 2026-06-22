@@ -31,6 +31,7 @@
 //   direct flag + atomic state transition.
 
 import { hashArtifact } from "./gate-hash";
+import { resolveTddDir } from "./sftdd-paths.js";
 import { withGatesLock } from "./gates-lock";
 import {
   readGates,
@@ -89,7 +90,7 @@ export function mutateTestList(args: MutateTestListArgs): MutateTestListResult {
     );
   }
 
-  const tddDir = args.tddDir ?? "./.tdd";
+  const tddDir = args.tddDir ?? resolveTddDir();
   const now = args.now ?? (() => new Date());
 
   return withGatesLock(
@@ -162,7 +163,7 @@ export function mutateTestList(args: MutateTestListArgs): MutateTestListResult {
  * need to pass hitlReapproved without running into the throw.
  */
 export function isTestListProtected(featureId: string, opts: { tddDir?: string } = {}): boolean {
-  const tddDir = opts.tddDir ?? "./.tdd";
+  const tddDir = opts.tddDir ?? resolveTddDir();
   try {
     const state = readGates(featureId, { tddDir });
     return state.gates.test_list.status === "approved";
