@@ -389,7 +389,7 @@ the same three records every time:
 2. **`selection-log.md` append** (the human-readable narrative-of-record): one
    append-only decision line. Humans read this; the substrate dual-writes it at every
    state change.
-3. **`gate.approved` event** in `.tdd/agent-log.jsonl`.
+3. **`gate.approved` event** in `.sftdd/agent-log.jsonl`.
 
 **The specific artifact each gate certifies (freezes):**
 
