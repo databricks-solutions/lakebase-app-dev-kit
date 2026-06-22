@@ -45,6 +45,14 @@ export interface StoryArtifactProbe {
   reviewPendingAc(story: string): string | null;
   /** An AC the REVIEW asked to refactor, not yet Driver-refactored, or null. */
   refactorPendingAc(story: string): string | null;
+  /** Story-level (the "story" granularity, default): every test in the story is
+   *  green but the story is not yet REVIEWed (drives the story-scoped Navigator
+   *  REVIEW turn, instead of per-AC). */
+  reviewPending(story: string): boolean;
+  /** Story-level: the story was REVIEWed with a refactor pending (the verdict
+   *  requested it, or an open build-refactor-routable smell), not yet refactored
+   *  (drives the story-scoped Driver REFACTOR turn). */
+  refactorPending(story: string): boolean;
   /** The open AC whose GREEN verify failed + has not yet been assessed, or null
    *  (drives the reactive Navigator assess turn). */
   assessGreenFailureAc(story: string): string | null;
@@ -71,6 +79,12 @@ export interface DriveContext {
   breakdownDone: boolean;
   /** Optional explicit story order; defaults to pipeline insertion order. */
   storyOrder?: string[];
+  /** Build-loop granularity (tdd-config.json, file -> env -> default). "story"
+   *  (the default) gives the Navigator/Driver story-scoped turns: one RED turn
+   *  writes the whole story's tests, one GREEN greens them, one REVIEW + one
+   *  REFACTOR per story. "ac" (strict per-test TDD) and "hybrid-a" (per-layer
+   *  batch, per-AC review) keep the per-AC review/refactor cadence. */
+  loop?: "ac" | "hybrid-a" | "story";
 }
 
 const DESIGN_DONE_STATUSES = new Set([
@@ -80,7 +94,12 @@ const DESIGN_DONE_STATUSES = new Set([
   "done",
 ]);
 
-function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryView {
+function storyView(
+  id: string,
+  e: StoryEntry,
+  probe: StoryArtifactProbe,
+  loop: "ac" | "hybrid-a" | "story",
+): StoryView {
   const gateApproved = e.gate?.status === "approved";
   const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
   return {
@@ -99,8 +118,11 @@ function storyView(id: string, e: StoryEntry, probe: StoryArtifactProbe): StoryV
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
+      loop,
       reviewAc: probe.reviewPendingAc(id),
       refactorAc: probe.refactorPendingAc(id),
+      reviewStoryPending: probe.reviewPending(id),
+      refactorStoryPending: probe.refactorPending(id),
       assessGreenAc: probe.assessGreenFailureAc(id),
       repairRegressionAc: probe.repairRegressionFixAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
@@ -121,9 +143,10 @@ export function deriveDriveState(
   probe: StoryArtifactProbe,
   ctx: DriveContext,
 ): DriveState {
+  const loop = ctx.loop ?? "story";
   const stories: Record<string, StoryView> = {};
   for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe);
+    stories[id] = storyView(id, entry, probe, loop);
   }
   const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
   // The breakdown is done once stories are tracked in the pipeline (the signal

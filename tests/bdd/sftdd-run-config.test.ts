@@ -65,8 +65,8 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
     expect(cfg.review_effort).toBe("low");
     expect(cfg.ui_track).toBe(true);
     expect(cfg.deploy_target).toBe("local");
-    // Defaults when the env knobs are unset.
-    expect(cfg.loop_granularity).toBe("ac");
+    // Defaults when the env knobs are unset (story-scoped Navigator/Driver turns).
+    expect(cfg.loop_granularity).toBe("story");
     expect(cfg.batch_cap).toBeUndefined();
   });
 
@@ -122,7 +122,7 @@ describe("run-config: formatRunConfig groups roles by model", () => {
     // Build roles grouped under sonnet, design under opus.
     expect(text).toMatch(/sonnet: .*driver/);
     expect(text).toMatch(/opus: .*spec-author/);
-    expect(text).toMatch(/loop=ac/);
+    expect(text).toMatch(/loop=story/);
     expect(text).toMatch(/review-effort=low/);
   });
 });

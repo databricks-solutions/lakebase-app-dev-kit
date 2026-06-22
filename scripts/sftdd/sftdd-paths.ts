@@ -57,6 +57,16 @@ export const acReviewJson = (tdd: string, f: string, s: string, ac: string): str
   join(cyclesRootDir(tdd), f, s, ac, "review.json");
 export const acReviewVerdictJson = (tdd: string, f: string, s: string, ac: string): string =>
   join(cyclesRootDir(tdd), f, s, ac, "review-verdict.json");
+// Story-level review (the "story" loop granularity): the Navigator REVIEWs the
+// WHOLE story in one turn and the Driver REFACTORs it in one turn, so the
+// transition record lives at the story's cycles root (sibling of the per-AC
+// dirs), not under any single AC. review-verdict.json is the Navigator's output
+// ({ refactor, notes }); review.json records reviewed_at / refactor_requested /
+// refactored_at , the same producer/consumer split as the per-AC pair above.
+export const storyReviewJson = (tdd: string, f: string, s: string): string =>
+  join(cyclesRootDir(tdd), f, s, "review.json");
+export const storyReviewVerdictJson = (tdd: string, f: string, s: string): string =>
+  join(cyclesRootDir(tdd), f, s, "review-verdict.json");
 
 // ── Project-level artifacts ───────────────────────────────────────
 export const workflowStateJson = (tdd: string): string => join(tdd, "workflow-state.json");

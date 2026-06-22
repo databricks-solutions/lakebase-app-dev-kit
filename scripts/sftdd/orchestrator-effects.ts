@@ -101,12 +101,13 @@ export interface DriveEffectsConfig {
   fallbackModelForRole?(role: string): string | undefined;
   /** Unified config: a role's `--max-budget-usd` per-invocation cap, or undefined. */
   maxBudgetUsdForRole?(role: string): number | undefined;
-  /** P8b: build loop granularity. "ac" (default) writes + greens one test at a
-   *  time (strict per-AC TDD). "hybrid-a" batches RED+GREEN by layer (the
-   *  Navigator writes a layer's failing tests in one turn, the Driver greens them
-   *  together), keeping the per-AC REVIEW. Cuts turn count on multi-AC same-layer
-   *  stories; gated so a rigorous run keeps strict per-AC. */
-  loopGranularity?: "ac" | "hybrid-a";
+  /** Build loop granularity. "story" (the DEFAULT) gives the Navigator + Driver
+   *  story-scoped turns: one RED turn writes the WHOLE story's tests, one GREEN
+   *  greens them, one REVIEW + one REFACTOR per story. "ac" writes + greens one
+   *  test at a time (strict per-AC TDD, per-AC REVIEW/REFACTOR). "hybrid-a"
+   *  batches RED+GREEN by layer (capped) but keeps the per-AC REVIEW. ac /
+   *  hybrid-a are opt-in for a more granular run. */
+  loopGranularity?: "ac" | "hybrid-a" | "story";
   /** P8b: max test-list items per layer-batch (hybrid-a). Default 3. */
   batchCap?: number;
   onAction?(action: WorkflowAction, iteration: number): void;
@@ -216,9 +217,30 @@ function nextPendingTestDirective(
   tddDir: string,
   featureId: string,
   story: string,
-  loop?: "ac" | "hybrid-a",
+  loop?: "ac" | "hybrid-a" | "story",
   cap?: number,
 ): string {
+  // story (default): the Navigator writes EVERY pending test for the story (all
+  // ACs) in ONE turn, matching the single whole-story batch RED cycle the
+  // orchestration stamps (begin --loop story). Same single source
+  // (nextPendingBatch) the begin reads, so written tests + stamped ids cannot drift.
+  if ((loop ?? "story") === "story") {
+    let batch: { id: string; ac_id: string; description: string }[] = [];
+    try {
+      batch = nextPendingBatch(tddDir, featureId, story, Number.MAX_SAFE_INTEGER);
+    } catch {
+      batch = [];
+    }
+    if (batch.length === 0) {
+      return `Write the failing tests (RED) for story ${story}: every test-list item for the story that has no cycle yet.`;
+    }
+    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
+    return (
+      `Write the failing tests (RED) for the WHOLE story ${story} in this one turn, EXACTLY these ${batch.length} item(s)` +
+      ` across all its ACs, in order: ${list}. Write ALL of them now and ONLY these; do NOT add or drop items, the` +
+      ` orchestration stamps ONE whole-story batch RED cycle for exactly these ids, and any mismatch is a defect.`
+    );
+  }
   // P8b (hybrid-a): the Navigator writes the first pending LAYER's tests in ONE
   // turn (a layer-batch), matching the batch RED cycle the orchestration stamps
   // for those exact ids. Same single source (nextPendingBatch) the begin reads,
@@ -342,7 +364,7 @@ function consumeHandback(
 /** The role's task prompt, with any pending hand-back note prepended (the
  *  informed-retry feedback). */
 interface BuildLoopOpts {
-  loop?: "ac" | "hybrid-a";
+  loop?: "ac" | "hybrid-a" | "story";
   cap?: number;
 }
 
@@ -492,6 +514,21 @@ function roleTaskBody(
         );
       }
       if (action.buildMode === "review") {
+        // story granularity (default): REVIEW the WHOLE story's implementation in
+        // one turn; verdict at the story root (no AC).
+        if ((build?.loop ?? "story") === "story") {
+          return (
+            `REVIEW the implementation of story ${s} now that ALL its tests are green, the whole story in one pass.` +
+            reviewRubric(tddDir, featureId, s, "") +
+            ` Judge the story's diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
+            ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
+            ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
+            ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
+            ` Write ONE verdict for the whole story to` +
+            ` .tdd/cycles/${featureId}/${s}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+            `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
+          );
+        }
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
           reviewRubric(tddDir, featureId, s, action.ac ?? "") +
@@ -510,6 +547,20 @@ function roleTaskBody(
         return regressionRepairDirective(tddDir, featureId, s);
       }
       if (action.buildMode === "refactor") {
+        // story granularity (default): REFACTOR the WHOLE story in one turn per
+        // the story-level review (.tdd/cycles/<F>/<S>/review.json -> refactor_notes).
+        if ((build?.loop ?? "story") === "story") {
+          return (
+            `REFACTOR story ${s} per the Navigator's review` +
+            ` (.tdd/cycles/${featureId}/${s}/review.json -> refactor_notes), guided by the architecture` +
+            ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+            ` If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering /` +
+            ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
+            ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
+            ` duplicated/misplaced code into one shared helper in its correct layer.` +
+            ` Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.`
+          );
+        }
         return (
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
           ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
@@ -522,9 +573,11 @@ function roleTaskBody(
         );
       }
       return (
-        (build?.loop === "hybrid-a"
-          ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
-          : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
+        ((build?.loop ?? "story") === "story"
+          ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.`
+          : build?.loop === "hybrid-a"
+            ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
+            : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
         (uiTrack ? UI_TRACK_BUILD : "") +
         supersededTestsDirective(tddDir, featureId, s)
       );
@@ -687,13 +740,18 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       } else if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        // P8b: a `begin` (RED) under hybrid-a stamps a layer-batch cycle; pass the
-        // mode + cap so the substrate batches exactly what the Navigator was told
-        // to write. The review verb is unaffected (still per-AC).
+        // Pass the loop granularity so the substrate scopes the turn:
+        //  - story (default): `begin` writes ONE batch RED for the whole story;
+        //    `review` reviews the WHOLE story (story-level review.json, no --ac).
+        //  - hybrid-a: `begin` writes a capped layer-batch; review stays per-AC.
+        //  - ac: one RED per test; review per-AC.
+        const loop = cfg.loopGranularity ?? "story";
         const loopFlag =
-          verb === "begin" && cfg.loopGranularity === "hybrid-a"
-            ? ["--loop", "hybrid-a", ...(cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : [])]
-            : [];
+          loop === "story"
+            ? ["--loop", "story"]
+            : verb === "begin" && loop === "hybrid-a"
+              ? ["--loop", "hybrid-a", ...(cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : [])]
+              : [];
         cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...loopFlag] });
       }
       if (!("mode" in action) && action.role === "driver") {
@@ -704,7 +762,10 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         // consumes the one repair attempt (a still-failing verify then escalates
         // with the Navigator's diagnosis instead of routing another repair).
         const repairFlag = isRepair ? ["--repair"] : [];
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag] });
+        // story granularity: a REFACTOR turn refactors the WHOLE story
+        // (refactorStory, no --ac). GREEN/repair are unaffected by --loop.
+        const loopFlag = verb === "refactor" && (cfg.loopGranularity ?? "story") === "story" ? ["--loop", "story"] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag, ...loopFlag] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,

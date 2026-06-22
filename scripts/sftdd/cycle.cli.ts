@@ -20,6 +20,8 @@ import {
   greenOpenCycle,
   reviewAc,
   refactorAc,
+  reviewStory,
+  refactorStory,
   firstReviewPendingAc,
   firstRefactorPendingAc,
   greenVerifierForEnv,
@@ -97,10 +99,15 @@ async function main(): Promise<number> {
     case "begin": {
       // P8b: hybrid-a stamps ONE batch RED cycle for the first pending layer's
       // items (capped); the default (ac) stamps one RED for the next test.
+      // story: one batch RED covering EVERY pending test in the story (the
+      // Navigator writes the whole story's failing tests in one turn).
+      // hybrid-a: one layer-batch (capped). ac: one RED for the next test.
       const r =
-        a.loop === "hybrid-a"
-          ? beginNextPendingBatch(base, { cap: a.batchCap })
-          : beginNextPendingCycle(base);
+        a.loop === "story"
+          ? beginNextPendingBatch(base, { cap: Number.MAX_SAFE_INTEGER })
+          : a.loop === "hybrid-a"
+            ? beginNextPendingBatch(base, { cap: a.batchCap })
+            : beginNextPendingCycle(base);
       process.stdout.write(
         r.recorded
           ? `cycle: RED ${r.cycleId} for ${r.testId} (${r.acId})\n`
@@ -128,6 +135,13 @@ async function main(): Promise<number> {
       return 0;
     }
     case "review": {
+      // story granularity (default): the Navigator REVIEWs the WHOLE story in
+      // one turn (review-verdict.json at the story root); no AC.
+      if (a.loop === "story") {
+        const r = reviewStory(tddDir, a.feature, a.story);
+        process.stdout.write(`cycle: REVIEWED story ${a.story}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}\n`);
+        return 0;
+      }
       // Record the Navigator's REVIEW of an AC (after its tests are all green).
       const ac = a.ac ?? firstReviewPendingAc(tddDir, a.feature, a.story);
       if (!ac) {
@@ -144,6 +158,17 @@ async function main(): Promise<number> {
       // AC stays refactor-pending + an escalation is raised; we exit 0 (the
       // escalation is recorded data, not a crash) so the driver's next readState
       // routes to a clean raise-to-hil halt.
+      // story granularity (default): the Driver REFACTORs the WHOLE story in
+      // one turn; honest re-verify gates stamping (same as the per-AC path).
+      if (a.loop === "story") {
+        const r = await refactorStory(tddDir, a.feature, a.story, { verify: greenVerifierForEnv() });
+        if (r.escalated) {
+          process.stdout.write(`cycle: REFACTOR BLOCKED for story ${a.story} -> raised to HIL: ${r.summary}\n`);
+        } else {
+          process.stdout.write(`cycle: REFACTORED story ${a.story}\n`);
+        }
+        return 0;
+      }
       const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
       if (!ac) {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);

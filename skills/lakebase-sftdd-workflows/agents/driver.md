@@ -51,6 +51,8 @@ You do NOT write cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRe
 
 ## GREEN
 
+By **default (story granularity)** your GREEN turn makes the WHOLE story's failing tests pass in one pass (the prompt names them); work test-by-test internally if that helps, but drive every one of the story's tests to green before you finish. (The opt-in `ac` / `hybrid-a` granularities hand you one test or a layer-batch at a time instead.)
+
 1. Read the failing test and the Navigator's `navigator_plan`.
 2. Write the code that makes the failing test pass. The test list is your horizon; the *current* test is your increment. **When `architecture.json` declares `layers` (a service-backed feature), realize them , do NOT write a fat controller.** The route/boundary handler validates input + delegates to a **service** (business logic); the service calls a **repository** for persistence; the repository is the ONLY layer that touches the ORM/session (`db.query/add/commit`, `Session`). No `db.*` and no business logic in the route handler or templates. **Place each layer's code at its exact declared `layers[].module` path** (a `module` ending `/` is a package directory, e.g. `app/services/`, not a flat `app/services.py`). **Render a UI boundary through the declared `renders_via` framework** (Jinja2 `TemplateResponse` + a `templates/` dir, with stable `data-testid` seams); NEVER return an inline HTML string from a route handler. Keep functions short and DRY (extract one shared helper, no copy-paste). The `lakebase-sftdd-layering-clean` gate + the `tests/architecture/test_layering.py` fitness test defend all of this; build it right as you go rather than refactoring later.
 3. **Dispatch on the AC's layer** to pick the runner:
@@ -71,9 +73,9 @@ You do NOT write cycle artifacts, call `recordRunnerOutcome`/`markGreen`/`markRe
 
 When GREEN requires a schema change, create the migration with **`lakebase-sftdd-new-migration --name "<description>"`** (in the project root). Never call `alembic` / `flyway` / `knex` directly: the kit detects the tool and names the migration with a UTC timestamp version (`YYYYMMDDHHMMSS`), keeping migrations globally unique and chronologically sorted so sibling features merge collision-free (Alembic `<ts>_<slug>.py`; Flyway `V<ts>__<slug>.sql`; Knex `<ts>_<slug>.js`). A bare `alembic revision` produces an unordered hash name and is a contract violation. Then author the `upgrade()`/`downgrade()` body. For Python you may add `--autogenerate --instance <id> --branch <branch>` to diff the models against the branch DB and prefill it.
 
-## REFACTOR (only on the Navigator's request, per AC)
+## REFACTOR (only on the Navigator's request)
 
-The orchestration invokes you in REFACTOR mode after the Navigator's REVIEW asked for one. Read the request (`cycles/<F>/<S>/<AC>/review.json` `refactor_notes`, citing `architecture.md` / `design-guide.md`), make the improvement (names, helpers, duplication, layer placement, design-token use) **without changing any outer-boundary test**, and re-run the tests (they MUST stay green). If the refactor would break an outer-boundary test, the refactor is wrong (or the test is): surface it to the Navigator; do not edit the test. You do NOT call `markRefactored()` or edit cycle artifacts.
+The orchestration invokes you in REFACTOR mode after the Navigator's REVIEW asked for one. By **default (story granularity)** this is ONE story-scoped refactor turn, read the story-level request (`cycles/<F>/<S>/review.json` `refactor_notes`); under the opt-in `ac` / `hybrid-a` granularities it is per-AC instead (`cycles/<F>/<S>/<AC>/review.json`). Citing `architecture.md` / `design-guide.md`, make the improvement (names, helpers, duplication, layer placement, design-token use) **without changing any outer-boundary test**, and re-run the tests (they MUST stay green). If the refactor would break an outer-boundary test, the refactor is wrong (or the test is): surface it to the Navigator; do not edit the test. You do NOT call `markRefactored()` or edit cycle artifacts.
 
 ## Logging
 

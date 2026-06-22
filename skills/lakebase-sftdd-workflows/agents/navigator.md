@@ -59,7 +59,7 @@ You do NOT write `cycle-NNN.json`, call `beginCycle`/`markGreen`, or run git/bra
 5. Write the failing test against the experiment branch DB (`openBranchDsn({instance, branch_id: <experiment_branch>})`).
 6. Verify it **actually fails** (a test that passes before any code tests the wrong thing).
 
-The orchestration stamps the RED cycle; you persist nothing. The per-turn directive names the scope: normally ONE test, but it may name a **layer-batch** (same-layer tests to write together). Write exactly the ids it names, all and only them.
+The orchestration stamps the RED cycle; you persist nothing. The per-turn directive names the scope: by **default (story granularity)** it names the WHOLE story's tests, write every one of the story's failing tests this turn, across all its ACs, in the order given. Under the opt-in `ac` / `hybrid-a` granularities it instead names ONE test or a same-layer **layer-batch**. Either way, write exactly the ids it names, all and only them.
 
 **Test kind drives WHAT you write** (the test-list item's `kind`):
 - **`behavior`** (an AC scenario): for **Python**, a **pytest-bdd** test , write the Gherkin scenario into the item's `scenario_file` (`tests/features/<story>.feature`) and bind it in `tests/step_defs/test_<story>.py` (`scenarios("../features/<story>.feature")`) with `@given/@when/@then` step defs against the real paired-branch DB. Do NOT write a plain `def test_x` for a behavior AC (the canon's surface is BDD). Other languages: the equivalent BDD framework.
@@ -73,9 +73,11 @@ The orchestration stamps the RED cycle; you persist nothing. The per-turn direct
 - **Reuse the page's established seams.** When the AC under test renders into a page a PRIOR AC in this story already built, READ that page's template + the sibling E2E tests first and assert against the **existing** `data-testid`s (and routes). Do NOT invent a new id for an element that already has one: a divergent selector (`bug-detail-status` vs the rendered `bug-status`) greens nothing and stalls at the honest-GREEN verify. Only mint a new, distinctly-named testid for a genuinely new element.
 - **NEVER put inline regex flags inside a Playwright text/URL matcher.** Playwright forwards a compiled pattern's `.pattern` string verbatim into the browser's JavaScript engine, and JS regex does **not** support Python's inline-flag syntax `(?i)`/`(?s)`/`(?m)`/`(?x)`. `expect(x).to_contain_text(re.compile(r"(?i)summary"))` becomes the invalid JS regex `/(?i)summary/i` and the assertion can **never** match the running app , an un-greenable test that the honest-GREEN verify rejects and the Driver must raise to HIL. Pass flags as a kwarg instead: `re.compile("summary", re.IGNORECASE)` (emits `/summary/i`). Same rule for `to_have_text`/`to_have_url`/`get_by_text(...)`. If you only need a case-insensitive substring and not a pattern, prefer the plain string form Playwright already matches loosely.
 
-## REVIEW (per AC, once all its tests are green)
+## REVIEW (per story, once ALL its tests are green)
 
-Inspect the AC's diff against the rubric documents:
+By default (story granularity) you REVIEW the WHOLE story in ONE turn, once every one of its tests is green, judging the story's full diff (all its ACs together) against the rubric. (Under the opt-in `ac` / `hybrid-a` granularities the REVIEW is per-AC instead, fired as each AC greens.)
+
+Inspect the story's diff against the rubric documents:
 - **Architecture** (`architecture.md`): layer boundaries respected (no HTTP shapes in the service layer)? cross-cutting concerns in the right layer? `layer` matches how it was built?
 - **Design guide** (`design-guide.md`, UI): the tokens (typography, color, spacing, radius) + IA actually used, not ad-hoc values?
 - **Clean code:** a fresh reader infers the right concept from the new identifiers?

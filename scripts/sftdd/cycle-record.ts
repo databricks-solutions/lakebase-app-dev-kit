@@ -20,7 +20,14 @@
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./sftdd-paths.js";
+import {
+  storyTestListJson,
+  cyclesRootDir,
+  acReviewJson,
+  acReviewVerdictJson,
+  storyReviewJson,
+  storyReviewVerdictJson,
+} from "./sftdd-paths.js";
 import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
@@ -700,5 +707,172 @@ export async function refactorAc(
   // Commit the behavior-preserving refactor as its own commit (the second half
   // of the "commit when green, then commit the refactor" rhythm).
   await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
+  return { refactored: true, summary: result.summary };
+}
+
+// ── Story-level review/refactor ("story" loop granularity, the default) ───────
+// When the build runs story-scoped turns the Navigator REVIEWs the WHOLE story
+// in one turn and the Driver REFACTORs it in one turn, instead of cycling per
+// AC. The transition is recorded ONCE at the story's cycles root
+// (storyReviewJson), the story-scoped analogue of the per-AC review.json above,
+// with the identical producer/consumer split: the Navigator writes
+// review-verdict.json ({ refactor, notes }); reviewStory stamps reviewed_at +
+// refactor_requested; refactorStory stamps refactored_at after an honest
+// behavior-preserving verify. The per-AC functions remain for the opt-in "ac" /
+// "hybrid-a" granularities.
+
+export interface StoryReviewState {
+  /** Every test-list item in the story has a green cycle (story ready to REVIEW). */
+  allTestsGreen: boolean;
+  /** review.json has reviewed_at (the Navigator REVIEWed the story). */
+  reviewed: boolean;
+  /** The REVIEW requested a refactor. */
+  refactorRequested: boolean;
+  /** review.json has refactored_at (the Driver completed the refactor). */
+  refactored: boolean;
+}
+
+function readStoryReview(tddDir: string, featureId: string, story: string): ReviewRecord {
+  const f = storyReviewJson(tddDir, featureId, story);
+  if (!existsSync(f)) return {};
+  try {
+    return JSON.parse(readFileSync(f, "utf8")) as ReviewRecord;
+  } catch {
+    return {};
+  }
+}
+
+/** Whether every test-list item in the story is green (story ready to REVIEW).
+ *  Mirrors the probe's codeWritten: test-list-driven when a list exists, else a
+ *  legacy fallback over the raw RED/GREEN cycles. */
+function storyAllTestsGreen(tddDir: string, featureId: string, story: string): boolean {
+  const p = storyTestProgress(tddDir, featureId, story);
+  if (p.total === 0) {
+    const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+    return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+  }
+  return p.allGreen;
+}
+
+export function storyReviewState(tddDir: string, featureId: string, story: string): StoryReviewState {
+  const r = readStoryReview(tddDir, featureId, story);
+  return {
+    allTestsGreen: storyAllTestsGreen(tddDir, featureId, story),
+    reviewed: Boolean(r.reviewed_at),
+    refactorRequested: Boolean(r.refactor_requested),
+    refactored: Boolean(r.refactored_at),
+  };
+}
+
+/** The story's REVIEW is pending: all its tests are green but the Navigator has
+ *  not yet REVIEWed the story (-> Navigator story-level REVIEW turn). */
+export function reviewPending(tddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(tddDir, featureId, story);
+  return s.allTestsGreen && !s.reviewed;
+}
+
+/** The story has a REFACTOR pending (-> Driver story-level REFACTOR turn), from
+ *  either source (mirrors firstRefactorPendingAc): the Navigator's REVIEW verdict
+ *  requested it, OR a still-open build-refactor-routable smell for the story (the
+ *  gate IS the refactor signal, so a reviewed-but-unrefactored story routes to
+ *  REFACTOR even when the verdict said refactor:false). One attempt; a residual
+ *  violation after refactorStory re-surfaces with no refactor pending + escalates. */
+export function refactorPending(tddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(tddDir, featureId, story);
+  if (!s.reviewed || s.refactored) return false;
+  if (s.refactorRequested) return true;
+  return hasOpenBuildRefactorRoutableSmell(tddDir, story);
+}
+
+/** Record the Navigator's REVIEW of the WHOLE story: read its verdict
+ *  (review-verdict.json at the story root) and stamp the story review.json with
+ *  reviewed_at + refactor_requested. No verdict present => refactor_requested
+ *  false ("looks good"), so a Navigator that finds nothing to fix never stalls.
+ *  Story-scoped sibling of reviewAc. */
+export function reviewStory(
+  tddDir: string,
+  featureId: string,
+  story: string,
+): { reviewed: boolean; refactorRequested: boolean } {
+  let verdict: { refactor?: boolean; notes?: string } = {};
+  const vf = storyReviewVerdictJson(tddDir, featureId, story);
+  if (existsSync(vf)) {
+    try {
+      verdict = JSON.parse(readFileSync(vf, "utf8")) as { refactor?: boolean; notes?: string };
+    } catch {
+      verdict = {};
+    }
+  }
+  const refactorRequested = verdict.refactor === true;
+  const file = storyReviewJson(tddDir, featureId, story);
+  const prior = readStoryReview(tddDir, featureId, story);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    JSON.stringify(
+      { ...prior, reviewed_at: new Date().toISOString(), refactor_requested: refactorRequested, ...(verdict.notes ? { refactor_notes: verdict.notes } : {}) },
+      null,
+      2,
+    ) + "\n",
+  );
+  logCycleEvent(tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.review",
+    feature_id: featureId,
+    slots: {
+      ac: story,
+      refactor: refactorRequested,
+      rationale: verdict.notes ?? (refactorRequested ? "refactor requested" : "looks good"),
+      story,
+    },
+  });
+  return { reviewed: true, refactorRequested };
+}
+
+/** Record that the Driver completed the requested REFACTOR for the WHOLE story.
+ *  Story-scoped sibling of refactorAc: the same honest behavior-preserving verify
+ *  (re-run the project's suite against the story's experiment branch) gates
+ *  stamping refactored_at; on failure the story stays refactor-pending and an
+ *  escalation is raised to the HIL. */
+export async function refactorStory(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  opts?: { verify?: GreenVerifier },
+): Promise<RefactorResult> {
+  const exp = storyExperiment(tddDir, featureId, story);
+  const verify = opts?.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-refactor",
+      reason: `REFACTOR verify failed for story ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+    });
+    return { refactored: false, escalated: true, escalation, summary: result.summary };
+  }
+
+  const file = storyReviewJson(tddDir, featureId, story);
+  const prior = readStoryReview(tddDir, featureId, story);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
+  for (const d of readSmellsLog(tddDir).detected) {
+    if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === undefined || d.story_id === story)) {
+      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored story: ${story}` });
+    }
+  }
+  const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
+    ? `addressed: ${prior.refactor_notes}`
+    : "structure improved";
+  logCycleEvent(tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    feature_id: featureId,
+    slots: { ac: story, change, story },
+  });
+  await commitCycleWork(tddDir, `refactor: story ${story} (${change})`);
   return { refactored: true, summary: result.summary };
 }

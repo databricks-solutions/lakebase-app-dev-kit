@@ -241,8 +241,16 @@ describe("commandsForAction: P8b loop granularity (hybrid-a layer-batched build)
     (cmds.find((c) => (c as { bin?: string }).bin === "lakebase-sftdd-cycle") as { args: string[] }).args;
   const navTask = (cmds: ReturnType<typeof commandsForAction>): string => (cmds[0] as { task: string }).task;
 
-  it("default (ac): the navigator begin command carries NO --loop flag", () => {
+  it("default (story): the navigator begin command appends --loop story (whole-story RED)", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("begin");
+    expect(args).toContain("--loop");
+    expect(args[args.indexOf("--loop") + 1]).toBe("story");
+  });
+
+  it("opt-in 'ac': the navigator begin command carries NO --loop flag (one RED per test)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg({ loopGranularity: "ac" }));
     const args = cycleArgs(cmds);
     expect(args[0]).toBe("begin");
     expect(args).not.toContain("--loop");
@@ -553,7 +561,7 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
       join(tdd, "features", "F1", "stories", "S1", "acs", "AC1-create.json"),
       JSON.stringify({ id: "AC1-create", layer: "API" }),
     );
-    const task = claudeCmd(review, { tddDir: tdd }).task;
+    const task = claudeCmd(review, { tddDir: tdd, loopGranularity: "ac" }).task;
     expect(task).toMatch(/RUBRIC \(pre-extracted/);
     expect(task).toContain("layer=API");
     expect(task).toContain("NFR-R2-status-validation"); // story-scoped NFR
@@ -564,8 +572,9 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
   });
 
   it("the review rubric degrades gracefully when architecture.json is absent", () => {
+    // loop="ac": exercise the per-AC review path (story-level review is the default).
     // cfg's tddDir does not exist -> no layer, no NFRs -> bare review prompt, no RUBRIC clause.
-    const task = claudeCmd(review).task;
+    const task = claudeCmd(review, { loopGranularity: "ac" }).task;
     expect(task).toMatch(/REVIEW the implementation of AC AC1-create/);
     expect(task).not.toMatch(/RUBRIC \(pre-extracted/);
   });

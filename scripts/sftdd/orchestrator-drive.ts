@@ -135,12 +135,22 @@ export interface StoryBuild {
   testsWritten: boolean;
   /** The Driver made the tests pass. */
   codeWritten: boolean;
+  /** Build-loop granularity for this story. "story" (default) drives one
+   *  story-scoped REVIEW + REFACTOR turn (reviewStoryPending / refactorStoryPending);
+   *  "ac" / "hybrid-a" drive the per-AC reviewAc / refactorAc cadence. */
+  loop?: "ac" | "hybrid-a" | "story";
   /** An AC whose tests are all green but not yet REVIEWed by the Navigator
    *  (against architecture + design guide), or null. Drives the per-AC REVIEW. */
   reviewAc?: string | null;
   /** An AC the Navigator REVIEW asked to refactor, not yet refactored by the
    *  Driver, or null. Drives the per-AC REFACTOR. */
   refactorAc?: string | null;
+  /** Story-level ("story" granularity): the whole story is green but not yet
+   *  REVIEWed (drives one story-scoped Navigator REVIEW turn). */
+  reviewStoryPending?: boolean;
+  /** Story-level: the story was REVIEWed with a refactor pending, not yet
+   *  refactored (drives one story-scoped Driver REFACTOR turn). */
+  refactorStoryPending?: boolean;
   /** An AC whose GREEN verify FAILED and has not yet been assessed, or null.
    *  Drives the reactive Navigator ASSESS turn: flag prior tests the AC
    *  supersedes (-> Driver permissive green) or confirm a genuine regression
@@ -311,8 +321,17 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   // batching all refactors to the end of the story. reviewAc/refactorAc are
   // per-AC (firstReviewPendingAc / firstRefactorPendingAc): each only fires for
   // an AC whose tests are ALL green, so a half-built AC is never reviewed.
-  if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
-  if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  // Story granularity (default): the Navigator REVIEWs the WHOLE story in one
+  // turn and the Driver REFACTORs it in one turn (no `ac`), instead of cycling
+  // per AC. Placed, like the per-AC checks, ABOVE the RED/GREEN steps so a
+  // green story is reviewed/refactored before the lane advances to acceptance.
+  if ((b.loop ?? "story") === "story") {
+    if (b.reviewStoryPending) return { kind: "invoke-role", role: "navigator", story, buildMode: "review" };
+    if (b.refactorStoryPending) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor" };
+  } else {
+    if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
+    if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
+  }
   // Reactive supersession trigger: an open AC whose GREEN verify failed + has not
   // been assessed routes the Navigator to ASSESS the failure (flag prior tests
   // the AC supersedes -> the Driver then permissively greens them, OR confirm a

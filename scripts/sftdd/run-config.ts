@@ -37,7 +37,8 @@ export interface RunConfig {
   build_session_scope: string;
   /** P6: the REVIEW turn's --effort ("" = model default). */
   review_effort: string;
-  /** P8b: the build loop granularity (ac | hybrid-a | ...); "ac" until P8b lands. */
+  /** The build loop granularity (story | ac | hybrid-a); "story" is the default
+   *  (Navigator/Driver take story-scoped turns). Override via LAKEBASE_TDD_LOOP. */
   loop_granularity: string;
   /** P8b: layer-batch cap, when batching. */
   batch_cap?: number;
@@ -98,7 +99,7 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
     ui_track: Boolean(inputs.uiTrack),
     build_session_scope: inputs.buildSessionScope ?? "story",
     review_effort: inputs.reviewEffort ?? "",
-    loop_granularity: env.LAKEBASE_TDD_LOOP || "ac",
+    loop_granularity: env.LAKEBASE_TDD_LOOP || "story",
     deploy_target: inputs.deployTarget ?? "local",
     models,
   };
