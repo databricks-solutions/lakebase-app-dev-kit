@@ -94,6 +94,7 @@
     "lakebase-mcp-server": "./dist/apps/mcp-server/index.js",
     "lakebase-pr": "./dist/scripts/github/pr.cli.js",
     "lakebase-resolve-profile": "./dist/scripts/lakebase/resolve-profile.cli.js",
+    "lakebase-resolve-sftdd-dir": "./dist/scripts/lakebase/resolve-sftdd-dir.cli.js",
     "lakebase-schema-diff": "./dist/scripts/lakebase/schema-diff.cli.js",
     "lakebase-schema-migrate": "./dist/scripts/lakebase/schema-migrate.cli.js",
     "lakebase-scm-abandon-feature": "./dist/scripts/lakebase/scm-abandon-feature.cli.js",

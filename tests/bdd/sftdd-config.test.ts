@@ -28,11 +28,23 @@ describe("resolveTddSettings: defaults when no file + no env", () => {
     expect(s.effortFor("navigator", "review")).toBe("low");
     expect(s.effortFor("navigator", "red")).toBe("default");
     expect(s.effortFor("driver", "green")).toBe("default");
-    expect(s.build.loopGranularity).toBe("ac");
+    expect(s.build.loopGranularity).toBe("story"); // default is story-scoped Navigator/Driver turns
     expect(s.build.sessionScope).toBe("story");
     expect(s.plan.sizing).toBe(true);
     expect(s.fallbackModels.navigator).toBeUndefined();
     expect(s.budgets.navigator).toBeUndefined();
+  });
+
+  // Regression: LAKEBASE_TDD_LOOP must be honored for EVERY granularity, not just
+  // hybrid-a. The drive reads s.build.loopGranularity (this resolver) , when the
+  // env value was ignored, a `loop=story` run silently fell back to per-test "ac"
+  // and the story-level cadence never engaged live (the hermetic commandsForAction
+  // tests missed it because their cfg() left loopGranularity undefined).
+  it("LAKEBASE_TDD_LOOP honors story | ac | hybrid-a (not just hybrid-a)", () => {
+    for (const v of ["story", "ac", "hybrid-a"] as const) {
+      const s = resolveTddSettings({ projectDir: proj, env: { LAKEBASE_TDD_LOOP: v } });
+      expect(s.build.loopGranularity).toBe(v);
+    }
   });
 });
 

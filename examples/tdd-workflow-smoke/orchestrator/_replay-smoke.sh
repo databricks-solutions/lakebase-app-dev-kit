@@ -89,40 +89,52 @@ replay_smoke() {
   : "${GITHUB_OWNER:?${SMOKE_NAME}: GITHUB_OWNER required}"
   log "scaffolding ${PROJECT_NAME} (tiers=${TIERS})..."
   bash "$KIT_LK" --warm || { err "could not resolve the kit via lk"; return 1; }
+  # Per-role model overrides. Default = the replay smokes' SPEED config (design
+  # prose on haiku, since design is REPLAYED there so model quality is moot;
+  # test-strategist stays sonnet , haiku thrashed ~200s on its structured list).
+  # A caller that runs design LIVE (run-capture) overrides AGENT_MODELS to a
+  # QUALITY config; pairs are space-separated role=model.
+  local AGENT_MODELS="${AGENT_MODELS:-spec-author=haiku architect-reviewer=haiku ux-designer=haiku product-owner=haiku release-engineer=haiku}"
+  local AGENT_MODEL_FLAGS="" _pair
+  for _pair in $AGENT_MODELS; do AGENT_MODEL_FLAGS="$AGENT_MODEL_FLAGS --agent-model $_pair"; done
+  log "agent models: ${AGENT_MODELS}"
   (
     bash "$KIT_LK" lakebase-create-project \
       --project-name "$PROJECT_NAME" --parent-dir "$(dirname "$PROJECT_DIR")" \
       --databricks-host "$DATABRICKS_HOST" --github-owner "$GITHUB_OWNER" \
       --language python --runner self-hosted --tiers "$TIERS" \
-      `# test-strategist stays on its sonnet default (P1): haiku thrashed ~200s on` \
-      `# its structured test-list. Other prose roles on haiku for speed.` \
-      --agent-model spec-author=haiku --agent-model architect-reviewer=haiku \
-      --agent-model ux-designer=haiku \
-      --agent-model product-owner=haiku --agent-model release-engineer=haiku \
+      $AGENT_MODEL_FLAGS \
       --enable-e2e
   ) || { err "scaffold failed"; return 1; }
   cd "$PROJECT_DIR"
 
   # ─── 2. project intake on trunk (REAL precondition) ───────────
+  # Resolve the runtime artifact dir through the kit's SINGLE point of entry,
+  # never a hardcoded name: lakebase-resolve-sftdd-dir prints resolveTddDir() (the
+  # one rule , prefer .sftdd, fall back to legacy .tdd). Defined ONCE + reused;
+  # the CLIs below also default --tdd-dir to resolveTddDir, so we never pass it.
   log "staging project intake (product-overview + nfrs + design-brief) via human-proxy"
   git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
+  local SFTDD_DIR SFTDD_REL
+  SFTDD_DIR="$(lk lakebase-resolve-sftdd-dir --project-dir "$PROJECT_DIR")" || { err "could not resolve the runtime artifact dir"; return 2; }
+  SFTDD_REL="$(basename "$SFTDD_DIR")"
   proxy_supply() {
-    lk lakebase-sftdd-human-proxy supply --from "$1" --to "$2" --artifact "$3" --tdd-dir "${PROJECT_DIR}/.tdd"
+    lk lakebase-sftdd-human-proxy supply --from "$1" --to "$2" --artifact "$3"
   }
-  proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${PROJECT_DIR}/.tdd/product-overview.md" "product-overview.md" \
+  proxy_supply "${ORCHESTRATOR_DIR}/product-overview.md" "${SFTDD_DIR}/product-overview.md" "product-overview.md" \
     || { err "human-proxy refused product-overview.md"; return 2; }
-  proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${PROJECT_DIR}/.tdd/nfrs.md" "nfrs.md" \
+  proxy_supply "${ORCHESTRATOR_DIR}/nfrs.md" "${SFTDD_DIR}/nfrs.md" "nfrs.md" \
     || { err "human-proxy refused nfrs.md"; return 2; }
-  proxy_supply "${ORCHESTRATOR_DIR}/design-brief.md" "${PROJECT_DIR}/.tdd/design/design-brief.md" "design-brief.md" \
+  proxy_supply "${ORCHESTRATOR_DIR}/design-brief.md" "${SFTDD_DIR}/design/design-brief.md" "design-brief.md" \
     || { err "human-proxy refused design-brief.md"; return 2; }
-  git add .tdd/product-overview.md .tdd/nfrs.md .tdd/design/design-brief.md 2>/dev/null || true
+  git add "${SFTDD_REL}/product-overview.md" "${SFTDD_REL}/nfrs.md" "${SFTDD_REL}/design/design-brief.md" 2>/dev/null || true
   git commit -m "intake: project product-overview + nfrs + design-brief" >/dev/null 2>&1 || true
 
   # ─── 3. feature-request on trunk, then claim the paired branch ─
   log "replay: feature-request.md -> trunk (the PO's committed ask)"
-  mkdir -p ".tdd/features/${FEATURE_ID}"
-  cp "${CORPUS_DIR}/features/${FEATURE_ID}/feature-request.md" ".tdd/features/${FEATURE_ID}/feature-request.md"
-  git add ".tdd/features/${FEATURE_ID}/feature-request.md"
+  mkdir -p "${SFTDD_DIR}/features/${FEATURE_ID}"
+  cp "${CORPUS_DIR}/features/${FEATURE_ID}/feature-request.md" "${SFTDD_DIR}/features/${FEATURE_ID}/feature-request.md"
+  git add "${SFTDD_REL}/features/${FEATURE_ID}/feature-request.md"
   git commit -m "plan: feature-request for ${FEATURE_ID}" >/dev/null 2>&1 || true
 
   log "claim the paired feature branch for ${FEATURE_ID} (REAL substrate)"
@@ -130,21 +142,32 @@ replay_smoke() {
     || { err "claim-feature-branch failed"; return 2; }
   "${ASSERT_DIR}/verify-workflow-state.sh" "$PROJECT_DIR" feature-claimed "$FEATURE_ID"
 
-  # ─── 4. drive in REPLAY mode, PAUSE just before the chosen handoff ─
-  # LAKEBASE_TDD_REPLAY_DIR replays each DESIGN-lane role turn from the corpus.
+  # ─── 4. drive, PAUSE just before the chosen handoff ─
+  # By default LAKEBASE_TDD_REPLAY_DIR replays each DESIGN-lane role turn from the
+  # corpus. With REPLAY_DESIGN=0 the design lane runs LIVE (real role agents) , the
+  # CAPTURE path , and (when LAKEBASE_TDD_RECORD_DIR is set) every turn is recorded.
+  # Live design needs an approver for its per-story spec/test_list gates: the Human
+  # Proxy approves them headless (--gates proxy), the same path run-smoke uses.
   # When REPLAY_BUILD=1 the recorded code tree + GREEN cycles are restored too
   # (the build skips to the Release Engineer). --pause-before makes the driver
   # PAUSE at the handoff (a [Y/n] gate) so the human reviews, then RESUME the
-  # same run on Y , it does NOT bail out of the state machine.
-  export LAKEBASE_TDD_REPLAY_DIR="${CORPUS_DIR}"
+  # same run on Y , it does NOT bail out of the state machine. The pause is
+  # INTERNAL to this one drive process, so recording + the turn timeline span
+  # design and build continuously (as if there were no pause).
+  local GATES_FLAG=""
+  if [[ "${REPLAY_DESIGN:-1}" == "1" ]]; then
+    export LAKEBASE_TDD_REPLAY_DIR="${CORPUS_DIR}"
+  else
+    GATES_FLAG="--gates proxy"
+  fi
   if [[ "$REPLAY_BUILD" == "1" ]]; then
     [[ -d "$BUILD_CORPUS_DIR" ]] || { err "build corpus missing: $BUILD_CORPUS_DIR"; return 2; }
     export LAKEBASE_TDD_REPLAY_BUILD_DIR="$BUILD_CORPUS_DIR"
-    log "design REPLAYED + build RESTORED (corpus: ${BUILD_CORPUS_DIR}); pausing at the ${PAUSE_BEFORE} handoff"
-  else
-    log "design REPLAYED (corpus: ${CORPUS_DIR}); pausing at the ${PAUSE_BEFORE} handoff"
   fi
-  lk lakebase-sftdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --pause-before "$PAUSE_BEFORE" \
+  local DESIGN_MODE; [[ "${REPLAY_DESIGN:-1}" == "1" ]] && DESIGN_MODE="REPLAYED" || DESIGN_MODE="LIVE (recording)"
+  local BUILD_NOTE=""; [[ "$REPLAY_BUILD" == "1" ]] && BUILD_NOTE=" + build RESTORED"
+  log "design ${DESIGN_MODE}${BUILD_NOTE}; pausing at the ${PAUSE_BEFORE} handoff${LAKEBASE_TDD_RECORD_DIR:+ (recording -> ${LAKEBASE_TDD_RECORD_DIR})}"
+  lk lakebase-sftdd-drive --feature "${FEATURE_ID}" --project-dir "$PROJECT_DIR" --pause-before "$PAUSE_BEFORE" $GATES_FLAG \
     || { err "lakebase-sftdd-drive failed for ${FEATURE_ID}"; return 2; }
 
   log "✓ ${SMOKE_NAME} complete (paused at the ${PAUSE_BEFORE} handoff, resumed on your Y). Project: ${PROJECT_DIR}"

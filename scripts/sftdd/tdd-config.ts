@@ -48,7 +48,7 @@ export interface TddConfigFile {
   version: 1;
   roles?: Partial<Record<SpawnableAgentRole, RoleSettingsFile>>;
   build?: {
-    loopGranularity?: "ac" | "hybrid-a";
+    loopGranularity?: "story" | "ac" | "hybrid-a";
     batchCap?: number;
     sessionScope?: "story" | "cycle";
   };
@@ -63,7 +63,7 @@ export interface ResolvedSettings {
   budgets: Record<string, number | undefined>;
   /** Resolve a role's effort for a turn ("default" => omit --effort). */
   effortFor(role: string, turn?: BuildTurn): EffortLevel;
-  build: { loopGranularity: "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
+  build: { loopGranularity: "story" | "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
   plan: { sizing: boolean };
   project: { uiTrack: boolean; gates: "interactive" | "proxy"; deployTarget: string };
 }
@@ -135,9 +135,11 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
   const batchCapRaw = env.LAKEBASE_TDD_BATCH_CAP;
   const envBatchCap = batchCapRaw && Number.isFinite(Number(batchCapRaw)) ? Math.floor(Number(batchCapRaw)) : undefined;
   const build = {
-    loopGranularity: (env.LAKEBASE_TDD_LOOP === "hybrid-a"
-      ? "hybrid-a"
-      : file?.build?.loopGranularity ?? "ac") as "ac" | "hybrid-a",
+    loopGranularity: ((): "story" | "ac" | "hybrid-a" => {
+      const e = env.LAKEBASE_TDD_LOOP;
+      if (e === "story" || e === "ac" || e === "hybrid-a") return e;
+      return file?.build?.loopGranularity ?? "story";
+    })(),
     batchCap: envBatchCap ?? file?.build?.batchCap,
     sessionScope: (env.LAKEBASE_TDD_BUILD_SESSION === "cycle"
       ? "cycle"
@@ -168,7 +170,7 @@ export function defaultTddConfig(): TddConfigFile {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
+    build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" },
   };
