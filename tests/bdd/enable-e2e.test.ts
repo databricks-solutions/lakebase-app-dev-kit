@@ -315,3 +315,18 @@ describe("pr.yml template: project-root E2E step", () => {
     expect(yml).toMatch(/Phase 2/);
   });
 });
+
+describe("base run-tests.sh: the full run does not collect tests/e2e (FEIP-7702 follow-up)", () => {
+  const script = fs.readFileSync(KIT_RUN_TESTS_SH, "utf8");
+
+  it("the no-arg Python run passes --ignore=tests/e2e so e2e is owned by the appended Playwright block", () => {
+    // The deploy gate runs `./scripts/run-tests.sh` with no args. If the base
+    // pytest collected tests/e2e it would try to launch a browser and die with
+    // "Failed to spawn: playwright" BEFORE the enable-e2e-appended block runs
+    // `playwright install chromium`. So the no-arg run must ignore tests/e2e.
+    expect(script).toMatch(/if \[ "\$#" -eq 0 \]; then/);
+    expect(script).toMatch(/uv run --extra dev pytest --ignore=tests\/e2e/);
+    // An explicit path arg is still honored verbatim (the per-cycle layer runner).
+    expect(script).toMatch(/uv run --extra dev pytest "\$@"/);
+  });
+});

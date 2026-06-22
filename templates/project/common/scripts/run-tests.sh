@@ -57,7 +57,19 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   # that can't see the venv's fastapi etc., and test collection crashes
   # with ModuleNotFoundError. Pass --extra dev so uv resolves against
   # the dev extras for the test invocation.
-  uv run --extra dev pytest "$@"
+  #
+  # E2E (tests/e2e) is owned by the dedicated Playwright block that enable-e2e
+  # appends below (it runs `playwright install chromium` first, then
+  # `pytest tests/e2e`). The base full run (no positional args, e.g. the deploy
+  # gate's `run-tests.sh`) must NOT collect tests/e2e, or pytest tries to launch
+  # a browser before that install ran and the run dies with "Failed to spawn:
+  # playwright" before the e2e block is reached. An explicit path arg is honored
+  # verbatim (the per-cycle layer runner). See FEIP-7702 follow-up.
+  if [ "$#" -eq 0 ]; then
+    uv run --extra dev pytest --ignore=tests/e2e
+  else
+    uv run --extra dev pytest "$@"
+  fi
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js / Knex + Jest
   echo "Running Knex migrations..."
