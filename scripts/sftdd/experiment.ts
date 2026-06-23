@@ -158,6 +158,22 @@ export async function cutExperiment(args: CutExperimentArgs): Promise<Experiment
     syncEnv: true,
     ...(ttl ? { ttl } : { noExpiry: true }),
   });
+  // A paired experiment MUST have its .env populated with the branch's
+  // DATABASE_URL: the build's honest-GREEN verify (alembic upgrade head + pytest)
+  // runs against THIS branch's database. createPairedBranch's .env sync is
+  // best-effort – it collects warnings instead of throwing – so a skipped sync
+  // would otherwise surface ~10 turns later as an opaque alembic connect failure,
+  // commonly mis-attributed to the post-checkout hook. Fail the cut here, with the
+  // underlying warnings, so the miss is immediate and correctly attributed. The
+  // Lakebase + git branches already exist (createPairedBranch does not roll back),
+  // so a retry of the cut reuses them idempotently.
+  if (!paired.envSynced) {
+    throw new Error(
+      `Experiment cut for "${branch}" did not populate .env with the branch's database connection` +
+        (paired.warnings.length ? ` (${paired.warnings.join("; ")})` : "") +
+        `. The build's honest-GREEN verify needs DATABASE_URL; aborting the cut so this is caught now, not at verify time.`,
+    );
+  }
   const branchId = branchIdOf(paired.branch);
 
   const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);

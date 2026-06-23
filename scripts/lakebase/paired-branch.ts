@@ -325,28 +325,37 @@ export async function createPairedBranch(
     }
   }
 
-  // 4. Sync .env with fresh credentials
+  // 4. Sync .env with fresh credentials.
+  //
+  // Use ensureEndpoint (get-or-create + POLL until a host appears, or throw on
+  // timeout) – NOT a bare getEndpoint. A freshly-cut Lakebase branch's endpoint
+  // provisions asynchronously, so a single getEndpoint right after the cut races
+  // the endpoint coming up: it returns undefined, we silently skip the .env sync,
+  // and `envSynced` stays false. That left experiment branches with an empty
+  // DATABASE_URL whose only symptom surfaced ~10 turns later at the build's
+  // honest-GREEN verify (alembic could not connect). Waiting here closes the race
+  // so the sync succeeds when the branch is genuinely READY.
   let envSynced = false;
   if (syncEnv && ready.state === "READY") {
     try {
-      const ep = await getEndpoint({ instance: args.instance, branch: sanitized });
-      if (!ep?.host) {
-        warnings.push(`Endpoint not yet available for "${sanitized}" – .env not updated`);
-      } else {
-        const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-        const dsn = buildDsn(ep.host, database, email, token);
-        const envPath = path.join(args.cwd, ".env");
-        updateEnvConnection({
-          envPath,
-          branchId: sanitized,
-          databaseUrl: dsn,
-          username: email,
-          password: token,
-          endpointHost: ep.host,
-        });
-        await ensureProfilePinned({ envPath }).catch(() => undefined);
-        envSynced = true;
-      }
+      const ep = await ensureEndpoint({
+        instance: args.instance,
+        branch: sanitized,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
+      });
+      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
+      const dsn = buildDsn(ep.host, database, email, token);
+      const envPath = path.join(args.cwd, ".env");
+      updateEnvConnection({
+        envPath,
+        branchId: sanitized,
+        databaseUrl: dsn,
+        username: email,
+        password: token,
+        endpointHost: ep.host,
+      });
+      await ensureProfilePinned({ envPath }).catch(() => undefined);
+      envSynced = true;
     } catch (err) {
       warnings.push(
         `.env sync failed: ${err instanceof Error ? err.message : String(err)}`
