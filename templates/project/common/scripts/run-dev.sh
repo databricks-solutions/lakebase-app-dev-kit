@@ -63,14 +63,27 @@ fi
 
 HOST="${HOST:-127.0.0.1}"
 
+# Is something LISTENING on this TCP port? Prefer lsof: it sees BOTH IPv4 and
+# IPv6 listeners. The old /dev/tcp/127.0.0.1 probe missed IPv6-only listeners
+# (Vite binds ::1), so it reported a busy port as free, then Vite died on
+# --strictPort with "Port already in use". Fall back to /dev/tcp where lsof is
+# absent.
+port_in_use() {
+  local p="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$p" -sTCP:LISTEN -n -P >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
+  fi
+}
+
 # Pick a free TCP port, probing upward from the requested one, so run-dev does
-# NOT collide with a deploy server (the deploy target also uses 8000) or another
-# dev server already on the port. Uses bash /dev/tcp: a successful connect means
-# something is LISTENING (busy); a failed connect means free. PORT pins the start.
+# NOT collide with a deploy server (the deploy target also uses 8000), a stale
+# dev server, or another listener already on the port. PORT pins the start.
 free_port() {
   local p="$1" tries=0
   while [ "$tries" -lt 20 ]; do
-    if ! (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
+    if ! port_in_use "$p"; then
       printf '%s' "$p"; return 0
     fi
     p=$((p + 1)); tries=$((tries + 1))
@@ -137,14 +150,33 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
     # CLIENT_PORT overrides the base; --strictPort makes Vite bind exactly this
     # resolved free port (so the printed URL is real), since Vite would otherwise
     # silently auto-increment.
-    CLIENT_PORT="$(free_port "${CLIENT_PORT:-5200}")"
+    CLIENT_REQ="${CLIENT_PORT:-5200}"
+    CLIENT_PORT="$(free_port "$CLIENT_REQ")"
+    if [ "$CLIENT_PORT" != "$CLIENT_REQ" ]; then
+      echo "Client port $CLIENT_REQ is in use (a stale dev server?), using $CLIENT_PORT instead." >&2
+    fi
     ( cd "$REPO_ROOT/client" && VITE_PROXY_TARGET="http://${HOST}:${PORT}" npm run dev -- --port "$CLIENT_PORT" --strictPort ) &
     CLIENT_PID=$!
     trap 'if [ -n "$CLIENT_PID" ]; then kill "$CLIENT_PID" 2>/dev/null; fi' EXIT INT TERM
+
+    # Announce the URL only AFTER Vite is actually serving, otherwise the line is
+    # immediately buried by Vite's startup banner and then the uvicorn log stream,
+    # so the reviewer never sees the real port. Vite often binds IPv6 ::1, so probe
+    # with curl against localhost (resolves either family), NOT /dev/tcp/127.0.0.1
+    # which false-negatives. Print localhost in the URL: it is what Cursor's
+    # integrated-browser link handler routes inline (127.0.0.1 opens externally).
+    APP_URL="http://localhost:${CLIENT_PORT}/"
+    printf 'Waiting for the client (Vite) on port %s' "$CLIENT_PORT"
+    _t=0
+    until curl -sf -o /dev/null --max-time 2 "$APP_URL" 2>/dev/null || [ "$_t" -ge 30 ]; do
+      printf '.'; sleep 1; _t=$((_t + 1))
+    done
     echo ""
-    echo "Open the app:  http://${HOST}:${CLIENT_PORT}/"
-    echo "Backend API:   http://${HOST}:${PORT}  (Vite proxies /api + /health here)"
-    echo "Ctrl-C stops both."
+    echo "============================================================"
+    echo "  Open the app:  $APP_URL"
+    echo "  Backend API:   http://${HOST}:${PORT}  (Vite proxies /api + /health here)"
+    echo "  Ctrl-C stops both."
+    echo "============================================================"
     echo ""
   else
     # API/CLI-only project: no SPA, so print the backend's browsable GET routes.
