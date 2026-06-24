@@ -4,9 +4,18 @@
 # branch's database (from .env, written by the post-checkout hook), then starts
 # the dev server with hot-reload. Ctrl-C to stop.
 #
+# For a full-stack Python project (a client/ SPA alongside the JSON backend) it
+# also starts the client's Vite dev server and proxies its /api + /health at the
+# backend, so "run both" is one command; Ctrl-C stops both.
+#
 # Usage: ./scripts/run-dev.sh [extra args passed to the server]
-#   PORT  override the listen port (default 8000 for Python/Node, 8080 for Java)
-#   HOST  override the bind host (default 127.0.0.1)
+#   PORT         override the backend listen port (default 8200 Python, 8000 Node, 8080 Java)
+#   CLIENT_PORT  override the client Vite dev port (default 5200; full-stack Python only)
+#   HOST         override the bind host (default 127.0.0.1)
+#   SEED         set to 0 to skip dev-data seeding (default: seed if SEED_SCRIPT exists)
+#   SEED_SCRIPT  path to the dev seed script (default scripts/seed_dev.py); it OWNS
+#                its own idempotency (no-op when data already present)
+#   SYNC_ENV     set to 0 to skip the pre-connect credential refresh (default: refresh)
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -19,6 +28,25 @@ set -a
 # shellcheck source=/dev/null
 source .env 2>/dev/null || true
 set +a
+
+# Re-mint fresh DB credentials for the current branch BEFORE connecting. The .env
+# password is a short-lived token; an idle checkout (or one whose token has aged
+# out) otherwise fails the first DB connect with "password authentication failed".
+# Re-syncing here means a developer never has to think about it. Best-effort: it
+# needs the kit's `lk` resolver + a working databricks auth, so a non-kit project
+# or an offline box falls back to whatever .env already holds. Re-source after, so
+# the refreshed DATABASE_URL/credentials land in this shell's environment.
+# Set SYNC_ENV=0 to skip (e.g. a pinned/offline .env you don't want overwritten).
+if [ "${SYNC_ENV:-1}" != "0" ] && [ -x "$REPO_ROOT/scripts/lk" ]; then
+  if "$REPO_ROOT/scripts/lk" lakebase-branch sync-env --cwd "$REPO_ROOT" >/dev/null 2>&1; then
+    set -a
+    # shellcheck source=/dev/null
+    source .env 2>/dev/null || true
+    set +a
+  else
+    echo "Note: could not refresh DB credentials (lakebase-branch sync-env); using existing .env." >&2
+  fi
+fi
 
 # Build DATABASE_URL from SPRING_DATASOURCE_* if not already set (backward compat).
 # URL-encode both username and password – the email-style username always
@@ -75,13 +103,56 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   fi
   echo "Running Alembic migrations..."
   uv run alembic upgrade head
-  PORT="$(resolve_port 8000)"
-  echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop)."
-  # Best-effort: list the app's browsable (GET) routes so the reviewer knows
-  # where to go. A freshly built app may have no "/" route (only e.g. /bugs/new),
-  # so opening the bare host 404s; printing the real entry points avoids the
-  # guessing game. Non-fatal if introspection fails (printed hint falls back).
-  routes="$(uv run python -c "
+
+  # Dev convenience: seed demo data so a freshly checked-out branch has something
+  # to review. The seed script (default scripts/seed_dev.py, override with
+  # SEED_SCRIPT) OWNS its own idempotency , it should no-op when data already
+  # exists, since "is it empty?" is app-specific (which table?). Set SEED=0 to
+  # skip. Non-fatal: a failed seed never blocks the dev server.
+  SEED_SCRIPT="${SEED_SCRIPT:-scripts/seed_dev.py}"
+  if [ "${SEED:-1}" != "0" ] && [ -f "$REPO_ROOT/$SEED_SCRIPT" ]; then
+    echo "Seeding dev data ($SEED_SCRIPT)..."
+    uv run python "$SEED_SCRIPT" || true
+  fi
+
+  # Dev backend port: start at 8200, NOT 8000. Port 8000 is the deploy target and
+  # the port CI's Playwright webServer binds (client/playwright.config.ts), so a
+  # local run-dev must stay off it. resolve_port respects PORT and probes upward
+  # off any busy port.
+  PORT="$(resolve_port 8200)"
+
+  # Full-stack: when a client/ SPA exists, the browsable UI is its Vite dev server,
+  # NOT this (JSON-only) backend. Start Vite in the background and point its
+  # /api + /health proxy at THIS backend (VITE_PROXY_TARGET, honored by
+  # client/vite.config.ts). Trapped so Ctrl-C stops both. Without this a JSON-only
+  # backend alone "shows nothing" to a reviewer who opens the bare host.
+  CLIENT_PID=""
+  if [ -f "$REPO_ROOT/client/package.json" ]; then
+    if [ ! -d "$REPO_ROOT/client/node_modules" ]; then
+      echo "Installing client dependencies (first run)..."
+      ( cd "$REPO_ROOT/client" && npm install )
+    fi
+    # Dev client port: start at 5200, NOT Vite's default 5173. CI's Playwright
+    # webServer and any stray Vite instance grab 5173, so run-dev avoids it.
+    # CLIENT_PORT overrides the base; --strictPort makes Vite bind exactly this
+    # resolved free port (so the printed URL is real), since Vite would otherwise
+    # silently auto-increment.
+    CLIENT_PORT="$(free_port "${CLIENT_PORT:-5200}")"
+    ( cd "$REPO_ROOT/client" && VITE_PROXY_TARGET="http://${HOST}:${PORT}" npm run dev -- --port "$CLIENT_PORT" --strictPort ) &
+    CLIENT_PID=$!
+    trap 'if [ -n "$CLIENT_PID" ]; then kill "$CLIENT_PID" 2>/dev/null; fi' EXIT INT TERM
+    echo ""
+    echo "Open the app:  http://${HOST}:${CLIENT_PORT}/"
+    echo "Backend API:   http://${HOST}:${PORT}  (Vite proxies /api + /health here)"
+    echo "Ctrl-C stops both."
+    echo ""
+  else
+    # API/CLI-only project: no SPA, so print the backend's browsable GET routes.
+    # A freshly built app may have no "/" route (only e.g. /bugs/new), so opening
+    # the bare host 404s; printing the real entry points avoids the guessing game.
+    # Non-fatal if introspection fails.
+    echo "Serving on http://${HOST}:${PORT}  (Ctrl-C to stop)."
+    routes="$(uv run python -c "
 from app.main import app
 for r in getattr(app, 'routes', []):
     methods = getattr(r, 'methods', None) or set()
@@ -89,10 +160,12 @@ for r in getattr(app, 'routes', []):
     if 'GET' in methods and not path.startswith('/openapi') and path not in ('/docs', '/redoc', '/docs/oauth2-redirect'):
         print(path)
 " 2>/dev/null)" || true
-  if [ -n "$routes" ]; then
-    echo "Open one of these in your browser:"
-    printf '%s\n' "$routes" | while IFS= read -r p; do echo "  http://${HOST}:${PORT}${p}"; done
+    if [ -n "$routes" ]; then
+      echo "Open one of these in your browser:"
+      printf '%s\n' "$routes" | while IFS= read -r p; do echo "  http://${HOST}:${PORT}${p}"; done
+    fi
   fi
+
   uv run uvicorn app.main:app --reload --host "$HOST" --port "$PORT" "$@"
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js – prefer a "dev" script, fall back to "start".
