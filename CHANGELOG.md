@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.4] - 2026-06-27
+
 ### Added
 
 - **Artifact-root resolution + auto-migration.** The on-disk artifact/log directory
