@@ -16,6 +16,7 @@
 // run, then exits (no execution) - a safe "what will the driver do next?".
 
 import { spawn } from "node:child_process";
+import { sftddEnv } from "./sftdd-env.js";
 import { resolveTddDir, ARTIFACT_ROOT, LEGACY_ARTIFACT_ROOT } from "./sftdd-paths.js";
 import { migrateLegacyArtifactDir } from "./migrate-artifact-dir.js";
 import { randomUUID } from "node:crypto";
@@ -57,11 +58,17 @@ import {
 import { resolveModelForRole } from "./agent-models.js";
 import { resolveTddSettings } from "./tdd-config.js";
 import { parseTurnUsage, assistantTextFromLine, type TurnUsage } from "./claude-usage.js";
-import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED } from "./context-budget.js";
+import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
+
+// How many times a single role turn that overflows the model window mid-turn
+// ("Prompt is too long") is retried on a FRESH session before the failure
+// propagates. Each retry inherits the prior attempt's on-disk progress, so a
+// small bound converges; it is a backstop, not a substitute for chunking work.
+const MAX_PROMPT_TOO_LONG_RETRIES = 2;
 
 interface ParsedArgs {
   feature?: string;
@@ -132,7 +139,7 @@ Flags:
                        build kickoff) | release-engineer (the deploy/verify). The
                        driver blocks for a human [Y/n], then RESUMES the same run
                        on Y , it never leaves the state machine. n re-asks. Set
-                       LAKEBASE_TDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
+                       LAKEBASE_SFTDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
   --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
                        (stop AT each HITL gate so the human answers, then re-run)
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
@@ -159,20 +166,46 @@ function spawnCmd(bin: string, args: string[], cwd: string): Promise<void> {
  * cost. stderr is inherited so claude's own errors surface. Usage parsing is
  * best-effort: a missing result event yields undefined (never breaks the turn).
  */
+/** A claude turn that exited non-zero. `promptTooLong` flags the recoverable
+ *  context-overflow case: the turn itself ballooned past the model window
+ *  WITHIN the turn (many tool calls in one shot), the "Prompt is too long"
+ *  failure the resume-time context guard cannot pre-empt. The runner retries
+ *  this case on a FRESH session; any other non-zero exit is a hard failure. */
+class ClaudeTurnError extends Error {
+  constructor(
+    message: string,
+    readonly promptTooLong: boolean,
+  ) {
+    super(message);
+    this.name = "ClaudeTurnError";
+  }
+}
+
 function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | undefined> {
   return new Promise((resolve, reject) => {
-    const child = spawn("claude", args, { cwd, stdio: ["inherit", "pipe", "inherit"] });
+    // Capture BOTH stdout (the stream-json events) and stderr (claude's own
+    // errors), teeing the human-readable parts to the console, so a context-
+    // overflow message printed to either stream is detectable for the retry.
+    const child = spawn("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
     const lines: string[] = [];
+    let sawTooLong = false;
     const rl = readline.createInterface({ input: child.stdout! });
     rl.on("line", (line) => {
       lines.push(line);
+      if (isPromptTooLongSignal(line)) sawTooLong = true;
       const text = assistantTextFromLine(line);
       if (text) process.stderr.write(text);
+    });
+    const erl = readline.createInterface({ input: child.stderr! });
+    erl.on("line", (line) => {
+      if (isPromptTooLongSignal(line)) sawTooLong = true;
+      process.stderr.write(`${line}\n`); // tee: keep claude's own errors visible
     });
     child.on("error", (err) => reject(err));
     child.on("close", (code) => {
       rl.close();
-      if (code !== 0) return reject(new Error(`claude exited ${code}`));
+      erl.close();
+      if (code !== 0) return reject(new ClaudeTurnError(`claude exited ${code}`, sawTooLong));
       resolve(parseTurnUsage(lines));
     });
   });
@@ -239,7 +272,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         return;
       }
       if (cmd.kind === "claude") {
-        // Per-turn BUILD replay: when LAKEBASE_TDD_REPLAY_BUILD_DIR is set, a
+        // Per-turn BUILD replay: when LAKEBASE_SFTDD_REPLAY_BUILD_DIR is set, a
         // Navigator/Driver turn overlays its recorded artifact (code + cycle/
         // experiment records) from the corpus instead of spawning the model. The
         // orchestrator still VISITS the turn (logs + transitions + runs the live
@@ -247,7 +280,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // every Navigator<->Driver event is reproduced , only the artifact
         // delivery is mocked. The Kth Navigator/Driver turn maps to the Kth
         // recorded turn dir. A turn the corpus lacks falls through to the real agent.
-        const replayBuildDir = process.env.LAKEBASE_TDD_REPLAY_BUILD_DIR;
+        const replayBuildDir = sftddEnv("REPLAY_BUILD_DIR");
         const story = cmd.replay?.story;
         if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
           const turnIndex = (buildTurns.get(story) ?? 0) + 1;
@@ -268,15 +301,15 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           }
           process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent\n`);
         }
-        // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
-        // Fast-forward replay: when LAKEBASE_TDD_REPLAY_DIR is set, a design-lane
+        // Fast-forward replay: when LAKEBASE_SFTDD_REPLAY_DIR is set, a design-lane
+        // Fast-forward replay: when LAKEBASE_SFTDD_REPLAY_DIR is set, a design-lane
         // role's turn copies its recorded output from the corpus instead of
         // spawning the model. The orchestrator still VISITS the turn (logs +
         // transitions + runs its deterministic effects); only the LLM generation
         // is replaced. Navigator/Driver are never replayed (not design roles),
         // so the real TDD begins at the Navigator handoff. A turn the corpus
         // lacks (e.g. an un-recorded story) falls through to the real agent.
-        const replayDir = process.env.LAKEBASE_TDD_REPLAY_DIR;
+        const replayDir = sftddEnv("REPLAY_DIR");
         if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
           const replayed = replayDesignTurn({
             turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
@@ -294,37 +327,65 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         }
         // stream-json (requires --verbose with --print) lets us capture the turn's
         // token usage from the result event while teeing readable text to the console.
-        const args = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
-        // Per-role/turn model-side knobs (tdd-config.json): effort (set on judgment
+        const baseArgs = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
+        // Per-role/turn model-side knobs (sftdd-config.json): effort (set on judgment
         // turns to run fast), fallback model (auto-failover when the primary is
         // overloaded), and a per-invocation dollar cap.
-        if (cmd.effort) args.push("--effort", cmd.effort);
-        if (cmd.fallbackModel) args.push("--fallback-model", cmd.fallbackModel);
-        if (typeof cmd.maxBudgetUsd === "number") args.push("--max-budget-usd", String(cmd.maxBudgetUsd));
-        if (cmd.resumeKey) {
+        if (cmd.effort) baseArgs.push("--effort", cmd.effort);
+        if (cmd.fallbackModel) baseArgs.push("--fallback-model", cmd.fallbackModel);
+        if (typeof cmd.maxBudgetUsd === "number") baseArgs.push("--max-budget-usd", String(cmd.maxBudgetUsd));
+        // Resolve this attempt's session flags. `forceFresh` ignores the warm
+        // session (used when retrying after a mid-turn "Prompt is too long").
+        const sessionArgsFor = (forceFresh: boolean): string[] => {
+          if (!cmd.resumeKey) return [];
           const existing = sessions.get(cmd.resumeKey);
           // Context-budget guard: only resume when the warm session still leaves
           // >= the required free fraction of the model window; otherwise the turn
-          // would risk "Prompt is too long". When it would not fit, start FRESH
-          // (new session-id, reset the tracked size) instead of failing the turn.
+          // would risk "Prompt is too long". When it would not fit (or we are
+          // forcing fresh after a mid-turn overflow), start FRESH (new session-id,
+          // reset the tracked size) instead of failing the turn.
           const priorCtx = sessionContext.get(cmd.resumeKey) ?? 0;
-          const wouldFit = resumeFitsBudget(priorCtx, cmd.model);
-          if (existing && wouldFit) {
-            args.push("--resume", existing);
-          } else {
-            if (existing && !wouldFit) {
+          const wouldFit = !forceFresh && resumeFitsBudget(priorCtx, cmd.model);
+          if (existing && wouldFit) return ["--resume", existing];
+          if (existing && !forceFresh && !wouldFit) {
+            process.stderr.write(
+              `[drive] context guard: ${cmd.role}'s warm session (~${priorCtx.toLocaleString()} tokens) would leave ` +
+                `< ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% of the ${cmd.model} window free, risking a "prompt too long" failure. ` +
+                `Starting a FRESH ${cmd.role} session instead: the prior turn's conversation is dropped, NOT the work , ` +
+                `the on-disk artifacts (.sftdd state + code + tests) are the source of truth, so this turn continues cleanly with a clean context.\n`,
+            );
+          }
+          const id = randomUUID();
+          sessions.set(cmd.resumeKey, id);
+          sessionContext.delete(cmd.resumeKey);
+          return ["--session-id", id];
+        };
+        // Spawn with a bounded retry on a MID-TURN context overflow. The resume-time
+        // guard above cannot pre-empt a turn that balloons WITHIN itself (one shot,
+        // many tool calls , the failure that killed F6/S3-split-drop-old). When that
+        // turn fails with "Prompt is too long", restart it on a FRESH session: the
+        // artifacts the failed attempt already wrote (.sftdd + code + tests) persist,
+        // so each retry has strictly less to do and converges, instead of aborting
+        // the whole drive. A non-overflow failure (or exhausted retries) still throws.
+        let usage: TurnUsage | undefined;
+        for (let attempt = 0; ; attempt++) {
+          const args = [...baseArgs, ...sessionArgsFor(attempt > 0)];
+          try {
+            usage = await spawnClaudeStreaming(args, cfg.projectDir);
+            break;
+          } catch (e) {
+            if (e instanceof ClaudeTurnError && e.promptTooLong && attempt < MAX_PROMPT_TOO_LONG_RETRIES) {
               process.stderr.write(
-                `[drive] context guard: ${cmd.role} resume context ~${priorCtx} tok would leave ` +
-                  `< ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% free of the ${cmd.model} window; starting a FRESH session.\n`,
+                `[drive] context guard (mid-turn): ${cmd.role}'s turn overflowed the ${cmd.model} window WITHIN the turn ` +
+                  `("Prompt is too long"). Retrying on a FRESH session (attempt ${attempt + 1}/${MAX_PROMPT_TOO_LONG_RETRIES}); ` +
+                  `the work the failed attempt wrote to disk (.sftdd state + code + tests) persists, so this retry resumes from it ` +
+                  `with a clean context.\n`,
               );
+              continue;
             }
-            const id = randomUUID();
-            sessions.set(cmd.resumeKey, id);
-            sessionContext.delete(cmd.resumeKey);
-            args.push("--session-id", id);
+            throw e;
           }
         }
-        const usage = await spawnClaudeStreaming(args, cfg.projectDir);
         // Log the turn's CONTEXT SIZE + usage right after it returns (role + model
         // + effort after role; the token counts in metadata). Best-effort: never
         // let a logging hiccup break the turn.
@@ -383,7 +444,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   // overrides the recorded project_id when given.
   const scm = readWorkflowState(projectDir);
   // Unified config: one resolution of the per-role/turn model+effort matrix + the
-  // build/plan/project knobs (tdd-config.json -> LAKEBASE_TDD_* env -> default).
+  // build/plan/project knobs (sftdd-config.json -> LAKEBASE_SFTDD_* env -> default).
   const settings = resolveTddSettings({ projectDir });
   return {
     projectDir,
@@ -396,7 +457,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     // Deploy target: the --deploy-target flag wins, else the config's default.
     deployTarget: args.deployTarget ?? settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",
-    // UI track: config (file or LAKEBASE_TDD_UI) decides whether the Spec Author
+    // UI track: config (file or LAKEBASE_SFTDD_UI) decides whether the Spec Author
     // frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
     uiTrack: settings.project.uiTrack,
     // P5: Navigator/Driver session scope (story warm-resume vs cycle cold-spawn).
@@ -458,8 +519,8 @@ function composeOnAction(
  * The PAUSE gate's human wait: block the state machine at the handoff and ask
  * [Y/n], then RESUME on Y (n re-asks; the run never bails). Three input sources,
  * in order:
- *   1. LAKEBASE_TDD_AUTO_CONTINUE=1   , auto-confirm (CI / fully non-interactive).
- *   2. LAKEBASE_TDD_GATE_ANSWER_FILE  , poll that file for y/n (a parent process
+ *   1. LAKEBASE_SFTDD_AUTO_CONTINUE=1   , auto-confirm (CI / fully non-interactive).
+ *   2. LAKEBASE_SFTDD_GATE_ANSWER_FILE  , poll that file for y/n (a parent process
  *      drives the gate, e.g. a controller answering on the human's behalf).
  *   3. an interactive stdin TTY       , prompt + read the human's line.
  * With none of those (piped, no control file), it auto-continues with a warning
@@ -467,8 +528,8 @@ function composeOnAction(
  * sandboxes, and its open error is async , the prior cause of a hard crash).
  */
 function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
-  const auto = process.env.LAKEBASE_TDD_AUTO_CONTINUE === "1";
-  const answerFile = process.env.LAKEBASE_TDD_GATE_ANSWER_FILE?.trim();
+  const auto = sftddEnv("AUTO_CONTINUE") === "1";
+  const answerFile = sftddEnv("GATE_ANSWER_FILE")?.trim();
   const isYes = (a: string): boolean => a === "" || a === "y" || a === "yes";
   return (action) =>
     new Promise((resolve) => {
@@ -506,21 +567,21 @@ function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
       }
       // No terminal + no control channel: never crash or hang , continue.
       process.stderr.write(
-        `${prompt}\n[drive] no interactive terminal and no LAKEBASE_TDD_GATE_ANSWER_FILE , auto-continuing past ${label}.\n`,
+        `${prompt}\n[drive] no interactive terminal and no LAKEBASE_SFTDD_GATE_ANSWER_FILE , auto-continuing past ${label}.\n`,
       );
       resolve();
     });
 }
 
 /**
- * Wrap effects so that, when LAKEBASE_TDD_RECORD_BUILD_DIR is set, the driver
+ * Wrap effects so that, when LAKEBASE_SFTDD_RECORD_BUILD_DIR is set, the driver
  * snapshots each Navigator/Driver turn AFTER its effect lands , the per-turn
  * build corpus the event-by-event replay plays back. A no-op when unset, so a
  * normal run is unaffected. Only build turns (invoke-role navigator|driver) are
  * recorded; design/deploy turns are not build output.
  */
 function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveEffects {
-  const recordBuildDir = process.env.LAKEBASE_TDD_RECORD_BUILD_DIR?.trim();
+  const recordBuildDir = sftddEnv("RECORD_BUILD_DIR")?.trim();
   if (!recordBuildDir) return inner;
   let turn = 0;
   return {
@@ -551,7 +612,7 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
 }
 
 /**
- * Wrap effects so that, when LAKEBASE_TDD_RECORD_DIR is set, the driver records
+ * Wrap effects so that, when LAKEBASE_SFTDD_RECORD_DIR is set, the driver records
  * EVERY state-machine turn AFTER its effect lands , the universal per-turn
  * timeline (design, gates, build, deploy, accept, promote), not just the build
  * lane. Each turn writes turns/<NNNN>-<label>/ (manifest + the .tdd/code delta it
@@ -561,7 +622,7 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
  * record/replay corpus. A no-op when unset, so a normal run is unaffected.
  */
 function withTurnRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveEffects {
-  const recordDir = process.env.LAKEBASE_TDD_RECORD_DIR?.trim();
+  const recordDir = sftddEnv("RECORD_DIR")?.trim();
   if (!recordDir) return inner;
   // Seed the delta baseline with the current (post-scaffold/intake) state ONCE,
   // so the first recorded turn reports only what it produced, not the pre-existing
@@ -621,7 +682,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  // Config defaults (tdd-config.json) for the two CLI-flag knobs: the --gates mode
+  // Config defaults (sftdd-config.json) for the two CLI-flag knobs: the --gates mode
   // and t-shirt sizing. The flag wins when given; else the config's default.
   const settings = resolveTddSettings({ projectDir });
   const interactive = (args.gates ?? settings.project.gates) === "interactive";
@@ -783,7 +844,7 @@ async function main(): Promise<number> {
 
   cfg.runner = execRunner(cfg);
   snapshotRunConfig(cfg, args, bound ?? "full");
-  // --gates flag wins; else the tdd-config.json project.gates default.
+  // --gates flag wins; else the sftdd-config.json project.gates default.
   const interactive =
     (args.gates ?? resolveTddSettings({ projectDir: cfg.projectDir }).project.gates) === "interactive";
   try {

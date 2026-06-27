@@ -41,3 +41,19 @@ export function resumeFitsBudget(priorContextTokens: number, model: string): boo
   const window = contextWindowFor(model);
   return priorContextTokens <= window * (1 - CONTEXT_FREE_FRACTION_REQUIRED);
 }
+
+/**
+ * Signatures claude emits when a SINGLE turn overflows the model context window
+ * (it ballooned within the turn, the failure the resume-time guard above cannot
+ * pre-empt). The driver scans a failed turn's output for these and, when matched,
+ * retries the turn on a FRESH session instead of aborting the drive , the
+ * on-disk artifacts a failed attempt already wrote persist, so the retry resumes
+ * from them with a clean context.
+ */
+export const PROMPT_TOO_LONG_RE =
+  /prompt is too long|prompt too long|exceeds? the (?:maximum )?context|context (?:window|length) (?:exceeded|too long)/i;
+
+/** True when a line of claude output signals a mid-turn context overflow. */
+export function isPromptTooLongSignal(line: string): boolean {
+  return PROMPT_TOO_LONG_RE.test(line);
+}

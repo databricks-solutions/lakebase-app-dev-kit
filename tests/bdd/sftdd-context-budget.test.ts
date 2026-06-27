@@ -9,6 +9,7 @@ import {
   turnContextTokens,
   resumeFitsBudget,
   CONTEXT_FREE_FRACTION_REQUIRED,
+  isPromptTooLongSignal,
 } from "../../scripts/sftdd/context-budget.js";
 
 describe("contextWindowFor", () => {
@@ -55,5 +56,22 @@ describe("resumeFitsBudget (>=40% free required)", () => {
     expect(resumeFitsBudget(600_001, "opus-1m")).toBe(false);
     // The same 600k context would NOT fit a 200k model (starts fresh there).
     expect(resumeFitsBudget(600_000, "opus")).toBe(false);
+  });
+});
+
+describe("isPromptTooLongSignal (mid-turn overflow detection -> fresh-session retry)", () => {
+  it("matches claude's context-overflow phrasings (the F6/S3 killer)", () => {
+    expect(isPromptTooLongSignal("Prompt is too long")).toBe(true);
+    expect(isPromptTooLongSignal("Error: prompt is too long: 1234567 tokens > 200000")).toBe(true);
+    expect(isPromptTooLongSignal("the prompt too long for this model")).toBe(true);
+    expect(isPromptTooLongSignal("this exceeds the maximum context length")).toBe(true);
+    expect(isPromptTooLongSignal("context window exceeded")).toBe(true);
+    expect(isPromptTooLongSignal("context length too long")).toBe(true);
+  });
+  it("does NOT match ordinary turn output (no false retry on unrelated failures)", () => {
+    expect(isPromptTooLongSignal("All 10 tests pass.")).toBe(false);
+    expect(isPromptTooLongSignal("claude exited 1")).toBe(false);
+    expect(isPromptTooLongSignal("Error: ENOENT no such file")).toBe(false);
+    expect(isPromptTooLongSignal("the test list is too long to enumerate here")).toBe(false);
   });
 });
