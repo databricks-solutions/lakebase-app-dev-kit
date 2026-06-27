@@ -22,11 +22,16 @@ import {
   type AgentLogEventName,
 } from "./agent-log.js";
 import { reconcileArtifactLog } from "./log-reconcile.js";
+import { reconstituteAgentLog } from "./log-reconstitute.js";
 import { recordBlockingSmellFlag } from "./escalation.js";
 
 interface ParsedArgs {
   read?: boolean;
   reconcile?: boolean;
+  /** Rewrite the log into one coherent timeline from a recorded design-lane log. */
+  reconstitute?: boolean;
+  /** Path to the recorded design-lane log (agent-log.design.jsonl) for --reconstitute. */
+  designLog?: string;
   role?: string;
   level?: string;
   minLevel?: string;
@@ -48,6 +53,8 @@ function parseArgs(argv: string[]): ParsedArgs {
     switch (argv[i]) {
       case "--read": out.read = true; break;
       case "--reconcile": out.reconcile = true; break;
+      case "--reconstitute": out.reconstitute = true; break;
+      case "--design-log": out.designLog = argv[++i]; break;
       case "--role": out.role = argv[++i]; break;
       case "--level": out.level = argv[++i]; break;
       case "--min-level": out.minLevel = argv[++i]; break;
@@ -105,6 +112,28 @@ Common:
 export function runAgentLogCli(argv: string[]): number {
   const a = parseArgs(argv);
   if (a.help) { process.stdout.write(`${HELP}\n`); return 0; }
+
+  if (a.reconstitute) {
+    // Post-capture: rewrite the agent-log into ONE coherent recording , the design
+    // lane verbatim from the recorded design log (original token counts + cost, on
+    // the original capture date), the live build/breakdown turns kept (real cost)
+    // but re-dated onto that same timeline, and the synthetic "reconciled"
+    // placeholders dropped. Requires --design-log.
+    if (!a.designLog) {
+      process.stderr.write("Error: --reconstitute requires --design-log <path>.\n");
+      return 2;
+    }
+    try {
+      const tddDir = a.tddDir ?? resolveTddDir();
+      const final = reconstituteAgentLog({ tddDir, designLogPath: a.designLog });
+      if (a.json) process.stdout.write(`${JSON.stringify(final)}\n`);
+      else process.stdout.write(`reconstituted agent-log: ${final.length} entries\n`);
+      return 0;
+    } catch (e) {
+      process.stderr.write(`lakebase-sftdd-log --reconstitute: ${(e as Error).message}\n`);
+      return 3;
+    }
+  }
 
   if (a.reconcile) {
     // Structural observability backstop: emit an artifact.written for every

@@ -1,0 +1,12 @@
+{
+  "id": "AC5-empty-state",
+  "given": "No stock records exist in the database",
+  "when": "User navigates to the stock home page",
+  "then": "An explicit empty state message is displayed guiding the user that no stock has been recorded yet, instead of showing an empty or blank table",
+  "status": "passing",
+  "architectural_notes": "Explicit empty-state handling owned by the boundary/template (app/routes/): when the service returns an empty list from the repository, the view renders a guidance message instead of a blank table. E2E: asserts the message against an empty DB. Cross-cutting: explicit-state design (no silent blank region); the empty-vs-populated branch is a view decision, the empty result itself comes from the repository read.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Handles the absence-of-data scenario separately from AC1-AC4, which assume records exist; the empty state is a distinct observable outcome required by the feature's design principle of explicit states."
+  }
+}

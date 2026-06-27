@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockFlow{% block title_suffix %}{% endblock %}</title>
+  <style>
+    :root {
+      /* typography */
+      --font-family: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: "DM Mono", ui-monospace, monospace;
+      --text-xs:   0.625rem;
+      --text-sm:   0.8125rem;
+      --text-base: 0.9375rem;
+      --text-md:   1rem;
+      --text-lg:   1.25rem;
+      --text-xl:   1.5rem;
+      --text-xxl:  1.8125rem;
+      --leading-tight:  1.25;
+      --leading-normal: 1.5;
+
+      /* brand */
+      --color-brand-red:       #FF3621;
+      --color-brand-red-hover: #EB1600;
+      --color-brand-red-light: rgba(255,54,33,0.08);
+
+      /* navy */
+      --color-navy-900: #1B3139;
+      --color-navy-700: #1B5162;
+      --color-navy-500: #618794;
+      --color-navy-400: #90A5B1;
+      --color-navy-300: #C4CCD6;
+      --color-navy-200: #E5EAF1;
+      --color-navy-100: #EDF2F8;
+
+      /* backgrounds */
+      --color-bg-white: #FFFFFF;
+      --color-bg-warm:  #F9F7F4;
+      --color-bg-cool:  #F0F2F5;
+
+      /* semantic */
+      --color-success:       #2E844A;
+      --color-success-light: rgba(46,132,74,0.1);
+      --color-warning:       #FFAB00;
+      --color-warning-light: rgba(255,171,0,0.12);
+      --color-info:          #0176D3;
+      --color-info-light:    rgba(1,118,211,0.1);
+      --color-error:         #FF3621;
+      --color-error-light:   rgba(255,54,33,0.08);
+
+      /* spacing */
+      --space-1:  4px;
+      --space-2:  8px;
+      --space-3:  12px;
+      --space-4:  16px;
+      --space-5:  20px;
+      --space-6:  24px;
+      --space-8:  32px;
+      --space-10: 40px;
+      --space-12: 48px;
+      --space-16: 64px;
+
+      /* radius */
+      --radius-none: 0px;
+      --radius-sm:   4px;
+      --radius-md:   8px;
+      --radius-lg:   12px;
+      --radius-xl:   15px;
+      --radius-pill: 9999px;
+
+      /* shadows */
+      --shadow-sm:     0px 2px 8px rgba(27,49,57,0.06);
+      --shadow-md:     0px 4px 16px rgba(27,49,57,0.08);
+      --shadow-lg:     0px 4px 8px rgba(27,49,57,0.04),0px 16px 24px rgba(27,49,57,0.04),0px 32px 40px rgba(27,49,57,0.05);
+      --shadow-navbar: 0px 4px 20px rgba(27,49,57,0.3);
+
+      /* breakpoints */
+      --bp-mobile:  480px;
+      --bp-tablet:  768px;
+      --bp-desktop: 1024px;
+
+      /* layout */
+      --content-max-width: 960px;
+      --navbar-height:     64px;
+
+      /* transitions */
+      --transition-fast: 0.15s ease;
+      --transition-base: 0.2s ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-family);
+      font-size: var(--text-base);
+      line-height: var(--leading-normal);
+      background: var(--color-bg-warm);
+      color: var(--color-navy-900);
+    }
+
+    nav[data-testid="navbar"] {
+      background: var(--color-navy-900);
+      height: var(--navbar-height);
+      border-bottom: 2px solid var(--color-brand-red);
+      box-shadow: var(--shadow-navbar);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--space-6);
+    }
+
+    nav[data-testid="navbar"] .brand {
+      color: #FFFFFF;
+      font-size: var(--text-lg);
+      font-weight: 700;
+      text-decoration: none;
+      margin-right: var(--space-8);
+    }
+
+    nav[data-testid="navbar"] a {
+      color: #FFFFFF;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      text-decoration: none;
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-md);
+    }
+
+    nav[data-testid="navbar"] a:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .page-content {
+      max-width: var(--content-max-width);
+      margin: 0 auto;
+      padding: var(--space-10) var(--space-6);
+    }
+
+    h1 {
+      font-size: var(--text-xl);
+      font-weight: 700;
+      color: var(--color-navy-900);
+      margin-bottom: var(--space-6);
+      line-height: var(--leading-tight);
+    }
+
+    .card {
+      background: var(--color-bg-white);
+      border: 1px solid var(--color-navy-200);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      padding: var(--space-5);
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      margin-bottom: var(--space-4);
+    }
+
+    .form-field label {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--color-navy-700);
+    }
+
+    .form-field input {
+      background: var(--color-bg-white);
+      border: 1px solid var(--color-navy-300);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: var(--text-base);
+      font-family: var(--font-family);
+      color: var(--color-navy-900);
+      outline: none;
+      transition: border-color var(--transition-fast);
+    }
+
+    .form-field input::placeholder {
+      color: var(--color-navy-400);
+    }
+
+    .form-field input:focus {
+      border-color: var(--color-info);
+      box-shadow: 0 0 0 2px var(--color-info-light);
+    }
+
+    .form-field input.has-error {
+      border-color: var(--color-error);
+      background: var(--color-error-light);
+    }
+
+    .field-error {
+      font-size: var(--text-sm);
+      color: var(--color-error);
+      margin-top: var(--space-1);
+    }
+
+    .btn-primary {
+      background: var(--color-brand-red);
+      color: #FFFFFF;
+      border: none;
+      border-radius: var(--radius-none);
+      padding: 12px 32px;
+      font-size: var(--text-md);
+      font-weight: 500;
+      font-family: var(--font-family);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      min-height: 44px;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-brand-red-hover);
+    }
+
+    .btn-secondary {
+      background: var(--color-bg-white);
+      color: var(--color-navy-500);
+      border: 2px solid var(--color-navy-200);
+      border-radius: var(--radius-md);
+      padding: 10px 24px;
+      font-size: var(--text-md);
+      font-weight: 500;
+      font-family: var(--font-family);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background var(--transition-fast);
+      display: inline-block;
+      min-height: 44px;
+    }
+
+    .btn-secondary:hover {
+      background: var(--color-navy-100);
+    }
+
+    .success-icon {
+      color: var(--color-success);
+      font-size: var(--text-xxl);
+      margin-bottom: var(--space-4);
+    }
+
+    .confirm-summary {
+      background: var(--color-success-light);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      margin: var(--space-4) 0;
+      color: var(--color-navy-900);
+    }
+
+    .confirm-summary dt {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--color-navy-500);
+    }
+
+    .confirm-summary dd {
+      font-size: var(--text-base);
+      font-weight: 500;
+      margin-bottom: var(--space-2);
+    }
+
+    .actions {
+      display: flex;
+      gap: var(--space-4);
+      margin-top: var(--space-6);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <nav data-testid="navbar">
+    <a class="brand" href="/">StockFlow</a>
+    <a data-testid="nav-link-home" href="/">Home</a>
+    <a data-testid="nav-link-receive" href="/receive">Receive</a>
+    <a data-testid="nav-link-pick" href="/pick">Pick</a>
+  </nav>
+  <main class="page-content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

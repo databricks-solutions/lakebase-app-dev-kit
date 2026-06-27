@@ -17,6 +17,8 @@ import {
 } from "../../scripts/sftdd/orchestrator-effects";
 import { existsSync, readFileSync } from "node:fs";
 import { handbackFile } from "../../scripts/sftdd/sftdd-paths";
+import { beginNextPendingCycle } from "../../scripts/sftdd/cycle-record";
+import { writeGreenFailure, writeSupersededTests } from "../../scripts/sftdd/supersession";
 
 function recordingRunner(): { runner: CommandRunner; calls: DriveCommand[] } {
   const calls: DriveCommand[] = [];
@@ -241,8 +243,16 @@ describe("commandsForAction: P8b loop granularity (hybrid-a layer-batched build)
     (cmds.find((c) => (c as { bin?: string }).bin === "lakebase-sftdd-cycle") as { args: string[] }).args;
   const navTask = (cmds: ReturnType<typeof commandsForAction>): string => (cmds[0] as { task: string }).task;
 
-  it("default (ac): the navigator begin command carries NO --loop flag", () => {
+  it("default (story): the navigator begin command appends --loop story (whole-story RED)", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg());
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("begin");
+    expect(args).toContain("--loop");
+    expect(args[args.indexOf("--loop") + 1]).toBe("story");
+  });
+
+  it("opt-in 'ac': the navigator begin command carries NO --loop flag (one RED per test)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, cfg({ loopGranularity: "ac" }));
     const args = cycleArgs(cmds);
     expect(args[0]).toBe("begin");
     expect(args).not.toContain("--loop");
@@ -279,6 +289,42 @@ describe("commandsForAction: P8b loop granularity (hybrid-a layer-batched build)
       cfg({ loopGranularity: "hybrid-a" }),
     );
     expect(navTask(cmds)).toMatch(/layer-batch|ALL GREEN/i);
+  });
+
+  // A contract/cleanup story (drop column / remove endpoint / rename) auto-drops
+  // to the finest `ac` loop even under a story-default run, since its lockstep
+  // DB+code change is too heavy for one story-level GREEN turn. The drop MUST
+  // reach the prompt text AND the cycle CLI flag, not only deriveDriveState's
+  // routing (the F6/S3-split-drop-old build re-escalated when the prompt still
+  // said "make ALL of the story GREEN in one pass" while the substrate stamped ac).
+  it("contract story under story-default: navigator begin carries NO --loop (drops to per-AC)", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "navigator", story: "S3-split-drop-old" },
+      cfg(),
+    );
+    const args = cycleArgs(cmds);
+    expect(args[0]).toBe("begin");
+    expect(args).not.toContain("--loop");
+    // The RED prompt is per-test (singular), not the whole-story batch.
+    expect(navTask(cmds)).toMatch(/the next failing test \(RED\)|EXACTLY ONE failing test/i);
+  });
+
+  it("contract story under story-default: driver GREEN prompt is per-test, not whole-story", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "driver", story: "S3-split-drop-old" },
+      cfg(),
+    );
+    expect(navTask(cmds)).toMatch(/Make the failing test for story/i);
+    expect(navTask(cmds)).not.toMatch(/Make ALL of story/i);
+  });
+
+  it("additive story under story-default is unchanged (--loop story; whole-story GREEN)", () => {
+    const nav = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1-record-stock" }, cfg());
+    const args = cycleArgs(nav);
+    expect(args[0]).toBe("begin");
+    expect(args[args.indexOf("--loop") + 1]).toBe("story");
+    const driver = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1-record-stock" }, cfg());
+    expect(navTask(driver)).toMatch(/Make ALL of story/i);
   });
 });
 
@@ -381,21 +427,23 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(cmds.some((c) => "role" in c && (c as { role?: string }).role === "release-engineer")).toBe(false);
   });
 
-  it("await-acceptance: the Release Engineer is dispatched to RUN the deterministic deploy gate, then marks awaiting", () => {
+  it("await-acceptance: runs the deterministic deploy gate as a CLI (not a spawned agent), then marks awaiting", () => {
     const cmds = commandsForAction({ kind: "await-acceptance", story: "S1" }, cfg());
     // teardown first (free the port).
     expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-deploy" });
     expect((cmds[0] as { args: string[] }).args).toContain("--stop");
-    // the RELEASE ENGINEER takes over (visible actor) , a claude turn whose task
-    // is to run the deterministic deploy gate (the deploy is the CLI, not the
-    // model's word; deploy-evidence is the backstop).
-    const re = cmds[1] as { kind: string; role?: string; task?: string };
-    expect(re.kind).toBe("claude");
-    expect(re.role).toBe("release-engineer");
-    expect(re.task).toContain("lakebase-sftdd-deploy");
-    expect(re.task).toEqual(expect.stringContaining("--gate"));
-    expect(re.task).toEqual(expect.stringContaining("--story S1"));
-    expect(re.task).toEqual(expect.stringContaining("--lakebase-branch"));
+    // the deploy gate runs DETERMINISTICALLY as a synchronous CLI (the deploy is
+    // the substrate, not a model's word; a live agent could background the long
+    // ephemeral-isolated verify + stall await-acceptance). deploy-evidence is the
+    // backstop. The logging layer still narrates the RE deploy handoff.
+    const dep = cmds[1] as { kind: string; bin?: string; args?: string[] };
+    expect(dep.kind).toBe("cli");
+    expect(dep.bin).toBe("lakebase-sftdd-deploy");
+    expect(dep.args).toContain("--gate");
+    expect(dep.args).toContain("--story");
+    expect(dep.args).toContain("S1");
+    expect(dep.args).toContain("--lakebase-branch");
+    expect(dep.args).not.toContain("--stop");
     // then the pipeline marks awaiting-acceptance.
     expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
     expect((cmds[2] as { args: string[] }).args[0]).toBe("await-acceptance");
@@ -553,7 +601,7 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
       join(tdd, "features", "F1", "stories", "S1", "acs", "AC1-create.json"),
       JSON.stringify({ id: "AC1-create", layer: "API" }),
     );
-    const task = claudeCmd(review, { tddDir: tdd }).task;
+    const task = claudeCmd(review, { tddDir: tdd, loopGranularity: "ac" }).task;
     expect(task).toMatch(/RUBRIC \(pre-extracted/);
     expect(task).toContain("layer=API");
     expect(task).toContain("NFR-R2-status-validation"); // story-scoped NFR
@@ -564,8 +612,9 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
   });
 
   it("the review rubric degrades gracefully when architecture.json is absent", () => {
+    // loop="ac": exercise the per-AC review path (story-level review is the default).
     // cfg's tddDir does not exist -> no layer, no NFRs -> bare review prompt, no RUBRIC clause.
-    const task = claudeCmd(review).task;
+    const task = claudeCmd(review, { loopGranularity: "ac" }).task;
     expect(task).toMatch(/REVIEW the implementation of AC AC1-create/);
     expect(task).not.toMatch(/RUBRIC \(pre-extracted/);
   });
@@ -660,5 +709,90 @@ describe("commandsForAction: promote phase (PR review + merge to parent)", () =>
   it("done emits ONLY the set-phase when the parent tier is unknown (no SCM state)", () => {
     const cmds = commandsForAction({ kind: "done" }, cfg({ parentBranch: undefined }));
     expect(cmds).toEqual([{ kind: "set-phase", phase: "shipped" }]);
+  });
+});
+
+// A green-failure assess can produce a MIXED verdict, some prior tests flagged
+// SUPERSEDED plus a genuine regression in the rest. The Driver's REPAIR turn must
+// then refactor the flagged superseded tests AND apply the regression fix in one
+// turn; otherwise the un-refactored superseded tests keep erroring (and, on a
+// shared session, cascade the others into failure) and the honest-GREEN verify
+// never holds, so it escalates. (Caught live on F6/S3-split-drop-old: T3-T5
+// superseded by the dropped inventory_code column poisoned the module session, so
+// T6-T8 bounced with InFailedSqlTransaction; the repair fixed only T6-T8.)
+describe("commandsForAction: repair turn carries the superseded-tests allowlist (mixed verdict)", () => {
+  let tdd: string;
+  const F = "F1";
+  const S = "S1";
+  const wj = (file: string, obj: unknown): void => writeFileSync(file, JSON.stringify(obj, null, 2) + "\n");
+  beforeEach(() => {
+    tdd = mkdtempSync(join(tmpdir(), "effects-repair-"));
+    const acsDir = join(tdd, "features", F, "stories", S, "acs");
+    mkdirSync(acsDir, { recursive: true });
+    wj(join(acsDir, "AC1.json"), { id: "AC1", layer: "API", text: "the API returns" });
+    const items = [{ id: "T1", description: "first", ac_id: "AC1", status: "pending" }];
+    wj(join(tdd, "features", F, "stories", S, "test-list-per-story.json"), { feature_id: F, story_id: S, items });
+    wj(join(tdd, "features", F, "test-list.json"), { feature_id: F, items });
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S }); // RED cycle for AC1 (openRed)
+  });
+  afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+
+  const task = (ac: string): string =>
+    (commandsForAction(
+      { kind: "invoke-role", role: "driver", buildMode: "repair", story: S, ac },
+      cfg({ tddDir: tdd, featureId: F }),
+    )[0] as { task: string }).task;
+
+  it("mixed verdict: the repair task carries BOTH the regression fix AND the supersede allowlist", () => {
+    writeGreenFailure(tdd, F, S, "AC1", {
+      assessed: true,
+      summary: "T6-T8 InFailedSqlTransaction",
+      diagnosis: "module-scoped session poisoned by a prior erroring scenario",
+      fixDirective: "add a rollback guard to the module session between scenarios",
+    });
+    writeSupersededTests(tdd, F, S, "AC1", {
+      tests: ["tests/step_defs/test_s1_split_add_backfill.py"],
+      reason: "inventory_code lookup removed by S3",
+    });
+    const t = task("AC1");
+    expect(t).toMatch(/REPAIR a driver-fixable regression/);
+    expect(t).toMatch(/rollback guard to the module session/);
+    // The actual supersede directive body (not just the repair turn's mention of it).
+    expect(t).toMatch(/supersedes behavior encoded in PRIOR tests/);
+    expect(t).toMatch(/inventory_code lookup removed by S3/);
+  });
+
+  it("pure regression (no supersede flag): the repair task is the regression directive alone", () => {
+    writeGreenFailure(tdd, F, S, "AC1", {
+      assessed: true,
+      summary: "off-by-one",
+      diagnosis: "boundary",
+      fixDirective: "fix the boundary check",
+    });
+    const t = task("AC1");
+    expect(t).toMatch(/REPAIR a driver-fixable regression/);
+    // No allowlist => no supersede directive body (the repair turn's EXCEPTION
+    // clause mentions the phrase, but the actual flagged-tests block is absent).
+    expect(t).not.toMatch(/supersedes behavior encoded in PRIOR tests/);
+  });
+});
+
+// The assess turn's supersession scan must be COMPREHENSIVE: a contract change
+// (drop/rename a column) supersedes not only behavior tests that NAME the column
+// but ALSO fitness/migration tests asserting a property of it (reversibility,
+// schema-shape). Caught live on F6/S3: the navigator flagged 9 column-naming
+// behavior tests but missed T11 (test_s1_split_fitness reversibility), so the
+// honest verify stayed red on the one unflagged test and escalated.
+describe("commandsForAction: assess directive scans fitness/migration tests for supersession", () => {
+  it("names fitness/architecture/migration + reversibility, and demands the COMPLETE failing set", () => {
+    const cmds = commandsForAction(
+      { kind: "invoke-role", role: "navigator", story: "S3-split-drop-old", buildMode: "assess", ac: "AC1-column-dropped" },
+      cfg(),
+    );
+    const t = (cmds[0] as { task: string }).task;
+    expect(t).toMatch(/ASSESS a failed honest-GREEN verify/);
+    expect(t).toMatch(/FITNESS \/ architecture \/ migration tests/);
+    expect(t).toMatch(/reversibility/);
+    expect(t).toMatch(/EVERY failing test|COMPLETE set/);
   });
 });

@@ -1,0 +1,13 @@
+{
+  "id": "AC7-preserve-business-data",
+  "given": "Stock row with sku = 'SKU123', quantity = 50, and inventory_code = 'A12-B7-S001'",
+  "when": "The migration runs",
+  "then": "sku = 'SKU123' and quantity = 50 (unchanged)",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract that business-critical columns (sku, quantity) are preserved bit-for-bit across the migration, asserted on the paired branch. Owner: the Alembic revision in the repository/migration layer. Cross-cutting concern: data integrity (R1); since quantity is untouched the F1 non-negative invariant (R2) holds trivially.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC6 tests location preservation; AC7 tests that other business-critical fields (sku, quantity) are not corrupted by the migration"
+  }
+}

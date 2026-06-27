@@ -1,0 +1,12 @@
+{
+  "id": "AC4-verification-accessible",
+  "given": "the validation query has been created and the DBA needs to review migration integrity before dropping inventory_code",
+  "when": "a database administrator executes the validation query",
+  "then": "they can retrieve the count of unparseable codes and review it for acceptance",
+  "status": "draft",
+  "architectural_notes": "Infra: a contract on the data-store, the probe count is retrievable and reviewable on the paired branch so the DBA can accept the migration before inventory_code is dropped. Owner: the validation/probe statement in the repository/migration layer (app/repositories), exposed as a reviewable result, not a UI flow. Cross-cutting concern: schema-evolution governance / data integrity (R1), the review gate that precedes the destructive drop, owned at the repository/migration layer.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC3 tests the accuracy of the count for unparseable codes; AC4 tests that the count is accessible and reviewable by DBAs"
+  }
+}

@@ -33,7 +33,7 @@
     },
     "model": {
       "type": "string",
-      "description": "The model the role's turn ran with (resolved from tdd-config.json). Present on the per-turn dispatch (phase.start) events; omitted where not applicable."
+      "description": "The model the role's turn ran with (resolved from sftdd-config.json). Present on the per-turn dispatch (phase.start) events; omitted where not applicable."
     },
     "effort": {
       "type": "string",

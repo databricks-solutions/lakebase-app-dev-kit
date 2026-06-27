@@ -1,0 +1,11 @@
+{
+  "ordinal": 46,
+  "step": 0,
+  "label": "merge",
+  "kind": "merge",
+  "action": {
+    "kind": "merge"
+  },
+  "produced": [],
+  "deleted": []
+}

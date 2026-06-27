@@ -230,13 +230,14 @@ describe("nextTransition: build lane (after a story is gated)", () => {
     expect(nextTransition(st)).toEqual({ kind: "complete", story: "S1" });
   });
 
-  it("does a pending AC's REVIEW before writing the next AC's tests (per-AC RED-GREEN-REVIEW-REFACTOR)", () => {
+  it("opt-in 'ac' granularity: does a pending AC's REVIEW before writing the next AC's tests (per-AC RED-GREEN-REVIEW-REFACTOR)", () => {
     // AC1's tests are all green (reviewAc=AC1) but the story is not all-green yet
     // (AC2's tests are still pending -> testsWritten false). The lane must REVIEW
-    // AC1 now, NOT jump to writing AC2's next RED test. This is the per-AC cycle:
-    // refactoring is not batched until every AC is green.
+    // AC1 now, NOT jump to writing AC2's next RED test. This is the per-AC cycle
+    // (opt-in loop="ac"): refactoring is not batched until every AC is green.
     const v = gatedUnbuilt();
     v.build.experimentCut = true;
+    v.build.loop = "ac"; // opt into the per-AC cadence (default is "story")
     v.build.testsWritten = false; // AC2 still has a pending test
     v.build.codeWritten = false;
     v.build.reviewAc = "AC1"; // AC1's tests are all green, not yet reviewed
@@ -250,6 +251,26 @@ describe("nextTransition: build lane (after a story is gated)", () => {
     // Only once AC1 is reviewed + refactored does the Navigator write AC2's tests.
     v.build.refactorAc = null;
     expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1" });
+  });
+
+  it("default 'story' granularity: one story-scoped REVIEW then REFACTOR (no ac), after the whole story is green", () => {
+    // The whole story is green (testsWritten + codeWritten). Under the default
+    // story granularity the Navigator REVIEWs the WHOLE story in one turn, then
+    // the Driver REFACTORs it in one turn , both story-scoped, no `ac` field.
+    const v = gatedUnbuilt();
+    v.build.experimentCut = true;
+    v.build.testsWritten = true;
+    v.build.codeWritten = true;
+    v.build.reviewStoryPending = true; // story green, not yet reviewed
+    const st = ws({ stories: { S1: v }, buildActive: "S1" });
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "review" });
+    // REVIEW asked for a refactor -> one story-scoped Driver REFACTOR turn.
+    v.build.reviewStoryPending = false;
+    v.build.refactorStoryPending = true;
+    expect(nextTransition(st)).toEqual({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor" });
+    // Reviewed + refactored -> the story advances to acceptance.
+    v.build.refactorStoryPending = false;
+    expect(nextTransition(st)).toEqual({ kind: "await-acceptance", story: "S1" });
   });
 
   it("builds a gated story before designing the next (per-story flow on a single lane)", () => {

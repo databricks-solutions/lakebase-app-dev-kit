@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import { dirname } from "node:path";
 import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
 import type { DriveEffects } from "./orchestrator-run.js";
-import { deriveDriveState } from "./orchestrator-derive.js";
+import { deriveDriveState, effectiveLoopForStory } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./sftdd-paths.js";
@@ -78,7 +78,7 @@ export interface DriveEffectsConfig {
    *  forks from a clean parent (and a human/the smoke is not left on the merged,
    *  soon-deleted feature branch). */
   parentBranch?: string;
-  /** UI track on (LAKEBASE_TDD_UI=1 / a design-brief.md is part of intake): the
+  /** UI track on (LAKEBASE_SFTDD_UI=1 / a design-brief.md is part of intake): the
    *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
    *  stories, not API-only, when proposing + breaking down. */
   uiTrack?: boolean;
@@ -95,18 +95,19 @@ export interface DriveEffectsConfig {
   reviewEffort?: string;
   /** Unified config: resolve `--effort` for ANY role+turn ("" / "default" => omit
    *  the flag). When set it governs every turn; absent, the review-only
-   *  reviewEffort fallback applies. (tdd-config.json, file -> env -> default.) */
+   *  reviewEffort fallback applies. (sftdd-config.json, file -> env -> default.) */
   effortForTurn?(role: string, turn?: "red" | "green" | "review" | "refactor"): string;
   /** Unified config: a role's `--fallback-model` (auto-failover), or undefined. */
   fallbackModelForRole?(role: string): string | undefined;
   /** Unified config: a role's `--max-budget-usd` per-invocation cap, or undefined. */
   maxBudgetUsdForRole?(role: string): number | undefined;
-  /** P8b: build loop granularity. "ac" (default) writes + greens one test at a
-   *  time (strict per-AC TDD). "hybrid-a" batches RED+GREEN by layer (the
-   *  Navigator writes a layer's failing tests in one turn, the Driver greens them
-   *  together), keeping the per-AC REVIEW. Cuts turn count on multi-AC same-layer
-   *  stories; gated so a rigorous run keeps strict per-AC. */
-  loopGranularity?: "ac" | "hybrid-a";
+  /** Build loop granularity. "story" (the DEFAULT) gives the Navigator + Driver
+   *  story-scoped turns: one RED turn writes the WHOLE story's tests, one GREEN
+   *  greens them, one REVIEW + one REFACTOR per story. "ac" writes + greens one
+   *  test at a time (strict per-AC TDD, per-AC REVIEW/REFACTOR). "hybrid-a"
+   *  batches RED+GREEN by layer (capped) but keeps the per-AC REVIEW. ac /
+   *  hybrid-a are opt-in for a more granular run. */
+  loopGranularity?: "ac" | "hybrid-a" | "story";
   /** P8b: max test-list items per layer-batch (hybrid-a). Default 3. */
   batchCap?: number;
   onAction?(action: WorkflowAction, iteration: number): void;
@@ -216,9 +217,30 @@ function nextPendingTestDirective(
   tddDir: string,
   featureId: string,
   story: string,
-  loop?: "ac" | "hybrid-a",
+  loop?: "ac" | "hybrid-a" | "story",
   cap?: number,
 ): string {
+  // story (default): the Navigator writes EVERY pending test for the story (all
+  // ACs) in ONE turn, matching the single whole-story batch RED cycle the
+  // orchestration stamps (begin --loop story). Same single source
+  // (nextPendingBatch) the begin reads, so written tests + stamped ids cannot drift.
+  if ((loop ?? "story") === "story") {
+    let batch: { id: string; ac_id: string; description: string }[] = [];
+    try {
+      batch = nextPendingBatch(tddDir, featureId, story, Number.MAX_SAFE_INTEGER);
+    } catch {
+      batch = [];
+    }
+    if (batch.length === 0) {
+      return `Write the failing tests (RED) for story ${story}: every test-list item for the story that has no cycle yet.`;
+    }
+    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
+    return (
+      `Write the failing tests (RED) for the WHOLE story ${story} in this one turn, EXACTLY these ${batch.length} item(s)` +
+      ` across all its ACs, in order: ${list}. Write ALL of them now and ONLY these; do NOT add or drop items, the` +
+      ` orchestration stamps ONE whole-story batch RED cycle for exactly these ids, and any mismatch is a defect.`
+    );
+  }
   // P8b (hybrid-a): the Navigator writes the first pending LAYER's tests in ONE
   // turn (a layer-batch), matching the batch RED cycle the orchestration stamps
   // for those exact ids. Same single source (nextPendingBatch) the begin reads,
@@ -304,13 +326,15 @@ function regressionRepairDirective(tddDir: string, featureId: string, story: str
   if (!gf?.fixDirective) return "";
   return (
     `REPAIR a driver-fixable regression in AC ${acId} (story ${story}). The honest-GREEN verify against the` +
-    ` running app FAILED and the Navigator diagnosed it as a genuine regression in the code (NOT a superseded` +
-    ` test):\n` +
+    ` running app FAILED and it was diagnosed (by the Navigator, or deterministically by a gate such as` +
+    ` contract-clean) as a genuine regression in the code, NOT a superseded test:\n` +
     `  DIAGNOSIS: ${gf.diagnosis ?? gf.summary}\n` +
     `  FIX: ${gf.fixDirective}\n` +
-    `Apply that fix to the PRODUCTION code (you may not edit prior tests, this is a regression, not a` +
-    ` supersession). Keep the AC's own tests green. This is your ONE repair attempt: if the verify still fails` +
-    ` after it, the orchestration escalates to a human with the diagnosis.`
+    `Apply that fix to the PRODUCTION code. Do NOT edit prior tests to force this regression green, fix the code.` +
+    ` (EXCEPTION: if a SUPERSEDED TESTS directive follows below, the Navigator flagged those specific prior tests as` +
+    ` encoding obsolete behavior, refactor ONLY those alongside this fix , often the regression is collateral from a` +
+    ` superseded test erroring on a shared session, so both must land in this one turn.) Keep the AC's own tests green.` +
+    ` This is your ONE repair attempt: if the verify still fails after it, the orchestration escalates to a human with the diagnosis.`
   );
 }
 
@@ -342,7 +366,7 @@ function consumeHandback(
 /** The role's task prompt, with any pending hand-back note prepended (the
  *  informed-retry feedback). */
 interface BuildLoopOpts {
-  loop?: "ac" | "hybrid-a";
+  loop?: "ac" | "hybrid-a" | "story";
   cap?: number;
 }
 
@@ -468,13 +492,34 @@ function roleTaskBody(
     }
     case "navigator":
       if (action.buildMode === "assess") {
+        // DETERMINISTIC contract-clean advisory (FEIP contract-completeness): when
+        // the first GREEN-failure found production code still referencing a
+        // migration-dropped column, the gate localized the exact file:line refs.
+        // Inject them so the Navigator's regression fix covers them WITHOUT having
+        // to re-localize (the live ceiling), while it still independently flags the
+        // superseded prior tests below. Empty when no contract refs were found.
+        const gfAssess = action.ac ? readGreenFailure(tddDir, featureId, s, action.ac) : undefined;
+        const contractAdvisory = gfAssess?.contractRefs
+          ? `DETERMINISTIC contract-clean has ALREADY localized the production-code references to the migration-` +
+            `dropped column(s) below , you do NOT need to re-find them. Record EXACTLY these as a driver-fixable` +
+            ` regression via assess-regression --fix (path (b)), AND SEPARATELY flag any prior tests that assert the` +
+            ` dropped column as superseded (path (a)) , a column drop needs BOTH the code fix and the test refactor` +
+            ` in the same repair turn:\n${gfAssess.contractRefs}\n\n`
+          : "";
         return (
+          contractAdvisory +
           `ASSESS a failed honest-GREEN verify for AC ${action.ac} in story ${s}. The Driver made the current` +
           ` test pass, but the full-suite verify against the running app FAILED, some OTHER test(s) now fail.` +
-          ` Inspect which tests fail and decide:\n` +
+          ` Inspect EVERY failing test (the COMPLETE set, not a sample) and decide per test:\n` +
           `(a) If the current AC INTENTIONALLY supersedes behavior those failing tests encode (the latest AC` +
           ` wins; e.g. a prior feature's test asserts an outcome this AC deliberately changes), FLAG them so the` +
-          ` Driver may permissively refactor ONLY those:\n` +
+          ` Driver may permissively refactor ONLY those. Scan COMPREHENSIVELY: when this AC drops, removes, or` +
+          ` renames a column / field / table / endpoint, the superseded set is NOT only the tests that NAME it in a` +
+          ` query/INSERT/assertion , it ALSO includes FITNESS / architecture / migration tests that assert a PROPERTY` +
+          ` of the now-gone shape (migration reversibility like "after up() then down(), <col> is reconstructed",` +
+          ` schema-shape checks like "<col> exists", invariants over the old column). Those are superseded too , a` +
+          ` reversibility/fitness test for an obsoleted column encodes abandoned behavior. Miss one and the verify` +
+          ` stays red and escalates, so list ALL of them in ONE flag-superseded call:\n` +
           `   lakebase-sftdd-cycle flag-superseded --feature ${featureId} --story ${s} --ac ${action.ac}` +
           ` --reason "<new AC + what changed>" --test <path_or_nodeid> [--test ...] --tdd-dir ${tddDir}\n` +
           `(b) If instead the failure is a GENUINE REGRESSION (the AC does NOT intend to change that behavior;` +
@@ -492,6 +537,21 @@ function roleTaskBody(
         );
       }
       if (action.buildMode === "review") {
+        // story granularity (default): REVIEW the WHOLE story's implementation in
+        // one turn; verdict at the story root (no AC).
+        if ((build?.loop ?? "story") === "story") {
+          return (
+            `REVIEW the implementation of story ${s} now that ALL its tests are green, the whole story in one pass.` +
+            reviewRubric(tddDir, featureId, s, "") +
+            ` Judge the story's diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
+            ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
+            ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
+            ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
+            ` Write ONE verdict for the whole story to` +
+            ` .tdd/cycles/${featureId}/${s}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+            `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
+          );
+        }
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
           reviewRubric(tddDir, featureId, s, action.ac ?? "") +
@@ -507,9 +567,30 @@ function roleTaskBody(
       return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
     case "driver":
       if (action.buildMode === "repair") {
-        return regressionRepairDirective(tddDir, featureId, s);
+        // A green-failure assess can produce a MIXED verdict: some prior tests
+        // flagged SUPERSEDED + a genuine regression diagnosed in the rest. The
+        // repair turn must then do BOTH , refactor the flagged superseded tests
+        // AND apply the regression fix , in one turn, or the un-refactored
+        // superseded tests keep erroring (and, on a shared session, cascade the
+        // others into failure), so the honest-GREEN verify never holds and it
+        // escalates. Append the supersede allowlist (empty when none was flagged).
+        return regressionRepairDirective(tddDir, featureId, s) + supersededTestsDirective(tddDir, featureId, s);
       }
       if (action.buildMode === "refactor") {
+        // story granularity (default): REFACTOR the WHOLE story in one turn per
+        // the story-level review (.tdd/cycles/<F>/<S>/review.json -> refactor_notes).
+        if ((build?.loop ?? "story") === "story") {
+          return (
+            `REFACTOR story ${s} per the Navigator's review` +
+            ` (.tdd/cycles/${featureId}/${s}/review.json -> refactor_notes), guided by the architecture` +
+            ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+            ` If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering /` +
+            ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
+            ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
+            ` duplicated/misplaced code into one shared helper in its correct layer.` +
+            ` Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.`
+          );
+        }
         return (
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
           ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
@@ -522,9 +603,11 @@ function roleTaskBody(
         );
       }
       return (
-        (build?.loop === "hybrid-a"
-          ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
-          : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
+        ((build?.loop ?? "story") === "story"
+          ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.`
+          : build?.loop === "hybrid-a"
+            ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
+            : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
         (uiTrack ? UI_TRACK_BUILD : "") +
         supersededTestsDirective(tddDir, featureId, s)
       );
@@ -614,7 +697,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       }
       // Per-role + per-turn `--effort` (unified config). Derive the build turn from
       // the action: navigator review|red, driver refactor|green; design roles have
-      // no turn (scalar effort). When `effortForTurn` is provided (tdd-config.json)
+      // no turn (scalar effort). When `effortForTurn` is provided (sftdd-config.json)
       // it governs EVERY turn; absent, fall back to the review-only `reviewEffort`
       // (P6 default low on the navigator REVIEW, model-default elsewhere).
       const buildTurn: "red" | "green" | "review" | "refactor" | undefined =
@@ -635,6 +718,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           : "";
       const fallbackModel = cfg.fallbackModelForRole?.(action.role);
       const maxBudgetUsd = cfg.maxBudgetUsdForRole?.(action.role);
+      // Per-story granularity: a contract/cleanup story (drop column / remove
+      // endpoint / rename) auto-drops to the finest `ac` loop, since its lockstep
+      // DB+code change is too heavy for one story-level GREEN turn. This must reach
+      // the PROMPT (the RED/GREEN/REFACTOR task text) AND the cycle CLI loop flag,
+      // not only the routing in deriveDriveState; otherwise the driver is told to
+      // "make ALL of the story GREEN in one pass" while the substrate stamps per-AC.
+      const storyLoop: "ac" | "hybrid-a" | "story" | undefined =
+        "story" in action ? effectiveLoopForStory(cfg.loopGranularity ?? "story", action.story) : cfg.loopGranularity;
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
@@ -645,7 +736,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         ...(typeof maxBudgetUsd === "number" ? { maxBudgetUsd } : {}),
         task:
           roleTask(action, f, cfg.uiTrack ?? false, cfg.tddDir, {
-            loop: cfg.loopGranularity,
+            loop: storyLoop,
             cap: cfg.batchCap,
           }) + AGENT_TERSE_SUFFIX,
         replay: {
@@ -687,13 +778,18 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       } else if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        // P8b: a `begin` (RED) under hybrid-a stamps a layer-batch cycle; pass the
-        // mode + cap so the substrate batches exactly what the Navigator was told
-        // to write. The review verb is unaffected (still per-AC).
+        // Pass the loop granularity so the substrate scopes the turn:
+        //  - story (default): `begin` writes ONE batch RED for the whole story;
+        //    `review` reviews the WHOLE story (story-level review.json, no --ac).
+        //  - hybrid-a: `begin` writes a capped layer-batch; review stays per-AC.
+        //  - ac: one RED per test; review per-AC.
+        const loop = storyLoop ?? "story";
         const loopFlag =
-          verb === "begin" && cfg.loopGranularity === "hybrid-a"
-            ? ["--loop", "hybrid-a", ...(cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : [])]
-            : [];
+          loop === "story"
+            ? ["--loop", "story"]
+            : verb === "begin" && loop === "hybrid-a"
+              ? ["--loop", "hybrid-a", ...(cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : [])]
+              : [];
         cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...loopFlag] });
       }
       if (!("mode" in action) && action.role === "driver") {
@@ -704,7 +800,10 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         // consumes the one repair attempt (a still-failing verify then escalates
         // with the Navigator's diagnosis instead of routing another repair).
         const repairFlag = isRepair ? ["--repair"] : [];
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag] });
+        // story granularity: a REFACTOR turn refactors the WHOLE story
+        // (refactorStory, no --ac). GREEN/repair are unaffected by --loop.
+        const loopFlag = verb === "refactor" && (storyLoop ?? "story") === "story" ? ["--loop", "story"] : [];
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.tddDir, ...repairFlag, ...loopFlag] });
       }
       // Code-emit artifact.written for whatever the role just wrote: reconcile
       // reads the artifacts on disk and logs any not already in the agent log,
@@ -760,33 +859,30 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "await-acceptance": {
-      // The Release Engineer (role) TAKES OVER here: it is dispatched to RUN the
-      // deterministic deploy gate (`lakebase-sftdd-deploy --gate`), which starts the
-      // app on the story's experiment branch, polls reachable, runs the project
-      // verify, and writes the STORY-scoped deploy-evidence. So the RE is the
-      // visible actor, but the deploy itself is the deterministic CLI, not the
-      // model's word: if the RE narrates success without running it, no
-      // deploy-evidence.json is written, deployVerified stays false, and the
-      // driver does NOT accept (the honest-deploy backstop, a false narration
-      // cannot pass). The CLI's --gate soft-fails (exit 0) on a real failure,
-      // recording honest evidence + an escalation that the next readState routes
-      // to a raise-to-hil halt. (Teardown first so a prior story's app frees the port.)
-      const deployCmd =
-        `./scripts/lk lakebase-sftdd-deploy --target ${deployTarget} --feature ${f} --story ${action.story}` +
-        ` --lakebase-branch ${experimentBranchName(action.story)} --tdd-dir ${cfg.tddDir} --gate`;
+      // The deploy gate runs DETERMINISTICALLY here: `lakebase-sftdd-deploy --gate`
+      // starts the app on the story's experiment branch, polls reachable, runs the
+      // project verify (by default on a disposable child branch , isolated), and
+      // writes the STORY-scoped deploy-evidence the acceptance gate reads. The CLI
+      // is SYNCHRONOUS (execSync through the verify + evidence write) and soft-fails
+      // (exit 0) on a real failure, recording honest evidence + an escalation that
+      // the next readState routes to a raise-to-hil halt. We run it as a CLI effect
+      // rather than via a spawned Release Engineer agent: the deploy IS the
+      // deterministic substrate, not the model's word, and a live agent could
+      // background the long (ephemeral-isolated) verify and end its turn before the
+      // evidence was written , stalling await-acceptance. The logging layer still
+      // narrates the RE deploy handoff (it keys off the action kind, not a spawn),
+      // so the RE remains the visible deploy actor in the trail. (Teardown first so
+      // a prior story's app frees the port.)
       return [
         { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
         {
-          kind: "claude",
-          role: "release-engineer",
-          model: cfg.modelForRole("release-engineer"),
-          resumeKey: "release-engineer",
-          task:
-            `Take over as the Release Engineer for story ${action.story} of ${f}. Deploy it to the ${deployTarget}` +
-            ` target and verify it actually serves: from the project root run exactly\n  ${deployCmd}\n` +
-            `That command starts the app, polls it reachable, runs the verify suite, and writes the deploy-evidence` +
-            ` the acceptance gate reads. Do NOT report success without running it, the orchestration checks the` +
-            ` evidence on disk, not your word.` + AGENT_TERSE_SUFFIX,
+          kind: "cli",
+          bin: DEPLOY_BIN,
+          args: [
+            "--target", deployTarget, "--feature", f, "--story", action.story,
+            "--lakebase-branch", experimentBranchName(action.story),
+            "--project-dir", cfg.projectDir, "--tdd-dir", cfg.tddDir, "--gate",
+          ],
         },
         { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] },
       ];

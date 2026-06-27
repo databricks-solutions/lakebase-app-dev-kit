@@ -11,10 +11,11 @@
 // both the interactive `/` commands and the smoke runners), capturing the
 // RESOLVED matrix (not just the override list). The timing report prints it as a
 // `config:` header and nests it in --json, so a comparison is a self-describing
-// { config, timing } pair. When recording (LAKEBASE_TDD_RECORD_DIR set), a copy
+// { config, timing } pair. When recording (LAKEBASE_SFTDD_RECORD_DIR set), a copy
 // is mirrored to the corpus root so a replay carries its own provenance.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { sftddEnv } from "./sftdd-env.js";
 import { ARTIFACT_ROOT } from "./sftdd-paths.js";
 import { join } from "path";
 import { ALL_AGENT_ROLES } from "./agent-models.js";
@@ -23,7 +24,7 @@ import { ALL_AGENT_ROLES } from "./agent-models.js";
  *  value so an old report reading a new file (or vice versa) stays robust. */
 export interface RunConfig {
   version: 1;
-  /** Optional human label for the run (LAKEBASE_TDD_RUN_LABEL). */
+  /** Optional human label for the run (LAKEBASE_SFTDD_RUN_LABEL). */
   run_label?: string;
   /** ISO start timestamp of the run. */
   started_at: string;
@@ -37,7 +38,8 @@ export interface RunConfig {
   build_session_scope: string;
   /** P6: the REVIEW turn's --effort ("" = model default). */
   review_effort: string;
-  /** P8b: the build loop granularity (ac | hybrid-a | ...); "ac" until P8b lands. */
+  /** The build loop granularity (story | ac | hybrid-a); "story" is the default
+   *  (Navigator/Driver take story-scoped turns). Override via LAKEBASE_SFTDD_LOOP. */
   loop_granularity: string;
   /** P8b: layer-batch cap, when batching. */
   batch_cap?: number;
@@ -88,7 +90,7 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
   const env = inputs.env ?? process.env;
   const models: Record<string, string> = {};
   for (const role of ALL_AGENT_ROLES) models[role] = inputs.modelForRole(role);
-  const capRaw = env.LAKEBASE_TDD_BATCH_CAP;
+  const capRaw = sftddEnv("BATCH_CAP", env);
   const cap = capRaw && Number.isFinite(Number(capRaw)) ? Number(capRaw) : undefined;
   const cfg: RunConfig = {
     version: 1,
@@ -98,12 +100,12 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
     ui_track: Boolean(inputs.uiTrack),
     build_session_scope: inputs.buildSessionScope ?? "story",
     review_effort: inputs.reviewEffort ?? "",
-    loop_granularity: env.LAKEBASE_TDD_LOOP || "ac",
+    loop_granularity: sftddEnv("LOOP", env) || "story",
     deploy_target: inputs.deployTarget ?? "local",
     models,
   };
   if (cap !== undefined) cfg.batch_cap = cap;
-  const label = env.LAKEBASE_TDD_RUN_LABEL;
+  const label = sftddEnv("RUN_LABEL", env);
   if (label) cfg.run_label = label;
   const kitRef = readKitRef(inputs.projectDir);
   if (kitRef) cfg.kit_ref = kitRef;
@@ -112,7 +114,7 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
 
 /**
  * Write the run-config snapshot to `.sftdd/run-config.json`, and , when recording
- * (LAKEBASE_TDD_RECORD_DIR set) , mirror a copy to the corpus root so a replay
+ * (LAKEBASE_SFTDD_RECORD_DIR set) , mirror a copy to the corpus root so a replay
  * carries its own provenance. Best-effort: a write failure never breaks a run
  * (the snapshot is observability, like the agent log).
  */
@@ -122,7 +124,7 @@ export function writeRunConfig(inputs: RunConfigInputs): RunConfig {
   try {
     mkdirSync(inputs.tddDir, { recursive: true });
     writeFileSync(join(inputs.tddDir, "run-config.json"), body);
-    const recordDir = (inputs.env ?? process.env).LAKEBASE_TDD_RECORD_DIR?.trim();
+    const recordDir = (inputs.env ?? process.env).LAKEBASE_SFTDD_RECORD_DIR?.trim();
     if (recordDir) {
       mkdirSync(recordDir, { recursive: true });
       writeFileSync(join(recordDir, "run-config.json"), body);

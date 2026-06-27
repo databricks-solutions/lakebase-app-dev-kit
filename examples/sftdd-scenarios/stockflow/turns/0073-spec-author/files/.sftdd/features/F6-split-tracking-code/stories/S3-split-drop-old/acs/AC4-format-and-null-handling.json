@@ -1,0 +1,12 @@
+{
+  "id": "AC4-format-and-null-handling",
+  "given": "The stock table includes rows where batch_number and/or serial_number are NULL (from unparseable inventory codes), and S3 down migration has executed",
+  "when": "We examine the reconstructed inventory_code values",
+  "then": "Each value has format location-segment2-segment3 where NULL fields are represented as empty strings (e.g., location--serial if batch is NULL)",
+  "status": "draft",
+  "architectural_notes": "Infra: a contract on reconstruction logic, the down() migration uses COALESCE(batch_number, '') || COALESCE(serial_number, '') to reconstruct, asserted by sampling rows with NULL batch/serial segments on the paired branch. Owner: the Alembic revision (UPDATE statement logic) in the repository/migration layer. Cross-cutting concern: reversibility (R4), nonconforming codes must round-trip correctly.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC3 tests that all rows have values; AC4 tests that values have correct format with proper NULL handling"
+  }
+}

@@ -18,7 +18,7 @@ import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
 import { diskArtifactProbe, readDriveContext } from "../../scripts/sftdd/orchestrator-probe";
 import type { WorkflowAction } from "../../scripts/sftdd/orchestrator-drive";
 import { writeCycleArtifact } from "../../scripts/sftdd/run-cycle";
-import { acReviewJson } from "../../scripts/sftdd/sftdd-paths";
+import { acReviewJson, storyReviewJson } from "../../scripts/sftdd/sftdd-paths";
 import {
   readPipeline,
   writePipeline,
@@ -137,8 +137,9 @@ function replayEffects(feature: string, stories: string[]) {
             });
           } else if (action.role === "navigator") {
             if (action.buildMode === "review") {
-              // Per-AC REVIEW: simulate "looks good" (no refactor requested).
-              writeJson(acReviewJson(tddDir, feature, s, ac(s)), { reviewed_at: AT, refactor_requested: false });
+              // Story-level REVIEW (the default granularity): simulate "looks good"
+              // (no refactor requested), recorded once at the story's cycles root.
+              writeJson(storyReviewJson(tddDir, feature, s), { reviewed_at: AT, refactor_requested: false });
             } else {
               writeCycleArtifact(
                 { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
@@ -147,7 +148,7 @@ function replayEffects(feature: string, stories: string[]) {
             }
           } else if (action.role === "driver") {
             if (action.buildMode === "refactor") {
-              writeJson(acReviewJson(tddDir, feature, s, ac(s)), { reviewed_at: AT, refactor_requested: true, refactored_at: AT });
+              writeJson(storyReviewJson(tddDir, feature, s), { reviewed_at: AT, refactor_requested: true, refactored_at: AT });
             } else {
               writeCycleArtifact(
                 { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },

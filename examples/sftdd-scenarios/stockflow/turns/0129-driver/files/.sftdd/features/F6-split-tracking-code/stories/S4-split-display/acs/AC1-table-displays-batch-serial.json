@@ -1,0 +1,9 @@
+{
+  "id": "AC1-table-displays-batch-serial",
+  "given": "stock records exist with populated batch_number and serial_number",
+  "when": "the home stock page is loaded",
+  "then": "the stock table displays a 'Batch Number' column and a 'Serial Number' column",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "E2E: drives the home stock page UI plus the full read path. The boundary (app/routes/) renders the home template; values flow boundary -> service (app/services/) -> repository (app/repositories/, the only ORM toucher) -> models (app/models/stock.py). The 'Batch Number' / 'Serial Number' columns read the split model fields directly and never re-parse the dropped inventory_code. Cross-cutting concern: presentation/column layout is owned by the boundary + template, never the domain; no business logic in the template."
+}

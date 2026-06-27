@@ -1,0 +1,53 @@
+{
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S2-split-validate",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T15",
+      "description": "the validation probe function can be called against the migrated stock table and returns a result without raising an error",
+      "ac_id": "AC1-verification-available",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-split-validate.feature"
+    },
+    {
+      "id": "T19",
+      "description": "the validation probe module (app/repositories) does not import app/routes or app/services; the probe is never re-implemented outside the repository layer",
+      "ac_id": "AC1-verification-available",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T16",
+      "description": "when every stock row has a three-segment inventory_code the validation probe returns a count of 0",
+      "ac_id": "AC2-verification-zero-when-valid",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-split-validate.feature"
+    },
+    {
+      "id": "T20",
+      "description": "the S2 validation test suite binds to the real Lakebase branch DB (DB_NAME=stockflow); no mock or in-memory substitute is used and the conftest fixture verifies the live connection before any probe scenario runs",
+      "ac_id": "AC2-verification-zero-when-valid",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T17",
+      "description": "when the stock table contains rows with non-conforming codes (e.g. 'A12' and 'c') the probe returns a count equal to the number of rows where batch_number IS NULL OR serial_number IS NULL",
+      "ac_id": "AC3-verification-counts-unparseable",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-split-validate.feature"
+    },
+    {
+      "id": "T18",
+      "description": "a database administrator executing the validation query receives a scalar integer count that can be read and recorded before the drop proceeds",
+      "ac_id": "AC4-verification-accessible",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-split-validate.feature"
+    }
+  ]
+}

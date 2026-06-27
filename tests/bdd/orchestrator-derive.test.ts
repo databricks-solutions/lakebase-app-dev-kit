@@ -26,6 +26,9 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     // Per-AC REVIEW/REFACTOR: not exercised by these derive tests (default: none pending).
     reviewPendingAc: () => null,
     refactorPendingAc: () => null,
+    // Story-level REVIEW/REFACTOR (the default granularity): driven from facts.
+    reviewPending: (s) => get(s, "reviewPending" as keyof StoryArtifactProbe),
+    refactorPending: (s) => get(s, "refactorPending" as keyof StoryArtifactProbe),
     assessGreenFailureAc: () => null,
     repairRegressionFixAc: () => null,
     // No blocking escalation by default (raise-to-hil routing tested separately).

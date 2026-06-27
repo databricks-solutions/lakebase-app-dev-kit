@@ -36,6 +36,7 @@ import {
   reviseStory,
 } from "./story-pipeline";
 import { mergePaired } from "../lakebase/paired-branch";
+import { commitExperimentCode } from "./cycle-record";
 import { applySchemaMigrations } from "../lakebase/schema-migrate";
 import { parseExperimentArgs, validateExperimentArgs } from "./experiment-args";
 import { emitAgentLogEvent } from "./agent-log";
@@ -68,6 +69,15 @@ function usage(msg: string): number {
 // experiment-lifecycle.ts; these are the side-effectful leaves.
 const realOps: ExperimentBranchOps = {
   gitMerge: async ({ from, into, projectDir }) => {
+    // Accept must carry the experiment's FULL work onto the feature branch. A
+    // supersession/repair turn can edit code outside any green/refactor commit
+    // point (it runs reactively, not as a cycle), leaving an uncommitted change
+    // on the experiment branch. mergePaired then checks out `into` and git
+    // ABORTS on the dirty tree ("local changes would be overwritten"). So commit
+    // any pending experiment CODE first, using the build's own code-only policy
+    // (runtime .sftdd/.tdd/.lakebase state stays uncommitted so it does not
+    // diverge from the feature branch). No-op when the tree is already clean.
+    await commitExperimentCode(projectDir, `accept: commit pending experiment work for ${from}`);
     // PAIRED merge via the substrate: checkout `into`, re-sync .env to its
     // Lakebase branch, then git-merge `from`. No raw git in the orchestration.
     await mergePaired({ cwd: projectDir, from, into });

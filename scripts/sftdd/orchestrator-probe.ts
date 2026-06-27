@@ -13,7 +13,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { readAcLayer, type CycleArtifact } from "./run-cycle.js";
-import { storyTestProgress, firstReviewPendingAc, firstRefactorPendingAc } from "./cycle-record.js";
+import {
+  storyTestProgress,
+  firstReviewPendingAc,
+  firstRefactorPendingAc,
+  reviewPending,
+  refactorPending,
+} from "./cycle-record.js";
 import { needsGreenAssess, hasPendingRegressionFix } from "./supersession.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import type { DriveEscalation } from "./orchestrator-drive.js";
@@ -220,6 +226,14 @@ export function diskArtifactProbe(
 
     refactorPendingAc(story) {
       return firstRefactorPendingAc(tddDir, featureId, story);
+    },
+
+    reviewPending(story) {
+      return reviewPending(tddDir, featureId, story);
+    },
+
+    refactorPending(story) {
+      return refactorPending(tddDir, featureId, story);
     },
 
     assessGreenFailureAc(story) {

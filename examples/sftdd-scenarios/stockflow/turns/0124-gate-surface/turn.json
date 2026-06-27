@@ -1,0 +1,15 @@
+{
+  "ordinal": 124,
+  "step": 0,
+  "label": "gate-surface",
+  "kind": "surface-gate",
+  "story": "S4-split-display",
+  "action": {
+    "kind": "surface-gate",
+    "story": "S4-split-display"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

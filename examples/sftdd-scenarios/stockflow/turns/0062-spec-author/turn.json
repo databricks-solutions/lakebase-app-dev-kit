@@ -1,0 +1,20 @@
+{
+  "ordinal": 62,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S2-split-validate",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S2-split-validate"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S2-split-validate/acs/AC1-verification-available.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-split-validate/acs/AC2-verification-zero-when-valid.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-split-validate/acs/AC3-verification-counts-unparseable.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-split-validate/acs/AC4-verification-accessible.json"
+  ],
+  "deleted": []
+}

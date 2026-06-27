@@ -1,0 +1,13 @@
+{
+  "id": "AC5-split-columns-dropped",
+  "given": "The S3 down migration has been executed and stock table is in rollback state",
+  "when": "We inspect the stock table schema",
+  "then": "The batch_number and serial_number columns are removed",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract on the stock data-store shape after rollback (the Alembic down migration drops batch_number and serial_number columns to fully restore the pre-split schema), proven by a parent-aware schema diff against the paired Lakebase branch. Owner: the Alembic revision in the repository/migration layer. Cross-cutting concern: reversibility (R4), the down path must fully restore the original schema.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1-4 test the inventory_code column lifecycle and content; AC5 tests that down migration completes by removing split columns"
+  }
+}

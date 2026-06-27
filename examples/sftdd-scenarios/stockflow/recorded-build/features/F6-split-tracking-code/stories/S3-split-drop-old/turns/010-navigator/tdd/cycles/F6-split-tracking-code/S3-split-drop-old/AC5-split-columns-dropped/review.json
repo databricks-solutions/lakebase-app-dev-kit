@@ -1,0 +1,5 @@
+{
+  "reviewed_at": "2026-06-15T16:22:25.266Z",
+  "refactor_requested": false,
+  "refactor_notes": "AC5 (T26/T27) green: the S3 downgrade() re-adds and reconstructs only inventory_code and never drops batch_number/serial_number, so the split columns owned by the S1 split migration are preserved on the reverse path, exactly what split-columns-dropped requires. Layering honored: the behavior lives entirely in the single S3 Alembic revision (repository/migration layer); the green diff touches only test files (feature + step_defs) and never couples to routes/services (T29 fitness green). NFR-F6-S1-2 satisfied (quantity is never written or recomputed by the migration). NFR-F6-S1-4 satisfied: the T26/T27 step defs assert via information_schema on a fresh live connection to the real paired Lakebase branch (engine.connect), no mock or in-memory substitute. NFR-F6-S1-5 satisfied: DSN resolves from env (DB_NAME=stockflow), no hardcoded connection string in the revision. Naming/comments make the preservation-vs-restore intent clear and SRP is consistent with the AC1-AC4 conventions; no UI surface in this AC. No concrete rubric-cited improvement warranted."
+}

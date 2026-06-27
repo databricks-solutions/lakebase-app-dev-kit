@@ -1,0 +1,9 @@
+{
+  "id": "AC1-column-dropped",
+  "given": "S1 and S2 have completed: batch_number and serial_number columns are added, backfilled, and validated",
+  "when": "The S3 migration (up) is executed to finalize schema cleanup",
+  "then": "The inventory_code column is removed from the stock table",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract on the stock data-store shape (the Alembic up migration drops inventory_code column), proven by a parent-aware schema diff against the paired Lakebase branch. Owner: the Alembic revision in the repository/migration layer (app/repositories), the only layer that touches the ORM/session. Cross-cutting concern: schema evolution (R3), owned at the repository/migration layer, never the domain or boundary."
+}

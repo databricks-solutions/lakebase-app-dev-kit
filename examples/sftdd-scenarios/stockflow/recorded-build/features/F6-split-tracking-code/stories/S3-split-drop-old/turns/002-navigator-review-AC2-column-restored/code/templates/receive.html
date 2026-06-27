@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title_suffix %} - Receive Inbound{% endblock %}
+{% block content %}
+<h1>Receive Inbound</h1>
+<div class="card">
+  {% if error_sku or error_location or error_qty %}
+  <div data-testid="receive-error" role="alert" style="
+    background: var(--color-error-light);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    color: var(--color-error);
+    margin-bottom: var(--space-4);
+    font-size: var(--text-sm);
+  ">Please correct the errors below.</div>
+  {% endif %}
+
+  <form data-testid="receive-form" method="post" action="/receive">
+    <div class="form-field">
+      <label for="sku-input">SKU</label>
+      {% if error_sku %}
+      <div data-testid="field-error-sku" class="field-error">{{ error_sku }}</div>
+      {% endif %}
+      <input
+        id="sku-input"
+        data-testid="receive-sku-input"
+        name="sku"
+        type="text"
+        placeholder="e.g. WIDGET-001"
+        value="{{ sku }}"
+        class="{{ 'has-error' if error_sku else '' }}"
+      />
+    </div>
+
+    <div class="form-field">
+      <label for="location-input">Location</label>
+      {% if error_location %}
+      <div data-testid="field-error-location" class="field-error">{{ error_location }}</div>
+      {% endif %}
+      <input
+        id="location-input"
+        data-testid="receive-location-input"
+        name="location"
+        type="text"
+        placeholder="e.g. A-01"
+        value="{{ location }}"
+        class="{{ 'has-error' if error_location else '' }}"
+      />
+    </div>
+
+    <div class="form-field">
+      <label for="qty-input">Quantity</label>
+      {% if error_qty %}
+      <div data-testid="field-error-qty" class="field-error">{{ error_qty }}</div>
+      {% endif %}
+      <input
+        id="qty-input"
+        data-testid="receive-qty-input"
+        name="qty"
+        type="number"
+        placeholder="e.g. 50"
+        value="{{ qty }}"
+        class="{{ 'has-error' if error_qty else '' }}"
+      />
+    </div>
+
+    <div class="form-field">
+      <label for="tracking-code-input">Tracking Code <span style="color: var(--color-navy-400); font-weight: 400;">(optional)</span></label>
+      <input
+        id="tracking-code-input"
+        data-testid="receive-tracking-code-input"
+        name="tracking_code"
+        type="text"
+        placeholder="e.g. TRK-20260624"
+        value="{{ tracking_code }}"
+      />
+    </div>
+
+    <div class="actions">
+      <button
+        data-testid="btn-save-receipt"
+        type="submit"
+        class="btn-primary"
+      >Save Receipt</button>
+      <a href="/" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

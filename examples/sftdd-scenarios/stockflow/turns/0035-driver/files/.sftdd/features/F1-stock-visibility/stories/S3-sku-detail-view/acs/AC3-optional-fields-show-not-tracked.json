@@ -1,0 +1,12 @@
+{
+  "id": "AC3-optional-fields-show-not-tracked",
+  "given": "A stock record exists for a SKU at a location without optional field values (e.g., par level)",
+  "when": "The SKU detail view is rendered",
+  "then": "Optional fields display a clear 'not tracked' message instead of showing blank regions or null values",
+  "status": "passing",
+  "architectural_notes": "E2E: nullable optional fields (par level, batch, serial) on the stock model render an explicit 'not tracked' rather than a null crash or blank region (the usability preference, NFR-F1-6). Owner module: the SKU-detail route/template on the stock boundary handles the empty-value presentation; nullability is a schema concern owned by the repository/model under the additive-migration preference (R1). Cross-cutting: presentation in the boundary, never business logic in the template.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Specifies how optional, untracked fields are displayed to the operator, distinct from AC1 (locations/quantities) and AC2 (tracking codes); these fields are independent concerns that could fail separately if optional-field handling logic is broken."
+  }
+}

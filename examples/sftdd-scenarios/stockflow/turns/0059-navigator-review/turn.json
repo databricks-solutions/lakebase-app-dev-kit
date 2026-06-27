@@ -1,0 +1,20 @@
+{
+  "ordinal": 59,
+  "step": 0,
+  "label": "navigator-review",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "review",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S1-split-add-backfill",
+    "buildMode": "review"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-add-backfill/review-verdict.json",
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-add-backfill/review.json"
+  ],
+  "deleted": []
+}

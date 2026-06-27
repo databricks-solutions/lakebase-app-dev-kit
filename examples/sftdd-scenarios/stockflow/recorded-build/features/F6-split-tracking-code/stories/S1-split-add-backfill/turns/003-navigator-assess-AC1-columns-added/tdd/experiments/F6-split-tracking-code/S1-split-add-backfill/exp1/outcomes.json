@@ -1,0 +1,10 @@
+{
+  "status": "running",
+  "by_tag": {
+    "infra": {
+      "passed": 0,
+      "failed": 1
+    }
+  },
+  "tests_failed": 1
+}

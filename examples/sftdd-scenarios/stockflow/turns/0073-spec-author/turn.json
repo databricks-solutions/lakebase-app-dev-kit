@@ -1,0 +1,22 @@
+{
+  "ordinal": 73,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC1-column-dropped.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC2-column-restored.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC3-all-rows-reconstructed.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC4-format-and-null-handling.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC5-split-columns-dropped.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/acs/AC6-not-null-constraint.json"
+  ],
+  "deleted": []
+}

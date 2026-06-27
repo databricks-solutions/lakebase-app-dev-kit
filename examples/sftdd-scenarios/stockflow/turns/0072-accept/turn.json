@@ -1,0 +1,15 @@
+{
+  "ordinal": 72,
+  "step": 0,
+  "label": "accept",
+  "kind": "accept",
+  "story": "S2-split-validate",
+  "action": {
+    "kind": "accept",
+    "story": "S2-split-validate"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

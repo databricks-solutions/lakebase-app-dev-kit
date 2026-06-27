@@ -1,0 +1,19 @@
+{
+  "ordinal": 127,
+  "step": 0,
+  "label": "cut-experiment",
+  "kind": "cut-experiment",
+  "story": "S4-split-display",
+  "action": {
+    "kind": "cut-experiment",
+    "story": "S4-split-display"
+  },
+  "produced": [
+    ".sftdd/experiments/F6-split-tracking-code/S4-split-display/exp1/branch.txt",
+    ".sftdd/experiments/F6-split-tracking-code/S4-split-display/exp1/notes.md",
+    ".sftdd/experiments/F6-split-tracking-code/S4-split-display/exp1/outcomes.json",
+    ".sftdd/experiments/F6-split-tracking-code/S4-split-display/exp1/timeline.json",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

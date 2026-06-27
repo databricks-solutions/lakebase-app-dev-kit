@@ -1,0 +1,13 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S3-split-drop-old",
+  "ac_id": "AC2-column-restored",
+  "test_id": "T22",
+  "test_description": "after the S3 down() migration runs, the inventory_code column is present on the stock table",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s3-split-drop-old-exp1",
+  "red_at": "2026-06-15T13:21:44.296Z",
+  "green_at": "2026-06-15T13:49:34.596Z",
+  "navigator_verdict": "passed"
+}

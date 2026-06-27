@@ -1,0 +1,19 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S3-sku-detail-view",
+  "ac_id": "AC1-detail-view-displays-sku-distribution",
+  "test_id": "T20",
+  "test_description": "Navigating to the detail page for a SKU that has stock at multiple locations renders one row per location with the location name and current quantity",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s3-sku-detail-view-exp1",
+  "red_at": "2026-06-15T10:22:42.696Z",
+  "test_ids": [
+    "T20",
+    "T23",
+    "T24",
+    "T21",
+    "T22"
+  ],
+  "chunk": "_nolayer-1"
+}

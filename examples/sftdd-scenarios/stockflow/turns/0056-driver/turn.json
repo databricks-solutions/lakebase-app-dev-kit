@@ -1,0 +1,22 @@
+{
+  "ordinal": 56,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S1-split-add-backfill"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-add-backfill/AC1-columns-added/green-failure.json",
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-add-backfill/exp1/outcomes.json",
+    "alembic/versions/20260624142037_add_batch_number_serial_number_to_stock.py",
+    "app/models/stock.py"
+  ],
+  "deleted": [
+    ".sftdd/deploy/local.pid"
+  ]
+}

@@ -123,6 +123,10 @@ jobs:
           # (which it is on self-hosted runners that pre-date the v1 cutover).
           # `pat` pins auth to DATABRICKS_TOKEN and bypasses the cache.
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID || '' }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REPO_FORK: ${{ github.event.pull_request.head.repo.fork }}
@@ -301,6 +305,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           if [ -z "$LAKEBASE_BRANCH_NAME" ]; then
@@ -370,6 +378,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
         run: npx playwright test
 
       # Phase 2: project-root Playwright wire-up (separate from
@@ -394,6 +406,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           PR="${{ github.event.pull_request.number }}"
@@ -430,6 +446,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
         run: |
           if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
             npm run test:e2e
@@ -447,6 +467,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST || '' }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN || '' }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID || '' }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |

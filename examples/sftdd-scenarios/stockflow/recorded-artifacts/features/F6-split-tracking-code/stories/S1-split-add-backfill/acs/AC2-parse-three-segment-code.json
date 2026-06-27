@@ -1,0 +1,13 @@
+{
+  "id": "AC2-parse-three-segment-code",
+  "given": "Stock row with inventory_code = 'A12-B7-S001'",
+  "when": "The migration backfills batch and serial from inventory_code",
+  "then": "batch_number = 'B7' and serial_number = 'S001'",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract on data-store state after the backfill (delimiter parse, segment 2 -> batch, segment 3 -> serial), asserted by querying the migrated rows on the paired branch. Owner: the Alembic backfill statement in the repository/migration layer; the parse rule is migration logic, never reimplemented in the boundary or domain. Cross-cutting concern: data integrity (R1), no silent corruption.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 tests column creation; AC2 tests that complete three-segment codes are correctly parsed and populated"
+  }
+}

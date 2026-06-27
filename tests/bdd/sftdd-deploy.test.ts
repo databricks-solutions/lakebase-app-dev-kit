@@ -88,13 +88,19 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
       lakebaseBranch: "experiment-s1",
       tddDir,
       rejectForeignPort: true,
-      reachable: async () => true, // a foreign/stale app is already on the port
+      reachable: async () => true, // a foreign/stale app stays on the port (stop does not free it)
       startProcess: () => {
         started = true;
         return 1;
       },
       runVerify: () => true,
       sleep: async () => {},
+      now: (() => {
+        // Fast-forward the self-heal re-probe clock so the genuinely-foreign
+        // path reaches its timeout instantly (no 5s real-time spin).
+        let t = 0;
+        return () => new Date((t += 1000));
+      })(),
     });
     expect(result.ok).toBe(false);
     expect(started).toBe(false); // never started our app onto a busy port
@@ -108,6 +114,44 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
     // and it raised an escalation for the HIL (deploy-verify source).
     const escs = readEscalations(tddDir).filter((e) => !e.resolved_at);
     expect(escs.some((e) => e.source === "deploy-verify" && e.story_id === "S1")).toBe(true);
+  });
+
+  it("self-heals: stops OUR own prior instance on the port, then deploys cleanly (no escalation)", async () => {
+    // The per-story await-acceptance deploy leaves our app running on the port
+    // for PO review; a re-issued gate deploy must stop that own instance and
+    // proceed, NOT refuse it as foreign.
+    const tddDir = join(dir, ".tdd");
+    mkdirSync(join(tddDir, "features", "F1", "stories", "S1"), { recursive: true });
+    let occupied = true; // our own prior app is on the port...
+    let stopped = false;
+    let started = false;
+    const result = await deployToTarget({
+      projectDir: dir,
+      targetName: "localv",
+      featureId: "F1",
+      storyId: "S1",
+      tddDir,
+      rejectForeignPort: true,
+      reachable: async () => (started ? true : occupied), // busy until stopped; up once we start
+      stop: () => {
+        stopped = true;
+        occupied = false; // ...stopping it frees the port
+      },
+      startProcess: () => {
+        started = true;
+        return 4321;
+      },
+      runVerify: () => true,
+      sleep: async () => {},
+      now: () => new Date(),
+    });
+    expect(stopped).toBe(true); // we stopped our own instance first
+    expect(started).toBe(true); // and then deployed cleanly onto the freed port
+    expect(result.ok).toBe(true);
+    expect(result.verify?.passed).toBe(true);
+    // no escalation: this was OUR app, self-healed, not a foreign squatter.
+    const escs = readEscalations(tddDir).filter((e) => !e.resolved_at);
+    expect(escs.some((e) => e.source === "deploy-verify")).toBe(false);
   });
 
   it("does NOT guard when rejectForeignPort is unset (per-cycle reuse path is unaffected)", async () => {

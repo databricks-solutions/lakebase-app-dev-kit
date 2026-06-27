@@ -50,6 +50,7 @@ describe("smells catalog", () => {
         "ac-overlap",
         "api-coherence-drift",
         "boundary-violation",
+        "contract-incompleteness",
         "cross-experiment-divergence",
         "cycle-stall",
         "dead-requirement-signal",

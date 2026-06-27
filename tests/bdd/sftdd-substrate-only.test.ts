@@ -18,6 +18,15 @@
 // already-checked-out experiment branch (cycle-record.ts) via this primitive;
 // the paired substrate still owns every create/delete/checkout/merge.
 //
+// EXEMPT: scripts/sftdd/ephemeral-verify.ts. The ephemeral verify branch is a
+// transient Lakebase-ONLY child cut off the story's parent branch to run the
+// migrations + test suite against an isolated DB endpoint (its DSN is injected
+// via VERIFY_DATABASE_URL), then always deleted. It deliberately has NO git pair:
+// there is no code branch for it (the working tree never switches), so pairing it
+// would be wrong, not a desync risk. It is the one intentional unpaired
+// Lakebase-only path in the orchestration layer, analogous to the low-level MCP
+// branch tools, and uses createBranch/deleteBranch directly by design.
+//
 // Every branch a TDD agent cuts gets a Lakebase branch AND a git branch AND an
 // .env sync, because the only path it can call does all three. This test fails
 // loudly if anyone re-introduces an unpaired path.
@@ -60,11 +69,17 @@ const FORBIDDEN_SYMBOL = /\b(createFeatureBranch|createTestBranch|createUatBranc
 // substrate surface and are out of scope for this guard.)
 const GUARDED_DIRS = [join(ROOT, "scripts", "sftdd")];
 
+// Files exempt from the unpaired-import guard (deliberate, documented in the
+// header note). The ephemeral verify branch is a transient Lakebase-only child
+// with no git pair by design, so it uses createBranch/deleteBranch directly.
+const EXEMPT_FROM_IMPORT_GUARD = new Set([join("scripts", "sftdd", "ephemeral-verify.ts")]);
+
 describe("substrate-only: TDD orchestration never imports an unpaired branch path", () => {
   for (const dir of GUARDED_DIRS) {
     for (const file of sourceFiles(dir)) {
       const rel = file.slice(ROOT.length + 1);
       it(`${rel} imports no unpaired Lakebase/git module`, () => {
+        if (EXEMPT_FROM_IMPORT_GUARD.has(rel)) return; // deliberate unpaired path (see header)
         const src = readFileSync(file, "utf8");
         const offending = src
           .split("\n")

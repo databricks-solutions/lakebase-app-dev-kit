@@ -56,7 +56,7 @@
 #
 # Project intake (product-overview.md + nfrs.md + design-brief.md) is staged
 # once before the sprints via human-proxy (stage_project_intake) and committed
-# to trunk; LAKEBASE_TDD_UI=1 turns on the UX track.
+# to trunk; LAKEBASE_SFTDD_UI=1 turns on the UX track.
 #
 # Other flags:
 #   --resume <iter>      skip earlier iterations + start at <iter>
@@ -145,21 +145,21 @@ mkdir -p "$(dirname "$PROJECT_DIR")"
 
 # Turn recording (code asset): the deterministic driver records EVERY state-
 # machine turn (design + build + gates + deploy + promote) into a replayable
-# corpus when LAKEBASE_TDD_RECORD_DIR is set. The test runner turns it on by
+# corpus when LAKEBASE_SFTDD_RECORD_DIR is set. The test runner turns it on by
 # default, one corpus dir beside the project, surviving --keep-on-failure:
 #   <RECORD_DIR>/turns/<NNNN>-<label>/   per-turn manifest + the .tdd/code delta
 #   <RECORD_DIR>/turns/index.json        the ordered timeline of every step
 #   <RECORD_DIR>/recorded-artifacts/     cumulative .tdd mirror (replayDesignTurn)
 #   <RECORD_DIR>/recorded-build/         per-turn code corpus (replayBuildTurn)
-# Override LAKEBASE_TDD_RECORD_DIR to relocate, or set it empty to disable.
-if [[ -z "${LAKEBASE_TDD_RECORD_DIR+x}" ]]; then
-  export LAKEBASE_TDD_RECORD_DIR="$(dirname "$PROJECT_DIR")/_recorded-${PROJECT_NAME}"
+# Override LAKEBASE_SFTDD_RECORD_DIR to relocate, or set it empty to disable.
+if [[ -z "${LAKEBASE_SFTDD_RECORD_DIR+x}" ]]; then
+  export LAKEBASE_SFTDD_RECORD_DIR="$(dirname "$PROJECT_DIR")/_recorded-${PROJECT_NAME}"
 fi
-if [[ -n "${LAKEBASE_TDD_RECORD_DIR}" ]]; then
-  : "${LAKEBASE_TDD_RECORD_BUILD_DIR:=${LAKEBASE_TDD_RECORD_DIR}/recorded-build}"
-  export LAKEBASE_TDD_RECORD_BUILD_DIR
-  mkdir -p "$LAKEBASE_TDD_RECORD_DIR"
-  echo "smoke: recording every state-machine turn -> $LAKEBASE_TDD_RECORD_DIR" >&2
+if [[ -n "${LAKEBASE_SFTDD_RECORD_DIR}" ]]; then
+  : "${LAKEBASE_SFTDD_RECORD_BUILD_DIR:=${LAKEBASE_SFTDD_RECORD_DIR}/recorded-build}"
+  export LAKEBASE_SFTDD_RECORD_BUILD_DIR
+  mkdir -p "$LAKEBASE_SFTDD_RECORD_DIR"
+  echo "smoke: recording every state-machine turn -> $LAKEBASE_SFTDD_RECORD_DIR" >&2
 fi
 
 # The kit npx URL. When KIT_REF is set, suffix the GitHub ref so npx
@@ -201,20 +201,20 @@ fi
 # /design run through to test-list.json (and /build) without a human, while
 # conformance still hard-blocks a missing/malformed artifact. See SKILL
 # "Headless / Human Proxy mode".
-export LAKEBASE_TDD_HUMAN_PROXY=1
+export LAKEBASE_SFTDD_HUMAN_PROXY=1
 
 # Where the Human Proxy reads pre-recorded HIL intake answers in headless mode.
 # /design's intake precondition (lakebase-sftdd-intake) facilitates from here when
 # an artifact is missing; this smoke also pre-supplies them (stage_project_intake)
 # for determinism. Same directory the recorded product-overview.md / nfrs.md live in.
-export LAKEBASE_TDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
+export LAKEBASE_SFTDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 
 # This smoke is a UI project (every feature is a browser-facing capability:
-# filing a bug, transitioning its status). LAKEBASE_TDD_UI=1 tells /design to run
+# filing a bug, transitioning its status). LAKEBASE_SFTDD_UI=1 tells /design to run
 # the UX Designer phase and require design-brief.md at intake, so the UX track
 # (design-guide.{md,json} + ia.md + token adherence) is exercised, and the Spec
 # Author proposes E2E (browser) stories rather than API-only.
-export LAKEBASE_TDD_UI=1
+export LAKEBASE_SFTDD_UI=1
 
 # The smoke drives the deterministic orchestrator (`lakebase-sftdd-drive`) CLI
 # directly for every phase (planning + per-feature design/build/deploy); it does
@@ -224,7 +224,7 @@ export LAKEBASE_TDD_UI=1
 # via --agent-model) and applies its own MCP-isolation flags. Driving the CLI
 # directly (rather than a claude -p "/plan" session) keeps gate mode + env
 # deterministic: a claude -p Bash tool does not reliably inherit
-# LAKEBASE_TDD_HUMAN_PROXY, which silently flipped the plan gate to interactive.
+# LAKEBASE_SFTDD_HUMAN_PROXY, which silently flipped the plan gate to interactive.
 
 log_kit_ref() { echo "smoke: kit ref = ${KIT_REF:-main} (npx package: ${KIT_NPX})"; }
 
@@ -351,20 +351,16 @@ scaffold_project() {
       --language python \
       --runner self-hosted \
       --tiers "$TIERS" \
-      `# Per-role model/effort matrix for the smoke (perf experiment): pin the` \
-      `# capability-critical roles to opus, the navigator (writes the RED tests +` \
-      `# reviews the design), the test-strategist (the structured test-list whose` \
-      `# every ac_id must map to a real AC), and the ux-designer (the design system` \
-      `# + IA the UI build adheres to). Every other role keeps its kit-default model.` \
-      `# create-project takes only --agent-model (model), so effort=low for ALL` \
-      `# roles is patched into tdd-config.json right after scaffold.` \
-      --agent-model navigator=opus \
-      --agent-model test-strategist=opus \
-      --agent-model ux-designer=opus \
+      `# Models: kit DEFAULTS, no per-role pins. The deterministic gates`\
+      `# (contract-clean, layering-clean, conformance) + the honest-GREEN backstop`\
+      `# carry the quality the old opus pins used to backstop, so the smoke runs on`\
+      `# each role's recommended model. Override per run via --agent-model / the`\
+      `# AGENT_MODELS env if a specific experiment needs it. effort=low for all`\
+      `# roles except the two design-gate gatekeepers is patched in below.` \
       --enable-e2e
   ) || { err "scaffold failed"; exit 1; }
 
-  # create-project seeds .lakebase/tdd-config.json with models but no effort
+  # create-project seeds .lakebase/sftdd-config.json with models but no effort
   # (it takes only --agent-model). The smoke wants effort=low for speed/cost on
   # MOST roles, but the two DESIGN-GATE gatekeepers for AC independence, the
   # spec-author (runs the per-pair independence test + outcome-vs-mechanism
@@ -372,12 +368,12 @@ scaffold_project() {
   # need full default effort: their judgment is subtle and effort=low undercuts it.
   # So patch effort=low on every role EXCEPT those two (left unset -> default
   # effort). Models from --agent-model + the kit defaults are preserved.
-  local _tdc="$PROJECT_DIR/.lakebase/tdd-config.json"
+  local _tdc="$PROJECT_DIR/.lakebase/sftdd-config.json"
   if [[ -f "$_tdc" ]]; then
     local _tmp; _tmp="$(mktemp)"
     if jq '.roles |= with_entries(if (.key == "spec-author" or .key == "test-strategist") then . else .value.effort = "low" end)' "$_tdc" > "$_tmp" 2>/dev/null; then
       mv "$_tmp" "$_tdc"
-      log "patched tdd-config.json: effort=low for all roles except spec-author + test-strategist (default effort; models: kit defaults, opus for navigator + test-strategist + ux-designer)"
+      log "patched sftdd-config.json: effort=low for all roles except spec-author + test-strategist (default effort; models: kit defaults)"
     else
       rm -f "$_tmp"; log "WARNING: could not patch effort into $_tdc (jq failed); using config defaults"
     fi
@@ -557,7 +553,7 @@ proxy_supply() {
 # Project-level intake, staged once before the iteration loop. product-overview.md
 # and nfrs.md are project-scoped (refined across features in a real run; recorded
 # here). design-brief.md is also supplied: this smoke is a UI project (every
-# feature is browser-facing), so LAKEBASE_TDD_UI=1 turns on the UX track and the intake
+# feature is browser-facing), so LAKEBASE_SFTDD_UI=1 turns on the UX track and the intake
 # precondition requires the brief.
 stage_project_intake() {
   log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"
@@ -618,7 +614,7 @@ run_plan_sprint() {
   # where the PO's artifacts are provided, and headless the Human Proxy supplies
   # them then (logging each). The recorded file is named independently of the
   # feature id (v1-initial-domain.md -> F1-initial-domain), so each pair is
-  # `<feature_id>\t<recorded source>`, passed via LAKEBASE_TDD_SPRINT_REQUESTS.
+  # `<feature_id>\t<recorded source>`, passed via LAKEBASE_SFTDD_SPRINT_REQUESTS.
   # This is the identical state machine a human runs; only the provider differs.
   local iter feature_id spec _pairs=""
   for iter in "${iters[@]}"; do
@@ -627,17 +623,17 @@ run_plan_sprint() {
     [[ -f "$spec" ]] || { err "missing iteration spec: $spec"; exit 2; }
     _pairs+="$(printf '%s\t%s' "$feature_id" "$spec")"$'\n'
   done
-  export LAKEBASE_TDD_SPRINT_REQUESTS="$_pairs"
+  export LAKEBASE_SFTDD_SPRINT_REQUESTS="$_pairs"
 
   # c. Drive planning through the deterministic orchestrator (the same CLI the
   # scaffolded /plan command runs). The smoke calls the driver DIRECTLY (as it
   # does for the per-feature loop), not through `claude -p "/plan"`: a claude -p
-  # session's Bash tool does not reliably inherit LAKEBASE_TDD_HUMAN_PROXY, so the
+  # session's Bash tool does not reliably inherit LAKEBASE_SFTDD_HUMAN_PROXY, so the
   # command's gate-mode check fell through to `interactive` headless and the plan
   # gate was never approved. Calling the driver here (in this shell, where the env
   # is correct) with an explicit `--gates proxy` is deterministic. The driver runs
   # propose (Spec Author -> feature-proposals.md), author-requests (the Human Proxy
-  # supplies the recorded feature-requests from LAKEBASE_TDD_SPRINT_REQUESTS + logs
+  # supplies the recorded feature-requests from LAKEBASE_SFTDD_SPRINT_REQUESTS + logs
   # each), sync-backlog (projects backlog.json from them), then the Human Proxy
   # approves the sprint plan gate (teeth: feature-proposals.md exists + conforms)
   # and it stops at planning-complete.

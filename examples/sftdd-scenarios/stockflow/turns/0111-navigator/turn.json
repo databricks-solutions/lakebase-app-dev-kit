@@ -1,0 +1,19 @@
+{
+  "ordinal": 111,
+  "step": 0,
+  "label": "navigator",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC5-split-columns-dropped/cycle-001.json",
+    "tests/features/S3-split-drop-old.feature",
+    "tests/step_defs/test_s3_split_drop_old.py"
+  ],
+  "deleted": []
+}

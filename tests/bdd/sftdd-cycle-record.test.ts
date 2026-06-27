@@ -19,6 +19,11 @@ import {
   firstRefactorPendingAc,
   reviewAc,
   refactorAc,
+  reviewPending,
+  refactorPending,
+  reviewStory,
+  refactorStory,
+  storyReviewState,
   type GreenVerifier,
 } from "../../scripts/sftdd/cycle-record.js";
 import { readAgentLog } from "../../scripts/sftdd/agent-log.js";
@@ -308,5 +313,66 @@ describe("cycle-record: GREEN + REFACTOR each commit on the experiment branch", 
     await refactorAc(ptdd, F, S, "AC1", { verify: pass });
     expect(gitlog()).toMatch(/refactor: AC1/);
     expect(codeDirty()).toBe("");
+  });
+});
+
+// ── Story-level review/refactor ("story" loop granularity, the default) ───────
+// The Navigator REVIEWs the whole story in one turn (reviewStory) and the Driver
+// REFACTORs it in one turn (refactorStory); the transition is recorded once at
+// the story's cycles root (cycles/<F>/<S>/review.json), not per AC.
+describe("cycle-record: story-level review/refactor (story granularity)", async () => {
+  function greenWholeStory(): Promise<unknown> {
+    // Green every pending test in the story (T1 + T2, both under AC1).
+    return (async () => {
+      beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+      await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+      beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+      await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    })();
+  }
+
+  it("reviewPending is true once the WHOLE story is green, false before", async () => {
+    expect(reviewPending(tdd, F, S)).toBe(false); // nothing green yet
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass }); // only T1
+    expect(reviewPending(tdd, F, S)).toBe(false); // T2 still pending
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass }); // T2
+    expect(reviewPending(tdd, F, S)).toBe(true); // whole story green -> review pending
+  });
+
+  it("reviewStory with no verdict marks reviewed (looks good): reviewPending clears, no refactor", async () => {
+    await greenWholeStory();
+    const r = reviewStory(tdd, F, S);
+    expect(r.reviewed).toBe(true);
+    expect(r.refactorRequested).toBe(false);
+    expect(reviewPending(tdd, F, S)).toBe(false);
+    expect(refactorPending(tdd, F, S)).toBe(false);
+    // Recorded once at the story root, NOT under an AC dir.
+    const state = storyReviewState(tdd, F, S);
+    expect(state.reviewed).toBe(true);
+    expect(state.refactored).toBe(false);
+  });
+
+  it("a refactor:true verdict routes one story REFACTOR, then refactorStory clears it", async () => {
+    await greenWholeStory();
+    writeJson(join(tdd, "cycles", F, S, "review-verdict.json"), { refactor: true, notes: "extract a shared helper" });
+    const r = reviewStory(tdd, F, S);
+    expect(r.refactorRequested).toBe(true);
+    expect(refactorPending(tdd, F, S)).toBe(true);
+    const res = await refactorStory(tdd, F, S, { verify: pass });
+    expect(res.refactored).toBe(true);
+    expect(refactorPending(tdd, F, S)).toBe(false); // refactored -> no longer pending
+  });
+
+  it("a FAILED post-refactor verify keeps the story refactor-pending + escalates", async () => {
+    await greenWholeStory();
+    writeJson(join(tdd, "cycles", F, S, "review-verdict.json"), { refactor: true, notes: "risky change" });
+    reviewStory(tdd, F, S);
+    const fail: GreenVerifier = async () => ({ passed: false, summary: "a sibling test regressed" });
+    const res = await refactorStory(tdd, F, S, { verify: fail });
+    expect(res.refactored).toBe(false);
+    expect(res.escalated).toBe(true);
+    expect(refactorPending(tdd, F, S)).toBe(true); // still pending (not stamped)
   });
 });

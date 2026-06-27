@@ -1,0 +1,15 @@
+{
+  "ordinal": 21,
+  "step": 0,
+  "label": "dispatch",
+  "kind": "dispatch",
+  "story": "S2-home-stock-table",
+  "action": {
+    "kind": "dispatch",
+    "story": "S2-home-stock-table"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

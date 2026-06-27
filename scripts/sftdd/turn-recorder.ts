@@ -5,7 +5,7 @@
 // This generalizes the build-only recorder (recordBuildTurn) to the whole
 // machine , the design lane in particular had no recorder, so the design corpus
 // used to be hand-assembled. Wired via `withTurnRecording` (drive.cli.ts), gated
-// on LAKEBASE_TDD_RECORD_DIR, fired AFTER each turn's effect lands.
+// on LAKEBASE_SFTDD_RECORD_DIR, fired AFTER each turn's effect lands.
 //
 // Layout under recordDir (the answer to "record every step, replayably"):
 //   turns/<NNNN>-<label>/turn.json   , manifest {step, kind, role, mode, story, ac, action, produced[], deleted[]}
@@ -49,7 +49,7 @@ interface ScannedFile {
 }
 
 export interface RecordTurnArgs {
-  /** LAKEBASE_TDD_RECORD_DIR , the corpus root. */
+  /** LAKEBASE_SFTDD_RECORD_DIR , the corpus root. */
   recordDir: string;
   /** Project working tree root (dirname of tddDir). */
   projectDir: string;

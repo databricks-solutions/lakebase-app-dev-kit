@@ -1,0 +1,26 @@
+{
+  "ordinal": 2,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC1-form-displays.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC1-form-displays.md",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC2-record-created-on-submission.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC2-record-created-on-submission.md",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC3-confirmation-shown.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC3-confirmation-shown.md",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC4-collision-handled-via-update.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC4-collision-handled-via-update.md",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC5-tracking-code-persisted.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC5-tracking-code-persisted.md"
+  ],
+  "deleted": []
+}

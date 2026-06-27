@@ -1,0 +1,11 @@
+{
+  "name": "stockflow",
+  "description": "Inventory app: F1 record-stock visibility, then F6 split tracking-code (expand/contract column drop with a self-healing contract-completeness gate).",
+  "tiers": 2,
+  "uiTrack": true,
+  "pauseBefore": "release-engineer",
+  "features": [
+    { "id": "F1-stock-visibility", "buildReplay": true, "summary": "additive: record-stock form + home stock table + sku detail view" },
+    { "id": "F6-split-tracking-code", "buildReplay": true, "summary": "contract: split tracking_code into batch_number + serial_number, then drop the old column in lockstep" }
+  ]
+}

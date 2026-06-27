@@ -19,8 +19,16 @@
 // cycle with `status:"red"` instead of the `red_at` the probe reads).
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { sftddEnv } from "./sftdd-env.js";
 import { join, dirname } from "path";
-import { storyTestListJson, cyclesRootDir, acReviewJson, acReviewVerdictJson } from "./sftdd-paths.js";
+import {
+  storyTestListJson,
+  cyclesRootDir,
+  acReviewJson,
+  acReviewVerdictJson,
+  storyReviewJson,
+  storyReviewVerdictJson,
+} from "./sftdd-paths.js";
 import { markTestItemGreen } from "./test-list.js";
 import { listExperiments } from "./experiment.js";
 import { ensureDeployedAndVerify } from "./deploy.js";
@@ -34,6 +42,7 @@ import {
   markSupersessionRefactored,
   markRegressionFixAttempted,
 } from "./supersession.js";
+import { checkContractClean } from "./contract-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
 import {
@@ -64,36 +73,48 @@ import type { AcLayer } from "./experiment.js";
  * file's logging resilience. A genuine failure leaves the tree dirty, which
  * prepare-pr catches downstream rather than the build stamping a false state.
  */
+/**
+ * Stage + commit the experiment branch's CODE , the canonical build-commit
+ * policy, shared by the per-cycle green/refactor commits AND the accept/merge
+ * precondition so both leave an identical clean code tree.
+ *
+ * Commits code + the stable design corpus. Excludes the churny orchestration
+ * metadata (.tdd state churns every turn; .lakebase is SCM state): committing
+ * those onto the experiment branch makes their committed copy diverge from the
+ * feature branch, which then breaks accept's `git checkout <feature>`.
+ * prepare-pr's dirty check ignores the same prefixes, so this leaves a clean
+ * CODE tree for promote.
+ *
+ * BUT force-include the project-level design + architecture corpora:
+ *   `.tdd/design/`        , the design guide + IA (UX Designer).
+ *   `.tdd/architecture/`  , the architecture conventions (the canonical
+ *                           role -> module layout the first feature pins).
+ * Both are written ONCE in the design phase and never touched during build, so
+ * they do NOT churn or diverge. Committing them here carries them onto the
+ * feature branch's PR to the parent tier, so the NEXT feature (forked from that
+ * tier) inherits them , `designGuideReady` skips re-authoring the design system,
+ * and `conventionsReady` makes the architect inherit + conform to the
+ * established layout instead of re-deriving it.
+ *
+ * Returns true when a commit was made. Throws on a genuine git failure (callers
+ * that want best-effort wrap it in try/catch).
+ */
+export async function commitExperimentCode(projectDir: string, message: string): Promise<boolean> {
+  return commitAllIfChanged({
+    cwd: projectDir,
+    message,
+    // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
+    // observability it churns every run and is not feature code; committing it
+    // onto the experiment branch would diverge from the feature branch (and it
+    // already blocks the fork via assertCleanForFork). Gitignored too.
+    exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
+    include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
+  });
+}
+
 async function commitCycleWork(tddDir: string, message: string): Promise<void> {
   try {
-    // Code + the stable design corpus. Exclude the churny orchestration metadata
-    // (.tdd state churns every turn; .lakebase is SCM state): committing those
-    // onto the experiment branch makes their committed copy diverge from the
-    // feature branch, which then breaks accept's `git checkout <feature>`.
-    // prepare-pr's dirty check ignores the same two prefixes, so this leaves a
-    // clean CODE tree for promote.
-    //
-    // BUT force-include the project-level design + architecture corpora:
-    //   `.tdd/design/`        , the design guide + IA (UX Designer).
-    //   `.tdd/architecture/`  , the architecture conventions (the canonical
-    //                           role -> module layout the first feature pins).
-    // Both are written ONCE in the design phase and never touched during build,
-    // so they do NOT churn or diverge. Committing them here carries them onto the
-    // feature branch's PR to the parent tier, so the NEXT feature (forked from
-    // that tier) inherits them , `designGuideReady` skips re-authoring the design
-    // system, and `conventionsReady` makes the architect inherit + conform to the
-    // established layout instead of re-deriving it. Without this, the broad `.tdd`
-    // exclude dropped both and every feature rebuilt them from scratch.
-    await commitAllIfChanged({
-      cwd: dirname(tddDir),
-      message,
-      // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
-      // observability it churns every run and is not feature code; committing it
-      // onto the experiment branch would diverge from the feature branch (and it
-      // already blocks the fork via assertCleanForFork). Gitignored too.
-      exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
-      include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
-    });
+    await commitExperimentCode(dirname(tddDir), message);
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
@@ -359,6 +380,31 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
 };
 
 /**
+ * Replay-build verifier (FEIP-7702): trust the recorded GREEN for this turn
+ * instead of re-running the full-suite honest-GREEN against the overlaid code.
+ * During a build replay the project tree at an intermediate turn carries the
+ * WHOLE recorded test set while only the current AC's code is in place, so a
+ * later AC's test is legitimately RED , re-running the full suite per turn would
+ * fail the cycle on a not-yet-built AC, which is not a regression. The corpus is
+ * the source of truth that the turn was green when recorded; the final all-ACs
+ * state is still honestly verified at the deploy gate. No deploy, no I/O.
+ */
+export const replayTrustVerifier: GreenVerifier = async () => ({
+  passed: true,
+  summary: "replay-build: trusting recorded GREEN (per-turn verify skipped; final state verified at the deploy gate)",
+});
+
+/**
+ * Pick the GREEN/REFACTOR verifier for the current environment: the
+ * replay-trust verifier when a build replay is in flight
+ * (LAKEBASE_SFTDD_REPLAY_BUILD_DIR set), else undefined so greenOpenCycle /
+ * refactorAc fall back to the real defaultGreenVerifier.
+ */
+export function greenVerifierForEnv(env: NodeJS.ProcessEnv = process.env): GreenVerifier | undefined {
+  return sftddEnv("REPLAY_BUILD_DIR", env) ? replayTrustVerifier : undefined;
+}
+
+/**
  * Record the runner outcome + stamp GREEN on the story's open RED cycle (red_at
  * set, green_at not). Per the "driver runs, orchestration records" contract the
  * Driver already ran the project's test command in its loop; this records that
@@ -406,7 +452,29 @@ export async function greenOpenCycle(
       // First failure: the break may be a PRIOR test the new AC legitimately
       // supersedes (only the full-suite verify reveals it). Route a Navigator
       // assess turn instead of escalating; the marker bounds it to one pass.
-      writeGreenFailure(tddDir, featureId, story, open.ac_id, { assessed: false, summary: result.summary });
+      //
+      // ENRICH (not replace) that assess with the DETERMINISTIC contract-clean
+      // gate: when a migration DROPPED a column the running code still references
+      // (the contract half of expand/contract, hard rule 9), the gate parses the
+      // migration's net forward drops + greps the code tree to LOCALIZE the
+      // residual refs precisely. A column drop ALSO supersedes prior tests that
+      // assert it, and ONLY the Navigator assess can flag those, so contract-clean
+      // does NOT short-circuit the assess; it records its findings as an advisory
+      // the assess directive injects, so the Navigator's fix covers the code refs
+      // (no re-localizing , the live ceiling) AND flags the superseded tests in
+      // the same turn.
+      let contractRefs: string | undefined;
+      try {
+        const contract = checkContractClean({ projectDir: dirname(tddDir) });
+        if (!contract.clean && contract.remediation) contractRefs = contract.remediation;
+      } catch {
+        /* advisory only: a gate error must never fail the cycle */
+      }
+      writeGreenFailure(tddDir, featureId, story, open.ac_id, {
+        assessed: false,
+        summary: result.summary,
+        ...(contractRefs ? { contractRefs } : {}),
+      });
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
     // Already assessed (the Navigator saw the failing tests) and STILL failing:
@@ -675,5 +743,172 @@ export async function refactorAc(
   // Commit the behavior-preserving refactor as its own commit (the second half
   // of the "commit when green, then commit the refactor" rhythm).
   await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
+  return { refactored: true, summary: result.summary };
+}
+
+// ── Story-level review/refactor ("story" loop granularity, the default) ───────
+// When the build runs story-scoped turns the Navigator REVIEWs the WHOLE story
+// in one turn and the Driver REFACTORs it in one turn, instead of cycling per
+// AC. The transition is recorded ONCE at the story's cycles root
+// (storyReviewJson), the story-scoped analogue of the per-AC review.json above,
+// with the identical producer/consumer split: the Navigator writes
+// review-verdict.json ({ refactor, notes }); reviewStory stamps reviewed_at +
+// refactor_requested; refactorStory stamps refactored_at after an honest
+// behavior-preserving verify. The per-AC functions remain for the opt-in "ac" /
+// "hybrid-a" granularities.
+
+export interface StoryReviewState {
+  /** Every test-list item in the story has a green cycle (story ready to REVIEW). */
+  allTestsGreen: boolean;
+  /** review.json has reviewed_at (the Navigator REVIEWed the story). */
+  reviewed: boolean;
+  /** The REVIEW requested a refactor. */
+  refactorRequested: boolean;
+  /** review.json has refactored_at (the Driver completed the refactor). */
+  refactored: boolean;
+}
+
+function readStoryReview(tddDir: string, featureId: string, story: string): ReviewRecord {
+  const f = storyReviewJson(tddDir, featureId, story);
+  if (!existsSync(f)) return {};
+  try {
+    return JSON.parse(readFileSync(f, "utf8")) as ReviewRecord;
+  } catch {
+    return {};
+  }
+}
+
+/** Whether every test-list item in the story is green (story ready to REVIEW).
+ *  Mirrors the probe's codeWritten: test-list-driven when a list exists, else a
+ *  legacy fallback over the raw RED/GREEN cycles. */
+function storyAllTestsGreen(tddDir: string, featureId: string, story: string): boolean {
+  const p = storyTestProgress(tddDir, featureId, story);
+  if (p.total === 0) {
+    const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+    return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
+  }
+  return p.allGreen;
+}
+
+export function storyReviewState(tddDir: string, featureId: string, story: string): StoryReviewState {
+  const r = readStoryReview(tddDir, featureId, story);
+  return {
+    allTestsGreen: storyAllTestsGreen(tddDir, featureId, story),
+    reviewed: Boolean(r.reviewed_at),
+    refactorRequested: Boolean(r.refactor_requested),
+    refactored: Boolean(r.refactored_at),
+  };
+}
+
+/** The story's REVIEW is pending: all its tests are green but the Navigator has
+ *  not yet REVIEWed the story (-> Navigator story-level REVIEW turn). */
+export function reviewPending(tddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(tddDir, featureId, story);
+  return s.allTestsGreen && !s.reviewed;
+}
+
+/** The story has a REFACTOR pending (-> Driver story-level REFACTOR turn), from
+ *  either source (mirrors firstRefactorPendingAc): the Navigator's REVIEW verdict
+ *  requested it, OR a still-open build-refactor-routable smell for the story (the
+ *  gate IS the refactor signal, so a reviewed-but-unrefactored story routes to
+ *  REFACTOR even when the verdict said refactor:false). One attempt; a residual
+ *  violation after refactorStory re-surfaces with no refactor pending + escalates. */
+export function refactorPending(tddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(tddDir, featureId, story);
+  if (!s.reviewed || s.refactored) return false;
+  if (s.refactorRequested) return true;
+  return hasOpenBuildRefactorRoutableSmell(tddDir, story);
+}
+
+/** Record the Navigator's REVIEW of the WHOLE story: read its verdict
+ *  (review-verdict.json at the story root) and stamp the story review.json with
+ *  reviewed_at + refactor_requested. No verdict present => refactor_requested
+ *  false ("looks good"), so a Navigator that finds nothing to fix never stalls.
+ *  Story-scoped sibling of reviewAc. */
+export function reviewStory(
+  tddDir: string,
+  featureId: string,
+  story: string,
+): { reviewed: boolean; refactorRequested: boolean } {
+  let verdict: { refactor?: boolean; notes?: string } = {};
+  const vf = storyReviewVerdictJson(tddDir, featureId, story);
+  if (existsSync(vf)) {
+    try {
+      verdict = JSON.parse(readFileSync(vf, "utf8")) as { refactor?: boolean; notes?: string };
+    } catch {
+      verdict = {};
+    }
+  }
+  const refactorRequested = verdict.refactor === true;
+  const file = storyReviewJson(tddDir, featureId, story);
+  const prior = readStoryReview(tddDir, featureId, story);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    JSON.stringify(
+      { ...prior, reviewed_at: new Date().toISOString(), refactor_requested: refactorRequested, ...(verdict.notes ? { refactor_notes: verdict.notes } : {}) },
+      null,
+      2,
+    ) + "\n",
+  );
+  logCycleEvent(tddDir, {
+    role: "navigator",
+    level: "info",
+    event: "cycle.review",
+    feature_id: featureId,
+    slots: {
+      ac: story,
+      refactor: refactorRequested,
+      rationale: verdict.notes ?? (refactorRequested ? "refactor requested" : "looks good"),
+      story,
+    },
+  });
+  return { reviewed: true, refactorRequested };
+}
+
+/** Record that the Driver completed the requested REFACTOR for the WHOLE story.
+ *  Story-scoped sibling of refactorAc: the same honest behavior-preserving verify
+ *  (re-run the project's suite against the story's experiment branch) gates
+ *  stamping refactored_at; on failure the story stays refactor-pending and an
+ *  escalation is raised to the HIL. */
+export async function refactorStory(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  opts?: { verify?: GreenVerifier },
+): Promise<RefactorResult> {
+  const exp = storyExperiment(tddDir, featureId, story);
+  const verify = opts?.verify ?? defaultGreenVerifier;
+  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  if (!result.passed) {
+    const escalation = writeEscalation(tddDir, {
+      source: "driver-refactor",
+      reason: `REFACTOR verify failed for story ${featureId}/${story}: ${result.summary}`,
+      feature_id: featureId,
+      story_id: story,
+    });
+    return { refactored: false, escalated: true, escalation, summary: result.summary };
+  }
+
+  const file = storyReviewJson(tddDir, featureId, story);
+  const prior = readStoryReview(tddDir, featureId, story);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
+  for (const d of readSmellsLog(tddDir).detected) {
+    if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === undefined || d.story_id === story)) {
+      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored story: ${story}` });
+    }
+  }
+  const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
+    ? `addressed: ${prior.refactor_notes}`
+    : "structure improved";
+  logCycleEvent(tddDir, {
+    role: "driver",
+    level: "info",
+    event: "cycle.refactored",
+    feature_id: featureId,
+    slots: { ac: story, change, story },
+  });
+  await commitCycleWork(tddDir, `refactor: story ${story} (${change})`);
   return { refactored: true, summary: result.summary };
 }

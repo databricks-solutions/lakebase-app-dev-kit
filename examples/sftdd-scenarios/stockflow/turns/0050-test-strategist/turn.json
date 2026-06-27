@@ -1,0 +1,19 @@
+{
+  "ordinal": 50,
+  "step": 0,
+  "label": "test-strategist",
+  "kind": "invoke-role",
+  "role": "test-strategist",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "invoke-role",
+    "role": "test-strategist",
+    "story": "S1-split-add-backfill"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/test-list-per-ac.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/test-list-per-story.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.json"
+  ],
+  "deleted": []
+}

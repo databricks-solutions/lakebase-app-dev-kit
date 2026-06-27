@@ -115,6 +115,13 @@ export interface GreenFailure {
    *  directive handed to a bounded Driver repair turn. Absent => not driver-fixable
    *  (escalate to HIL with the diagnosis). */
   fixDirective?: string;
+  /** DETERMINISTIC contract-clean advisory recorded at the FIRST GREEN-failure: the
+   *  precise production-code references to migration-dropped column(s) (hard rule 9),
+   *  localized by the `contract-clean` gate. It does NOT short-circuit the Navigator
+   *  assess (a column drop also supersedes prior tests, which only the assess flags);
+   *  it ENRICHES the assess directive so the Navigator's fix covers these code refs
+   *  without having to re-localize them. Advisory, present only when refs were found. */
+  contractRefs?: string;
   /** True once the Driver has consumed its one repair attempt (bounds the
    *  navigator->driver repair to a single pass before the honest-GREEN backstop
    *  escalates, symmetric to SupersededTests.refactored). */

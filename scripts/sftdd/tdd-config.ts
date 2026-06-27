@@ -1,10 +1,10 @@
 // Unified TDD run config: ONE declarative source of truth for the per-role +
 // per-turn model/effort matrix and the build/plan/project behavior knobs, so the
 // settings that used to be scattered across `.lakebase/agent-config.json` (models
-// only), hardcoded `buildCfg` defaults, and a dozen `LAKEBASE_TDD_*` env vars live
-// in one editable file: `.lakebase/tdd-config.json`.
+// only), hardcoded `buildCfg` defaults, and a dozen `LAKEBASE_SFTDD_*` env vars live
+// in one editable file: `.lakebase/sftdd-config.json`.
 //
-// Resolution order for EVERY setting: tdd-config.json -> LAKEBASE_TDD_* env
+// Resolution order for EVERY setting: sftdd-config.json -> LAKEBASE_SFTDD_* env
 // override -> code default. (Env stays as the one-off experiment override on top
 // of the file; the file is the durable choice.) The resolved result is what the
 // driver runs with AND what run-config.json snapshots, so a run is reproducible +
@@ -16,6 +16,7 @@
 // max-turns are NOT CLI-exposed, so they are intentionally absent.
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
+import { sftddEnv } from "./sftdd-env.js";
 import { dirname, join } from "path";
 import type { AgentRole } from "./agent-log.js";
 import {
@@ -25,8 +26,13 @@ import {
   type SpawnableAgentRole,
 } from "./agent-models.js";
 
-/** Project-relative path of the unified config. */
-export const TDD_CONFIG_REL = join(".lakebase", "tdd-config.json");
+/** Project-relative path of the unified config (canonical name post-SFTDD rename). */
+export const SFTDD_CONFIG_REL = join(".lakebase", "sftdd-config.json");
+/** Legacy pre-rename name, still READ (dual-read) so existing scaffolded projects
+ *  keep working until they migrate. New writes use SFTDD_CONFIG_REL. */
+export const LEGACY_TDD_CONFIG_REL = join(".lakebase", "tdd-config.json");
+/** @deprecated use SFTDD_CONFIG_REL. Kept as an alias for callers not yet updated. */
+export const TDD_CONFIG_REL = SFTDD_CONFIG_REL;
 
 /** The turns whose effort can differ within a multi-turn build role. Single-turn
  *  roles ignore the turn and use their scalar effort. */
@@ -48,7 +54,7 @@ export interface TddConfigFile {
   version: 1;
   roles?: Partial<Record<SpawnableAgentRole, RoleSettingsFile>>;
   build?: {
-    loopGranularity?: "ac" | "hybrid-a";
+    loopGranularity?: "story" | "ac" | "hybrid-a";
     batchCap?: number;
     sessionScope?: "story" | "cycle";
   };
@@ -63,20 +69,25 @@ export interface ResolvedSettings {
   budgets: Record<string, number | undefined>;
   /** Resolve a role's effort for a turn ("default" => omit --effort). */
   effortFor(role: string, turn?: BuildTurn): EffortLevel;
-  build: { loopGranularity: "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
+  build: { loopGranularity: "story" | "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
   plan: { sizing: boolean };
   project: { uiTrack: boolean; gates: "interactive" | "proxy"; deployTarget: string };
 }
 
-/** Read `.lakebase/tdd-config.json`, or undefined when absent / unparseable. */
+/** Read `.lakebase/sftdd-config.json` (canonical), falling back to the legacy
+ *  `.lakebase/tdd-config.json` for projects scaffolded before the rename.
+ *  Undefined when neither exists / both unparseable. */
 export function loadTddConfig(projectDir: string): TddConfigFile | undefined {
-  const f = join(projectDir, TDD_CONFIG_REL);
-  if (!existsSync(f)) return undefined;
-  try {
-    return JSON.parse(readFileSync(f, "utf8")) as TddConfigFile;
-  } catch {
-    return undefined;
+  for (const rel of [SFTDD_CONFIG_REL, LEGACY_TDD_CONFIG_REL]) {
+    const f = join(projectDir, rel);
+    if (!existsSync(f)) continue;
+    try {
+      return JSON.parse(readFileSync(f, "utf8")) as TddConfigFile;
+    } catch {
+      return undefined;
+    }
   }
+  return undefined;
 }
 
 /** Code default effort: the navigator REVIEW turn runs fast (low), everything
@@ -97,7 +108,7 @@ interface ResolveInputs {
  * Resolve the run settings: file -> env -> code default, per setting. Legacy
  * `.lakebase/agent-config.json` (models only) is honored as a fallback BELOW the
  * new file but ABOVE the built-in recommended, so existing projects keep their
- * model choices until they adopt tdd-config.json.
+ * model choices until they adopt sftdd-config.json.
  */
 export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
   const env = inputs.env ?? process.env;
@@ -118,9 +129,9 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
 
   const effortFor = (role: string, turn?: BuildTurn): EffortLevel => {
     // Env override wins (the one-off experiment knob on top of the file). Today
-    // only LAKEBASE_TDD_REVIEW_EFFORT exists, for the navigator REVIEW turn.
+    // only LAKEBASE_SFTDD_REVIEW_EFFORT exists, for the navigator REVIEW turn.
     if (role === "navigator" && turn === "review") {
-      const ev = env.LAKEBASE_TDD_REVIEW_EFFORT;
+      const ev = sftddEnv("REVIEW_EFFORT", env);
       if (ev === "default") return "default";
       if (ev) return ev as EffortLevel;
     }
@@ -132,20 +143,22 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
     return defaultEffort(role, turn);
   };
 
-  const batchCapRaw = env.LAKEBASE_TDD_BATCH_CAP;
+  const batchCapRaw = sftddEnv("BATCH_CAP", env);
   const envBatchCap = batchCapRaw && Number.isFinite(Number(batchCapRaw)) ? Math.floor(Number(batchCapRaw)) : undefined;
   const build = {
-    loopGranularity: (env.LAKEBASE_TDD_LOOP === "hybrid-a"
-      ? "hybrid-a"
-      : file?.build?.loopGranularity ?? "ac") as "ac" | "hybrid-a",
+    loopGranularity: ((): "story" | "ac" | "hybrid-a" => {
+      const e = sftddEnv("LOOP", env);
+      if (e === "story" || e === "ac" || e === "hybrid-a") return e;
+      return file?.build?.loopGranularity ?? "story";
+    })(),
     batchCap: envBatchCap ?? file?.build?.batchCap,
-    sessionScope: (env.LAKEBASE_TDD_BUILD_SESSION === "cycle"
+    sessionScope: (sftddEnv("BUILD_SESSION", env) === "cycle"
       ? "cycle"
       : file?.build?.sessionScope ?? "story") as "story" | "cycle",
   };
 
   const project = {
-    uiTrack: env.LAKEBASE_TDD_UI === "1" ? true : env.LAKEBASE_TDD_UI === "0" ? false : file?.project?.uiTrack ?? false,
+    uiTrack: sftddEnv("UI", env) === "1" ? true : sftddEnv("UI", env) === "0" ? false : file?.project?.uiTrack ?? false,
     gates: (file?.project?.gates ?? "proxy") as "interactive" | "proxy",
     deployTarget: file?.project?.deployTarget ?? "local",
   };
@@ -168,13 +181,13 @@ export function defaultTddConfig(): TddConfigFile {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
+    build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" },
   };
 }
 
-/** Write a tdd-config.json (scaffold/init). Does not overwrite unless force. */
+/** Write a sftdd-config.json (scaffold/init). Does not overwrite unless force. */
 export function writeTddConfig(projectDir: string, config: TddConfigFile, opts?: { force?: boolean }): boolean {
   const f = join(projectDir, TDD_CONFIG_REL);
   if (existsSync(f) && !opts?.force) return false;

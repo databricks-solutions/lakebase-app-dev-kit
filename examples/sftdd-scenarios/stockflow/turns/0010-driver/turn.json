@@ -1,0 +1,46 @@
+{
+  "ordinal": 10,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S1-record-stock/AC1-form-displays/cycle-001.json",
+    ".sftdd/experiments/F1-stock-visibility/S1-record-stock/exp1/outcomes.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC1-form-displays.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC2-record-created-on-submission.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC3-confirmation-shown.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC4-collision-handled-via-update.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/test-list-per-story.json",
+    ".sftdd/features/F1-stock-visibility/test-list.json",
+    ".sftdd/features/F1-stock-visibility/test-list.md",
+    ".tmp/schema-diff.md",
+    "alembic/versions/20260624124618_create_stock_table.py",
+    "app/database.py",
+    "app/main.py",
+    "app/models/__init__.py",
+    "app/models/stock.py",
+    "app/repositories/__init__.py",
+    "app/repositories/stock_repository.py",
+    "app/routes/__init__.py",
+    "app/routes/stock_routes.py",
+    "app/services/__init__.py",
+    "app/services/dependencies.py",
+    "app/services/stock_service.py",
+    "pyproject.toml",
+    "templates/base.html",
+    "templates/receive.html",
+    "templates/receive_confirm.html",
+    "tests/features/S1-record-stock.feature",
+    "uv.lock"
+  ],
+  "deleted": [
+    "app/models.py"
+  ]
+}

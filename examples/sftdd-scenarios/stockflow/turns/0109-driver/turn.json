@@ -1,0 +1,20 @@
+{
+  "ordinal": 109,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC4-format-and-null-handling/cycle-002.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/test-list-per-story.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.md"
+  ],
+  "deleted": []
+}

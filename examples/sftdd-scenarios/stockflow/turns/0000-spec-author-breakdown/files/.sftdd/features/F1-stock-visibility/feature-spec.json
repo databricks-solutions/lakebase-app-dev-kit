@@ -1,0 +1,11 @@
+{
+  "id": "F1-stock-visibility",
+  "name": "Record and view stock by SKU and location",
+  "status": "draft",
+  "tdd_mode": "N>=2",
+  "stories": [
+    "S1-record-stock",
+    "S2-home-stock-table",
+    "S3-sku-detail-view"
+  ]
+}

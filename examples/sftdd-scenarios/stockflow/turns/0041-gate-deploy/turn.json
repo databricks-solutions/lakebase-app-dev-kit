@@ -1,0 +1,14 @@
+{
+  "ordinal": 41,
+  "step": 0,
+  "label": "gate-deploy",
+  "kind": "approve-deploy-gate",
+  "action": {
+    "kind": "approve-deploy-gate"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/gates.json",
+    ".sftdd/selection-log.md"
+  ],
+  "deleted": []
+}

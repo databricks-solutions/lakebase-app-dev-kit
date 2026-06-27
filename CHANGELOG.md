@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.4] - 2026-06-27
+
 ### Added
 
 - **Artifact-root resolution + auto-migration.** The on-disk artifact/log directory
@@ -16,9 +18,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   orchestrator (`lakebase-sftdd-drive`) auto-migrates a legacy `.tdd` to `.sftdd` on
   its next run (`git mv` to preserve history when possible, else a filesystem
   rename), and rewrites the project `.gitignore` entries to match.
+- **Per-story build granularity: contract/cleanup stories auto-drop to `ac`.** A
+  story that drops, removes, or renames an existing shape (a column / endpoint /
+  field, detected from the story id verb) now builds one verifiable increment per
+  AC regardless of the run default, since its lockstep DB+code change is too heavy
+  for one story-level GREEN turn (`effectiveLoopForStory` in `orchestrator-derive.ts`,
+  applied in both the routing and the RED/GREEN/REFACTOR prompt builder).
+- **Reactive supersession self-heal.** When greening an AC breaks PRIOR-story tests,
+  a failed honest-GREEN verify routes a Navigator ASSESS turn that classifies each
+  failure as supersession (the latest AC intentionally changed that behavior) or a
+  genuine regression. Superseded tests are flagged for permissive Driver refactor; a
+  regression routes one bounded Driver repair. A MIXED verdict (some superseded plus a
+  regression) is served in a single repair turn (the repair directive now carries the
+  superseded-tests allowlist).
+- **Ephemeral verify branch.** With `LAKEBASE_SFTDD_EPHEMERAL_VERIFY=1`, each GREEN /
+  deploy verify runs its migrations + tests on a disposable child Lakebase branch
+  forked off the story's experiment branch (then deleted), so a contract story's
+  up/down migration fixtures cannot leave the shared DB half-migrated for the next
+  run (`scripts/sftdd/ephemeral-verify.ts`).
+- **Mid-turn context-overflow recovery.** A role turn that overflows the model window
+  ("prompt is too long") is retried on a fresh session (bounded), continuing from the
+  on-disk artifacts rather than failing the run (`scripts/sftdd/context-budget.ts`).
+- **`sftddEnv` env accessor.** `scripts/sftdd/sftdd-env.ts` reads `LAKEBASE_SFTDD_*`
+  with a fallback to the legacy `LAKEBASE_TDD_*` name, the read-side half of the
+  env-prefix rename below.
 
 ### Changed
 
+- **Config file + env prefix renamed `tdd` -> `sftdd` (back-compat).** The unified
+  config is now `.lakebase/sftdd-config.json` and the runtime env knobs are
+  `LAKEBASE_SFTDD_*`, matching the `lakebase-sftdd-workflows` skill, the `scripts/sftdd/`
+  dir, and the `lakebase-sftdd-*` bins. Both are dual-read: `loadTddConfig` prefers
+  `sftdd-config.json` and falls back to a legacy `tdd-config.json`; every env read goes
+  through `sftddEnv`, which falls back to `LAKEBASE_TDD_*`. Existing projects / shells
+  keep working with no manual change; new writes use the canonical names.
+- **Supersession + contract-completeness canon (`software-design-principles`).** Hard
+  rule 8 (a later AC can supersede earlier tests) now requires scanning for
+  supersession COMPREHENSIVELY, including FITNESS / migration tests that assert a
+  property of a dropped shape (reversibility, schema-shape), not only tests that name
+  it. Hard rule 9 makes a schema-contract change update the data model AND the code
+  (ORM / queries / serializers / views) in lockstep with the migration. The Navigator
+  ASSESS and Driver REPAIR prompts enforce both.
 - **Artifact directory renamed `.tdd` -> `.sftdd`.** New projects (and the
   `sftdd-bootstrap` template) scaffold a `.sftdd/` directory to match the
   `lakebase-sftdd-workflows` naming. Existing `.tdd` projects keep working (dual-read)
@@ -31,6 +71,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   against that frozen spec. Narrative added to the skill README + SKILL, the
   spec-format reference, the design-lane agent prompts (spec-author,
   architect-reviewer, test-strategist), and the kit README + CLAUDE.
+
+### Fixed
+
+- **Deploy resilience on a port already in use.** Before refusing to deploy because a
+  port is occupied, the deploy stops its OWN prior app instance and re-probes, so a
+  re-run reclaims its own port instead of failing on a foreign-port refusal
+  (`scripts/sftdd/deploy.ts`).
 
 ## [0.3.0-beta.1] - 2026-06-10
 

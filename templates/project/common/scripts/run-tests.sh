@@ -28,6 +28,19 @@ if [ -z "${DATABASE_URL:-}" ] && [ -n "${SPRING_DATASOURCE_URL:-}" ]; then
   export DATABASE_URL
 fi
 
+# Ephemeral verify DB: when the kit's deploy substrate provides a disposable
+# CHILD branch DSN, run migrations + tests against IT instead of the shared
+# branch. A contract/cleanup story's tests carry migration up/down fixtures; run
+# against the shared branch they leave it half-migrated for the next run and the
+# build thrashes fighting DB state. Forked off the experiment branch at its
+# committed schema, the child gives every verify a clean, isolated DB and is
+# deleted after. (Python + Node read DATABASE_URL directly; Java/Spring would
+# also need SPRING_DATASOURCE_* overridden , tracked follow-up.)
+if [ -n "${VERIFY_DATABASE_URL:-}" ]; then
+  echo "Verify DB: running migrations + tests against the ephemeral child branch (isolating migration fixtures)."
+  export DATABASE_URL="$VERIFY_DATABASE_URL"
+fi
+
 # Detect project language and run pending migrations before tests
 if [ -f "$REPO_ROOT/pom.xml" ]; then
   # Java / Maven – export SPRING_DATASOURCE_* for Maven/Spring
@@ -57,7 +70,19 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   # that can't see the venv's fastapi etc., and test collection crashes
   # with ModuleNotFoundError. Pass --extra dev so uv resolves against
   # the dev extras for the test invocation.
-  uv run --extra dev pytest "$@"
+  #
+  # E2E (tests/e2e) is owned by the dedicated Playwright block that enable-e2e
+  # appends below (it runs `playwright install chromium` first, then
+  # `pytest tests/e2e`). The base full run (no positional args, e.g. the deploy
+  # gate's `run-tests.sh`) must NOT collect tests/e2e, or pytest tries to launch
+  # a browser before that install ran and the run dies with "Failed to spawn:
+  # playwright" before the e2e block is reached. An explicit path arg is honored
+  # verbatim (the per-cycle layer runner). See FEIP-7702 follow-up.
+  if [ "$#" -eq 0 ]; then
+    uv run --extra dev pytest --ignore=tests/e2e
+  else
+    uv run --extra dev pytest "$@"
+  fi
 elif [ -f "$REPO_ROOT/package.json" ]; then
   # Node.js / Knex + Jest
   echo "Running Knex migrations..."

@@ -1,0 +1,8 @@
+{
+  "id": "S3-split-drop-old",
+  "title": "Remove the inventory_code column and support rollback",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "S2 validates the backfill; S3 performs the schema cleanup by dropping the old column and provides a down() migration path that reconstructs the combined code"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "refactor": false,
+  "notes": "Null handling lives correctly in the Alembic down-migration (Infra/migration layer per architecture.md, the only layer touching DDL/data), not leaked into service or routes. concat_ws('-', location, coalesce(batch_number,''), coalesce(serial_number,'')) yields the exact specified formats ('LOC--S001' for NULL batch, 'LOC-B7-' for NULL serial), satisfying T24/T25. Reversibility (NFR-F6-S1-2) and lossy-tolerant NULL-segment collapse with no silent data loss (R1 / NFR-F6-S1-4, F6-S1-5) are honored: nullable reconstructed column and empty-segment collapse match the architecture's documented down-path design. Naming and comments make the supersession intent clear. No rubric-cited improvement warranted."
+}

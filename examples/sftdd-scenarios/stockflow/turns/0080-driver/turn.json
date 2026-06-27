@@ -1,0 +1,21 @@
+{
+  "ordinal": 80,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC1-column-dropped/green-failure.json",
+    "alembic/versions/20260626040644_drop_inventory_code_from_stock.py",
+    "app/models/stock.py",
+    "templates/home.html",
+    "templates/sku_detail.html"
+  ],
+  "deleted": []
+}

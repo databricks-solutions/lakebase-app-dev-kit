@@ -1,0 +1,23 @@
+{
+  "established_by": "F1-stock-visibility",
+  "established_at": "2026-06-15T09:00:15.158Z",
+  "service_backed": true,
+  "layers": [
+    {
+      "role": "boundary",
+      "module": "app/routes"
+    },
+    {
+      "role": "service",
+      "module": "app/services"
+    },
+    {
+      "role": "repository",
+      "module": "app/repositories"
+    },
+    {
+      "role": "models",
+      "module": "app/models"
+    }
+  ]
+}

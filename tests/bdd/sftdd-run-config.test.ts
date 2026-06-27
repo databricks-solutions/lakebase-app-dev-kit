@@ -65,8 +65,8 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
     expect(cfg.review_effort).toBe("low");
     expect(cfg.ui_track).toBe(true);
     expect(cfg.deploy_target).toBe("local");
-    // Defaults when the env knobs are unset.
-    expect(cfg.loop_granularity).toBe("ac");
+    // Defaults when the env knobs are unset (story-scoped Navigator/Driver turns).
+    expect(cfg.loop_granularity).toBe("story");
     expect(cfg.batch_cap).toBeUndefined();
   });
 
@@ -74,9 +74,9 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
     const cfg = buildRunConfig(
       inputs({
         env: {
-          LAKEBASE_TDD_LOOP: "hybrid-a",
-          LAKEBASE_TDD_BATCH_CAP: "3",
-          LAKEBASE_TDD_RUN_LABEL: "8b-vs-ac",
+          LAKEBASE_SFTDD_LOOP: "hybrid-a",
+          LAKEBASE_SFTDD_BATCH_CAP: "3",
+          LAKEBASE_SFTDD_RUN_LABEL: "8b-vs-ac",
         },
       }),
     );
@@ -102,9 +102,9 @@ describe("run-config: write / read / mirror", () => {
     expect(read?.models.driver).toBe("sonnet");
   });
 
-  it("mirrors a copy to LAKEBASE_TDD_RECORD_DIR when recording", () => {
+  it("mirrors a copy to LAKEBASE_SFTDD_RECORD_DIR when recording", () => {
     const recordDir = join(proj, "_recorded");
-    writeRunConfig(inputs({ env: { LAKEBASE_TDD_RECORD_DIR: recordDir } }));
+    writeRunConfig(inputs({ env: { LAKEBASE_SFTDD_RECORD_DIR: recordDir } }));
     expect(existsSync(join(recordDir, "run-config.json"))).toBe(true);
     const mirrored = JSON.parse(readFileSync(join(recordDir, "run-config.json"), "utf8"));
     expect(mirrored.models.navigator).toBe("sonnet");
@@ -122,7 +122,7 @@ describe("run-config: formatRunConfig groups roles by model", () => {
     // Build roles grouped under sonnet, design under opus.
     expect(text).toMatch(/sonnet: .*driver/);
     expect(text).toMatch(/opus: .*spec-author/);
-    expect(text).toMatch(/loop=ac/);
+    expect(text).toMatch(/loop=story/);
     expect(text).toMatch(/review-effort=low/);
   });
 });

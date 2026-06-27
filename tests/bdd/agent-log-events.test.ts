@@ -28,7 +28,7 @@ describe("agent-log-events vocabulary", () => {
   });
 
   it("throws on a missing required slot (nothing rendered partial)", () => {
-    expect(() => renderEventMessage("cycle.red", { test_id: "T1", ac: "AC1" })).toThrow(/missing required slot "asserts"/i);
+    expect(() => renderEventMessage("cycle.red", { batch: 9, cycle_id: "cycle-001", layer: "E2E", test_id: "T1", ac: "AC1" })).toThrow(/missing required slot "asserts"/i);
   });
 
   it("treats undefined / null / empty-string slot values as missing", () => {

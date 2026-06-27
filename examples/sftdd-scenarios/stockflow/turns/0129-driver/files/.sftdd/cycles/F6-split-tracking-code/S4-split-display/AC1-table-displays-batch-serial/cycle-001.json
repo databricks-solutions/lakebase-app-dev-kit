@@ -1,0 +1,25 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S4-split-display",
+  "ac_id": "AC1-table-displays-batch-serial",
+  "test_id": "T31",
+  "test_description": "the home stock table renders a 'Batch Number' column and a 'Serial Number' column when stock records with populated batch_number and serial_number exist",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s4-split-display-exp1",
+  "red_at": "2026-06-15T16:59:44.904Z",
+  "layer": "E2E",
+  "test_ids": [
+    "T31",
+    "T37",
+    "T32",
+    "T33",
+    "T34",
+    "T38",
+    "T35",
+    "T36"
+  ],
+  "chunk": "E2E-1",
+  "green_at": "2026-06-15T17:09:15.551Z",
+  "navigator_verdict": "passed"
+}

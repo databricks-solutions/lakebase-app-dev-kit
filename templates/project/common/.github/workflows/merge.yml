@@ -128,6 +128,10 @@ jobs:
           # legacy ~/.databricks/ cache that v1+ refuses to read. Self-
           # hosted runners with older CLI installations have such a cache.
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
         run: |
           if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
             echo "::error::DATABRICKS_HOST or DATABRICKS_TOKEN secret not set. Push from local to refresh: git push triggers pre-push hook which syncs the token."
@@ -226,6 +230,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           PROJ_PATH="projects/${LAKEBASE_PROJECT_ID}"
@@ -275,6 +283,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           if [ -z "$LAKEBASE_BRANCH_NAME" ]; then
@@ -303,6 +315,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           if [ -z "${SNAPSHOT_NAME}" ]; then
@@ -350,6 +366,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
           LAKEBASE_PROJECT_ID: ${{ secrets.LAKEBASE_PROJECT_ID }}
         run: |
           if [ -z "$LAKEBASE_BRANCH_NAME" ]; then
@@ -400,6 +420,10 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_AUTH_TYPE: pat
+          # Clear any runner-inherited CLI profile so AUTH_TYPE=pat is used cleanly
+          # (a leaked DATABRICKS_CONFIG_PROFILE makes the CLI attempt OAuth resolution,
+          # which hangs headless and times out the substrate's databricks calls).
+          DATABRICKS_CONFIG_PROFILE: ""
         run: |
           if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
             echo "::error::DATABRICKS_HOST or DATABRICKS_TOKEN secret not set."

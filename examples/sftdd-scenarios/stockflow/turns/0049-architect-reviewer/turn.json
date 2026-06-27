@@ -1,0 +1,25 @@
+{
+  "ordinal": 49,
+  "step": 0,
+  "label": "architect-reviewer",
+  "kind": "invoke-role",
+  "role": "architect-reviewer",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "invoke-role",
+    "role": "architect-reviewer",
+    "story": "S1-split-add-backfill"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/architecture.json",
+    ".sftdd/features/F6-split-tracking-code/architecture.md",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC1-columns-added.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC2-parse-three-segment-code.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC3-parse-two-segment-code.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC4-parse-one-segment-code.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC5-migrate-all-rows.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC6-preserve-location.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/acs/AC7-preserve-business-data.json"
+  ],
+  "deleted": []
+}

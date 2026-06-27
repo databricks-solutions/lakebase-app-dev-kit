@@ -1,0 +1,8 @@
+{
+  "id": "AC1-table-displays",
+  "given": "Stock records exist in the database (created via S1)",
+  "when": "User navigates to the stock home page",
+  "then": "A table is displayed showing all current stock records",
+  "status": "draft",
+  "architectural_notes": "Exercises the full read path UI + boundary + service + repository + DB: the home route (app/routes/) calls a stock-listing service (app/services/) backed by a list query in app/repositories/ (the only ORM layer) and renders the table. E2E because it asserts both rendered UI and seeded DB state. Cross-cutting: persistence read owned by the repository; no business rule in the boundary or template."
+}

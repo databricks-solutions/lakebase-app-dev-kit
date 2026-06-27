@@ -63,13 +63,17 @@ describe("run-cycle (hermetic)", () => {
   });
 
   it("emits cycle.red (navigator) on beginCycle and cycle.green (driver) on markGreen, from the substrate", () => {
-    const a = beginCycle({ ...scope, test_id: "T1", test_description: "POST /bugs returns 404" });
+    // A real cycle always carries an AC layer (the cycle.red template renders it);
+    // pass it explicitly here since this hermetic scope has no AC file to derive it from.
+    const a = beginCycle({ ...scope, test_id: "T1", test_description: "POST /bugs returns 404", layer: "API" });
     markGreen(scope, a.cycle_id, "added route handler");
     const log = readAgentLog({ tddDir: tdd });
     const red = log.find((e) => e.event === "cycle.red");
     const green = log.find((e) => e.event === "cycle.green");
     expect(red?.role).toBe("navigator");
-    expect(red?.message).toContain("RED T1");
+    // template: "RED {{batch}} test(s) in {{cycle_id}} [{{layer}}], lead {{test_id}} ({{ac}}): {{asserts}}"
+    expect(red?.message).toMatch(/^RED .*\bT1\b/);
+    expect(red?.message).toContain("[API]");
     expect(green?.role).toBe("driver");
     expect(green?.message).toContain("GREEN T1");
   });

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S1-split-add-backfill",
+  "target": "local",
+  "url": "http://localhost:8000/",
+  "reachable": true,
+  "verify": {
+    "passed": true,
+    "command": "./scripts/run-tests.sh",
+    "summary": "feature-verify passed against the running app"
+  },
+  "lakebase_branch": "experiment-s1-split-add-backfill-exp1",
+  "deployed_at": "2026-06-15T11:28:44.836Z"
+}
