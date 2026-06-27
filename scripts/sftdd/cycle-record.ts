@@ -19,6 +19,7 @@
 // cycle with `status:"red"` instead of the `red_at` the probe reads).
 
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { sftddEnv } from "./sftdd-env.js";
 import { join, dirname } from "path";
 import {
   storyTestListJson,
@@ -41,6 +42,7 @@ import {
   markSupersessionRefactored,
   markRegressionFixAttempted,
 } from "./supersession.js";
+import { checkContractClean } from "./contract-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
 import {
@@ -71,36 +73,48 @@ import type { AcLayer } from "./experiment.js";
  * file's logging resilience. A genuine failure leaves the tree dirty, which
  * prepare-pr catches downstream rather than the build stamping a false state.
  */
+/**
+ * Stage + commit the experiment branch's CODE , the canonical build-commit
+ * policy, shared by the per-cycle green/refactor commits AND the accept/merge
+ * precondition so both leave an identical clean code tree.
+ *
+ * Commits code + the stable design corpus. Excludes the churny orchestration
+ * metadata (.tdd state churns every turn; .lakebase is SCM state): committing
+ * those onto the experiment branch makes their committed copy diverge from the
+ * feature branch, which then breaks accept's `git checkout <feature>`.
+ * prepare-pr's dirty check ignores the same prefixes, so this leaves a clean
+ * CODE tree for promote.
+ *
+ * BUT force-include the project-level design + architecture corpora:
+ *   `.tdd/design/`        , the design guide + IA (UX Designer).
+ *   `.tdd/architecture/`  , the architecture conventions (the canonical
+ *                           role -> module layout the first feature pins).
+ * Both are written ONCE in the design phase and never touched during build, so
+ * they do NOT churn or diverge. Committing them here carries them onto the
+ * feature branch's PR to the parent tier, so the NEXT feature (forked from that
+ * tier) inherits them , `designGuideReady` skips re-authoring the design system,
+ * and `conventionsReady` makes the architect inherit + conform to the
+ * established layout instead of re-deriving it.
+ *
+ * Returns true when a commit was made. Throws on a genuine git failure (callers
+ * that want best-effort wrap it in try/catch).
+ */
+export async function commitExperimentCode(projectDir: string, message: string): Promise<boolean> {
+  return commitAllIfChanged({
+    cwd: projectDir,
+    message,
+    // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
+    // observability it churns every run and is not feature code; committing it
+    // onto the experiment branch would diverge from the feature branch (and it
+    // already blocks the fork via assertCleanForFork). Gitignored too.
+    exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
+    include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
+  });
+}
+
 async function commitCycleWork(tddDir: string, message: string): Promise<void> {
   try {
-    // Code + the stable design corpus. Exclude the churny orchestration metadata
-    // (.tdd state churns every turn; .lakebase is SCM state): committing those
-    // onto the experiment branch makes their committed copy diverge from the
-    // feature branch, which then breaks accept's `git checkout <feature>`.
-    // prepare-pr's dirty check ignores the same two prefixes, so this leaves a
-    // clean CODE tree for promote.
-    //
-    // BUT force-include the project-level design + architecture corpora:
-    //   `.tdd/design/`        , the design guide + IA (UX Designer).
-    //   `.tdd/architecture/`  , the architecture conventions (the canonical
-    //                           role -> module layout the first feature pins).
-    // Both are written ONCE in the design phase and never touched during build,
-    // so they do NOT churn or diverge. Committing them here carries them onto the
-    // feature branch's PR to the parent tier, so the NEXT feature (forked from
-    // that tier) inherits them , `designGuideReady` skips re-authoring the design
-    // system, and `conventionsReady` makes the architect inherit + conform to the
-    // established layout instead of re-deriving it. Without this, the broad `.tdd`
-    // exclude dropped both and every feature rebuilt them from scratch.
-    await commitAllIfChanged({
-      cwd: dirname(tddDir),
-      message,
-      // Also exclude per-agent local memory (.claude/agent-memory/): like .tdd
-      // observability it churns every run and is not feature code; committing it
-      // onto the experiment branch would diverge from the feature branch (and it
-      // already blocks the fork via assertCleanForFork). Gitignored too.
-      exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
-      include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
-    });
+    await commitExperimentCode(dirname(tddDir), message);
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
@@ -383,11 +397,11 @@ export const replayTrustVerifier: GreenVerifier = async () => ({
 /**
  * Pick the GREEN/REFACTOR verifier for the current environment: the
  * replay-trust verifier when a build replay is in flight
- * (LAKEBASE_TDD_REPLAY_BUILD_DIR set), else undefined so greenOpenCycle /
+ * (LAKEBASE_SFTDD_REPLAY_BUILD_DIR set), else undefined so greenOpenCycle /
  * refactorAc fall back to the real defaultGreenVerifier.
  */
 export function greenVerifierForEnv(env: NodeJS.ProcessEnv = process.env): GreenVerifier | undefined {
-  return env.LAKEBASE_TDD_REPLAY_BUILD_DIR ? replayTrustVerifier : undefined;
+  return sftddEnv("REPLAY_BUILD_DIR", env) ? replayTrustVerifier : undefined;
 }
 
 /**
@@ -438,7 +452,29 @@ export async function greenOpenCycle(
       // First failure: the break may be a PRIOR test the new AC legitimately
       // supersedes (only the full-suite verify reveals it). Route a Navigator
       // assess turn instead of escalating; the marker bounds it to one pass.
-      writeGreenFailure(tddDir, featureId, story, open.ac_id, { assessed: false, summary: result.summary });
+      //
+      // ENRICH (not replace) that assess with the DETERMINISTIC contract-clean
+      // gate: when a migration DROPPED a column the running code still references
+      // (the contract half of expand/contract, hard rule 9), the gate parses the
+      // migration's net forward drops + greps the code tree to LOCALIZE the
+      // residual refs precisely. A column drop ALSO supersedes prior tests that
+      // assert it, and ONLY the Navigator assess can flag those, so contract-clean
+      // does NOT short-circuit the assess; it records its findings as an advisory
+      // the assess directive injects, so the Navigator's fix covers the code refs
+      // (no re-localizing , the live ceiling) AND flags the superseded tests in
+      // the same turn.
+      let contractRefs: string | undefined;
+      try {
+        const contract = checkContractClean({ projectDir: dirname(tddDir) });
+        if (!contract.clean && contract.remediation) contractRefs = contract.remediation;
+      } catch {
+        /* advisory only: a gate error must never fail the cycle */
+      }
+      writeGreenFailure(tddDir, featureId, story, open.ac_id, {
+        assessed: false,
+        summary: result.summary,
+        ...(contractRefs ? { contractRefs } : {}),
+      });
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
     // Already assessed (the Navigator saw the failing tests) and STILL failing:
