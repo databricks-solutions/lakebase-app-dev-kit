@@ -234,6 +234,22 @@ The Beck cycle is the inner row, PLAN to REFACTOR. The orchestrator routes into 
 start each cycle; the Navigator and Driver do the work; the agents never write the cycle
 artifacts.
 
+GREEN is **verified, not asserted**: the orchestration runs the project's verify suite
+against the running app and only stamps GREEN if it genuinely passes. That splits the loop
+into two outcomes after the Driver's GREEN attempt:
+
+- **verify passes** , proceed to **REVIEW / REFACTOR** (the design-quality step: Navigator
+  reviews against the canon, Driver refactors if asked).
+- **verify FAILS** , the reactive **ASSESS / REPAIR** path. The Navigator *assesses* the
+  failure and classifies each failing test: a **regression** (still-valid behavior the new
+  code broke , Driver does a bounded code **REPAIR**, never touching tests) or a
+  **supersession** (a later AC/story legitimately invalidated a prior test, e.g. a
+  contract/cleanup story that drops a column , Driver does a **permissive-green**,
+  refactoring only the flagged prior tests, including cross-story/feature ones; `software-design-principles`
+  hard rule 8). Either way it re-verifies; a still-failing verify, or a genuine conflict,
+  escalates to the HIL. The two paths are mutually exclusive per failing test, but one
+  assess can flag some superseded AND diagnose a regression in others.
+
 ```mermaid
 flowchart LR
     ORCH(("orchestr-<br/>ator")) -. routes .-> PLANb
@@ -242,7 +258,16 @@ flowchart LR
     NAV2(("Navigator")) -. responsible .-> RED
     RED -->|minimal honest code| GREEN
     DRV(("Driver")) -. responsible .-> GREEN
-    GREEN -->|review| REVIEW
+    GREEN -->|verify passes| REVIEW
+    GREEN -->|verify FAILS| ASSESS["ASSESS<br/>supersession vs regression"]
+    NAV4(("Navigator")) -. responsible .-> ASSESS
+    ASSESS -->|regression: fix code| REPAIR["REPAIR<br/>(code, not tests)"]
+    ASSESS -->|superseded: refactor flagged prior tests| PERMGREEN["permissive-green"]
+    DRV3(("Driver")) -. responsible .-> REPAIR
+    DRV4(("Driver")) -. responsible .-> PERMGREEN
+    REPAIR -->|re-verify| GREEN
+    PERMGREEN -->|re-verify| GREEN
+    ASSESS -.->|still failing / conflict| HIL(["raise-to-HIL"])
     NAV3(("Navigator")) -. responsible .-> REVIEW
     REVIEW -->|cleanup needed| REFACTOR
     DRV2(("Driver")) -. responsible .-> REFACTOR
@@ -251,8 +276,10 @@ flowchart LR
 
     classDef role fill:#FFE9E4,stroke:#FF5F46,stroke-width:2px,color:#0B2026;
     classDef orch fill:#C9D2D4,stroke:#3D4A4F,stroke-width:2px,color:#0B2026;
-    class NAV1,NAV2,NAV3,DRV,DRV2 role;
+    classDef hil fill:#FFF4CE,stroke:#C99A00,stroke-width:2px,color:#0B2026;
+    class NAV1,NAV2,NAV3,NAV4,DRV,DRV2,DRV3,DRV4 role;
     class ORCH orch;
+    class HIL hil;
 ```
 
 ### `/deploy`
@@ -367,7 +394,7 @@ flowchart TB
 | `architectural-review` | SDD | `/design` | Architect Reviewer assigns `layer` + `architectural_notes`, writes `architecture` md/json, covers NFRs | **`spec` gate** (arch folds in) |
 | `test-list-construction` | SDD | `/design` | Test Strategist builds the Beck-ordered test list, scoped per story | **`test_list` gate** |
 | `design-spec-gate` | SDD | `/design` | Analyzer proposes the experiment plan (N, strategies, budget) to `plan.json`; PO signs off | experiment-plan approval |
-| `implementation` | TDD | `/build` | Per-story experiment; Navigator runs PLAN/RED/REVIEW, Driver runs GREEN/REFACTOR; smells after each cycle | per story: **accept / discard / revise** |
+| `implementation` | TDD | `/build` | Per-story experiment; Navigator runs PLAN/RED/REVIEW (+ ASSESS on a failed verify), Driver runs GREEN/REFACTOR (+ REPAIR or permissive-green on a failed verify); each verify runs on a disposable ephemeral child DB; smells after each cycle | per story: **accept / discard / revise** |
 | `synthesis` | TDD | `/build` | N>=2 only: `compareExperiments` report; PO selects the winner or synthesizes (`promoteExperiment` / `synthesizeExperiments`) | experiment selection (HITL, not the `promote` gate) |
 | `review` | TDD | `/build` | Ready-for-review: accepted experiment merged into the feature branch | (feature-complete, to deploy) |
 | `deploy` | deploy | `/deploy` | Deploy merged feature/story; poll reachable; run feature-verify | **`deploy` gate** |

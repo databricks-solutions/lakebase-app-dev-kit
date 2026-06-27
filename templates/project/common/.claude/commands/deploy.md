@@ -31,7 +31,7 @@ bounded to `deploy`, with interactive gates so the Product Owner answers the
 working-software gate (headless: the Human Proxy):
 
 ```bash
-GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+GATES=interactive; [ "${LAKEBASE_SFTDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
   lakebase-sftdd-drive --feature "<feature-id>" --only deploy --gates "$GATES" \
     --deploy-target "${DEPLOY_TARGET:-local}" --project-dir "$PWD"

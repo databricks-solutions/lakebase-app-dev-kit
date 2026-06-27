@@ -25,7 +25,7 @@ from the recorded backlog).
 `/sprint` IS the deterministic orchestrator driver run at sprint scope:
 
 ```bash
-GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+GATES=interactive; [ "${LAKEBASE_SFTDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
   lakebase-sftdd-drive --sprint "<sprint-name>" --gates "$GATES" --project-dir "$PWD"
 ```
@@ -43,7 +43,7 @@ next HITL gate, prints a `GATE` marker, and exits so YOU surface it to the human
 On the human's approval, record it (the same approve CLI the Tier-2 commands use
 for that gate), then re-run `/sprint <name>` to RESUME: planning and already-done
 features are idempotent no-ops, and the in-progress feature continues past the
-now-approved gate. Headless (`--gates proxy`, `LAKEBASE_TDD_HUMAN_PROXY=1`): the
+now-approved gate. Headless (`--gates proxy`, `LAKEBASE_SFTDD_HUMAN_PROXY=1`): the
 Human Proxy answers every gate and the whole sprint runs end to end (what the
 TDD-workflow smoke exercises).
 

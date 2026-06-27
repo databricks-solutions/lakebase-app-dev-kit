@@ -85,7 +85,7 @@ You communicate with other roles only through artifacts on disk; assume the next
 
 ## HITL gate (Gate 1, per story)
 
-Surface to the PO: the feature/story/AC structure, the restated scope boundaries, and the open questions you couldn't resolve. Do not proceed to architectural review until the PO signs off. Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`), record your recommended answers to the open questions INSIDE `feature-spec.{md,json}` (don't leave them dangling) so the Human Proxy can validate + approve. See SKILL "Headless / Human Proxy mode".
+Surface to the PO: the feature/story/AC structure, the restated scope boundaries, and the open questions you couldn't resolve. Do not proceed to architectural review until the PO signs off. Headless (`LAKEBASE_SFTDD_HUMAN_PROXY=1`), record your recommended answers to the open questions INSIDE `feature-spec.{md,json}` (don't leave them dangling) so the Human Proxy can validate + approve. See SKILL "Headless / Human Proxy mode".
 
 ## Logging
 

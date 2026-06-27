@@ -49,19 +49,19 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
   1. **Product -> `.sftdd/product-overview.md`** (Product Owner): what the product is + who uses it; what users need to accomplish; first usable version vs later; how it grows; non-goals; what they want to see after each sprint. Open-ended product intent, no implementation detail.
   2. **NFR -> `.sftdd/nfrs.md`** (the Architect's intake): walk the NFR categories (performance, scalability, security, observability, operability, resilience); for each the HIL gives a hard requirement, a preference, "N/A", or "out of bounds". Write `## Required` (each item a stable `R<n>` id) / `## Preferences` / `## Out of bounds`. Every `## Required` item must later be covered by the Architect via `architecture.json` `brief_ref`.
   3. **UX -> `.sftdd/design/design-brief.md`** (UI projects only; skip for API / CLI / Infra): name 1-3 reference websites and, for each, what to take (brand, color, layout, tone); plus brand constraints, interaction/feedback expectations, accessibility targets. Write the required `## References` section.
-- **Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_TDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
+- **Headless (`LAKEBASE_SFTDD_HUMAN_PROXY=1`):** there is no human to interview, so the orchestrator has the **Human Proxy supply** each missing artifact from the pre-recorded answers directory `$LAKEBASE_SFTDD_RECORDED_INTAKE_DIR` (validate-then-place; refuses a missing/non-conformant recording):
 
   ```bash
   ./scripts/lk lakebase-sftdd-human-proxy supply \
-    --from "$LAKEBASE_TDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".sftdd/nfrs.md" --artifact nfrs.md
+    --from "$LAKEBASE_SFTDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".sftdd/nfrs.md" --artifact nfrs.md
   ```
 
-**UI projects:** a project is UI when `LAKEBASE_TDD_UI=1` (set by the orchestrator / smoke) or the feature has a user-facing surface. For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless) and pass `--ui` to the precondition so it requires the brief; the UX Designer phase then runs. For API / CLI / Infra projects, skip the UX track entirely.
+**UI projects:** a project is UI when `LAKEBASE_SFTDD_UI=1` (set by the orchestrator / smoke) or the feature has a user-facing surface. For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless) and pass `--ui` to the precondition so it requires the brief; the UX Designer phase then runs. For API / CLI / Infra projects, skip the UX track entirely.
 
 **Then enforce the precondition (the hard gate):**
 
 ```bash
-UI_FLAG=""; [ "${LAKEBASE_TDD_UI:-}" = "1" ] && UI_FLAG="--ui"
+UI_FLAG=""; [ "${LAKEBASE_SFTDD_UI:-}" = "1" ] && UI_FLAG="--ui"
 ./scripts/lk lakebase-sftdd-intake --feature "<feature-id>" $UI_FLAG
 ```
 
@@ -75,7 +75,7 @@ spawns each role agent itself, run it bounded to `design`, with interactive
 gates so YOU answer each per-story spec gate (headless: the Human Proxy answers):
 
 ```bash
-GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+GATES=interactive; [ "${LAKEBASE_SFTDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
   lakebase-sftdd-drive --feature "<feature-id>" --only design --gates "$GATES" --project-dir "$PWD"
 ```
@@ -98,7 +98,7 @@ The driver:
 `GATE` marker with the pending action. Surface that story's spec to the human; on
 their approval record it (`lakebase-sftdd-pipeline approve-gate --story <s>
 --approver <human>`), then re-run the command to resume past it. Headless
-(`--gates proxy`, `LAKEBASE_TDD_HUMAN_PROXY=1`): the Human Proxy validates each
+(`--gates proxy`, `LAKEBASE_SFTDD_HUMAN_PROXY=1`): the Human Proxy validates each
 gate's artifacts EXIST + carry their EXPECTED ELEMENTS and approves only then. A
 gate is never skipped; a missing/non-conformant artifact hard-blocks either way.
 

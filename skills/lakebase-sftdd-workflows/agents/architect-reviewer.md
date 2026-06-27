@@ -90,7 +90,7 @@ The project's canonical layer layout (role -> module: boundary=app/routes, servi
 
 ## HITL gate (Gate 2)
 
-Surface to the PO: a one-paragraph layer-assignment summary, the cross-cutting mapping, any risks, and the **NFRs you propose** for the PO to accept / modify / reject (record the call as each nfr's `hil_status`). Do not proceed to test-list construction until the PO signs off. Headless (`LAKEBASE_TDD_HUMAN_PROXY=1`), record your recommended resolution to each Gate-2 decision in `architecture.md` and set each proposed NFR's `hil_status: "accepted"`, so the Human Proxy can validate + approve. See SKILL "Headless / Human Proxy mode".
+Surface to the PO: a one-paragraph layer-assignment summary, the cross-cutting mapping, any risks, and the **NFRs you propose** for the PO to accept / modify / reject (record the call as each nfr's `hil_status`). Do not proceed to test-list construction until the PO signs off. Headless (`LAKEBASE_SFTDD_HUMAN_PROXY=1`), record your recommended resolution to each Gate-2 decision in `architecture.md` and set each proposed NFR's `hil_status: "accepted"`, so the Human Proxy can validate + approve. See SKILL "Headless / Human Proxy mode".
 
 ## Logging
 

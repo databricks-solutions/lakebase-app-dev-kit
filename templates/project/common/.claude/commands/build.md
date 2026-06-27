@@ -17,7 +17,7 @@ it bounded to `build`, with interactive gates so YOU answer each per-story
 acceptance (headless: the Human Proxy answers):
 
 ```bash
-GATES=interactive; [ "${LAKEBASE_TDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
+GATES=interactive; [ "${LAKEBASE_SFTDD_HUMAN_PROXY:-}" = "1" ] && GATES=proxy
 ./scripts/lk \
   lakebase-sftdd-drive --feature "<feature-id>" --only build --gates "$GATES" --project-dir "$PWD"
 ```

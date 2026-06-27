@@ -75,18 +75,18 @@ The same orchestrated path runs for real and headless; headless, the Human Proxy
 
 ## Headless / Human Proxy mode
 
-By default every gate is HITL (the workflow halts for the Product Owner). When `LAKEBASE_TDD_HUMAN_PROXY=1` (set by CI and the smoke), the approver role is **performed by** the `human-proxy` identity, a diligent stand-in, not a rubber stamp. It approves a `gates.json` gate (`spec`/`plan`/`test_list`/`promote`) and emits `gate.approved` only when both hold:
+By default every gate is HITL (the workflow halts for the Product Owner). When `LAKEBASE_SFTDD_HUMAN_PROXY=1` (set by CI and the smoke), the approver role is **performed by** the `human-proxy` identity, a diligent stand-in, not a rubber stamp. It approves a `gates.json` gate (`spec`/`plan`/`test_list`/`promote`) and emits `gate.approved` only when both hold:
 - **Given the artifacts:** the gate's expected artifacts EXIST (a missing one is refused).
 - **Format-conformant:** each validates against its declared format (JSON against its schema; narrative MD against its required sections, see `references/spec-format.md` + `lakebase-sftdd-gate-conformance`). A malformed artifact, or one missing a required section, is refused.
 
 So the producing role's job here is to HAND the approver complete, conformant artifacts, recording its recommended resolutions (decisions, NFR acceptances, orderings) INSIDE them rather than leaving open questions for a human reply. A gate advances because real well-formed work was verified, never because it was skipped; a missing/malformed artifact hard-blocks in CI exactly as for a human.
 
 Beyond the gates, the Human Proxy stands in wherever the path needs human input (`lakebase-sftdd-human-proxy` has two subcommands, `supply` and `approve`; both validate-then-place, neither fabricates or skips):
-- **Project intake** (precondition of `/plan` + `/design`): `supply`s `product-overview.md` / `nfrs.md` / `design-brief.md` from `$LAKEBASE_TDD_RECORDED_INTAKE_DIR`; `lakebase-sftdd-intake` then passes because they're present + conformant.
+- **Project intake** (precondition of `/plan` + `/design`): `supply`s `product-overview.md` / `nfrs.md` / `design-brief.md` from `$LAKEBASE_SFTDD_RECORDED_INTAKE_DIR`; `lakebase-sftdd-intake` then passes because they're present + conformant.
 - **`/plan` backlog:** the Architect sizes the candidates live; the Proxy `supply`s the recorded `feature-request.md` files (the PO's groomed sprint). `sync-backlog` projects `backlog.json` (committed ids + sizes).
 - **`/deploy` gate:** confirms the app came up reachable AND the verify passed, then records `gate.approved`; never approves a non-reachable or failed-verify deploy.
 
-Check the mode with `[ "$LAKEBASE_TDD_HUMAN_PROXY" = "1" ]`. Absent/unset = normal HITL.
+Check the mode with `[ "$LAKEBASE_SFTDD_HUMAN_PROXY" = "1" ]`. Absent/unset = normal HITL.
 
 ## Agent roles (the per-role agent runtime)
 
