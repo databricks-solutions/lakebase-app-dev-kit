@@ -355,9 +355,9 @@ export async function createProject(
   }
 
   // ── Step 7d: unified TDD run config ──────────
-  // Seed .lakebase/tdd-config.json, the one declarative source for the per-role
+  // Seed .lakebase/sftdd-config.json, the one declarative source for the per-role
   // + per-turn model/effort matrix and the build/plan/project knobs (the
-  // orchestrator resolves file -> LAKEBASE_TDD_* env -> default). Seeded with each
+  // orchestrator resolves file -> LAKEBASE_SFTDD_* env -> default). Seeded with each
   // role's recommended model + any HIL model overrides chosen at setup, and the
   // navigator REVIEW turn pinned to low effort (the fast judgment turn). Written
   // before the initial commit so it is tracked, like workflow-state.json.

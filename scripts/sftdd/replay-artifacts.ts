@@ -32,7 +32,7 @@ export interface ReplayTurn {
 
 export interface ReplayArgs {
   turn: ReplayTurn;
-  /** The recorded-artifacts corpus root (LAKEBASE_TDD_REPLAY_DIR). */
+  /** The recorded-artifacts corpus root (LAKEBASE_SFTDD_REPLAY_DIR). */
   replayDir: string;
   /** The target project .tdd dir. */
   tddDir: string;

@@ -14,7 +14,7 @@ import { featuresDir, cyclesRootDir, experimentsRootDir } from "./sftdd-paths.js
 import { codeTreeFilter } from "./replay-build.js";
 
 export interface RecordBuildTurnArgs {
-  /** The corpus root to write into (LAKEBASE_TDD_RECORD_BUILD_DIR). */
+  /** The corpus root to write into (LAKEBASE_SFTDD_RECORD_BUILD_DIR). */
   recordBuildDir: string;
   /** The project working tree (the experiment branch is checked out). */
   projectDir: string;

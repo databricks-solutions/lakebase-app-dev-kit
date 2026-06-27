@@ -61,7 +61,7 @@ function runSupplyCli(argv: string[]): number {
  * `supply-requests` subcommand: at the planning author-requests step, the Human
  * Proxy supplies the PO's recorded feature-request.md files (the headless stand-
  * in for the human providing them when the state machine asks). The (feature_id,
- * recorded source) pairs come from $LAKEBASE_TDD_SPRINT_REQUESTS. Always exits 0:
+ * recorded source) pairs come from $LAKEBASE_SFTDD_SPRINT_REQUESTS. Always exits 0:
  * an unset env is a no-op (a live human provides them out-of-band); a missing or
  * non-conformant recording is logged + skipped, and the driver surfaces the
  * unmet need as a stall rather than advancing on absent artifacts.
@@ -81,7 +81,7 @@ function runSupplyRequestsCli(argv: string[]): number {
   if (result.supplied.length > 0) {
     process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}\n`);
   } else {
-    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_TDD_SPRINT_REQUESTS unset/empty)\n`);
+    process.stdout.write(`human-proxy: no recorded feature-requests to supply (LAKEBASE_SFTDD_SPRINT_REQUESTS unset/empty)\n`);
   }
   if (result.skipped.length > 0) {
     process.stderr.write(

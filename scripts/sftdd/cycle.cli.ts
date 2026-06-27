@@ -120,7 +120,7 @@ async function main(): Promise<number> {
       // app. On failure it leaves the cycle RED + raises an escalation; we exit
       // 0 (the escalation is recorded data, not a command crash) so the driver's
       // next readState routes to a clean raise-to-hil halt.
-      // In a build replay (LAKEBASE_TDD_REPLAY_BUILD_DIR set) the per-turn
+      // In a build replay (LAKEBASE_SFTDD_REPLAY_BUILD_DIR set) the per-turn
       // full-suite honest-GREEN is invalid (a later AC's test is legitimately RED
       // while only the current AC's code is overlaid), so trust the recorded GREEN
       // for this turn; the final all-ACs state is verified at the deploy gate (FEIP-7702).

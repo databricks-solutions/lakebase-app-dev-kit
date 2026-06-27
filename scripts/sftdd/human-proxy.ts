@@ -42,6 +42,7 @@
 // belongs in the orchestrator once the phase<->gate<->mode mapping is settled.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { sftddEnv } from "./sftdd-env.js";
 import { join, dirname, basename } from "node:path";
 import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
@@ -778,7 +779,7 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
 // logs each, then sync-backlog projects the backlog from what was supplied.
 //
 // The committed set + each request's recorded source are the orchestrator's
-// call, passed in via LAKEBASE_TDD_SPRINT_REQUESTS as one `<feature_id>\t<source
+// call, passed in via LAKEBASE_SFTDD_SPRINT_REQUESTS as one `<feature_id>\t<source
 // path>` per line (the recorded file is named independently of the feature id,
 // e.g. v1-initial-domain.md -> F1-initial-domain). Unset => no-op (the live
 // human provides them out-of-band); the driver still advances once they exist.
@@ -786,7 +787,7 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
 export interface SupplyRequestsArgs {
   tddDir?: string;
   approver?: string;
-  /** Override the recorded pairs; defaults to $LAKEBASE_TDD_SPRINT_REQUESTS. */
+  /** Override the recorded pairs; defaults to $LAKEBASE_SFTDD_SPRINT_REQUESTS. */
   pairs?: Array<{ featureId: string; from: string }>;
 }
 
@@ -795,9 +796,9 @@ export interface SupplyRequestsResult {
   skipped: Array<{ featureId: string; reason: string }>;
 }
 
-/** Parse the `<feature_id>\t<source>` lines from $LAKEBASE_TDD_SPRINT_REQUESTS. */
+/** Parse the `<feature_id>\t<source>` lines from $LAKEBASE_SFTDD_SPRINT_REQUESTS. */
 function recordedRequestPairs(): Array<{ featureId: string; from: string }> {
-  const raw = process.env.LAKEBASE_TDD_SPRINT_REQUESTS ?? "";
+  const raw = sftddEnv("SPRINT_REQUESTS") ?? "";
   return raw
     .split("\n")
     .map((line) => line.trim())

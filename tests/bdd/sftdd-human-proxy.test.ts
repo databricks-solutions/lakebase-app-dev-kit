@@ -488,28 +488,28 @@ describe("Human Proxy supplyRequests (the PO's artifacts, given when the state m
     expect(supplied.some((e) => e.metadata?.artifact === "feature-request.md")).toBe(true);
   });
 
-  it("reads the (feature_id, source) pairs from $LAKEBASE_TDD_SPRINT_REQUESTS when pairs are not passed", () => {
+  it("reads the (feature_id, source) pairs from $LAKEBASE_SFTDD_SPRINT_REQUESTS when pairs are not passed", () => {
     const recorded = join(tdd, "recorded-v1.md");
     writeFileSync(recorded, CONFORMANT_REQUEST);
-    const prev = process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
-    process.env.LAKEBASE_TDD_SPRINT_REQUESTS = `${FEATURE_ID}\t${recorded}\n`;
+    const prev = process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS;
+    process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS = `${FEATURE_ID}\t${recorded}\n`;
     try {
       const result = supplyRequests({ tddDir: tdd });
       expect(result.supplied).toEqual([FEATURE_ID]);
       expect(existsSync(join(fdir, "feature-request.md"))).toBe(true);
     } finally {
-      if (prev === undefined) delete process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
-      else process.env.LAKEBASE_TDD_SPRINT_REQUESTS = prev;
+      if (prev === undefined) delete process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS;
+      else process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS = prev;
     }
   });
 
   it("supplies nothing when unset (a live human provides them out-of-band)", () => {
-    const prev = process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
-    delete process.env.LAKEBASE_TDD_SPRINT_REQUESTS;
+    const prev = process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS;
+    delete process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS;
     try {
       expect(supplyRequests({ tddDir: tdd })).toEqual({ supplied: [], skipped: [] });
     } finally {
-      if (prev !== undefined) process.env.LAKEBASE_TDD_SPRINT_REQUESTS = prev;
+      if (prev !== undefined) process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS = prev;
     }
   });
 
