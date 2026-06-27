@@ -1,0 +1,13 @@
+{
+  "id": "AC2-verification-zero-when-valid",
+  "given": "all inventory codes conform to location-batch-serial format (three segments separated by '-')",
+  "when": "the validation query executes on the migrated stock table",
+  "then": "it returns a count of 0 unparseable codes",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract on data-store state, the probe returns 0 when every code conformed and split cleanly, asserted by querying the migrated rows on the paired branch. Owner: the validation/probe statement in the repository/migration layer (app/repositories). Cross-cutting concern: data integrity (R1), the probe is the review signal that no conforming row was dropped or mis-parsed.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 tests that the validation mechanism exists; AC2 verifies it returns 0 when all codes are valid"
+  }
+}

@@ -1,9 +1,0 @@
-{
-  "id": "AC3-form-submission-redirects",
-  "given": "the user has filled in a title and description on the create form",
-  "when": "the user clicks the submit button",
-  "then": "the form submission is successful and the user is redirected to /bugs/{bugId} where {bugId} is the created bug's numeric ID",
-  "status": "passing",
-  "layer": "E2E",
-  "architectural_notes": "Form submission (POST /bugs) requires server-side validation and database persistence; cross-cutting concerns: server-side validation, error handling (API middleware), bug creation in domain/persistence layers. Module: routes/bugs, services/bugService, BugRepository."
-}

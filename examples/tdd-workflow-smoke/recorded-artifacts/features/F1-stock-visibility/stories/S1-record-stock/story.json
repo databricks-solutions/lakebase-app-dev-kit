@@ -1,0 +1,8 @@
+{
+  "id": "S1-record-stock",
+  "feature_id": "F1-stock-visibility",
+  "as_a": "warehouse operator",
+  "i_want_to": "file a stock record at a location for a SKU",
+  "so_that": "the inventory system reflects what is physically on the shelf",
+  "status": "draft"
+}

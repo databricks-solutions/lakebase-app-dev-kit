@@ -70,7 +70,7 @@ UX design brief (UI track): [`orchestrator/design-brief.md`](orchestrator/design
 The sprint's feature requests (authored by the PO at `/plan`):
 [`orchestrator/feature-requests/`](orchestrator/feature-requests/).
 
-This is a UI project (`LAKEBASE_TDD_UI=1`), so the UX Designer phase runs and
+This is a UI project (`LAKEBASE_SFTDD_UI=1`), so the UX Designer phase runs and
 `design-brief.md` is required at intake; the UX track (design-guide + ia +
 token adherence) is exercised.
 
@@ -118,7 +118,7 @@ bash examples/tdd-workflow-smoke/orchestrator/run-smoke.sh --tiers 2
 
 Scaffolds the project, stages project intake, then runs sprint-1 (`/plan` + v1)
 and sprint-2 (`/plan` + v2). Headless throughout
-(`LAKEBASE_TDD_HUMAN_PROXY=1`, set by the script).
+(`LAKEBASE_SFTDD_HUMAN_PROXY=1`, set by the script).
 
 ### Resume
 
@@ -145,7 +145,7 @@ committed `lk` resolver, and the three smokes default to THIS checkout's built
 | `rebuild-push-warm.sh` | Publishes the current branch: rebuild + commit `dist/` + push + warm the lk cache. Run it when you want the pushed/published bits; the smokes don't need it. |
 
 `run-to-*` PAUSE at the handoff (a `[Y/n]` prompt) and RESUME the same run on Y ,
-they never bail out of the state machine. Set `LAKEBASE_TDD_AUTO_CONTINUE=1` to
+they never bail out of the state machine. Set `LAKEBASE_SFTDD_AUTO_CONTINUE=1` to
 auto-confirm in non-interactive / CI runs.
 
 ### Other useful flags

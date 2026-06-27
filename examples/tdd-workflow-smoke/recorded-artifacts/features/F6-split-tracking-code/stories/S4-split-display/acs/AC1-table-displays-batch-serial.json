@@ -1,0 +1,9 @@
+{
+  "id": "AC1-table-displays-batch-serial",
+  "given": "Stock records with batch_number and serial_number columns populated exist",
+  "when": "The home stock table is rendered",
+  "then": "The table displays batch number and serial number in separate columns, replacing the combined tracking code column",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E: The batch_number and serial_number persisted on each stock record (app/models/stock.py) are surfaced through the list-stock route -> service -> repository read and rendered in separate table columns. Owner modules: stock API route (app/routes/) projects batch_number and serial_number; StockTable component (client/src/components/StockTable.tsx) displays them in separate columns. Column projection is owned by the boundary (route) and presentation by the component; no computation in either. S4 replaces the pre-split inventory_code display with post-split batch+serial."
+}
