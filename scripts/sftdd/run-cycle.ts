@@ -211,7 +211,10 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
       ac: args.ac_id,
       asserts: args.test_description,
       layer,
-      ...(args.test_ids && args.test_ids.length > 1 ? { batch: args.test_ids.length } : {}),
+      // Always carry the batch size (1 for a per-AC cycle, N for a story batch),
+      // so a story-level RED reads as "N test(s)" instead of looking like a single
+      // T1 cycle. Keep the full list in metadata for traceability.
+      batch: args.test_ids && args.test_ids.length > 0 ? args.test_ids.length : 1,
     },
   });
   return artifact;

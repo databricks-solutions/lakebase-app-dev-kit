@@ -79,7 +79,7 @@ export interface DriveContext {
   breakdownDone: boolean;
   /** Optional explicit story order; defaults to pipeline insertion order. */
   storyOrder?: string[];
-  /** Build-loop granularity (tdd-config.json, file -> env -> default). "story"
+  /** Build-loop granularity (sftdd-config.json, file -> env -> default). "story"
    *  (the default) gives the Navigator/Driver story-scoped turns: one RED turn
    *  writes the whole story's tests, one GREEN greens them, one REVIEW + one
    *  REFACTOR per story. "ac" (strict per-test TDD) and "hybrid-a" (per-layer
@@ -93,6 +93,33 @@ const DESIGN_DONE_STATUSES = new Set([
   "awaiting-acceptance",
   "done",
 ]);
+
+/**
+ * A contract / cleanup story REMOVES or renames an existing shape (drop a
+ * column, remove an endpoint, rename a field). Its build turn is the heaviest ,
+ * the change must land in the migration AND the ORM model AND every query AND
+ * every view in lockstep (`software-design-principles` hard rule 9). Packed into
+ * one story-level GREEN turn that is too much to land reliably (the F6/S3 build
+ * ground for 20+ min without converging), so a contract story automatically
+ * runs at the FINEST `ac` granularity , one small, verifiable increment per AC ,
+ * regardless of the run default. Detected from the story id's verb (the Spec
+ * Author names contract stories descriptively: `...-drop-old`, `...-remove-x`,
+ * `...-rename-y`, `...-cleanup`). */
+export function isContractStory(storyId: string): boolean {
+  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
+    storyId,
+  );
+}
+
+/** The granularity a story actually builds at: a contract/cleanup story drops to
+ *  `ac` (finest); everything else uses the run default. Already-fine defaults
+ *  (`ac`) stay `ac`. */
+export function effectiveLoopForStory(
+  runLoop: "ac" | "hybrid-a" | "story",
+  storyId: string,
+): "ac" | "hybrid-a" | "story" {
+  return isContractStory(storyId) ? "ac" : runLoop;
+}
 
 function storyView(
   id: string,
@@ -146,7 +173,10 @@ export function deriveDriveState(
   const loop = ctx.loop ?? "story";
   const stories: Record<string, StoryView> = {};
   for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe, loop);
+    // Per-story granularity: a contract/cleanup story (drop column / remove
+    // endpoint / rename) auto-drops to the finest `ac` loop, since its lockstep
+    // DB+code change is too heavy for one story-level GREEN turn.
+    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
   }
   const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
   // The breakdown is done once stories are tracked in the pipeline (the signal

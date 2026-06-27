@@ -92,7 +92,7 @@ Set `"refactor": true` ONLY for a concrete rubric-cited improvement; otherwise `
 
 ## Superseding prior tests (a new AC may legitimately change old behavior)
 
-Stories + features ACCUMULATE requirements, and the **latest AC wins**. When the AC you are writing a test for INTENTIONALLY changes behavior that PRIOR tests (often from an earlier feature) encode, those prior tests are *superseded*, not a contradiction to block. Recognize this BEFORE the Driver greens: while you write the RED test, identify the prior tests the new behavior breaks and FLAG them so the Driver is permitted to refactor ONLY those (alongside the code), keeping every other test untouched. Emit the flag (one --test per prior test file / node-id):
+Stories + features ACCUMULATE requirements, and the **latest AC wins** (this is canon , `software-design-principles` hard rule 8). When the AC you are writing a test for INTENTIONALLY changes behavior that PRIOR tests encode , whether from an earlier feature OR an earlier story in THIS feature , those prior tests are *superseded*, not a contradiction to block. The classic case is a **contract / cleanup phase**: a later story that DROPS a column, REMOVES an endpoint, or RENAMES a field will break earlier stories' tests that still assert on the old shape , those are superseded by design. Recognize this BEFORE the Driver greens: while you write the RED test, identify EVERY prior test the new behavior breaks , including tests owned by other stories or features , and FLAG them so the Driver is permitted to refactor ONLY those (alongside the code), keeping every other test untouched. Emit the flag (one --test per prior test file / node-id; paths may point into any story's or feature's test files):
 
 ```
 lakebase-sftdd-cycle flag-superseded --feature <F> --story <S> --ac <AC> \
@@ -101,7 +101,17 @@ lakebase-sftdd-cycle flag-superseded --feature <F> --story <S> --ac <AC> \
 
 The honest-GREEN verify stays the backstop: an UNflagged failing test is a genuine regression that still escalates. Distinguish this from the **`test-list-drift`** smell below: drift is an IN-SCOPE contradiction (two tests in THIS story that cannot both hold), which blocks; supersession is the deliberate, documented evolution of an OLDER requirement, which you flag so the Driver carries the old tests forward to the new AC.
 
-**When you ASSESS a failed honest-GREEN verify and it is a GENUINE regression (not a supersession), never just walk away , record your diagnosis so it reaches the Driver / the human instead of being lost.** A diagnosis-free escalation forces the human to re-derive what you already found, and a bare re-drive cannot fix what it was never told. Write your root-cause finding, and , when the fix is clear + within the Driver's reach (a wrong default, a missing filter, an off-by-one) , a concrete repair directive that routes a bounded Driver REPAIR turn:
+**When the honest-GREEN verify FAILS, your assess turn must first CLASSIFY each failing test , supersession or regression , because the proactive flag above is easy to under-scope (a contract/cleanup AC that drops a column breaks tests in OTHER stories you weren't looking at). The assess is your second, authoritative chance to catch them. Do NOT default to "regression"; that is what wrongly escalated before.** Two branches:
+
+**(a) SUPERSEDED , the failing prior test asserts behavior THIS AC/story/feature intentionally changed** (a dropped column, a changed contract, a removed endpoint , `software-design-principles` hard rule 8). Flag it now , the SAME `flag-superseded` command is valid at assess time , listing every such test, INCLUDING tests owned by other stories or features. The orchestration then routes a Driver permissive-green turn that refactors exactly those, carrying the old requirement forward:
+
+```
+lakebase-sftdd-cycle flag-superseded --feature <F> --story <S> --ac <AC> \
+  --reason "<this AC + what behavior it changed that the old tests assert>" \
+  --test <path_or_nodeid> [--test ...] --tdd-dir <D>
+```
+
+**(b) REGRESSION , the failing test encodes still-valid behavior the new code broke by accident.** Never just walk away: record your diagnosis so it reaches the Driver / the human instead of being lost. Write the root cause, and , when the fix is clear + within the Driver's reach (a wrong default, a missing filter, an off-by-one) , a concrete repair directive that routes a bounded Driver REPAIR turn:
 
 ```
 lakebase-sftdd-cycle assess-regression --feature <F> --story <S> --ac <AC> \
@@ -109,7 +119,7 @@ lakebase-sftdd-cycle assess-regression --feature <F> --story <S> --ac <AC> \
   [--fix "<what the Driver should change>"]
 ```
 
-Include `--fix` ONLY when the Driver can honestly fix it in one pass; OMIT it when it needs a human, a design change, or a spec change (the orchestration then escalates carrying your diagnosis). The repair is bounded to ONE attempt: if the verify still fails after it, the honest-GREEN backstop escalates to the HIL , with your diagnosis attached.
+Include `--fix` ONLY when the Driver can honestly fix it in one pass; OMIT it when it needs a human, a design change, or a spec change (the orchestration then escalates carrying your diagnosis). The repair is bounded to ONE attempt: if the verify still fails after it, the honest-GREEN backstop escalates to the HIL , with your diagnosis attached. The two branches are mutually exclusive per test, but a single assess may flag some tests superseded AND diagnose a regression in others; the only true escalation is a genuine conflict (carrying a superseded test forward would break a still-valid one).
 
 ## Smells you must flag (not silently fix)
 

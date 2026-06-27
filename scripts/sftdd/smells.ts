@@ -20,6 +20,7 @@ export type SmellName =
   | "ux-adherence"
   | "e2e-inline-regex-flag"
   | "e2e-row-perma-red"
+  | "contract-incompleteness"
   | "superseded-tests";
 
 export interface SmellDefinition {
@@ -194,6 +195,24 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
     proposed_remediation:
       "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner.",
+  },
+  {
+    name: "contract-incompleteness",
+    description:
+      "A migration DROPPED (or renamed) a column the running code still references , the ORM " +
+      "model field, a query/repository, a serializer/DTO, or a template/view , so the app emits " +
+      "SQL for a column the migrated database no longer has and crashes at runtime (\"column X " +
+      "does not exist\") even though the migration itself succeeded. The contract half of " +
+      "expand/contract (software-design-principles hard rule 9) was left incomplete: the schema " +
+      "shrank but the code did not follow in the SAME change. Caught DETERMINISTICALLY by the " +
+      "`lakebase-sftdd-contract-clean` gate (it parses the migration's net column drops and greps " +
+      "the code tree for residual references), which enriches the GREEN-verify failure with the " +
+      "exact file:line list , no model judgment needed to notice OR localize it.",
+    proposed_remediation:
+      "Driver REPAIR: remove or replace EVERY residual reference (model field, queries, " +
+      "serializers/DTOs, templates/views) in the same change so the code matches the migrated " +
+      "schema. Never edit the migration or a test to hide it. The green-failure fixDirective " +
+      "carries the precise file:line list, so this self-heals without a Navigator assess.",
   },
 ];
 

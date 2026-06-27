@@ -146,9 +146,9 @@ describe("replay-build: per-turn green trusts the recorded outcome (FEIP-7702)",
     expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
   });
 
-  it("greenVerifierForEnv returns the replay verifier ONLY when LAKEBASE_TDD_REPLAY_BUILD_DIR is set", async () => {
+  it("greenVerifierForEnv returns the replay verifier ONLY when LAKEBASE_SFTDD_REPLAY_BUILD_DIR is set", async () => {
     expect(greenVerifierForEnv({})).toBeUndefined();
-    const v = greenVerifierForEnv({ LAKEBASE_TDD_REPLAY_BUILD_DIR: "/corpus" });
+    const v = greenVerifierForEnv({ LAKEBASE_SFTDD_REPLAY_BUILD_DIR: "/corpus" });
     expect(v).toBeDefined();
     const r = await v!({ projectDir: "/x", tddDir: tdd, featureId: F, story: S });
     expect(r.passed).toBe(true);
