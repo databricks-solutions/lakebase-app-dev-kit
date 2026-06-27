@@ -1,0 +1,15 @@
+{
+  "ordinal": 6,
+  "step": 0,
+  "label": "gate-spec",
+  "kind": "approve-gate",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "approve-gate",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

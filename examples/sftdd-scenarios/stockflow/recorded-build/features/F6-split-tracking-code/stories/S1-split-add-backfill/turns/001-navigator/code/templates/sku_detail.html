@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title_suffix %} - {{ sku }} Detail{% endblock %}
+{% block content %}
+<h1>SKU: {{ sku }}</h1>
+<div aria-live="polite" aria-atomic="true" style="position:absolute;left:-9999px;height:1px;overflow:hidden;"></div>
+{% if stocks %}
+<div class="card" style="padding: 0; overflow: hidden;">
+  <table
+    data-testid="sku-detail-table"
+    style="
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--text-base);
+    "
+  >
+    <thead>
+      <tr style="background: var(--color-bg-cool);">
+        <th style="
+          text-align: left;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--text-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--color-navy-500);
+          border-bottom: 1px solid var(--color-navy-200);
+        ">Location</th>
+        <th style="
+          text-align: right;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--text-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--color-navy-500);
+          border-bottom: 1px solid var(--color-navy-200);
+        ">Quantity</th>
+        <th style="
+          text-align: left;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--text-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--color-navy-500);
+          border-bottom: 1px solid var(--color-navy-200);
+        ">Tracking Code</th>
+        <th style="
+          text-align: left;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--text-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          color: var(--color-navy-500);
+          border-bottom: 1px solid var(--color-navy-200);
+        ">Inventory Code</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for stock in stocks %}
+      <tr
+        data-testid="sku-detail-row"
+        data-location="{{ stock.location }}"
+        style="
+          background: var(--color-bg-white);
+          border-bottom: 1px solid var(--color-navy-200);
+        "
+      >
+        <td style="padding: var(--space-3) var(--space-4); color: var(--color-navy-900);">{{ stock.location }}</td>
+        <td
+          style="
+            padding: var(--space-3) var(--space-4);
+            text-align: right;
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+            color: var(--color-navy-900);
+          "
+        >{{ stock.quantity }}</td>
+        <td
+          data-testid="sku-detail-row-tracking"
+          style="padding: var(--space-3) var(--space-4); color: var(--color-navy-900);"
+        >{{ stock.tracking_code if stock.tracking_code else "not tracked" }}</td>
+        <td style="padding: var(--space-3) var(--space-4); color: var(--color-navy-900);">
+          {% if stock.inventory_code %}{{ stock.inventory_code }}{% else %}not tracked{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div
+  data-testid="sku-detail-table-empty"
+  style="
+    text-align: center;
+    padding: var(--space-12) var(--space-6);
+  "
+>
+  <p style="font-size: var(--text-lg); font-weight: 700; color: var(--color-navy-900); margin-bottom: var(--space-2);">No stock recorded for this SKU</p>
+  <p style="font-size: var(--text-base); color: var(--color-navy-500); max-width: 400px; margin: 0 auto var(--space-6);">Receive an inbound shipment to start tracking stock here.</p>
+  <a href="/receive" class="btn-primary" style="text-decoration: none; display: inline-block;">Receive Inbound</a>
+</div>
+<table data-testid="sku-detail-table" style="display: none;"></table>
+{% endif %}
+<div style="margin-top: var(--space-6);">
+  <a href="/" class="btn-secondary">Back to Stock Home</a>
+</div>
+{% endblock %}

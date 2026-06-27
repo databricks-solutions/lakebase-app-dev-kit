@@ -1,0 +1,10 @@
+{
+  "id": "S3-sku-detail-view",
+  "feature_id": "F1-stock-visibility",
+  "as_a": "warehouse operator",
+  "i_want_to": "view a specific SKU's inventory across all its locations with tracking codes",
+  "so_that": "I can understand the complete distribution of that SKU in the warehouse",
+  "status": "draft",
+  "distinct_from_prior": true,
+  "rationale": "Shows a focused detail view of one SKU's stock across locations with tracking codes, distinct from S1 (record-entry form) and S2 (general home table). Delivers new capability: filtering and examining one SKU's full distribution."
+}

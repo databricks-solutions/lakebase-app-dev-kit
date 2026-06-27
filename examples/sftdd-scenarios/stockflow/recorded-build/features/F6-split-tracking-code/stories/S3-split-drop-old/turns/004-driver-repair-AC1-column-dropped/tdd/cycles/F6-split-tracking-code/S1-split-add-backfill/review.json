@@ -1,0 +1,5 @@
+{
+  "reviewed_at": "2026-06-15T11:23:08.961Z",
+  "refactor_requested": false,
+  "refactor_notes": "Layer boundaries clean: migration lives entirely in the Alembic revision (infra), models package updated with batch_number/serial_number, service/routes untouched by S1 as required by SRP. NFR-F6-S1-1 through -6 all satisfied: columns added and backfilled via set-based UPDATE, quantity/location/sku preserved, UNIQUE(sku,location) constraint intact, config-in-env confirmed, downgrade drops the two new columns (inventory_code was never cleared by upgrade so the round-trip is implicit but correct for S1 scope -- S3 owns the actual drop). Flat app/models.py replaced by app/models/ package; no duplicate class definitions. No hardcoded DSN in any revision file or alembic/env.py. No concrete rubric-cited improvement warranted."
+}

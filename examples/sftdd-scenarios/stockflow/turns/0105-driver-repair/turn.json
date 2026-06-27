@@ -1,0 +1,23 @@
+{
+  "ordinal": 105,
+  "step": 0,
+  "label": "driver-repair",
+  "kind": "invoke-role",
+  "role": "driver",
+  "mode": "repair",
+  "story": "S3-split-drop-old",
+  "ac": "AC4-format-and-null-handling",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S3-split-drop-old",
+    "buildMode": "repair",
+    "ac": "AC4-format-and-null-handling"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC4-format-and-null-handling/green-failure.json",
+    ".sftdd/escalations/driver-green__F6-split-tracking-code__S3-split-drop-old__AC4-format-and-null-handling.json",
+    "tests/step_defs/test_s3_split_drop_old.py"
+  ],
+  "deleted": []
+}

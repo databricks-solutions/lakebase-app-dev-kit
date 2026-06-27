@@ -1,0 +1,22 @@
+{
+  "ordinal": 118,
+  "step": 0,
+  "label": "navigator-review",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "review",
+  "story": "S3-split-drop-old",
+  "ac": "AC6-not-null-constraint",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S3-split-drop-old",
+    "buildMode": "review",
+    "ac": "AC6-not-null-constraint"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC6-not-null-constraint/review-verdict.json",
+    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC6-not-null-constraint/review.json"
+  ],
+  "deleted": []
+}

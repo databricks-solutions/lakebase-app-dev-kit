@@ -1,0 +1,6 @@
+{
+  "assessed": true,
+  "summary": "GREEN verify FAILED against the running app",
+  "diagnosis": "Contract-incompleteness (software-design-principles hard rule 9): the S3 up migration DROPped stock.inventory_code, but app/repositories/stock_repository.py:14 count_unparseable_codes still emits SQL referencing inventory_code, so against the migrated running app the query fails with 'column inventory_code does not exist' and every caller (S2 validate probe tests T15/T18, and any code path invoking the probe) crashes even though the migration succeeded. The behavior (count rows whose tracking code could not be split) is still valid; only the column reference is stale.",
+  "fixDirective": "In app/repositories/stock_repository.py remove the inventory_code reference: count_unparseable_codes must count rows WHERE batch_number IS NULL OR serial_number IS NULL (the post-split definition of an unparseable row) and must not SELECT/filter on inventory_code. Update the line-14 docstring/comment accordingly so the code matches the migrated schema; do not edit the migration or any test."
+}

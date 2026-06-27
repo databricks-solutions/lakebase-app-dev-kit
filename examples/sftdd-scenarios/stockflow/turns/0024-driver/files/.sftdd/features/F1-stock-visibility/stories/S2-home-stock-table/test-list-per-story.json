@@ -1,0 +1,69 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S2-home-stock-table",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T12",
+      "description": "Navigating to the stock home page when records exist renders a table with one row per seeded stock record",
+      "ac_id": "AC1-table-displays",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    },
+    {
+      "id": "T18",
+      "description": "The home route module does not import the DB session; the read path reaches the database only through the repository layer (layering contract)",
+      "ac_id": "AC1-table-displays",
+      "status": "green",
+      "kind": "fitness"
+    },
+    {
+      "id": "T13",
+      "description": "Navigating to the stock home page when no records exist shows an explicit empty-state guidance message instead of a blank or empty table",
+      "ac_id": "AC5-empty-state",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    },
+    {
+      "id": "T14",
+      "description": "When records span multiple locations the table rows are grouped so all rows for one location appear together before rows for the next location",
+      "ac_id": "AC2-organized-by-location",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    },
+    {
+      "id": "T19",
+      "description": "The repository or service module supplies rows already ordered by location then SKU; no sorting or grouping logic appears in the boundary or template module",
+      "ac_id": "AC2-organized-by-location",
+      "status": "green",
+      "kind": "fitness"
+    },
+    {
+      "id": "T15",
+      "description": "Each table row displays the SKU, location, quantity, and inventory_code values from the corresponding seeded stock record",
+      "ac_id": "AC3-columns-display",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    },
+    {
+      "id": "T16",
+      "description": "A stock record whose inventory_code is null renders the literal text 'not tracked' in the inventory_code column rather than an empty cell (NFR-F1-6)",
+      "ac_id": "AC3-columns-display",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    },
+    {
+      "id": "T17",
+      "description": "The rendered quantity cell carries a right-align CSS style so the numeric column is visually scannable",
+      "ac_id": "AC4-quantities-right-aligned",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-home-stock-table.feature"
+    }
+  ]
+}

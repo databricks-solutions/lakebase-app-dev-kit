@@ -1,0 +1,15 @@
+{
+  "ordinal": 51,
+  "step": 0,
+  "label": "gate-surface",
+  "kind": "surface-gate",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "surface-gate",
+    "story": "S1-split-add-backfill"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

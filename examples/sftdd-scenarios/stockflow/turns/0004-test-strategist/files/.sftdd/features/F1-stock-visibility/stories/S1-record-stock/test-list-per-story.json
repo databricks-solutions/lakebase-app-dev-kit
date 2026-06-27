@@ -1,0 +1,91 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S1-record-stock",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T1",
+      "description": "Navigating to the record stock page renders a form with input fields for SKU, location, quantity, and tracking code",
+      "ac_id": "AC1-form-displays",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T2",
+      "description": "Submitting the form with a required field left blank shows an inline validation error that names the missing field",
+      "ac_id": "AC1-form-displays",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T3",
+      "description": "Submitting the form with all valid inputs creates a stock record in the database with the submitted SKU, location, quantity, and tracking code",
+      "ac_id": "AC2-record-created-on-submission",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T7",
+      "description": "Submitting a stock record with a negative quantity is rejected at write time and no row with a negative quantity is stored",
+      "ac_id": "AC2-record-created-on-submission",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T8",
+      "description": "The routes/boundary module does not import the DB session; persistence is only reachable through the repository layer (layering contract)",
+      "ac_id": "AC2-record-created-on-submission",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T11",
+      "description": "The pytest-bdd conftest binds to the real paired-branch DB (DB_NAME=stockflow); no mock or in-memory DB substitution is used in any integration test (NFR-F1-4)",
+      "ac_id": "AC2-record-created-on-submission",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T4",
+      "description": "After a successful form submission the user sees a confirmation message indicating the stock record was saved",
+      "ac_id": "AC3-confirmation-shown",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T5",
+      "description": "A tracking code submitted on the form is retrievable from the API without loss or truncation",
+      "ac_id": "AC5-tracking-code-persisted",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T9",
+      "description": "The application reads DB_NAME/PGDATABASE from the environment and contains no hardcoded DSN string (config-in-env, NFR-F1-5)",
+      "ac_id": "AC5-tracking-code-persisted",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T6",
+      "description": "Submitting the form for a SKU and location that already has a record updates the existing record's quantity and shows no error message",
+      "ac_id": "AC4-collision-handled-via-update",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T10",
+      "description": "The stock table carries a database-level unique constraint on (sku, location) so the upsert strategy is enforced at the schema layer (NFR-F1-3)",
+      "ac_id": "AC4-collision-handled-via-update",
+      "status": "pending",
+      "kind": "fitness"
+    }
+  ]
+}

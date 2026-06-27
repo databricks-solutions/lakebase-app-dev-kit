@@ -1,0 +1,40 @@
+{
+  "feature_id": "F6-split-tracking-code",
+  "schema_version": 1,
+  "gates": {
+    "spec": {
+      "status": "open",
+      "history": []
+    },
+    "plan": {
+      "status": "open",
+      "history": []
+    },
+    "test_list": {
+      "status": "open",
+      "history": []
+    },
+    "promote": {
+      "status": "open",
+      "history": []
+    },
+    "deploy": {
+      "status": "approved",
+      "approver": "human-proxy",
+      "approved_at": "2026-06-15T17:31:23.948Z",
+      "artifact_hashes": {
+        "deploy-evidence.json": "102755430348c680728f0a730aa02c0344c99d7ac38fa19bbeff73d59343d4d2"
+      },
+      "history": [
+        {
+          "action": "approved",
+          "at": "2026-06-15T17:31:23.948Z",
+          "approver": "human-proxy",
+          "artifact_hashes": {
+            "deploy-evidence.json": "102755430348c680728f0a730aa02c0344c99d7ac38fa19bbeff73d59343d4d2"
+          }
+        }
+      ]
+    }
+  }
+}

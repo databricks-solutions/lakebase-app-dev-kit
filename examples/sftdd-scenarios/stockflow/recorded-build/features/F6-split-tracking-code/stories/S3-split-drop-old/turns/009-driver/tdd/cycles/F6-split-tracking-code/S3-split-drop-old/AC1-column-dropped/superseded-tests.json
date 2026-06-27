@@ -1,0 +1,15 @@
+{
+  "tests": [
+    "tests/step_defs/test_s1_split_add_backfill.py::test_t3_threesegment_inventory_code_a12b7s001_backfills_to_batch_number_b7_and_serial_number_s001",
+    "tests/step_defs/test_s1_split_add_backfill.py::test_t4_twosegment_inventory_code_a12b7_backfills_to_batch_number_b7_with_null_serial_number",
+    "tests/step_defs/test_s1_split_add_backfill.py::test_t5_onesegment_inventory_code_a12_backfills_with_null_batch_number_and_null_serial_number",
+    "tests/step_defs/test_s2_split_validate.py::test_t16_the_probe_returns_0_when_all_inventory_codes_are_threesegment",
+    "tests/step_defs/test_s2_split_validate.py::test_t17_the_probe_count_equals_rows_with_null_batch_number_or_serial_number",
+    "tests/architecture/test_s1_split_fitness.py::test_t11_downgrade_reconstructs_inventory_code",
+    "tests/e2e/test_s2_home_stock_table.py::test_t15_each_table_row_displays_the_sku_location_quantity_and_inventory_code_values_from_the_corresponding_seeded_stock_record",
+    "tests/e2e/test_s2_home_stock_table.py::test_t16_a_stock_record_whose_inventory_code_is_null_renders_the_literal_text_not_tracked_in_the_inventory_code_column_rather_than_an_empty_cell",
+    "tests/e2e/test_s3_sku_detail_view.py::test_t22_a_location_row_whose_optional_fields_have_no_stored_value_displays_the_literal_text_not_tracked_rather_than_a_blank_cell_or_raw_null"
+  ],
+  "reason": "AC1-column-dropped: the S3 up migration DROPs stock.inventory_code (the latest AC wins; software-design-principles hard rule 8). Every prior test that seeds/inserts, queries WHERE inventory_code, displays, or asserts reversibility of inventory_code now encodes abandoned behavior and must be carried forward to the migrated batch_number/serial_number+tracking_code shape (re-key by sku, drop inventory_code from seed INSERTs / assertions).",
+  "refactored": true
+}

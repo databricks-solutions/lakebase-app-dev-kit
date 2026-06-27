@@ -1,0 +1,15 @@
+{
+  "ordinal": 106,
+  "step": 0,
+  "label": "raise-to-hil",
+  "kind": "raise-to-hil",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "raise-to-hil",
+    "reason": "GREEN verify failed for T24 (AC4-format-and-null-handling) in F6-split-tracking-code/S3-split-drop-old after assessment , T24 (AC4's OWN behavior test) fails ONLY in the full suite, never in isolation, so this is order-dependent test pollution, not a code regression and not a supersession. Proof: (1) T24 passed in a clean 302s isolated run taken immediately AFTER the combined run failed it, on the same still-valid DB token, so the failure is reproducible ordering, not the late-run OAuth-token expiry; (2) the down() reconstruction SQL is provably correct: concat_ws('-', location, coalesce(batch_number,''), coalesce(serial_number,'')) returns exactly 'LOC--S001' and 'LOC-B7-' (verified directly against the DB); (3) T11 (the only prior test that asserted the old tracking_code-first reconstruction) was already carried forward by the Driver to the location-first format and PASSES, as do T21-T23. Root cause: the S3 step module shares one module-scoped _module_session across T21-T24 while s3_down_applied cycles downgrade/upgrade per scenario; when T24 runs after T22/T23 the shared session still holds an open transaction (and lock) on stock plus leftover T23 seed rows, so the alembic ADD COLUMN inventory_code in downgrade() and the post-downgrade SELECT race the stale session snapshot and the assertion reads a missing/stale inventory_code (sess.expire_all() does not refresh a held transaction). The production migration is correct; the S3 test harness is non-hermetic.: GREEN verify FAILED against the running app",
+    "source": "driver-green",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [],
+  "deleted": []
+}

@@ -1,0 +1,14 @@
+{
+  "ordinal": 40,
+  "step": 0,
+  "label": "deploy",
+  "kind": "deploy",
+  "action": {
+    "kind": "deploy"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F1-stock-visibility/deploy-evidence.json"
+  ],
+  "deleted": []
+}

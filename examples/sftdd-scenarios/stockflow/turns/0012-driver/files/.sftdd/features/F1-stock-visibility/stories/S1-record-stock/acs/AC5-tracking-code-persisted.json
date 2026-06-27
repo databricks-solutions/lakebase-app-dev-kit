@@ -1,0 +1,9 @@
+{
+  "id": "AC5-tracking-code-persisted",
+  "given": "Form is submitted with a tracking code value in the inventory_code field",
+  "when": "Record is saved to the database",
+  "then": "The tracking code is stored with the record and can be retrieved without loss or truncation",
+  "status": "passing",
+  "layer": "API",
+  "architectural_notes": "The assertion is a persistence round-trip contract (inventory_code stored and retrieved with no loss or truncation) with no UI claim, so the outermost meaningful boundary is the app/routes/stock.py write API verified against the real branch; API. Owner module: StockRepository (ORM mapping + column width for inventory_code) with the Stock model in app/models/stock.py. Cross-cutting: data integrity / R1 durability across migrations; defended by a real-branch integration test, never a mock."
+}

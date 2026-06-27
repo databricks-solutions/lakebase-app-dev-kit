@@ -1,0 +1,9 @@
+{
+  "id": "AC2-record-created-on-submission",
+  "given": "Form is displayed with valid inputs entered (SKU, location, quantity, tracking code)",
+  "when": "User clicks the submit button",
+  "then": "A stock record is created in the database with the submitted values",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Full write path: UI form submit -> app/routes/stock.py boundary -> StockService -> StockRepository -> Stock model, asserting persisted DB state on the paired branch, so E2E. Owner module: StockService (app/services/stock_service.py) owns the create-or-update business logic; the repository is the only layer touching the ORM. Cross-cutting: the create transaction is owned by the service layer (never the model); audit fields (created_at/actor, R1) are set in the service."
+}

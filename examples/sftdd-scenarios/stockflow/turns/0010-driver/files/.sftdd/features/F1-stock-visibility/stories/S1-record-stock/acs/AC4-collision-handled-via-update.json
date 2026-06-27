@@ -1,0 +1,9 @@
+{
+  "id": "AC4-collision-handled-via-update",
+  "given": "A stock record already exists for SKU=X and location=Y with quantity Q1",
+  "when": "User submits the form to record stock for the same SKU X at the same location Y with a different quantity Q2",
+  "then": "The existing record is updated with the new quantity Q2 and no error message is shown",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "Exercises the R3 uniqueness rule end to end: a second submit for the same (sku, location) upserts rather than duplicating or erroring, asserted via DB state and the absence of a UI error, so E2E. Owner module: StockService owns the create-or-update decision; the unique (sku, location) constraint and idempotent upsert live in StockRepository (the only ORM layer). Defended by the R3 write-time-collision NFR fitness test against the real branch."
+}

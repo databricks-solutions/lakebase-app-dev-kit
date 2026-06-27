@@ -1,0 +1,4 @@
+{
+  "refactor": false,
+  "notes": "Layering clean (gate OK): routes delegate to StockService -> StockRepository, no DB session at the boundary; T37 fitness green. Home and SKU-detail templates render Batch Number and Serial Number as separate labeled columns/fields with a 'not tracked' fallback for NULLs (T31-T36), using design tokens (--space-*, --color-navy-*, --text-*) and stable data-testids consistent with sibling rows. NFRs satisfied: split fields displayed distinctly, NULL handled without silent loss, dev/prod parity intact (templates via Jinja2, no import-time build coupling). No concrete rubric-cited improvement warranted."
+}

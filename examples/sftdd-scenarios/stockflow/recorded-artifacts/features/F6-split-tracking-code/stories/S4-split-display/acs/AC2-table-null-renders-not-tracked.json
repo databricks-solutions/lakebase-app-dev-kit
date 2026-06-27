@@ -1,0 +1,13 @@
+{
+  "id": "AC2-table-null-renders-not-tracked",
+  "given": "Stock records with NULL batch_number or serial_number exist",
+  "when": "The home stock table is rendered",
+  "then": "In the home table, a NULL batch_number or serial_number is displayed as 'not tracked' instead of blank or null",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E: null-safe rendering (a usability requirement restated from NFR-F1-6 for the split fields). Owner: StockTable component (client/src/components/StockTable.tsx) checks each field for null and renders the explicit 'not tracked' string. Applies to both batch and serial independently (if batch is NULL, batch column shows 'not tracked'; if serial is NULL, serial column shows 'not tracked'). An optional field that is absent never renders blank or crashes, matching the design guideline 'No silent failures'.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 tests that batch and serial columns are displayed with populated data; AC2 tests the null-safe rendering behavior, which is a distinct observable outcome that could fail independently (e.g., the columns could be present but fail to handle nulls correctly, showing blank or null instead of 'not tracked')."
+  }
+}

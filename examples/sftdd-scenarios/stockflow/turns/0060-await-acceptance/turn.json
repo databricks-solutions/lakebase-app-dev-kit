@@ -1,0 +1,17 @@
+{
+  "ordinal": 60,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S1-split-add-backfill",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S1-split-add-backfill"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-add-backfill/deploy-evidence.json"
+  ],
+  "deleted": []
+}

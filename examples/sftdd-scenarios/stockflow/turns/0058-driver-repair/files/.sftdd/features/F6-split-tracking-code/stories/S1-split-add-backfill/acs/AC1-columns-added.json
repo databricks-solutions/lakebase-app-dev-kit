@@ -1,0 +1,9 @@
+{
+  "id": "AC1-columns-added",
+  "given": "The stock table exists with inventory_code column and rows",
+  "when": "The migration runs",
+  "then": "batch_number and serial_number columns are added to the stock table",
+  "status": "passing",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a contract on the stock data-store shape (the Alembic up migration adds batch_number/serial_number columns), proven by a parent-aware schema diff against the paired Lakebase branch, not an HTTP boundary. Owner: stock models module (app/models/stock.py) declares the new columns; the Alembic revision realizes them, applied via the repository/migration path that alone touches the ORM/session. Cross-cutting concern: schema evolution / data integrity (R1), owned at the repository/migration layer, never the domain or boundary."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "AC2-tracking-code-displayed",
+  "given": "Stock records with inventory tracking codes exist for a SKU at multiple locations",
+  "when": "The SKU detail view is rendered",
+  "then": "Each location row displays the inventory tracking code",
+  "status": "draft",
+  "architectural_notes": "E2E: the inventory tracking code persisted on each stock record (`app/models/stock.py`) is surfaced through the detail route -> query service -> repository read and rendered per location row. Owner module: the SKU-detail route on the stock boundary; the tracking-code field is read-only here (its persistence contract is owned by S1 AC5). Cross-cutting: ORM access in the repository only; presentation in the boundary/template, never business logic.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Specifies that tracking codes are visible in the detail view, distinct from AC1 which only requires locations and quantities to be shown; a detail view could display locations and quantities without including tracking codes."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "id": "AC1-verification-available",
+  "given": "S1 has completed and backfilled batch_number and serial_number columns from inventory_code",
+  "when": "a database administrator needs to verify the migration integrity",
+  "then": "a validation query is available to execute that counts codes which could not be parsed as location-batch-serial",
+  "status": "draft",
+  "architectural_notes": "Infra: a contract on the data-store, an integrity-probe query that exists and runs against the migrated stock table on the paired Lakebase branch, not an HTTP boundary. Owner: the validation/probe statement in the repository/migration layer (app/repositories), the only layer that touches the ORM/session. Cross-cutting concern: schema-evolution / data integrity (R1), owned at the repository/migration layer, never the domain or boundary."
+}

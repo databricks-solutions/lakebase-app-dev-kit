@@ -1,0 +1,17 @@
+{
+  "ordinal": 71,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S2-split-validate",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S2-split-validate"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-split-validate/deploy-evidence.json"
+  ],
+  "deleted": []
+}

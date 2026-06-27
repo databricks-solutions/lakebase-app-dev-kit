@@ -1,0 +1,17 @@
+{
+  "ordinal": 119,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S3-split-drop-old/deploy-evidence.json"
+  ],
+  "deleted": []
+}

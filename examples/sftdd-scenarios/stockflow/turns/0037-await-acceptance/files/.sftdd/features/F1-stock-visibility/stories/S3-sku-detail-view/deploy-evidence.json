@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S3-sku-detail-view",
+  "target": "local",
+  "url": "http://localhost:8000/",
+  "reachable": true,
+  "verify": {
+    "passed": true,
+    "command": "./scripts/run-tests.sh",
+    "summary": "feature-verify passed against the running app"
+  },
+  "lakebase_branch": "experiment-s3-sku-detail-view-exp1",
+  "deployed_at": "2026-06-15T10:28:44.131Z"
+}

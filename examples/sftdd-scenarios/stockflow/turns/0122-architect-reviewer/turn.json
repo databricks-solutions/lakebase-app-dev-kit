@@ -1,0 +1,22 @@
+{
+  "ordinal": 122,
+  "step": 0,
+  "label": "architect-reviewer",
+  "kind": "invoke-role",
+  "role": "architect-reviewer",
+  "story": "S4-split-display",
+  "action": {
+    "kind": "invoke-role",
+    "role": "architect-reviewer",
+    "story": "S4-split-display"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/architecture.json",
+    ".sftdd/features/F6-split-tracking-code/architecture.md",
+    ".sftdd/features/F6-split-tracking-code/stories/S4-split-display/acs/AC1-table-displays-batch-serial.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S4-split-display/acs/AC2-table-null-renders-not-tracked.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S4-split-display/acs/AC3-detail-displays-batch-serial.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S4-split-display/acs/AC4-detail-null-renders-not-tracked.json"
+  ],
+  "deleted": []
+}

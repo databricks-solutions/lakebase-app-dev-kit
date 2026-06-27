@@ -1,0 +1,143 @@
+[
+  {
+    "ac_id": "AC1-columns-added",
+    "items": [
+      {
+        "id": "T1",
+        "description": "after the up() migration runs, the stock table has a batch_number column",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      },
+      {
+        "id": "T2",
+        "description": "after the up() migration runs, the stock table has a serial_number column",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      },
+      {
+        "id": "T9",
+        "description": "the Alembic revision module does not import app/routes or app/services; persistence logic stays in the repository/migration layer",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "fitness"
+      },
+      {
+        "id": "T10",
+        "description": "the app and Alembic env read DB_NAME/PGDATABASE from the environment; no hardcoded DSN exists anywhere in the migration or config path",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "fitness"
+      },
+      {
+        "id": "T11",
+        "description": "after up() then down(), the original inventory_code value is reconstructed for every row and the batch_number/serial_number columns are removed",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "fitness"
+      },
+      {
+        "id": "T14",
+        "description": "the integration test suite connects to the real Lakebase branch DB (DB_NAME=stockflow) and not an in-memory substitute; the conftest fixture verifies the live connection before any scenario runs",
+        "ac_id": "AC1-columns-added",
+        "status": "pending",
+        "kind": "fitness"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC2-parse-three-segment-code",
+    "items": [
+      {
+        "id": "T3",
+        "description": "a stock row with inventory_code 'A12-B7-S001' has batch_number='B7' and serial_number='S001' after the backfill",
+        "ac_id": "AC2-parse-three-segment-code",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC3-parse-two-segment-code",
+    "items": [
+      {
+        "id": "T4",
+        "description": "a stock row with inventory_code 'A12-B7' has batch_number='B7' and serial_number=NULL after the backfill",
+        "ac_id": "AC3-parse-two-segment-code",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC4-parse-one-segment-code",
+    "items": [
+      {
+        "id": "T5",
+        "description": "a stock row with inventory_code 'A12' has batch_number=NULL and serial_number=NULL after the backfill",
+        "ac_id": "AC4-parse-one-segment-code",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC5-migrate-all-rows",
+    "items": [
+      {
+        "id": "T6",
+        "description": "every row in a 100-row stock table has batch_number and serial_number present (populated or NULL) after the migration, with no rows skipped",
+        "ac_id": "AC5-migrate-all-rows",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC6-preserve-location",
+    "items": [
+      {
+        "id": "T7",
+        "description": "the location column value is unchanged for a row after the migration runs",
+        "ac_id": "AC6-preserve-location",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      },
+      {
+        "id": "T12",
+        "description": "the UNIQUE(sku, location) constraint exists on the stock table after the migration and rejects a duplicate (sku, location) pair",
+        "ac_id": "AC6-preserve-location",
+        "status": "pending",
+        "kind": "fitness"
+      }
+    ]
+  },
+  {
+    "ac_id": "AC7-preserve-business-data",
+    "items": [
+      {
+        "id": "T8",
+        "description": "sku and quantity are unchanged for a row after the migration runs",
+        "ac_id": "AC7-preserve-business-data",
+        "status": "pending",
+        "kind": "behavior",
+        "scenario_file": "tests/features/S1-split-add-backfill.feature"
+      },
+      {
+        "id": "T13",
+        "description": "quantity values are identical for every row before and after the migration; no negative quantity is introduced",
+        "ac_id": "AC7-preserve-business-data",
+        "status": "pending",
+        "kind": "fitness"
+      }
+    ]
+  }
+]

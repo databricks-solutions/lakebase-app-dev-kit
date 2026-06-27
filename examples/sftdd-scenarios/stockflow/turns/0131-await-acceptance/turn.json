@@ -1,0 +1,17 @@
+{
+  "ordinal": 131,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S4-split-display",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S4-split-display"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S4-split-display/deploy-evidence.json"
+  ],
+  "deleted": []
+}

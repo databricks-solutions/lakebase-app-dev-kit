@@ -1,0 +1,12 @@
+{
+  "id": "AC2-table-null-renders-not-tracked",
+  "given": "a stock row in the home table has NULL batch_number or NULL serial_number",
+  "when": "the home stock table is rendered",
+  "then": "the corresponding column displays 'not tracked'",
+  "status": "draft",
+  "layer": "E2E",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 tests column presence with populated data; AC2 tests the observable rendering behavior when data is NULL, a distinct outcome achieved by adding a conditional display rule"
+  }
+}

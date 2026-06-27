@@ -1,0 +1,15 @@
+{
+  "ordinal": 102,
+  "step": 0,
+  "label": "raise-to-hil",
+  "kind": "raise-to-hil",
+  "story": "S3-split-drop-old",
+  "action": {
+    "kind": "raise-to-hil",
+    "reason": "GREEN verify failed for T24 (AC4-format-and-null-handling) in F6-split-tracking-code/S3-split-drop-old after assessment: GREEN verify FAILED against the running app",
+    "source": "driver-green",
+    "story": "S3-split-drop-old"
+  },
+  "produced": [],
+  "deleted": []
+}

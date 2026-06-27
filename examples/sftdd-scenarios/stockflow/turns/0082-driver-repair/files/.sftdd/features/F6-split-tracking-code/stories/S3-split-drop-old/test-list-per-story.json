@@ -1,0 +1,85 @@
+{
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S3-split-drop-old",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T21",
+      "description": "after the S3 up() migration runs, the stock table has no inventory_code column",
+      "ac_id": "AC1-column-dropped",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T29",
+      "description": "the S3 Alembic revision module does not import app/routes or app/services; the migration stays in the repository/migration layer and never crosses the layering contract",
+      "ac_id": "AC1-column-dropped",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T30",
+      "description": "the S3 integration test suite binds to the real Lakebase branch DB (DB_NAME=stockflow); no mock or in-memory substitute is used and the conftest fixture verifies the live connection before any S3 scenario runs",
+      "ac_id": "AC1-column-dropped",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T22",
+      "description": "after the S3 down() migration runs, the inventory_code column is present on the stock table",
+      "ac_id": "AC2-column-restored",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T23",
+      "description": "after the S3 down() migration runs, every row has a non-NULL inventory_code value",
+      "ac_id": "AC3-all-rows-reconstructed",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T24",
+      "description": "a row where batch_number is NULL has its inventory_code reconstructed with an empty string in the batch segment position (e.g., 'LOC--S001')",
+      "ac_id": "AC4-format-and-null-handling",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T25",
+      "description": "a row where serial_number is NULL has its inventory_code reconstructed with an empty string in the serial segment position (e.g., 'LOC-B7-')",
+      "ac_id": "AC4-format-and-null-handling",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T26",
+      "description": "after the S3 down() migration runs, the batch_number column is STILL PRESENT (preserved; owned by the S1 split migration, not retired by S3.down)",
+      "ac_id": "AC5-split-columns-dropped",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T27",
+      "description": "after the S3 down() migration runs, the serial_number column is STILL PRESENT (preserved; owned by the S1 split migration, not retired by S3.down)",
+      "ac_id": "AC5-split-columns-dropped",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    },
+    {
+      "id": "T28",
+      "description": "after the S3 down() migration runs, the inventory_code column carries a NOT NULL constraint and an attempt to insert a NULL value is rejected",
+      "ac_id": "AC6-not-null-constraint",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-split-drop-old.feature"
+    }
+  ]
+}

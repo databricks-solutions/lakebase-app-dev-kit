@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title_suffix %} - Receipt Recorded{% endblock %}
+{% block content %}
+<div data-testid="receipt-confirm-page" class="card" style="text-align: center; max-width: 480px; margin: 0 auto;">
+  <div class="success-icon" aria-hidden="true">&#10003;</div>
+  <h1 style="color: var(--color-success); font-size: var(--text-xl);">Receipt Recorded</h1>
+
+  <dl data-testid="receipt-confirm-summary" class="confirm-summary" style="text-align: left;">
+    <dt>SKU</dt>
+    <dd>{{ sku or "not tracked" }}</dd>
+    <dt>Location</dt>
+    <dd>{{ location or "not tracked" }}</dd>
+    <dt>Quantity Received</dt>
+    <dd>{{ qty or "not tracked" }}</dd>
+  </dl>
+
+  <div class="actions" style="justify-content: center;">
+    <a data-testid="btn-receive-another" href="/receive" class="btn-secondary">Receive Another</a>
+    <a href="/" class="btn-secondary">Go to Home</a>
+  </div>
+</div>
+{% endblock %}

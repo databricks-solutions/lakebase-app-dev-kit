@@ -1,0 +1,8 @@
+{
+  "id": "AC1-table-displays-batch-serial",
+  "given": "stock records exist with populated batch_number and serial_number",
+  "when": "the home stock page is loaded",
+  "then": "the stock table displays a 'Batch Number' column and a 'Serial Number' column",
+  "status": "draft",
+  "layer": "E2E"
+}

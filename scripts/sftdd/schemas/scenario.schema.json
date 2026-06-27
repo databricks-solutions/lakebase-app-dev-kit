@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/scenario.schema.json",
+  "title": "RecordedScenario",
+  "description": "Manifest for a recorded replay scenario under examples/sftdd-scenarios/<name>/. A scenario is a self-contained corpus (recorded-artifacts/ design lane + recorded-build/ build corpus + turns/ per-turn timeline) plus this manifest, replayed by replay-scenario.sh and guarded by tests/bdd/sftdd-scenarios.test.ts. See examples/sftdd-scenarios/SCENARIOS.md.",
+  "type": "object",
+  "required": ["name", "description", "features"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Scenario slug; must match the scenario directory name."
+    },
+    "description": {
+      "type": "string",
+      "description": "One-line summary of what the scenario exercises."
+    },
+    "tiers": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3,
+      "default": 2,
+      "description": "SCM tier count to scaffold (1=prod, 2=prod+staging, 3=prod+staging+dev)."
+    },
+    "uiTrack": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the scenario has a user-facing UI (a design-brief.md is part of intake)."
+    },
+    "features": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The features replayed in order (each from its recorded-artifacts/ design + recorded-build/ build corpus).",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F[0-9]+(-[a-z0-9-]+)?$",
+            "description": "Feature id; must match a recorded-artifacts/features/<id>/ + recorded-build/features/<id>/ dir."
+          },
+          "buildReplay": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether a recorded build corpus exists to restore (skip navigator/driver). false = design-only replay, live build."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Optional one-line note on what this feature demonstrates (e.g. additive vs contract/cleanup)."
+          }
+        }
+      }
+    },
+    "pauseBefore": {
+      "type": "string",
+      "enum": ["navigator", "release-engineer"],
+      "default": "release-engineer",
+      "description": "Default handoff the live replay drives to (lakebase-sftdd-drive --pause-before)."
+    }
+  }
+}
