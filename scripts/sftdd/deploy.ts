@@ -22,6 +22,47 @@ import { writeEscalation } from "./escalation.js";
 import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION } from "./e2e-regex-clean.js";
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
 import type { AgentLogEventName } from "./agent-log-events.js";
+import { withEphemeralVerifyBranch, ephemeralVerifyBranchName } from "./ephemeral-verify.js";
+
+/** Read the Lakebase project id from the project's .env (LAKEBASE_PROJECT_ID). */
+function readProjectInstance(projectDir: string): string | undefined {
+  try {
+    const m = readFileSync(join(projectDir, ".env"), "utf8").match(/^\s*LAKEBASE_PROJECT_ID\s*=\s*(.+?)\s*$/m);
+    return m ? m[1].replace(/^["']|["']$/g, "").trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run the feature-verify, by DEFAULT on a DISPOSABLE child branch. Whenever the
+ * deploy is bound to an experiment branch (`lakebaseBranch`) of a resolvable
+ * Lakebase project, fork a short-lived child off that branch, point the verify
+ * at it (VERIFY_DATABASE_URL), and delete it after , so the suite's migration
+ * up/down fixtures mutate a throwaway DB instead of leaving the shared branch
+ * half-migrated for the next story's verify (the thrash fix; Lakebase branching
+ * makes the fork + teardown ~instant). Set `LAKEBASE_EPHEMERAL_VERIFY=0` to opt
+ * OUT (plain in-place verify); also falls back in-place when there is no
+ * experiment branch / instance to fork from. Always returns the pass/fail boolean.
+ */
+async function runVerifyMaybeEphemeral(
+  runVerify: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean,
+  cmd: string,
+  projectDir: string,
+  env: NodeJS.ProcessEnv | undefined,
+  lakebaseBranch: string | undefined,
+  now: () => Date,
+): Promise<boolean> {
+  const instance =
+    lakebaseBranch && process.env.LAKEBASE_EPHEMERAL_VERIFY !== "0" ? readProjectInstance(projectDir) : undefined;
+  if (!instance || !lakebaseBranch) {
+    return runVerify(cmd, projectDir, env);
+  }
+  const childName = ephemeralVerifyBranchName(lakebaseBranch, String(now().getTime()).slice(-7));
+  return withEphemeralVerifyBranch({ instance, parentBranch: lakebaseBranch, childName }, (childDsn) =>
+    runVerify(cmd, projectDir, { ...(env ?? process.env), VERIFY_DATABASE_URL: childDsn }),
+  );
+}
 
 export const DEPLOY_EVIDENCE_SCHEMA_VERSION = 1;
 
@@ -301,6 +342,8 @@ export interface DeployArgs {
   reachable?: (url: string) => Promise<boolean>;
   /** Inject for tests: run the feature-verify command; true = passed (exit 0). */
   runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
+  /** Stop the running local app (default stopLocal). Injectable for hermetic tests. */
+  stop?: (projectDir: string, targetName: string) => void;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
   /**
@@ -308,9 +351,15 @@ export interface DeployArgs {
    * (a foreign or stale process). A gate deploy must run + verify OUR app; if
    * something else holds the port, `make run` cannot bind and the reachability
    * probe would falsely pass against the foreign app, recording bogus evidence.
-   * With this set, that case fails honestly (reachable=false, verify failed) and
-   * raises an escalation, instead of false-positiving. Off by default so the
-   * per-cycle reuse path (ensureDeployedAndVerify) is unaffected.
+   *
+   * With this set we FIRST self-heal: the per-story await-acceptance deploy
+   * intentionally leaves OUR app running on the port for PO review, so a
+   * re-issued gate deploy (or a resumed run) legitimately finds our own prior
+   * instance there. We stop our recorded instance (pidfile) and re-probe; only
+   * if the port is STILL held , a process we do NOT own (truly foreign) , does
+   * the deploy fail honestly (reachable=false, verify failed) + escalate, instead
+   * of false-positiving. Off by default so the per-cycle reuse path
+   * (ensureDeployedAndVerify) is unaffected.
    */
   rejectForeignPort?: boolean;
 }
@@ -350,9 +399,29 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
 
   // Foreign-port guard (gate deploys): if something is ALREADY serving the port
   // before we deploy, our app cannot bind there and verifying against the
-  // squatter would record bogus evidence. Fail honestly + escalate.
+  // squatter would record bogus evidence. But FIRST self-heal: the per-story
+  // await-acceptance deploy intentionally LEAVES our app running on the port for
+  // PO review (deployToTarget records its pid + does not stop it), so a re-issued
+  // gate deploy , or a resumed run , legitimately finds OUR OWN prior instance
+  // there. Stop our recorded instance (pidfile process group) and wait for the
+  // socket to release; only refuse when the port is STILL held by a process we do
+  // NOT own (truly foreign). This brings the gate deploy to parity with
+  // ensureDeployedAndVerify, which already stops-first before re-binding.
+  const stop = args.stop ?? ((pd, tn) => void stopLocal(pd, tn));
   if (args.rejectForeignPort && (await reachable(url))) {
-    const reason = `target port already serving a process at ${url} before deploy; refusing to verify against a foreign/stale app. Stop it first (lakebase-sftdd-deploy --target ${args.targetName} --stop, or free the port).`;
+    stop(args.projectDir, args.targetName);
+    const released = await pollUntil<boolean>({
+      probe: async () => ((await reachable(url)) ? { done: false } : { done: true, value: true }),
+      timeoutMs: 5000,
+      intervalMs: 250,
+      sleep: args.sleep,
+      now: args.now,
+    });
+    if (released.outcome === "done") {
+      // Our own stale instance is gone and the port is free , fall through to a
+      // clean deploy of this turn's code.
+    } else {
+    const reason = `target port still serving a foreign process at ${url} after stopping our own instance; refusing to verify against it. Stop it first (lakebase-sftdd-deploy --target ${args.targetName} --stop, or free the port).`;
     const verify: VerifyResult = { passed: false, summary: reason };
     let evidencePath: string | undefined;
     if (args.featureId) {
@@ -377,6 +446,7 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
       });
     }
     return { ok: false, reason, verify, evidencePath };
+    }
   }
 
   // Per-story deploy: bind the run command to the experiment
@@ -406,7 +476,14 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
   let verify: VerifyResult = { passed: false };
   if (reachableNow && cfg.verify) {
     const runVerify = args.runVerify ?? defaultRunVerify;
-    const passed = runVerify(cfg.verify, args.projectDir, env);
+    const passed = await runVerifyMaybeEphemeral(
+      runVerify,
+      cfg.verify,
+      args.projectDir,
+      env,
+      args.lakebaseBranch,
+      args.now ?? (() => new Date()),
+    );
     verify = {
       passed,
       command: cfg.verify,
@@ -570,7 +647,14 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   }
   let passed: boolean;
   try {
-    passed = runVerify(cfg.verify, args.projectDir, env);
+    passed = await runVerifyMaybeEphemeral(
+      runVerify,
+      cfg.verify,
+      args.projectDir,
+      env,
+      args.lakebaseBranch,
+      args.now ?? (() => new Date()),
+    );
   } finally {
     stop(args.projectDir, targetName); // never leave the app on the port
   }
