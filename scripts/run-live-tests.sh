@@ -45,9 +45,10 @@ FLYWAY_VERSION="10.20.1"
 MODE="migrate"
 case "${1:-}" in
   --read-only)  MODE="read-only" ;;
+  --scenarios)  MODE="scenarios" ;;
   --all)        MODE="all" ;;
   "")           MODE="migrate" ;;
-  *)            echo "Unknown flag: $1. Use --read-only / --all, or no flag for migrate-live." >&2; exit 2 ;;
+  *)            echo "Unknown flag: $1. Use --read-only / --scenarios / --all, or no flag for migrate-live." >&2; exit 2 ;;
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,7 +81,32 @@ require_cmd() {
   fi
 }
 
+# Replay every recorded scenario under examples/sftdd-scenarios/<name>/ live
+# (design replay + build restore -> deterministic orchestrator to the RE handoff),
+# headless. The hermetic guard (tests/bdd/sftdd-scenarios.test.ts) checks corpus
+# shape on every `npm test`; THIS is the workspace-backed end-to-end replay.
+run_scenarios() {
+  local scen_root="$REPO_ROOT/examples/sftdd-scenarios"
+  local ran=0 d name
+  for d in "$scen_root"/*/; do
+    [[ -f "${d}scenario.json" ]] || continue
+    name="$(basename "$d")"
+    blue ""
+    blue "==> Replaying scenario: $name"
+    LAKEBASE_SFTDD_AUTO_CONTINUE=1 bash "$scen_root/replay-scenario.sh" --scenario "$name" --to release-engineer
+    ran=$((ran + 1))
+  done
+  if [[ "$ran" -eq 0 ]]; then
+    yellow "  no scenarios under examples/sftdd-scenarios/ yet (nothing to replay)"
+  fi
+}
+
 blue "==> Validating environment for mode: $MODE"
+
+if [[ "$MODE" == "scenarios" || "$MODE" == "all" ]]; then
+  require_env DATABRICKS_HOST
+  require_env GITHUB_OWNER
+fi
 
 if [[ "$MODE" == "migrate" || "$MODE" == "all" ]]; then
   require_env DATABRICKS_HOST
@@ -211,8 +237,12 @@ case "$MODE" in
       tests/bdd/lakebase-project.test.ts \
       tests/bdd/schema-diff-equivalence.test.ts
     ;;
+  scenarios)
+    run_scenarios
+    ;;
   all)
     npx vitest run
+    run_scenarios
     ;;
 esac
 

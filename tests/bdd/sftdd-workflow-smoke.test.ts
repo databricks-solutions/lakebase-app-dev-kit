@@ -103,7 +103,7 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
   it("drives the orchestrator CLI directly, with no top-level claude -p session", () => {
     // The smoke drives lakebase-sftdd-drive directly for every phase (planning +
     // per-feature). It does NOT boot a top-level `claude -p` slash-command
-    // session: that path does not reliably inherit LAKEBASE_TDD_HUMAN_PROXY into
+    // session: that path does not reliably inherit LAKEBASE_SFTDD_HUMAN_PROXY into
     // its Bash tool, which silently flipped the plan gate to interactive. The
     // driver owns role-agent invocation internally (claude -p --agent <role>).
     const topLevelCalls = runSmoke
@@ -115,25 +115,17 @@ describe("TDD-workflow smoke: headless speed (MCP strip + per-role model tiering
     expect(runSmoke).toMatch(/lakebase-sftdd-drive\b[\s\S]*--plan-only[\s\S]*--gates proxy/);
   });
 
-  it("tiers roles for the smoke via --agent-model + effort: navigator + test-strategist + ux-designer pinned to opus, rest default, effort=low for all EXCEPT the two AC-independence gatekeepers (spec-author + test-strategist run at default effort)", () => {
-    // Perf-experiment matrix: pin the capability-critical roles to opus, the
-    // navigator (writes the RED tests + reviews the design), the test-strategist
-    // (the structured test-list whose every ac_id must map to a real AC), and the
-    // ux-designer (the design system + IA the UI build adheres to). Every other
-    // role keeps its kit-default model (left unpinned).
-    expect(runSmoke).toMatch(/--agent-model navigator=opus/);
-    expect(runSmoke).toMatch(/--agent-model test-strategist=opus/);
-    expect(runSmoke).toMatch(/--agent-model ux-designer=opus/);
-    // The rest are default: NOT pinned via --agent-model at all.
-    for (const role of ["spec-author", "architect-reviewer", "product-owner", "release-engineer", "driver"]) {
-      expect(runSmoke, `${role} should keep its kit default (not pinned)`).not.toMatch(
-        new RegExp(`--agent-model ${role}=`),
-      );
-    }
-    // No role is on haiku now.
-    expect(runSmoke).not.toMatch(/--agent-model \S+=haiku/);
+  it("runs on kit-default models (NO per-role --agent-model pins), and patches effort=low for all roles EXCEPT the two AC-independence gatekeepers (spec-author + test-strategist run at default effort)", () => {
+    // Models: kit DEFAULTS, no per-role pins. The deterministic gates
+    // (contract-clean, layering-clean, conformance) + the honest-GREEN backstop
+    // carry the quality the old opus pins used to backstop, so the smoke runs on
+    // each role's recommended model. (Overridable per run via --agent-model / the
+    // AGENT_MODELS env if a specific experiment needs it.)
+    expect(runSmoke, "no per-role --agent-model pins; the smoke uses kit defaults").not.toMatch(
+      /--agent-model \S+=/,
+    );
     // create-project takes only --agent-model (model), so effort is patched into
-    // the seeded tdd-config.json right after scaffold: effort=low on every role
+    // the seeded sftdd-config.json right after scaffold: effort=low on every role
     // EXCEPT the two design-gate AC-independence gatekeepers (spec-author +
     // test-strategist), left unset -> default effort, because their semantic
     // judgment (independence test / ac-overlap detection) is undercut by low effort.
@@ -209,16 +201,16 @@ describe("TDD-workflow smoke: orchestrator supplies intake via the Human Proxy",
     expect(runSmoke).toMatch(/design-brief\.md/);
   });
 
-  it("declares the UI track (LAKEBASE_TDD_UI=1) so the UX Designer + design-brief intake run", () => {
-    expect(runSmoke).toMatch(/export LAKEBASE_TDD_UI=1/);
+  it("declares the UI track (LAKEBASE_SFTDD_UI=1) so the UX Designer + design-brief intake run", () => {
+    expect(runSmoke).toMatch(/export LAKEBASE_SFTDD_UI=1/);
   });
 
   it("hands the PO's feature-requests to the Human Proxy WHEN the state machine asks (not pre-staged)", () => {
     // The PO's artifacts are supplied at the author-requests step, not before:
     // run_plan_sprint records the (feature_id, recorded source) pairs in
-    // LAKEBASE_TDD_SPRINT_REQUESTS, and the driver's author-requests step has the
+    // LAKEBASE_SFTDD_SPRINT_REQUESTS, and the driver's author-requests step has the
     // Human Proxy supply them. No bare cp, and no up-front proxy_supply into .tdd.
-    expect(runSmoke).toMatch(/export LAKEBASE_TDD_SPRINT_REQUESTS=/);
+    expect(runSmoke).toMatch(/export LAKEBASE_SFTDD_SPRINT_REQUESTS=/);
     expect(runSmoke).not.toMatch(/cp "\$spec"/);
     expect(runSmoke, "no up-front feature-request staging").not.toMatch(
       /proxy_supply "\$spec".*feature-request\.md/,
@@ -226,7 +218,7 @@ describe("TDD-workflow smoke: orchestrator supplies intake via the Human Proxy",
     expect(runSmoke).toMatch(/run_plan_sprint\s*\(\)/);
     const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
     expect(planFn, "the recorded request pairs are built in run_plan_sprint").toMatch(
-      /LAKEBASE_TDD_SPRINT_REQUESTS/,
+      /LAKEBASE_SFTDD_SPRINT_REQUESTS/,
     );
   });
 });
@@ -263,7 +255,7 @@ describe("TDD-workflow smoke: /plan authors each sprint's backlog (two sprints, 
 
   it("drives planning through the orchestrator CLI (--plan-only --gates proxy), not claude -p", () => {
     // Planning runs the same driver the scaffolded /plan command runs, called
-    // directly so gate mode + LAKEBASE_TDD_HUMAN_PROXY are deterministic (the
+    // directly so gate mode + LAKEBASE_SFTDD_HUMAN_PROXY are deterministic (the
     // claude -p "/plan" path did not reliably inherit the env, flipping the plan
     // gate to interactive headless).
     const planFn = runSmoke.slice(runSmoke.indexOf("run_plan_sprint() {"));
