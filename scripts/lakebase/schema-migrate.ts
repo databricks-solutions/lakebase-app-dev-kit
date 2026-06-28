@@ -21,6 +21,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConnection } from "./get-connection.js";
+import { resolveMigrationLanguage } from "./migration-layout.js";
 // Adapter modules auto-register on import; routing below uses
 // resolveSchemaMigrationAdapter() (slice 4). The legacy public API
 // (applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus /
@@ -130,25 +131,19 @@ export class SchemaMigrationError extends Error {
  *  detection in templates/project/common/scripts/flyway-migrate.sh so the
  *  kit primitive and the bundled hook agree on which tool to run. */
 export function detectLanguage(projectDir: string): SchemaMigrationLanguage {
-  if (fs.existsSync(path.join(projectDir, "pom.xml"))) {
-    // pom.xml present, default to "java"; kotlin still uses pom + Flyway.
-    return "java";
+  // Delegate to the canonical resolver (migration-layout.ts) so the kit and the
+  // lakebase-scm-extension share ONE detection rule. The resolver is tolerant
+  // (returns "unknown"); this throwing wrapper preserves the kit primitive's
+  // historical contract for callers that require a concrete language.
+  const lang = resolveMigrationLanguage(projectDir);
+  if (lang === "unknown") {
+    throw new SchemaMigrationError(
+      `Could not detect project language in ${projectDir}. ` +
+        `Expected one of: pom.xml (java/kotlin), pyproject.toml or alembic.ini (python), package.json (nodejs). ` +
+        `Pass {language} explicitly to override.`
+    );
   }
-  if (
-    fs.existsSync(path.join(projectDir, "pyproject.toml")) ||
-    fs.existsSync(path.join(projectDir, "requirements.txt")) ||
-    fs.existsSync(path.join(projectDir, "alembic.ini"))
-  ) {
-    return "python";
-  }
-  if (fs.existsSync(path.join(projectDir, "package.json"))) {
-    return "nodejs";
-  }
-  throw new SchemaMigrationError(
-    `Could not detect project language in ${projectDir}. ` +
-      `Expected one of: pom.xml (java/kotlin), pyproject.toml or alembic.ini (python), package.json (nodejs). ` +
-      `Pass {language} explicitly to override.`
-  );
+  return lang;
 }
 
 /** Map a language to the migration tool the kit invokes for it. */

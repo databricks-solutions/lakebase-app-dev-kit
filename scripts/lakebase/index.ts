@@ -53,6 +53,7 @@ export * from "./update-commands.js";
 export * from "./workflow-drift.js";
 export * from "./spring-initializr.js";
 export * from "./uc-resources.js";
+export * from "./migration-layout.js";
 export {
   applySchemaMigrations,
   rollbackSchemaMigration,
