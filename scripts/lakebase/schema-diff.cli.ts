@@ -10,6 +10,7 @@ interface ParsedArgs {
   branch?: string;
   comparisonBranch?: string;
   database?: string;
+  schema?: string;
   format?: OutputFormat;
   pretty?: boolean;
   help?: boolean;
@@ -32,6 +33,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--database":
         out.database = argv[++i];
+        break;
+      case "--schema":
+        out.schema = argv[++i];
         break;
       case "--format": {
         const v = argv[++i];
@@ -78,6 +82,10 @@ Flags:
   --against / --comparison-branch
                        Explicit parent branch (default: resolved from metadata)
   --database           Database name (default: $PGDATABASE or "databricks_postgres")
+  --schema <name|all>  Postgres schema to diff (default: "public"). A specific
+                       schema (e.g. "cfg") diffs objects outside public; "all"
+                       (or "*") diffs every non-system schema, qualifying names
+                       as schema.table.
   --format <json|markdown>
                        Output format. "json" (default) emits the structured
                        SchemaDiffResult. "markdown" emits the canonical
@@ -120,6 +128,7 @@ async function main(): Promise<number> {
     branch: args.branch,
     comparisonBranch: args.comparisonBranch,
     database: args.database,
+    schema: args.schema,
   });
 
   if (format === "markdown") {

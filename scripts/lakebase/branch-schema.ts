@@ -34,14 +34,78 @@ export interface QueryBranchSchemaArgs {
   database?: string;
   /** Skip the flyway_schema_history table (default: true) */
   skipFlyway?: boolean;
+  /**
+   * Postgres schema to inventory. Default "public". Pass a specific schema
+   * (e.g. "cfg") to diff objects that live outside public, or "all" / "*" to
+   * inventory every non-system schema (in which case table names are returned
+   * qualified as `schema.table` so objects from different schemas don't
+   * collide). See {@link buildSchemaQuery}.
+   */
+  schema?: string;
 }
 
-const SCHEMA_QUERY =
-  "SELECT c.table_name, c.column_name, c.data_type " +
-  "FROM information_schema.columns c " +
-  "JOIN pg_tables t ON c.table_name = t.tablename " +
-  "WHERE c.table_schema='public' AND t.schemaname='public' " +
-  "ORDER BY c.table_name, c.ordinal_position";
+/** A row of the information_schema column inventory. */
+export interface SchemaQueryRow {
+  table_schema: string;
+  table_name: string;
+  column_name: string;
+  data_type: string;
+}
+
+const SYSTEM_SCHEMA_FILTER =
+  "c.table_schema NOT IN ('pg_catalog','information_schema') " +
+  "AND c.table_schema NOT LIKE 'pg_%'";
+
+/** True when `schema` requests every non-system schema rather than just one. */
+export function isAllSchemas(schema?: string): boolean {
+  const s = (schema ?? "").trim().toLowerCase();
+  return s === "all" || s === "*";
+}
+
+/**
+ * Build the parameterized information_schema inventory query for a schema
+ * scope. This is the ONE place the column-inventory SQL lives; both
+ * queryBranchSchema (live introspection) and getSchemaDiff (parent diff) use
+ * it, so a fix to the schema scoping applies to both.
+ *
+ *   - default / "public": filter to the single schema, bare table names
+ *     (backward compatible with the prior public-only behavior).
+ *   - a specific schema (e.g. "cfg"): filter to that schema, bare table names.
+ *   - "all" / "*": every non-system schema, table names qualified as
+ *     `schema.table`.
+ */
+export function buildSchemaQuery(schema?: string): { text: string; values: string[] } {
+  const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
+  const join =
+    "FROM information_schema.columns c " +
+    "JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  if (isAllSchemas(schema)) {
+    return {
+      text:
+        `SELECT ${cols} ` + join +
+        `WHERE ${SYSTEM_SCHEMA_FILTER} ` +
+        "ORDER BY c.table_schema, c.table_name, c.ordinal_position",
+      values: [],
+    };
+  }
+  const one = ((schema ?? "").trim() || "public");
+  return {
+    text:
+      `SELECT ${cols} ` + join +
+      "WHERE c.table_schema = $1 " +
+      "ORDER BY c.table_name, c.ordinal_position",
+    values: [one],
+  };
+}
+
+/**
+ * Object name for an inventory row: `schema.table` when scanning all schemas,
+ * the bare table name otherwise. Keeps single-schema diffs (the common case)
+ * on bare names while making multi-schema inventories collision-free.
+ */
+export function schemaObjectName(row: { table_schema: string; table_name: string }, allSchemas: boolean): string {
+  return allSchemas ? `${row.table_schema}.${row.table_name}` : row.table_name;
+}
 
 /**
  * Inventory the tables + columns on a Lakebase branch's public schema.
@@ -76,19 +140,21 @@ export async function queryBranchSchema(args: QueryBranchSchemaArgs): Promise<Ta
     statement_timeout: KIT_TIMEOUTS.pgStatement,
   });
 
+  const allSchemas = isAllSchemas(args.schema);
+  const query = buildSchemaQuery(args.schema);
+
   try {
     await client.connect();
-    const result = await client.query<{ table_name: string; column_name: string; data_type: string }>(
-      SCHEMA_QUERY
-    );
+    const result = await client.query<SchemaQueryRow>(query.text, query.values);
     const tables = new Map<string, Array<{ name: string; dataType: string }>>();
     for (const row of result.rows) {
       if (!row.table_name) continue;
       if (skipFlyway && row.table_name === "flyway_schema_history") continue;
-      if (!tables.has(row.table_name)) {
-        tables.set(row.table_name, []);
+      const key = schemaObjectName(row, allSchemas);
+      if (!tables.has(key)) {
+        tables.set(key, []);
       }
-      tables.get(row.table_name)!.push({ name: row.column_name, dataType: row.data_type });
+      tables.get(key)!.push({ name: row.column_name, dataType: row.data_type });
     }
     return Array.from(tables.entries()).map(([name, columns]) => ({ name, columns }));
   } finally {

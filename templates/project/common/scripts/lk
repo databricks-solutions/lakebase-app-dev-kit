@@ -108,7 +108,18 @@ else
   # A bin run: install once if the cache is cold (fast path , no network when
   # warm, so per-turn agent calls stay ~0.09s; freshness for a moving branch is
   # the warm step's job).
+  #
+  # LK_NO_INSTALL: callers on a latency-sensitive, best-effort path (e.g. the
+  # prepare-commit-msg schema-diff enrichment) set this so a COLD cache never
+  # triggers a synchronous `npm install` (the ~70s commit stall). With it set we
+  # skip the install and exit 97 ("kit cache cold, install skipped"); the caller
+  # treats that as "enrichment unavailable" and proceeds. Warming stays the job
+  # of `lk --warm` at scaffold/create time, never of a commit.
   if [ ! -d "${kit_dir}/dist" ]; then
+    if [ -n "${LK_NO_INSTALL:-}" ]; then
+      echo "lk: kit cache cold for ref '${ref}' and LK_NO_INSTALL set , skipping install (run 'lk --warm')." >&2
+      exit 97
+    fi
     sha="$([ "$is_sha" -eq 1 ] && printf '%s' "$ref" || remote_sha)"
     install_kit "${sha:-$ref}" "$sha" || true
   fi

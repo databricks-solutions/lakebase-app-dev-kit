@@ -3,6 +3,9 @@ import { execFileSync } from "node:child_process";
 import {
   queryBranchSchema,
   queryBranchTables,
+  buildSchemaQuery,
+  isAllSchemas,
+  schemaObjectName,
 } from "../../scripts/lakebase/branch-schema.js";
 
 const cliAvailable = (() => {
@@ -49,6 +52,41 @@ describe.skipIf(!live)("queryBranchSchema – live pg connect", () => {
     });
     expect(names).not.toContain("flyway_schema_history");
   }, 45_000);
+});
+
+describe("W10: schema-scoped inventory query (hermetic)", () => {
+  it("defaults to the public schema, bare table names", () => {
+    const q = buildSchemaQuery();
+    expect(q.text).toMatch(/c\.table_schema = \$1/);
+    expect(q.values).toEqual(["public"]);
+    expect(isAllSchemas(undefined)).toBe(false);
+  });
+
+  it("scopes to a specific non-public schema via a bound parameter (no injection)", () => {
+    const q = buildSchemaQuery("cfg");
+    expect(q.values).toEqual(["cfg"]);
+    // The schema name is bound, never interpolated into SQL text.
+    expect(q.text).not.toContain("cfg");
+    expect(isAllSchemas("cfg")).toBe(false);
+    // A single named schema keeps bare table names.
+    expect(schemaObjectName({ table_schema: "cfg", table_name: "settings" }, false)).toBe("settings");
+  });
+
+  it("'all' / '*' scans every non-system schema and qualifies names", () => {
+    for (const all of ["all", "ALL", "*"]) {
+      expect(isAllSchemas(all)).toBe(true);
+      const q = buildSchemaQuery(all);
+      expect(q.values).toEqual([]);
+      expect(q.text).toMatch(/NOT IN \('pg_catalog','information_schema'\)/);
+      expect(q.text).not.toMatch(/table_schema = \$1/);
+    }
+    expect(schemaObjectName({ table_schema: "cfg", table_name: "settings" }, true)).toBe("cfg.settings");
+  });
+
+  it("blank/whitespace schema falls back to public", () => {
+    expect(buildSchemaQuery("   ").values).toEqual(["public"]);
+    expect(buildSchemaQuery("").values).toEqual(["public"]);
+  });
 });
 
 describe("branch-schema – skip-when-env-missing", () => {

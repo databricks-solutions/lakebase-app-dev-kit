@@ -21,6 +21,34 @@ if [ -z "$WORK_TREE" ]; then
 fi
 cd "$WORK_TREE"
 
+# This script runs synchronously inside the prepare-commit-msg hook, so it must
+# NEVER block a commit. Two guards:
+#   1. LK_NO_INSTALL: a cold kit cache must not trigger an `npm install` on
+#      commit (that was the ~70s stall). The `lk` shim skips the install and
+#      exits 97; we treat that like any other "diff unavailable".
+#   2. A hard timeout on the diff itself, so an unreachable/slow Lakebase can't
+#      hang the commit. Override seconds via LAKEBASE_SCHEMA_DIFF_TIMEOUT.
+export LK_NO_INSTALL=1
+DIFF_TIMEOUT="${LAKEBASE_SCHEMA_DIFF_TIMEOUT:-10}"
+
+# Portable hard timeout: prefer timeout(1)/gtimeout (Linux/coreutils); else a
+# bash watchdog that TERMs (then KILLs) the command after $1 seconds. Stdout/
+# stderr redirections applied to the call propagate to the backgrounded child.
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"; return $?; fi
+  if command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"; return $?; fi
+  "$@" &
+  local cmd_pid=$!
+  ( sleep "$secs"; kill -TERM "$cmd_pid" 2>/dev/null; sleep 2; kill -KILL "$cmd_pid" 2>/dev/null ) >/dev/null 2>&1 &
+  local wd_pid=$!
+  local code=0
+  wait "$cmd_pid" 2>/dev/null || code=$?
+  kill -TERM "$wd_pid" 2>/dev/null || true
+  wait "$wd_pid" 2>/dev/null || true
+  return $code
+}
+
 if [ ! -f .env ]; then
   echo "prepare-schema-diff: .env not found. Copy .env.example to .env and set LAKEBASE_PROJECT_ID." >&2
   exit 1
@@ -101,10 +129,10 @@ echo "" >> "$MD"
 # production" regardless of what the branch was forked from.
 echo "### Schema diff: \`${BRANCH_LABEL}\` vs production" >> "$MD"
 echo "" >> "$MD"
-if ! $BIN --instance "$PROJ_ID" --branch "$BRANCH" --format markdown >> "$MD" 2>>"$MD.err"; then
+if ! run_with_timeout "$DIFF_TIMEOUT" $BIN --instance "$PROJ_ID" --branch "$BRANCH" --format markdown >> "$MD" 2>>"$MD.err"; then
   {
     echo ""
-    echo "Schema diff could not be computed:"
+    echo "Schema diff could not be computed (commit is not blocked):"
     if [ -s "$MD.err" ]; then
       sed 's/^/  > /' "$MD.err"
     fi

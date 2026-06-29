@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import type { Pool } from "pg";
 import { getConnection } from "./get-connection.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
+import { buildSchemaQuery, isAllSchemas, schemaObjectName, type SchemaQueryRow } from "./branch-schema.js";
 
 export interface SchemaColumn {
   name: string;
@@ -78,17 +79,17 @@ export interface GetSchemaDiffArgs {
   database?: string;
   /** Optional WorkspaceClient pass-through to getConnection (OBO via AppKit). */
   workspaceClient?: unknown;
+  /**
+   * Postgres schema to diff. Default "public". A specific schema (e.g. "cfg")
+   * diffs objects outside public; "all" / "*" diffs every non-system schema
+   * with table names qualified as `schema.table`. Both branches are scanned
+   * with the same scope so names line up.
+   */
+  schema?: string;
 }
 
 /** Skip this table in diffs – Flyway's bookkeeping isn't user schema. */
 const IGNORED_TABLES = new Set(["flyway_schema_history"]);
-
-const SCHEMA_QUERY =
-  "SELECT c.table_name, c.column_name, c.data_type " +
-  "FROM information_schema.columns c " +
-  "JOIN pg_tables t ON c.table_name = t.tablename " +
-  "WHERE c.table_schema='public' AND t.schemaname='public' " +
-  "ORDER BY c.table_name, c.ordinal_position";
 
 export async function getSchemaDiff(args: GetSchemaDiffArgs): Promise<SchemaDiffResult> {
   const timestamp = new Date().toISOString();
@@ -131,8 +132,8 @@ export async function getSchemaDiff(args: GetSchemaDiffArgs): Promise<SchemaDiff
       workspaceClient: args.workspaceClient,
     });
 
-    const targetTables = await listTables(targetPool);
-    const comparisonTables = await listTables(comparisonPool);
+    const targetTables = await listTables(targetPool, args.schema);
+    const comparisonTables = await listTables(comparisonPool, args.schema);
     return diffSchemas(args.branch, comparisonBranch, targetTables, comparisonTables, timestamp);
   } catch (err) {
     return {
@@ -146,19 +147,16 @@ export async function getSchemaDiff(args: GetSchemaDiffArgs): Promise<SchemaDiff
   }
 }
 
-interface TableRow {
-  table_name: string;
-  column_name: string;
-  data_type: string;
-}
-
-async function listTables(pool: Pool): Promise<Map<string, SchemaColumn[]>> {
-  const { rows } = await pool.query<TableRow>(SCHEMA_QUERY);
+async function listTables(pool: Pool, schema?: string): Promise<Map<string, SchemaColumn[]>> {
+  const allSchemas = isAllSchemas(schema);
+  const query = buildSchemaQuery(schema);
+  const { rows } = await pool.query<SchemaQueryRow>(query.text, query.values);
   const tables = new Map<string, SchemaColumn[]>();
   for (const r of rows) {
     if (!r.table_name || IGNORED_TABLES.has(r.table_name)) continue;
-    if (!tables.has(r.table_name)) tables.set(r.table_name, []);
-    tables.get(r.table_name)!.push({ name: r.column_name, dataType: r.data_type });
+    const key = schemaObjectName(r, allSchemas);
+    if (!tables.has(key)) tables.set(key, []);
+    tables.get(key)!.push({ name: r.column_name, dataType: r.data_type });
   }
   return tables;
 }

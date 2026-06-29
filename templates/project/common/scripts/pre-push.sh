@@ -34,9 +34,12 @@ if [ -n "${DATABRICKS_HOST:-}" ] && command -v databricks >/dev/null 2>&1; then
     export DATABRICKS_TOKEN="$FRESH_TOKEN"
     echo "Pre-push: OAuth token refreshed."
   else
-    echo "Pre-push: ERROR – could not refresh OAuth token."
-    echo "Pre-push: CI will fail with a stale token. Run 'databricks auth login' and try again."
-    exit 1
+    # Warn, do NOT block. A stale or missing Databricks token only affects the
+    # downstream CI secret sync; it must not stop the developer from pushing
+    # code (offline work, docs, a fix to the auth itself). If CI later fails on
+    # a stale token, run 'databricks auth login' and push again to re-sync.
+    echo "Pre-push: WARNING – could not refresh OAuth token; pushing anyway." >&2
+    echo "Pre-push: if CI fails on a stale token, run 'databricks auth login' and push again." >&2
   fi
 fi
 

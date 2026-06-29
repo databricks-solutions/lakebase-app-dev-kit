@@ -25,6 +25,7 @@ const LAKEBASE_PLUGINS = `
                     <user>\${env.SPRING_DATASOURCE_USERNAME}</user>
                     <password>\${env.SPRING_DATASOURCE_PASSWORD}</password>
                     <baselineOnMigrate>true</baselineOnMigrate>
+                    <baselineVersion>0</baselineVersion>
                 </configuration>
             </plugin>`;
 
