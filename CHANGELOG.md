@@ -6,6 +6,57 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.5] - 2026-06-29
+
+Greenfield hardening: scaffolded-project fixes surfaced by a hands-on evaluation
+of a freshly created project. All changes are additive and validated live on a
+real workspace (project provision + Flyway migrate + multi-schema diff + a full
+create-project run with a GitHub repo).
+
+### Added
+
+- **Monorepo-aware migration-layout resolver (single source of truth).**
+  `scripts/lakebase/migration-layout.ts` owns language detection and the
+  migration path / pattern / glob conventions (`detectLanguageAt`,
+  `resolveMigrationLanguage`, `resolveMigrationLayout`, `compileMigrationPattern`);
+  `schema-migrate` delegates to it, and the VS Code extension consumes it so a
+  subdir app (e.g. `recipe-app/migrations`) is detected correctly instead of
+  assuming a repo-root Flyway layout.
+- **Multi-schema schema diff (`--schema`).** `branch-schema.ts` now owns one
+  shared `buildSchemaQuery` / `schemaObjectName` / `isAllSchemas`; both
+  `queryBranchSchema` and `getSchemaDiff` consume it and accept a `schema`
+  argument (default `public`, a named schema, or `all` / `*` which qualifies
+  names as `schema.table`). `lakebase-schema-diff` gains `--schema <name|all>`.
+  Objects outside `public` are no longer silently invisible to the diff. The
+  schema name is bound, never interpolated.
+- **Create-project preflight + cleanup (`scripts/lakebase/create-preflight.ts`).**
+  - `checkDatabricksAuth` runs as create Step 0: a missing/stale token fails with
+    an actionable `databricks auth login --host <host>` message up front, before
+    any GitHub repo or Lakebase project is created.
+  - `warmAndVerifyKit` warms AND verifies the fast-CLI cache at create time and
+    surfaces a specific warning if it fails (a silent warm failure used to
+    surface later as a mysterious commit hang).
+  - `withLakebaseRollback` wraps the post-create steps so a failure deletes the
+    just-created Lakebase project, leaving no orphaned slug to block a same-name
+    retry.
+
+### Fixed
+
+- **Flyway baseline trap.** The java + kotlin fallback `pom.xml` and the dynamic
+  `pom-patch.ts` now pin `<baselineVersion>0</baselineVersion>` alongside
+  `baselineOnMigrate=true`, so `mvn flyway:migrate` applies `V1` on a fresh
+  database instead of consuming it as the baseline (parity with the kit's
+  Flyway runner, which already passed `-baselineVersion=0`).
+- **`pre-push` no longer blocks a push on a stale Databricks token.** A failed
+  OAuth token refresh now warns and lets the push proceed (the token only
+  affects the downstream CI secret sync); it no longer `exit 1`s.
+- **Commit-time schema diff can no longer stall a commit.** `lk` honors
+  `LK_NO_INSTALL` so a cold kit cache skips the synchronous `npm install` (the
+  ~70s stall) and exits 97; `prepare-schema-diff.sh` sets it and wraps the diff
+  in a portable hard timeout (`LAKEBASE_SCHEMA_DIFF_TIMEOUT`, default 10s). A
+  cold cache or slow Lakebase yields a commit without the diff, never a blocked
+  commit.
+
 ## [0.3.0-beta.4] - 2026-06-27
 
 ### Added
