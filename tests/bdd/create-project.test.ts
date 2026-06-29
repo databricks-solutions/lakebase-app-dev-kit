@@ -149,6 +149,12 @@ describe.skipIf(!e2eReady)("createProject – live end-to-end (LAKEBASE_TEST_E2E
     const seededEnv = fs.readFileSync(path.join(result.projectDir, ".env"), "utf-8");
     expect(seededEnv).toContain(`LAKEBASE_PROJECT_ID=${result.lakebaseProjectId}`);
     expect(seededEnv).toContain("DATABRICKS_HOST=");
+
+    // W3: the kit fast-CLI cache must have warmed + verified on this happy
+    // path (auth is good, network is up), so no warm-failure warning is
+    // surfaced. (The failure path is covered hermetically in
+    // create-preflight.test.ts.)
+    expect(result.warnings.find((w) => /could not be warmed/.test(w))).toBeUndefined();
   }, E2E_TIMEOUT_MS);
 });
 

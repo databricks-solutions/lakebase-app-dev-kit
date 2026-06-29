@@ -27,6 +27,7 @@ export * from "./branch-schema.js";
 export * from "./paired-branch.js";
 export * from "./branch-utils.js";
 export { createProject } from "./create-project.js";
+export * from "./create-preflight.js";
 export * from "./env-file.js";
 export * from "./enable-e2e.js";
 export * from "./enable-infra.js";

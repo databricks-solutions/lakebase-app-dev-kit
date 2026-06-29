@@ -8,7 +8,6 @@
 import * as fs from "node:fs";
 import { ARTIFACT_ROOT } from "../sftdd/sftdd-paths.js";
 import * as path from "node:path";
-import { spawnSync } from "node:child_process";
 import { writeEnvFile } from "./env-file.js";
 import { verifyProject, verifyHooks, verifyWorkflows } from "./project-verify.js";
 import { createRepo, getRepoFullName, getCurrentUser } from "../github/repo.js";
@@ -19,6 +18,13 @@ import {
   createLakebaseProject,
   getDefaultBranchId,
 } from "./lakebase-project.js";
+import {
+  checkDatabricksAuth,
+  databricksAuthPrereqMessage,
+  warmAndVerifyKit,
+  kitWarmWarning,
+  withLakebaseRollback,
+} from "./create-preflight.js";
 import { scaffoldAll } from "./scaffold.js";
 import { createLongRunningBranch } from "./long-running-branch.js";
 import { enableE2eForProject } from "./enable-e2e.js";
@@ -167,9 +173,26 @@ export async function createProject(
   if (useGithub && !input.githubOwner) {
     throw new Error("GitHub owner is required when creating a GitHub repository");
   }
+  // Cheap, pure-input validation runs BEFORE the auth probe so a bad request
+  // fails without shelling out (and so the failure is the specific input error,
+  // not a masking auth error).
+  if (!useGithub && fs.existsSync(projectDir)) {
+    throw new Error(`Directory already exists: ${projectDir}`);
+  }
   const fullRepoName = input.githubOwner
     ? `${input.githubOwner}/${input.projectName}`
     : "";
+
+  // ── Step 0: Databricks auth precondition (W5) ─────────────────
+  // Probe auth up front. Without this, a missing/stale token fails cryptically
+  // several steps in (at createLakebaseProject), after a GitHub repo may already
+  // exist. Surfacing the one-time `databricks auth login` prereq here is the
+  // single most common setup blocker, and it fails before anything is created.
+  report("Checking Databricks authentication...");
+  const auth = await checkDatabricksAuth(host);
+  if (!auth.ok) {
+    throw new Error(databricksAuthPrereqMessage(host, auth.reason));
+  }
 
   // ── Step 1+2: GitHub repo + clone, OR local-only setup ────────
   if (useGithub) {
@@ -228,6 +251,14 @@ export async function createProject(
   // ── Step 3: Lakebase project ──────────────────────────────────
   report("Creating Lakebase database...", lakebaseProjectId);
   await createLakebaseProject({ projectId: lakebaseProjectId, host });
+
+  // From here on the Lakebase project EXISTS. If any later step throws, roll it
+  // back (W9) so the slug isn't orphaned , a retry with the same name would
+  // otherwise collide with the reserved/soft-deleted slug. The wrapper rethrows
+  // with rollback context.
+  return await withLakebaseRollback(
+    { projectId: lakebaseProjectId, host, report },
+    async (): Promise<CreateProjectResult> => {
 
   // ── Step 4: Default branch lookup (non-fatal if not ready yet) ─
   report("Resolving database endpoint...");
@@ -378,30 +409,37 @@ export async function createProject(
     }
   }
 
-  // ── Step 7e: pin the kit ref + warm the fast-CLI cache (npx-tax kill) ──
+  // ── Step 7e: pin the kit ref + warm AND VERIFY the fast-CLI cache (W3) ──
   // The scaffolded scripts/lk runs kit CLIs via `node dist/...` (~0.09s) instead
   // of npx-from-github (~3.5s/call, re-resolves the ref every time). lk resolves
   // the kit per ref into a shared cache. Record the ref this project was
   // scaffolded with WHEN PINNED (LAKEBASE_KIT_REF) so lk resolves it from a file
   // (a claude -p agent's bash does not inherit env); unset means lk defaults to
-  // "main", matching today's npx default. Then warm the cache once so the first
-  // workflow call is already fast. Best-effort: lk installs lazily on first use.
+  // "main", matching today's npx default.
+  //
+  // Then warm the cache AND verify a CLI resolves. A silent warm failure used to
+  // surface later as a mysterious commit-time hang; the commit no longer hangs
+  // (W2), so a failed warm would instead silently skip schema-diff enrichment.
+  // Verifying here and reporting a specific reason + remediation makes the
+  // problem visible AT CREATE TIME, where it can be fixed. The project is still
+  // usable, so this is a loud warning rather than a fatal abort.
   if (enableTdd) {
-    try {
-      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
-      if (kitRef) {
+    const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+    if (kitRef) {
+      try {
         const dir = path.join(projectDir, ".lakebase");
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, "kit-ref"), `${kitRef}\n`, "utf8");
+      } catch (err) {
+        warnings.push(`Kit ref pin failed (advisory): ${err instanceof Error ? err.message : String(err)}.`);
       }
-      const lk = path.join(projectDir, "scripts", "lk");
-      if (fs.existsSync(lk)) {
-        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 180000 });
-      }
-    } catch (err) {
-      warnings.push(
-        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`,
-      );
+    }
+    report("Warming + verifying the kit fast-CLI cache...");
+    const warm = warmAndVerifyKit(projectDir);
+    if (!warm.ok) {
+      const msg = kitWarmWarning(projectDir, warm.reason);
+      warnings.push(msg);
+      report(`Warning: ${msg}`);
     }
   }
 
@@ -499,6 +537,9 @@ export async function createProject(
     lakebaseDefaultBranch: defaultBranchId,
     warnings,
   };
+
+    } // end withLakebaseRollback closure
+  );
 }
 
 // Re-exports for callers that only need ported leaves.
