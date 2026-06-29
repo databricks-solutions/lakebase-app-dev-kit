@@ -158,6 +158,59 @@ describe.skipIf(!e2eReady)("createProject – live end-to-end (LAKEBASE_TEST_E2E
   }, E2E_TIMEOUT_MS);
 });
 
+// Full create flow WITH a real GitHub repo. Gated on an explicit owner env so
+// it never fires in ordinary CI (it creates + deletes a real repo). Uses
+// github-hosted runners to skip the ~250MB self-hosted runner download.
+const ghOwner = process.env.LAKEBASE_TEST_GITHUB_OWNER;
+const ghE2eReady = e2eReady && !!ghOwner;
+
+describe.skipIf(!ghE2eReady)("createProject – live end-to-end WITH GitHub", () => {
+  const E2E_TIMEOUT_MS = 240_000;
+  let createdProjectIds: Array<{ id: string; host: string }> = [];
+  let createdRepos: string[] = [];
+
+  afterEach(async () => {
+    for (const { id, host } of createdProjectIds) {
+      try { await deleteLakebaseProject({ projectId: id, host }); } catch { /* best effort */ }
+    }
+    createdProjectIds = [];
+    for (const repo of createdRepos) {
+      try { execFileSync("gh", ["repo", "delete", repo, "--yes"], { stdio: "ignore", timeout: 30_000 }); } catch { /* best effort */ }
+    }
+    createdRepos = [];
+  });
+
+  it("provisions Lakebase + a GitHub repo; warms cleanly; auth precondition + rollback wrap intact", async () => {
+    const parent = mkTmp();
+    const host = e2eHost!;
+    const projectName = `lbscm-gh-${Date.now()}`;
+    const fullRepo = `${ghOwner}/${projectName}`;
+    createdProjectIds.push({ id: projectName, host });
+    createdRepos.push(fullRepo);
+
+    const result = await createProject({
+      projectName,
+      parentDir: parent,
+      databricksHost: host,
+      createGithubRepo: true,
+      githubOwner: ghOwner,
+      privateRepo: true,
+      language: "python",
+      runnerType: "github-hosted",
+    });
+
+    // GitHub side created + cloned + committed.
+    expect(result.githubRepoUrl).toContain(fullRepo);
+    expect(fs.existsSync(path.join(result.projectDir, ".git"))).toBe(true);
+    expect(fs.existsSync(path.join(result.projectDir, "pyproject.toml"))).toBe(true);
+    // W5: getting here means the up-front auth precondition passed (a bad token
+    // would have thrown before any repo/project was created).
+    expect(result.lakebaseProjectId).toBe(projectName);
+    // W3: kit warmed cleanly on the happy path.
+    expect(result.warnings.find((w) => /could not be warmed/.test(w))).toBeUndefined();
+  }, E2E_TIMEOUT_MS);
+});
+
 describe("createProject – skip-when-e2e-disabled", () => {
   it("documents the skip reason when LAKEBASE_TEST_E2E is unset", () => {
     if (liveE2E) return;
