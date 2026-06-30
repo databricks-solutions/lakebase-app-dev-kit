@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.6] - 2026-06-30
+
+EMU / CI robustness, surfaced by a partner project on an Enterprise Managed Users
+org.
+
+### Fixed
+
+- **Host-aliased git remotes resolve to the correct owner/repo.** `getGitHubUrl`
+  only normalized a literal `git@github.com:` remote, so an SSH host-alias remote
+  (common for EMU, e.g. `org-140212977@github-emu:databricks-field-eng/partner-
+  asset-tracker.git`) was mis-parsed into a garbage owner and every owner/repo API
+  call 404'd , Create PR and self-hosted runner setup both failed with "Not
+  Found". The normalizer now extracts owner/repo after any host (SCP, `ssh://`,
+  `https://`, with or without a user) and re-homes it on github.com.
+
+### Added
+
+- **`getActionsEnabled(ownerRepo)`** , reports whether GitHub Actions is enabled
+  for a repo (returns `undefined` when undeterminable, so a missing token never
+  false-alarms). Used by the new scm-doctor check + the extension's Health Check.
+- **scm-doctor `github-actions-disabled` finding** , when Actions is off (commonly
+  an org policy on EMU repos a repo admin cannot override), the kit's CI workflows
+  (pr.yml / merge.yml) silently never run; the doctor now surfaces this explicitly
+  with remediation instead of leaving "CI never happened" unexplained.
+
 ## [0.3.0-beta.5] - 2026-06-29
 
 Greenfield hardening: scaffolded-project fixes surfaced by a hands-on evaluation
