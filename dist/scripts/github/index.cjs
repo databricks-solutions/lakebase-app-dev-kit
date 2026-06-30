@@ -42,6 +42,7 @@ __export(github_exports, {
   deleteRunner: () => deleteRunner,
   diagnoseGitHubAuth: () => diagnoseGitHubAuth,
   fastForwardBranch: () => fastForwardBranch,
+  getActionsEnabled: () => getActionsEnabled,
   getCurrentUser: () => getCurrentUser,
   getPullRequest: () => getPullRequest,
   getPullRequestComments: () => getPullRequestComments,
@@ -234,6 +235,16 @@ async function repoExists(name) {
   } catch (err) {
     if (err instanceof import_octokit.RequestError && err.status === 404) return false;
     wrap(err, `Failed to check repository "${name}"`);
+  }
+}
+async function getActionsEnabled(ownerRepo) {
+  try {
+    const { owner, repo } = parseOwnerRepo(ownerRepo);
+    const ctx = await newContext();
+    const { data } = await ctx.octokit.rest.actions.getGithubActionsPermissionsRepository({ owner, repo });
+    return data.enabled;
+  } catch {
+    return void 0;
   }
 }
 async function getRepoFullName(name) {
@@ -921,6 +932,7 @@ async function mergePairedPullRequest(args) {
   deleteRunner,
   diagnoseGitHubAuth,
   fastForwardBranch,
+  getActionsEnabled,
   getCurrentUser,
   getPullRequest,
   getPullRequestComments,

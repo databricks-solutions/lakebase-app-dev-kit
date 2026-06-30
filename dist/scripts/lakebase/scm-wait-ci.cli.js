@@ -250,8 +250,24 @@ function exec2(command, opts = {}) {
 // scripts/git/remote.ts
 async function getGitHubUrl(cwd) {
   try {
-    const url = (await exec2("git remote get-url origin", { cwd, timeout: 5e3 })).trim();
-    return url.replace(/\.git$/, "").replace(/^git@github\.com:/, "https://github.com/").replace(/^ssh:\/\/git@github\.com\//, "https://github.com/");
+    const raw = (await exec2("git remote get-url origin", { cwd, timeout: 5e3 })).trim();
+    if (!raw) {
+      return "";
+    }
+    const url = raw.replace(/\.git$/, "");
+    const scp = url.match(/^(?:[^@/]+@)?[^/:]+:([^/].*)$/);
+    if (scp) {
+      return `https://github.com/${scp[1]}`;
+    }
+    const ssh = url.match(/^ssh:\/\/(?:[^@/]+@)?[^/]+\/(.+)$/);
+    if (ssh) {
+      return `https://github.com/${ssh[1]}`;
+    }
+    const https = url.match(/^https?:\/\/[^/]+\/(.+)$/);
+    if (https) {
+      return `https://github.com/${https[1]}`;
+    }
+    return "";
   } catch {
     return "";
   }

@@ -194,17 +194,17 @@ async function getConnection(args) {
   const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
   const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
-  const endpointPath = `projects/${args.instance}/branches/${branchId}/endpoints/${endpointName}`;
+  const endpointPath2 = `projects/${args.instance}/branches/${branchId}/endpoints/${endpointName}`;
   if (args.output === "dsn") {
     const host2 = await resolveEndpointHost(args.instance, branchId);
-    const { token, email: email2 } = await mintCredential(endpointPath);
+    const { token, email: email2 } = await mintCredential(endpointPath2);
     const url = buildPostgresUrl({ host: host2, port: POSTGRES_PORT, database, user: email2, password: token });
-    return { url, host: host2, port: POSTGRES_PORT, database, user: email2, endpointPath };
+    return { url, host: host2, port: POSTGRES_PORT, database, user: email2, endpointPath: endpointPath2 };
   }
   const host = await resolveEndpointHost(args.instance, branchId);
   const email = await resolveCurrentUser();
   return createLakebasePool({
-    endpoint: endpointPath,
+    endpoint: endpointPath2,
     host,
     database,
     user: email,
@@ -227,11 +227,11 @@ async function resolveEndpointHost(instance, branch) {
   }
   return host;
 }
-async function mintCredential(endpointPath) {
-  const raw = dbcli2(["postgres", "generate-database-credential", endpointPath, "-o", "json"]);
+async function mintCredential(endpointPath2) {
+  const raw = dbcli2(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
   const token = JSON.parse(raw)?.token ?? "";
   if (!token) {
-    throw new Error(`generate-database-credential returned no token for ${endpointPath}`);
+    throw new Error(`generate-database-credential returned no token for ${endpointPath2}`);
   }
   const email = await resolveCurrentUser();
   return { token, email };
@@ -270,9 +270,41 @@ stderr: ${stderr.trim()}` : ""}`
 }
 
 // scripts/lakebase/schema-diff.ts
+import { execFileSync as execFileSync3 } from "child_process";
+
+// scripts/lakebase/branch-schema.ts
+import { Client as Client2 } from "pg";
+
+// scripts/lakebase/branch-endpoint.ts
 import { execFileSync as execFileSync2 } from "child_process";
+
+// scripts/lakebase/branch-schema.ts
+var SYSTEM_SCHEMA_FILTER = "c.table_schema NOT IN ('pg_catalog','information_schema') AND c.table_schema NOT LIKE 'pg_%'";
+function isAllSchemas(schema) {
+  const s = (schema ?? "").trim().toLowerCase();
+  return s === "all" || s === "*";
+}
+function buildSchemaQuery(schema) {
+  const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
+  const join8 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  if (isAllSchemas(schema)) {
+    return {
+      text: `SELECT ${cols} ` + join8 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
+      values: []
+    };
+  }
+  const one = (schema ?? "").trim() || "public";
+  return {
+    text: `SELECT ${cols} ` + join8 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
+    values: [one]
+  };
+}
+function schemaObjectName(row, allSchemas) {
+  return allSchemas ? `${row.table_schema}.${row.table_name}` : row.table_name;
+}
+
+// scripts/lakebase/schema-diff.ts
 var IGNORED_TABLES = /* @__PURE__ */ new Set(["flyway_schema_history"]);
-var SCHEMA_QUERY = "SELECT c.table_name, c.column_name, c.data_type FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename WHERE c.table_schema='public' AND t.schemaname='public' ORDER BY c.table_name, c.ordinal_position";
 async function getSchemaDiff(args) {
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
   const baseResult = {
@@ -310,8 +342,8 @@ async function getSchemaDiff(args) {
       database: args.database,
       workspaceClient: args.workspaceClient
     });
-    const targetTables = await listTables(targetPool);
-    const comparisonTables = await listTables(comparisonPool);
+    const targetTables = await listTables(targetPool, args.schema);
+    const comparisonTables = await listTables(comparisonPool, args.schema);
     return diffSchemas(args.branch, comparisonBranch, targetTables, comparisonTables, timestamp);
   } catch (err) {
     return {
@@ -324,13 +356,16 @@ async function getSchemaDiff(args) {
     if (comparisonPool) await comparisonPool.end().catch(() => void 0);
   }
 }
-async function listTables(pool) {
-  const { rows } = await pool.query(SCHEMA_QUERY);
+async function listTables(pool, schema) {
+  const allSchemas = isAllSchemas(schema);
+  const query = buildSchemaQuery(schema);
+  const { rows } = await pool.query(query.text, query.values);
   const tables = /* @__PURE__ */ new Map();
   for (const r of rows) {
     if (!r.table_name || IGNORED_TABLES.has(r.table_name)) continue;
-    if (!tables.has(r.table_name)) tables.set(r.table_name, []);
-    tables.get(r.table_name).push({ name: r.column_name, dataType: r.data_type });
+    const key = schemaObjectName(r, allSchemas);
+    if (!tables.has(key)) tables.set(key, []);
+    tables.get(key).push({ name: r.column_name, dataType: r.data_type });
   }
   return tables;
 }
@@ -420,7 +455,7 @@ function findDefaultBranch(instance) {
   }
 }
 function dbcli3(args) {
-  return execFileSync2("databricks", args, {
+  return execFileSync3("databricks", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.cliDefault

@@ -1047,24 +1047,24 @@ async function createPairedBranch(args) {
   let envSynced = false;
   if (syncEnv && ready.state === "READY") {
     try {
-      const ep = await getEndpoint({ instance: args.instance, branch: sanitized });
-      if (!ep?.host) {
-        warnings.push(`Endpoint not yet available for "${sanitized}" \u2013 .env not updated`);
-      } else {
-        const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-        const dsn = buildDsn(ep.host, database, email, token);
-        const envPath = path2.join(args.cwd, ".env");
-        updateEnvConnection({
-          envPath,
-          branchId: sanitized,
-          databaseUrl: dsn,
-          username: email,
-          password: token,
-          endpointHost: ep.host
-        });
-        await ensureProfilePinned({ envPath }).catch(() => void 0);
-        envSynced = true;
-      }
+      const ep = await ensureEndpoint({
+        instance: args.instance,
+        branch: sanitized,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
+      });
+      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
+      const dsn = buildDsn(ep.host, database, email, token);
+      const envPath = path2.join(args.cwd, ".env");
+      updateEnvConnection({
+        envPath,
+        branchId: sanitized,
+        databaseUrl: dsn,
+        username: email,
+        password: token,
+        endpointHost: ep.host
+      });
+      await ensureProfilePinned({ envPath }).catch(() => void 0);
+      envSynced = true;
     } catch (err) {
       warnings.push(
         `.env sync failed: ${err instanceof Error ? err.message : String(err)}`

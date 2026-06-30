@@ -169,6 +169,16 @@ async function repoExists(name) {
     wrap(err, `Failed to check repository "${name}"`);
   }
 }
+async function getActionsEnabled(ownerRepo) {
+  try {
+    const { owner, repo } = parseOwnerRepo(ownerRepo);
+    const ctx = await newContext();
+    const { data } = await ctx.octokit.rest.actions.getGithubActionsPermissionsRepository({ owner, repo });
+    return data.enabled;
+  } catch {
+    return void 0;
+  }
+}
 async function getRepoFullName(name) {
   try {
     const { owner, repo } = parseOwnerRepo(name);
@@ -853,6 +863,7 @@ export {
   deleteRunner,
   diagnoseGitHubAuth,
   fastForwardBranch,
+  getActionsEnabled,
   getCurrentUser,
   getPullRequest,
   getPullRequestComments,

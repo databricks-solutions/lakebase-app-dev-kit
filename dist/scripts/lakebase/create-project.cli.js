@@ -8,7 +8,7 @@ var getDirname = () => path.dirname(getFilename());
 var __dirname = /* @__PURE__ */ getDirname();
 
 // scripts/lakebase/create-project.ts
-import * as fs15 from "fs";
+import * as fs16 from "fs";
 
 // scripts/sftdd/sftdd-paths.ts
 import * as fs from "fs";
@@ -16,8 +16,7 @@ import { join } from "path";
 var ARTIFACT_ROOT = ".sftdd";
 
 // scripts/lakebase/create-project.ts
-import * as path14 from "path";
-import { spawnSync } from "child_process";
+import * as path15 from "path";
 
 // scripts/lakebase/env-file.ts
 import * as fs2 from "fs";
@@ -303,9 +302,9 @@ function asBranchUid(s) {
   }
   return s;
 }
-function branchNameFromResourcePath(path15) {
-  if (!path15.includes("/branches/")) return null;
-  const leaf = path15.split("/branches/").pop();
+function branchNameFromResourcePath(path16) {
+  if (!path16.includes("/branches/")) return null;
+  const leaf = path16.split("/branches/").pop();
   if (!leaf) return null;
   try {
     return asBranchName(leaf);
@@ -377,6 +376,10 @@ async function createLakebaseProject(args) {
     state: status?.current_state ?? result.state ?? "READY"
   };
 }
+async function deleteLakebaseProject(args) {
+  const name = args.projectId.startsWith("projects/") ? args.projectId : `projects/${args.projectId}`;
+  await dbcli(["postgres", "delete-project", name, "-o", "json"], args.host);
+}
 function findDefaultBranchName(items) {
   const def = items.find((b) => b.status?.default === true || b.is_default === true);
   if (!def || !def.name) return null;
@@ -443,43 +446,130 @@ stderr: ${stderr.trim()}` : ""}`
   }
 }
 
+// scripts/lakebase/create-preflight.ts
+import { execFile as execFile2, spawnSync } from "child_process";
+import { promisify as promisify2 } from "util";
+import * as fs4 from "fs";
+import * as path4 from "path";
+var execFileP2 = promisify2(execFile2);
+function lastLines(s, n = 3) {
+  return (s ?? "").trim().split("\n").filter(Boolean).slice(-n).join("; ");
+}
+async function checkDatabricksAuth(host) {
+  const trimmedHost = host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
+  const profileArg = process.env.DATABRICKS_CONFIG_PROFILE ? ["--profile", process.env.DATABRICKS_CONFIG_PROFILE] : [];
+  try {
+    await execFileP2("databricks", ["current-user", "me", "-o", "json", ...profileArg], {
+      env,
+      timeout: 8e3
+    });
+    return { ok: true };
+  } catch (err) {
+    const e = err;
+    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
+    return { ok: false, reason: lastLines(stderr, 2) || e.message || "databricks current-user me failed" };
+  }
+}
+function databricksAuthPrereqMessage(host, reason) {
+  const hostFlag = host ? ` --host ${host.replace(/\/+$/, "")}` : "";
+  return `Databricks authentication is required before creating a project. Run: databricks auth login${hostFlag}` + (reason ? `
+(auth probe failed: ${reason})` : "");
+}
+function warmAndVerifyKit(projectDir, timeoutMs = 18e4) {
+  const lk = path4.join(projectDir, "scripts", "lk");
+  if (!fs4.existsSync(lk)) {
+    return { ok: false, reason: "scripts/lk shim missing from the scaffold" };
+  }
+  const warm = spawnSync("bash", [lk, "--warm"], { cwd: projectDir, encoding: "utf-8", timeout: timeoutMs });
+  if (warm.status !== 0) {
+    return { ok: false, reason: lastLines(warm.stderr) || `lk --warm exited ${warm.status ?? "(killed)"}` };
+  }
+  const verify = spawnSync("bash", [lk, "lakebase-schema-diff", "--help"], {
+    cwd: projectDir,
+    encoding: "utf-8",
+    timeout: 3e4,
+    env: { ...process.env, LK_NO_INSTALL: "1" }
+  });
+  if (verify.status !== 0) {
+    return {
+      ok: false,
+      reason: `kit warmed but a CLI did not resolve: ${lastLines(verify.stderr) || `exit ${verify.status}`}`
+    };
+  }
+  return { ok: true };
+}
+function kitWarmWarning(projectDir, reason) {
+  return `Kit could not be warmed at create: ${reason ?? "unknown reason"}. Commit-time schema diff will be unavailable until the kit warms; run: (cd ${projectDir} && ./scripts/lk --warm). Check network access to github.com / npm.`;
+}
+async function withLakebaseRollback(opts, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    const del = opts.deleteProject ?? deleteLakebaseProject;
+    const report = opts.report ?? (() => {
+    });
+    report(`Create failed; rolling back Lakebase project ${opts.projectId}...`);
+    let rolledBack = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await del({ projectId: opts.projectId, host: opts.host });
+        rolledBack = true;
+        break;
+      } catch (delErr) {
+        const m = delErr instanceof Error ? delErr.message : String(delErr);
+        if (/not.?found/i.test(m)) {
+          rolledBack = true;
+          break;
+        }
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1e3 * attempt));
+      }
+    }
+    const base = err instanceof Error ? err.message : String(err);
+    const suffix = rolledBack ? ` (rolled back the Lakebase project "${opts.projectId}", so you can retry with the same name)` : ` (WARNING: could not roll back the Lakebase project "${opts.projectId}"; purge it before retrying: databricks postgres delete-project ${opts.projectId})`;
+    const wrapped = err instanceof Error ? err : new Error(base);
+    wrapped.message = `${base}${suffix}`;
+    throw wrapped;
+  }
+}
+
 // scripts/lakebase/scaffold.ts
 import * as cp2 from "child_process";
-import * as fs9 from "fs";
-import * as path8 from "path";
+import * as fs10 from "fs";
+import * as path9 from "path";
 import { fileURLToPath as fileURLToPath4 } from "url";
 
 // scripts/lakebase/scaffold-language.ts
-import * as fs8 from "fs";
-import * as path7 from "path";
+import * as fs9 from "fs";
+import * as path8 from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 
 // scripts/util/copy-dir-substituted.ts
-import * as fs4 from "fs";
-import * as path4 from "path";
+import * as fs5 from "fs";
+import * as path5 from "path";
 var SKIP_ENTRIES = /* @__PURE__ */ new Set([".gitignore.extra", "fallback"]);
 function copyDirSubstituted(srcDir, destDir, args = {}) {
   const skip = args.skipEntries ?? SKIP_ENTRIES;
-  fs4.mkdirSync(destDir, { recursive: true });
-  for (const file of fs4.readdirSync(srcDir)) {
+  fs5.mkdirSync(destDir, { recursive: true });
+  for (const file of fs5.readdirSync(srcDir)) {
     if (skip.has(file)) continue;
-    const srcPath = path4.join(srcDir, file);
-    const destPath = path4.join(destDir, file);
-    if (fs4.statSync(srcPath).isDirectory()) {
+    const srcPath = path5.join(srcDir, file);
+    const destPath = path5.join(destDir, file);
+    if (fs5.statSync(srcPath).isDirectory()) {
       copyDirSubstituted(srcPath, destPath, { projectName: args.projectName, skipEntries: /* @__PURE__ */ new Set() });
     } else {
-      let content = fs4.readFileSync(srcPath, "utf-8");
+      let content = fs5.readFileSync(srcPath, "utf-8");
       if (args.projectName) {
         content = content.replace(/\{\{PROJECT_NAME\}\}/g, args.projectName);
       }
-      fs4.writeFileSync(destPath, content);
+      fs5.writeFileSync(destPath, content);
     }
   }
 }
 
 // scripts/lakebase/spring-initializr.ts
-import * as fs7 from "fs";
-import * as path6 from "path";
+import * as fs8 from "fs";
+import * as path7 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 
 // scripts/util/maven-coords.ts
@@ -495,34 +585,34 @@ function sanitizeArtifactId(name) {
 }
 
 // scripts/util/zip-extract.ts
-import * as fs5 from "fs";
-import * as path5 from "path";
+import * as fs6 from "fs";
+import * as path6 from "path";
 import AdmZip from "adm-zip";
 function extractZipToDir(zipBuffer, targetDir) {
-  fs5.mkdirSync(targetDir, { recursive: true });
+  fs6.mkdirSync(targetDir, { recursive: true });
   const zip = new AdmZip(zipBuffer);
-  const tempDir = path5.join(targetDir, `.initializr-extract-${Date.now()}`);
+  const tempDir = path6.join(targetDir, `.initializr-extract-${Date.now()}`);
   zip.extractAllTo(tempDir, true);
-  const entries = fs5.readdirSync(tempDir).filter((e) => e !== "__MACOSX");
-  const sourceDir = entries.length === 1 && fs5.statSync(path5.join(tempDir, entries[0])).isDirectory() ? path5.join(tempDir, entries[0]) : tempDir;
+  const entries = fs6.readdirSync(tempDir).filter((e) => e !== "__MACOSX");
+  const sourceDir = entries.length === 1 && fs6.statSync(path6.join(tempDir, entries[0])).isDirectory() ? path6.join(tempDir, entries[0]) : tempDir;
   copyDirRecursive(sourceDir, targetDir);
-  fs5.rmSync(tempDir, { recursive: true, force: true });
+  fs6.rmSync(tempDir, { recursive: true, force: true });
 }
 function copyDirRecursive(src, dest) {
-  fs5.mkdirSync(dest, { recursive: true });
-  for (const entry of fs5.readdirSync(src)) {
-    const srcPath = path5.join(src, entry);
-    const destPath = path5.join(dest, entry);
-    if (fs5.statSync(srcPath).isDirectory()) {
+  fs6.mkdirSync(dest, { recursive: true });
+  for (const entry of fs6.readdirSync(src)) {
+    const srcPath = path6.join(src, entry);
+    const destPath = path6.join(dest, entry);
+    if (fs6.statSync(srcPath).isDirectory()) {
       copyDirRecursive(srcPath, destPath);
     } else {
-      fs5.copyFileSync(srcPath, destPath);
+      fs6.copyFileSync(srcPath, destPath);
     }
   }
 }
 
 // scripts/util/pom-patch.ts
-import * as fs6 from "fs";
+import * as fs7 from "fs";
 var FLYWAY_PG_DEPENDENCY = `
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -544,13 +634,14 @@ var LAKEBASE_PLUGINS = `
                     <user>\${env.SPRING_DATASOURCE_USERNAME}</user>
                     <password>\${env.SPRING_DATASOURCE_PASSWORD}</password>
                     <baselineOnMigrate>true</baselineOnMigrate>
+                    <baselineVersion>0</baselineVersion>
                 </configuration>
             </plugin>`;
 function patchPomForLakebase(pomPath) {
-  if (!fs6.existsSync(pomPath)) {
+  if (!fs7.existsSync(pomPath)) {
     throw new Error(`pom.xml not found at ${pomPath}`);
   }
-  let pom = fs6.readFileSync(pomPath, "utf-8");
+  let pom = fs7.readFileSync(pomPath, "utf-8");
   if (!pom.includes("flyway-database-postgresql")) {
     pom = pom.replace("</dependencies>", `${FLYWAY_PG_DEPENDENCY}
     </dependencies>`);
@@ -579,7 +670,7 @@ function patchPomForLakebase(pomPath) {
         </plugins>`
     );
   }
-  fs6.writeFileSync(pomPath, pom);
+  fs7.writeFileSync(pomPath, pom);
 }
 
 // scripts/lakebase/spring-initializr.ts
@@ -733,15 +824,15 @@ function parseMetadata(body) {
 var cachedTemplatesDir;
 function findTemplatesDir() {
   if (cachedTemplatesDir) return cachedTemplatesDir;
-  const here = path6.dirname(fileURLToPath2(import.meta.url));
+  const here = path7.dirname(fileURLToPath2(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path6.join(dir, "templates", "project");
-    if (fs7.existsSync(path6.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path7.join(dir, "templates", "project");
+    if (fs8.existsSync(path7.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir = candidate;
       return cachedTemplatesDir;
     }
-    const parent = path6.dirname(dir);
+    const parent = path7.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -776,12 +867,12 @@ async function deploySpringStarter(args) {
     });
     extractZipToDir(zip, args.targetDir);
     initializrExtracted = true;
-    const pomPath = path6.join(args.targetDir, "pom.xml");
-    if (!fs7.existsSync(pomPath)) {
+    const pomPath = path7.join(args.targetDir, "pom.xml");
+    if (!fs8.existsSync(pomPath)) {
       throw new Error("Spring Initializr did not produce a Maven project (missing pom.xml)");
     }
-    const mvnw = path6.join(args.targetDir, "mvnw");
-    if (fs7.existsSync(mvnw)) fs7.chmodSync(mvnw, 493);
+    const mvnw = path7.join(args.targetDir, "mvnw");
+    if (fs8.existsSync(mvnw)) fs8.chmodSync(mvnw, 493);
     deploySpringOverlays(args.targetDir, templatesDir);
     patchPomForLakebase(pomPath);
   } catch (err) {
@@ -798,26 +889,26 @@ async function deploySpringStarter(args) {
   }
 }
 function deploySpringFallback(targetDir, language, projectName, templatesDir) {
-  const fallbackDir = path6.join(templatesDir, language, "fallback");
-  if (!fs7.existsSync(fallbackDir)) {
+  const fallbackDir = path7.join(templatesDir, language, "fallback");
+  if (!fs8.existsSync(fallbackDir)) {
     throw new Error(`No fallback template found for language: ${language}`);
   }
   copyDirSubstituted(fallbackDir, targetDir, { projectName });
-  const mvnw = path6.join(targetDir, "mvnw");
-  if (fs7.existsSync(mvnw)) fs7.chmodSync(mvnw, 493);
+  const mvnw = path7.join(targetDir, "mvnw");
+  if (fs8.existsSync(mvnw)) fs8.chmodSync(mvnw, 493);
 }
 function deploySpringOverlays(targetDir, templatesDir) {
-  const overlayDir = path6.join(templatesDir, "spring");
-  if (!fs7.existsSync(overlayDir)) {
+  const overlayDir = path7.join(templatesDir, "spring");
+  if (!fs8.existsSync(overlayDir)) {
     throw new Error(`Spring overlay template not found at ${overlayDir}`);
   }
   copyDirSubstituted(overlayDir, targetDir);
 }
 function clearScaffoldArtifacts(targetDir) {
-  if (!fs7.existsSync(targetDir)) return;
-  for (const entry of fs7.readdirSync(targetDir)) {
+  if (!fs8.existsSync(targetDir)) return;
+  for (const entry of fs8.readdirSync(targetDir)) {
     if (entry === ".git") continue;
-    fs7.rmSync(path6.join(targetDir, entry), { recursive: true, force: true });
+    fs8.rmSync(path7.join(targetDir, entry), { recursive: true, force: true });
   }
 }
 
@@ -825,15 +916,15 @@ function clearScaffoldArtifacts(targetDir) {
 var cachedTemplatesDir2;
 function findTemplatesDir2() {
   if (cachedTemplatesDir2) return cachedTemplatesDir2;
-  const here = path7.dirname(fileURLToPath3(import.meta.url));
+  const here = path8.dirname(fileURLToPath3(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path7.join(dir, "templates", "project");
-    if (fs8.existsSync(path7.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path8.join(dir, "templates", "project");
+    if (fs9.existsSync(path8.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir2 = candidate;
       return cachedTemplatesDir2;
     }
-    const parent = path7.dirname(dir);
+    const parent = path8.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -852,8 +943,8 @@ async function deployLanguageProject(args) {
     return;
   }
   const templatesDir = args.templatesDir ?? findTemplatesDir2();
-  const langSrc = path7.join(templatesDir, args.language);
-  if (!fs8.existsSync(langSrc)) {
+  const langSrc = path8.join(templatesDir, args.language);
+  if (!fs9.existsSync(langSrc)) {
     throw new Error(`No template found for language: ${args.language}`);
   }
   copyDirSubstituted(langSrc, args.targetDir, { projectName: args.projectName });
@@ -863,15 +954,15 @@ async function deployLanguageProject(args) {
 var cachedTemplatesDir3;
 function findTemplatesDir3() {
   if (cachedTemplatesDir3) return cachedTemplatesDir3;
-  const here = path8.dirname(fileURLToPath4(import.meta.url));
+  const here = path9.dirname(fileURLToPath4(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path8.join(dir, "templates", "project");
-    if (fs9.existsSync(path8.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path9.join(dir, "templates", "project");
+    if (fs10.existsSync(path9.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir3 = candidate;
       return cachedTemplatesDir3;
     }
-    const parent = path8.dirname(dir);
+    const parent = path9.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -883,27 +974,27 @@ function templatesRoot(opts) {
   return opts?.templatesDir ?? findTemplatesDir3();
 }
 function commonDir(opts) {
-  return path8.join(templatesRoot(opts), "common");
+  return path9.join(templatesRoot(opts), "common");
 }
 function langDir(language, opts) {
-  return path8.join(templatesRoot(opts), language);
+  return path9.join(templatesRoot(opts), language);
 }
 function copyDir(srcDir, destDir, makeExecutable, relPrefix = "") {
-  if (!fs9.existsSync(srcDir)) {
+  if (!fs10.existsSync(srcDir)) {
     throw new Error(`Source directory not found: ${srcDir}`);
   }
-  fs9.mkdirSync(destDir, { recursive: true });
+  fs10.mkdirSync(destDir, { recursive: true });
   const out = [];
-  for (const entry of fs9.readdirSync(srcDir)) {
-    const srcPath = path8.join(srcDir, entry);
-    const destPath = path8.join(destDir, entry);
-    const relPath = relPrefix ? path8.join(relPrefix, entry) : entry;
-    if (fs9.statSync(srcPath).isDirectory()) {
+  for (const entry of fs10.readdirSync(srcDir)) {
+    const srcPath = path9.join(srcDir, entry);
+    const destPath = path9.join(destDir, entry);
+    const relPath = relPrefix ? path9.join(relPrefix, entry) : entry;
+    if (fs10.statSync(srcPath).isDirectory()) {
       out.push(...copyDir(srcPath, destPath, makeExecutable, relPath));
     } else {
-      fs9.copyFileSync(srcPath, destPath);
+      fs10.copyFileSync(srcPath, destPath);
       if (makeExecutable) {
-        fs9.chmodSync(destPath, 493);
+        fs10.chmodSync(destPath, 493);
       }
       out.push(relPath);
     }
@@ -911,52 +1002,52 @@ function copyDir(srcDir, destDir, makeExecutable, relPrefix = "") {
   return out;
 }
 async function deployScripts(targetDir, opts) {
-  return copyDir(path8.join(commonDir(opts), "scripts"), path8.join(targetDir, "scripts"), true);
+  return copyDir(path9.join(commonDir(opts), "scripts"), path9.join(targetDir, "scripts"), true);
 }
 async function deployClaudeCommands(targetDir, opts) {
-  const src = path8.join(commonDir(opts), ".claude", "commands");
-  if (!fs9.existsSync(src)) {
+  const src = path9.join(commonDir(opts), ".claude", "commands");
+  if (!fs10.existsSync(src)) {
     return { written: [], skipped: [] };
   }
-  const destDir = path8.join(targetDir, ".claude", "commands");
-  fs9.mkdirSync(destDir, { recursive: true });
+  const destDir = path9.join(targetDir, ".claude", "commands");
+  fs10.mkdirSync(destDir, { recursive: true });
   const version = kitVersion(opts);
   const written = [];
   const skipped = [];
-  for (const entry of fs9.readdirSync(src)) {
+  for (const entry of fs10.readdirSync(src)) {
     if (!entry.endsWith(".md")) continue;
-    const relDest = path8.join(".claude", "commands", entry);
-    const destPath = path8.join(targetDir, relDest);
-    if (fs9.existsSync(destPath) && !opts?.force) {
+    const relDest = path9.join(".claude", "commands", entry);
+    const destPath = path9.join(targetDir, relDest);
+    if (fs10.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    const before = fs9.readFileSync(path8.join(src, entry), "utf-8");
+    const before = fs10.readFileSync(path9.join(src, entry), "utf-8");
     const after = before.replace(/\$\{KIT_VERSION_AT_SCAFFOLD\}/g, version);
-    fs9.writeFileSync(destPath, after);
+    fs10.writeFileSync(destPath, after);
     written.push(relDest);
   }
   return { written, skipped };
 }
 async function deployClaudeAgents(targetDir, opts) {
-  const kitRoot = path8.dirname(path8.dirname(templatesRoot(opts)));
-  const src = path8.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
-  if (!fs9.existsSync(src)) {
+  const kitRoot = path9.dirname(path9.dirname(templatesRoot(opts)));
+  const src = path9.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
+  if (!fs10.existsSync(src)) {
     return { written: [], skipped: [] };
   }
-  const destDir = path8.join(targetDir, ".claude", "agents");
-  fs9.mkdirSync(destDir, { recursive: true });
+  const destDir = path9.join(targetDir, ".claude", "agents");
+  fs10.mkdirSync(destDir, { recursive: true });
   const written = [];
   const skipped = [];
-  for (const entry of fs9.readdirSync(src)) {
+  for (const entry of fs10.readdirSync(src)) {
     if (!entry.endsWith(".md")) continue;
-    const relDest = path8.join(".claude", "agents", entry);
-    const destPath = path8.join(targetDir, relDest);
-    if (fs9.existsSync(destPath) && !opts?.force) {
+    const relDest = path9.join(".claude", "agents", entry);
+    const destPath = path9.join(targetDir, relDest);
+    if (fs10.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    fs9.copyFileSync(path8.join(src, entry), destPath);
+    fs10.copyFileSync(path9.join(src, entry), destPath);
     written.push(relDest);
   }
   return { written, skipped };
@@ -972,40 +1063,40 @@ var PROJECT_SKILLS = [
   "databricks-core"
 ];
 async function deployClaudeSkills(targetDir, opts) {
-  const kitRoot = path8.dirname(path8.dirname(templatesRoot(opts)));
+  const kitRoot = path9.dirname(path9.dirname(templatesRoot(opts)));
   const written = [];
   const skipped = [];
   for (const skill of PROJECT_SKILLS) {
-    const src = path8.join(kitRoot, "skills", skill);
-    if (!fs9.existsSync(src)) continue;
-    const relDest = path8.join(".claude", "skills", skill);
-    const destPath = path8.join(targetDir, relDest);
-    if (fs9.existsSync(destPath) && !opts?.force) {
+    const src = path9.join(kitRoot, "skills", skill);
+    if (!fs10.existsSync(src)) continue;
+    const relDest = path9.join(".claude", "skills", skill);
+    const destPath = path9.join(targetDir, relDest);
+    if (fs10.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    fs9.mkdirSync(path8.dirname(destPath), { recursive: true });
-    fs9.cpSync(src, destPath, { recursive: true });
+    fs10.mkdirSync(path9.dirname(destPath), { recursive: true });
+    fs10.cpSync(src, destPath, { recursive: true });
     written.push(relDest);
   }
   return { written, skipped };
 }
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
-    path8.join(commonDir(opts), ".github", "workflows"),
-    path8.join(targetDir, ".github", "workflows"),
+    path9.join(commonDir(opts), ".github", "workflows"),
+    path9.join(targetDir, ".github", "workflows"),
     false
   );
   substituteWorkflowPlaceholders(
-    path8.join(targetDir, ".github", "workflows"),
+    path9.join(targetDir, ".github", "workflows"),
     opts
   );
   return written;
 }
 function kitVersion(opts) {
   try {
-    const kitRoot = path8.dirname(path8.dirname(templatesRoot(opts)));
-    const raw = fs9.readFileSync(path8.join(kitRoot, "package.json"), "utf-8");
+    const kitRoot = path9.dirname(path9.dirname(templatesRoot(opts)));
+    const raw = fs10.readFileSync(path9.join(kitRoot, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -1013,23 +1104,23 @@ function kitVersion(opts) {
   }
 }
 function substituteWorkflowPlaceholders(workflowDir, opts) {
-  if (!fs9.existsSync(workflowDir)) return;
+  if (!fs10.existsSync(workflowDir)) return;
   const version = kitVersion(opts);
-  for (const entry of fs9.readdirSync(workflowDir)) {
+  for (const entry of fs10.readdirSync(workflowDir)) {
     if (!entry.endsWith(".yml") && !entry.endsWith(".yaml")) continue;
-    const filePath = path8.join(workflowDir, entry);
-    const before = fs9.readFileSync(filePath, "utf-8");
+    const filePath = path9.join(workflowDir, entry);
+    const before = fs10.readFileSync(filePath, "utf-8");
     const after = before.replace(/\{\{LAKEBASE_KIT_VERSION\}\}/g, version);
-    if (after !== before) fs9.writeFileSync(filePath, after);
+    if (after !== before) fs10.writeFileSync(filePath, after);
   }
 }
 async function installHooks(targetDir) {
-  const scriptsDir = path8.join(targetDir, "scripts");
-  const gitHooksDir = path8.join(targetDir, ".git", "hooks");
-  if (!fs9.existsSync(path8.join(targetDir, ".git"))) {
+  const scriptsDir = path9.join(targetDir, "scripts");
+  const gitHooksDir = path9.join(targetDir, ".git", "hooks");
+  if (!fs10.existsSync(path9.join(targetDir, ".git"))) {
     throw new Error(`Not a git repo root: ${targetDir}`);
   }
-  fs9.mkdirSync(gitHooksDir, { recursive: true });
+  fs10.mkdirSync(gitHooksDir, { recursive: true });
   cp2.execSync("git config --local core.hooksPath .git/hooks", {
     cwd: targetDir,
     stdio: "pipe"
@@ -1042,18 +1133,18 @@ async function installHooks(targetDir) {
   ];
   const installed = [];
   for (const [srcName, hookName] of hookPairs) {
-    const src = path8.join(scriptsDir, srcName);
-    if (!fs9.existsSync(src)) continue;
-    const dest = path8.join(gitHooksDir, hookName);
-    fs9.copyFileSync(src, dest);
-    fs9.chmodSync(dest, 493);
+    const src = path9.join(scriptsDir, srcName);
+    if (!fs10.existsSync(src)) continue;
+    const dest = path9.join(gitHooksDir, hookName);
+    fs10.copyFileSync(src, dest);
+    fs10.chmodSync(dest, 493);
     installed.push(hookName);
   }
   return `Installed hooks: ${installed.join(", ") || "none"}`;
 }
 function renderEnvFromTemplate(args) {
-  const src = path8.join(commonDir(args), ".env.example");
-  let content = fs9.readFileSync(src, "utf-8");
+  const src = path9.join(commonDir(args), ".env.example");
+  let content = fs10.readFileSync(src, "utf-8");
   if (args.databricksHost) {
     content = content.replace(/DATABRICKS_HOST=.*/, `DATABRICKS_HOST=${args.databricksHost}`);
   }
@@ -1063,42 +1154,42 @@ function renderEnvFromTemplate(args) {
   return content;
 }
 async function deployEnvExample(targetDir, args = {}) {
-  fs9.writeFileSync(path8.join(targetDir, ".env.example"), renderEnvFromTemplate(args));
+  fs10.writeFileSync(path9.join(targetDir, ".env.example"), renderEnvFromTemplate(args));
 }
 async function deployEnv(targetDir, args = {}) {
-  fs9.writeFileSync(path8.join(targetDir, ".env"), renderEnvFromTemplate(args));
+  fs10.writeFileSync(path9.join(targetDir, ".env"), renderEnvFromTemplate(args));
 }
 async function deployDeployTargets(targetDir, projectName, opts) {
-  const src = path8.join(commonDir(opts), "deploy-targets.yaml");
-  const dest = path8.join(targetDir, "deploy-targets.yaml");
-  if (!fs9.existsSync(src)) return;
-  let content = fs9.readFileSync(src, "utf-8");
+  const src = path9.join(commonDir(opts), "deploy-targets.yaml");
+  const dest = path9.join(targetDir, "deploy-targets.yaml");
+  if (!fs10.existsSync(src)) return;
+  let content = fs10.readFileSync(src, "utf-8");
   if (projectName) {
     content = content.replace(/\{\{PROJECT_NAME\}\}/g, projectName);
   }
-  fs9.writeFileSync(dest, content);
+  fs10.writeFileSync(dest, content);
 }
 async function deployVscodeSettings(targetDir, opts) {
-  const src = path8.join(commonDir(opts), ".vscode", "settings.json");
-  const destDir = path8.join(targetDir, ".vscode");
-  fs9.mkdirSync(destDir, { recursive: true });
-  fs9.copyFileSync(src, path8.join(destDir, "settings.json"));
+  const src = path9.join(commonDir(opts), ".vscode", "settings.json");
+  const destDir = path9.join(targetDir, ".vscode");
+  fs10.mkdirSync(destDir, { recursive: true });
+  fs10.copyFileSync(src, path9.join(destDir, "settings.json"));
 }
 async function deployGitignore(targetDir, language = "java", opts) {
-  const base = fs9.readFileSync(path8.join(commonDir(opts), ".gitignore.base"), "utf-8");
-  const extraPath = path8.join(langDir(language, opts), ".gitignore.extra");
-  const extra = fs9.existsSync(extraPath) ? fs9.readFileSync(extraPath, "utf-8") : "";
-  fs9.writeFileSync(path8.join(targetDir, ".gitignore"), base + "\n" + extra);
+  const base = fs10.readFileSync(path9.join(commonDir(opts), ".gitignore.base"), "utf-8");
+  const extraPath = path9.join(langDir(language, opts), ".gitignore.extra");
+  const extra = fs10.existsSync(extraPath) ? fs10.readFileSync(extraPath, "utf-8") : "";
+  fs10.writeFileSync(path9.join(targetDir, ".gitignore"), base + "\n" + extra);
 }
 async function patchWorkflowsForRunnerType(targetDir, runnerType) {
-  const workflowDir = path8.join(targetDir, ".github", "workflows");
+  const workflowDir = path9.join(targetDir, ".github", "workflows");
   if (runnerType === "github-hosted") {
-    for (const file of fs9.existsSync(workflowDir) ? fs9.readdirSync(workflowDir) : []) {
+    for (const file of fs10.existsSync(workflowDir) ? fs10.readdirSync(workflowDir) : []) {
       if (!file.endsWith(".yml") && !file.endsWith(".yaml")) continue;
-      const filePath = path8.join(workflowDir, file);
-      let content = fs9.readFileSync(filePath, "utf-8");
+      const filePath = path9.join(workflowDir, file);
+      let content = fs10.readFileSync(filePath, "utf-8");
       content = content.replace(/runs-on: self-hosted/g, "runs-on: ubuntu-latest");
-      fs9.writeFileSync(filePath, content);
+      fs10.writeFileSync(filePath, content);
     }
     return;
   }
@@ -1132,14 +1223,14 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     ""
   ].join("\n");
   for (const file of ["pr.yml", "merge.yml"]) {
-    const filePath = path8.join(workflowDir, file);
-    if (!fs9.existsSync(filePath)) continue;
-    let content = fs9.readFileSync(filePath, "utf-8");
+    const filePath = path9.join(workflowDir, file);
+    if (!fs10.existsSync(filePath)) continue;
+    let content = fs10.readFileSync(filePath, "utf-8");
     content = content.replace(
       /- name: Set up JDK\n(?:\s+[\w-]+:.*\n)*\s+uses: actions\/setup-java@v4\n\s+with:\n(?:\s+#[^\n]*\n)*(?:\s+[\w-]+:.*\n)+/g,
       localJdkStep
     );
-    fs9.writeFileSync(filePath, content);
+    fs10.writeFileSync(filePath, content);
   }
 }
 async function scaffoldStaticAll(args) {
@@ -1213,8 +1304,8 @@ async function scaffoldAll(args) {
 import * as cp3 from "child_process";
 
 // scripts/lakebase/branch-create.ts
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
+import { execFile as execFile4 } from "child_process";
+import { promisify as promisify4 } from "util";
 
 // scripts/util/delay.ts
 function delay(ms) {
@@ -1275,9 +1366,9 @@ function sanitizeBranchName(gitBranch) {
 }
 
 // scripts/lakebase/branch-utils.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-var execFileP2 = promisify2(execFile2);
+import { execFile as execFile3 } from "child_process";
+import { promisify as promisify3 } from "util";
+var execFileP3 = promisify3(execFile3);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -1381,7 +1472,7 @@ async function dbcli2(args, host) {
   const trimmedHost = host?.replace(/\/+$/, "");
   const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
   try {
-    const { stdout } = await execFileP2("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
+    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
     return stdout.toString();
   } catch (err) {
     const e = err;
@@ -1394,7 +1485,7 @@ stderr: ${stderr.trim()}` : ""}`
 }
 
 // scripts/lakebase/branch-create.ts
-var execFileP3 = promisify3(execFile3);
+var execFileP4 = promisify4(execFile4);
 async function createBranch(args) {
   const sanitized = sanitizeBranchName(args.branch);
   const lookup = { instance: args.instance, host: args.host };
@@ -1544,7 +1635,7 @@ async function dbcli3(args, host) {
   const trimmedHost = host?.replace(/\/+$/, "");
   const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
   try {
-    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
+    const { stdout } = await execFileP4("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
     return stdout.toString();
   } catch (err) {
     const e = err;
@@ -1581,25 +1672,25 @@ async function createLongRunningBranch(args) {
 }
 
 // scripts/lakebase/enable-e2e.ts
-import * as fs11 from "fs";
-import * as path10 from "path";
+import * as fs12 from "fs";
+import * as path11 from "path";
 
 // scripts/lakebase/install-playwright.ts
-import * as fs10 from "fs";
-import * as path9 from "path";
+import * as fs11 from "fs";
+import * as path10 from "path";
 import { fileURLToPath as fileURLToPath5 } from "url";
 var cachedTemplatesDir4;
 function findTemplatesDir4() {
   if (cachedTemplatesDir4) return cachedTemplatesDir4;
-  const here = path9.dirname(fileURLToPath5(import.meta.url));
+  const here = path10.dirname(fileURLToPath5(import.meta.url));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path9.join(dir, "templates", "project");
-    if (fs10.existsSync(path9.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path10.join(dir, "templates", "project");
+    if (fs11.existsSync(path10.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir4 = candidate;
       return cachedTemplatesDir4;
     }
-    const parent = path9.dirname(dir);
+    const parent = path10.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -1608,14 +1699,14 @@ function findTemplatesDir4() {
   );
 }
 function commonDir2(opts) {
-  return path9.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
+  return path10.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
 }
 var NODE_E2E_TEMPLATE_FILES = [
   "playwright.config.ts",
-  path9.join("tests", "e2e", "smoke.spec.ts")
+  path10.join("tests", "e2e", "smoke.spec.ts")
 ];
 var PYTHON_E2E_TEMPLATE_FILES = [
-  path9.join("tests", "e2e", "conftest.py")
+  path10.join("tests", "e2e", "conftest.py")
 ];
 var PLAYWRIGHT_TEMPLATE_FILES = [
   ...NODE_E2E_TEMPLATE_FILES,
@@ -1626,17 +1717,17 @@ function writePlaywrightTemplates(args) {
   const written = [];
   const skipped = [];
   for (const rel of args.files ?? PLAYWRIGHT_TEMPLATE_FILES) {
-    const from = path9.join(src, rel);
-    if (!fs10.existsSync(from)) {
+    const from = path10.join(src, rel);
+    if (!fs11.existsSync(from)) {
       throw new Error(`Kit template missing: ${from}`);
     }
-    const to = path9.join(args.projectDir, rel);
-    if (fs10.existsSync(to) && !args.force) {
+    const to = path10.join(args.projectDir, rel);
+    if (fs11.existsSync(to) && !args.force) {
       skipped.push(rel);
       continue;
     }
-    fs10.mkdirSync(path9.dirname(to), { recursive: true });
-    fs10.copyFileSync(from, to);
+    fs11.mkdirSync(path10.dirname(to), { recursive: true });
+    fs11.copyFileSync(from, to);
     written.push(rel);
   }
   return { written, skipped };
@@ -1647,12 +1738,12 @@ var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
 var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
 var PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 function addPlaywrightToPackageJson(args) {
-  const pkgPath = path10.join(args.projectDir, "package.json");
-  if (!fs11.existsSync(pkgPath)) {
+  const pkgPath = path11.join(args.projectDir, "package.json");
+  if (!fs12.existsSync(pkgPath)) {
     return { patched: false, scriptAdded: false, depAdded: false };
   }
   const range = args.versionRange ?? PLAYWRIGHT_TEST_VERSION_RANGE;
-  const raw = fs11.readFileSync(pkgPath, "utf8");
+  const raw = fs12.readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(raw);
   const scripts = pkg.scripts ?? {};
   const devDependencies = pkg.devDependencies ?? {};
@@ -1670,16 +1761,16 @@ function addPlaywrightToPackageJson(args) {
   pkg.devDependencies = devDependencies;
   if (scriptAdded || depAdded) {
     const trailingNewline = raw.endsWith("\n") ? "\n" : "";
-    fs11.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailingNewline, "utf8");
+    fs12.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailingNewline, "utf8");
   }
   return { patched: true, scriptAdded, depAdded };
 }
 function addPythonDevDep(projectDir, pkg, range) {
-  const pyPath = path10.join(projectDir, "pyproject.toml");
-  if (!fs11.existsSync(pyPath)) {
+  const pyPath = path11.join(projectDir, "pyproject.toml");
+  if (!fs12.existsSync(pyPath)) {
     return { patched: false, depAdded: false };
   }
-  const original = fs11.readFileSync(pyPath, "utf8");
+  const original = fs12.readFileSync(pyPath, "utf8");
   if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
     return { patched: true, depAdded: false };
   }
@@ -1691,7 +1782,7 @@ function addPythonDevDep(projectDir, pkg, range) {
       return `${open}${body}${sep}
 ${depLine}${close}`;
     });
-    fs11.writeFileSync(pyPath, patched, "utf8");
+    fs12.writeFileSync(pyPath, patched, "utf8");
     return { patched: true, depAdded: true };
   }
   const trimmed = original.replace(/\n+$/, "\n");
@@ -1701,7 +1792,7 @@ dev = [
 ${depLine}
 ]
 `;
-  fs11.writeFileSync(pyPath, trimmed + block, "utf8");
+  fs12.writeFileSync(pyPath, trimmed + block, "utf8");
   return { patched: true, depAdded: true };
 }
 function ensurePythonE2eDeps(args) {
@@ -1712,11 +1803,11 @@ function ensurePythonBddDeps(args) {
 }
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
-  const scriptPath = path10.join(args.projectDir, "scripts", "run-tests.sh");
-  if (!fs11.existsSync(scriptPath)) {
+  const scriptPath = path11.join(args.projectDir, "scripts", "run-tests.sh");
+  if (!fs12.existsSync(scriptPath)) {
     return { patched: false, inserted: false };
   }
-  const original = fs11.readFileSync(scriptPath, "utf8");
+  const original = fs12.readFileSync(scriptPath, "utf8");
   if (original.includes(RUN_TESTS_E2E_MARKER)) {
     return { patched: true, inserted: false };
   }
@@ -1744,14 +1835,14 @@ function addE2eToRunTestsScript(args) {
     "fi",
     ""
   ].join("\n");
-  fs11.writeFileSync(scriptPath, trimmed + block, "utf8");
+  fs12.writeFileSync(scriptPath, trimmed + block, "utf8");
   return { patched: true, inserted: true };
 }
 function enableE2eForProject(args) {
-  const rootPkg = path10.join(args.projectDir, "package.json");
-  const isNode = args.language === "nodejs" || args.language === "node" || fs11.existsSync(rootPkg);
+  const rootPkg = path11.join(args.projectDir, "package.json");
+  const isNode = args.language === "nodejs" || args.language === "node" || fs12.existsSync(rootPkg);
   if (!isNode) {
-    const isPython = args.language === "python" || fs11.existsSync(path10.join(args.projectDir, "pyproject.toml"));
+    const isPython = args.language === "python" || fs12.existsSync(path11.join(args.projectDir, "pyproject.toml"));
     const templates2 = isPython ? writePlaywrightTemplates({
       projectDir: args.projectDir,
       force: args.force,
@@ -1793,16 +1884,16 @@ function enableE2eForProject(args) {
 }
 
 // scripts/lakebase/enable-infra.ts
-import * as fs12 from "fs";
-import * as path11 from "path";
+import * as fs13 from "fs";
+import * as path12 from "path";
 var RUN_TESTS_INFRA_MARKER = "# Run Lakebase [Infra]-tag suite when wired";
 function addInfraToPackageJson(args) {
-  const pkgPath = path11.join(args.projectDir, "package.json");
-  if (!fs12.existsSync(pkgPath)) {
+  const pkgPath = path12.join(args.projectDir, "package.json");
+  if (!fs13.existsSync(pkgPath)) {
     return { patched: false, scriptAdded: false };
   }
   const scriptValue = args.scriptValue ?? "npx --yes lakebase-infra-runner";
-  const raw = fs12.readFileSync(pkgPath, "utf8");
+  const raw = fs13.readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(raw);
   const scripts = pkg.scripts ?? {};
   let scriptAdded = false;
@@ -1813,16 +1904,16 @@ function addInfraToPackageJson(args) {
   pkg.scripts = scripts;
   if (scriptAdded) {
     const trailing = raw.endsWith("\n") ? "\n" : "";
-    fs12.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailing, "utf8");
+    fs13.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailing, "utf8");
   }
   return { patched: true, scriptAdded };
 }
 function addInfraToRunTestsScript(args) {
-  const scriptPath = path11.join(args.projectDir, "scripts", "run-tests.sh");
-  if (!fs12.existsSync(scriptPath)) {
+  const scriptPath = path12.join(args.projectDir, "scripts", "run-tests.sh");
+  if (!fs13.existsSync(scriptPath)) {
     return { patched: false, inserted: false };
   }
-  const original = fs12.readFileSync(scriptPath, "utf8");
+  const original = fs13.readFileSync(scriptPath, "utf8");
   if (original.includes(RUN_TESTS_INFRA_MARKER)) {
     return { patched: true, inserted: false };
   }
@@ -1838,7 +1929,7 @@ function addInfraToRunTestsScript(args) {
     "fi",
     ""
   ].join("\n");
-  fs12.writeFileSync(scriptPath, trimmed + block, "utf8");
+  fs13.writeFileSync(scriptPath, trimmed + block, "utf8");
   return { patched: true, inserted: true };
 }
 function enableInfraForProject(args) {
@@ -1851,9 +1942,9 @@ function enableInfraForProject(args) {
 }
 
 // scripts/lakebase/runner-setup.ts
-import * as fs13 from "fs";
+import * as fs14 from "fs";
 import * as os from "os";
-import * as path12 from "path";
+import * as path13 from "path";
 import * as cp4 from "child_process";
 import * as tar from "tar";
 import findJavaHome from "find-java-home";
@@ -1932,28 +2023,28 @@ var RUNNER_OS = process.platform === "darwin" ? "osx" : "linux";
 var RUNNER_ARCHIVE = `actions-runner-${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz`;
 var RUNNER_URL = `https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${RUNNER_ARCHIVE}`;
 function cacheDir() {
-  return path12.join(os.homedir(), ".cache", "github-actions-runner");
+  return path13.join(os.homedir(), ".cache", "github-actions-runner");
 }
 function runnersDir() {
-  return path12.join(os.homedir(), ".lakebase", "runners");
+  return path13.join(os.homedir(), ".lakebase", "runners");
 }
 function runnerDir(projectName) {
-  return path12.join(runnersDir(), projectName);
+  return path13.join(runnersDir(), projectName);
 }
 function runnerName(projectName) {
   return `lakebase-${projectName}`;
 }
 async function ensureCachedArchive() {
   const dir = cacheDir();
-  fs13.mkdirSync(dir, { recursive: true });
-  const cachedPath = path12.join(dir, RUNNER_ARCHIVE);
-  if (fs13.existsSync(cachedPath)) return cachedPath;
+  fs14.mkdirSync(dir, { recursive: true });
+  const cachedPath = path13.join(dir, RUNNER_ARCHIVE);
+  if (fs14.existsSync(cachedPath)) return cachedPath;
   const response = await fetch(RUNNER_URL);
   if (!response.ok) {
     throw new Error(`Failed to download runner: HTTP ${response.status}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
-  fs13.writeFileSync(cachedPath, buffer);
+  fs14.writeFileSync(cachedPath, buffer);
   return cachedPath;
 }
 async function resolveJavaHome() {
@@ -1965,12 +2056,12 @@ async function resolveJavaHome() {
 var lastRunnerPid;
 function stopRunner(projectName) {
   const dir = runnerDir(projectName);
-  const pidFile = path12.join(dir, ".pid");
+  const pidFile = path13.join(dir, ".pid");
   let pid = lastRunnerPid;
-  if (fs13.existsSync(pidFile)) {
-    pid = parseInt(fs13.readFileSync(pidFile, "utf-8").trim(), 10);
+  if (fs14.existsSync(pidFile)) {
+    pid = parseInt(fs14.readFileSync(pidFile, "utf-8").trim(), 10);
     try {
-      fs13.unlinkSync(pidFile);
+      fs14.unlinkSync(pidFile);
     } catch {
     }
   }
@@ -1983,7 +2074,7 @@ function stopRunner(projectName) {
       } catch {
       }
     }
-  } else if (fs13.existsSync(dir)) {
+  } else if (fs14.existsSync(dir)) {
     try {
       cp4.execSync(`pkill -9 -f "${dir.replace(/\//g, "\\/")}.*Runner" 2>/dev/null || true`, {
         timeout: KIT_TIMEOUTS.cmdShort
@@ -1993,16 +2084,16 @@ function stopRunner(projectName) {
   }
   lastRunnerPid = void 0;
   for (const stale of ["_diag/pages", "_work/_temp", "_work/_actions"]) {
-    const full = path12.join(dir, stale);
-    if (fs13.existsSync(full)) {
+    const full = path13.join(dir, stale);
+    if (fs14.existsSync(full)) {
       try {
-        fs13.rmSync(full, { recursive: true, force: true });
+        fs14.rmSync(full, { recursive: true, force: true });
       } catch {
       }
     }
   }
   try {
-    fs13.mkdirSync(path12.join(dir, "_diag", "pages"), { recursive: true });
+    fs14.mkdirSync(path13.join(dir, "_diag", "pages"), { recursive: true });
   } catch {
   }
 }
@@ -2018,24 +2109,24 @@ function resetRunnerConfig(dir, projectName) {
   ];
   for (const f of stateFiles) {
     try {
-      fs13.unlinkSync(path12.join(dir, f));
+      fs14.unlinkSync(path13.join(dir, f));
     } catch {
     }
   }
   if (process.platform === "darwin") {
-    const plist = path12.join(
+    const plist = path13.join(
       os.homedir(),
       "Library",
       "LaunchAgents",
       `actions.runner.${projectName}.plist`
     );
-    if (fs13.existsSync(plist)) {
+    if (fs14.existsSync(plist)) {
       try {
         cp4.execFileSync("launchctl", ["unload", plist], { stdio: "ignore" });
       } catch {
       }
       try {
-        fs13.unlinkSync(plist);
+        fs14.unlinkSync(plist);
       } catch {
       }
     }
@@ -2049,24 +2140,24 @@ async function setupRunner(args) {
   stopRunner(args.projectName);
   report("Downloading runner binary...");
   const archive = await ensureCachedArchive();
-  fs13.mkdirSync(dir, { recursive: true });
-  if (!fs13.existsSync(path12.join(dir, "config.sh"))) {
+  fs14.mkdirSync(dir, { recursive: true });
+  if (!fs14.existsSync(path13.join(dir, "config.sh"))) {
     report("Extracting runner...");
     await tar.extract({ file: archive, cwd: dir });
   }
-  const diagPages = path12.join(dir, "_diag", "pages");
-  if (fs13.existsSync(diagPages)) {
-    fs13.rmSync(diagPages, { recursive: true, force: true });
-    fs13.mkdirSync(diagPages, { recursive: true });
+  const diagPages = path13.join(dir, "_diag", "pages");
+  if (fs14.existsSync(diagPages)) {
+    fs14.rmSync(diagPages, { recursive: true, force: true });
+    fs14.mkdirSync(diagPages, { recursive: true });
   }
-  const runnerFile = path12.join(dir, ".runner");
-  let needsConfig = !fs13.existsSync(runnerFile);
+  const runnerFile = path13.join(dir, ".runner");
+  let needsConfig = !fs14.existsSync(runnerFile);
   if (needsConfig) {
     resetRunnerConfig(dir, args.projectName);
   } else {
     let urlMismatch = false;
     try {
-      const runnerJson = JSON.parse(fs13.readFileSync(runnerFile, "utf-8"));
+      const runnerJson = JSON.parse(fs14.readFileSync(runnerFile, "utf-8"));
       const configuredUrl = runnerJson.gitHubUrl || runnerJson.serverUrl || runnerJson.agentUrl || "";
       const expectedUrl = `https://github.com/${args.fullRepoName}`;
       urlMismatch = !!configuredUrl && !configuredUrl.startsWith(expectedUrl);
@@ -2115,7 +2206,7 @@ async function setupRunner(args) {
   child.unref();
   lastRunnerPid = child.pid;
   if (child.pid) {
-    fs13.writeFileSync(path12.join(dir, ".pid"), String(child.pid));
+    fs14.writeFileSync(path13.join(dir, ".pid"), String(child.pid));
   }
   report("Waiting for runner to come online...");
   let online = false;
@@ -2199,8 +2290,24 @@ async function setRepoSecrets(ownerRepo, secrets) {
 // scripts/git/remote.ts
 async function getGitHubUrl(cwd) {
   try {
-    const url = (await exec2("git remote get-url origin", { cwd, timeout: 5e3 })).trim();
-    return url.replace(/\.git$/, "").replace(/^git@github\.com:/, "https://github.com/").replace(/^ssh:\/\/git@github\.com\//, "https://github.com/");
+    const raw = (await exec2("git remote get-url origin", { cwd, timeout: 5e3 })).trim();
+    if (!raw) {
+      return "";
+    }
+    const url = raw.replace(/\.git$/, "");
+    const scp = url.match(/^(?:[^@/]+@)?[^/:]+:([^/].*)$/);
+    if (scp) {
+      return `https://github.com/${scp[1]}`;
+    }
+    const ssh = url.match(/^ssh:\/\/(?:[^@/]+@)?[^/]+\/(.+)$/);
+    if (ssh) {
+      return `https://github.com/${ssh[1]}`;
+    }
+    const https = url.match(/^https?:\/\/[^/]+\/(.+)$/);
+    if (https) {
+      return `https://github.com/${https[1]}`;
+    }
+    return "";
   } catch {
     return "";
   }
@@ -2248,8 +2355,8 @@ async function syncCiSecrets(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-import * as fs14 from "fs";
-import * as path13 from "path";
+import * as fs15 from "fs";
+import * as path14 from "path";
 var SCM_STATES = [
   "scaffold-complete",
   "feature-claimed",
@@ -2263,7 +2370,7 @@ var STATE_INDEX = SCM_STATES.reduce(
 );
 var STATE_FILE_REL = ".lakebase/workflow-state.json";
 function stateFilePath(projectDir) {
-  return path13.join(projectDir, STATE_FILE_REL);
+  return path14.join(projectDir, STATE_FILE_REL);
 }
 function writeWorkflowState(projectDir, state) {
   const result = validateWorkflowState(state);
@@ -2272,14 +2379,14 @@ function writeWorkflowState(projectDir, state) {
     throw new Error(`Refusing to write invalid SCM state:
 ${summary}`);
   }
-  const dir = path13.join(projectDir, ".lakebase");
-  fs14.mkdirSync(dir, { recursive: true });
+  const dir = path14.join(projectDir, ".lakebase");
+  fs15.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs14.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs15.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs14.renameSync(tmp, target);
+  fs15.renameSync(tmp, target);
 }
 function initWorkflowState(args) {
   return {
@@ -2453,11 +2560,11 @@ function orderForOutput(state) {
 }
 
 // scripts/sftdd/tdd-config.ts
-import { existsSync as existsSync13, readFileSync as readFileSync10, mkdirSync as mkdirSync9, writeFileSync as writeFileSync10 } from "fs";
-import { dirname as dirname7, join as join15 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync10, mkdirSync as mkdirSync9, writeFileSync as writeFileSync10 } from "fs";
+import { dirname as dirname7, join as join16 } from "path";
 
 // scripts/sftdd/agent-models.ts
-import { dirname as dirname6, join as join14 } from "path";
+import { dirname as dirname6, join as join15 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -2469,10 +2576,12 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join14(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join15(".lakebase", "agent-config.json");
 
 // scripts/sftdd/tdd-config.ts
-var TDD_CONFIG_REL = join15(".lakebase", "tdd-config.json");
+var SFTDD_CONFIG_REL = join16(".lakebase", "sftdd-config.json");
+var LEGACY_TDD_CONFIG_REL = join16(".lakebase", "tdd-config.json");
+var TDD_CONFIG_REL = SFTDD_CONFIG_REL;
 function defaultTddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
@@ -2481,14 +2590,14 @@ function defaultTddConfig() {
   return {
     version: 1,
     roles,
-    build: { loopGranularity: "ac", batchCap: 3, sessionScope: "story" },
+    build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
     project: { gates: "proxy", deployTarget: "local" }
   };
 }
 function writeTddConfig(projectDir, config, opts) {
-  const f = join15(projectDir, TDD_CONFIG_REL);
-  if (existsSync13(f) && !opts?.force) return false;
+  const f = join16(projectDir, TDD_CONFIG_REL);
+  if (existsSync14(f) && !opts?.force) return false;
   mkdirSync9(dirname7(f), { recursive: true });
   writeFileSync10(f, JSON.stringify(config, null, 2) + "\n");
   return true;
@@ -2498,7 +2607,7 @@ function writeTddConfig(projectDir, config, opts) {
 async function createProject(input, progress) {
   const report = progress ?? (() => {
   });
-  const projectDir = path14.join(input.parentDir, input.projectName);
+  const projectDir = path15.join(input.parentDir, input.projectName);
   const lakebaseProjectId = input.projectName;
   const host = input.databricksHost.replace(/\/+$/, "");
   const useGithub = input.createGithubRepo !== false;
@@ -2513,7 +2622,15 @@ async function createProject(input, progress) {
   if (useGithub && !input.githubOwner) {
     throw new Error("GitHub owner is required when creating a GitHub repository");
   }
+  if (!useGithub && fs16.existsSync(projectDir)) {
+    throw new Error(`Directory already exists: ${projectDir}`);
+  }
   const fullRepoName = input.githubOwner ? `${input.githubOwner}/${input.projectName}` : "";
+  report("Checking Databricks authentication...");
+  const auth = await checkDatabricksAuth(host);
+  if (!auth.ok) {
+    throw new Error(databricksAuthPrereqMessage(host, auth.reason));
+  }
   if (useGithub) {
     report("Creating GitHub repository...", fullRepoName);
     await createRepo(fullRepoName, {
@@ -2558,226 +2675,233 @@ Last probe error:
     });
   } else {
     report("Creating local project directory...", projectDir);
-    if (fs15.existsSync(projectDir)) {
+    if (fs16.existsSync(projectDir)) {
       throw new Error(`Directory already exists: ${projectDir}`);
     }
-    fs15.mkdirSync(projectDir, { recursive: true });
+    fs16.mkdirSync(projectDir, { recursive: true });
     await gitInit(projectDir);
   }
   report("Creating Lakebase database...", lakebaseProjectId);
   await createLakebaseProject({ projectId: lakebaseProjectId, host });
-  report("Resolving database endpoint...");
-  const defaultBranchId = await getDefaultBranchId({
-    projectId: lakebaseProjectId,
-    host
-  });
-  report("Scaffolding project files...");
-  await scaffoldAll({
-    targetDir: projectDir,
-    databricksHost: host,
-    lakebaseProjectId,
-    language,
-    runnerType,
-    skipCommands,
-    report: (m, d) => report(m, d)
-  });
-  if (enableTdd) {
-    report("Scaffolding .tdd/ workflow directory...");
-    layDownTddScaffold(projectDir);
-  }
-  if (enableE2e) {
-    report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir, language });
-    if (e2e.templatesWritten.length > 0) {
-      report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
-    }
-    if (e2e.packageJson.patched && (e2e.packageJson.scriptAdded || e2e.packageJson.depAdded)) {
-      report("  patched package.json (test:e2e + @playwright/test)");
-    } else if (!e2e.packageJson.patched) {
-      report("  package.json absent, skipped npm wiring (non-Node project)");
-    }
-    if (e2e.runTestsScript.inserted) {
-      report("  patched scripts/run-tests.sh");
-    }
-  }
-  if (enableInfra) {
-    report("Wiring [Infra]-tag runner support...");
-    const infra = enableInfraForProject({ projectDir });
-    if (infra.packageJson.patched && infra.packageJson.scriptAdded) {
-      report("  patched package.json (test:infra)");
-    } else if (!infra.packageJson.patched) {
-      report("  package.json absent, skipped npm wiring (non-Node project)");
-    }
-    if (infra.runTestsScript.inserted) {
-      report("  patched scripts/run-tests.sh (infra block)");
-    }
-  }
-  if (useGithub) {
-    report("Setting up CI auth (service principal)...");
-    try {
-      await syncCiSecrets({
-        projectDir,
+  return await withLakebaseRollback(
+    { projectId: lakebaseProjectId, host, report },
+    async () => {
+      report("Resolving database endpoint...");
+      const defaultBranchId = await getDefaultBranchId({
+        projectId: lakebaseProjectId,
+        host
+      });
+      report("Scaffolding project files...");
+      await scaffoldAll({
+        targetDir: projectDir,
         databricksHost: host,
         lakebaseProjectId,
-        comment: "GitHub Actions CI",
-        lifetimeSeconds: 86400,
-        ownerRepo: fullRepoName
+        language,
+        runnerType,
+        skipCommands,
+        report: (m, d) => report(m, d)
       });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`CI auth setup failed: ${msg}`);
-      report(`Warning: CI auth setup failed (${msg})`);
-    }
-  }
-  if (useGithub && runnerType === "self-hosted") {
-    report("Setting up self-hosted runner...");
-    try {
-      await setupRunner({
-        fullRepoName,
-        projectName: input.projectName,
-        report: (m) => report(m)
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnings.push(`Runner setup failed: ${msg}`);
-      report(`Warning: runner setup failed (${msg}). CI workflows will queue until a runner is available.`);
-    }
-  } else if (useGithub) {
-    report("Using GitHub-hosted runners \u2013 no local runner needed.");
-  } else {
-    report("Skipping runner setup (no GitHub repository).");
-  }
-  try {
-    writeWorkflowState(
-      projectDir,
-      initWorkflowState({
-        projectId: lakebaseProjectId,
-        tierTopology: tiers ?? 1
-      })
-    );
-  } catch (err) {
-    warnings.push(
-      `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
-    );
-  }
-  if (enableTdd) {
-    try {
-      const tddConfig = defaultTddConfig();
-      for (const [role, model] of Object.entries(input.agentModels ?? {})) {
-        if (model && tddConfig.roles?.[role]) {
-          tddConfig.roles[role].model = model;
+      if (enableTdd) {
+        report("Scaffolding .tdd/ workflow directory...");
+        layDownTddScaffold(projectDir);
+      }
+      if (enableE2e) {
+        report("Wiring Playwright E2E support...");
+        const e2e = enableE2eForProject({ projectDir, language });
+        if (e2e.templatesWritten.length > 0) {
+          report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
+        }
+        if (e2e.packageJson.patched && (e2e.packageJson.scriptAdded || e2e.packageJson.depAdded)) {
+          report("  patched package.json (test:e2e + @playwright/test)");
+        } else if (!e2e.packageJson.patched) {
+          report("  package.json absent, skipped npm wiring (non-Node project)");
+        }
+        if (e2e.runTestsScript.inserted) {
+          report("  patched scripts/run-tests.sh");
         }
       }
-      writeTddConfig(projectDir, tddConfig);
-    } catch (err) {
-      warnings.push(
-        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
-      );
-    }
-  }
-  if (enableTdd) {
-    try {
-      const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
-      if (kitRef) {
-        const dir = path14.join(projectDir, ".lakebase");
-        fs15.mkdirSync(dir, { recursive: true });
-        fs15.writeFileSync(path14.join(dir, "kit-ref"), `${kitRef}
-`, "utf8");
+      if (enableInfra) {
+        report("Wiring [Infra]-tag runner support...");
+        const infra = enableInfraForProject({ projectDir });
+        if (infra.packageJson.patched && infra.packageJson.scriptAdded) {
+          report("  patched package.json (test:infra)");
+        } else if (!infra.packageJson.patched) {
+          report("  package.json absent, skipped npm wiring (non-Node project)");
+        }
+        if (infra.runTestsScript.inserted) {
+          report("  patched scripts/run-tests.sh (infra block)");
+        }
       }
-      const lk = path14.join(projectDir, "scripts", "lk");
-      if (fs15.existsSync(lk)) {
-        spawnSync("bash", [lk, "--warm"], { cwd: projectDir, stdio: "ignore", timeout: 18e4 });
-      }
-    } catch (err) {
-      warnings.push(
-        `Kit fast-CLI cache warm failed (advisory): ${err instanceof Error ? err.message : String(err)}. scripts/lk installs lazily on first use.`
-      );
-    }
-  }
-  const langLabels = {
-    java: "Java/Spring Boot",
-    kotlin: "Kotlin/Spring Boot",
-    python: "Python/FastAPI",
-    nodejs: "Node.js/Express"
-  };
-  const langLabel = langLabels[language] ?? language;
-  report("Creating initial commit...");
-  await commitAndPush({
-    projectDir,
-    message: `Initial project scaffold (${langLabel} + Lakebase)`,
-    push: useGithub
-  });
-  if (tiers === 2 || tiers === 3) {
-    if (!useGithub) {
-      warnings.push(
-        `tiers === ${tiers} requires a GitHub repository (createLongRunningBranch pushes the tier's git side to origin). Extra tiers were NOT cut.`
-      );
-    } else {
-      report(`Cutting staging tier (tiers=${tiers}) via createLongRunningBranch...`);
-      try {
-        await createLongRunningBranch({
-          name: "staging",
-          forkFromBranch: "main",
-          projectId: lakebaseProjectId,
-          workTreeDir: projectDir,
-          databricksHost: host
-        });
-      } catch (err) {
-        warnings.push(
-          `tiers === ${tiers} requested but createLongRunningBranch for staging failed: ${err instanceof Error ? err.message : String(err)}.`
-        );
-      }
-      if (tiers === 3) {
-        report("Cutting dev tier (tiers=3) via createLongRunningBranch (off staging)...");
+      if (useGithub) {
+        report("Setting up CI auth (service principal)...");
         try {
-          await createLongRunningBranch({
-            name: "dev",
-            forkFromBranch: "staging",
-            projectId: lakebaseProjectId,
-            workTreeDir: projectDir,
-            databricksHost: host
+          await syncCiSecrets({
+            projectDir,
+            databricksHost: host,
+            lakebaseProjectId,
+            comment: "GitHub Actions CI",
+            lifetimeSeconds: 86400,
+            ownerRepo: fullRepoName
           });
         } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          warnings.push(`CI auth setup failed: ${msg}`);
+          report(`Warning: CI auth setup failed (${msg})`);
+        }
+      }
+      if (useGithub && runnerType === "self-hosted") {
+        report("Setting up self-hosted runner...");
+        try {
+          await setupRunner({
+            fullRepoName,
+            projectName: input.projectName,
+            report: (m) => report(m)
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          warnings.push(`Runner setup failed: ${msg}`);
+          report(`Warning: runner setup failed (${msg}). CI workflows will queue until a runner is available.`);
+        }
+      } else if (useGithub) {
+        report("Using GitHub-hosted runners \u2013 no local runner needed.");
+      } else {
+        report("Skipping runner setup (no GitHub repository).");
+      }
+      try {
+        writeWorkflowState(
+          projectDir,
+          initWorkflowState({
+            projectId: lakebaseProjectId,
+            tierTopology: tiers ?? 1
+          })
+        );
+      } catch (err) {
+        warnings.push(
+          `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
+        );
+      }
+      if (enableTdd) {
+        try {
+          const tddConfig = defaultTddConfig();
+          for (const [role, model] of Object.entries(input.agentModels ?? {})) {
+            if (model && tddConfig.roles?.[role]) {
+              tddConfig.roles[role].model = model;
+            }
+          }
+          writeTddConfig(projectDir, tddConfig);
+        } catch (err) {
           warnings.push(
-            `tiers === 3 requested but createLongRunningBranch for dev failed: ${err instanceof Error ? err.message : String(err)}.`
+            `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
           );
         }
       }
+      if (enableTdd) {
+        const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
+        if (kitRef) {
+          try {
+            const dir = path15.join(projectDir, ".lakebase");
+            fs16.mkdirSync(dir, { recursive: true });
+            fs16.writeFileSync(path15.join(dir, "kit-ref"), `${kitRef}
+`, "utf8");
+          } catch (err) {
+            warnings.push(`Kit ref pin failed (advisory): ${err instanceof Error ? err.message : String(err)}.`);
+          }
+        }
+        report("Warming + verifying the kit fast-CLI cache...");
+        const warm = warmAndVerifyKit(projectDir);
+        if (!warm.ok) {
+          const msg = kitWarmWarning(projectDir, warm.reason);
+          warnings.push(msg);
+          report(`Warning: ${msg}`);
+        }
+      }
+      const langLabels = {
+        java: "Java/Spring Boot",
+        kotlin: "Kotlin/Spring Boot",
+        python: "Python/FastAPI",
+        nodejs: "Node.js/Express"
+      };
+      const langLabel = langLabels[language] ?? language;
+      report("Creating initial commit...");
+      await commitAndPush({
+        projectDir,
+        message: `Initial project scaffold (${langLabel} + Lakebase)`,
+        push: useGithub
+      });
+      if (tiers === 2 || tiers === 3) {
+        if (!useGithub) {
+          warnings.push(
+            `tiers === ${tiers} requires a GitHub repository (createLongRunningBranch pushes the tier's git side to origin). Extra tiers were NOT cut.`
+          );
+        } else {
+          report(`Cutting staging tier (tiers=${tiers}) via createLongRunningBranch...`);
+          try {
+            await createLongRunningBranch({
+              name: "staging",
+              forkFromBranch: "main",
+              projectId: lakebaseProjectId,
+              workTreeDir: projectDir,
+              databricksHost: host
+            });
+          } catch (err) {
+            warnings.push(
+              `tiers === ${tiers} requested but createLongRunningBranch for staging failed: ${err instanceof Error ? err.message : String(err)}.`
+            );
+          }
+          if (tiers === 3) {
+            report("Cutting dev tier (tiers=3) via createLongRunningBranch (off staging)...");
+            try {
+              await createLongRunningBranch({
+                name: "dev",
+                forkFromBranch: "staging",
+                projectId: lakebaseProjectId,
+                workTreeDir: projectDir,
+                databricksHost: host
+              });
+            } catch (err) {
+              warnings.push(
+                `tiers === 3 requested but createLongRunningBranch for dev failed: ${err instanceof Error ? err.message : String(err)}.`
+              );
+            }
+          }
+        }
+      }
+      report("Verifying project...");
+      const health = verifyProject(projectDir);
+      for (const w of health.warnings) {
+        warnings.push(w);
+        report(`Warning: ${w}`);
+      }
+      report("Project created successfully!");
+      if (enableTdd) {
+        report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
+      }
+      report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
+      return {
+        projectDir,
+        githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
+        lakebaseProjectId,
+        lakebaseDefaultBranch: defaultBranchId,
+        warnings
+      };
     }
-  }
-  report("Verifying project...");
-  const health = verifyProject(projectDir);
-  for (const w of health.warnings) {
-    warnings.push(w);
-    report(`Warning: ${w}`);
-  }
-  report("Project created successfully!");
-  if (enableTdd) {
-    report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
-  }
-  report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
-  return {
-    projectDir,
-    githubRepoUrl: useGithub ? `https://github.com/${fullRepoName}` : void 0,
-    lakebaseProjectId,
-    lakebaseDefaultBranch: defaultBranchId,
-    warnings
-  };
+    // end withLakebaseRollback closure
+  );
 }
 function layDownTddScaffold(targetDir) {
   const candidates = [
-    path14.resolve(__dirname, `../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`),
-    path14.resolve(__dirname, `../../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`)
+    path15.resolve(__dirname, `../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`),
+    path15.resolve(__dirname, `../../../templates/sftdd-bootstrap/${ARTIFACT_ROOT}`)
   ];
-  const source = candidates.find((c) => fs15.existsSync(c));
+  const source = candidates.find((c) => fs16.existsSync(c));
   if (!source) {
     throw new Error(`sftdd-bootstrap template not found; looked in: ${candidates.join(", ")}`);
   }
-  const dest = path14.join(targetDir, ARTIFACT_ROOT);
-  if (fs15.existsSync(dest)) {
+  const dest = path15.join(targetDir, ARTIFACT_ROOT);
+  if (fs16.existsSync(dest)) {
     return;
   }
-  fs15.cpSync(source, dest, { recursive: true });
+  fs16.cpSync(source, dest, { recursive: true });
 }
 
 // scripts/lakebase/create-project.cli.ts

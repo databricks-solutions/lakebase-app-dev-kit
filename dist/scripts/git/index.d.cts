@@ -76,7 +76,17 @@ interface DeleteRemoteBranchArgs {
 }
 /**
  * Read `git remote get-url origin` and normalize to https://github.com/owner/repo.
- * Returns empty string if not a git repo or origin isn't GitHub.
+ * Returns empty string if not a git repo / no origin.
+ *
+ * Host-alias aware: the host segment must NOT be hardcoded to `github.com`.
+ * EMU (Enterprise Managed Users) setups commonly point origin at an SSH `Host`
+ * alias from ~/.ssh/config , e.g. `org-140212977@github-emu:databricks-field-eng/
+ * partner-asset-tracker.git`. The old normalizer only rewrote a literal
+ * `git@github.com:`, so the alias passed through unchanged and parseOwnerRepo
+ * then split it into a garbage owner (`org-...@github-emu:databricks-field-eng`),
+ * which 404s every owner/repo-derived op (Create PR, runner setup, PR status).
+ * We extract the owner/repo PATH after the host regardless of the host/user and
+ * re-home it on github.com (this module is GitHub-only).
  */
 declare function getGitHubUrl(cwd: string): Promise<string>;
 /** owner/repo slug for the origin remote; empty string if not GitHub. */

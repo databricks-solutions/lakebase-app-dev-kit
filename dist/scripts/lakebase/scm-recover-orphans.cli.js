@@ -219,6 +219,29 @@ async function resolveBranchPath(branchNameOrUid, opts) {
   const branch = await getBranchByName(branchNameOrUid, opts);
   return branch?.name;
 }
+async function resolveBranchId(args) {
+  const { branch, ...opts } = args;
+  if (branch.startsWith("projects/") && branch.includes("/branches/")) {
+    const leaf2 = branch.split("/branches/").pop();
+    if (leaf2) return leaf2;
+  }
+  if (!branch.startsWith("br-")) {
+    return branch;
+  }
+  const info = await getBranchByName(branch, opts);
+  if (!info) {
+    throw new LakebaseBranchError(
+      `Could not resolve branch "${branch}" in project "${opts.instance}". Pass either the branch_id (e.g. "demo-feature") or the branch uid.`
+    );
+  }
+  const leaf = info.name.split("/branches/").pop();
+  if (!leaf) {
+    throw new LakebaseBranchError(
+      `Branch info for "${branch}" missing a name segment (got "${info.name}").`
+    );
+  }
+  return leaf;
+}
 function parseBranch(raw) {
   if (!raw || typeof raw !== "object") return void 0;
   const r = raw;
@@ -635,6 +658,43 @@ async function getEndpoint(args) {
 function endpointPath(instance, branch, endpointName = DEFAULT_ENDPOINT) {
   return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
 }
+async function ensureEndpoint(args) {
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
+  const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
+  const existing = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+  if (existing?.host) {
+    return existing;
+  }
+  const branchPath = `projects/${args.instance}/branches/${branchId}`;
+  const spec = {
+    spec: {
+      endpoint_type: args.endpointType ?? "ENDPOINT_TYPE_READ_WRITE",
+      autoscaling_limit_min_cu: args.autoscalingMinCu ?? 2,
+      autoscaling_limit_max_cu: args.autoscalingMaxCu ?? 4
+    }
+  };
+  try {
+    execFileSync2(
+      "databricks",
+      ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
+      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+    );
+  } catch (err) {
+    const racy = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+    if (racy?.host) return racy;
+    throw err;
+  }
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ep = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+    if (ep?.host) return ep;
+    await new Promise((r) => setTimeout(r, KIT_TIMEOUTS.readyPoll));
+  }
+  throw new Error(
+    `Endpoint for ${branchPath} did not reach ACTIVE within ${timeoutMs}ms (create succeeded but no host yet)`
+  );
+}
 
 // scripts/util/exec.ts
 import * as cp from "child_process";
@@ -891,24 +951,24 @@ async function createPairedBranch(args) {
   let envSynced = false;
   if (syncEnv && ready.state === "READY") {
     try {
-      const ep = await getEndpoint({ instance: args.instance, branch: sanitized });
-      if (!ep?.host) {
-        warnings.push(`Endpoint not yet available for "${sanitized}" \u2013 .env not updated`);
-      } else {
-        const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-        const dsn = buildDsn(ep.host, database, email, token);
-        const envPath = path2.join(args.cwd, ".env");
-        updateEnvConnection({
-          envPath,
-          branchId: sanitized,
-          databaseUrl: dsn,
-          username: email,
-          password: token,
-          endpointHost: ep.host
-        });
-        await ensureProfilePinned({ envPath }).catch(() => void 0);
-        envSynced = true;
-      }
+      const ep = await ensureEndpoint({
+        instance: args.instance,
+        branch: sanitized,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
+      });
+      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
+      const dsn = buildDsn(ep.host, database, email, token);
+      const envPath = path2.join(args.cwd, ".env");
+      updateEnvConnection({
+        envPath,
+        branchId: sanitized,
+        databaseUrl: dsn,
+        username: email,
+        password: token,
+        endpointHost: ep.host
+      });
+      await ensureProfilePinned({ envPath }).catch(() => void 0);
+      envSynced = true;
     } catch (err) {
       warnings.push(
         `.env sync failed: ${err instanceof Error ? err.message : String(err)}`

@@ -354,6 +354,124 @@ async function getCurrentBranch(args) {
   }
 }
 
+// scripts/util/parse-owner-repo.ts
+function parseOwnerRepo(urlOrSlug) {
+  const trimmed = urlOrSlug.trim().replace(/\.git$/, "");
+  if (trimmed.includes("/")) {
+    const slugMatch = trimmed.match(/github\.com[/:]([^/]+)\/([^/]+)/);
+    if (slugMatch) {
+      return { owner: slugMatch[1], repo: slugMatch[2] };
+    }
+    const parts = trimmed.split("/");
+    if (parts.length >= 2) {
+      return {
+        owner: parts[parts.length - 2],
+        repo: parts[parts.length - 1]
+      };
+    }
+  }
+  throw new Error(`Invalid GitHub repo reference: ${urlOrSlug}`);
+}
+function formatOwnerRepo(owner, repo) {
+  return `${owner}/${repo}`;
+}
+
+// scripts/git/remote.ts
+async function getGitHubUrl(cwd) {
+  try {
+    const raw = (await exec2("git remote get-url origin", { cwd, timeout: 5e3 })).trim();
+    if (!raw) {
+      return "";
+    }
+    const url = raw.replace(/\.git$/, "");
+    const scp = url.match(/^(?:[^@/]+@)?[^/:]+:([^/].*)$/);
+    if (scp) {
+      return `https://github.com/${scp[1]}`;
+    }
+    const ssh = url.match(/^ssh:\/\/(?:[^@/]+@)?[^/]+\/(.+)$/);
+    if (ssh) {
+      return `https://github.com/${ssh[1]}`;
+    }
+    const https = url.match(/^https?:\/\/[^/]+\/(.+)$/);
+    if (https) {
+      return `https://github.com/${https[1]}`;
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+async function getOwnerRepo(cwd) {
+  const url = await getGitHubUrl(cwd);
+  if (!url) return "";
+  try {
+    const { owner, repo } = parseOwnerRepo(url);
+    return formatOwnerRepo(owner, repo);
+  } catch {
+    return "";
+  }
+}
+
+// scripts/github/repo.ts
+import { Octokit, RequestError } from "octokit";
+
+// scripts/github/auth.ts
+import { execFileSync } from "child_process";
+var GITHUB_SCOPES = ["repo", "workflow", "delete_repo"];
+async function resolveGitHubToken(scopes = GITHUB_SCOPES) {
+  const fromEnv = process.env.GITHUB_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  const fromVsCode = await tryVsCodeSession({ scopes });
+  if (fromVsCode) return fromVsCode;
+  const fromGh = tryGhAuthToken();
+  if (fromGh) return fromGh;
+  throw new Error(
+    "No GitHub auth available. Set GITHUB_TOKEN, sign in to GitHub in VS Code, or run `gh auth login`."
+  );
+}
+async function tryVsCodeSession(opts = {}) {
+  const scopes = opts.scopes ?? GITHUB_SCOPES;
+  try {
+    const vscode = await import("vscode");
+    if (!vscode?.authentication?.getSession) return void 0;
+    const session = await vscode.authentication.getSession("github", [...scopes], {
+      createIfNone: !!opts.createIfNone
+    });
+    return session?.accessToken;
+  } catch {
+    return void 0;
+  }
+}
+function tryGhAuthToken() {
+  try {
+    const raw = execFileSync("gh", ["auth", "token"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5e3
+    });
+    const token = raw.trim();
+    return token || void 0;
+  } catch {
+    return void 0;
+  }
+}
+
+// scripts/github/repo.ts
+async function newContext() {
+  const token = await resolveGitHubToken();
+  return { octokit: new Octokit({ auth: token }) };
+}
+async function getActionsEnabled(ownerRepo) {
+  try {
+    const { owner, repo } = parseOwnerRepo(ownerRepo);
+    const ctx = await newContext();
+    const { data } = await ctx.octokit.rest.actions.getGithubActionsPermissionsRepository({ owner, repo });
+    return data.enabled;
+  } catch {
+    return void 0;
+  }
+}
+
 // scripts/lakebase/scm-workflow-state.ts
 import * as fs2 from "fs";
 import * as path from "path";
@@ -689,7 +807,7 @@ async function adoptScmState(args) {
 // scripts/lakebase/paired-branch.ts
 import * as fs5 from "fs";
 import * as path3 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
+import { execFileSync as execFileSync4 } from "child_process";
 
 // scripts/lakebase/branch-create.ts
 import { execFile as execFile3 } from "child_process";
@@ -976,10 +1094,10 @@ import { promisify as promisify4 } from "util";
 var execFileP4 = promisify4(execFile4);
 
 // scripts/lakebase/branch-endpoint.ts
-import { execFileSync as execFileSync2 } from "child_process";
+import { execFileSync as execFileSync3 } from "child_process";
 
 // scripts/lakebase/get-connection.ts
-import { execFileSync } from "child_process";
+import { execFileSync as execFileSync2 } from "child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
@@ -1053,7 +1171,7 @@ function buildPostgresUrl(parts) {
 }
 function dbcli4(args) {
   try {
-    return execFileSync("databricks", args, {
+    return execFileSync2("databricks", args, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.cliDefault
@@ -1076,7 +1194,7 @@ async function getEndpoint(args) {
   }
   let raw;
   try {
-    raw = execFileSync2("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
+    raw = execFileSync3("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.cliDefault
@@ -1101,6 +1219,43 @@ async function getEndpoint(args) {
 }
 function endpointPath(instance, branch, endpointName = DEFAULT_ENDPOINT) {
   return `projects/${instance}/branches/${branch}/endpoints/${endpointName}`;
+}
+async function ensureEndpoint(args) {
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
+  const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
+  const existing = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+  if (existing?.host) {
+    return existing;
+  }
+  const branchPath = `projects/${args.instance}/branches/${branchId}`;
+  const spec = {
+    spec: {
+      endpoint_type: args.endpointType ?? "ENDPOINT_TYPE_READ_WRITE",
+      autoscaling_limit_min_cu: args.autoscalingMinCu ?? 2,
+      autoscaling_limit_max_cu: args.autoscalingMaxCu ?? 4
+    }
+  };
+  try {
+    execFileSync3(
+      "databricks",
+      ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
+      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+    );
+  } catch (err) {
+    const racy = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+    if (racy?.host) return racy;
+    throw err;
+  }
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.readyWait;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ep = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
+    if (ep?.host) return ep;
+    await new Promise((r) => setTimeout(r, KIT_TIMEOUTS.readyPoll));
+  }
+  throw new Error(
+    `Endpoint for ${branchPath} did not reach ACTIVE within ${timeoutMs}ms (create succeeded but no host yet)`
+  );
 }
 
 // scripts/git/status.ts
@@ -1214,7 +1369,7 @@ async function ensureProfilePinned(args) {
 // scripts/lakebase/paired-branch.ts
 function gitHasLocalBranch(cwd, branch) {
   try {
-    execFileSync3("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
+    execFileSync4("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd,
       stdio: "ignore",
       timeout: KIT_TIMEOUTS.gitDefault
@@ -1226,7 +1381,7 @@ function gitHasLocalBranch(cwd, branch) {
 }
 function gitCheckoutNewBranch(cwd, branch, startPoint) {
   const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
-  execFileSync3("git", argv, {
+  execFileSync4("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
@@ -1234,7 +1389,7 @@ function gitCheckoutNewBranch(cwd, branch, startPoint) {
 }
 function gitFetchBranch(cwd, remote, branch) {
   try {
-    execFileSync3("git", ["fetch", remote, branch], {
+    execFileSync4("git", ["fetch", remote, branch], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitNetwork
@@ -1244,7 +1399,7 @@ function gitFetchBranch(cwd, remote, branch) {
 }
 function gitRefExists(cwd, ref) {
   try {
-    execFileSync3("git", ["rev-parse", "--verify", "--quiet", ref], {
+    execFileSync4("git", ["rev-parse", "--verify", "--quiet", ref], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitDefault
@@ -1270,7 +1425,7 @@ async function assertCleanForFork(cwd, startPoint) {
   }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
-  execFileSync3("git", ["checkout", branch], {
+  execFileSync4("git", ["checkout", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
@@ -1333,24 +1488,24 @@ async function createPairedBranch(args) {
   let envSynced = false;
   if (syncEnv && ready.state === "READY") {
     try {
-      const ep = await getEndpoint({ instance: args.instance, branch: sanitized });
-      if (!ep?.host) {
-        warnings.push(`Endpoint not yet available for "${sanitized}" \u2013 .env not updated`);
-      } else {
-        const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-        const dsn = buildDsn(ep.host, database, email, token);
-        const envPath = path3.join(args.cwd, ".env");
-        updateEnvConnection({
-          envPath,
-          branchId: sanitized,
-          databaseUrl: dsn,
-          username: email,
-          password: token,
-          endpointHost: ep.host
-        });
-        await ensureProfilePinned({ envPath }).catch(() => void 0);
-        envSynced = true;
-      }
+      const ep = await ensureEndpoint({
+        instance: args.instance,
+        branch: sanitized,
+        timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
+      });
+      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
+      const dsn = buildDsn(ep.host, database, email, token);
+      const envPath = path3.join(args.cwd, ".env");
+      updateEnvConnection({
+        envPath,
+        branchId: sanitized,
+        databaseUrl: dsn,
+        username: email,
+        password: token,
+        endpointHost: ep.host
+      });
+      await ensureProfilePinned({ envPath }).catch(() => void 0);
+      envSynced = true;
     } catch (err) {
       warnings.push(
         `.env sync failed: ${err instanceof Error ? err.message : String(err)}`
@@ -2626,6 +2781,21 @@ async function runDoctor(args) {
       message: "No .lakebase/workflow-state.json. Either the project pre-dates the SCM workflow or scaffold did not seed it.",
       suggestion: "lakebase-scm-adopt-state"
     });
+  }
+  try {
+    const ownerRepo = await getOwnerRepo(projectDir);
+    if (ownerRepo) {
+      const enabled = await getActionsEnabled(ownerRepo);
+      if (enabled === false) {
+        findings.push({
+          id: "github-actions-disabled",
+          severity: "warn",
+          message: `GitHub Actions is disabled for ${ownerRepo}, so the kit's CI workflows (pr.yml / merge.yml) will never run , the PR branch's migrations, tests, and schema-diff comment are all skipped. This is commonly an org-level policy on EMU repos, which a repo admin cannot override.`,
+          suggestion: "Have an org owner enable Actions for this repo (repo Settings -> Actions -> General; if it says 'disabled by the organization', it must be enabled in the org's Actions policy). Until then, run the workflow steps locally: scripts/run-tests.sh against a Lakebase branch."
+        });
+      }
+    }
+  } catch {
   }
   if (!env.has("LAKEBASE_PROJECT_ID")) {
     findings.push({
