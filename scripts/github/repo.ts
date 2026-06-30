@@ -131,6 +131,28 @@ export async function repoExists(name: string): Promise<boolean> {
 }
 
 /**
+ * Whether GitHub Actions is enabled for `ownerRepo`. `GET .../actions/permissions`
+ * returns `enabled:false` both when a repo admin disabled Actions AND when an org
+ * policy disables it for the repo. When Actions is off, the kit's CI workflows
+ * (pr.yml / merge.yml) silently never run, which presents as "CI didn't follow
+ * the kit workflow". Returns:
+ *   - true / false  : the determined state
+ *   - undefined     : couldn't determine (no token, repo invisible, API error) ,
+ *                     callers must treat this as "unknown", never as disabled,
+ *                     so a missing token never produces a false alarm.
+ */
+export async function getActionsEnabled(ownerRepo: string): Promise<boolean | undefined> {
+  try {
+    const { owner, repo } = parseOwnerRepo(ownerRepo);
+    const ctx = await newContext();
+    const { data } = await ctx.octokit.rest.actions.getGithubActionsPermissionsRepository({ owner, repo });
+    return data.enabled;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Resolve the canonical `owner/repo` slug. Used by create-project to poll
  * until a freshly-created repo is visible (SAML / propagation delays).
  */

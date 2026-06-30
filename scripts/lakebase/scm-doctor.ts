@@ -18,6 +18,8 @@ import {
   type LakebaseBranchInfo,
 } from "./branch-utils.js";
 import { getCurrentBranch } from "../git/inspect.js";
+import { getOwnerRepo } from "../git/remote.js";
+import { getActionsEnabled } from "../github/repo.js";
 import { adoptScmState, inferTierTopology } from "./scm-adopt-state.js";
 import { recoverOrphans } from "./scm-recover-orphans.js";
 import {
@@ -115,6 +117,38 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
         "No .lakebase/workflow-state.json. Either the project pre-dates the SCM workflow or scaffold did not seed it.",
       suggestion: "lakebase-scm-adopt-state",
     });
+  }
+
+  // 1b. GitHub Actions enabled? When Actions is disabled (often an ORG policy
+  // on EMU repos, which a repo admin cannot override), the kit's CI workflows
+  // (pr.yml / merge.yml) silently never run , no migrations, no tests, no
+  // schema-diff comment , which looks like "CI ignored the kit workflow".
+  // Surface it explicitly. Best-effort + GitHub-independent of the Lakebase
+  // instance, so it runs before the no-instance early return. An undetermined
+  // result (no token / repo invisible) is skipped, never reported as disabled.
+  try {
+    const ownerRepo = await getOwnerRepo(projectDir);
+    if (ownerRepo) {
+      const enabled = await getActionsEnabled(ownerRepo);
+      if (enabled === false) {
+        findings.push({
+          id: "github-actions-disabled",
+          severity: "warn",
+          message:
+            `GitHub Actions is disabled for ${ownerRepo}, so the kit's CI workflows ` +
+            `(pr.yml / merge.yml) will never run , the PR branch's migrations, tests, ` +
+            `and schema-diff comment are all skipped. This is commonly an org-level ` +
+            `policy on EMU repos, which a repo admin cannot override.`,
+          suggestion:
+            "Have an org owner enable Actions for this repo (repo Settings -> Actions -> " +
+            "General; if it says 'disabled by the organization', it must be enabled in the " +
+            "org's Actions policy). Until then, run the workflow steps locally: " +
+            "scripts/run-tests.sh against a Lakebase branch.",
+        });
+      }
+    }
+  } catch {
+    // best-effort: no git remote / no token / offline -> skip silently.
   }
 
   // 2. .env reachability
