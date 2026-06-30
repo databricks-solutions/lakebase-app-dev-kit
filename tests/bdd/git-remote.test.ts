@@ -42,12 +42,46 @@ describe("getGitHubUrl", () => {
     const dir = await mkRepoWithRemote("ssh://git@github.com/foo/bar.git");
     expect(await getGitHubUrl(dir)).toBe("https://github.com/foo/bar");
   });
+
+  it("normalizes an SCP-style EMU host alias (user@alias:owner/repo)", async () => {
+    // EMU setups point origin at an ~/.ssh/config Host alias, e.g.
+    // `org-140212977@github-emu:databricks-field-eng/partner-asset-tracker.git`.
+    const dir = await mkRepoWithRemote(
+      "org-140212977@github-emu:databricks-field-eng/partner-asset-tracker.git",
+    );
+    expect(await getGitHubUrl(dir)).toBe(
+      "https://github.com/databricks-field-eng/partner-asset-tracker",
+    );
+  });
+
+  it("normalizes a bare host-alias SCP URL (alias:owner/repo)", async () => {
+    const dir = await mkRepoWithRemote("github-emu:databricks-field-eng/partner-asset-tracker.git");
+    expect(await getGitHubUrl(dir)).toBe(
+      "https://github.com/databricks-field-eng/partner-asset-tracker",
+    );
+  });
+
+  it("normalizes an ssh:// URL with a host alias", async () => {
+    const dir = await mkRepoWithRemote("ssh://org-1@github-emu/databricks-field-eng/partner-asset-tracker.git");
+    expect(await getGitHubUrl(dir)).toBe(
+      "https://github.com/databricks-field-eng/partner-asset-tracker",
+    );
+  });
 });
 
 describe("getOwnerRepo", () => {
   it("returns 'owner/repo' slug", async () => {
     const dir = await mkRepoWithRemote("https://github.com/databricks-solutions/lakebase-scm-extension");
     expect(await getOwnerRepo(dir)).toBe("databricks-solutions/lakebase-scm-extension");
+  });
+
+  it("returns the right owner/repo for an EMU host-alias remote (the bug)", async () => {
+    // Before the fix this yielded owner='org-140212977@github-emu:databricks-field-eng',
+    // which 404'd every owner/repo op (Create PR, runner setup).
+    const dir = await mkRepoWithRemote(
+      "org-140212977@github-emu:databricks-field-eng/partner-asset-tracker.git",
+    );
+    expect(await getOwnerRepo(dir)).toBe("databricks-field-eng/partner-asset-tracker");
   });
 
   it("returns empty string for a non-GitHub remote", async () => {
