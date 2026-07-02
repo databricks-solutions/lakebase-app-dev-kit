@@ -7,9 +7,9 @@
 // reimplementation.
 //
 // Alembic supports rollback natively (downgrade), so this adapter
-// implements the optional rollback method. baseline is deferred to a
-// follow-up slice; Alembic's `stamp` command is the equivalent, but
-// wiring it through cleanly requires runner changes.
+// implements the optional rollback method. baseline is implemented via
+// Alembic's `stamp` command (sets alembic_version without running
+// migration bodies) — the cross-tool equivalent of Flyway baseline.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -21,6 +21,7 @@ import {
   listAlembicHeads,
   mergeAlembicHeads,
   rollbackAlembic,
+  stampAlembic,
   statusAlembic,
 } from "../schema-migrate-runners/alembic.js";
 import {
@@ -34,6 +35,8 @@ import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
+  type BaselineArgs,
+  type BaselineResult,
   type CollapseHeadsArgs,
   type CollapseHeadsResult,
   type ListArgs,
@@ -191,8 +194,30 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
     return { files: listAlembicFiles(args.projectDir) };
   },
 
-  // baseline intentionally absent in slice 3. Alembic exposes `stamp`
-  // as the equivalent operation; deferred to a follow-up.
+  async baseline(args: BaselineArgs): Promise<BaselineResult> {
+    // Alembic has no `baseline` command; `stamp` is the equivalent — it sets
+    // alembic_version to the target revision without running migration bodies.
+    // The cross-tool contract's `version` field carries the revision id here.
+    const dsn = await buildDsn(args);
+    try {
+      const legacy = await stampAlembic({
+        projectDir: args.projectDir,
+        dsn,
+        revision: args.version,
+      });
+      return {
+        status: "ok",
+        baseline_version: legacy.stampedRevision,
+        tool_specific: { tool: legacy.tool },
+      };
+    } catch (err) {
+      return {
+        status: "error",
+        baseline_version: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 
   async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
     try {

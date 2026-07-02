@@ -44,14 +44,15 @@ describe("AlembicAdapter: static surface", () => {
     expect(typeof AlembicAdapter.rollback).toBe("function");
   });
 
-  it("omits baseline in slice 3 (Alembic stamp deferred)", () => {
-    expect(typeof AlembicAdapter.baseline).toBe("undefined");
+  it("implements baseline (via Alembic stamp)", () => {
+    expect(typeof AlembicAdapter.baseline).toBe("function");
   });
 
-  it("apply + status + list are all functions", () => {
+  it("apply + status + list + baseline are all functions", () => {
     expect(typeof AlembicAdapter.apply).toBe("function");
     expect(typeof AlembicAdapter.status).toBe("function");
     expect(typeof AlembicAdapter.list).toBe("function");
+    expect(typeof AlembicAdapter.baseline).toBe("function");
   });
 });
 

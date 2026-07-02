@@ -42,14 +42,15 @@ describe("FlywayAdapter: static surface", () => {
     expect(typeof FlywayAdapter.rollback).toBe("undefined");
   });
 
-  it("omits baseline in slice 2 (deferred to a follow-up)", () => {
-    expect(typeof FlywayAdapter.baseline).toBe("undefined");
+  it("implements baseline (Flyway supports it at the tool level)", () => {
+    expect(typeof FlywayAdapter.baseline).toBe("function");
   });
 
-  it("apply + status + list are all functions", () => {
+  it("apply + status + list + baseline are all functions", () => {
     expect(typeof FlywayAdapter.apply).toBe("function");
     expect(typeof FlywayAdapter.status).toBe("function");
     expect(typeof FlywayAdapter.list).toBe("function");
+    expect(typeof FlywayAdapter.baseline).toBe("function");
   });
 });
 
