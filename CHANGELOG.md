@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`baseline` on the Flyway and Alembic adapters.** Both adapters now implement
+  the optional `baseline` capability from the ADR-0005 schema-migration-adapter
+  contract; previously it was declared on the interface but omitted by every
+  built-in adapter. `FlywayAdapter.baseline` wraps `flyway baseline` (new
+  `baselineFlyway` runner); `AlembicAdapter.baseline` wraps `alembic stamp` (new
+  `stampAlembic` runner) — Alembic's equivalent operation, with the contract's
+  `version` field carrying the target revision. Both stamp an existing,
+  already-populated schema at a version so pre-baseline migrations are treated as
+  applied and never re-run — the adoption path for a database whose schema
+  predates the migration tool. Additive and backward-compatible: callers that
+  property-check `adapter.baseline` before invoking are unaffected.
+
 ## [0.3.0-beta.6] - 2026-06-30
 
 EMU / CI robustness, surfaced by a partner project on an Enterprise Managed Users

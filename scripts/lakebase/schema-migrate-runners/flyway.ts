@@ -188,6 +188,31 @@ export async function applyFlyway(ctx: FlywayCtx): Promise<ApplySchemaMigrations
   };
 }
 
+export interface BaselineFlywayResult {
+  /** The version the schema history table was baselined at. */
+  baselineVersion: string;
+  tool: "flyway";
+}
+
+export async function baselineFlyway(
+  ctx: FlywayCtx & { version: string; description?: string }
+): Promise<BaselineFlywayResult> {
+  // `flyway baseline` stamps an existing (already-populated) schema at a
+  // version so pre-baseline migrations are treated as applied and never
+  // re-run. This is the adoption path for a database whose schema predates
+  // Flyway: baseline at the current version, then future V<n> migrations
+  // above it apply normally.
+  //
+  // Distinct from applyFlyway's `-baselineOnMigrate`/`-baselineVersion=0`
+  // pairing, which anchors the AUTO-baseline at 0 so every user migration
+  // stays pending. Here the caller picks the explicit baseline version.
+  const args = [`-baselineVersion=${ctx.version}`];
+  if (ctx.description) args.push(`-baselineDescription=${ctx.description}`);
+  args.push("baseline");
+  await runFlyway(ctx, args);
+  return { baselineVersion: ctx.version, tool: "flyway" };
+}
+
 export async function rollbackFlyway(
   _ctx: FlywayCtx & { target: string }
 ): Promise<RollbackSchemaMigrationResult> {

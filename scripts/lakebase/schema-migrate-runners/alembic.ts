@@ -169,6 +169,25 @@ export async function mergeAlembicHeads(projectDir: string, message: string): Pr
   return m[1].trim();
 }
 
+export interface StampAlembicResult {
+  /** The revision the alembic_version table was stamped at. */
+  stampedRevision: string;
+  tool: "alembic";
+}
+
+/**
+ * `alembic stamp <rev>` sets the DB's alembic_version to <rev> WITHOUT running
+ * any migration bodies. This is Alembic's equivalent of Flyway's baseline: it
+ * marks a database whose schema already matches <rev> as being at that revision,
+ * so revisions at or below it are treated as applied and never re-run.
+ */
+export async function stampAlembic(
+  ctx: RunnerCtx & { revision: string }
+): Promise<StampAlembicResult> {
+  await runAlembic(ctx, ["stamp", ctx.revision]);
+  return { stampedRevision: ctx.revision, tool: "alembic" };
+}
+
 /** Return the currently-applied head revision, or undefined when the DB has no Alembic state. */
 async function getCurrentRevision(ctx: RunnerCtx): Promise<string | undefined> {
   const { stdout } = await runAlembic(ctx, ["current"]);

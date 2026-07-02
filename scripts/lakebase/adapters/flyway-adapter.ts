@@ -8,7 +8,9 @@
 //
 // Note: Flyway Community Edition does NOT support rollback. The adapter
 // omits the `rollback` method per the ADR-0005 optional-capability
-// protocol; callers MUST property-check before invoking.
+// protocol; callers MUST property-check before invoking. `baseline` IS
+// supported (stamps an existing schema at a version so pre-baseline
+// migrations are treated as applied).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -16,6 +18,7 @@ import * as path from "node:path";
 import { getConnection } from "../get-connection.js";
 import {
   applyFlyway,
+  baselineFlyway,
   statusFlyway,
 } from "../schema-migrate-runners/flyway.js";
 import {
@@ -29,6 +32,8 @@ import {
   registerSchemaMigrationAdapter,
   type ApplyArgs,
   type ApplyResult,
+  type BaselineArgs,
+  type BaselineResult,
   type ListArgs,
   type ListResult,
   type NewMigrationArgs,
@@ -143,10 +148,28 @@ export const FlywayAdapter: SchemaMigrationAdapter = {
     return { files: listFlywayFiles(args.projectDir) };
   },
 
-  // baseline intentionally absent. Flyway DOES support baseline at the
-  // tool level, but exposing it cleanly requires plumbing flags into the
-  // existing runner. Deferred to a follow-up slice; the adapter's
-  // optional-protocol shape makes this additive.
+  async baseline(args: BaselineArgs): Promise<BaselineResult> {
+    const dsn = await buildDsn(args);
+    try {
+      const legacy = await baselineFlyway({
+        projectDir: args.projectDir,
+        dsn,
+        version: args.version,
+        description: args.description,
+      });
+      return {
+        status: "ok",
+        baseline_version: legacy.baselineVersion,
+        tool_specific: { tool: legacy.tool },
+      };
+    } catch (err) {
+      return {
+        status: "error",
+        baseline_version: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
 
   async newMigration(args: NewMigrationArgs): Promise<NewMigrationResult> {
     // Flyway has no `generate` command: migrations are hand-written SQL whose
