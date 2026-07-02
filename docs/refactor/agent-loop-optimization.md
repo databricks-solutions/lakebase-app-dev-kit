@@ -6,7 +6,7 @@ Goal: cut wall-clock to run a feature through the deterministic driver (design -
 build -> deploy) without losing correctness, by attacking where the time actually
 goes. The orchestrator routing is already free; all time is in agent turns.
 
-## Measured baseline (live FEIP-7422 capture, run `bug-tracker-capture-20260609-221144`, S1 only)
+## Measured baseline (live capture, run `bug-tracker-capture-20260609-221144`, S1 only)
 
 Source: `.tdd/agent-log.jsonl` timestamps. S1 = 6 ACs, kit `eab213f`, build roles
 on sonnet, design roles on haiku.

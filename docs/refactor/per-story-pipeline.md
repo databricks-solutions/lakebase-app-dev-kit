@@ -1,8 +1,8 @@
 # Per-story design->build pipeline (streaming, single build lane + ready queue)
 
 **Status**: Design proposal, 2026-06-07
-**Umbrella FEIP**: (workflows as executable state machines)
-**Primary FEIP**: (per-story pipelined design->build)
+**Umbrella scope**: workflows as executable state machines
+**Scope**: per-story pipelined design->build
 **Builds on**: (per-role agent runtime), the /plan -> /design -> /build -> /deploy loop.
 
 ---
@@ -66,4 +66,4 @@ deploy:                    per the working-software gate once the feature's stor
 ## Decisions locked
 - Full design sub-pipeline per story (Spec Author -> Architect -> Test Strategist -> gate -> build), not a lean spec->build.
 - Single Navigator+Driver build lane; a Scrum-Master-managed FIFO ready-for-build queue absorbs stories that gate while the pair is busy.
-- Design + FEIP + phased plan first; implement phase-by-phase with the suite green at each step.
+- Design + phased plan first; implement phase-by-phase with the suite green at each step.

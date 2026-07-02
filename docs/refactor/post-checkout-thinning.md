@@ -1,4 +1,4 @@
-# FEIP scope: thin `post-checkout.sh` onto `checkoutPaired`
+# Scope: thin `post-checkout.sh` onto `checkoutPaired`
 
 **Status:** scoping only (no code). Suggested labels: LADT, lakebase-for-agile-dev.
 Cross-refs: (substrate-only / thin-wrap shells) (SCM

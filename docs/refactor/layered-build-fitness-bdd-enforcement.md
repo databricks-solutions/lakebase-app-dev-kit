@@ -1,6 +1,6 @@
 # Enforce layered architecture + architectural fitness functions + pytest-bdd (Python build quality)
 
-Status: increments 1-6 + thread 2 LANDED (local, branch `docs/tighten-design-canon-drop-dtsttcpw`); live FEIP-7422 re-smoke pending. Owner: TDD substrate.
+Status: increments 1-6 + thread 2 LANDED (local, branch `docs/tighten-design-canon-drop-dtsttcpw`); live re-smoke pending. Owner: TDD substrate.
 
 ## Problem (confirmed from a live complete build, project bug-tracker-20260611-171519, kit 0df37f4)
 
@@ -70,7 +70,7 @@ Three enforcement surfaces, increasing strength:
 
 ## Increment 6: born-green fitness tests are regression guards, not a cycle-stall (the live blocker)
 
-Symptom (live FEIP-7422 capture, S1): the navigator authored the ORM-only fitness
+Symptom (live capture, S1): the navigator authored the ORM-only fitness
 test `tests/architecture/test_orm_only.py`, but it was **born-green** , the app
 already had zero raw SQL (the layering refactor in prior cycles removed it). With
 no honest RED possible, the navigator (correctly refusing to fake a RED) flagged
@@ -119,11 +119,11 @@ Changes:
 - Tests: hermetic , `pendingItemKind`; `escalationsFromSmells` drops a cycle-stall
   when the pending item is fitness, keeps it for a behavior item; the born-green
   fitness greens via the normal GREEN turn.
-- Verify LIVE: the FEIP-7422 smoke passes S1's ORM-only (+ config-in-env) fitness
+- Verify LIVE: the smoke passes S1's ORM-only (+ config-in-env) fitness
   items born-green and reaches `done`.
 
 ## Definition of done (the whole effort)
-A live FEIP-7422 smoke on a service-backed feature produces, and a human can confirm:
+A live smoke on a service-backed feature produces, and a human can confirm:
 1. AC behavior tests are pytest-bdd (`tests/features/*.feature` + step defs), not plain pytest.
 2. >=1 architectural fitness test exists and is GREEN (e.g. `tests/architecture/test_layering.py`).
 3. The app is layered: `app/services/*` + `app/repositories/*` (or equivalent), route handlers delegate (no `db.*` in the boundary). The layering fitness test + the Gate-2/Gate-3 conformance both pass.

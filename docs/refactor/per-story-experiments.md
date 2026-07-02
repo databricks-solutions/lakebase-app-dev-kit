@@ -1,8 +1,8 @@
 # Per-story experiments (build isolation + throw-away) with PO acceptance
 
 **Status**: Design proposal, 2026-06-07
-**Primary FEIP**: (per-story experiments: build isolation + PO accept/discard/revise)
-**Umbrella FEIP**: (workflows as executable state machines)
+**Scope**: per-story experiments: build isolation + PO accept/discard/revise
+**Umbrella scope**: workflows as executable state machines
 **Builds on**: (per-story pipelined design->build) (per-role agent runtime)
 **Cross-ref**: (Lakebase SCM workflows epic), the paired-branch + tier substrate.
 
@@ -68,7 +68,7 @@ The current substrate keys experiments at the feature level: `.tdd/experiments/<
 
 ## Phased plan (each phase: a commit, full suite green)
 
-0. **Design + FEIP.** This doc (repo + ~/docs/specs); file the FEIP under, cross-ref. (Ticket filing gated on explicit go.)
+0. **Design.** This doc (repo + ~/docs/specs); cross-ref.
 1. **Acceptance + experiment-ref substrate (pipeline.json).** StoryStatus adds `awaiting-acceptance` + `discarded`; `StoryAcceptance` (accepted/discarded/revise + history); per-story `experiment` ref; functions `cutStoryExperiment` / `awaitAcceptance` / `acceptStory` (merge + done) / `discardStory` (withdraw spec gate + discarded) / `reviseStory` (-> designing); each frees the lane. Schema + unit tests. Isolated in pipeline.json. NOTE: the existing feature-level `experiment.ts` on-disk layout (`.tdd/experiments/<feature>/<slug>/`, cutExperiment, comparison report) is NOT re-scoped here, it is only needed for N>=2 story-level racing (a later concern); `run-cycle.ts` is already story-scoped (`cycles/<feature>/<story>/<ac>/`). The N=1 build-isolation + throw-away path needs only this pipeline-state substrate + the experiment-branch lifecycle CLI (phase 2).
 2. **Experiment branch lifecycle CLI.** `lakebase-sftdd-experiment cut|merge|discard` composing the paired-branch fork + git merge + teardown; short TTL; scm-doctor / recover-orphans label stale spikes vs experiments. Tests.
 3. **Per-story deploy from an experiment.** Extend the deploy substrate to target an experiment's branch/DSN; release-engineer wiring. Tests.

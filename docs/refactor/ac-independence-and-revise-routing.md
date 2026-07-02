@@ -1,6 +1,6 @@
 # AC independence (shift-left) + blocking-smell revise-routing
 
-> Tickets: **FEIP-7625** (Part A / Phase 1, shift-left, implemented) and **FEIP-7626** (Part B / Phase 2, revise-routing + Human-Proxy self-heal, design only), both under FEIP-7461.
+> Part A (shift-left) is implemented; Part B (revise-routing + Human-Proxy self-heal) is design only.
 
 ## Problem
 
@@ -72,7 +72,7 @@ This is the headless analog of the live `accept | revise` surface: live, a human
 
 Required:
 - **Smell taxonomy split.** Tag each blocking smell `spec-level` (route to an author after the PO decides) vs `build-level` (`cycle-stall` from genuine thrashing, `fragility-ratio` -> driver/navigator retry). The router needs this to pick the owning author; today everything halts identically. The taxonomy also names, per spec-level smell, the **owning author** to route to (`ac-overlap`/AC contradiction -> spec-author; pure test-list order/dup -> test-strategist).
-- **A `revise` transition** in the orchestrator drive state-machine: on the PO's (or proxy's) revise decision, re-enter the per-story design lane at the owning step, re-gate, and resume the build lane on that story. Pairs with the per-story pipeline + the experiment `revise` verb (FEIP-7566).
+- **A `revise` transition** in the orchestrator drive state-machine: on the PO's (or proxy's) revise decision, re-enter the per-story design lane at the owning step, re-gate, and resume the build lane on that story. Pairs with the per-story pipeline + the experiment `revise` verb.
 - The PO/Human-Proxy gate surface gains an `accept | revise` choice on a spec-level escalation (with the role to route to). Headless, the Human Proxy resolves it within the per-story revise bound above.
 
 ## Acceptance
