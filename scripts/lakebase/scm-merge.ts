@@ -138,6 +138,28 @@ function defaultMigratePredicate(
   return created >= mergedAt.getTime() - 5_000;
 }
 
+/**
+ * Preferred predicate: match the downstream run by the exact merge commit SHA.
+ *
+ * The merge API returns the SHA it created on the base branch; the `push`
+ * workflow run that GitHub fires on that base runs against that same SHA
+ * (`head_sha`). Matching on it is clock-independent, so it does NOT
+ * false-negative when local post-merge bookkeeping (checkout, fetch,
+ * fast-forward, branch delete) pushes our `mergedAt` clock reading seconds to
+ * tens of seconds past the moment GitHub recorded the merge, the exact skew
+ * that made the timestamp window drop the real run and burn the whole budget
+ * on "(no matching run)". Falls back to the timestamp window only when the
+ * merge SHA is unavailable.
+ */
+function shaMigratePredicate(
+  mergeCommitSha: string,
+): (run: WorkflowRunSummary, mergedAt: Date) => boolean {
+  return (run) => {
+    if (run.event && run.event !== "push") return false;
+    return !!run.headSha && run.headSha === mergeCommitSha;
+  };
+}
+
 export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
   const current = readWorkflowState(args.projectDir);
   if (!current) {
@@ -280,7 +302,14 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
     const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
     const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
     const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
-    const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+    // Prefer clock-independent SHA matching (the merge commit the API just
+    // reported), falling back to the timestamp window only when the SHA is
+    // unavailable. A caller-supplied predicate (tests) always wins.
+    const predicate =
+      args.migrateRunPredicate ??
+      (paired.mergeCommitSha
+        ? shaMigratePredicate(paired.mergeCommitSha)
+        : defaultMigratePredicate);
 
     // The poll deadline is measured from mergedAt (the moment GitHub
     // recorded the merge), not from the start of the probe, so the

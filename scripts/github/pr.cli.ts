@@ -190,13 +190,13 @@ async function main(): Promise<number> {
       case "merge": {
         if (!requireFlags("merge", args, ["ownerRepo", "pullNumber"]))
           return 2;
-        const message = await mergePullRequest({
+        const { message, sha } = await mergePullRequest({
           ownerRepo: args.ownerRepo!,
           pullNumber: args.pullNumber!,
           method: args.method,
           deleteRemoteBranch: !args.keepRemote,
         });
-        printJson({ message }, pretty);
+        printJson({ message, sha }, pretty);
         return 0;
       }
 
