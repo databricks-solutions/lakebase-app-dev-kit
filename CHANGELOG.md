@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lakebase-auth PAT no longer passed on the command line.**
+  `ensureLakebaseSecretAuth` stored the minted PAT with
+  `databricks secrets put-secret … --string-value "<pat>"`, which exposed the
+  secret in the process table (`ps`) and any shell trace for the call's
+  lifetime. The PAT is now fed to the CLI on **stdin** (the documented
+  alternative to `--string-value`), so it never appears as a process argument.
+  `exec()` gained an `input` option to support this.
+- **Hardened shell-out escaping across the deploy/UC/secret seams.** Six
+  modules (`secret-auth`, `deploy-credentials`, `deploy-rollback`,
+  `uc-resources`, `databricks-host`, `deploy-app-endpoint`) each defined a local
+  `escapeShellArg` that only escaped `"` — leaving `$`, backticks, and other
+  shell metacharacters active inside the double-quoted interpolations, a
+  correctness bug (and injection surface) for any scope / key / catalog /
+  comment value containing them. All call sites now use the canonical POSIX
+  single-quote escaper `shq()` from `util/exec.ts`; the duplicated local
+  escapers are deleted.
+
 ## [0.3.0-beta.6] - 2026-06-30
 
 EMU / CI robustness, surfaced by a partner project on an Enterprise Managed Users

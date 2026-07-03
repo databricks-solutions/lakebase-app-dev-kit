@@ -9,6 +9,13 @@ export interface ExecOptions {
   env?: Record<string, string>;
   /** Milliseconds before SIGTERM. Default: 60_000. */
   timeout?: number;
+  /**
+   * Written to the child's stdin, then stdin is closed. Use this to feed a
+   * secret to a CLI that reads it from stdin (e.g. `databricks secrets
+   * put-secret` with no `--string-value`) so the value never appears in the
+   * command line / process table. Omit for commands that take no input.
+   */
+  input?: string;
 }
 
 /**
@@ -49,7 +56,7 @@ export function exec(command: string, opts: ExecOptions = {}): Promise<string> {
     if (opts.env) {
       options.env = { ...process.env, ...opts.env };
     }
-    cp.exec(command, options, (err, stdout, stderr) => {
+    const child = cp.exec(command, options, (err, stdout, stderr) => {
       if (err) {
         const msg = String(stderr || err.message);
         reject(new Error(`${command}: ${msg}`));
@@ -57,5 +64,10 @@ export function exec(command: string, opts: ExecOptions = {}): Promise<string> {
       }
       resolve(String(stdout).trim());
     });
+    if (opts.input !== undefined) {
+      // Feed the value on stdin, then close it, so a secret never rides on
+      // the command line (where `ps` / shell traces would expose it).
+      child.stdin?.end(opts.input);
+    }
   });
 }

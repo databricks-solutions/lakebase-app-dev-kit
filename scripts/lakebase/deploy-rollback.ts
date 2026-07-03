@@ -22,7 +22,7 @@
 // structured result shape as `ensureAppEndpoint`.
 
 import { spawn } from "node:child_process";
-import { exec } from "../util/exec.js";
+import { exec, shq } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface RollbackDeployArgs {
@@ -71,7 +71,7 @@ export async function listAppDeployments(args: {
 }): Promise<DeploymentInfo[]> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   const stdout = await exec(
-    `databricks apps list-deployments "${escapeShellArg(args.appName)}" --profile "${escapeShellArg(args.profile)}" -o json`,
+    `databricks apps list-deployments ${shq(args.appName)} --profile ${shq(args.profile)} -o json`,
     { timeout: timeoutMs }
   );
   const parsed = JSON.parse(stdout) as unknown;
@@ -218,6 +218,3 @@ function runRollbackDeploy(args: {
   });
 }
 
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
-}

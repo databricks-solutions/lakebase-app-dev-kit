@@ -13,7 +13,7 @@
 // token cache is invalidated by a CLI upgrade); we tolerate that by
 // trimming to the first `{` before parsing.
 
-import { exec } from "../util/exec.js";
+import { exec, shq } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface ResolveDatabricksHostArgs {
@@ -34,7 +34,7 @@ export async function resolveDatabricksHost(
 ): Promise<string | undefined> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   const out = await exec(
-    `databricks auth describe --profile "${escapeShellArg(args.profile)}" -o json`,
+    `databricks auth describe --profile ${shq(args.profile)} -o json`,
     { timeout: timeoutMs }
   );
   return parseHostFromAuthDescribe(out);
@@ -60,6 +60,3 @@ export function parseHostFromAuthDescribe(out: string): string | undefined {
   }
 }
 
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
-}
