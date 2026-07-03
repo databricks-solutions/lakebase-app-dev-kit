@@ -10,7 +10,7 @@
 // are idempotent (existence check + conditional create), and the
 // permission grant matches the platform's standard CHANGES shape.
 
-import { exec } from "../util/exec.js";
+import { exec, shq } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 const DEFAULT_CREATE_COMMENT = "Created by lakebase-app-dev-kit";
@@ -30,7 +30,7 @@ export async function catalogExists(args: CatalogExistsArgs): Promise<boolean> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   try {
     await exec(
-      `databricks api get /api/2.1/unity-catalog/catalogs/${escapeShellArg(args.catalog)} --profile "${escapeShellArg(args.profile)}"`,
+      `databricks api get /api/2.1/unity-catalog/catalogs/${shq(args.catalog)} --profile ${shq(args.profile)}`,
       { timeout: timeoutMs }
     );
     return true;
@@ -68,7 +68,7 @@ export async function tryCreateCatalog(args: TryCreateCatalogArgs): Promise<TryC
   const payload = JSON.stringify({ name: args.catalog, comment });
   try {
     await exec(
-      `databricks api post /api/2.1/unity-catalog/catalogs --profile "${escapeShellArg(args.profile)}" --json '${escapeSingleQuoted(payload)}'`,
+      `databricks api post /api/2.1/unity-catalog/catalogs --profile ${shq(args.profile)} --json ${shq(payload)}`,
       { timeout: timeoutMs }
     );
     return { created: true };
@@ -116,7 +116,7 @@ export async function ensureSchemaAndVolume(
   if (!exists) {
     const payload = JSON.stringify({ name: schema, catalog_name: catalog, comment });
     await exec(
-      `databricks api post /api/2.1/unity-catalog/schemas --profile "${escapeShellArg(profile)}" --json '${escapeSingleQuoted(payload)}'`,
+      `databricks api post /api/2.1/unity-catalog/schemas --profile ${shq(profile)} --json ${shq(payload)}`,
       { timeout: timeoutMs }
     );
     schemaCreated = true;
@@ -138,7 +138,7 @@ export async function ensureSchemaAndVolume(
       comment,
     });
     await exec(
-      `databricks api post /api/2.1/unity-catalog/volumes --profile "${escapeShellArg(profile)}" --json '${escapeSingleQuoted(payload)}'`,
+      `databricks api post /api/2.1/unity-catalog/volumes --profile ${shq(profile)} --json ${shq(payload)}`,
       { timeout: timeoutMs }
     );
     volumeCreated = true;
@@ -199,7 +199,7 @@ export async function grantUcCatalogPermission(
     ],
   });
   await exec(
-    `databricks api patch /api/2.1/unity-catalog/permissions/catalog/${escapeShellArg(args.catalog)} --profile "${escapeShellArg(args.profile)}" --json '${escapeSingleQuoted(payload)}'`,
+    `databricks api patch /api/2.1/unity-catalog/permissions/catalog/${shq(args.catalog)} --profile ${shq(args.profile)} --json ${shq(payload)}`,
     { timeout: timeoutMs }
   );
   return { granted: true };
@@ -218,7 +218,7 @@ export function catalogExplorerUrl(workspaceHost: string): string {
 
 async function ucResourceExists(apiPath: string, profile: string, timeoutMs: number): Promise<boolean> {
   try {
-    await exec(`databricks api get ${apiPath} --profile "${escapeShellArg(profile)}"`, { timeout: timeoutMs });
+    await exec(`databricks api get ${apiPath} --profile ${shq(profile)}`, { timeout: timeoutMs });
     return true;
   } catch (err) {
     if (isUcMissingError((err as Error).message)) return false;
@@ -228,12 +228,4 @@ async function ucResourceExists(apiPath: string, profile: string, timeoutMs: num
 
 function isUcMissingError(msg: string): boolean {
   return /RESOURCE_DOES_NOT_EXIST|does not exist|status:? 404\b|NOT_FOUND/i.test(msg);
-}
-
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
-}
-
-function escapeSingleQuoted(s: string): string {
-  return s.replace(/'/g, `'\\''`);
 }

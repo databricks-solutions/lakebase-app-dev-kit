@@ -10,7 +10,7 @@
 // Lifted from the lakebase-scm-extension's bespoke
 // DeployService.ensureLakebaseSecretAuth.
 
-import { exec } from "../util/exec.js";
+import { exec, shq } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 const NINETY_DAYS_SECONDS = 90 * 24 * 60 * 60;
@@ -79,7 +79,7 @@ export async function ensureLakebaseSecretAuth(
   let scopeCreated = false;
   try {
     await exec(
-      `databricks secrets create-scope "${escapeShellArg(scopeName)}" --profile "${escapeShellArg(profile)}"`,
+      `databricks secrets create-scope ${shq(scopeName)} --profile ${shq(profile)}`,
       { timeout: timeoutMs }
     );
     scopeCreated = true;
@@ -90,7 +90,7 @@ export async function ensureLakebaseSecretAuth(
 
   // 2. Mint PAT
   const tokenJson = await exec(
-    `databricks tokens create --comment "${escapeShellArg(tokenComment)}" --lifetime-seconds ${tokenLifetimeSeconds} -o json --profile "${escapeShellArg(profile)}"`,
+    `databricks tokens create --comment ${shq(tokenComment)} --lifetime-seconds ${tokenLifetimeSeconds} -o json --profile ${shq(profile)}`,
     { timeout: timeoutMs }
   );
   const tokenStart = tokenJson.indexOf("{");
@@ -103,10 +103,12 @@ export async function ensureLakebaseSecretAuth(
     throw new Error("databricks tokens create returned no token_value");
   }
 
-  // 3. Store the PAT
+  // 3. Store the PAT. Feed it on stdin (the CLI reads the value from stdin
+  // when --string-value is omitted) so the secret never appears on the
+  // command line / in the process table.
   await exec(
-    `databricks secrets put-secret "${escapeShellArg(scopeName)}" "${escapeShellArg(keyName)}" --string-value "${escapeShellArg(pat)}" --profile "${escapeShellArg(profile)}"`,
-    { timeout: timeoutMs }
+    `databricks secrets put-secret ${shq(scopeName)} ${shq(keyName)} --profile ${shq(profile)}`,
+    { timeout: timeoutMs, input: pat }
   );
 
   // 4. ACL (best-effort)
@@ -114,7 +116,7 @@ export async function ensureLakebaseSecretAuth(
   if (servicePrincipalClientId) {
     try {
       await exec(
-        `databricks secrets put-acl "${escapeShellArg(scopeName)}" "${escapeShellArg(servicePrincipalClientId)}" READ --profile "${escapeShellArg(profile)}"`,
+        `databricks secrets put-acl ${shq(scopeName)} ${shq(servicePrincipalClientId)} READ --profile ${shq(profile)}`,
         { timeout: timeoutMs }
       );
       aclGranted = true;
@@ -134,8 +136,4 @@ export async function ensureLakebaseSecretAuth(
 
 function isAlreadyExistsError(msg: string): boolean {
   return /already exists|SCOPE_ALREADY_EXISTS|RESOURCE_ALREADY_EXISTS/i.test(msg);
-}
-
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
 }

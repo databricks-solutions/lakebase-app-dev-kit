@@ -22,4 +22,18 @@ describe("exec", () => {
     });
     expect(out).toBe("xyzzy");
   });
+
+  it("feeds `input` to the child on stdin", async () => {
+    // `cat` echoes back exactly what it reads from stdin, proving the value
+    // reached the child without appearing anywhere on the command line.
+    const out = await exec("cat", { input: "secret-on-stdin" });
+    expect(out).toBe("secret-on-stdin");
+  });
+
+  it("closes stdin so a stdin-reading command terminates", async () => {
+    // Without end()ing stdin, `cat` would block until timeout. A prompt
+    // return proves the stream was closed.
+    const out = await exec("cat", { input: "" });
+    expect(out).toBe("");
+  });
 });

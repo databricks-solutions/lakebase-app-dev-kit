@@ -13,7 +13,7 @@
 // DeployTarget + profile + appName, it resolves the SP, grants the
 // permission(s), returns a structured result.
 
-import { exec } from "../util/exec.js";
+import { exec, shq } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 import { DeployTarget } from "./deploy-targets.js";
 import { getAppEndpoint } from "./deploy-app-endpoint.js";
@@ -111,7 +111,7 @@ export async function grantLakebasePermission(
     ],
   });
   await exec(
-    `databricks api patch "/api/2.0/permissions/database-projects/${escapeShellArg(args.projectName)}" --profile "${escapeShellArg(args.profile)}" --json '${escapeSingleQuoted(payload)}'`,
+    `databricks api patch /api/2.0/permissions/database-projects/${shq(args.projectName)} --profile ${shq(args.profile)} --json ${shq(payload)}`,
     { timeout: timeoutMs }
   );
   return { granted: true };
@@ -178,15 +178,3 @@ export async function propagateCredentials(
   };
 }
 
-// ─── helpers ────────────────────────────────────────────────────
-
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
-}
-
-function escapeSingleQuoted(s: string): string {
-  // Within single-quoted shell strings, the only escape needed is to
-  // close + reopen for embedded apostrophes. The JSON payload itself
-  // contains no apostrophes, but harden anyway for future-proofing.
-  return s.replace(/'/g, `'\\''`);
-}
