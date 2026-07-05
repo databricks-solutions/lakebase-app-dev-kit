@@ -60,6 +60,10 @@ export interface DriveEffectsConfig {
   runner: CommandRunner;
   /** Resolve a role's model (per-project override -> recommended -> inherit). */
   modelForRole(role: string): string;
+  /** Unified config: resolve the model for a role+turn (model tiering). A per-turn
+   *  `model` map entry (e.g. driver GREEN on haiku) wins for that turn; absent, the
+   *  role's base model applies. When unset, the caller falls back to modelForRole. */
+  modelForTurn?(role: string, turn?: "red" | "green" | "review" | "refactor"): string;
   /** Approver name for headless gate approvals (the Human Proxy). */
   approver?: string;
   /** Sprint name, threaded to the sprint plan gate in the planning phase. */
@@ -729,7 +733,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       const claude: DriveCommand = {
         kind: "claude",
         role: action.role,
-        model: cfg.modelForRole(action.role),
+        model: cfg.modelForTurn ? cfg.modelForTurn(action.role, buildTurn) : cfg.modelForRole(action.role),
         ...(resumeKey !== undefined ? { resumeKey } : {}),
         ...(effort && effort !== "default" ? { effort } : {}),
         ...(fallbackModel ? { fallbackModel } : {}),

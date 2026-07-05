@@ -41,10 +41,12 @@ export type BuildTurn = "red" | "green" | "review" | "refactor";
 /** `--effort` levels `claude -p` accepts, plus "default" (omit the flag). */
 export type EffortLevel = "default" | "low" | "medium" | "high" | "xhigh" | "max";
 
-/** Per-role settings as written on disk. `effort` is either one level for the
- *  whole role, or a per-turn map (only navigator/driver have multiple turns). */
+/** Per-role settings as written on disk. `model` and `effort` are each either one
+ *  value for the whole role, or a per-turn map (only navigator/driver have multiple
+ *  turns). A per-turn `model` map is how the Driver's mechanical GREEN/REFACTOR runs
+ *  on a cheaper/faster model than its RED (test authoring), the model-tiering lever. */
 export interface RoleSettingsFile {
-  model?: string;
+  model?: string | Partial<Record<BuildTurn, string>>;
   fallbackModel?: string;
   maxBudgetUsd?: number;
   effort?: EffortLevel | Partial<Record<BuildTurn, EffortLevel>>;
@@ -64,9 +66,15 @@ export interface TddConfigFile {
 
 /** The fully-resolved settings the driver runs with (file -> env -> default). */
 export interface ResolvedSettings {
+  /** A role's BASE model (the scalar it runs with when no per-turn override
+   *  applies). Callers that know the turn should prefer `modelFor`. */
   models: Record<string, string>;
   fallbackModels: Record<string, string | undefined>;
   budgets: Record<string, number | undefined>;
+  /** Resolve the model to spawn a role's turn with: a per-turn `model` map entry
+   *  (e.g. driver GREEN on haiku) when present, else the role's base model. This is
+   *  the model-tiering lever, mechanical turns run cheaper than authoring turns. */
+  modelFor(role: string, turn?: BuildTurn): string;
   /** Resolve a role's effort for a turn ("default" => omit --effort). */
   effortFor(role: string, turn?: BuildTurn): EffortLevel;
   build: { loopGranularity: "story" | "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
@@ -121,11 +129,22 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
   for (const role of ALL_AGENT_ROLES) {
     const rc = file?.roles?.[role];
     const legacyEntry = legacy?.roles?.[role];
+    // A per-turn `model` map has no single scalar; the base falls through to
+    // legacy -> recommended -> inherit. Only a string `model` sets the base.
+    const scalarModel = typeof rc?.model === "string" ? rc.model : undefined;
     models[role] =
-      rc?.model ?? legacyEntry?.override ?? legacyEntry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
+      scalarModel ?? legacyEntry?.override ?? legacyEntry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
     fallbackModels[role] = rc?.fallbackModel;
     budgets[role] = typeof rc?.maxBudgetUsd === "number" ? rc.maxBudgetUsd : undefined;
   }
+
+  const modelFor = (role: string, turn?: BuildTurn): string => {
+    const m = file?.roles?.[role as SpawnableAgentRole]?.model;
+    // A per-turn map wins for the turn it names (driver GREEN/REFACTOR on haiku);
+    // a scalar (or an absent turn in the map) falls to the role's base model.
+    if (m && typeof m !== "string" && turn && m[turn]) return m[turn] as string;
+    return models[role] ?? "inherit";
+  };
 
   const effortFor = (role: string, turn?: BuildTurn): EffortLevel => {
     // Env override wins (the one-off experiment knob on top of the file). Today
@@ -165,7 +184,7 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
 
   const plan = { sizing: file?.plan?.sizing ?? true };
 
-  return { models, fallbackModels, budgets, effortFor, build, plan, project };
+  return { models, modelFor, fallbackModels, budgets, effortFor, build, plan, project };
 }
 
 /** A default config seeded from the recommended models (for scaffold / `--init`),
@@ -176,7 +195,13 @@ export function defaultTddConfig(): TddConfigFile {
     roles[role] =
       role === "navigator"
         ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } }
-        : { model: RECOMMENDED_MODELS[role] };
+        : role === "driver"
+          ? // Model tiering: the Driver's RED (test authoring) keeps its
+            // recommended model; the mechanical GREEN + REFACTOR turns drop to a
+            // fast/cheap model. Biggest safe speed/cost lever; a project can flatten
+            // this back to a scalar `model` in sftdd-config.json.
+            { model: { red: RECOMMENDED_MODELS[role], green: "haiku", refactor: "haiku" } }
+          : { model: RECOMMENDED_MODELS[role] };
   }
   return {
     version: 1,

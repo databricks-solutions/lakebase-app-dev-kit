@@ -480,6 +480,9 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     fallbackModelForRole: (role) => settings.fallbackModels[role],
     maxBudgetUsdForRole: (role) => settings.budgets[role],
     modelForRole: (role) => settings.models[role] ?? resolveModelForRole(role as AgentRole, projectDir),
+    // Model tiering: per-turn model (driver GREEN/REFACTOR on a cheaper model than
+    // its RED). Falls through to the role's base model when no per-turn map applies.
+    modelForTurn: (role, turn) => settings.modelFor(role, turn),
     runner: { async run() {} },
     onAction: composeOnAction(
       // Narrate each routing decision in plain language (DRY: the same message

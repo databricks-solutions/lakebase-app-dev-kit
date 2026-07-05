@@ -113,6 +113,49 @@ describe("resolveTddSettings: the file drives the per-role/turn matrix", () => {
   });
 });
 
+describe("resolveTddSettings: per-turn model tiering (driver GREEN/REFACTOR cheaper)", () => {
+  it("a per-turn `model` map resolves per turn; the base falls to the recommended model", () => {
+    writeConfig({
+      version: 1,
+      roles: { driver: { model: { red: "sonnet", green: "haiku", refactor: "haiku" } } },
+    });
+    const s = resolveTddSettings({ projectDir: proj, env: {} });
+    expect(s.modelFor("driver", "red")).toBe("sonnet");
+    expect(s.modelFor("driver", "green")).toBe("haiku");
+    expect(s.modelFor("driver", "refactor")).toBe("haiku");
+    // base (no turn) + a turn absent from the map fall through to the recommended
+    // default, NOT to a map entry.
+    expect(s.models.driver).toBe("sonnet");
+    expect(s.modelFor("driver")).toBe("sonnet");
+    expect(s.modelFor("driver", "review")).toBe("sonnet");
+  });
+
+  it("a scalar `model` applies to every turn", () => {
+    writeConfig({ version: 1, roles: { driver: { model: "opus" } } });
+    const s = resolveTddSettings({ projectDir: proj, env: {} });
+    expect(s.models.driver).toBe("opus");
+    expect(s.modelFor("driver", "green")).toBe("opus");
+    expect(s.modelFor("driver")).toBe("opus");
+  });
+
+  it("with no file, modelFor returns the recommended base for every turn", () => {
+    const s = resolveTddSettings({ projectDir: proj, env: {} });
+    expect(s.modelFor("driver", "green")).toBe("sonnet");
+    expect(s.modelFor("spec-author")).toBe("opus");
+  });
+
+  it("defaultTddConfig seeds the balanced driver tier: RED recommended, GREEN/REFACTOR haiku", () => {
+    writeTddConfig(proj, defaultTddConfig());
+    const s = resolveTddSettings({ projectDir: proj, env: {} });
+    expect(s.modelFor("driver", "red")).toBe("sonnet");
+    expect(s.modelFor("driver", "green")).toBe("haiku");
+    expect(s.modelFor("driver", "refactor")).toBe("haiku");
+    // navigator + design roles keep their scalar recommended model.
+    expect(s.modelFor("navigator", "red")).toBe("sonnet");
+    expect(s.modelFor("architect-reviewer")).toBe("opus");
+  });
+});
+
 describe("resolveTddSettings: env overrides the file", () => {
   it("LAKEBASE_SFTDD_LOOP / _BATCH_CAP / _BUILD_SESSION / _REVIEW_EFFORT / _UI win over the file", () => {
     writeConfig({

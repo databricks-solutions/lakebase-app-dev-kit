@@ -199,8 +199,34 @@ describe("commandsForAction: invoke-role -> claude", () => {
 describe("commandsForAction: unified config model-side payload (effort per turn + fallback + budget)", () => {
   const claudeOf = (cmds: ReturnType<typeof commandsForAction>) =>
     cmds.find((c) => (c as { kind: string }).kind === "claude") as
-      | { effort?: string; fallbackModel?: string; maxBudgetUsd?: number }
+      | { model?: string; effort?: string; fallbackModel?: string; maxBudgetUsd?: number }
       | undefined;
+
+  it("modelForTurn tiers the model by build turn: driver GREEN/REFACTOR cheaper than RED", () => {
+    // Mirror the sftdd-config resolution: red keeps sonnet, green/refactor drop to haiku.
+    const perTurn: Record<string, string> = { red: "sonnet", green: "haiku", refactor: "haiku" };
+    const c = cfg({
+      modelForRole: () => "sonnet",
+      modelForTurn: (role, turn) => (role === "driver" && turn && perTurn[turn] ? perTurn[turn] : "sonnet"),
+    });
+    // Driver GREEN (buildMode absent -> "green") runs haiku.
+    const green = claudeOf(commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c));
+    expect(green?.model).toBe("haiku");
+    // Driver REFACTOR runs haiku.
+    const refactor = claudeOf(
+      commandsForAction({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor", ac: "AC1" }, c),
+    );
+    expect(refactor?.model).toBe("haiku");
+    // Navigator RED (test authoring) keeps sonnet.
+    const red = claudeOf(commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1" }, c));
+    expect(red?.model).toBe("sonnet");
+  });
+
+  it("back-compat: no modelForTurn -> modelForRole still sets the model", () => {
+    const c = cfg({ modelForRole: (r) => (r === "driver" ? "opus" : "sonnet") }); // no modelForTurn
+    const green = claudeOf(commandsForAction({ kind: "invoke-role", role: "driver", story: "S1" }, c));
+    expect(green?.model).toBe("opus");
+  });
 
   it("effortForTurn governs ANY turn (not just review); fallback + budget reach the claude command", () => {
     const c = cfg({
