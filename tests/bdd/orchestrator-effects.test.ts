@@ -645,6 +645,48 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
     expect(task).not.toMatch(/RUBRIC \(pre-extracted/);
   });
 
+  // ── #4 context compaction: the SAME rubric now feeds the RED + GREEN authoring
+  //    turns, not just REVIEW, so the Navigator/Driver do not re-read the full
+  //    design tree every turn. Story-scoped: layers are the UNION across the ACs.
+  it("injects the pre-extracted rubric into RED (navigator) and GREEN (driver), story-scoped", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "effects-buildrubric-"));
+    const tdd = join(tmp, ".tdd");
+    mkdirSync(join(tdd, "features", "F1", "stories", "S1", "acs"), { recursive: true });
+    // Two ACs across two layers -> the story rubric unions them.
+    writeFileSync(
+      join(tdd, "features", "F1", "stories", "S1", "story.json"),
+      JSON.stringify({ id: "S1", acs: ["AC1-create", "AC2-list"] }),
+    );
+    writeFileSync(
+      join(tdd, "features", "F1", "stories", "S1", "acs", "AC1-create.json"),
+      JSON.stringify({ id: "AC1-create", layer: "API" }),
+    );
+    writeFileSync(
+      join(tdd, "features", "F1", "stories", "S1", "acs", "AC2-list.json"),
+      JSON.stringify({ id: "AC2-list", layer: "Infra" }),
+    );
+    writeFileSync(
+      join(tdd, "features", "F1", "architecture.json"),
+      JSON.stringify({ nfrs: [{ id: "NFR-tx", brief: "atomic writes", applies_to: "S1" }] }),
+    );
+    const redTask = claudeCmd(red, { tddDir: tdd }).task;
+    const greenTask = claudeCmd(green, { tddDir: tdd }).task;
+    for (const task of [redTask, greenTask]) {
+      expect(task).toMatch(/RUBRIC \(pre-extracted/);
+      expect(task).toContain("layers=API, Infra"); // story-scoped union
+      expect(task).toContain("NFR-tx");
+      expect(task).toMatch(/do not re-read them by default/);
+    }
+  });
+
+  it("build-turn rubric degrades to the bare directive when no design artifacts exist", () => {
+    // No tddDir on disk -> empty rubric -> unchanged GREEN directive, no RUBRIC clause.
+    const greenTask = claudeCmd(green).task;
+    expect(greenTask).toMatch(/Make ALL of story S1/);
+    expect(greenTask).not.toMatch(/RUBRIC \(pre-extracted/);
+    expect(greenTask).not.toMatch(/do not re-read them by default/);
+  });
+
   // ── P5: build session scope ────────────────────────────────────────────────
   it("by default resumes Navigator/Driver PER STORY (story-scoped resumeKey), fresh at each new story", () => {
     expect(claudeCmd(red).resumeKey).toBe("navigator:S1");

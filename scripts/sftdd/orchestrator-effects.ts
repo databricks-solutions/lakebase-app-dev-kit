@@ -159,22 +159,35 @@ function storyStubScope(tddDir: string, featureId: string, storyId: string): str
 }
 
 /**
- * P2: a compact, AC-scoped REVIEW rubric the orchestrator extracts ONCE from the
- * design artifacts and passes inline, so the Navigator's review turn does not
- * reload `architecture.md` + `nfrs.md` + `design-guide.md` IN FULL for every AC
- * (the same 3 files, re-read 6x across a 6-AC story). Same data, pre-extracted:
- *   - the AC's `layer` (boundary the diff must respect),
+ * A compact, pre-extracted design rubric the orchestrator computes ONCE from the
+ * design artifacts and passes inline to a BUILD turn (RED / GREEN / REVIEW /
+ * REFACTOR), so the Navigator + Driver do not reload `architecture.md` +
+ * `nfrs.md` + `design-guide.md` IN FULL every turn (the same 3 files, re-read
+ * on each RED/GREEN/REVIEW/REFACTOR across a story). Same data, pre-extracted:
+ *   - the `layer`(s) the code must respect: the single AC's layer in ac-loop, or
+ *     the UNION across the story's ACs at story scope (ac === ""),
  *   - the NFRs that apply to this story or feature-wide (id + brief), from
  *     architecture.json (the canonical NFR home), and
- *   - for a UI (E2E) AC, the design-token groups to check, from design-guide.json.
- * Best-effort: any unreadable / absent source is simply omitted (the review
- * prompt still names the full files for when more detail than the rubric is
- * needed). Returns "" when nothing could be extracted.
+ *   - for UI (E2E) work, the design-token groups to check, from design-guide.json.
+ * Best-effort: any unreadable / absent source is simply omitted (the prompt
+ * still names the full files for when more detail than the rubric is needed).
+ * Returns "" when nothing could be extracted (the prompt then degrades to naming
+ * the full files, the prior behavior). This is the per-role context-compaction
+ * lever: inject the slice, do not make each turn re-read the whole design tree.
  */
-function reviewRubric(tddDir: string, featureId: string, story: string, ac: string): string {
+function contextRubric(tddDir: string, featureId: string, story: string, ac: string): string {
   const parts: string[] = [];
-  const layer = readAcLayer(tddDir, featureId, ac);
-  if (layer) parts.push(`layer=${layer}`);
+
+  // Layer(s): the single AC in ac-loop; the union across the story's ACs at
+  // story scope (so a story-level RED/GREEN/REVIEW/REFACTOR sees every boundary
+  // its tests/code span, not just one).
+  const layers = new Set<string>();
+  const acIds = ac ? [ac] : storyAcIds(tddDir, featureId, story);
+  for (const id of acIds) {
+    const l = readAcLayer(tddDir, featureId, id);
+    if (l) layers.add(l);
+  }
+  if (layers.size) parts.push(`layer${layers.size > 1 ? "s" : ""}=${[...layers].join(", ")}`);
 
   // NFRs scoped to this story or applied feature-wide (applies_to === featureId).
   try {
@@ -191,9 +204,9 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
     /* no architecture.json -> omit; prompt still names nfrs.md */
   }
 
-  // Design-token groups to check, for a UI (E2E) AC only, the non-UI majority
-  // need NO design-guide read at all.
-  if (layer === "E2E") {
+  // Design-token groups to check, only when UI (E2E) work is in scope, the
+  // non-UI majority need NO design-guide read at all.
+  if (layers.has("E2E")) {
     try {
       const dg = JSON.parse(fs.readFileSync(designGuideJson(tddDir), "utf8")) as {
         tokens?: Record<string, unknown>;
@@ -206,6 +219,20 @@ function reviewRubric(tddDir: string, featureId: string, story: string, ac: stri
   }
 
   return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
+}
+
+/** The shared "prefer the pre-extracted rubric; open the full files only if you
+ *  need more detail" note appended after a non-empty `contextRubric`. Uses the
+ *  hyphenated `design-guide.md` filename only (never the phrase "design guide"),
+ *  so a RED/GREEN turn's note does not read as the UI-track design-guide input
+ *  flag. Returns "" when the rubric was empty (nothing pre-extracted to prefer). */
+function rubricSourcesNote(rubric: string, featureId: string): string {
+  if (!rubric) return "";
+  return (
+    ` The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md,` +
+    ` and .tdd/design/design-guide.md, open those full files ONLY if you need more detail than it carries` +
+    ` (do not re-read them by default).`
+  );
 }
 
 /** Short task directive handed to a role subagent for an invoke-role action. */
@@ -546,7 +573,7 @@ function roleTaskBody(
         if ((build?.loop ?? "story") === "story") {
           return (
             `REVIEW the implementation of story ${s} now that ALL its tests are green, the whole story in one pass.` +
-            reviewRubric(tddDir, featureId, s, "") +
+            contextRubric(tddDir, featureId, s, "") +
             ` Judge the story's diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
             ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
             ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
@@ -558,7 +585,7 @@ function roleTaskBody(
         }
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
-          reviewRubric(tddDir, featureId, s, action.ac ?? "") +
+          contextRubric(tddDir, featureId, s, action.ac ?? "") +
           ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
           ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
           ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
@@ -568,7 +595,17 @@ function roleTaskBody(
           `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
       }
-      return `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}`;
+      {
+        // RED: inject the pre-extracted design rubric (layer(s) + NFRs + any UI
+        // tokens) so the Navigator authors tests against the slice inline rather
+        // than re-reading the full design tree. Empty rubric -> unchanged directive.
+        const redRubric = contextRubric(tddDir, featureId, s, action.ac ?? "");
+        return (
+          `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}` +
+          redRubric +
+          rubricSourcesNote(redRubric, featureId)
+        );
+      }
     case "driver":
       if (action.buildMode === "repair") {
         // A green-failure assess can produce a MIXED verdict: some prior tests
@@ -592,7 +629,8 @@ function roleTaskBody(
             ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
             ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
             ` duplicated/misplaced code into one shared helper in its correct layer.` +
-            ` Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.`
+            ` Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.` +
+            contextRubric(tddDir, featureId, s, "")
           );
         }
         return (
@@ -603,18 +641,27 @@ function roleTaskBody(
           ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
           ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
           ` duplicated/misplaced code into one shared helper in its correct layer.` +
-          ` Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.`
+          ` Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.` +
+          contextRubric(tddDir, featureId, s, action.ac ?? "")
         );
       }
-      return (
-        ((build?.loop ?? "story") === "story"
-          ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.`
-          : build?.loop === "hybrid-a"
-            ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
-            : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
-        (uiTrack ? UI_TRACK_BUILD : "") +
-        supersededTestsDirective(tddDir, featureId, s)
-      );
+      {
+        // GREEN: inject the pre-extracted design rubric so the Driver implements
+        // against the layer(s) + NFRs slice inline instead of re-reading the full
+        // design tree every GREEN. Empty rubric -> unchanged directive.
+        const greenRubric = contextRubric(tddDir, featureId, s, action.ac ?? "");
+        return (
+          ((build?.loop ?? "story") === "story"
+            ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.`
+            : build?.loop === "hybrid-a"
+              ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
+              : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
+          (uiTrack ? UI_TRACK_BUILD : "") +
+          greenRubric +
+          rubricSourcesNote(greenRubric, featureId) +
+          supersededTestsDirective(tddDir, featureId, s)
+        );
+      }
     default:
       return `Work story ${s}.`;
   }
