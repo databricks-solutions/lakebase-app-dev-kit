@@ -864,3 +864,28 @@ describe("commandsForAction: assess directive scans fitness/migration tests for 
     expect(t).toMatch(/EVERY failing test|COMPLETE set/);
   });
 });
+
+describe("commandsForAction: pre-build reflection gate (navigator reflect)", () => {
+  const reflect = { kind: "invoke-role", role: "navigator", story: "S1", buildMode: "reflect" } as const;
+
+  it("the reflect turn is a claude turn that critiques spec + test-list and writes the verdict", () => {
+    const cmds = commandsForAction(reflect, cfg());
+    const claude = cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string; role: string };
+    expect(claude.role).toBe("navigator");
+    expect(claude.task).toMatch(/REFLECT on story S1 BEFORE the build lane/);
+    expect(claude.task).toContain("test-list-per-story.json");
+    expect(claude.task).toContain("reflect-verdict.json");
+    // It critiques design consistency, not implementation.
+    expect(claude.task).toMatch(/contradict|no covering test|untestable|layer/i);
+  });
+
+  it("emits the DETERMINISTIC reflect-gate CLI step after the reflect turn (not a build begin/review)", () => {
+    const cmds = commandsForAction(reflect, cfg());
+    const cli = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-sftdd-cycle") as { args: string[] };
+    expect(cli).toBeDefined();
+    expect(cli.args).toEqual(["reflect-gate", "--feature", "F1", "--story", "S1", "--tdd-dir", expect.any(String)]);
+    // It must NOT run the build-cycle `begin`/`review` verbs (that would start RED).
+    expect(cli.args).not.toContain("begin");
+    expect(cli.args).not.toContain("review");
+  });
+});

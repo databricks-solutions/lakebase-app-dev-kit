@@ -37,6 +37,9 @@ export interface StoryArtifactProbe {
   architectAnnotated(story: string): boolean;
   /** The Test Strategist produced this story's test list (test-list.json). */
   testListReady(story: string): boolean;
+  /** The pre-build reflection critic PASSED this story's spec + test-list
+   *  (reflect-verdict.json passed:true). A missing/failed verdict is false. */
+  reflectionPassed(story: string): boolean;
   /** The Navigator wrote the (failing) tests for the story's current cycle. */
   testsWritten(story: string): boolean;
   /** The Driver made those tests pass. */
@@ -138,6 +141,7 @@ function storyView(
       hasAcs: probe.hasAcs(id),
       architectAnnotated: probe.architectAnnotated(id),
       testListReady: probe.testListReady(id),
+      reflectionPassed: probe.reflectionPassed(id),
     },
     build: {
       // An experiment that was discarded is no longer cut (a fresh one is cut

@@ -136,7 +136,15 @@ function replayEffects(feature: string, stories: string[]) {
               items: [{ id: "T1", description: "t", ac_id: ac(s), status: "pending" }],
             });
           } else if (action.role === "navigator") {
-            if (action.buildMode === "review") {
+            if (action.buildMode === "reflect") {
+              // Pre-build reflection: the clean-design happy path passes in one
+              // turn (per-story verdict the reflectionPassed probe reads).
+              writeJson(join(storyDir(feature, s), "reflect-verdict.json"), {
+                version: 1,
+                passed: true,
+                findings: [],
+              });
+            } else if (action.buildMode === "review") {
               // Story-level REVIEW (the default granularity): simulate "looks good"
               // (no refactor requested), recorded once at the story's cycles root.
               writeJson(storyReviewJson(tddDir, feature, s), { reviewed_at: AT, refactor_requested: false });

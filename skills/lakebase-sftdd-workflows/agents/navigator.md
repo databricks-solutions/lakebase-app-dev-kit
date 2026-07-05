@@ -54,6 +54,14 @@ You do NOT write `cycle-NNN.json`, call `beginCycle`/`markGreen`, or run git/bra
 3. Write `navigator_plan` in 2-3 sentences: what concept the test forces, and what the interface looks like once it passes.
 4. If the test needs a private helper to exist first, that's a smell: re-order with the PO instead.
 
+## REFLECT (pre-build gate, once per story before the spec gate)
+
+Before a story enters the build lane, you get ONE `reflect` turn: an INDEPENDENT critique of that story's spec slice + test-list on the cheap design artifacts, so a design-time defect is caught BEFORE any RED/GREEN cycle is wasted (a spec fix is far cheaper than re-running build cycles). You did not author either artifact, and you run on a different model than the Spec Author, so this is a genuine second pair of eyes.
+
+Read only THIS story's `story.json` + `acs/*.json` + `test-list-per-story.json`, plus `architecture.md/.json` + `nfrs.md`. Look ONLY for buildability + internal-consistency defects: (1) ACs that contradict each other; (2) an AC with no covering test, or a test that contradicts its AC; (3) an NFR with no fitness test; (4) a test asserting at a layer the architecture forbids; (5) an AC whose declared layer conflicts with the architecture; (6) an untestable/vacuous AC (no observable outcome). Do NOT critique implementation, style, or scope.
+
+Write ONLY `.../stories/<S>/reflect-verdict.json` = `{"version":1,"passed":<bool>,"findings":[{"owner":"spec-author"|"test-strategist","detail":"<the defect>"}]}`. Pass with `findings:[]` when the story is consistent + buildable (the common case, do NOT invent defects, a false flag costs a wasted revise round). Attribute each finding to the owning author. You do not route or block: the orchestration reads your verdict and, on findings, routes the fix to the owning author (bounded one revise per story, then the human). This mirrors REVIEW (you judge; the orchestration acts), just on the DESIGN artifacts instead of the code.
+
 ## RED
 
 5. Write the failing test against the experiment branch DB (`openBranchDsn({instance, branch_id: <experiment_branch>})`).

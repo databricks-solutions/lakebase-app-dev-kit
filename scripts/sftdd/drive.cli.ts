@@ -602,12 +602,12 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
           story: action.story,
           turn,
           role: action.role,
-          ac: action.ac,
+          ac: "ac" in action ? action.ac : undefined,
           mode: action.buildMode,
         });
         process.stderr.write(
           `[record] turn ${turn}: ${action.role}${action.buildMode ? ` (${action.buildMode})` : ""}` +
-            `${action.ac ? ` ${action.ac}` : ""} -> ${dir}\n`,
+            `${"ac" in action && action.ac ? ` ${action.ac}` : ""} -> ${dir}\n`,
         );
       }
     },

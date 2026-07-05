@@ -35,6 +35,7 @@ import {
   writeRegressionAssessment,
 } from "./supersession.js";
 import { writeEscalation } from "./escalation.js";
+import { recordReflectionGate } from "./reflection.js";
 
 interface Args {
   cmd?: string;
@@ -208,6 +209,21 @@ async function main(): Promise<number> {
       });
       process.stdout.write(
         `cycle: regression assessed for ${a.story}/${a.ac}${a.fixDirective ? " (driver-fixable; repair directive recorded)" : " (not driver-fixable; will escalate with diagnosis)"}\n`,
+      );
+      return 0;
+    }
+    case "reflect-gate": {
+      // Deterministic post-turn step after the Navigator's reflect turn: read the
+      // per-story reflect-verdict.json and, if it did NOT pass, flag the
+      // spec-level blocking smell(s) for the owning author(s), scoped to the
+      // story. The existing revise-route/escalation machinery then routes +
+      // bounds + escalates. A passed/absent verdict flags nothing.
+      if (!a.story) return usage("reflect-gate: --story is required.");
+      const hits = recordReflectionGate(tddDir, a.feature, a.story);
+      process.stdout.write(
+        hits.length === 0
+          ? `cycle: reflect gate passed for ${a.story} (no design defect)\n`
+          : `cycle: reflect gate flagged ${hits.length} design defect(s) for ${a.story}: ${hits.map((h) => h.smell).join(", ")}\n`,
       );
       return 0;
     }

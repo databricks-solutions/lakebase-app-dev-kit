@@ -522,6 +522,34 @@ function roleTaskBody(
       );
     }
     case "navigator":
+      if (action.buildMode === "reflect") {
+        // Pre-build reflection: an INDEPENDENT critique of the story's spec slice
+        // + test-list BEFORE the build lane (the Navigator did NOT author either,
+        // and runs on a different model than the Spec Author). Catch design-time
+        // defects on the cheap artifacts, far cheaper than re-running build cycles.
+        // The critic writes ONLY the verdict; the deterministic reflect-gate CLI
+        // step turns a failed verdict into the routed smell (it does not decide
+        // routing here). Scope is THIS story only (parallel-story isolation).
+        return (
+          `REFLECT on story ${s} BEFORE the build lane: independently critique its spec slice ` +
+          `(.tdd/features/${featureId}/stories/${s}/story.json + acs/*.json) and its test-list ` +
+          `(.tdd/features/${featureId}/stories/${s}/test-list-per-story.json) against the architecture ` +
+          `(.tdd/features/${featureId}/architecture.md/.json) + NFRs.` +
+          contextRubric(tddDir, featureId, s, "") +
+          ` Look ONLY for design-time defects that would waste a build cycle: (1) ACs that contradict ` +
+          `each other; (2) an AC with no covering test, or a test that contradicts its AC; (3) an NFR with ` +
+          `no fitness test; (4) a test asserting at a layer the architecture forbids; (5) an AC whose ` +
+          `declared layer conflicts with the architecture; (6) an untestable/vacuous AC (no observable ` +
+          `outcome). Do NOT critique implementation, style, or scope, only buildability + internal ` +
+          `consistency of THIS story's artifacts.` +
+          ` Write your verdict to .tdd/features/${featureId}/stories/${s}/reflect-verdict.json as ` +
+          `{"version":1,"passed":<bool>,"findings":[{"owner":"spec-author"|"test-strategist","detail":"<the defect>"}]}. ` +
+          `passed:true with findings:[] when the spec + test-list are consistent + buildable (the common ` +
+          `case, do NOT invent defects). Attribute each finding to spec-author (an AC/spec defect) or ` +
+          `test-strategist (a test-list/coverage defect). Write ONLY that file; the orchestrator routes any ` +
+          `fix deterministically.`
+        );
+      }
       if (action.buildMode === "assess") {
         // DETERMINISTIC contract-clean advisory (FEIP contract-completeness): when
         // the first GREEN-failure found production code still referencing a
@@ -752,15 +780,20 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // it governs EVERY turn; absent, fall back to the review-only `reviewEffort`
       // (P6 default low on the navigator REVIEW, model-default elsewhere).
       const buildTurn: "red" | "green" | "review" | "refactor" | undefined =
-        "buildMode" in action && action.buildMode === "review"
-          ? "review"
-          : "buildMode" in action && action.buildMode === "refactor"
-            ? "refactor"
-            : action.role === "navigator"
-              ? "red"
-              : action.role === "driver"
-                ? "green"
-                : undefined;
+        "buildMode" in action && action.buildMode === "reflect"
+          ? // reflect is a DESIGN-lane critique, not a build turn: no per-turn
+            // effort/model override (it runs on the navigator's base model, the
+            // different-model critic), so it maps to no build turn.
+            undefined
+          : "buildMode" in action && action.buildMode === "review"
+            ? "review"
+            : "buildMode" in action && action.buildMode === "refactor"
+              ? "refactor"
+              : action.role === "navigator"
+                ? "red"
+                : action.role === "driver"
+                  ? "green"
+                  : undefined;
       const isReviewTurn = action.role === "navigator" && buildTurn === "review";
       const effort = cfg.effortForTurn
         ? cfg.effortForTurn(action.role, buildTurn)
@@ -819,7 +852,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // this (vs the agent hand-writing cycle-NNN.json) is what keeps the
       // probe's red_at/green_at reading in lockstep with what was produced ,
       // the drift that stalled the live smoke.
-      if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess") {
+      if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "reflect") {
+        // After the Navigator's reflect turn writes its verdict, the DETERMINISTIC
+        // reflect gate reads it and, on a failed verdict, flags the spec-level
+        // blocking smell for the owning author (scoped to the story). The existing
+        // revise-route/escalation machinery then routes + bounds + escalates. A
+        // passed verdict flags nothing and the design lane advances to the gate.
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["reflect-gate", "--feature", f, "--story", action.story, "--tdd-dir", cfg.tddDir] });
+      } else if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess") {
         // After the Navigator assesses a failed GREEN verify, finalize it: mark
         // the green-failure assessed + (if the Navigator did NOT flag-supersede)
         // record the genuine-regression escalation. Whether a flag was made is

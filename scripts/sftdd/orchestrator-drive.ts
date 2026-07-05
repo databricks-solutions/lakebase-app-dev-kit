@@ -26,6 +26,11 @@ export interface StoryDesign {
   architectAnnotated: boolean;
   /** The Test Strategist has produced this story's ordered test list. */
   testListReady: boolean;
+  /** The pre-build reflection critic (Navigator, reflect mode) has PASSED this
+   *  story's spec + test-list. A missing/failed verdict is not passed: the lane
+   *  runs (or re-runs) the critic, and a failed verdict drives the spec-level
+   *  smell -> revise-route -> HITL machinery. */
+  reflectionPassed: boolean;
 }
 
 /** A story's design + gate status, as the driver sees it. */
@@ -58,6 +63,10 @@ export type DriveAction =
   // style guide. Feature/project-level + once, so no story scope.
   | { kind: "invoke-role"; role: "ux-designer" }
   | { kind: "invoke-role"; role: DesignRole; story: string }
+  // Pre-build reflection gate: the Navigator (reflect mode) critiques the story's
+  // spec slice + test-list before the human spec gate. A design-lane use of the
+  // build reviewer role; buildMode "reflect" distinguishes it from its build turns.
+  | { kind: "invoke-role"; role: "navigator"; story: string; buildMode: "reflect" }
   | { kind: "surface-gate"; story: string }
   | { kind: "approve-gate"; story: string }
   | { kind: "design-complete" };
@@ -105,11 +114,22 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
     const v = state.stories[story];
     // A story absent from the snapshot is treated as fresh (nothing designed).
     if (v?.gateApproved) continue; // done designing; move on
-    const design = v?.design ?? { hasAcs: false, architectAnnotated: false, testListReady: false };
+    const design = v?.design ?? {
+      hasAcs: false,
+      architectAnnotated: false,
+      testListReady: false,
+      reflectionPassed: false,
+    };
 
     if (!design.hasAcs) return { kind: "invoke-role", role: "spec-author", story };
     if (!design.architectAnnotated) return { kind: "invoke-role", role: "architect-reviewer", story };
     if (!design.testListReady) return { kind: "invoke-role", role: "test-strategist", story };
+    // Pre-build reflection: the Navigator critiques the (now complete) spec +
+    // test-list BEFORE the human spec gate + the build. On findings it flags a
+    // spec-level smell that the escalation machinery routes back to the owning
+    // author (bounded one revise, then HITL) BEFORE this returns again; here we
+    // only advance once the critic has PASSED the story.
+    if (!design.reflectionPassed) return { kind: "invoke-role", role: "navigator", story, buildMode: "reflect" };
     if (!v?.gateSurfaced) return { kind: "surface-gate", story };
     return { kind: "approve-gate", story };
   }

@@ -149,6 +149,12 @@ export const acJson = (tdd: string, f: string, s: string, ac: string): string =>
 export const storyTestListJson = (tdd: string, f: string, s: string): string =>
   join(storyResolved(tdd, f, s), "test-list-per-story.json");
 export const storyPlanJson = (tdd: string, f: string, s: string): string => join(storyResolved(tdd, f, s), "plan.json");
+/** The pre-build reflection critic's verdict for one story (the Navigator's
+ *  reflect turn). Design-lane + per-story, so it is naturally feature+story
+ *  isolated (parallel stories/features write independent verdicts, no shared
+ *  reflect state). Shape in reflection.ts (ReflectVerdict). */
+export const reflectVerdictJson = (tdd: string, f: string, s: string): string =>
+  join(storyResolved(tdd, f, s), "reflect-verdict.json");
 /** The hand-back note for a role's retry: the orchestrator writes it (what the
  *  role's prior turn failed to return) and the role's next prompt CONSUMES it
  *  (reads + deletes). Keyed by role (+ story when per-story) so concurrent

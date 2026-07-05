@@ -20,6 +20,7 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     hasAcs: (s) => get(s, "hasAcs"),
     architectAnnotated: (s) => get(s, "architectAnnotated"),
     testListReady: (s) => get(s, "testListReady"),
+    reflectionPassed: (s) => get(s, "reflectionPassed"),
     testsWritten: (s) => get(s, "testsWritten"),
     codeWritten: (s) => get(s, "codeWritten"),
     storyDeployVerified: (s) => get(s, "storyDeployVerified"),
@@ -96,6 +97,52 @@ describe("deriveDriveState + nextTransition: realistic on-disk situations", () =
     const p = pipeline({ S1: { status: "designing" } });
     const state = deriveDriveState(p, fakeProbe({ S1: { hasAcs: true } }), FEATURE);
     expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "architect-reviewer", story: "S1" });
+  });
+
+  it("design lane: a story with a ready test-list but no reflection PASS runs the Navigator reflect turn (before the gate)", () => {
+    const p = pipeline({ S1: { status: "designing" } });
+    const state = deriveDriveState(
+      p,
+      fakeProbe({ S1: { hasAcs: true, architectAnnotated: true, testListReady: true } }),
+      FEATURE,
+    );
+    // reflectionPassed is absent (false) -> the reflect turn runs, NOT surface-gate.
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "reflect" });
+  });
+
+  it("design lane: once reflection PASSES, the story advances to the spec gate", () => {
+    const p = pipeline({ S1: { status: "designing" } });
+    const state = deriveDriveState(
+      p,
+      fakeProbe({ S1: { hasAcs: true, architectAnnotated: true, testListReady: true, reflectionPassed: true } }),
+      FEATURE,
+    );
+    expect(nextTransition(state)).toEqual({ kind: "surface-gate", story: "S1" });
+  });
+
+  it("per-story isolation: S2 pending reflection does not block S1 (S1 reflects first, in order)", () => {
+    const p = pipeline({ S1: { status: "designing" }, S2: { status: "designing" } });
+    // Both fully designed but neither reflected: the lane advances the FIRST
+    // story's reflect independently; S2's pending reflection never blocks S1.
+    const state = deriveDriveState(
+      p,
+      fakeProbe({
+        S1: { hasAcs: true, architectAnnotated: true, testListReady: true },
+        S2: { hasAcs: true, architectAnnotated: true, testListReady: true },
+      }),
+      FEATURE,
+    );
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "reflect" });
+    // S1 reflection passes -> S1 goes to its gate; S2 still independently pending.
+    const state2 = deriveDriveState(
+      p,
+      fakeProbe({
+        S1: { hasAcs: true, architectAnnotated: true, testListReady: true, reflectionPassed: true },
+        S2: { hasAcs: true, architectAnnotated: true, testListReady: true },
+      }),
+      FEATURE,
+    );
+    expect(nextTransition(state2)).toEqual({ kind: "surface-gate", story: "S1" });
   });
 
   it("dispatches a gate-approved ready story when the build lane is idle", () => {
