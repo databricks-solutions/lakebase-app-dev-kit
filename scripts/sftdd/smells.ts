@@ -21,7 +21,13 @@ export type SmellName =
   | "e2e-inline-regex-flag"
   | "e2e-row-perma-red"
   | "contract-incompleteness"
-  | "superseded-tests";
+  | "superseded-tests"
+  // Pre-build reflection gate: the Navigator (reflect mode) found a design-time
+  // defect in a story's spec or test-list before the build lane. Spec-level +
+  // blocking, so it routes to the owning author (bounded one revise) then HITL,
+  // reusing the FEIP-7626 revise-route machinery.
+  | "reflect-spec-defect"
+  | "reflect-testlist-defect";
 
 export interface SmellDefinition {
   name: SmellName;
@@ -141,6 +147,39 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     level: "spec",
     owning_role: "spec-author",
     gate_to_rerun: "spec",
+  },
+  {
+    name: "reflect-spec-defect",
+    description:
+      "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's " +
+      "SPEC before the build lane: an internal contradiction between ACs, a spec-vs-architecture " +
+      "layer conflict, or an untestable/vacuous AC (no observable outcome). Caught on the cheap " +
+      "design artifacts so it is fixed BEFORE any RED/GREEN/REVIEW cycle runs, the reflection " +
+      "gate is a speed play (a spec fix is far cheaper than re-running build cycles).",
+    proposed_remediation:
+      "Route back to the Spec Author (Gate 1): resolve the contradiction, make the AC observable, " +
+      "or realign the AC with the architecture. Bounded to one automatic revise per story; if the " +
+      "critic still finds the defect after the re-spec, it escalates to the human.",
+    // A spec defect the critic surfaces is a spec-author fix: route back to Gate 1.
+    level: "spec",
+    owning_role: "spec-author",
+    gate_to_rerun: "spec",
+  },
+  {
+    name: "reflect-testlist-defect",
+    description:
+      "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's " +
+      "TEST-LIST before the build lane: a test that contradicts its AC, an AC with no covering " +
+      "test (coverage gap), an NFR with no fitness test, or a test that asserts at a layer the " +
+      "architecture forbids. Caught on the cheap artifacts so it is fixed BEFORE the build lane.",
+    proposed_remediation:
+      "Route back to the Test Strategist (Gate 3): align the test with its AC, add the missing " +
+      "coverage, or move the assertion to the correct layer. Bounded to one automatic revise per " +
+      "story; if the critic still finds the defect after the re-scope, it escalates to the human.",
+    // A test-list defect the critic surfaces is a test-strategist fix: route back to Gate 3.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list",
   },
   {
     name: "layering-violation",

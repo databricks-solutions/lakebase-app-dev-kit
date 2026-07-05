@@ -48,6 +48,12 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
   // overlap that stalled S1).
   "ac-overlap",
+  // Pre-build reflection gate: the Navigator (reflect mode) found a spec or
+  // test-list defect BEFORE the build lane. Blocking + spec-level, so it routes
+  // to the owning author (bounded one revise) then HITL, via the revise-route
+  // machinery. Halts the build until the design defect is resolved.
+  "reflect-spec-defect",
+  "reflect-testlist-defect",
   // The boundary/routes layer touching persistence directly (a fat controller),
   // instead of delegating to a service + repository. A build-level structural
   // defect; the Navigator flags it in REVIEW and the layering fitness test
