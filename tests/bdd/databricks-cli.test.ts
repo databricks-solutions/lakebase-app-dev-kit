@@ -99,4 +99,17 @@ describe("classifyDatabricksError: auth failures surface one actionable error", 
     const err = new Error("401 Unauthorized");
     expect(classifyDatabricksError(err, argv, undefined)).toBeInstanceOf(DatabricksAuthError);
   });
+
+  it("folds stdout into the message when the failure wrote to stdout, not stderr", () => {
+    const err = Object.assign(new Error("Command failed"), { stderr: "", stdout: "Error: quota exceeded", code: 1 });
+    const mapped = classifyDatabricksError(err, argv, "myprof");
+    expect(mapped.message).toContain("stdout: Error: quota exceeded");
+    expect(mapped.stderr).toBe("Error: quota exceeded"); // detail preserved for callers matching on it
+  });
+
+  it("surfaces the exit code when a failure is silent on both streams (no black box)", () => {
+    const err = Object.assign(new Error("Command failed"), { stderr: "", stdout: "", code: 1 });
+    const mapped = classifyDatabricksError(err, argv, "myprof");
+    expect(mapped.message).toContain("(no stderr/stdout; exit 1)");
+  });
 });

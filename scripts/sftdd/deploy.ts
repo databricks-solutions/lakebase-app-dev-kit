@@ -13,6 +13,7 @@
 // `stopLocal` tears it down.
 
 import { execSync, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { readTargets } from "../lakebase/deploy-targets.js";
@@ -100,7 +101,11 @@ async function runVerifyMaybeEphemeral(
   if (!instance || !lakebaseBranch) {
     return runVerify(cmd, projectDir, env);
   }
-  const childName = ephemeralVerifyBranchName(lakebaseBranch, String(now().getTime()).slice(-7));
+  // Unique per attempt: a time prefix (debuggable) plus a random suffix, so a
+  // child leaked by a crashed prior run (reaped by its TTL) can never collide
+  // with this run's fork. A bare timestamp slice can repeat under a pinned clock.
+  const nonce = `${String(now().getTime()).slice(-7)}-${randomBytes(3).toString("hex")}`;
+  const childName = ephemeralVerifyBranchName(lakebaseBranch, nonce);
   const database = readAppDatabaseName(projectDir);
   return withEphemeralVerifyBranch({ instance, parentBranch: lakebaseBranch, childName, database }, (childDsn) =>
     runVerify(cmd, projectDir, { ...(env ?? process.env), VERIFY_DATABASE_URL: childDsn }),

@@ -15,9 +15,11 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { LakebaseBranchError, type LakebaseBranchInfo } from "../../scripts/lakebase/branch-utils.js";
+import { DatabricksCliError } from "../../scripts/lakebase/databricks-cli.js";
 
 const mockGetBranchByName = vi.fn();
 const mockGetDefaultBranch = vi.fn();
+const mockRunDatabricks = vi.fn();
 
 vi.mock("../../scripts/lakebase/branch-utils.js", async () => {
   const actual = await vi.importActual<typeof import("../../scripts/lakebase/branch-utils.js")>(
@@ -31,7 +33,17 @@ vi.mock("../../scripts/lakebase/branch-utils.js", async () => {
   };
 });
 
-// Import after the mock is registered.
+// The create call itself goes through the one databricks-CLI wrapper. Mock only
+// runDatabricks so the recheck-after-error path can simulate "the client errored
+// but the branch landed server-side".
+vi.mock("../../scripts/lakebase/databricks-cli.js", async () => {
+  const actual = await vi.importActual<typeof import("../../scripts/lakebase/databricks-cli.js")>(
+    "../../scripts/lakebase/databricks-cli.js",
+  );
+  return { ...actual, runDatabricks: (...args: any[]) => mockRunDatabricks(...args) };
+});
+
+// Import after the mocks are registered.
 const { createBranch } = await import("../../scripts/lakebase/branch-create.js");
 
 function fakeBranch(leaf: string, sourceLeaf: string | undefined): LakebaseBranchInfo {
@@ -62,6 +74,7 @@ describe("createBranch – collision-vs-idempotency contract", () => {
   beforeEach(() => {
     mockGetBranchByName.mockReset();
     mockGetDefaultBranch.mockReset();
+    mockRunDatabricks.mockReset();
   });
 
   it("returns the existing branch when its source matches the requested parent (idempotent retry)", async () => {
@@ -130,5 +143,41 @@ describe("createBranch – collision-vs-idempotency contract", () => {
     });
 
     expect(result).toBe(existing);
+  });
+
+  it("adopts the branch when create errors on the client but landed server-side (silent-flake resilience)", async () => {
+    // The target does not exist at the pre-check, so create proceeds. The
+    // create call errors (empty output, as the live silent exit-1 did) but the
+    // branch actually landed, so the post-error recheck must find it and the
+    // call must succeed rather than surfacing the raw CLI error.
+    const landed = fakeBranch("feature-foo", "production");
+    let created = false;
+    mockGetBranchByName.mockImplementation((name: string) => {
+      if (name === "production") return Promise.resolve(fakeBranch("production", undefined));
+      if (name === "feature-foo") return Promise.resolve(created ? landed : undefined);
+      return Promise.resolve(undefined);
+    });
+    mockRunDatabricks.mockImplementation(() => {
+      created = true; // the server created the branch despite the client-side failure
+      return Promise.reject(new DatabricksCliError("databricks postgres create-branch failed: exit 1", "prof", ""));
+    });
+
+    const result = await createBranch({ instance: "ignored", branch: "feature-foo", parentBranch: "production" });
+    expect(result).toBe(landed);
+  });
+
+  it("rethrows the create error when nothing landed (a genuine failure, not a flake)", async () => {
+    // Same silent error, but the branch never got created: the recheck finds
+    // nothing, so the original error propagates instead of being swallowed.
+    mockGetBranchByName.mockImplementation((name: string) =>
+      Promise.resolve(name === "production" ? fakeBranch("production", undefined) : undefined),
+    );
+    mockRunDatabricks.mockRejectedValue(
+      new DatabricksCliError("databricks postgres create-branch failed: exit 1", "prof", ""),
+    );
+
+    await expect(
+      createBranch({ instance: "ignored", branch: "feature-foo", parentBranch: "production" }),
+    ).rejects.toThrow(DatabricksCliError);
   });
 });

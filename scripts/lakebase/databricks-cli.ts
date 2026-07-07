@@ -119,17 +119,29 @@ export function buildInvocation(args: string[], opts: DatabricksCliOptions): {
 
 /** Map a spawn failure to a typed error (DatabricksAuthError on auth failure). */
 export function classifyDatabricksError(err: unknown, argv: string[], profile: string | undefined): DatabricksCliError {
-  const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer; stdout?: string | Buffer };
-  const stderr =
-    typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-  const haystack = `${e.message ?? ""}\n${stderr}`;
+  const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer; stdout?: string | Buffer; code?: string | number };
+  const asText = (v: string | Buffer | undefined): string =>
+    typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}\n${stderr}\n${stdout}`;
   if (isAuthFailure(haystack)) {
-    return new DatabricksAuthError(profile, stderr.trim() || (e.message ?? ""));
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
   }
+  // Some CLI failures write to stdout, not stderr; a few exit non-zero with both
+  // streams empty. Fold in whatever we have plus the exit code so a silent
+  // failure is still legible rather than a bare "Command failed".
+  const detail = stderr
+    ? `\nstderr: ${stderr}`
+    : stdout
+      ? `\nstdout: ${stdout}`
+      : e.code !== undefined
+        ? `\n(no stderr/stdout; exit ${e.code})`
+        : "";
   return new DatabricksCliError(
-    `databricks ${argv.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`,
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
     profile,
-    stderr.trim(),
+    stderr || stdout,
   );
 }
 

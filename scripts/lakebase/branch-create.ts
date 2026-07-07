@@ -178,15 +178,7 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   // handing back the stale branch would lie about the lineage.
   const existing = await getBranchByName(sanitized, lookup);
   if (existing) {
-    const existingLeaf = leafOf(existing.sourceBranchName);
-    const requestedLeaf = leafOf(sourceBranchPath);
-    if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
-      throw new LakebaseBranchError(
-        `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", ` +
-          `not the requested "${requestedLeaf}". Delete the existing branch first, ` +
-          `or pick a different target name.`,
-      );
-    }
+    assertSourceMatches(existing, sourceBranchPath, sanitized);
     return existing;
   }
 
@@ -206,7 +198,20 @@ export async function createBranch(args: CreateBranchArgs): Promise<LakebaseBran
   } else if (args.noExpiry ?? true) {
     specObj.no_expiry = true;
   }
-  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  try {
+    await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  } catch (err) {
+    // A create-branch call can exit non-zero on the client yet land the branch
+    // server-side (a silent client flake, or a concurrent creator won the race).
+    // Re-check: if the name now exists with the source we asked for, the create
+    // effectively succeeded, so fall through to the READY wait. A TTL-cap
+    // rejection means nothing was created; anything else that also didn't land
+    // rethrows unchanged.
+    if (err instanceof LakebaseBranchTtlTooLongError) throw err;
+    const landed = await getBranchByName(sanitized, lookup);
+    if (!landed) throw err;
+    assertSourceMatches(landed, sourceBranchPath, sanitized);
+  }
 
   return waitForBranchReady({
     instance: args.instance,
@@ -250,6 +255,25 @@ function leafOf(pathOrName: string | undefined): string | undefined {
   if (!pathOrName) return undefined;
   const segments = pathOrName.split("/");
   return segments[segments.length - 1] || undefined;
+}
+
+/** Throw a typed conflict when a branch already occupying `sanitized` was forked
+ *  from a different source than requested; no-op when the lineage matches (or
+ *  neither leaf is comparable). */
+function assertSourceMatches(
+  existing: LakebaseBranchInfo,
+  sourceBranchPath: string,
+  sanitized: string,
+): void {
+  const existingLeaf = leafOf(existing.sourceBranchName);
+  const requestedLeaf = leafOf(sourceBranchPath);
+  if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
+    throw new LakebaseBranchError(
+      `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", ` +
+        `not the requested "${requestedLeaf}". Delete the existing branch first, ` +
+        `or pick a different target name.`,
+    );
+  }
 }
 
 /**
