@@ -15,6 +15,7 @@
 // ~instant, so this is cheap per verify. The child also carries a TTL so a
 // crashed run can't leak a branch (Lakebase reaps it).
 
+import { LAKEBASE_BRANCH_NAME_MAX } from "../util/sanitize-branch-name.js";
 import { createBranch } from "../lakebase/branch-create.js";
 import { deleteBranch } from "../lakebase/branch-delete.js";
 import { getConnection, waitForBranchAuthReady } from "../lakebase/get-connection.js";
@@ -92,8 +93,16 @@ export async function withEphemeralVerifyBranch<T>(
  * branch. The nonce (a per-run token the caller supplies) keeps concurrent or
  * back-to-back verifies from colliding on the name even if a prior child is
  * still being reaped.
+ *
+ * The result is capped at the Lakebase branch-name limit by truncating the
+ * (descriptive) experiment prefix, NEVER the `-vrfy-<nonce>` suffix. An
+ * over-limit name would be silently truncated on create, and the ephemeral flow
+ * then looks the branch up by the untruncated name , "branch id not found".
  */
 export function ephemeralVerifyBranchName(experimentBranch: string, nonce: string): string {
   const clean = (s: string) => s.replace(/[^a-zA-Z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return `${clean(experimentBranch)}-vrfy-${clean(nonce)}`;
+  const suffix = `-vrfy-${clean(nonce)}`;
+  const prefixBudget = Math.max(0, LAKEBASE_BRANCH_NAME_MAX - suffix.length);
+  const prefix = clean(experimentBranch).slice(0, prefixBudget).replace(/-$/, "");
+  return `${prefix}${suffix}`;
 }

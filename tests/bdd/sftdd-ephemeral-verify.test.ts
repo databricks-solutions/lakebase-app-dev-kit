@@ -19,6 +19,18 @@ describe("ephemeralVerifyBranchName", () => {
   it("sanitizes illegal characters", () => {
     expect(ephemeralVerifyBranchName("exp/weird name", "a.b")).toBe("exp-weird-name-vrfy-a-b");
   });
+
+  it("caps at the Lakebase 63-char limit by truncating the prefix, never the -vrfy-<nonce> suffix", () => {
+    // Regression: a 64-char child was silently truncated to 63 on create, then
+    // looked up by the untruncated name -> "branch id not found".
+    const longExp = "experiment-s3-reversible-down-migration-exp1"; // 44 chars
+    const name = ephemeralVerifyBranchName(longExp, "0902519-ad2313"); // suffix pushes past 63
+    expect(name.length).toBeLessThanOrEqual(63);
+    // The unique suffix survives intact (uniqueness + identifiability); the
+    // descriptive prefix is what gets trimmed.
+    expect(name.endsWith("-vrfy-0902519-ad2313")).toBe(true);
+    expect(name.startsWith("experiment-s3-reversible-down-migration")).toBe(true);
+  });
 });
 
 describe("withEphemeralVerifyBranch", () => {
