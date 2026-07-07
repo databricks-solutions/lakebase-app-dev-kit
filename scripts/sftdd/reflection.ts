@@ -77,6 +77,16 @@ export function reflectionPassed(tddDir: string, feature: string, story: string)
   return readReflectVerdict(tddDir, feature, story)?.passed === true;
 }
 
+/** Did the reflect turn produce a readable verdict at all (pass OR fail)? The
+ *  reflect turn's deliverable is the verdict file; a passed:false verdict is a
+ *  VALID deliverable (it drives the smell + revise-route). This distinguishes
+ *  "the critic ran and produced a verdict" from "no verdict on disk", so the
+ *  driver can guard a reflect turn that produced nothing (escalate) instead of
+ *  silently re-invoking it into a stall. */
+export function reflectionVerdictWritten(tddDir: string, feature: string, story: string): boolean {
+  return readReflectVerdict(tddDir, feature, story) !== undefined;
+}
+
 /**
  * The DETERMINISTIC reflection gate: read the story's verdict and, when it did
  * NOT pass, flag the spec-level blocking smell(s) for the owning author(s),

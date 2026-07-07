@@ -21,6 +21,7 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     architectAnnotated: (s) => get(s, "architectAnnotated"),
     testListReady: (s) => get(s, "testListReady"),
     reflectionPassed: (s) => get(s, "reflectionPassed"),
+    reflectionVerdictWritten: (s) => get(s, "reflectionVerdictWritten"),
     testsWritten: (s) => get(s, "testsWritten"),
     codeWritten: (s) => get(s, "codeWritten"),
     storyDeployVerified: (s) => get(s, "storyDeployVerified"),

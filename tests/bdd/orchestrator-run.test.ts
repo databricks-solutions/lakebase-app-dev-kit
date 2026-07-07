@@ -25,7 +25,7 @@ function freshStory(): StoryView {
   return {
     gateApproved: false,
     gateSurfaced: false,
-    design: { hasAcs: false, architectAnnotated: false, testListReady: false, reflectionPassed: false },
+    design: { hasAcs: false, architectAnnotated: false, testListReady: false, reflectionPassed: false, reflectionVerdictWritten: false },
     build: {
       experimentCut: false,
       testsWritten: false,
@@ -80,9 +80,12 @@ function makeFakeWorld(storyIds: string[]) {
             if (action.role === "spec-author") s.design.hasAcs = true;
             else if (action.role === "architect-reviewer") s.design.architectAnnotated = true;
             else if (action.role === "test-strategist") s.design.testListReady = true;
-            else if (action.role === "navigator" && "buildMode" in action && action.buildMode === "reflect")
-              // Pre-build reflection: the clean-design happy path passes in one turn.
+            else if (action.role === "navigator" && "buildMode" in action && action.buildMode === "reflect") {
+              // Pre-build reflection: the clean-design happy path writes a passing
+              // verdict in one turn (the real effect writes reflect-verdict.json).
+              s.design.reflectionVerdictWritten = true;
               s.design.reflectionPassed = true;
+            }
             else if (action.role === "navigator") s.build.testsWritten = true;
             else if (action.role === "driver") s.build.codeWritten = true;
           }
@@ -303,7 +306,7 @@ describe("runDriver: Tier-2 phase bounds (driverBoundOptions)", () => {
     state.storyOrder = ["S1", "S2"];
     for (const id of ["S1", "S2"]) {
       const v = freshStory();
-      v.design = { hasAcs: true, architectAnnotated: true, testListReady: true, reflectionPassed: true };
+      v.design = { hasAcs: true, architectAnnotated: true, testListReady: true, reflectionPassed: true, reflectionVerdictWritten: true };
       v.gateApproved = true;
       v.gateSurfaced = true;
       state.stories[id] = v;

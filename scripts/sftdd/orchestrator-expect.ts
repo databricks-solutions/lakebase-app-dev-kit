@@ -159,6 +159,20 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
   // loop is covered by the generic stall detector (a truly stuck turn repeats its
   // signature) + the honest-green runner contract; the ledger stays precise.
   const buildMode = "buildMode" in action ? (action as { buildMode?: string }).buildMode : undefined;
+  // Pre-build reflection (design lane): the critic's deliverable is a readable
+  // reflect-verdict.json (pass OR fail). A failed verdict is valid (it drives the
+  // smell -> revise-route). The contract is only that a verdict WAS produced, so a
+  // reflect turn that writes nothing aborts loudly instead of re-dispatching into
+  // a stall (the S3 failure mode: the critic narrated a verdict it never wrote).
+  if (responder === "navigator" && buildMode === "reflect") {
+    return {
+      ...base,
+      expected: "a reflect verdict (reflect-verdict.json, pass or fail)",
+      satisfiedBy: (s) => storyView(s)?.design.reflectionVerdictWritten === true,
+      remediation:
+        "Write your verdict to the story's reflect-verdict.json (schema: { version, passed, findings[] }). A failing verdict is valid and expected when you find a defect: set passed:false and list each finding with its owner. Narrating the verdict in your reply is NOT enough; the file must exist.",
+    };
+  }
   const ac = "ac" in action ? (action as { ac?: string }).ac : undefined;
   const withAc = { ...base, ...(ac ? { ac } : {}) };
   if (responder === "navigator" && buildMode === "review") {

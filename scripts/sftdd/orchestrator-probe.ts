@@ -28,7 +28,7 @@ import { storyDeployVerified } from "./deploy.js";
 import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js";
 import { firstPendingEscalation } from "./escalation.js";
 import { specLevelSmell, priorReviseCount, isBuildRefactorRoutableSmell } from "./smells.js";
-import { reflectionPassed } from "./reflection.js";
+import { reflectionPassed, reflectionVerdictWritten } from "./reflection.js";
 import {
   cyclesRootDir,
   workflowStateJson,
@@ -199,6 +199,13 @@ export function diskArtifactProbe(
       // missing/failed verdict is false: the design lane runs (or re-runs) the
       // critic, and a failed verdict drives the smell -> revise-route -> HITL.
       return reflectionPassed(tddDir, featureId, story);
+    },
+
+    reflectionVerdictWritten(story) {
+      // Whether the reflect turn produced a readable verdict at all (pass OR
+      // fail). The expectation guard uses this so a reflect turn that writes
+      // nothing escalates rather than looping.
+      return reflectionVerdictWritten(tddDir, featureId, story);
     },
 
     // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test

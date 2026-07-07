@@ -23,7 +23,7 @@ function baseState(over: Partial<DriveState> = {}): DriveState {
       "S2-submit-create-bug": {
         gateApproved: false,
         gateSurfaced: false,
-        design: { hasAcs: true, architectAnnotated: true, testListReady: false, reflectionPassed: false },
+        design: { hasAcs: true, architectAnnotated: true, testListReady: false, reflectionPassed: false, reflectionVerdictWritten: false },
         build: {
           experimentCut: false,
           testsWritten: false,
@@ -72,9 +72,26 @@ describe("expectationFor: each role handoff declares its non-null return contrac
     expect(h!.satisfiedBy(ready)).toBe(true);
   });
 
+  it("navigator reflect owes a written verdict (pass OR fail); a turn that writes nothing is UNMET", () => {
+    // The S3 stall: the critic narrated a passed:false verdict it never wrote to
+    // disk, so reflectionPassed stayed false and the driver re-invoked reflect
+    // forever. The contract is only that a verdict WAS produced.
+    const h = expectationFor({ kind: "invoke-role", role: "navigator", story: "S2-submit-create-bug", buildMode: "reflect" } as unknown as WorkflowAction);
+    expect(h).toBeTruthy();
+    expect(h!.responder).toBe("navigator");
+    // No verdict on disk -> UNMET (aborts loudly instead of looping).
+    expect(h!.satisfiedBy(baseState())).toBe(false);
+    // A written FAILING verdict still satisfies the contract (it drives the
+    // smell -> revise-route; it is a valid deliverable, not a violation).
+    const failed = baseState();
+    failed.stories["S2-submit-create-bug"].design.reflectionVerdictWritten = true;
+    failed.stories["S2-submit-create-bug"].design.reflectionPassed = false;
+    expect(h!.satisfiedBy(failed)).toBe(true);
+  });
+
   it("spec-author / architect-reviewer per-story contracts map to their DriveState advance", () => {
     const noAcs = baseState();
-    noAcs.stories["S2-submit-create-bug"].design = { hasAcs: false, architectAnnotated: false, testListReady: false, reflectionPassed: false };
+    noAcs.stories["S2-submit-create-bug"].design = { hasAcs: false, architectAnnotated: false, testListReady: false, reflectionPassed: false, reflectionVerdictWritten: false };
     const spec = expectationFor({ kind: "invoke-role", role: "spec-author", story: "S2-submit-create-bug" } as WorkflowAction)!;
     expect(spec.satisfiedBy(noAcs)).toBe(false);
     expect(spec.satisfiedBy(baseState())).toBe(true); // hasAcs true in base
@@ -203,7 +220,7 @@ describe("ExpectationLedger.processCallback: caller-identity intake (multi-threa
     s.stories["S1"] = {
       gateApproved: false,
       gateSurfaced: false,
-      design: { hasAcs: over.s1HasAcs ?? false, architectAnnotated: false, testListReady: false, reflectionPassed: false },
+      design: { hasAcs: over.s1HasAcs ?? false, architectAnnotated: false, testListReady: false, reflectionPassed: false, reflectionVerdictWritten: false },
       build: { experimentCut: false, testsWritten: false, codeWritten: false, awaitingAcceptance: false, deployVerified: false, accepted: false },
     };
     s.stories["S2-submit-create-bug"].design.testListReady = over.s2ListReady ?? false;

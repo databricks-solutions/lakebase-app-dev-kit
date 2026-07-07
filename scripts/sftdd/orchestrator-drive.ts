@@ -31,6 +31,10 @@ export interface StoryDesign {
    *  runs (or re-runs) the critic, and a failed verdict drives the spec-level
    *  smell -> revise-route -> HITL machinery. */
   reflectionPassed: boolean;
+  /** The reflect turn produced a readable verdict (pass OR fail). The turn's
+   *  deliverable is the verdict file; this is the expectation the driver enforces
+   *  so a reflect turn that writes nothing escalates instead of looping. */
+  reflectionVerdictWritten: boolean;
 }
 
 /** A story's design + gate status, as the driver sees it. */
@@ -119,6 +123,7 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
       architectAnnotated: false,
       testListReady: false,
       reflectionPassed: false,
+      reflectionVerdictWritten: false,
     };
 
     if (!design.hasAcs) return { kind: "invoke-role", role: "spec-author", story };
