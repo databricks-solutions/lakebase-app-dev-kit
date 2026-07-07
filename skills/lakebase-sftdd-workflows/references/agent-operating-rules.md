@@ -18,10 +18,10 @@ Roles share no memory. The next role sees only what you wrote to `.sftdd/`. Put 
 
 Long phases must stay observable. Emit structured events via `lakebase-sftdd-log` (see [agent-logging.md](agent-logging.md)), including interim `--event progress` during a long sub-step, so the orchestrator + a watching human can tell work is advancing, not hung.
 
-## 5. Narrate your work (start and finish)
+## 5. Reply with the OUTCOME only, never the deliberation
 
-Your reply is part of the relay the orchestrator and human read; never a bare "done". Bookend every turn:
-- **Start:** one line on what you're about to do (task + the artifact you'll produce). E.g. "Driver: making the RED test for AC3 (form submission redirects) pass with the minimal route + redirect."
-- **Finish:** one line on what you actually did (the concrete change + where it landed). E.g. "Driver: added `POST /bugs` + 303 redirect in `app/routes/bugs.py`; cycle-001 for T3 is now GREEN."
+Your entire reply is **one finish line**: what you actually did + where it landed (plus, when your role calls for it, a short decision or the list the next role needs). Never a bare "done". E.g. "Driver: added `POST /bugs` + 303 redirect in `app/routes/bugs.py`; cycle-001 for T3 is GREEN." State the substance of the result, then stop.
 
-State the substance, not just completion. This is in addition to the structured `lakebase-sftdd-log` events (rule 4): the log is the machine trail, your reply is the human-readable bookend.
+**Do NOT narrate what you are ABOUT to do or how you got there.** No "now I'll write the artifacts...", no "the ACs already look valid so I'll...", no "let me check...", no options you weighed, files you skimmed, or step-by-step account of your thinking. There is **no reader** for that: the orchestrator routes on the artifact + the gate, the next role sees only the artifact, and the turn recorder captures every reply into the corpus, so a "what I'm about to do" preamble or a wall of thinking-out-loud is pure noise that bloats the recording and spends tokens for nobody. Think as much as you need internally; the reasoning that matters goes **inside the artifact** (rule 3); the reply carries only the outcome.
+
+This is separate from the structured `lakebase-sftdd-log` events (rule 4): the log is the machine progress trail, your reply is the single human-readable result line.

@@ -10,8 +10,46 @@
 
 import type { TurnUsage } from "./claude-usage.js";
 
-/** Require at least this fraction of the model window still free to RESUME. */
+/** Require at least this fraction of the model window still free to RESUME
+ *  (the default; a smaller warm window = a LARGER required free fraction, set via
+ *  LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION to tighten how early lighter roles reset). */
 export const CONTEXT_FREE_FRACTION_REQUIRED = 0.4;
+
+/** The required-free fraction in force, honoring the env override (clamped to a
+ *  sane (0,1) range; a bad value falls back to the default). */
+export function requiredFreeFraction(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION ?? env.SFTDD_CONTEXT_FREE_FRACTION;
+  if (raw === undefined) return CONTEXT_FREE_FRACTION_REQUIRED;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : CONTEXT_FREE_FRACTION_REQUIRED;
+}
+
+/**
+ * PROACTIVE per-turn context cap (companion to the reactive resumeFitsBudget
+ * guard). The reactive guard only resets a session AFTER it has already grown too
+ * big; a "heavy" role (the Driver writes code + runs the full suite, the Navigator
+ * reads the whole diff + test output) accumulates so fast that even one warm turn
+ * can carry a large, mostly-extraneous context into the next. For heavy roles we
+ * therefore start EVERY turn fresh: each turn reloads only what it needs from the
+ * on-disk artifacts (artifact-as-API makes a cold turn always correct), so no turn
+ * inherits a prior turn's accumulation and each stays small + focused + fast.
+ *
+ * Default heavy roles are the two builders; override with a comma list in
+ * LAKEBASE_SFTDD_HEAVY_ROLES (empty string disables the proactive cap entirely,
+ * falling back to the reactive guard alone).
+ */
+export const DEFAULT_HEAVY_ROLES = ["driver", "navigator"] as const;
+
+export function heavyRoles(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const raw = env.LAKEBASE_SFTDD_HEAVY_ROLES ?? env.SFTDD_HEAVY_ROLES;
+  if (raw === undefined) return new Set<string>(DEFAULT_HEAVY_ROLES);
+  return new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+}
+
+/** Whether this role should start each turn on a FRESH session (proactive cap). */
+export function startsFreshEachTurn(role: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return heavyRoles(env).has(role.toLowerCase());
+}
 
 /** The model's usable context window (tokens). Defaults to the standard 200k; a
  *  `1m`-tagged model gets the 1M window. Unknown models take the safe floor so
@@ -37,9 +75,13 @@ export function turnContextTokens(u: TurnUsage): number {
  * fraction of the model window. False => the driver starts the turn fresh.
  * priorContextTokens === 0 (no tracked size yet) always fits.
  */
-export function resumeFitsBudget(priorContextTokens: number, model: string): boolean {
+export function resumeFitsBudget(
+  priorContextTokens: number,
+  model: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   const window = contextWindowFor(model);
-  return priorContextTokens <= window * (1 - CONTEXT_FREE_FRACTION_REQUIRED);
+  return priorContextTokens <= window * (1 - requiredFreeFraction(env));
 }
 
 /**

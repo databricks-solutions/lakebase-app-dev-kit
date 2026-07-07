@@ -1,5 +1,5 @@
 // A feature branch must fork from its PARENT tier's pushed tip, not from
-// whatever happens to be checked out. The live FEIP-7422 smoke cut F2 from
+// whatever happens to be checked out. The live smoke cut F2 from
 // `main` (trunk, no F1 work) while its paired Lakebase branch carried staging's
 // lineage, so F2 re-authored F1's migration and Alembic could not locate the
 // DB's stamped revision at accept. Root cause: `git checkout -b <branch>` with

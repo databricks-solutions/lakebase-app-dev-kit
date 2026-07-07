@@ -151,7 +151,7 @@ function readGateApproved(featureId: string, tddDir: string, gate: "deploy" | "p
 /** Construct a probe bound to a project's .tdd dir + feature. `buildActive` (the
  *  pipeline's currently-building story) is the fallback story scope for a
  *  smell-derived escalation that did not carry one, so revise-routing knows which
- *  story to send back (FEIP-7626). */
+ *  story to send back. */
 export function diskArtifactProbe(
   tddDir: string,
   featureId: string,
@@ -284,7 +284,7 @@ export function diskArtifactProbe(
         reason: e.reason,
         ...(e.story_id ? { story_id: e.story_id } : {}),
       };
-      // FEIP-7626 revise-routing: a smell-derived escalation (`smell:<name>`) for
+      // revise-routing: a smell-derived escalation (`smell:<name>`) for
       // a SPEC-level smell is recoverable IF a story scope is known (the smell's
       // own, else the active build story) AND the one-revise-per-(smell,story)
       // budget is not yet spent. Explicit escalation files + build-level smells

@@ -57,8 +57,8 @@ import {
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import { resolveTddSettings } from "./tdd-config.js";
-import { parseTurnUsage, assistantTextFromLine, type TurnUsage } from "./claude-usage.js";
-import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal } from "./context-budget.js";
+import { parseTurnUsage, assistantTextFromLine, assistantEventSummary, type TurnUsage } from "./claude-usage.js";
+import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal, startsFreshEachTurn } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction } from "./orchestrator-logging.js";
@@ -127,7 +127,7 @@ Usage:
 Flags:
   --feature <id>       Feature to drive (required)
   --project-dir <dir>  Project root (default: cwd)
-  --tdd-dir <dir>      .tdd dir (default: <project-dir>/.tdd)
+  --tdd-dir <dir>      artifact root (default: <project-dir>/.sftdd, honors a legacy .tdd)
   --instance <id>      Lakebase instance id (threaded to experiment branch ops)
   --deploy-target <t>  Deploy target for the deploy phase (default: local)
   --approver <name>    Headless gate approver (default: human-proxy)
@@ -189,12 +189,25 @@ function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | 
     const child = spawn("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
     const lines: string[] = [];
     let sawTooLong = false;
+    // Tee a COMPACT trace: each tool action (liveness) as it streams, and the
+    // turn's FINAL assistant text (the outcome) at close. The interstitial
+    // "now I'll... / let me check..." prose is buffered and overwritten, so only
+    // the last text (the result line) survives , the deliberation never hits the
+    // log. Set LAKEBASE_SFTDD_VERBOSE_AGENT=1 to tee every assistant text delta.
+    const verboseAgent = !!process.env.LAKEBASE_SFTDD_VERBOSE_AGENT;
+    let lastText = "";
     const rl = readline.createInterface({ input: child.stdout! });
     rl.on("line", (line) => {
       lines.push(line);
       if (isPromptTooLongSignal(line)) sawTooLong = true;
-      const text = assistantTextFromLine(line);
-      if (text) process.stderr.write(text);
+      if (verboseAgent) {
+        const text = assistantTextFromLine(line);
+        if (text) process.stderr.write(text);
+        return;
+      }
+      const { text, tools } = assistantEventSummary(line);
+      for (const t of tools) process.stderr.write(`  · ${t}\n`);
+      if (text) lastText = text; // hold; only the final one is printed at close
     });
     const erl = readline.createInterface({ input: child.stderr! });
     erl.on("line", (line) => {
@@ -205,6 +218,9 @@ function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | 
     child.on("close", (code) => {
       rl.close();
       erl.close();
+      // The turn's final assistant text = the outcome (rule 5). Print it once,
+      // after the tool trace, so the log shows actions + result, not the prose.
+      if (!verboseAgent && lastText) process.stderr.write(`${lastText}\n`);
       if (code !== 0) return reject(new ClaudeTurnError(`claude exited ${code}`, sawTooLong));
       resolve(parseTurnUsage(lines));
     });
@@ -338,6 +354,18 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // session (used when retrying after a mid-turn "Prompt is too long").
         const sessionArgsFor = (forceFresh: boolean): string[] => {
           if (!cmd.resumeKey) return [];
+          // Proactive per-turn context cap: a HEAVY role (Driver/Navigator) starts
+          // EVERY turn on a fresh session, so no turn inherits a prior turn's
+          // accumulated context. This is the deterministic companion to the reactive
+          // budget guard below (which only resets AFTER a session already grew too
+          // big). Artifact-as-API makes a cold turn always correct: the turn reloads
+          // exactly what it needs from disk. Overridable via LAKEBASE_SFTDD_HEAVY_ROLES.
+          if (startsFreshEachTurn(cmd.role)) {
+            const id = randomUUID();
+            sessions.set(cmd.resumeKey, id);
+            sessionContext.delete(cmd.resumeKey);
+            return ["--session-id", id];
+          }
           const existing = sessions.get(cmd.resumeKey);
           // Context-budget guard: only resume when the warm session still leaves
           // >= the required free fraction of the model window; otherwise the turn
@@ -349,10 +377,8 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           if (existing && wouldFit) return ["--resume", existing];
           if (existing && !forceFresh && !wouldFit) {
             process.stderr.write(
-              `[drive] context guard: ${cmd.role}'s warm session (~${priorCtx.toLocaleString()} tokens) would leave ` +
-                `< ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% of the ${cmd.model} window free, risking a "prompt too long" failure. ` +
-                `Starting a FRESH ${cmd.role} session instead: the prior turn's conversation is dropped, NOT the work , ` +
-                `the on-disk artifacts (.sftdd state + code + tests) are the source of truth, so this turn continues cleanly with a clean context.\n`,
+              `[drive] context guard: fresh ${cmd.role} session ` +
+                `(warm ~${priorCtx.toLocaleString()} tok < ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% of ${cmd.model} window free)\n`,
             );
           }
           const id = randomUUID();
@@ -368,6 +394,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // so each retry has strictly less to do and converges, instead of aborting
         // the whole drive. A non-overflow failure (or exhausted retries) still throws.
         let usage: TurnUsage | undefined;
+        const turnStart = Date.now();
         for (let attempt = 0; ; attempt++) {
           const args = [...baseArgs, ...sessionArgsFor(attempt > 0)];
           try {
@@ -376,10 +403,8 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           } catch (e) {
             if (e instanceof ClaudeTurnError && e.promptTooLong && attempt < MAX_PROMPT_TOO_LONG_RETRIES) {
               process.stderr.write(
-                `[drive] context guard (mid-turn): ${cmd.role}'s turn overflowed the ${cmd.model} window WITHIN the turn ` +
-                  `("Prompt is too long"). Retrying on a FRESH session (attempt ${attempt + 1}/${MAX_PROMPT_TOO_LONG_RETRIES}); ` +
-                  `the work the failed attempt wrote to disk (.sftdd state + code + tests) persists, so this retry resumes from it ` +
-                  `with a clean context.\n`,
+                `[drive] context guard (mid-turn): ${cmd.role} overflowed ${cmd.model}; ` +
+                  `fresh-session retry ${attempt + 1}/${MAX_PROMPT_TOO_LONG_RETRIES}\n`,
               );
               continue;
             }
@@ -389,10 +414,15 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // Log the turn's CONTEXT SIZE + usage right after it returns (role + model
         // + effort after role; the token counts in metadata). Best-effort: never
         // let a logging hiccup break the turn.
+        const turnMs = Date.now() - turnStart;
         if (usage) {
           // Record this turn's total context so the next resume decision for this
           // session can apply the context-budget guard above.
           if (cmd.resumeKey) sessionContext.set(cmd.resumeKey, turnContextTokens(usage));
+          // Wall-clock per turn: the missing signal for perf work. Emitted on the
+          // turn.usage event (+ a terse console line) so a run's log shows WHERE the
+          // seconds go (which role/turn) instead of guessing.
+          process.stderr.write(`[drive] ${cmd.role} turn ${(turnMs / 1000).toFixed(1)}s (${cmd.model})\n`);
           try {
             emitAgentLogEvent(
               {
@@ -403,6 +433,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
                 ...(cmd.effort ? { effort: cmd.effort } : {}),
                 feature_id: cfg.featureId,
                 slots: {
+                  duration_ms: turnMs,
                   input_tokens: usage.inputTokens,
                   output_tokens: usage.outputTokens,
                   ...(usage.cacheReadTokens !== undefined ? { cache_read_tokens: usage.cacheReadTokens } : {}),
@@ -486,11 +517,13 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     runner: { async run() {} },
     onAction: composeOnAction(
       // Narrate each routing decision in plain language (DRY: the same message
-      // the structured log uses), then the raw action for machine-trace parity.
-      (action, i) =>
-        process.stderr.write(
-          `[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}  ${JSON.stringify(action)}\n`,
-        ),
+      // the structured log uses). The machine-readable form is already written to
+      // the structured agent-log by makeOnAction below, so the raw action JSON is
+      // console noise on every line , append it only under LAKEBASE_SFTDD_TRACE.
+      (action, i) => {
+        const trace = process.env.LAKEBASE_SFTDD_TRACE ? `  ${JSON.stringify(action)}` : "";
+        process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}${trace}\n`);
+      },
       // Code-emit the orchestrator's lifecycle (handoff / phase.start /
       // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
       // so the structured trail is written every run with no LLM in the loop.
@@ -666,9 +699,12 @@ function pendingGateOf(r: RunDriverResult): WorkflowAction | undefined {
 }
 
 function reportGate(gate: WorkflowAction): void {
+  // Reuse the shared action narration (DRY) instead of dumping raw JSON; the
+  // full action is available under LAKEBASE_SFTDD_TRACE for debugging.
+  const trace = process.env.LAKEBASE_SFTDD_TRACE ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
-    `[drive] GATE awaiting human approval: ${JSON.stringify(gate)}. ` +
-      `Surface it to the human; on approval record their decision (the approver), then re-run to continue.\n`,
+    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} ` +
+      `Approve + record the approver, then re-run to continue.\n`,
   );
 }
 
@@ -861,13 +897,13 @@ async function main(): Promise<number> {
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
       // Surface + halt: a blocking problem was raised to the HIL. The escalation
-      // is recorded under .tdd/escalations/; exit non-zero so the run fails loud
+      // is recorded under ${path.basename(cfg.tddDir)}/escalations/; exit non-zero so the run fails loud
       // (the increment is genuinely not done) and a human resolves it.
       const e = result.escalation;
       process.stderr.write(
         `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.\n` +
           `        source: ${e?.source}\n        reason: ${e?.reason}\n` +
-          `        recorded under .tdd/escalations/ ; resolve it, then re-run to resume.\n`,
+          `        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; resolve it, then re-run to resume.\n`,
       );
       return 3;
     } else if (result.stoppedAtMax) {
@@ -907,7 +943,7 @@ async function main(): Promise<number> {
       } catch {
         /* logging/escalation is best-effort; the abort below is the real signal */
       }
-      process.stderr.write(`[drive] ${err.message}\n        recorded under .tdd/escalations/ ; fix the responder, then re-run.\n`);
+      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; fix the responder, then re-run.\n`);
       return 3;
     }
     // A wrong / unexpected caller (concurrent dispatch): a callback arrived from a
@@ -933,7 +969,7 @@ async function main(): Promise<number> {
       } catch {
         /* best-effort */
       }
-      process.stderr.write(`[drive] ${err.message}\n        recorded under .tdd/escalations/ ; resolve it, then re-run.\n`);
+      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; resolve it, then re-run.\n`);
       return 3;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);

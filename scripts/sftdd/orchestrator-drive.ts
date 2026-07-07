@@ -257,7 +257,7 @@ export interface DriveEscalation {
   source: string;
   reason: string;
   story_id?: string;
-  /** FEIP-7626 revise-routing: set by the probe when this is a SPEC-level smell
+  /** revise-routing: set by the probe when this is a SPEC-level smell
    *  whose one-revise-per-(smell,story) budget is not yet spent. When present,
    *  nextTransition routes to `revise-route` (send the owning author the verdict,
    *  re-gate, resume) instead of the terminal `raise-to-hil`. Absent => hard halt
@@ -314,7 +314,7 @@ export type WorkflowAction =
   | { kind: "approve-promote-gate" }
   | { kind: "merge" }
   | { kind: "raise-to-hil"; reason: string; source: string; story?: string }
-  // FEIP-7626: a SPEC-level blocking smell the PO can send back to its owning
+  // a SPEC-level blocking smell the PO can send back to its owning
   // author and resume, instead of hard-halting. Routes the verdict (reason) to
   // the owning author at its gate, resets the story to designing, and the
   // standing design lane re-runs Gate 1->2->3 before the build resumes.
@@ -397,7 +397,7 @@ export function nextTransition(state: DriveState): WorkflowAction {
   // false-greens past the problem or silently stalls.
   if (state.escalation) {
     const e = state.escalation;
-    // FEIP-7626: a SPEC-level smell with revise budget left is recoverable, send
+    // a SPEC-level smell with revise budget left is recoverable, send
     // the verdict back to its owning author + re-gate + resume (revise-route)
     // instead of the terminal halt. The probe sets `routable` ONLY for that case;
     // everything else (build-level smells, explicit escalation files, the budget
@@ -576,7 +576,7 @@ export function actionLane(action: WorkflowAction): ActionLane {
       // Terminal halt: surfaced to the HIL, the run stops here for a human.
       return "done";
     case "revise-route":
-      // FEIP-7626: re-enter the design lane at the owning author (resume, not halt).
+      // re-enter the design lane at the owning author (resume, not halt).
       return "design";
     case "done":
       return "done";

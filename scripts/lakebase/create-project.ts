@@ -281,7 +281,7 @@ export async function createProject(
 
   // ── Step 5b: .sftdd/ scaffold (lakebase-sftdd-workflows bootstrap) ────────
   if (enableTdd) {
-    report("Scaffolding .tdd/ workflow directory...");
+    report("Scaffolding .sftdd/ workflow directory...");
     layDownTddScaffold(projectDir);
   }
 

@@ -10,6 +10,10 @@ import {
   resumeFitsBudget,
   CONTEXT_FREE_FRACTION_REQUIRED,
   isPromptTooLongSignal,
+  startsFreshEachTurn,
+  heavyRoles,
+  requiredFreeFraction,
+  DEFAULT_HEAVY_ROLES,
 } from "../../scripts/sftdd/context-budget.js";
 
 describe("contextWindowFor", () => {
@@ -73,5 +77,39 @@ describe("isPromptTooLongSignal (mid-turn overflow detection -> fresh-session re
     expect(isPromptTooLongSignal("claude exited 1")).toBe(false);
     expect(isPromptTooLongSignal("Error: ENOENT no such file")).toBe(false);
     expect(isPromptTooLongSignal("the test list is too long to enumerate here")).toBe(false);
+  });
+});
+
+describe("proactive per-turn cap: heavy roles start each turn fresh", () => {
+  it("the builders (driver, navigator) are heavy by default; design roles are not", () => {
+    expect(startsFreshEachTurn("driver", {})).toBe(true);
+    expect(startsFreshEachTurn("navigator", {})).toBe(true);
+    expect(startsFreshEachTurn("Driver", {})).toBe(true); // case-insensitive
+    expect(startsFreshEachTurn("spec-author", {})).toBe(false);
+    expect(startsFreshEachTurn("architect-reviewer", {})).toBe(false);
+    expect(startsFreshEachTurn("test-strategist", {})).toBe(false);
+    expect([...DEFAULT_HEAVY_ROLES]).toEqual(["driver", "navigator"]);
+  });
+
+  it("LAKEBASE_SFTDD_HEAVY_ROLES overrides the set; empty string disables the proactive cap", () => {
+    const only = { LAKEBASE_SFTDD_HEAVY_ROLES: "driver" };
+    expect(startsFreshEachTurn("driver", only)).toBe(true);
+    expect(startsFreshEachTurn("navigator", only)).toBe(false);
+    const off = { LAKEBASE_SFTDD_HEAVY_ROLES: "" };
+    expect(heavyRoles(off).size).toBe(0);
+    expect(startsFreshEachTurn("driver", off)).toBe(false);
+  });
+});
+
+describe("configurable warm-window threshold (smaller warm window on demand)", () => {
+  it("defaults to the module constant; a valid env value tightens it", () => {
+    expect(requiredFreeFraction({})).toBe(CONTEXT_FREE_FRACTION_REQUIRED);
+    // 200k window: default 0.4 fits <=120k; a 0.7 required-free fits only <=60k.
+    expect(resumeFitsBudget(100_000, "opus", {})).toBe(true);
+    expect(resumeFitsBudget(100_000, "opus", { LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION: "0.7" })).toBe(false);
+  });
+  it("ignores an out-of-range or non-numeric override (falls back to the default)", () => {
+    expect(requiredFreeFraction({ LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION: "9" })).toBe(CONTEXT_FREE_FRACTION_REQUIRED);
+    expect(requiredFreeFraction({ LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION: "abc" })).toBe(CONTEXT_FREE_FRACTION_REQUIRED);
   });
 });

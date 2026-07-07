@@ -118,7 +118,7 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
       expected: "a feature breakdown (≥1 story)",
       satisfiedBy: (s) => s.breakdownDone === true,
       remediation:
-        "Write feature-spec.json with a NON-EMPTY `stories[]` array and create the story stub dirs under .tdd/features/<feature>/stories/. The feature dir currently holds only feature-request.md; a prose list of stories in your reply is NOT the breakdown.",
+        "Write feature-spec.json with a NON-EMPTY `stories[]` array and create the story stub dirs under the artifact root's features/<feature>/stories/. The feature dir currently holds only feature-request.md; a prose list of stories in your reply is NOT the breakdown.",
     };
   }
   if (responder === "spec-author" && "mode" in action && action.mode === "propose") {

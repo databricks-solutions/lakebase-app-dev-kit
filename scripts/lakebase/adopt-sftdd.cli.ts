@@ -45,7 +45,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-adopt-sftdd – bootstrap the .tdd/ workflow tree on an existing repo
+const HELP = `lakebase-adopt-sftdd – bootstrap the .sftdd/ workflow tree on an existing repo
 
 Usage:
   lakebase-adopt-sftdd [path]                     fresh adoption; fails if .tdd/ exists

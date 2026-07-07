@@ -105,7 +105,7 @@ Reconcile (structural observability backstop):
     own events. Idempotent. The orchestrator / smoke calls this after each phase.
 
 Common:
-  --tdd-dir <path>   .tdd/ root (default ./.tdd)
+  --tdd-dir <path>   artifact root (default ./.sftdd, honors a legacy ./.tdd)
   -h, --help
 `;
 
@@ -212,7 +212,7 @@ export function runAgentLogCli(argv: string[]): number {
     // fires before the next dispatch. No-op for advisory/unknown smell names.
     if (a.event === "smell.flagged" && typeof slots.smell === "string") {
       // Carry story/ac scope when the role names it (slots), so revise-routing
-      // (FEIP-7626) knows which story to send back. The probe also falls back to
+      // knows which story to send back. The probe also falls back to
       // the active build story when scope is absent.
       recordBlockingSmellFlag(
         a.tddDir ?? resolveTddDir(),

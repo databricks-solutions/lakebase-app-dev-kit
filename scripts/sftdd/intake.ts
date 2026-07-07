@@ -16,7 +16,7 @@ import { checkArtifactConformance } from "./artifact-conformance.js";
 import { resolveTddDir, featureRequestMd } from "./sftdd-paths.js";
 
 export interface IntakeCheckArgs {
-  /** .tdd/ root. Default ./.tdd */
+  /** Artifact root. Default ./.sftdd (honors a legacy ./.tdd) */
   tddDir?: string;
   /** When set, also require this feature's feature-request.md. */
   featureId?: string;

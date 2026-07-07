@@ -36,20 +36,20 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `lakebase-feature-status — one-screen snapshot of a feature's TDD workflow state
+const HELP = `lakebase-feature-status – one-screen snapshot of a feature's TDD workflow state
 
 Usage:
   lakebase-feature-status <feature-id> [--tdd <dir>] [--json]
 
 Flags:
-  --tdd <dir>   Path to the .tdd/ directory (default: ./.tdd)
+  --tdd <dir>   Path to the artifact root (default: ./.sftdd, honors a legacy ./.tdd)
   --json        Print the snapshot as JSON instead of human-readable text
   --help, -h    Show this help message
 
 Examples:
   lakebase-feature-status F1-checkout
   lakebase-feature-status F1-checkout --json | jq '.experiments[].slug'
-  lakebase-feature-status F1-checkout --tdd path/to/.tdd
+  lakebase-feature-status F1-checkout --tdd path/to/.sftdd
 `;
 
 function main(): number {

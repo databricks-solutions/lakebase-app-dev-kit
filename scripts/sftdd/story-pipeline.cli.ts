@@ -4,7 +4,7 @@
 // status as it streams; on a per-story gate approval the orchestrator enqueues
 // the story; the single build lane dispatches the head and completes it.
 //
-// Usage (all take --feature <F> [--tdd-dir <dir>]; default tdd-dir = $PWD/.tdd):
+// Usage (all take --feature <F> [--tdd-dir <dir>]; default tdd-dir = $PWD/.sftdd, honors a legacy $PWD/.tdd):
 //   lakebase-sftdd-pipeline status        --feature F [--json]
 //   lakebase-sftdd-pipeline set            --feature F --story S --status <designing|awaiting-gate|ready|building|done>
 //   lakebase-sftdd-pipeline surface        --feature F --story S                 (design done -> awaiting-gate, open the gate)

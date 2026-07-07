@@ -3,7 +3,7 @@
 // output + prompt-cache reuse + cost. Sample lines mirror the real v2.1.x shape.
 
 import { describe, it, expect } from "vitest";
-import { parseTurnUsage, usageFromResultEvent, assistantTextFromLine } from "../../scripts/sftdd/claude-usage.js";
+import { parseTurnUsage, usageFromResultEvent, assistantTextFromLine, assistantEventSummary } from "../../scripts/sftdd/claude-usage.js";
 
 // A representative stream-json transcript: system init, an assistant text msg,
 // a tool use, then the terminal result event with usage (the shape probed live).
@@ -65,5 +65,32 @@ describe("assistantTextFromLine: tee readable text, skip the rest", () => {
     expect(assistantTextFromLine('{"type":"result","usage":{}}')).toBe("");
     expect(assistantTextFromLine("garbage")).toBe("");
     expect(assistantTextFromLine('{"type":"assistant","message":{"content":[{"type":"tool_use"}]}}')).toBe("");
+  });
+});
+
+describe("assistantEventSummary: compact tool actions + text, drop nothing structural", () => {
+  it("summarizes tool_use as name + target (file_path / command)", () => {
+    const write = assistantEventSummary(
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"app/models/inventory.py"}}]}}',
+    );
+    expect(write.tools).toEqual(["Write app/models/inventory.py"]);
+    expect(write.text).toBe("");
+    const bash = assistantEventSummary(
+      '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"uv run pytest"}}]}}',
+    );
+    expect(bash.tools).toEqual(["Bash uv run pytest"]);
+  });
+
+  it("separates interstitial text from tool actions in the same event", () => {
+    const ev = assistantEventSummary(
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Now let me write it."},{"type":"tool_use","name":"Edit","input":{"file_path":"a.py"}}]}}',
+    );
+    expect(ev.text).toBe("Now let me write it."); // the caller buffers text; only the LAST survives
+    expect(ev.tools).toEqual(["Edit a.py"]);
+  });
+
+  it("returns empties for non-assistant / malformed lines", () => {
+    expect(assistantEventSummary('{"type":"result","usage":{}}')).toEqual({ text: "", tools: [] });
+    expect(assistantEventSummary("garbage")).toEqual({ text: "", tools: [] });
   });
 });

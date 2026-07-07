@@ -53,8 +53,11 @@ StockFlow's requirements, not the substrate's.
 
 ## Environment constraint (for the Architect)
 
-- The app connects to the `stockflow` database, NOT the default
-  `databricks_postgres`. The deployed pool resolves its host from the
-  paired Lakebase branch; the Architect must keep `DB_NAME` /
-  `PGDATABASE` set to `stockflow` so local preview follows the
-  checked-out branch.
+- The app connects to the substrate-provisioned `databricks_postgres`
+  database via the `DATABASE_URL` the post-checkout hook writes from the
+  paired Lakebase branch. Do NOT rename the database or set `DB_NAME` /
+  `PGDATABASE` to an app-specific name, and do not make the database name
+  a requirement or NFR: the branch provisions only `databricks_postgres`
+  (a migration creates tables, not databases), so an app pointed at any
+  other name cannot connect. Leave the scaffold's connection defaults
+  alone; the schema lives in `databricks_postgres` on the paired branch.

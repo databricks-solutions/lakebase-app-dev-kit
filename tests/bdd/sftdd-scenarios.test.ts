@@ -115,10 +115,16 @@ describe("assertScenarioCorpus: logic exercised against a synthetic fixture", ()
 });
 
 describe("sftdd-scenarios: every committed scenario is well-formed + replay-ready", () => {
+  // A subdir is a COMMITTED scenario only once it carries a scenario.json manifest.
+  // A capture records INTO examples/sftdd-scenarios/<name>/ and only writes the
+  // manifest when the author finalizes it ("add scenario.json, then commit"), so a
+  // manifest-less dir is an in-progress / uncommitted capture, NOT a scenario to
+  // validate. Requiring the manifest here keeps a live capture from breaking `npm test`.
   const scenarioDirs = fs.existsSync(SCENARIOS_DIR)
     ? fs
         .readdirSync(SCENARIOS_DIR, { withFileTypes: true })
         .filter((e) => e.isDirectory())
+        .filter((e) => fs.existsSync(path.join(SCENARIOS_DIR, e.name, "scenario.json")))
         .map((e) => e.name)
     : [];
 

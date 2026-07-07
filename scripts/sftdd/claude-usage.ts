@@ -91,3 +91,40 @@ export function assistantTextFromLine(line: string): string {
   }
   return parts.join("");
 }
+
+/**
+ * Split one stream-json line into what a human trace should show: the assistant
+ * TEXT blocks (joined) and a compact one-line summary of each tool_use (action +
+ * target). The driver's tee shows the tool actions (liveness) + the turn's FINAL
+ * text (the outcome) and drops the interstitial "now I'll..." prose , which no
+ * one reads and which bloats the run log. Non-assistant lines yield empties.
+ */
+export function assistantEventSummary(line: string): { text: string; tools: string[] } {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed[0] !== "{") return { text: "", tools: [] };
+  let ev: { type?: string; message?: { content?: unknown } };
+  try {
+    ev = JSON.parse(trimmed) as typeof ev;
+  } catch {
+    return { text: "", tools: [] };
+  }
+  if (ev.type !== "assistant" || !ev.message || !Array.isArray(ev.message.content)) return { text: "", tools: [] };
+  const textParts: string[] = [];
+  const tools: string[] = [];
+  for (const block of ev.message.content as Array<{ type?: string; text?: string; name?: string; input?: Record<string, unknown> }>) {
+    if (block?.type === "text" && typeof block.text === "string") {
+      textParts.push(block.text);
+    } else if (block?.type === "tool_use" && typeof block.name === "string") {
+      const inp = block.input ?? {};
+      const target =
+        (typeof inp.file_path === "string" && inp.file_path) ||
+        (typeof inp.path === "string" && inp.path) ||
+        (typeof inp.command === "string" && inp.command) ||
+        (typeof inp.pattern === "string" && inp.pattern) ||
+        "";
+      const clipped = typeof target === "string" && target.length > 80 ? `${target.slice(0, 80)}...` : target;
+      tools.push(clipped ? `${block.name} ${clipped}` : block.name);
+    }
+  }
+  return { text: textParts.join("").trim(), tools };
+}

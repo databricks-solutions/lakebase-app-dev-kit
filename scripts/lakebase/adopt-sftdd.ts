@@ -179,7 +179,7 @@ function findBootstrapDir(): string {
     dir = parent;
   }
   throw new Error(
-    `Could not locate templates/sftdd-bootstrap/.tdd relative to ${here}. ` +
+    `Could not locate templates/sftdd-bootstrap/.sftdd relative to ${here}. ` +
       `Pass explicit { bootstrapDir } to override.`
   );
 }

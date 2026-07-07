@@ -48,7 +48,7 @@ gaps between consecutive log events, attributed to the ending event, then rolled
 up by phase, role, and role/event kind, with the slowest spans surfaced.
 
   lakebase-sftdd-timing [flags]
-    --tdd-dir <path>  .tdd/ root (default ./.tdd)
+    --tdd-dir <path>  artifact root (default ./.sftdd, honors a legacy ./.tdd)
     --feature <id>    only this feature's events
     --top <n>         how many slowest spans to surface (default 10)
     --json            emit the TimingReport as JSON (the machine API)
