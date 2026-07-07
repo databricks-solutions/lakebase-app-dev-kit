@@ -52,6 +52,7 @@ export default defineConfig({
     "scripts/sftdd/gate-conformance.cli": "scripts/sftdd/gate-conformance.cli.ts",
     "scripts/sftdd/agent-log.cli": "scripts/sftdd/agent-log.cli.ts",
     "scripts/sftdd/timing-report.cli": "scripts/sftdd/timing-report.cli.ts",
+    "scripts/sftdd/drive-log-report.cli": "scripts/sftdd/drive-log-report.cli.ts",
     "scripts/sftdd/contract-clean.cli": "scripts/sftdd/contract-clean.cli.ts",
     "scripts/sftdd/imports-clean.cli": "scripts/sftdd/imports-clean.cli.ts",
     "scripts/sftdd/layering-clean.cli": "scripts/sftdd/layering-clean.cli.ts",

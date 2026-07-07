@@ -17,7 +17,7 @@
 // code, plus deterministic per-action logging via the loop's onAction hook.
 
 import * as fs from "node:fs";
-import { dirname } from "node:path";
+import { dirname, basename } from "node:path";
 import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
 import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState, effectiveLoopForStory } from "./orchestrator-derive.js";
@@ -122,7 +122,20 @@ export interface DriveEffectsConfig {
  *  (the design lane's `layer: "E2E"` work), not just API surface. */
 const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story, a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-const UI_TRACK_BUILD = ` UI track is ON: the UI must adhere to the project design guide at .tdd/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
+/** The artifact-root basename (`.sftdd`, or a legacy `.tdd`) as agents see it,
+ *  relative to the project dir they run in. Every prompt string that names an
+ *  on-disk artifact path MUST build it from this, never a hardcoded `.tdd/`, so
+ *  the path the agent is told to read/write matches the dir the driver resolved
+ *  (`--tdd-dir`). tddDir is always the absolute resolved root, so its basename
+ *  is the correct relative reference. */
+function artifactRootRel(tddDir: string): string {
+  return basename(tddDir);
+}
+
+/** UI-track build directive naming the design guide under the resolved root. */
+function uiTrackBuild(root: string): string {
+  return ` UI track is ON: the UI must adhere to the project design guide at ${root}/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
+}
 
 // Appended to every role spawn: the artifacts ARE the deliverable; free-text
 // response tokens are pure latency. Keep the model from narrating a plan,
@@ -226,13 +239,63 @@ function contextRubric(tddDir: string, featureId: string, story: string, ac: str
  *  hyphenated `design-guide.md` filename only (never the phrase "design guide"),
  *  so a RED/GREEN turn's note does not read as the UI-track design-guide input
  *  flag. Returns "" when the rubric was empty (nothing pre-extracted to prefer). */
-function rubricSourcesNote(rubric: string, featureId: string): string {
+function rubricSourcesNote(rubric: string, featureId: string, root: string): string {
   if (!rubric) return "";
   return (
-    ` The rubric above is pre-extracted from .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md,` +
-    ` and .tdd/design/design-guide.md, open those full files ONLY if you need more detail than it carries` +
+    ` The rubric above is pre-extracted from ${root}/features/${featureId}/architecture.md, ${root}/nfrs.md,` +
+    ` and ${root}/design/design-guide.md, open those full files ONLY if you need more detail than it carries` +
     ` (do not re-read them by default).`
   );
+}
+
+/**
+ * The build turn's CONTEXT PACK: rubric (layers + NFRs + UI tokens) PLUS the
+ * established module layout and where the story's tests live. A heavy role
+ * (Driver / Navigator) starts EVERY turn on a FRESH session (no warm context),
+ * so anything it is not TOLD it must rediscover , and the recorded worst GREEN
+ * turn spent 93 tool round-trips, ~37 of them just `find`/`grep`/`ls`/`Read`
+ * relocating context already on disk. Injecting the layout + test locations
+ * turns that discovery into zero round-trips. All of it is a deterministic
+ * projection of the artifacts (conventions.json + the scaffold's fixed test
+ * dirs), never authored, so it cannot drift. Best-effort: an absent piece is
+ * simply omitted. `skipTestLoop` drops the test-location + iterate line for turns
+ * that do not run the build test loop (RED has no code yet; REVIEW only judges).
+ */
+function buildContextPack(
+  tddDir: string,
+  featureId: string,
+  story: string,
+  ac: string,
+  opts: { skipTestLoop?: boolean } = {},
+): string {
+  const root = artifactRootRel(tddDir);
+  const rubric = contextRubric(tddDir, featureId, story, ac);
+  const parts: string[] = [];
+  if (rubric) parts.push(rubric + rubricSourcesNote(rubric, featureId, root));
+
+  // Module layout: the established role -> path map, so the Driver PLACES code
+  // (and the Navigator/Reviewer JUDGES placement) without probing the tree.
+  const conventions = readConventions(tddDir);
+  if (conventions?.layers?.length) {
+    const layout = conventions.layers
+      .map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`)
+      .join(" | ");
+    parts.push(` LAYOUT (place/judge code at THESE paths, do not scan for them) :: ${layout}.`);
+  }
+
+  // Test locations: the scaffold fixes these dirs, so a build turn never needs
+  // to `find`/`ls` for the story's tests. Behavior + fitness live in known dirs;
+  // e2e is owned by the deploy gate, never re-run per cycle here.
+  if (!opts.skipTestLoop) {
+    parts.push(
+      ` TESTS :: this story's tests are under tests/step_defs/ (behavior, one file per story) and` +
+        ` tests/architecture/ (fitness: layering, persistence invariants, migration reversibility). Read those` +
+        ` named paths directly; do NOT find/grep/ls to locate them. Iterate against the single failing test while` +
+        ` fixing; the honest-GREEN verify is the authoritative full run.`,
+    );
+  }
+
+  return parts.join("");
 }
 
 /** Short task directive handed to a role subagent for an invoke-role action. */
@@ -440,6 +503,10 @@ function roleTaskBody(
   tddDir: string,
   build?: BuildLoopOpts,
 ): string {
+  // The artifact-root basename (.sftdd, or a legacy .tdd) every prompt path
+  // below is built from, so what the agent is told to read/write matches the
+  // dir the driver resolved. Never hardcode ".tdd/" in a prompt string.
+  const root = artifactRootRel(tddDir);
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -458,7 +525,7 @@ function roleTaskBody(
   // guide. Project-level, no story scope, so handle it before reading a story.
   if (action.role === "ux-designer") {
     return (
-      `Translate the HIL design brief (.tdd/design/design-brief.md) into the project design system:` +
+      `Translate the HIL design brief (${root}/design/design-brief.md) into the project design system:` +
       ` write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable` +
       ` tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information` +
       ` architecture: screens, navigation, flows). This is the project-level style guide the Navigator` +
@@ -494,7 +561,12 @@ function roleTaskBody(
         ` service, and repository layers (plus a "models" PACKAGE app/models/ , one module per domain object, NOT a flat` +
         ` app/models.py , when it persists entities); set false ONLY for a trivial static/read-through endpoint. A not-service_backed` +
         ` declaration is cross-checked , an Infra-layer AC or a migration/schema/storage NFR while service_backed is` +
-        ` false hard-blocks the gate.${architectConventionsDirective(tddDir)}`
+        ` false hard-blocks the gate.` +
+        ` When service_backed:true you MUST also declare architecture.json persistence_invariants[] , the DB-level guarantees the` +
+        ` schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible,` +
+        ` table, and a one-line brief): the unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints, any` +
+        ` transactional-atomicity boundary, and migration reversibility. These are the persistence contract the test-strategist must` +
+        ` cover with a real-branch test each; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(tddDir)}`
       );
     case "test-strategist": {
       // Pass the story's AC ids INLINE so the strategist does not re-scan the
@@ -514,11 +586,40 @@ function roleTaskBody(
       // The orchestration generates the per-story + per-AC views FROM the master
       // (lakebase-sftdd-test-list), so a per-story file the role writes is
       // regenerated, author the master, not the per-story file.
+      // Persistence coverage: a service-backed feature declares persistence_invariants
+      // (the DB-level guarantees the schema enforces); the test-list must cover EVERY
+      // one with a real-branch test tagged invariant_id, or the design gate blocks.
+      // These are `fitness` tests that verify the MIGRATION realized the invariant
+      // against the branch + the repository honors it , NOT the ORM's generic CRUD.
+      // Best-effort: omit when there is no architecture.json yet (the gate still
+      // enforces at submit time).
+      let dbScope = "";
+      try {
+        const arch = JSON.parse(fs.readFileSync(architectureJson(tddDir, featureId), "utf8")) as {
+          service_backed?: boolean;
+          persistence_invariants?: Array<{ id?: string; brief?: string }>;
+        };
+        if (arch.service_backed === true) {
+          const inv = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string");
+          const list = inv.length
+            ? ` The declared persistence invariants are: ${inv.map((i) => `${i.id}${i.brief ? ` (${i.brief})` : ""}`).join("; ")}.`
+            : "";
+          dbScope =
+            ` This feature is service-backed. Cover EVERY architecture.json persistence_invariant with >=1 test that` +
+            ` sets "invariant_id" to that invariant's id and exercises it DIRECTLY against the branch database (a real DB` +
+            ` session, never a mock): verify the MIGRATION actually realized the guarantee (e.g. inserting a duplicate raises` +
+            ` an IntegrityError, a NOT NULL/CHECK rejects a bad row, a down-then-up migration round-trips) and that the` +
+            ` repository honors it. Do NOT write a test of the ORM's generic add/commit/query round-trip , that tests the` +
+            ` library, not your schema.${list}`;
+        }
+      } catch {
+        /* no architecture.json yet -> omit; the test_list gate still enforces it */
+      }
       return (
         `Produce story ${s}'s ordered tests and APPEND them to the feature master test list` +
-        ` .tdd/features/${featureId}/test-list.json, keep every item already there for the other` +
+        ` ${root}/features/${featureId}/test-list.json, keep every item already there for the other` +
         ` stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration` +
-        ` generates the per-story + per-AC views from the master).${acScope}`
+        ` generates the per-story + per-AC views from the master).${acScope}${dbScope}`
       );
     }
     case "navigator":
@@ -532,9 +633,9 @@ function roleTaskBody(
         // routing here). Scope is THIS story only (parallel-story isolation).
         return (
           `REFLECT on story ${s} BEFORE the build lane: independently critique its spec slice ` +
-          `(.tdd/features/${featureId}/stories/${s}/story.json + acs/*.json) and its test-list ` +
-          `(.tdd/features/${featureId}/stories/${s}/test-list-per-story.json) against the architecture ` +
-          `(.tdd/features/${featureId}/architecture.md/.json) + NFRs.` +
+          `(${root}/features/${featureId}/stories/${s}/story.json + acs/*.json) and its test-list ` +
+          `(${root}/features/${featureId}/stories/${s}/test-list-per-story.json) against the architecture ` +
+          `(${root}/features/${featureId}/architecture.md/.json) + NFRs.` +
           contextRubric(tddDir, featureId, s, "") +
           ` Look ONLY for design-time defects that would waste a build cycle: (1) ACs that contradict ` +
           `each other; (2) an AC with no covering test, or a test that contradicts its AC; (3) an NFR with ` +
@@ -542,7 +643,7 @@ function roleTaskBody(
           `declared layer conflicts with the architecture; (6) an untestable/vacuous AC (no observable ` +
           `outcome). Do NOT critique implementation, style, or scope, only buildability + internal ` +
           `consistency of THIS story's artifacts.` +
-          ` Write your verdict to .tdd/features/${featureId}/stories/${s}/reflect-verdict.json as ` +
+          ` Write your verdict to ${root}/features/${featureId}/stories/${s}/reflect-verdict.json as ` +
           `{"version":1,"passed":<bool>,"findings":[{"owner":"spec-author"|"test-strategist","detail":"<the defect>"}]}. ` +
           `passed:true with findings:[] when the spec + test-list are consistent + buildable (the common ` +
           `case, do NOT invent defects). Attribute each finding to spec-author (an AC/spec defect) or ` +
@@ -601,37 +702,31 @@ function roleTaskBody(
         if ((build?.loop ?? "story") === "story") {
           return (
             `REVIEW the implementation of story ${s} now that ALL its tests are green, the whole story in one pass.` +
-            contextRubric(tddDir, featureId, s, "") +
-            ` Judge the story's diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
-            ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
-            ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
-            ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
+            ` Judge the story's diff against the context pack: layer boundaries, naming, cross-cutting concerns, the` +
+            ` required NFRs, and (for UI) design-token + IA adherence.` +
+            buildContextPack(tddDir, featureId, s, "", { skipTestLoop: true }) +
             ` Write ONE verdict for the whole story to` +
-            ` .tdd/cycles/${featureId}/${s}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+            ` ${root}/cycles/${featureId}/${s}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
             `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
           );
         }
         return (
           `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green.` +
-          contextRubric(tddDir, featureId, s, action.ac ?? "") +
-          ` Judge the diff against the rubric: layer boundaries, naming, cross-cutting concerns, the required` +
-          ` NFRs, and (for UI) design-token + IA adherence. The rubric above is pre-extracted from` +
-          ` .tdd/features/${featureId}/architecture.md, .tdd/nfrs.md, and .tdd/design/design-guide.md, open` +
-          ` those full files ONLY if you need more detail than it carries (do not re-read them by default).` +
+          ` Judge the diff against the context pack: layer boundaries, naming, cross-cutting concerns, the required` +
+          ` NFRs, and (for UI) design-token + IA adherence.` +
+          buildContextPack(tddDir, featureId, s, action.ac ?? "", { skipTestLoop: true }) +
           ` Write your verdict to` +
-          ` .tdd/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
+          ` ${root}/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}` +
           `, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`
         );
       }
       {
-        // RED: inject the pre-extracted design rubric (layer(s) + NFRs + any UI
-        // tokens) so the Navigator authors tests against the slice inline rather
-        // than re-reading the full design tree. Empty rubric -> unchanged directive.
-        const redRubric = contextRubric(tddDir, featureId, s, action.ac ?? "");
+        // RED: inject the context pack (rubric + module layout) so the Navigator
+        // authors tests against the slice + the known layout inline rather than
+        // re-reading the design tree. redOnly: no test-location line (no code yet).
         return (
-          `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? UI_TRACK_BUILD : ""}` +
-          redRubric +
-          rubricSourcesNote(redRubric, featureId)
+          `${nextPendingTestDirective(tddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? uiTrackBuild(root) : ""}` +
+          buildContextPack(tddDir, featureId, s, action.ac ?? "", { skipTestLoop: true })
         );
       }
     case "driver":
@@ -651,42 +746,41 @@ function roleTaskBody(
         if ((build?.loop ?? "story") === "story") {
           return (
             `REFACTOR story ${s} per the Navigator's review` +
-            ` (.tdd/cycles/${featureId}/${s}/review.json -> refactor_notes), guided by the architecture` +
-            ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+            ` (${root}/cycles/${featureId}/${s}/review.json -> refactor_notes), guided by the architecture` +
+            ` (${root}/features/${featureId}/architecture.md), the NFRs (${root}/nfrs.md), + design guide (${root}/design/design-guide.md).` +
             ` If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering /` +
-            ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
+            ` design-adherence / import-coupling smell in ${root}/smells.json): run that gate to see the violation` +
             ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
             ` duplicated/misplaced code into one shared helper in its correct layer.` +
             ` Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.` +
-            contextRubric(tddDir, featureId, s, "")
+            buildContextPack(tddDir, featureId, s, "")
           );
         }
         return (
           `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review` +
-          ` (.tdd/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
-          ` (.tdd/features/${featureId}/architecture.md), the NFRs (.tdd/nfrs.md), + design guide (.tdd/design/design-guide.md).` +
+          ` (${root}/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture` +
+          ` (${root}/features/${featureId}/architecture.md), the NFRs (${root}/nfrs.md), + design guide (${root}/design/design-guide.md).` +
           ` If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering /` +
-          ` design-adherence / import-coupling smell in .tdd/smells.json): run that gate to see the violation` +
+          ` design-adherence / import-coupling smell in ${root}/smells.json): run that gate to see the violation` +
           ` (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the` +
           ` duplicated/misplaced code into one shared helper in its correct layer.` +
           ` Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.` +
-          contextRubric(tddDir, featureId, s, action.ac ?? "")
+          buildContextPack(tddDir, featureId, s, action.ac ?? "")
         );
       }
       {
-        // GREEN: inject the pre-extracted design rubric so the Driver implements
-        // against the layer(s) + NFRs slice inline instead of re-reading the full
-        // design tree every GREEN. Empty rubric -> unchanged directive.
-        const greenRubric = contextRubric(tddDir, featureId, s, action.ac ?? "");
+        // GREEN: inject the context pack (rubric + module layout + test
+        // locations) so the Driver implements against the slice + known paths
+        // inline instead of re-reading the design tree and re-discovering the
+        // tests every GREEN (the 93-round-trip worst turn).
         return (
           ((build?.loop ?? "story") === "story"
             ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.`
             : build?.loop === "hybrid-a"
               ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.`
               : `Make the failing test for story ${s} GREEN (simplest honest code).`) +
-          (uiTrack ? UI_TRACK_BUILD : "") +
-          greenRubric +
-          rubricSourcesNote(greenRubric, featureId) +
+          (uiTrack ? uiTrackBuild(root) : "") +
+          buildContextPack(tddDir, featureId, s, action.ac ?? "") +
           supersededTestsDirective(tddDir, featureId, s)
         );
       }
@@ -702,6 +796,7 @@ const HUMAN_PROXY_BIN = "lakebase-sftdd-human-proxy";
 const LOG_BIN = "lakebase-sftdd-log";
 const TEST_LIST_BIN = "lakebase-sftdd-test-list";
 const DEPLOY_BIN = "lakebase-sftdd-deploy";
+const GATE_CONFORMANCE_BIN = "lakebase-sftdd-gate-conformance";
 // Promote phase, the SCM workflow CLIs (lakebase-scm-workflows). They read +
 // advance the SCM ladder in .lakebase/workflow-state.json, so they take
 // --project-dir (the project root), NOT --feature/--tdd-dir.
@@ -1033,7 +1128,18 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       return [{ kind: "set-phase", phase: "discovery" }];
 
     case "feature-complete":
-      return [{ kind: "set-phase", phase: "deploy" }];
+      // Feature-design-complete conformance gate (deterministic backstop): once
+      // EVERY story is designed + gated, the WHOLE feature's artifacts must
+      // conform , all Required NFRs covered, layers declared, and every declared
+      // persistence_invariant + a fitness guard covered across the merged
+      // test-list , before the feature deploys. The per-story reflect gate catches
+      // per-story design defects; this catches feature-wide coverage a single
+      // story cannot see (e.g. an invariant no story's test covers). It enforces
+      // on the advance for ANY approver; a non-zero exit halts the drive.
+      return [
+        { kind: "cli", bin: GATE_CONFORMANCE_BIN, args: ["--feature", f, "--tdd-dir", cfg.tddDir] },
+        { kind: "set-phase", phase: "deploy" },
+      ];
 
     case "deploy":
       // Ship the merged feature, deterministically (same contract as the per-story
@@ -1144,7 +1250,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       ];
 
     case "revise-route": {
-      // FEIP-7626: a SPEC-level smell the PO sends back to its owning author.
+      // a SPEC-level smell the PO sends back to its owning author.
       // ONE in-process command does it atomically (no inter-command readState
       // window): record the PO's revise decision as gate events, reset the story
       // to `designing` (reviseStory: discard the experiment + reopen the gate +
@@ -1218,7 +1324,7 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
     async readState() {
       const pipeline = readPipeline(cfg.tddDir, cfg.featureId);
       // Thread the active build story so a smell-derived escalation with no story
-      // scope still resolves to a story for revise-routing (FEIP-7626).
+      // scope still resolves to a story for revise-routing.
       const probe = diskArtifactProbe(cfg.tddDir, cfg.featureId, pipeline.build_active);
       const ctx = readDriveContext(cfg.tddDir, cfg.featureId, cfg.projectDir);
       const state = deriveDriveState(pipeline, probe, ctx);

@@ -495,7 +495,12 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
 describe("commandsForAction: coarse phase transitions -> set-phase", () => {
   it("planning-complete -> discovery, feature-complete -> deploy, done -> shipped", () => {
     expect(commandsForAction({ kind: "planning-complete" }, cfg())).toEqual([{ kind: "set-phase", phase: "discovery" }]);
-    expect(commandsForAction({ kind: "feature-complete" }, cfg())).toEqual([{ kind: "set-phase", phase: "deploy" }]);
+    // feature-complete runs the feature-design-complete conformance gate (a
+    // deterministic feature-wide backstop) before advancing to the deploy phase.
+    expect(commandsForAction({ kind: "feature-complete" }, cfg())).toEqual([
+      { kind: "cli", bin: "lakebase-sftdd-gate-conformance", args: ["--feature", "F1", "--tdd-dir", "/p/.tdd"] },
+      { kind: "set-phase", phase: "deploy" },
+    ]);
     expect(commandsForAction({ kind: "done" }, cfg())).toEqual([{ kind: "set-phase", phase: "shipped" }]);
   });
 });
@@ -685,6 +690,40 @@ describe("commandsForAction: build-lane perf (P2 review rubric / P5 session scop
     expect(greenTask).toMatch(/Make ALL of story S1/);
     expect(greenTask).not.toMatch(/RUBRIC \(pre-extracted/);
     expect(greenTask).not.toMatch(/do not re-read them by default/);
+  });
+
+  // ── context pack: the module LAYOUT (conventions.json) + TEST locations, so a
+  //    build turn places code + finds tests without discovery round-trips.
+  it("injects the LAYOUT map into build turns, and the TESTS loop only where the loop runs", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "effects-pack-"));
+    const tdd = join(tmp, ".tdd");
+    mkdirSync(join(tdd, "architecture"), { recursive: true });
+    writeFileSync(
+      join(tdd, "architecture", "conventions.json"),
+      JSON.stringify({
+        established_by: "F1",
+        established_at: "2026-01-01T00:00:00.000Z",
+        service_backed: true,
+        layers: [
+          { role: "boundary", module: "app/routes" },
+          { role: "service", module: "app/services" },
+          { role: "repository", module: "app/repositories" },
+        ],
+      }),
+    );
+    const greenTask = claudeCmd(green, { tddDir: tdd }).task;
+    const redTask = claudeCmd(red, { tddDir: tdd }).task;
+    // LAYOUT map is injected into both RED and GREEN.
+    for (const task of [greenTask, redTask]) {
+      expect(task).toMatch(/LAYOUT \(place\/judge code/);
+      expect(task).toContain("boundary=app/routes");
+      expect(task).toContain("repository=app/repositories");
+    }
+    // The TEST-loop line rides only on turns that RUN the loop: GREEN yes, RED no.
+    expect(greenTask).toMatch(/TESTS ::/);
+    expect(greenTask).toMatch(/do NOT find\/grep\/ls/);
+    expect(redTask).not.toMatch(/TESTS ::/);
+    rmSync(tmp, { recursive: true, force: true });
   });
 
   // ── P5: build session scope ────────────────────────────────────────────────
@@ -887,5 +926,52 @@ describe("commandsForAction: pre-build reflection gate (navigator reflect)", () 
     // It must NOT run the build-cycle `begin`/`review` verbs (that would start RED).
     expect(cli.args).not.toContain("begin");
     expect(cli.args).not.toContain("review");
+  });
+});
+
+// Regression guard: role task prompts must name artifact paths under the RESOLVED
+// artifact root (the basename of the configured tddDir), never a hardcoded
+// ".tdd/". On a fresh project (whose root is ".sftdd") a prompt telling the agent
+// to read/write ".tdd/..." points at a directory the driver does not resolve, so
+// the design lane stalls (the agent writes reflect-verdict.json / test-list.json
+// where the deterministic probe never looks). This asserts the prompt path prefix
+// tracks the config, closing the ".tdd/.sftdd" mismatch.
+describe("role tasks name paths under the resolved artifact root (not a hardcoded .tdd/)", () => {
+  const sftddCfg = (over: Partial<DriveEffectsConfig> = {}) => cfg({ tddDir: "/p/.sftdd", ...over });
+  function taskFor(action: Parameters<typeof commandsForAction>[0]): string {
+    const cmds = commandsForAction(action, sftddCfg());
+    return (cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string }).task;
+  }
+
+  it("ux-designer reads the design brief under .sftdd, not .tdd", () => {
+    const task = taskFor({ kind: "invoke-role", role: "ux-designer" });
+    expect(task).toContain(".sftdd/design/design-brief.md");
+    expect(task).not.toContain(".tdd/");
+  });
+
+  it("navigator reflect writes the verdict + reads the spec slice under .sftdd, not .tdd", () => {
+    const task = taskFor({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "reflect" });
+    expect(task).toContain(".sftdd/features/F1/stories/S1/reflect-verdict.json");
+    expect(task).toContain(".sftdd/features/F1/stories/S1/test-list-per-story.json");
+    expect(task).not.toContain(".tdd/");
+  });
+
+  it("test-strategist appends to the feature master test list under .sftdd, not .tdd", () => {
+    const task = taskFor({ kind: "invoke-role", role: "test-strategist", story: "S1" });
+    expect(task).toContain(".sftdd/features/F1/test-list.json");
+    expect(task).not.toContain(".tdd/");
+  });
+
+  it("driver story refactor names review.json + architecture under .sftdd, not .tdd", () => {
+    const task = taskFor({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor" });
+    expect(task).toContain(".sftdd/cycles/F1/S1/review.json");
+    expect(task).not.toContain(".tdd/");
+  });
+
+  it("a legacy .tdd root is honored verbatim (dual-read projects keep working)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "ux-designer" }, cfg({ tddDir: "/p/.tdd" }));
+    const task = (cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string }).task;
+    expect(task).toContain(".tdd/design/design-brief.md");
+    expect(task).not.toContain(".sftdd/");
   });
 });

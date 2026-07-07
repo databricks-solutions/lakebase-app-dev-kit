@@ -144,11 +144,13 @@ describe("resolveTddSettings: per-turn model tiering (driver GREEN/REFACTOR chea
     expect(s.modelFor("spec-author")).toBe("opus");
   });
 
-  it("defaultTddConfig seeds the balanced driver tier: RED recommended, GREEN/REFACTOR haiku", () => {
+  it("defaultTddConfig seeds the balanced driver tier: RED + GREEN recommended, REFACTOR haiku", () => {
     writeTddConfig(proj, defaultTddConfig());
     const s = resolveTddSettings({ projectDir: proj, env: {} });
     expect(s.modelFor("driver", "red")).toBe("sonnet");
-    expect(s.modelFor("driver", "green")).toBe("haiku");
+    // GREEN was haiku, but it thrashed round-trips (recorded 93 calls); the
+    // recommended model finishes in fewer round-trips, faster in wall-clock.
+    expect(s.modelFor("driver", "green")).toBe("sonnet");
     expect(s.modelFor("driver", "refactor")).toBe("haiku");
     // navigator + design roles keep their scalar recommended model.
     expect(s.modelFor("navigator", "red")).toBe("sonnet");

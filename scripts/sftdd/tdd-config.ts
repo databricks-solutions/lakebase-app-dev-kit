@@ -196,11 +196,14 @@ export function defaultTddConfig(): TddConfigFile {
       role === "navigator"
         ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } }
         : role === "driver"
-          ? // Model tiering: the Driver's RED (test authoring) keeps its
-            // recommended model; the mechanical GREEN + REFACTOR turns drop to a
-            // fast/cheap model. Biggest safe speed/cost lever; a project can flatten
-            // this back to a scalar `model` in sftdd-config.json.
-            { model: { red: RECOMMENDED_MODELS[role], green: "haiku", refactor: "haiku" } }
+          ? // Model tiering: RED (test authoring) + GREEN (implementation) keep the
+            // recommended model; only the mechanical REFACTOR turn drops to a fast
+            // model. GREEN was on haiku, but the recorded worst GREEN turn thrashed
+            // 93 tool round-trips (haiku's trial-and-error), so wall-clock, not token
+            // cost, dominated. Sonnet finishes GREEN in far fewer round-trips, faster
+            // even at a higher per-token price. Overridable per project + via
+            // LAKEBASE_SFTDD_* ; a project can flatten to a scalar `model`.
+            { model: { red: RECOMMENDED_MODELS[role], green: RECOMMENDED_MODELS[role], refactor: "haiku" } }
           : { model: RECOMMENDED_MODELS[role] };
   }
   return {
