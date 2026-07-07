@@ -10,8 +10,7 @@
 // Returns the LakebaseBranchInfo when the branch reaches READY within the
 // poll budget (default ~120s); throws otherwise.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { runDatabricks, DatabricksCliError } from "./databricks-cli.js";
 import { pollUntilDefined } from "../util/poll-until.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { asBranchName, looksLikeBranchUid } from "./branch-id.js";
@@ -31,7 +30,6 @@ import {
 import { getProjectRetentionDuration } from "./lakebase-project.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
-const execFileP = promisify(execFile);
 
 export interface CreateBranchArgs extends BranchLookupOpts {
   /** Target branch name (will be sanitized to a Lakebase id). */
@@ -291,7 +289,7 @@ async function createWithTtlRecovery(
     // Only attempt recovery when this looks like the workspace-TTL-cap
     // rejection AND we actually had a TTL set (no_expiry: true requests
     // never hit this code path).
-    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
+    if (!(err instanceof DatabricksCliError) || !originalTtl || !isTtlTooLongError(err.message)) {
       throw err;
     }
     // Resolve retention duration: prefer per-session cache, then probe.
@@ -328,7 +326,7 @@ async function createWithTtlRecovery(
         host,
       );
     } catch (retryErr) {
-      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
+      if (retryErr instanceof DatabricksCliError && isTtlTooLongError(retryErr.message)) {
         throw new LakebaseBranchTtlTooLongError(
           clamped,
           `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`,
@@ -339,24 +337,10 @@ async function createWithTtlRecovery(
   }
 }
 
-async function dbcli(args: string[], host?: string): Promise<string> {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost
-    ? ({ ...process.env, DATABRICKS_HOST: trimmedHost } as NodeJS.ProcessEnv)
-    : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
-    return stdout.toString();
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string"
-        ? e.stderr
-        : Buffer.isBuffer(e.stderr)
-          ? e.stderr.toString("utf8")
-          : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`
-    );
-  }
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts): threads the
+// resolved --profile + DATABRICKS_HOST. Uses the longer create-branch timeout.
+// Failures throw DatabricksCliError (message preserved), which the TTL fallback
+// below matches instead of the old LakebaseBranchError.
+function dbcli(args: string[], host?: string): Promise<string> {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }

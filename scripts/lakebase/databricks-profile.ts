@@ -15,6 +15,7 @@
 // `databricks auth profiles -o json`.
 
 import * as fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { exec } from "../util/exec.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
@@ -87,6 +88,31 @@ export async function resolveProfileForHost(
   let out: string;
   try {
     out = await exec("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return undefined;
+  }
+  return selectProfileForHost(out, host);
+}
+
+/**
+ * Synchronous twin of resolveProfileForHost, for the synchronous CLI-wrapper
+ * path (get-connection / schema-diff run the `databricks` CLI with execFileSync).
+ * Same source (`databricks auth profiles -o json`) + same pure selector
+ * (selectProfileForHost), so both paths resolve a host to a profile IDENTICALLY;
+ * only the shell-out is sync here. Returns undefined on CLI error / no unique match.
+ */
+export function resolveProfileForHostSync(
+  host: string,
+  timeoutMs: number = KIT_TIMEOUTS.cliDefault,
+): string | undefined {
+  if (!normalizeHost(host)) return undefined;
+  let out: string;
+  try {
+    out = execFileSync("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs,
+    });
   } catch {
     return undefined;
   }

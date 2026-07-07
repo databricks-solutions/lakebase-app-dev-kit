@@ -13,7 +13,7 @@
 // (.github/workflows/grep-guard.yml) fails the build if it appears outside
 // this module.
 
-import { execFileSync } from "node:child_process";
+import { runDatabricksSync } from "./databricks-cli.js";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client, type Pool } from "pg";
 import { resolveBranchId } from "./branch-utils.js";
@@ -180,21 +180,11 @@ function buildPostgresUrl(parts: {
   return u.toString();
 }
 
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts). No workspace
+// host at this layer, so the profile resolves from the env (DATABRICKS_CONFIG_PROFILE)
+// through the same wrapper; auth failures surface as a uniform DatabricksAuthError.
 function dbcli(args: string[]): string {
-  try {
-    return execFileSync("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault,
-    });
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 /**

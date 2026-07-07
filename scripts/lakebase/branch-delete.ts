@@ -2,17 +2,15 @@
 // The CLI requires the full resource name (projects/.../branches/...);
 // this module looks it up first.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   LakebaseBranchError,
   BranchLookupOpts,
   getBranchByName,
   resolveBranchPath,
 } from "./branch-utils.js";
+import { runDatabricks } from "./databricks-cli.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
-const execFileP = promisify(execFile);
 
 export interface DeleteBranchArgs extends BranchLookupOpts {
   /** Branch uid, branchId, or full resource name. */
@@ -65,24 +63,7 @@ export async function deleteBranch(args: DeleteBranchArgs): Promise<void> {
   await dbcli(["postgres", "delete-branch", fullPath], args.host);
 }
 
-async function dbcli(args: string[], host?: string): Promise<string> {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost
-    ? ({ ...process.env, DATABRICKS_HOST: trimmedHost } as NodeJS.ProcessEnv)
-    : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string"
-        ? e.stderr
-        : Buffer.isBuffer(e.stderr)
-          ? e.stderr.toString("utf8")
-          : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`
-    );
-  }
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts).
+function dbcli(args: string[], host?: string): Promise<string> {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }

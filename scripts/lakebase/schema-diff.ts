@@ -11,7 +11,7 @@
 // semantics, so once the extension re-routes (publish_and_consume),
 // the modal can read identical JSON from either call site.
 
-import { execFileSync } from "node:child_process";
+import { runDatabricksSync } from "./databricks-cli.js";
 import type { Pool } from "pg";
 import { getConnection } from "./get-connection.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
@@ -364,10 +364,8 @@ function findDefaultBranch(instance: string): string | undefined {
   }
 }
 
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts). Profile
+// resolves from the env through the same wrapper; auth failures are uniform.
 function dbcli(args: string[]): string {
-  return execFileSync("databricks", args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: KIT_TIMEOUTS.cliDefault,
-  });
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }

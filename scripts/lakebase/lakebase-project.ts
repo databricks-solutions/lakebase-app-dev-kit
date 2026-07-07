@@ -3,12 +3,9 @@
 // concerns (endpoints, credential minting, schema querying) live in
 // scripts/lakebase/get-connection.ts and other verbs.
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { branchNameFromResourcePath, type BranchName } from "./branch-id.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
-
-const execFileP = promisify(execFile);
+import { runDatabricks } from "./databricks-cli.js";
 
 export class LakebaseProjectError extends Error {
   constructor(message: string) {
@@ -230,25 +227,7 @@ export async function getProjectRetentionDuration(
   return findHistoryRetentionDuration(parsed);
 }
 
-async function dbcli(args: string[], host?: string): Promise<string> {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, {
-      env: env as NodeJS.ProcessEnv,
-      timeout: KIT_TIMEOUTS.cliDefault,
-    });
-    return stdout.toString();
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string"
-        ? e.stderr
-        : Buffer.isBuffer(e.stderr)
-          ? e.stderr.toString("utf8")
-          : "";
-    throw new LakebaseProjectError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`
-    );
-  }
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts).
+function dbcli(args: string[], host?: string): Promise<string> {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }

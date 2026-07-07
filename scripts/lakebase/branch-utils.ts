@@ -1,8 +1,7 @@
 // Lakebase branch lookup helpers. Subset of LakebaseService ported for
 // the branch-lifecycle ops (create / delete; checkout follows in).
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { runDatabricks } from "./databricks-cli.js";
 import {
   asBranchUid,
   branchNameFromResourcePath,
@@ -11,7 +10,6 @@ import {
 } from "./branch-id.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
-const execFileP = promisify(execFile);
 
 export class LakebaseBranchError extends Error {
   constructor(message: string) {
@@ -449,24 +447,9 @@ function parseBranch(raw: unknown): LakebaseBranchInfo | undefined {
   };
 }
 
-async function dbcli(args: string[], host?: string): Promise<string> {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost
-    ? ({ ...process.env, DATABRICKS_HOST: trimmedHost } as NodeJS.ProcessEnv)
-    : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string"
-        ? e.stderr
-        : Buffer.isBuffer(e.stderr)
-          ? e.stderr.toString("utf8")
-          : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `\nstderr: ${stderr.trim()}` : ""}`
-    );
-  }
+// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts): threads the
+// resolved --profile + DATABRICKS_HOST and maps auth failures uniformly. This file
+// only binds the default timeout; the implementation lives in one place.
+function dbcli(args: string[], host?: string): Promise<string> {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
