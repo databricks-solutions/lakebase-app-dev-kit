@@ -5,7 +5,10 @@
 // profile to the ambient shell, so a drive launched without DATABRICKS_CONFIG_PROFILE
 // silently used DEFAULT (wrong workspace, stale token).
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildInvocation,
   classifyDatabricksError,
@@ -14,7 +17,12 @@ import {
   _resetProfileCache,
 } from "../../scripts/lakebase/databricks-cli.js";
 
-beforeEach(() => _resetProfileCache());
+let emptyDir: string; // a cwd with no .env, so profile resolution is deterministic
+beforeEach(() => {
+  _resetProfileCache();
+  emptyDir = mkdtempSync(join(tmpdir(), "dbcli-nocfg-"));
+});
+afterEach(() => rmSync(emptyDir, { recursive: true, force: true }));
 
 describe("buildInvocation: profile resolved one way + threaded explicitly", () => {
   it("threads --profile from an explicit opts.profile (highest precedence)", () => {
@@ -42,10 +50,26 @@ describe("buildInvocation: profile resolved one way + threaded explicitly", () =
     expect(env.DATABRICKS_HOST).toBe("https://x.cloud.databricks.com");
   });
 
-  it("does NOT thread a profile when none is resolvable (no explicit, no env, no host)", () => {
-    const { argv, profile } = buildInvocation(["postgres", "list-branches", "projects/x"], { env: {} });
+  it("does NOT thread a profile when none is resolvable (no explicit, no env, no .env, no host)", () => {
+    const { argv, profile } = buildInvocation(["postgres", "list-branches", "projects/x"], { env: {}, cwd: emptyDir });
     expect(profile).toBeUndefined();
     expect(argv).not.toContain("--profile"); // degrades to the CLI default, unchanged
+  });
+
+  it("resolves the profile from the project's .env (the pinned single source) when env is unset", () => {
+    // The exact failure class: the drive/CLIs run in the project dir but do NOT
+    // source .env, so the pinned DATABRICKS_CONFIG_PROFILE never reaches the process
+    // env. The wrapper reads it straight from <cwd>/.env instead of falling to DEFAULT.
+    writeFileSync(
+      join(emptyDir, ".env"),
+      "DATABRICKS_HOST=https://x.cloud.databricks.com\nDATABRICKS_CONFIG_PROFILE=fevm-serverless-stable-ecparr\n",
+    );
+    const { argv, profile } = buildInvocation(["postgres", "list-branches", "projects/x", "-o", "json"], {
+      env: {},
+      cwd: emptyDir,
+    });
+    expect(profile).toBe("fevm-serverless-stable-ecparr");
+    expect(argv.slice(-2)).toEqual(["--profile", "fevm-serverless-stable-ecparr"]);
   });
 
   it("never double-adds --profile when the caller already passed one", () => {

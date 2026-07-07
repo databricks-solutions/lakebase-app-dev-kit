@@ -9,6 +9,22 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+/**
+ * Read a single key's value from a .env file (the last assignment wins, matching
+ * how a shell `source .env` resolves duplicates). Trims surrounding quotes. Returns
+ * undefined when the file or key is absent. Pure read; never throws.
+ */
+export function readEnvVar(envPath: string, key: string): string | undefined {
+  if (!fs.existsSync(envPath)) return undefined;
+  let value: string | undefined;
+  for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : undefined;
+}
+
 export interface WriteEnvFileArgs {
   projectDir: string;
   databricksHost: string;

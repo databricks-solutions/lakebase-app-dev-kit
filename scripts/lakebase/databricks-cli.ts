@@ -29,8 +29,10 @@
 
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
+import { join } from "node:path";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 import { resolveProfileForHostSync } from "./databricks-profile.js";
+import { readEnvVar } from "./env-file.js";
 
 const execFileP = promisify(execFile);
 
@@ -44,6 +46,10 @@ export interface DatabricksCliOptions {
   timeout?: number;
   /** Base environment (test seam). Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
+  /** Project dir whose `.env` pins DATABRICKS_CONFIG_PROFILE (the project's declared
+   *  source of truth). Defaults to process.cwd(), which IS the project root for the
+   *  drive + scaffolded CLIs. Consulted after an explicit/env profile, before host-match. */
+  cwd?: string;
 }
 
 /** A `databricks` CLI call failed. Message preserves the historical shape
@@ -80,10 +86,13 @@ export class DatabricksAuthError extends DatabricksCliError {
 /** Memoized host -> profile (undefined = resolved-to-nothing, still cached so we
  *  do not re-shell `auth profiles` for a host with no unique match). */
 const profileByHost = new Map<string, string | undefined>();
+/** Memoized <cwd> -> DATABRICKS_CONFIG_PROFILE read from that project's .env. */
+const profileByEnvFile = new Map<string, string | undefined>();
 
-/** Test seam: clear the per-process profile memo. */
+/** Test seam: clear the per-process profile memos. */
 export function _resetProfileCache(): void {
   profileByHost.clear();
+  profileByEnvFile.clear();
 }
 
 /** Does this CLI output signal an auth/token failure a human must re-login to fix? */
@@ -93,12 +102,28 @@ function isAuthFailure(text: string): boolean {
   );
 }
 
-/** Resolve the profile ONE way (explicit -> env -> host-match, memoized per host). */
+/** Resolve the profile ONE way, in precedence order:
+ *    explicit opts.profile -> env DATABRICKS_CONFIG_PROFILE -> project .env
+ *    (<cwd>/.env DATABRICKS_CONFIG_PROFILE, the project's declared source) -> host-match.
+ *  The project-.env step is what makes the pinned profile reach every call even
+ *  though the drive/CLIs do NOT source .env into their process (the DEFAULT-fallback
+ *  bug). Both file + host-match reads are memoized. */
 function resolveProfile(opts: DatabricksCliOptions): string | undefined {
   const base = opts.env ?? process.env;
   if (opts.profile) return opts.profile;
   const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
   if (envProfile) return envProfile;
+
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile: string | undefined;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar(join(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+
   const host = opts.host?.trim();
   if (!host) return undefined;
   if (profileByHost.has(host)) return profileByHost.get(host);
