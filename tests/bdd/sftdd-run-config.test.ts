@@ -70,19 +70,19 @@ describe("run-config: buildRunConfig resolves the model + option matrix", () => 
     expect(cfg.batch_cap).toBeUndefined();
   });
 
-  it("reads the P8b + label knobs from the environment when set", () => {
+  it("takes loop + batchCap from the resolved settings (inputs); RUN_LABEL stays env (run-mode)", () => {
     const cfg = buildRunConfig(
-      inputs({
-        env: {
-          LAKEBASE_SFTDD_LOOP: "hybrid-a",
-          LAKEBASE_SFTDD_BATCH_CAP: "3",
-          LAKEBASE_SFTDD_RUN_LABEL: "8b-vs-ac",
-        },
-      }),
+      inputs({ loopGranularity: "hybrid-a", batchCap: 3, env: { LAKEBASE_SFTDD_RUN_LABEL: "8b-vs-ac" } }),
     );
-    expect(cfg.loop_granularity).toBe("hybrid-a");
+    expect(cfg.loop_granularity).toBe("hybrid-a"); // from inputs (single source)
     expect(cfg.batch_cap).toBe(3);
-    expect(cfg.run_label).toBe("8b-vs-ac");
+    expect(cfg.run_label).toBe("8b-vs-ac"); // RUN_LABEL is a run-mode annotation, env
+  });
+
+  it("ignores LAKEBASE_SFTDD_LOOP / _BATCH_CAP env (the resolved settings are the single source)", () => {
+    const cfg = buildRunConfig(inputs({ env: { LAKEBASE_SFTDD_LOOP: "ac", LAKEBASE_SFTDD_BATCH_CAP: "9" } }));
+    expect(cfg.loop_granularity).toBe("story"); // inputs default; env ignored, no lying snapshot
+    expect(cfg.batch_cap).toBeUndefined();
   });
 
   it("captures the kit ref from .lakebase/kit-ref when present", () => {

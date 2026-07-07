@@ -56,7 +56,7 @@ import {
   type SprintEffects,
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
-import { resolveTddSettings } from "./tdd-config.js";
+import { resolveSftddSettings, applyProjectOverrides } from "./sftdd-config.js";
 import { parseTurnUsage, assistantTextFromLine, assistantEventSummary, type TurnUsage } from "./claude-usage.js";
 import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal, startsFreshEachTurn } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
@@ -194,7 +194,7 @@ function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | 
     // "now I'll... / let me check..." prose is buffered and overwritten, so only
     // the last text (the result line) survives , the deliberation never hits the
     // log. Set LAKEBASE_SFTDD_VERBOSE_AGENT=1 to tee every assistant text delta.
-    const verboseAgent = !!process.env.LAKEBASE_SFTDD_VERBOSE_AGENT;
+    const verboseAgent = !!sftddEnv("VERBOSE_AGENT");
     let lastText = "";
     const rl = readline.createInterface({ input: child.stdout! });
     rl.on("line", (line) => {
@@ -476,7 +476,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   const scm = readWorkflowState(projectDir);
   // Unified config: one resolution of the per-role/turn model+effort matrix + the
   // build/plan/project knobs (sftdd-config.json -> LAKEBASE_SFTDD_* env -> default).
-  const settings = resolveTddSettings({ projectDir });
+  const settings = resolveSftddSettings({ projectDir });
   return {
     projectDir,
     tddDir,
@@ -485,11 +485,11 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
     parentBranch: scm?.parent_branch,
-    // Deploy target: the --deploy-target flag wins, else the config's default.
-    deployTarget: args.deployTarget ?? settings.project.deployTarget,
+    // Deploy target from the config (the --deploy-target flag wrote through to it).
+    deployTarget: settings.project.deployTarget,
     approver: args.approver ?? "human-proxy",
-    // UI track: config (file or LAKEBASE_SFTDD_UI) decides whether the Spec Author
-    // frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
+    // UI track: the config (project.uiTrack, the single source) decides whether the
+    // Spec Author frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
     uiTrack: settings.project.uiTrack,
     // P5: Navigator/Driver session scope (story warm-resume vs cycle cold-spawn).
     buildSessionScope: settings.build.sessionScope,
@@ -521,7 +521,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
       // the structured agent-log by makeOnAction below, so the raw action JSON is
       // console noise on every line , append it only under LAKEBASE_SFTDD_TRACE.
       (action, i) => {
-        const trace = process.env.LAKEBASE_SFTDD_TRACE ? `  ${JSON.stringify(action)}` : "";
+        const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(action)}` : "";
         process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}${trace}\n`);
       },
       // Code-emit the orchestrator's lifecycle (handoff / phase.start /
@@ -701,7 +701,7 @@ function pendingGateOf(r: RunDriverResult): WorkflowAction | undefined {
 function reportGate(gate: WorkflowAction): void {
   // Reuse the shared action narration (DRY) instead of dumping raw JSON; the
   // full action is available under LAKEBASE_SFTDD_TRACE for debugging.
-  const trace = process.env.LAKEBASE_SFTDD_TRACE ? `  ${JSON.stringify(gate)}` : "";
+  const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
     `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} ` +
       `Approve + record the approver, then re-run to continue.\n`,
@@ -721,17 +721,17 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  // Config defaults (sftdd-config.json) for the two CLI-flag knobs: the --gates mode
-  // and t-shirt sizing. The flag wins when given; else the config's default.
-  const settings = resolveTddSettings({ projectDir });
-  const interactive = (args.gates ?? settings.project.gates) === "interactive";
-  const skipSizing = args.noSizing ?? !settings.plan.sizing;
+  // gates + sizing come from sftdd-config.json (the --gates / --no-sizing flags
+  // wrote through to it before resolution). The file is the single source.
+  const settings = resolveSftddSettings({ projectDir });
+  const interactive = settings.project.gates === "interactive";
+  const skipSizing = !settings.plan.sizing;
 
   const effects: SprintEffects = {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, args, "plan");
+      snapshotRunConfig(cfg,"plan");
       const planning: DriveEffects = {
         // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
         readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing }),
@@ -756,7 +756,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, args, "full");
+      snapshotRunConfig(cfg,"full");
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(undefined, interactive),
       });
@@ -797,16 +797,22 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
  *  the corpus root when recording) at the start of an ACTUAL run (not --dry-run),
  *  so a timing report is self-describing and two runs are A/B-comparable.
  *  Best-effort: writeRunConfig swallows its own IO errors. */
-function snapshotRunConfig(cfg: DriveEffectsConfig, args: ParsedArgs, bound: string): void {
+function snapshotRunConfig(cfg: DriveEffectsConfig, bound: string): void {
   writeRunConfig({
     projectDir: cfg.projectDir,
     tddDir: cfg.tddDir,
     bound,
-    gates: args.gates ?? "proxy",
+    // gates from sftdd-config.json (the --gates flag wrote through to it), so the
+    // snapshot records what the drive actually used, never a stale flag default.
+    gates: resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates,
     uiTrack: cfg.uiTrack,
     buildSessionScope: cfg.buildSessionScope,
     reviewEffort: cfg.reviewEffort,
     deployTarget: cfg.deployTarget,
+    // loop + batchCap from the resolved settings (single source), so the snapshot
+    // records what the drive actually used, never a stale env value.
+    loopGranularity: cfg.loopGranularity,
+    batchCap: cfg.batchCap,
     modelForRole: cfg.modelForRole ?? (() => "inherit"),
   });
 }
@@ -829,6 +835,15 @@ async function main(): Promise<number> {
       );
     }
   }
+  // Write-through the drive's ad-hoc override flags into sftdd-config.json BEFORE
+  // any settings resolution, so the file stays the single source of truth (the
+  // flag is a WRITER, not a parallel reader; absent flags never mutate the file).
+  applyProjectOverrides(args.projectDir ?? process.cwd(), {
+    gates: args.gates as "interactive" | "proxy" | undefined,
+    deployTarget: args.deployTarget,
+    sizing: args.noSizing === true ? false : undefined,
+  });
+
   // Tier-1: `--sprint <name>` with no `--feature` runs the whole-sprint orchestrator.
   if (args.sprint && !args.feature) {
     return runSprintMode(args);
@@ -882,10 +897,9 @@ async function main(): Promise<number> {
   }
 
   cfg.runner = execRunner(cfg);
-  snapshotRunConfig(cfg, args, bound ?? "full");
-  // --gates flag wins; else the sftdd-config.json project.gates default.
-  const interactive =
-    (args.gates ?? resolveTddSettings({ projectDir: cfg.projectDir }).project.gates) === "interactive";
+  snapshotRunConfig(cfg,bound ?? "full");
+  // gates from sftdd-config.json (the --gates flag wrote through to it).
+  const interactive = resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,

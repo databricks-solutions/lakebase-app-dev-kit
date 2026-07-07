@@ -85,6 +85,40 @@ describe("sftdd-scenarios: framework scaffolding", () => {
   });
 });
 
+// Capture-wiring guard: the exact regression that motivated the single-source
+// refactor. capture-scenario.sh must read scenario.json (the single source for a
+// scenario's conditions) and funnel it into create-project as flags , NOT set the
+// e2e-scaffold door while the drive reads a different uiTrack door. This test locks
+// the funnel so the "UI project runs with no UX lane" contradiction cannot return.
+describe("capture-scenario.sh funnels scenario.json into create-project (one way in)", () => {
+  const src = fs.readFileSync(path.join(SCENARIOS_DIR, "capture-scenario.sh"), "utf8");
+
+  it("reads the manifest via the tested scenario-conditions reader", () => {
+    expect(src).toMatch(/scenario-conditions\.cli\.js/);
+    expect(src).toMatch(/SCENARIO_MANIFEST=/);
+    expect(src).toMatch(/sc uiTrack/);
+  });
+
+  it("declares the UX track via create-project --ui-track (the ONE door for the UX lane)", () => {
+    expect(src).toMatch(/create_flags\+=\(--ui-track\)/);
+  });
+
+  it("funnels language / runner / tiers from the manifest, not a harness hardcode", () => {
+    expect(src).toMatch(/create_flags\+=\(--language/);
+    expect(src).toMatch(/create_flags\+=\(--runner/);
+    expect(src).toMatch(/--tiers/);
+    // The old hardcode `--language python --runner self-hosted` is gone: language
+    // and runner are only ever passed from the manifest ($SC_LANG / $SC_RUNNER).
+    expect(src).not.toMatch(/--language\s+python/);
+    expect(src).not.toMatch(/--runner\s+self-hosted/);
+  });
+
+  it("has NO second UX door: no --ui->--enable-e2e mapping, no LAKEBASE_SFTDD_UI export", () => {
+    expect(src).not.toMatch(/--enable-e2e/); // e2e is derived from uiTrack in create-project
+    expect(src).not.toMatch(/LAKEBASE_SFTDD_UI\b/); // the removed env door
+  });
+});
+
 describe("assertScenarioCorpus: logic exercised against a synthetic fixture", () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "scenario-fixture-"));
   afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));

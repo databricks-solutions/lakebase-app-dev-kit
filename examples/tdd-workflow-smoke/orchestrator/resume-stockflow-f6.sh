@@ -34,13 +34,13 @@ export LAKEBASE_KIT_DIR="${LAKEBASE_KIT_DIR:-$KIT_ROOT}"          # use the fres
 export LAKEBASE_SFTDD_RECORD_DIR="${PARENT}/_capture-stockflow"     # continue the SAME record dir
 export LAKEBASE_SFTDD_RECORD_BUILD_DIR="${LAKEBASE_SFTDD_RECORD_DIR}/recorded-build"
 export LAKEBASE_SFTDD_REPLAY_DIR="${CORPUS_DIR}"                    # design replays from the corpus
-export LAKEBASE_SFTDD_LOOP=story
+# (Build cadence is a PROJECT setting: build.loopGranularity in the resumed
+# project's sftdd-config.json, "story" by default. Not an env door.)
 # Ephemeral verify DB: run each verify's migrations + tests on a disposable
 # child branch forked off the story's experiment branch (then deleted), so a
 # contract/cleanup story's migration up/down fixtures can't leave the shared DB
 # half-migrated for the next run , the thrash that ground F6/S3's GREEN turn.
-export LAKEBASE_EPHEMERAL_VERIFY=1
-export LAKEBASE_SFTDD_UI=1
+export LAKEBASE_SFTDD_EPHEMERAL_VERIFY=1
 export LAKEBASE_SFTDD_HUMAN_PROXY=1
 export LAKEBASE_SFTDD_AUTO_CONTINUE=1
 export LAKEBASE_SFTDD_RECORDED_INTAKE_DIR="${ORCH}"

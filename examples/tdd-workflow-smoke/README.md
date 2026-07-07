@@ -70,7 +70,7 @@ UX design brief (UI track): [`orchestrator/design-brief.md`](orchestrator/design
 The sprint's feature requests (authored by the PO at `/plan`):
 [`orchestrator/feature-requests/`](orchestrator/feature-requests/).
 
-This is a UI project (`LAKEBASE_SFTDD_UI=1`), so the UX Designer phase runs and
+This is a UI project (`project.uiTrack: true` in `sftdd-config.json`, set at create by `--ui-track`), so the UX Designer phase runs and
 `design-brief.md` is required at intake; the UX track (design-guide + ia +
 token adherence) is exercised.
 

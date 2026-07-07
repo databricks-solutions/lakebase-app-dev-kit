@@ -88,6 +88,15 @@ Beyond the gates, the Human Proxy stands in wherever the path needs human input 
 
 Check the mode with `[ "$LAKEBASE_SFTDD_HUMAN_PROXY" = "1" ]`. Absent/unset = normal HITL.
 
+## Configuration (one source of truth per setting)
+
+Every knob has exactly ONE home; see [`CONFIG.md`](CONFIG.md) for the full table + writers. In brief:
+
+- **Project settings** (what the project IS: `uiTrack`, `gates`, `deployTarget`, the per-role model matrix, build cadence) live only in `.lakebase/sftdd-config.json`, resolved **file -> code default** by `resolveSftddSettings`. There is no env or flag override at read time. The writers are create-project (create-time, e.g. `--ui-track`) and the drive's write-through flags (`--gates` / `--deploy-target` / `--no-sizing`), which persist INTO the file before it is read.
+- **`uiTrack` is the single door for the UX lane.** It drives BOTH the UX Designer (design-guide / `ia.md` / adherence gate) AND the e2e harness (create-project derives e2e from it, and refuses a UI project without it). A UI project can never run with the UX lane off.
+- **Run-mode knobs** (record/replay, headless, debug, e.g. `LAKEBASE_SFTDD_HUMAN_PROXY`, `_AUTO_CONTINUE`, `_RECORD_DIR`) are per-invocation `LAKEBASE_SFTDD_*` env vars, read via `sftddEnv` (one door each). They are NOT project settings and never belong in `sftdd-config.json`.
+- **Capture-time conditions** live in a scenario's `scenario.json` and are funneled into create-project flags by `capture-scenario.sh`; they never reach the drive directly.
+
 ## Agent roles (the per-role agent runtime)
 
 Each role is a separate agent definition under [`agents/`](agents/) with frontmatter (`name`, a `description` that is the auto-selection criteria, least-privilege `tools`, a strongly-recommended `model`, `memory: project`, `color`) and a body that is its system prompt. The roles communicate only through the artifacts on disk, the artifact is the inter-agent API.

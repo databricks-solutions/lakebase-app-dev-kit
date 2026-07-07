@@ -4,11 +4,15 @@
 // only), hardcoded `buildCfg` defaults, and a dozen `LAKEBASE_SFTDD_*` env vars live
 // in one editable file: `.lakebase/sftdd-config.json`.
 //
-// Resolution order for EVERY setting: sftdd-config.json -> LAKEBASE_SFTDD_* env
-// override -> code default. (Env stays as the one-off experiment override on top
-// of the file; the file is the durable choice.) The resolved result is what the
-// driver runs with AND what run-config.json snapshots, so a run is reproducible +
-// A/B-comparable.
+// Resolution for EVERY project setting: sftdd-config.json -> code default. The
+// file is the SINGLE source of truth; there is NO env or flag override at read
+// time (an env door here is what let a UI project silently run with the UX lane
+// off). The only writers of the file are create-project (create-time) and the
+// drive's write-through override flags. The resolved result is what the driver
+// runs with AND what run-config.json snapshots, so a run is reproducible +
+// A/B-comparable. (Per-invocation run-mode knobs , record/replay/headless/debug ,
+// are NOT project settings; they stay explicit env inputs, read elsewhere via
+// sftddEnv, one door each.)
 //
 // Model-side knobs are exactly what `claude -p` (v2.1.x) exposes per invocation:
 // model, effort (low|medium|high|xhigh|max|default), fallbackModel
@@ -16,7 +20,6 @@
 // max-turns are NOT CLI-exposed, so they are intentionally absent.
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
-import { sftddEnv } from "./sftdd-env.js";
 import { dirname, join } from "path";
 import type { AgentRole } from "./agent-log.js";
 import {
@@ -52,7 +55,7 @@ export interface RoleSettingsFile {
   effort?: EffortLevel | Partial<Record<BuildTurn, EffortLevel>>;
 }
 
-export interface TddConfigFile {
+export interface SftddConfigFile {
   version: 1;
   roles?: Partial<Record<SpawnableAgentRole, RoleSettingsFile>>;
   build?: {
@@ -64,7 +67,7 @@ export interface TddConfigFile {
   project?: { uiTrack?: boolean; gates?: "interactive" | "proxy"; deployTarget?: string };
 }
 
-/** The fully-resolved settings the driver runs with (file -> env -> default). */
+/** The fully-resolved settings the driver runs with (file -> code default). */
 export interface ResolvedSettings {
   /** A role's BASE model (the scalar it runs with when no per-turn override
    *  applies). Callers that know the turn should prefer `modelFor`. */
@@ -85,12 +88,12 @@ export interface ResolvedSettings {
 /** Read `.lakebase/sftdd-config.json` (canonical), falling back to the legacy
  *  `.lakebase/tdd-config.json` for projects scaffolded before the rename.
  *  Undefined when neither exists / both unparseable. */
-export function loadTddConfig(projectDir: string): TddConfigFile | undefined {
+export function loadSftddConfig(projectDir: string): SftddConfigFile | undefined {
   for (const rel of [SFTDD_CONFIG_REL, LEGACY_TDD_CONFIG_REL]) {
     const f = join(projectDir, rel);
     if (!existsSync(f)) continue;
     try {
-      return JSON.parse(readFileSync(f, "utf8")) as TddConfigFile;
+      return JSON.parse(readFileSync(f, "utf8")) as SftddConfigFile;
     } catch {
       return undefined;
     }
@@ -108,19 +111,17 @@ function defaultEffort(role: string, turn?: BuildTurn): EffortLevel {
 
 interface ResolveInputs {
   projectDir: string;
-  /** Env source (defaults to process.env); injectable for tests. */
-  env?: Record<string, string | undefined>;
 }
 
 /**
- * Resolve the run settings: file -> env -> code default, per setting. Legacy
+ * Resolve the run settings: file -> code default, per setting. The file is the
+ * SINGLE source of truth for project settings; there is no env override. Legacy
  * `.lakebase/agent-config.json` (models only) is honored as a fallback BELOW the
  * new file but ABOVE the built-in recommended, so existing projects keep their
  * model choices until they adopt sftdd-config.json.
  */
-export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
-  const env = inputs.env ?? process.env;
-  const file = loadTddConfig(inputs.projectDir);
+export function resolveSftddSettings(inputs: ResolveInputs): ResolvedSettings {
+  const file = loadSftddConfig(inputs.projectDir);
   const legacy = readAgentConfig(inputs.projectDir); // models only
 
   const models: Record<string, string> = {};
@@ -147,14 +148,7 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
   };
 
   const effortFor = (role: string, turn?: BuildTurn): EffortLevel => {
-    // Env override wins (the one-off experiment knob on top of the file). Today
-    // only LAKEBASE_SFTDD_REVIEW_EFFORT exists, for the navigator REVIEW turn.
-    if (role === "navigator" && turn === "review") {
-      const ev = sftddEnv("REVIEW_EFFORT", env);
-      if (ev === "default") return "default";
-      if (ev) return ev as EffortLevel;
-    }
-    // Then the file: a scalar applies to all turns; a map is per-turn.
+    // The file is the single source: a scalar applies to all turns; a map is per-turn.
     const rc = file?.roles?.[role as SpawnableAgentRole];
     const e = rc?.effort;
     if (typeof e === "string") return e;
@@ -162,22 +156,14 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
     return defaultEffort(role, turn);
   };
 
-  const batchCapRaw = sftddEnv("BATCH_CAP", env);
-  const envBatchCap = batchCapRaw && Number.isFinite(Number(batchCapRaw)) ? Math.floor(Number(batchCapRaw)) : undefined;
   const build = {
-    loopGranularity: ((): "story" | "ac" | "hybrid-a" => {
-      const e = sftddEnv("LOOP", env);
-      if (e === "story" || e === "ac" || e === "hybrid-a") return e;
-      return file?.build?.loopGranularity ?? "story";
-    })(),
-    batchCap: envBatchCap ?? file?.build?.batchCap,
-    sessionScope: (sftddEnv("BUILD_SESSION", env) === "cycle"
-      ? "cycle"
-      : file?.build?.sessionScope ?? "story") as "story" | "cycle",
+    loopGranularity: (file?.build?.loopGranularity ?? "story") as "story" | "ac" | "hybrid-a",
+    batchCap: file?.build?.batchCap,
+    sessionScope: (file?.build?.sessionScope ?? "story") as "story" | "cycle",
   };
 
   const project = {
-    uiTrack: sftddEnv("UI", env) === "1" ? true : sftddEnv("UI", env) === "0" ? false : file?.project?.uiTrack ?? false,
+    uiTrack: file?.project?.uiTrack ?? false,
     gates: (file?.project?.gates ?? "proxy") as "interactive" | "proxy",
     deployTarget: file?.project?.deployTarget ?? "local",
   };
@@ -189,7 +175,7 @@ export function resolveTddSettings(inputs: ResolveInputs): ResolvedSettings {
 
 /** A default config seeded from the recommended models (for scaffold / `--init`),
  *  with the navigator REVIEW effort pinned low (the P6 default made explicit). */
-export function defaultTddConfig(): TddConfigFile {
+export function defaultSftddConfig(): SftddConfigFile {
   const roles = {} as Record<SpawnableAgentRole, RoleSettingsFile>;
   for (const role of ALL_AGENT_ROLES) {
     roles[role] =
@@ -201,8 +187,8 @@ export function defaultTddConfig(): TddConfigFile {
             // model. GREEN was on haiku, but the recorded worst GREEN turn thrashed
             // 93 tool round-trips (haiku's trial-and-error), so wall-clock, not token
             // cost, dominated. Sonnet finishes GREEN in far fewer round-trips, faster
-            // even at a higher per-token price. Overridable per project + via
-            // LAKEBASE_SFTDD_* ; a project can flatten to a scalar `model`.
+            // even at a higher per-token price. Overridable per project by editing
+            // sftdd-config.json (a project can flatten to a scalar `model`).
             { model: { red: RECOMMENDED_MODELS[role], green: RECOMMENDED_MODELS[role], refactor: "haiku" } }
           : { model: RECOMMENDED_MODELS[role] };
   }
@@ -211,15 +197,37 @@ export function defaultTddConfig(): TddConfigFile {
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { gates: "proxy", deployTarget: "local" },
+    project: { uiTrack: false, gates: "proxy", deployTarget: "local" },
   };
 }
 
 /** Write a sftdd-config.json (scaffold/init). Does not overwrite unless force. */
-export function writeTddConfig(projectDir: string, config: TddConfigFile, opts?: { force?: boolean }): boolean {
+export function writeSftddConfig(projectDir: string, config: SftddConfigFile, opts?: { force?: boolean }): boolean {
   const f = join(projectDir, TDD_CONFIG_REL);
   if (existsSync(f) && !opts?.force) return false;
   mkdirSync(dirname(f), { recursive: true });
   writeFileSync(f, JSON.stringify(config, null, 2) + "\n");
   return true;
+}
+
+/**
+ * Write-through for the drive's ad-hoc override flags (`--gates`,
+ * `--deploy-target`, `--no-sizing`). These are WRITERS, not parallel readers: a
+ * flag persists its value into sftdd-config.json so the file stays the single
+ * source of truth (resolveSftddSettings then reads it like any other setting).
+ * No-op when no override is given, so a plain run never mutates the file. Loads
+ * the existing config (or the default when none) so unrelated fields are kept.
+ */
+export function applyProjectOverrides(
+  projectDir: string,
+  over: { gates?: "interactive" | "proxy"; deployTarget?: string; sizing?: boolean },
+): void {
+  if (over.gates === undefined && over.deployTarget === undefined && over.sizing === undefined) return;
+  const cfg = loadSftddConfig(projectDir) ?? defaultSftddConfig();
+  cfg.project = cfg.project ?? {};
+  if (over.gates !== undefined) cfg.project.gates = over.gates;
+  if (over.deployTarget !== undefined) cfg.project.deployTarget = over.deployTarget;
+  cfg.plan = cfg.plan ?? {};
+  if (over.sizing !== undefined) cfg.plan.sizing = over.sizing;
+  writeSftddConfig(projectDir, cfg, { force: true });
 }

@@ -11,17 +11,21 @@
 // check itself is what makes intake un-skippable in real and test alike.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { checkArtifactConformance } from "./artifact-conformance.js";
 import { resolveTddDir, featureRequestMd } from "./sftdd-paths.js";
+import { resolveSftddSettings } from "./sftdd-config.js";
 
 export interface IntakeCheckArgs {
   /** Artifact root. Default ./.sftdd (honors a legacy ./.tdd) */
   tddDir?: string;
   /** When set, also require this feature's feature-request.md. */
   featureId?: string;
-  /** When true (UI project), also require design/design-brief.md. */
-  ui?: boolean;
+  /** Project root that holds `.lakebase/sftdd-config.json`. Defaults to the
+   *  parent of `tddDir`. Only used to LOCATE the single source of `uiTrack`;
+   *  whether the design-brief is required is read from that config, never from a
+   *  flag or env (the one way in for the UX track). */
+  projectDir?: string;
 }
 
 export interface IntakeArtifactStatus {
@@ -44,17 +48,22 @@ export interface IntakeCheckResult {
 /**
  * Verify the intake artifacts that /design requires before phase 1. Project
  * -level product-overview.md + nfrs.md are always required; feature-request.md
- * is required when a featureId is given; design-brief.md when ui is true.
+ * is required when a featureId is given; design-brief.md when the project is a UI
+ * project. Whether it is a UI project is read from the SINGLE source
+ * (`project.uiTrack` in sftdd-config.json), never a flag or env.
  * Returns the per-artifact status plus the missing / non-conformant lists.
  */
 export function checkIntakePreconditions(args: IntakeCheckArgs = {}): IntakeCheckResult {
   const tddDir = args.tddDir ?? resolveTddDir();
+  const projectDir = args.projectDir ?? dirname(tddDir);
+  // The one way in for the UX track: the persisted project setting, not a flag.
+  const uiTrack = resolveSftddSettings({ projectDir }).project.uiTrack;
 
   const required: Array<{ artifact: string; path: string }> = [
     { artifact: "product-overview.md", path: join(tddDir, "product-overview.md") },
     { artifact: "nfrs.md", path: join(tddDir, "nfrs.md") },
   ];
-  if (args.ui) {
+  if (uiTrack) {
     required.push({ artifact: "design-brief.md", path: join(tddDir, "design", "design-brief.md") });
   }
   if (args.featureId) {

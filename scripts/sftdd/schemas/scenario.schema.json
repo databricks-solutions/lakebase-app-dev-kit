@@ -26,7 +26,17 @@
     "uiTrack": {
       "type": "boolean",
       "default": false,
-      "description": "Whether the scenario has a user-facing UI (a design-brief.md is part of intake)."
+      "description": "Whether the scenario has a user-facing UI. The single source for the UX track: the capture harness passes it to create-project (--ui-track), which persists project.uiTrack (the drive reads it to run the UX Designer + design-guide/IA + adherence gate) and always wires the e2e harness for a UI project."
+    },
+    "language": {
+      "type": "string",
+      "enum": ["java", "kotlin", "python", "nodejs"],
+      "description": "Project language stack to scaffold (create-project --language). Omit to use create-project's default."
+    },
+    "runner": {
+      "type": "string",
+      "enum": ["self-hosted", "github-hosted"],
+      "description": "CI runner type to scaffold (create-project --runner). Omit to use create-project's default."
     },
     "features": {
       "type": "array",

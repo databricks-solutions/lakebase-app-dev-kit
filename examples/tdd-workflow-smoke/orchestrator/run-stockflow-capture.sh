@@ -42,12 +42,11 @@ export LAKEBASE_SFTDD_RECORD_BUILD_DIR="${LAKEBASE_SFTDD_RECORD_DIR}/recorded-bu
 mkdir -p "$LAKEBASE_SFTDD_RECORD_DIR"
 # Design REPLAYED from the faithful stockflow corpus; build runs LIVE.
 export LAKEBASE_SFTDD_REPLAY_DIR="${CORPUS_DIR}"
-# Build STORY-by-story (one RED writes the whole story's tests, one GREEN, one
-# REVIEW/REFACTOR per story), NOT per-AC. The resolver honors this env over the
-# scaffolded tdd-config, so the cadence is correct even if a config drifts.
-export LAKEBASE_SFTDD_LOOP=story
-# Headless: human-proxy approves gates; UI track on (full-stack SPA).
-export LAKEBASE_SFTDD_UI=1
+# Build cadence (story-by-story) and the UI track are PROJECT settings, resolved
+# from sftdd-config.json (loopGranularity defaults to "story"; project.uiTrack is
+# set at create by --ui-track below). They are NOT env-configurable, so there is
+# no LAKEBASE_SFTDD_LOOP / _UI export here (that door was removed; the config is
+# the single source). Only run-mode knobs are env:
 export LAKEBASE_SFTDD_HUMAN_PROXY=1
 export LAKEBASE_SFTDD_AUTO_CONTINUE=1
 export LAKEBASE_SFTDD_RECORDED_INTAKE_DIR="${ORCH}"
@@ -70,7 +69,7 @@ bash "$KIT_LK" lakebase-create-project \
   --project-name "$PROJECT_NAME" --parent-dir "$PARENT" \
   --databricks-host "$DATABRICKS_HOST" --github-owner "$GITHUB_OWNER" \
   --language python --runner self-hosted --tiers "$TIERS" \
-  $AGENT_MODEL_FLAGS --enable-e2e || { err "scaffold failed"; exit 1; }
+  $AGENT_MODEL_FLAGS --ui-track || { err "scaffold failed"; exit 1; }
 cd "$PROJECT_DIR"
 lk() { "$PROJECT_DIR/scripts/lk" "$@"; }
 

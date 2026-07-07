@@ -141,14 +141,26 @@ if [[ -n "$CREATE" ]]; then
   [[ -f "${INTAKE_DIR}/product-overview.md" ]] || { echo "capture-scenario: missing ${INTAKE_DIR}/product-overview.md (inputs from ${INPUTS})" >&2; exit 2; }
   [[ -d "$PROJECT_DIR/.git" ]] && { echo "capture-scenario: project exists: $PROJECT_DIR" >&2; exit 1; }
   mkdir -p "$PARENT"
-  ui_flags=(); [[ -n "$UI" ]] && ui_flags=(--enable-e2e)
+  # The scenario MANIFEST (scenario.json) is the single source for this project's
+  # conditions. Read them via the tested reader and funnel them into create-project
+  # as flags , the ONE way in. uiTrack (persisted to sftdd-config.json) drives BOTH
+  # the drive's UX lane AND the e2e harness (create-project derives e2e from it);
+  # language/runner come from the manifest, not a harness hardcode. Degrades to the
+  # --ui flag when the reader bin is absent (stale dist).
+  SCENARIO_MANIFEST="${INPUTS}/scenario.json"
+  sc() { node "${KIT_ROOT}/dist/scripts/sftdd/scenario-conditions.cli.js" --manifest "$SCENARIO_MANIFEST" --field "$1" 2>/dev/null || true; }
+  SC_UI="$(sc uiTrack)"; SC_LANG="$(sc language)"; SC_RUNNER="$(sc runner)"; SC_TIERS="$(sc tiers)"
+  create_flags=(--tiers "${SC_TIERS:-$TIERS}")
+  [[ "$SC_UI" == "true" || -n "$UI" ]] && create_flags+=(--ui-track)
+  [[ -n "$SC_LANG" ]] && create_flags+=(--language "$SC_LANG")
+  [[ -n "$SC_RUNNER" ]] && create_flags+=(--runner "$SC_RUNNER")
 
-  echo "[capture-scenario] create ${PROJECT_NAME} on ${HOST} (owner ${OWNER}, tiers ${TIERS})" >&2
+  echo "[capture-scenario] create ${PROJECT_NAME} on ${HOST} (owner ${OWNER}; conditions ${SCENARIO_MANIFEST}: uiTrack=${SC_UI:-false} lang=${SC_LANG:-<default>} runner=${SC_RUNNER:-<default>} tiers=${SC_TIERS:-$TIERS})" >&2
   bash "$KIT_LK" --warm || { echo "capture-scenario: kit --warm failed" >&2; exit 1; }
   bash "$KIT_LK" lakebase-create-project \
     --project-name "$PROJECT_NAME" --parent-dir "$PARENT" \
     --databricks-host "$HOST" --github-owner "$OWNER" \
-    --language python --runner self-hosted --tiers "$TIERS" ${ui_flags[@]+"${ui_flags[@]}"} \
+    "${create_flags[@]}" \
     || { echo "capture-scenario: create-project failed" >&2; exit 1; }
 
   cd "$PROJECT_DIR"

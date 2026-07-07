@@ -23,6 +23,7 @@ import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION 
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
 import type { AgentLogEventName } from "./agent-log-events.js";
 import { withEphemeralVerifyBranch, ephemeralVerifyBranchName } from "./ephemeral-verify.js";
+import { sftddEnv } from "./sftdd-env.js";
 
 /** Read the Lakebase project id from the project's .env (LAKEBASE_PROJECT_ID). */
 function readProjectInstance(projectDir: string): string | undefined {
@@ -82,7 +83,7 @@ export function readAppDatabaseName(projectDir: string): string | undefined {
  * at it (VERIFY_DATABASE_URL), and delete it after , so the suite's migration
  * up/down fixtures mutate a throwaway DB instead of leaving the shared branch
  * half-migrated for the next story's verify (the thrash fix; Lakebase branching
- * makes the fork + teardown ~instant). Set `LAKEBASE_EPHEMERAL_VERIFY=0` to opt
+ * makes the fork + teardown ~instant). Set `LAKEBASE_SFTDD_EPHEMERAL_VERIFY=0` to opt
  * OUT (plain in-place verify); also falls back in-place when there is no
  * experiment branch / instance to fork from. Always returns the pass/fail boolean.
  */
@@ -95,7 +96,7 @@ async function runVerifyMaybeEphemeral(
   now: () => Date,
 ): Promise<boolean> {
   const instance =
-    lakebaseBranch && process.env.LAKEBASE_EPHEMERAL_VERIFY !== "0" ? readProjectInstance(projectDir) : undefined;
+    lakebaseBranch && sftddEnv("EPHEMERAL_VERIFY") !== "0" ? readProjectInstance(projectDir) : undefined;
   if (!instance || !lakebaseBranch) {
     return runVerify(cmd, projectDir, env);
   }

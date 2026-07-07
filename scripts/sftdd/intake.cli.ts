@@ -3,8 +3,12 @@
 //
 //   lakebase-sftdd-intake                         # require product-overview.md + nfrs.md
 //   lakebase-sftdd-intake --feature F1-x          # + that feature's feature-request.md
-//   lakebase-sftdd-intake --ui                    # + design/design-brief.md (UI projects)
 //   lakebase-sftdd-intake --json --pretty
+//
+// design-brief.md is additionally required for UI projects. Whether the project
+// is UI is read from the SINGLE source (project.uiTrack in sftdd-config.json, set
+// at create via --ui-track), NOT a flag or env, so a UI project can never skip the
+// UX intake.
 //
 // /design calls this BEFORE phase 1 and refuses to proceed when it fails, so
 // the HIL intake (product-overview.md / nfrs.md / ...) can never be skipped.
@@ -16,28 +20,29 @@ import { checkIntakePreconditions } from "./intake.js";
 
 export function runIntakeCli(argv: string[]): number {
   let featureId: string | undefined;
-  let ui = false;
   let tddDir: string | undefined;
+  let projectDir: string | undefined;
   let json = false;
   let pretty = false;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--feature": featureId = argv[++i]; break;
-      case "--ui": ui = true; break;
       case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--project-dir": projectDir = argv[++i]; break;
       case "--json": json = true; break;
       case "--pretty": pretty = true; break;
       case "-h":
       case "--help":
         process.stdout.write(
-          "lakebase-sftdd-intake [--feature <id>] [--ui] [--tdd-dir <path>] [--json] [--pretty]\n" +
-            "Verifies the HIL intake artifacts /design requires before phase 1.\n",
+          "lakebase-sftdd-intake [--feature <id>] [--tdd-dir <path>] [--project-dir <path>] [--json] [--pretty]\n" +
+            "Verifies the HIL intake artifacts /design requires before phase 1.\n" +
+            "design-brief.md is required for UI projects (read from project.uiTrack in sftdd-config.json).\n",
         );
         return 0;
     }
   }
 
-  const result = checkIntakePreconditions({ tddDir, featureId, ui });
+  const result = checkIntakePreconditions({ tddDir, featureId, projectDir });
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, pretty ? 2 : 0)}\n`);
   } else if (result.ok) {

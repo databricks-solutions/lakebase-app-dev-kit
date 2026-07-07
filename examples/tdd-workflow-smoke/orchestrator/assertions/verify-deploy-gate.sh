@@ -55,7 +55,7 @@ test_count="$(count_tests 'tests/test_*.py')"
 ok "tests present ($test_count test functions)"
 
 # 4. The feature carries at least one E2E (browser) acceptance criterion. The UI
-#    track is on (LAKEBASE_SFTDD_UI=1), so every user-facing capability must be
+#    track is on (project.uiTrack in sftdd-config.json), so every user-facing capability must be
 #    deliverable end to end as an E2E story. Resolve the feature dir (the kit
 #    uses either <id> or <id>-<slug>) and scan its on-disk ACs.
 feature_dir="$(ls -d .tdd/features/"${FEATURE_ID}"* 2>/dev/null | head -1)"

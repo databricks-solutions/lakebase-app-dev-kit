@@ -65,6 +65,10 @@ export interface RunConfigInputs {
   buildSessionScope?: string;
   reviewEffort?: string;
   deployTarget?: string;
+  /** Build loop granularity, from the resolved settings (single source). */
+  loopGranularity?: string;
+  /** Layer-batch cap, from the resolved settings (single source). */
+  batchCap?: number;
   /** Resolve the model the driver will spawn a role with (cfg.modelForRole). */
   modelForRole: (role: string) => string;
   /** Override the start timestamp (tests); defaults to now. */
@@ -90,8 +94,6 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
   const env = inputs.env ?? process.env;
   const models: Record<string, string> = {};
   for (const role of ALL_AGENT_ROLES) models[role] = inputs.modelForRole(role);
-  const capRaw = sftddEnv("BATCH_CAP", env);
-  const cap = capRaw && Number.isFinite(Number(capRaw)) ? Number(capRaw) : undefined;
   const cfg: RunConfig = {
     version: 1,
     started_at: inputs.startedAt ?? new Date().toISOString(),
@@ -100,11 +102,16 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
     ui_track: Boolean(inputs.uiTrack),
     build_session_scope: inputs.buildSessionScope ?? "story",
     review_effort: inputs.reviewEffort ?? "",
-    loop_granularity: sftddEnv("LOOP", env) || "story",
+    // loop + batchCap come from the RESOLVED settings (the caller passes the file
+    // values); never re-read from env here, or the snapshot would record a value
+    // the drive did not actually use (the resolver is now file-only).
+    loop_granularity: inputs.loopGranularity ?? "story",
     deploy_target: inputs.deployTarget ?? "local",
     models,
   };
-  if (cap !== undefined) cfg.batch_cap = cap;
+  if (inputs.batchCap !== undefined) cfg.batch_cap = inputs.batchCap;
+  // RUN_LABEL is a per-invocation run-mode annotation (not a project setting), so
+  // it stays an explicit env input.
   const label = sftddEnv("RUN_LABEL", env);
   if (label) cfg.run_label = label;
   const kitRef = readKitRef(inputs.projectDir);
@@ -124,7 +131,7 @@ export function writeRunConfig(inputs: RunConfigInputs): RunConfig {
   try {
     mkdirSync(inputs.tddDir, { recursive: true });
     writeFileSync(join(inputs.tddDir, "run-config.json"), body);
-    const recordDir = (inputs.env ?? process.env).LAKEBASE_SFTDD_RECORD_DIR?.trim();
+    const recordDir = sftddEnv("RECORD_DIR", inputs.env ?? process.env)?.trim();
     if (recordDir) {
       mkdirSync(recordDir, { recursive: true });
       writeFileSync(join(recordDir, "run-config.json"), body);

@@ -7,7 +7,7 @@ There is no feature request to begin with. A feature has to be teased out of the
 ## Usage
 
 ```
-/plan [--sprint <name>] [--ui]
+/plan [--sprint <name>]
 ```
 
 `/plan` does NOT create branches and does NOT enter the TDD phases. It produces `feature-request.md` files; `/design <feature-id>` is what claims the paired branch (its Step 0) and consumes one request.
@@ -19,11 +19,10 @@ If `.sftdd/` does not exist, this command hard-fails with the same setup hint `/
 Planning reads the HIL's intent from the PROJECT-level intake artifacts (`product-overview.md`, `nfrs.md`, and `design-brief.md` for UI projects). `/plan` is the first place project intake is needed, before any `/design`. These are the same project-level preconditions `/design` enforces; `/plan` enforces them too:
 
 ```bash
-UI_FLAG=""; [ "${LAKEBASE_SFTDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-./scripts/lk lakebase-sftdd-intake $UI_FLAG
+./scripts/lk lakebase-sftdd-intake
 ```
 
-Note: no `--feature`. `lakebase-sftdd-intake` without a feature checks only the project-level artifacts (`product-overview.md` + `nfrs.md`, plus `design-brief.md` when `--ui`). It exits non-zero (5) and names what is missing or non-conformant if intake is incomplete. If it fails, the orchestrator facilitates project intake first (the interviews documented in `/design` Step 0.5: Product, NFR, and UX for UI projects), or, headless, the Human Proxy supplies the pre-recorded answers. Do not plan against missing intent.
+Note: no `--feature`. `lakebase-sftdd-intake` without a feature checks only the project-level artifacts (`product-overview.md` + `nfrs.md`, plus `design-brief.md` for UI projects). Whether the project is UI is read from its single source (`project.uiTrack` in `sftdd-config.json`, set at create via `--ui-track`), not a flag or env. It exits non-zero (5) and names what is missing or non-conformant if intake is incomplete. If it fails, the orchestrator facilitates project intake first (the interviews documented in `/design` Step 0.5: Product, NFR, and UX for UI projects), or, headless, the Human Proxy supplies the pre-recorded answers. Do not plan against missing intent.
 
 ## Phase 1: Spec Author proposes the feature breakdown (the BA)
 

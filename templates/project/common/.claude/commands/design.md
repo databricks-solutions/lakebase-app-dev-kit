@@ -56,13 +56,12 @@ The per-feature `feature-request.md` is NOT authored here. It is the Product Own
     --from "$LAKEBASE_SFTDD_RECORDED_INTAKE_DIR/nfrs.md" --to ".sftdd/nfrs.md" --artifact nfrs.md
   ```
 
-**UI projects:** a project is UI when `LAKEBASE_SFTDD_UI=1` (set by the orchestrator / smoke) or the feature has a user-facing surface. For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless) and pass `--ui` to the precondition so it requires the brief; the UX Designer phase then runs. For API / CLI / Infra projects, skip the UX track entirely.
+**UI projects:** whether this is a UI project is the persisted setting `project.uiTrack` in `sftdd-config.json` (set once at create via `--ui-track`, the single source). For UI projects, also facilitate `design-brief.md` (interview track 3, or Human Proxy supply headless); the precondition below reads `uiTrack` and requires the brief on its own, and the UX Designer phase then runs. For API / CLI / Infra projects (`uiTrack` false), the UX track is skipped entirely. Do NOT gate this on an env var; the config is the one way in.
 
 **Then enforce the precondition (the hard gate):**
 
 ```bash
-UI_FLAG=""; [ "${LAKEBASE_SFTDD_UI:-}" = "1" ] && UI_FLAG="--ui"
-./scripts/lk lakebase-sftdd-intake --feature "<feature-id>" $UI_FLAG
+./scripts/lk lakebase-sftdd-intake --feature "<feature-id>"
 ```
 
 `lakebase-sftdd-intake` exits non-zero (5) if any required intake artifact is missing or non-conformant, naming each. If it fails, **REFUSE to proceed to phase 1** and report what intake is missing. Do not work around it: the precondition is what makes intake un-skippable in both real and headless runs, exactly as Step 0's claim is un-skippable.

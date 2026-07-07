@@ -40,8 +40,8 @@ export LAKEBASE_KIT_DIR="${LAKEBASE_KIT_DIR:-$KIT_ROOT}"          # use the fres
 export LAKEBASE_SFTDD_RECORD_DIR="${PARENT}/_capture-stockflow"     # continue the SAME record dir
 export LAKEBASE_SFTDD_RECORD_BUILD_DIR="${LAKEBASE_SFTDD_RECORD_DIR}/recorded-build"
 export LAKEBASE_SFTDD_REPLAY_DIR="${CORPUS_DIR}"                    # design replays from the corpus
-export LAKEBASE_SFTDD_LOOP=story                                   # story-level build cadence
-export LAKEBASE_SFTDD_UI=1
+# Build cadence (story) + UI track are PROJECT settings in the resumed project's
+# sftdd-config.json (single source), not env doors, so no LOOP / UI export here.
 export LAKEBASE_SFTDD_HUMAN_PROXY=1
 export LAKEBASE_SFTDD_AUTO_CONTINUE=1
 export LAKEBASE_SFTDD_RECORDED_INTAKE_DIR="${ORCH}"

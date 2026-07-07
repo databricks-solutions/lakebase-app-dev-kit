@@ -56,7 +56,7 @@
 #
 # Project intake (product-overview.md + nfrs.md + design-brief.md) is staged
 # once before the sprints via human-proxy (stage_project_intake) and committed
-# to trunk; LAKEBASE_SFTDD_UI=1 turns on the UX track.
+# to trunk; the UX track is on via create-project --ui-track.
 #
 # Other flags:
 #   --resume <iter>      skip earlier iterations + start at <iter>
@@ -210,11 +210,11 @@ export LAKEBASE_SFTDD_HUMAN_PROXY=1
 export LAKEBASE_SFTDD_RECORDED_INTAKE_DIR="${ORCHESTRATOR_DIR}"
 
 # This smoke is a UI project (every feature is a browser-facing capability:
-# filing a bug, transitioning its status). LAKEBASE_SFTDD_UI=1 tells /design to run
-# the UX Designer phase and require design-brief.md at intake, so the UX track
-# (design-guide.{md,json} + ia.md + token adherence) is exercised, and the Spec
-# Author proposes E2E (browser) stories rather than API-only.
-export LAKEBASE_SFTDD_UI=1
+# filing a bug, transitioning its status). It is scaffolded with `--ui-track`
+# above, which persists project.uiTrack into sftdd-config.json (the SINGLE source
+# the drive reads to run the UX Designer + require design-brief.md at intake +
+# exercise the design-guide/IA/token-adherence track). no UI env door:
+# that was a second door for the same setting.
 
 # The smoke drives the deterministic orchestrator (`lakebase-sftdd-drive`) CLI
 # directly for every phase (planning + per-feature design/build/deploy); it does
@@ -357,7 +357,10 @@ scaffold_project() {
       `# each role's recommended model. Override per run via --agent-model / the`\
       `# AGENT_MODELS env if a specific experiment needs it. effort=low for all`\
       `# roles except the two design-gate gatekeepers is patched in below.` \
-      --enable-e2e
+      `# --ui-track is the single source for the UX lane: it persists`\
+      `# project.uiTrack (the drive reads it, no UI env door) AND`\
+      `# derives the e2e harness. One way in.` \
+      --ui-track
   ) || { err "scaffold failed"; exit 1; }
 
   # create-project seeds .lakebase/sftdd-config.json with models but no effort
@@ -553,7 +556,7 @@ proxy_supply() {
 # Project-level intake, staged once before the iteration loop. product-overview.md
 # and nfrs.md are project-scoped (refined across features in a real run; recorded
 # here). design-brief.md is also supplied: this smoke is a UI project (every
-# feature is browser-facing), so LAKEBASE_SFTDD_UI=1 turns on the UX track and the intake
+# feature is browser-facing), so the UX track is on via create-project --ui-track and the intake
 # precondition requires the brief.
 stage_project_intake() {
   log "staging project HIL intake via human-proxy (product-overview.md + nfrs.md + design-brief.md)"

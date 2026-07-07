@@ -23,14 +23,28 @@ const NFRS = [
 const FEATURE_REQUEST = "# v1\n\nA team needs to file bugs and find them later, in their own words.\n";
 const DESIGN_BRIEF = "# Design brief\n\n## References\n- partner-asset-tracker for layout + tone\n";
 
+let proj: string;
 let tdd: string;
 const FEATURE = "F1-x";
 
+// The project's `.sftdd` artifact root lives under a project dir that also holds
+// `.lakebase/sftdd-config.json` (the single source of `uiTrack`), so intake reads
+// UI-ness the same way it does in a real scaffolded project.
 beforeEach(() => {
-  tdd = mkdtempSync(join(tmpdir(), "intake-"));
+  proj = mkdtempSync(join(tmpdir(), "intake-"));
+  tdd = join(proj, ".sftdd");
   mkdirSync(join(tdd, "features", FEATURE), { recursive: true });
 });
-afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+afterEach(() => rmSync(proj, { recursive: true, force: true }));
+
+/** Mark the project a UI project via its single source (config.project.uiTrack). */
+const markUiProject = (): void => {
+  mkdirSync(join(proj, ".lakebase"), { recursive: true });
+  writeFileSync(
+    join(proj, ".lakebase", "sftdd-config.json"),
+    JSON.stringify({ version: 1, project: { uiTrack: true } }),
+  );
+};
 
 describe("checkIntakePreconditions", () => {
   it("fails when product-overview.md + nfrs.md are absent", () => {
@@ -64,16 +78,18 @@ describe("checkIntakePreconditions", () => {
     expect(checkIntakePreconditions({ tddDir: tdd, featureId: FEATURE }).ok).toBe(true);
   });
 
-  it("requires design-brief.md only for UI projects (--ui)", () => {
+  it("requires design-brief.md only for UI projects (read from config.uiTrack, the single source)", () => {
     writeFileSync(join(tdd, "product-overview.md"), PRODUCT_OVERVIEW);
     writeFileSync(join(tdd, "nfrs.md"), NFRS);
-    expect(checkIntakePreconditions({ tddDir: tdd }).ok).toBe(true); // non-UI: fine
-    const uiMissing = checkIntakePreconditions({ tddDir: tdd, ui: true });
+    expect(checkIntakePreconditions({ tddDir: tdd }).ok).toBe(true); // non-UI (no config): fine
+
+    markUiProject(); // project.uiTrack = true in sftdd-config.json
+    const uiMissing = checkIntakePreconditions({ tddDir: tdd });
     expect(uiMissing.ok).toBe(false);
     expect(uiMissing.missing).toContain("design-brief.md");
 
     mkdirSync(join(tdd, "design"), { recursive: true });
     writeFileSync(join(tdd, "design", "design-brief.md"), DESIGN_BRIEF);
-    expect(checkIntakePreconditions({ tddDir: tdd, ui: true }).ok).toBe(true);
+    expect(checkIntakePreconditions({ tddDir: tdd }).ok).toBe(true);
   });
 });

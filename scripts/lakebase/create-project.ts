@@ -37,7 +37,7 @@ import {
   writeWorkflowState,
 } from "./scm-workflow-state.js";
 import type { AgentRole } from "../sftdd/agent-log.js";
-import { defaultTddConfig, writeTddConfig } from "../sftdd/tdd-config.js";
+import { defaultSftddConfig, writeSftddConfig } from "../sftdd/sftdd-config.js";
 
 export interface CreateProjectArgs {
   /** Project name (Lakebase project id and local directory name). */
@@ -77,8 +77,16 @@ export interface CreateProjectArgs {
    * branch exists.
    */
   tiers?: 1 | 2 | 3;
+  /**
+   * Whether the project has a user-facing UI. This is the SINGLE SOURCE for the
+   * UX track: it is persisted to sftdd-config.json (project.uiTrack), which the
+   * drive reads to run the UX Designer + design-guide/IA + design-adherence gate,
+   * AND it drives the e2e scaffolding below (a UI project always gets e2e). There
+   * is no separate env/flag door; this input is the one way in. Default: false.
+   */
+  uiTrack?: boolean;
   /** Lay down the .sftdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
-  enableTdd?: boolean;
+  enableSftdd?: boolean;
   /**
    * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
    * runner: drops `playwright.config.ts` + `tests/e2e/smoke.spec.ts`,
@@ -157,13 +165,24 @@ export async function createProject(
   const useGithub = input.createGithubRepo !== false;
   const language = input.language ?? "java";
   const runnerType = input.runnerType ?? "self-hosted";
-  const enableTdd = input.enableTdd !== false;
-  // Phase 2: default-on for Node/React templates only. Java/
-  // Kotlin/Python backends opt in explicitly. An undefined input.enableE2e
-  // means "fall back to the language default"; an explicit boolean
-  // overrides regardless of language.
+  const enableSftdd = input.enableSftdd !== false;
+  // uiTrack is the SINGLE SOURCE for "this project has a UI": it is persisted to
+  // sftdd-config.json below (project.uiTrack, which the drive reads to run the UX
+  // Designer + design-guide/IA + adherence gate) AND it drives e2e here. A UI
+  // project ALWAYS gets the e2e harness; e2e may still be enabled independently
+  // for a non-UI Node backend. Deriving e2e from uiTrack makes the old
+  // contradiction (e2e on / uiTrack off, or the reverse) unrepresentable from
+  // this one entry point.
+  const uiTrack = input.uiTrack === true;
   const enableE2e =
-    input.enableE2e !== undefined ? input.enableE2e : language === "nodejs";
+    uiTrack || (input.enableE2e !== undefined ? input.enableE2e : language === "nodejs");
+  // Invariant guard (belt-and-suspenders against a future edit): a UI project can
+  // never be produced without its e2e harness.
+  if (uiTrack && !enableE2e) {
+    throw new Error(
+      "create-project: uiTrack requires the e2e harness; a UI project cannot be scaffolded without it.",
+    );
+  }
   const enableInfra =
     input.enableInfra !== undefined ? input.enableInfra : language === "nodejs";
   const skipCommands = input.skipCommands === true;
@@ -280,7 +299,7 @@ export async function createProject(
   });
 
   // ── Step 5b: .sftdd/ scaffold (lakebase-sftdd-workflows bootstrap) ────────
-  if (enableTdd) {
+  if (enableSftdd) {
     report("Scaffolding .sftdd/ workflow directory...");
     layDownTddScaffold(projectDir);
   }
@@ -388,23 +407,26 @@ export async function createProject(
   // ── Step 7d: unified TDD run config ──────────
   // Seed .lakebase/sftdd-config.json, the one declarative source for the per-role
   // + per-turn model/effort matrix and the build/plan/project knobs (the
-  // orchestrator resolves file -> LAKEBASE_SFTDD_* env -> default). Seeded with each
-  // role's recommended model + any HIL model overrides chosen at setup, and the
-  // navigator REVIEW turn pinned to low effort (the fast judgment turn). Written
-  // before the initial commit so it is tracked, like workflow-state.json.
+  // orchestrator resolves file -> default; the file is the SINGLE source, no env
+  // override). Seeded with each role's recommended model + any HIL model overrides
+  // chosen at setup, the navigator REVIEW turn pinned to low effort, and
+  // project.uiTrack from the create-time input (the one way in for the UX lane).
+  // Written before the initial commit so it is tracked, like workflow-state.json.
   // Best-effort: a failure is a warning; the code defaults still apply.
-  if (enableTdd) {
+  if (enableSftdd) {
     try {
-      const tddConfig = defaultTddConfig();
+      const sftddConfig = defaultSftddConfig();
       for (const [role, model] of Object.entries(input.agentModels ?? {})) {
-        if (model && tddConfig.roles?.[role as keyof typeof tddConfig.roles]) {
-          tddConfig.roles[role as keyof typeof tddConfig.roles]!.model = model;
+        if (model && sftddConfig.roles?.[role as keyof typeof sftddConfig.roles]) {
+          sftddConfig.roles[role as keyof typeof sftddConfig.roles]!.model = model;
         }
       }
-      writeTddConfig(projectDir, tddConfig);
+      // uiTrack: the single persisted source the drive reads for the UX lane.
+      if (sftddConfig.project) sftddConfig.project.uiTrack = uiTrack;
+      writeSftddConfig(projectDir, sftddConfig);
     } catch (err) {
       warnings.push(
-        `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
+        `SFTDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`,
       );
     }
   }
@@ -423,7 +445,7 @@ export async function createProject(
   // Verifying here and reporting a specific reason + remediation makes the
   // problem visible AT CREATE TIME, where it can be fixed. The project is still
   // usable, so this is a loud warning rather than a fatal abort.
-  if (enableTdd) {
+  if (enableSftdd) {
     const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
     if (kitRef) {
       try {
@@ -522,7 +544,7 @@ export async function createProject(
   }
 
   report("Project created successfully!");
-  if (enableTdd) {
+  if (enableSftdd) {
     // Point the user at the convenient workflow launcher (scaffolded into
     // scripts/sftdd.sh): it drives the deterministic orchestrator.
     report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);

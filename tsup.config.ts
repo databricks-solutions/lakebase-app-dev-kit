@@ -60,6 +60,7 @@ export default defineConfig({
     "scripts/sftdd/story-pipeline.cli": "scripts/sftdd/story-pipeline.cli.ts",
     "scripts/sftdd/cycle.cli": "scripts/sftdd/cycle.cli.ts",
     "scripts/sftdd/response-formatter.cli": "scripts/sftdd/response-formatter.cli.ts",
+    "scripts/sftdd/scenario-conditions.cli": "scripts/sftdd/scenario-conditions.cli.ts",
     "scripts/sftdd/story-experiment.cli": "scripts/sftdd/story-experiment.cli.ts",
     "scripts/sftdd/drive.cli": "scripts/sftdd/drive.cli.ts",
     "scripts/sftdd/spike.cli": "scripts/sftdd/spike.cli.ts",

@@ -86,8 +86,8 @@ replay_smoke() {
   fi
   [[ -n "$KIT_REF" ]] && export LAKEBASE_KIT_REF="$KIT_REF"
 
-  # UI track on (browser-facing feature); headless gates via the Human Proxy.
-  export LAKEBASE_SFTDD_UI=1
+  # UI track is a PROJECT setting (project.uiTrack, set at create by --ui-track
+  # below), not an env door. Only the run-mode Human Proxy is env here.
   export LAKEBASE_SFTDD_HUMAN_PROXY=1
 
   # When recording a run (LAKEBASE_SFTDD_RECORD_DIR set), capture the BUILD corpus
@@ -133,7 +133,7 @@ replay_smoke() {
         --databricks-host "$DATABRICKS_HOST" --github-owner "$GITHUB_OWNER" \
         --language python --runner self-hosted --tiers "$TIERS" \
         $AGENT_MODEL_FLAGS \
-        --enable-e2e
+        --ui-track
     ) || { err "scaffold failed"; return 1; }
   else
     log "reusing existing project ${PROJECT_DIR} (multi-feature scenario , skip scaffold + intake)"

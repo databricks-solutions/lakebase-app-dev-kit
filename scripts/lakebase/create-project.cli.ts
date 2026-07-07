@@ -22,6 +22,7 @@ interface ParsedArgs {
   tiers?: 1 | 2 | 3;
   enableE2e?: boolean;
   enableInfra?: boolean;
+  uiTrack?: boolean;
   skipCommands?: boolean;
   agentModels?: Partial<Record<SpawnableAgentRole, string>>;
   help?: boolean;
@@ -87,6 +88,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--no-infra":
         out.enableInfra = false;
         break;
+      case "--ui-track":
+        out.uiTrack = true;
+        break;
+      case "--no-ui-track":
+        out.uiTrack = false;
+        break;
       case "--skip-commands":
         out.skipCommands = true;
         break;
@@ -147,6 +154,10 @@ Flags:
   --enable-infra      Force-enable [Infra]-tag runner wire-up
   --no-infra          Force-disable [Infra]-tag runner wire-up
                       (default: on for --language nodejs, off otherwise)
+  --ui-track          Mark the project as having a UI. The single source for the
+  --no-ui-track       UX track: persists project.uiTrack (the drive reads it to
+                      run the UX Designer + design-guide/IA + adherence gate) and,
+                      when on, always wires the e2e harness. Default: off.
   --skip-commands     Skip scaffolding .claude/commands/{design,build}.md
                       (default: commands are written)
   --agent-model       <role>=<model>, repeatable. Override a TDD role agent's
@@ -192,6 +203,7 @@ async function main(): Promise<number> {
       tiers: args.tiers,
       enableE2e: args.enableE2e,
       enableInfra: args.enableInfra,
+      uiTrack: args.uiTrack,
       skipCommands: args.skipCommands,
       agentModels: args.agentModels,
     };

@@ -82,7 +82,7 @@ export interface DriveEffectsConfig {
    *  forks from a clean parent (and a human/the smoke is not left on the merged,
    *  soon-deleted feature branch). */
   parentBranch?: string;
-  /** UI track on (LAKEBASE_SFTDD_UI=1 / a design-brief.md is part of intake): the
+  /** UI track on (project.uiTrack in sftdd-config.json, the single source): the
    *  Spec Author must treat user-facing capabilities as E2E (browser/screen)
    *  stories, not API-only, when proposing + breaking down. */
   uiTrack?: boolean;

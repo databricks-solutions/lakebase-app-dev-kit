@@ -201,8 +201,12 @@ describe("TDD-workflow smoke: orchestrator supplies intake via the Human Proxy",
     expect(runSmoke).toMatch(/design-brief\.md/);
   });
 
-  it("declares the UI track (LAKEBASE_SFTDD_UI=1) so the UX Designer + design-brief intake run", () => {
-    expect(runSmoke).toMatch(/export LAKEBASE_SFTDD_UI=1/);
+  it("declares the UI track via create-project --ui-track (the single source), not a LAKEBASE_SFTDD_UI env door", () => {
+    // Single-source config: uiTrack is persisted at scaffold (create-project
+    // --ui-track -> project.uiTrack in sftdd-config.json, which the drive reads),
+    // NOT set through the removed LAKEBASE_SFTDD_UI env override.
+    expect(runSmoke).toMatch(/--ui-track/);
+    expect(runSmoke).not.toMatch(/LAKEBASE_SFTDD_UI/);
   });
 
   it("hands the PO's feature-requests to the Human Proxy WHEN the state machine asks (not pre-staged)", () => {

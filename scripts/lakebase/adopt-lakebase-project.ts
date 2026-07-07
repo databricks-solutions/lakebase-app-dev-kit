@@ -47,7 +47,7 @@ export interface AdoptLakebaseProjectArgs {
    * Default: false (brownfield onboarding is incremental; TDD adoption
    * is a separate, opt-in decision).
    */
-  enableTdd?: boolean;
+  enableSftdd?: boolean;
   /**
    * Whether to wire `[E2E]` Playwright support (delegates to
    * `enableE2eForProject`). Requires a `package.json` at projectDir.
@@ -175,14 +175,14 @@ export async function adoptLakebaseProject(
   }
 
   // Step 4 (opt-in): optional TDD adoption.
-  if (args.enableTdd) {
+  if (args.enableSftdd) {
     if (!dryRun) {
       const result = adoptTdd({ projectDir: args.projectDir });
       for (const rel of result.added) {
         filesWritten.push(path.join(ARTIFACT_ROOT, rel));
       }
     } else {
-      warnings.push("dryRun: skipped enableTdd. Re-run without --dry-run to drop the .tdd/ scaffold.");
+      warnings.push("dryRun: skipped enableSftdd. Re-run without --dry-run to drop the .sftdd/ scaffold.");
     }
   }
 
