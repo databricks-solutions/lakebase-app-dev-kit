@@ -6,6 +6,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.7] - 2026-07-07
+
+Resilience hardening surfaced by a live SFTDD capture run (paired-branch build +
+deploy + PR/CI).
+
+### Fixed
+
+- **alembic subcommands can import app code (PYTHONPATH parity).** `alembic upgrade`
+  runs `env.py` (which prepends the project root to `sys.path`), but `alembic
+  history`/`heads` do not, yet still import every migration module to build the
+  revision map. A data migration importing app code then failed
+  `ModuleNotFoundError` under the migration-lineage check while working under
+  upgrade. `spawnAlembic` now puts the project root on `PYTHONPATH` for every
+  subcommand, and the scaffolded `alembic.ini` gains the idiomatic `prepend_sys_path
+  = .`.
+- **Ephemeral-verify branch create tolerates a silent client flake.** A
+  `create-branch` that exits non-zero yet lands the branch server-side no longer
+  aborts: `createBranch` re-checks and adopts the landed branch. `classifyDatabricksError`
+  folds stdout + the exit code into the message when stderr is empty, so a silent
+  failure is legible.
+- **Ephemeral-verify child name capped at the 63-char Lakebase limit.** An over-limit
+  name was truncated on create but looked up untruncated ("branch id not found"); the
+  name now truncates the descriptive prefix and preserves the unique `-vrfy-<nonce>`
+  suffix.
+- **Pre-build reflection turn is guarded.** A reflect turn that produces no readable
+  `reflect-verdict.json` now escalates to the human instead of the driver silently
+  re-invoking it into a stall.
+
+### Added
+
+- **`migration-app-coupling` smell + `lakebase-sftdd-migration-clean` gate.** A
+  deterministic check (mirroring contract-clean) that fails a build cycle when a
+  migration imports app code at module scope, routing a repair to make the migration
+  self-contained before it reaches CI.
+
 ## [0.3.0-beta.6] - 2026-06-30
 
 EMU / CI robustness, surfaced by a partner project on an Enterprise Managed Users
