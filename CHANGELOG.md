@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.9] - 2026-07-07
+
+Follow-on to beta.8, surfaced by the live SFTDD capture at an S2 REFACTOR that
+dead-locked.
+
+### Fixed
+
+- **A UI test that asserts the implementation instead of the seam no longer
+  dead-locks the REFACTOR.** The Test Strategist authored a test that grepped the
+  page source for an inline `style=` (e.g. `text-align: right`); the design lane then
+  refactored that inline style into a token-driven class, so the test could never
+  stay green and the REFACTOR halted. New `ui-style-implementation-test` smell
+  (spec-level, owned by the Test Strategist, re-gates `test_list`) plus a reflect
+  critic directive that flags a styling test asserting raw inline CSS in the page
+  source rather than the rendered seam (a design-guide class / `data-testid`) or the
+  design-adherence gate. The Test Strategist guidance now directs, for a
+  design-guide-governed visual property, asserting the seam and leaving the rendered
+  property to the design-adherence gate. This is a design-lane guard: it prevents the
+  test from being authored, it does not retroactively rewrite a frozen test list.
+
 ## [0.3.0-beta.8] - 2026-07-07
 
 Follow-on to beta.7, surfaced by the live SFTDD capture at the S1 experiment cut.
