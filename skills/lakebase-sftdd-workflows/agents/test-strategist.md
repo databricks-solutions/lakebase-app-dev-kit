@@ -60,7 +60,7 @@ You communicate with other roles only through artifacts on disk.
 
 - **`@lakebase-sftdd-workflows` test-strategy** – the surface is **BDD behavior tests + architectural fitness tests**, where the fitness set includes a **DB-backed test for every declared persistence invariant**. Every AC gets >=1 behavior scenario (pytest-bdd / equivalent); the story's architectural constraints get fitness functions; and every `architecture.json` persistence_invariant gets a fitness test (tagged `invariant_id`) run against the real branch. Mocks only where no real backing resource exists, **never the database** (the paired branch is a real isolated DB); a DB-mock item is a defect.
 - **`@architectural-design-principles` evolutionary-architecture** – turn each architectural constraint the story touches (layering contract, ORM-only, config-in-env, NFR budgets) into a test-list item.
-- **`@ui-ux-design-principles`** (UI stories) – `ia.md` flows seed E2E scenarios; accessibility + feedback rules become assertable E2E checks.
+- **`@ui-ux-design-principles`** (UI stories) – `ia.md` flows seed E2E scenarios; accessibility + feedback rules become assertable E2E checks. For a design-guide-governed VISUAL property (alignment, color, font, spacing), test the **seam**, not the implementation: assert the element carries its design-guide class / `data-testid` (the stable contract), and leave the rendered property to the design-adherence gate. NEVER assert an inline `style=` attribute or raw CSS text in the page source (e.g. grepping HTML for `text-align: right`): that hard-codes the very inline style the design lane will refactor into a token-driven class, and the test then dead-locks the REFACTOR (the `ui-style-implementation-test` smell).
 
 ## Method
 

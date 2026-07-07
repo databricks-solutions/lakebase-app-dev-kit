@@ -647,7 +647,12 @@ function roleTaskBody(
           `each other; (2) an AC with no covering test, or a test that contradicts its AC; (3) an NFR with ` +
           `no fitness test; (4) a test asserting at a layer the architecture forbids; (5) an AC whose ` +
           `declared layer conflicts with the architecture; (6) an untestable/vacuous AC (no observable ` +
-          `outcome). Do NOT critique implementation, style, or scope, only buildability + internal ` +
+          `outcome); (7) a UI-styling test that asserts inline HTML style or raw CSS in the page SOURCE ` +
+          `(e.g. a text-align/color/font check inside a style= attr) for a property the design-guide + ` +
+          `design-adherence gate govern, instead of the rendered SEAM (the element carries the design-guide ` +
+          `class / data-testid): such a test hard-codes the very inline style the design lane then refactors ` +
+          `into a token-driven class, so it blocks that refactor (the ui-style-implementation-test smell).` +
+          ` Do NOT critique implementation, style, or scope, only buildability + internal ` +
           `consistency of THIS story's artifacts.` +
           ` Write your verdict to ${root}/features/${featureId}/stories/${s}/reflect-verdict.json as ` +
           `{"version":1,"passed":<bool>,"findings":[{"owner":"spec-author"|"test-strategist","detail":"<the defect>"}]}. ` +

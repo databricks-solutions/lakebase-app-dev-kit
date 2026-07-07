@@ -18,6 +18,7 @@ export type SmellName =
   | "ac-overlap"
   | "layering-violation"
   | "ux-adherence"
+  | "ui-style-implementation-test"
   | "e2e-inline-regex-flag"
   | "e2e-row-perma-red"
   | "contract-incompleteness"
@@ -212,6 +213,29 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with " +
       "its data-testid seams, and give every action a perceivable result. Refactor the UI to the " +
       "design guide; do not weaken the guide to match the drift.",
+  },
+  {
+    name: "ui-style-implementation-test",
+    description:
+      "A test for a design-guide-governed styling property asserts the IMPLEMENTATION in the page " +
+      "SOURCE (an inline `style=` attr or raw CSS text, e.g. grepping the HTML for `text-align: right`) " +
+      "instead of the rendered SEAM (the element carries the design-guide class / data-testid) or the " +
+      "design-adherence gate. It greens only while the style stays inline, so the moment the design lane " +
+      "refactors that ad-hoc inline style into a token-driven theme.css class (as the design guide " +
+      "requires), the test breaks and the REFACTOR dead-locks with no valid SUPERSEDED-TESTS path (the " +
+      "test and the design guide cannot both be satisfied). A test-list decomposition defect the pre-build " +
+      "reflection critic flags (routes to the Test Strategist), so it is fixed before a build cycle wastes " +
+      "on it.",
+    proposed_remediation:
+      "Test the SEAM, not the implementation: assert the quantity/styled cell carries its design-guide " +
+      "class or data-testid (the stable contract), and leave the visual property (alignment, tabular-nums, " +
+      "color) to the design-adherence gate / a rendered-output check. Never assert an inline `style=` string " +
+      "the design guide will move into a token-driven class.",
+    // A styling test asserting implementation is a test-strategist decomposition
+    // defect: route back to Gate 3 (test_list) on `revise`.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list",
   },
   {
     name: "e2e-inline-regex-flag",

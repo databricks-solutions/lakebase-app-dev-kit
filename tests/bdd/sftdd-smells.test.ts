@@ -68,6 +68,7 @@ describe("smells catalog", () => {
         "test-cost-spiral",
         "test-deletion-attempt",
         "test-list-drift",
+        "ui-style-implementation-test",
         "ux-adherence",
       ].sort()
     );
