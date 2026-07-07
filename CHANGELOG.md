@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.8] - 2026-07-07
+
+Follow-on to beta.7, surfaced by the live SFTDD capture at the S1 experiment cut.
+
+### Fixed
+
+- **Stray agent-created junk no longer blocks the experiment cut, and never rides a
+  commit.** A design-lane agent wrote a mis-quoted file (named `"`) to the project
+  root; the fork guard refused the cut because the build commit ran `git add -A` and
+  would have committed that junk onto the experiment branch. `commitExperimentCode`
+  now allow-lists what it stages (every tracked change anywhere, plus new untracked
+  files only under the source/test/migration roots or with a recognized source
+  extension, so root-level `app.py` is still committed), and `assertCleanForFork`
+  ignores untracked files (uncommitted edits to tracked source still refuse). Adds an
+  `untracked` toggle to `isDirty` and an `untrackedAllow` option to
+  `commitAllIfChanged`.
+
 ## [0.3.0-beta.7] - 2026-07-07
 
 Resilience hardening surfaced by a live SFTDD capture run (paired-branch build +
