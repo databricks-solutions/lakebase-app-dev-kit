@@ -263,10 +263,13 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "of that app symbol breaks replaying the migration from base (the historical revision can no " +
       "longer import), and every alembic subcommand that builds the revision map (history/heads, " +
       "not just upgrade) must load the module. It greens under `upgrade` (env.py puts the project " +
-      "root on sys.path) yet can fail elsewhere. The Navigator flags it in REVIEW.",
+      "root on sys.path) yet fails in CI's `alembic history`/`heads`. Caught DETERMINISTICALLY by the " +
+      "`lakebase-sftdd-migration-clean` gate (it scans the migration files for module-scope app imports), " +
+      "which runs proactively at GREEN even when the local verify passes, so it is fixed before the PR; " +
+      "the Navigator may also flag it in REVIEW.",
     proposed_remediation:
-      "Make the migration self-contained: inline a frozen copy of the needed logic in the migration " +
-      "file (or express the data change in raw SQL). Do not import from app.* at module scope, so " +
+      "Driver REPAIR: make the migration self-contained: inline a frozen copy of the needed logic in the " +
+      "migration file (or express the data change in raw SQL). Do not import from app.* at module scope, so " +
       "the migration stays stable as the app evolves and loads under every alembic subcommand.",
   },
 ];

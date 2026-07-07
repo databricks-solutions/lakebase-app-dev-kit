@@ -45,6 +45,7 @@ import {
   rearmRegressionFix,
 } from "./supersession.js";
 import { checkContractClean } from "./contract-clean.js";
+import { checkMigrationAppClean } from "./migration-app-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
 import {
@@ -445,7 +446,22 @@ export async function greenOpenCycle(
   // here leaves the cycle RED and raises an escalation to the HIL; the
   // orchestration then routes to raise-to-hil rather than advancing.
   const verify = args.verify ?? defaultGreenVerifier;
-  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: open.branch_id });
+  let result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: open.branch_id });
+  // Proactive migration-self-containment gate. Even when the honest verify PASSES
+  // (local `alembic upgrade` runs env.py, so an app-importing migration imports
+  // fine), a migration that imports app code at module scope breaks CI's
+  // `alembic history` (which does not run env.py). Fail the cycle here with a
+  // precise fix directive so the assess->repair loop makes the migration
+  // self-contained BEFORE it reaches the PR. Skipped during a build replay (the
+  // recorded corpus is trusted; re-gating it would fail on historical migrations).
+  if (result.passed && !sftddEnv("REPLAY_BUILD_DIR")) {
+    try {
+      const mig = checkMigrationAppClean({ projectDir: dirname(tddDir) });
+      if (!mig.clean && mig.remediation) result = { passed: false, summary: mig.remediation };
+    } catch {
+      /* advisory scan: a gate error must never fail the cycle */
+    }
+  }
   if (open.layer && open.experiment_slug) {
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
   }
