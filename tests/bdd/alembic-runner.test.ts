@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { resolveAlembicBin } from "../../scripts/lakebase/schema-migrate-runners/alembic.js";
+import { resolveAlembicBin, listAlembicHeads } from "../../scripts/lakebase/schema-migrate-runners/alembic.js";
 
 const tmpDirs: string[] = [];
 
@@ -66,5 +66,24 @@ describe("resolveAlembicBin", () => {
     // Resolution must not throw on a missing dir; fall through to PATH.
     const fake = path.join(os.tmpdir(), `lbscm-alembic-missing-${Date.now()}`);
     expect(resolveAlembicBin(fake)).toBe("alembic");
+  });
+});
+
+describe("spawnAlembic env parity", () => {
+  it("puts the project root on PYTHONPATH for EVERY subcommand (so app-importing migrations load under `history`/`heads`)", async () => {
+    // A fake alembic that records the PYTHONPATH it was given, then prints a
+    // valid `heads` line. Without the PYTHONPATH fix, a migration importing app
+    // code fails ModuleNotFoundError under commands that don't run env.py.
+    const dir = mkTmp();
+    const bin = path.join(dir, ".venv", "bin", "alembic");
+    fs.mkdirSync(path.dirname(bin), { recursive: true });
+    fs.writeFileSync(bin, `#!/usr/bin/env bash\nprintf '%s' "$PYTHONPATH" > "${path.join(dir, "seen-pythonpath.txt")}"\necho 'abc123 (head)'\n`);
+    fs.chmodSync(bin, 0o755);
+
+    const heads = await listAlembicHeads(dir);
+    expect(heads).toEqual(["abc123"]); // ran through spawnAlembic
+
+    const seen = fs.readFileSync(path.join(dir, "seen-pythonpath.txt"), "utf8");
+    expect(seen.split(path.delimiter)).toContain(dir); // project root is importable
   });
 });

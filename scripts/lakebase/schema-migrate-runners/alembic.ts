@@ -66,9 +66,17 @@ function spawnAlembic(
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const bin = resolveAlembicBin(projectDir);
+    // Put the project root on PYTHONPATH so `app` is importable for EVERY alembic
+    // subcommand. `upgrade` runs env.py (which prepends sys.path), but `history`
+    // and other read-only commands do not, yet they still import every migration
+    // module to build the revision map. A data migration that imports app code
+    // then fails ModuleNotFoundError under `history` but works under `upgrade`.
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    env.PYTHONPATH = [projectDir, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter);
+    if (dsn) env.DATABASE_URL = dsn;
     const child = spawn(bin, args, {
       cwd: projectDir,
-      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
