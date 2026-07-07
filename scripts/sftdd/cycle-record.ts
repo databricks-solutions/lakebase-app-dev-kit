@@ -112,6 +112,11 @@ export async function commitExperimentCode(projectDir: string, message: string):
     // already blocks the fork via assertCleanForFork). Gitignored too.
     exclude: [".sftdd", ".tdd", ".lakebase", ".claude/agent-memory"],
     include: [".sftdd/design", ".sftdd/architecture", ".tdd/design", ".tdd/architecture"],
+    // Allow-list NEW untracked files to the project's source/test/migration roots
+    // (tracked edits anywhere are still staged). A design-lane agent that writes a
+    // mis-quoted junk file to the repo root must not get it committed onto the
+    // experiment branch, and must not block the fork.
+    untrackedAllow: ["app", "src", "lib", "server", "client", "tests", "test", "alembic", "migrations", "db"],
   });
 }
 

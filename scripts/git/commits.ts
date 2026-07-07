@@ -10,6 +10,17 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { exec, shq } from "../util/exec.js";
 
+/** Extensions the allow-list commit treats as source/artifact worth staging even
+ *  at the repo root (so a minimal app's root `app.py`/`main.ts` is committed).
+ *  A file with no extension or a non-source one (e.g. a stray `"` or a `.log`)
+ *  outside the source roots is left untracked, so agent junk never rides a commit. */
+const SOURCE_EXTENSIONS = new Set<string>([
+  ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".kts",
+  ".go", ".rb", ".rs", ".php", ".cs", ".scala", ".sql", ".html", ".htm", ".css",
+  ".scss", ".less", ".vue", ".svelte", ".json", ".yaml", ".yml", ".toml", ".ini",
+  ".cfg", ".conf", ".xml", ".md", ".sh", ".bash", ".env", ".gradle", ".properties",
+]);
+
 export interface CommitArgs {
   cwd: string;
   message: string;
@@ -85,6 +96,17 @@ export interface CommitAllArgs extends CommitArgs {
    * is skipped (git errors on an unmatched pathspec).
    */
   include?: string[];
+  /**
+   * Allow-list the UNTRACKED files that get staged: stage every TRACKED change
+   * (anywhere, minus `exclude`) so no edit to committed config/source is ever
+   * dropped, but stage NEW untracked files ONLY when they sit under one of these
+   * repo-relative prefixes (the project's source/test/migration roots). Stray
+   * untracked files elsewhere , e.g. agent junk written to the repo root by a
+   * mis-quoted shell command , are then never committed onto the experiment
+   * branch. When omitted, the legacy `git add -A` (minus `exclude`) behavior is
+   * used (stage everything, tracked and untracked).
+   */
+  untrackedAllow?: string[];
 }
 
 /**
@@ -100,10 +122,33 @@ export async function commitAllIfChanged(args: CommitAllArgs): Promise<boolean> 
     throw new Error("Commit message is required");
   }
   const exclude = args.exclude ?? [];
-  if (exclude.length > 0) {
-    // A trailing slash on a prefix is dropped (`.tdd/` -> exclude the `.tdd` dir).
-    const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-    await exec(`git add -A -- . ${ex}`, { cwd: args.cwd });
+  // A trailing slash on a prefix is dropped (`.tdd/` -> exclude the `.tdd` dir).
+  const ex = exclude.length > 0 ? " " + exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ") : "";
+  const allow = args.untrackedAllow ?? [];
+  if (allow.length > 0) {
+    // Allow-list mode: stage every TRACKED change (anywhere, minus excludes) so
+    // no committed-file edit is dropped, then stage NEW untracked files only when
+    // they sit under an allow-listed source root OR carry a recognized source
+    // extension (so root-level code like `app.py` is committed). Stray junk with
+    // no/unknown extension outside the source roots , e.g. an agent's mis-quoted
+    // file named `"` , is never staged, so it cannot ride onto the experiment.
+    await exec(`git add -u -- .${ex}`, { cwd: args.cwd });
+    const excludeDirs = exclude.map((p) => p.replace(/\/+$/, ""));
+    const underDir = (f: string, d: string): boolean => f === d || f.startsWith(`${d}/`);
+    const untracked = (await exec("git ls-files --others --exclude-standard", { cwd: args.cwd }))
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const f of untracked) {
+      if (excludeDirs.some((d) => underDir(f, d))) continue;
+      const dot = f.lastIndexOf(".");
+      const ext = dot > f.lastIndexOf("/") ? f.slice(dot).toLowerCase() : "";
+      if (allow.some((d) => underDir(f, d)) || SOURCE_EXTENSIONS.has(ext)) {
+        await exec(`git add -- ${shq(f)}`, { cwd: args.cwd });
+      }
+    }
+  } else if (exclude.length > 0) {
+    await exec(`git add -A -- .${ex}`, { cwd: args.cwd });
   } else {
     await exec("git add -A", { cwd: args.cwd });
   }

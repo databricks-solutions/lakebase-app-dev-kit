@@ -65,6 +65,14 @@ export interface IsDirtyArgs extends CwdOnlyArgs {
    * (the original behavior).
    */
   ignore?: string[];
+  /**
+   * Count untracked files as dirty. Default true (porcelain reports them). Set
+   * false to consider ONLY changes to tracked files: an untracked file rides
+   * onto a `git checkout -b` but is never committed by an allow-list commit, so
+   * a fork guard can safely tolerate stray untracked junk while still refusing
+   * on uncommitted edits to tracked source.
+   */
+  untracked?: boolean;
 }
 
 /**
@@ -77,7 +85,8 @@ export interface IsDirtyArgs extends CwdOnlyArgs {
 export async function isDirty(args: IsDirtyArgs): Promise<boolean> {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       // Let GIT exclude the ignored paths via pathspec, rather than parsing the
       // porcelain ourselves , the leading status column is a space for unstaged
@@ -85,7 +94,7 @@ export async function isDirty(args: IsDirtyArgs): Promise<boolean> {
       // A magic `:(exclude)` pathspec must be paired with an inclusive one (`.`).
       // A trailing slash on a prefix is dropped (`.tdd/` -> exclude the `.tdd` dir).
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec(command, { cwd: args.cwd });
     return out.trim().length > 0;

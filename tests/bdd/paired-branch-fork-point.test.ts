@@ -109,4 +109,12 @@ describe("assertCleanForFork", () => {
     writeFileSync(join(workDir, ".lakebase", "workflow-state.json"), "{}");
     await expect(assertCleanForFork(workDir, "origin/staging")).resolves.toBeUndefined();
   });
+
+  it("tolerates a stray UNTRACKED file (agent junk): it rides the fork but the allow-list build never commits it", async () => {
+    // The live F1 stall: a design-lane agent wrote a mis-quoted file named `"` at
+    // the repo root. It is untracked, so it must NOT block the experiment cut.
+    writeFileSync(join(workDir, '"'), '"component =\n');
+    writeFileSync(join(workDir, "stray-junk.txt"), "oops");
+    await expect(assertCleanForFork(workDir, "origin/staging")).resolves.toBeUndefined();
+  });
 });

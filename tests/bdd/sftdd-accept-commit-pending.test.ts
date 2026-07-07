@@ -86,6 +86,35 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     await expect(exec("git checkout feature", { cwd: dir })).resolves.toBeDefined();
   });
 
+  it("stages new source under the allow-listed roots but NEVER a stray untracked file at the repo root", async () => {
+    // The live F1 stall: a design-lane agent wrote mis-quoted junk (a file named
+    // `"`) to the repo root. The allow-list commit must stage real code (app/) and
+    // leave the junk untracked, so it never rides onto the experiment branch.
+    const dir = mkTmp();
+    await gitInit(dir);
+    await configIdentity(dir);
+    await writeMigration(dir, "def downgrade():\n    pass\n");
+    await exec("git add -A && git commit -m base", { cwd: dir });
+
+    // New real source under app/, plus stray agent junk at the root.
+    fs.mkdirSync(path.join(dir, "app", "services"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "app/services/parser.py"), "def parse(): ...\n", "utf8");
+    fs.writeFileSync(path.join(dir, '"'), '"component =\n', "utf8"); // the mis-quoted junk
+    fs.writeFileSync(path.join(dir, "scratch.log"), "noise\n", "utf8"); // other root junk
+
+    const committed = await commitExperimentCode(dir, "green: parser");
+    expect(committed).toBe(true);
+
+    // The last commit contains the app source but neither junk file.
+    const files = await exec("git show --name-only --pretty=format: HEAD", { cwd: dir });
+    expect(files).toMatch(/app\/services\/parser\.py/);
+    expect(files).not.toMatch(/scratch\.log/);
+    expect(files).not.toContain('"');
+    // And the junk remains untracked (not lost, just not committed).
+    const status = await exec("git status --porcelain", { cwd: dir });
+    expect(status).toMatch(/scratch\.log/);
+  });
+
   it("is a no-op (returns false) on an already-clean code tree", async () => {
     const dir = mkTmp();
     await gitInit(dir);

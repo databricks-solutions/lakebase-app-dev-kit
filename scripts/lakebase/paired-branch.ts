@@ -128,9 +128,10 @@ export async function assertCleanForFork(cwd: string, startPoint?: string): Prom
   if (!startPoint) return;
   // "Uncommitted CODE?" , tolerate the workflow-metadata churn the driver writes
   // mid-run (`.tdd/` log + state pointers, `.lakebase/` workflow state), matching
-  // scm-prepare-pr. Only real source changes that would be carried onto the new
-  // branch count.
-  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  // scm-prepare-pr. Only uncommitted edits to TRACKED source count: an untracked
+  // file rides onto the fork but the build's allow-list commit never stages it, so
+  // stray agent junk (e.g. a mis-quoted filename) must not block the cut.
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"], untracked: false })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} ` +
         `(they would be carried onto the new branch). Commit or stash first.`,
