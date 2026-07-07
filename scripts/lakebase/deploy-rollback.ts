@@ -22,7 +22,7 @@
 // structured result shape as `ensureAppEndpoint`.
 
 import { spawn } from "node:child_process";
-import { exec } from "../util/exec.js";
+import { runDatabricks } from "./databricks-cli.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface RollbackDeployArgs {
@@ -70,10 +70,10 @@ export async function listAppDeployments(args: {
   timeoutMs?: number;
 }): Promise<DeploymentInfo[]> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const stdout = await exec(
-    `databricks apps list-deployments "${escapeShellArg(args.appName)}" --profile "${escapeShellArg(args.profile)}" -o json`,
-    { timeout: timeoutMs }
-  );
+  const stdout = await runDatabricks(["apps", "list-deployments", args.appName, "-o", "json"], {
+    profile: args.profile,
+    timeout: timeoutMs,
+  });
   const parsed = JSON.parse(stdout) as unknown;
   // The CLI may return a bare array or an object with `app_deployments`/`items`.
   if (Array.isArray(parsed)) return parsed as DeploymentInfo[];
@@ -172,6 +172,8 @@ function runRollbackDeploy(args: {
   timeoutMs: number;
 }): Promise<DeployOut> {
   return new Promise((resolve, reject) => {
+    // databricks-cli-exempt: long-running STREAMING deploy spawn (rollback redeploy)
+    // with a structured-result + timeout contract; threads an explicit required --profile.
     const child = spawn(
       "databricks",
       [
@@ -216,8 +218,4 @@ function runRollbackDeploy(args: {
       });
     }, args.timeoutMs);
   });
-}
-
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
 }

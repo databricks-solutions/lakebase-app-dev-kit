@@ -6,6 +6,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { exec } from "../util/exec.js";
+import { runDatabricks } from "./databricks-cli.js";
 import { resolveDatabricksHost } from "./databricks-host.js";
 import { resolveProfileForHost } from "./databricks-profile.js";
 import { listBranches } from "./branch-utils.js";
@@ -62,7 +63,7 @@ function readEnvFile(projectDir: string): Record<string, string> {
 
 async function checkDatabricksCli(): Promise<CheckResult> {
   try {
-    const out = await exec("databricks --version", { timeout: 5_000 });
+    const out = await runDatabricks(["--version"], { timeout: 5_000 });
     const trimmed = out.trim();
     const m = trimmed.match(/v?(\d+)\.(\d+)/);
     if (m) {
@@ -96,8 +97,8 @@ async function checkDatabricksCli(): Promise<CheckResult> {
 
 async function checkAuth(profile?: string): Promise<CheckResult> {
   try {
-    const profileArg = profile ? ` --profile ${profile}` : "";
-    const out = await exec(`databricks auth describe -o json${profileArg}`, {
+    const out = await runDatabricks(["auth", "describe", "-o", "json"], {
+      profile,
       timeout: 5_000,
     });
     let host: string | undefined;
@@ -129,8 +130,8 @@ async function checkAuth(profile?: string): Promise<CheckResult> {
 
 async function checkIdentity(profile?: string): Promise<CheckResult> {
   try {
-    const profileArg = profile ? ` --profile ${profile}` : "";
-    const out = await exec(`databricks current-user me -o json${profileArg}`, {
+    const out = await runDatabricks(["current-user", "me", "-o", "json"], {
+      profile,
       timeout: 5_000,
     });
     let user: string | undefined;

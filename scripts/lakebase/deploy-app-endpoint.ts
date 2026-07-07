@@ -21,7 +21,7 @@
 // separately (slice 5).
 
 import { spawn } from "node:child_process";
-import { exec } from "../util/exec.js";
+import { runDatabricks } from "./databricks-cli.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 import { uploadDirectory, UploadDirectoryResult } from "./deploy-workspace-upload.js";
 
@@ -146,10 +146,10 @@ export interface GetCiAppEndpointResult {
 export async function getAppEndpoint(args: GetAppEndpointArgs): Promise<GetAppEndpointResult> {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   try {
-    const stdout = await exec(
-      `databricks apps get "${escapeShellArg(args.appName)}" --profile "${escapeShellArg(args.profile)}" -o json`,
-      { timeout: timeoutMs }
-    );
+    const stdout = await runDatabricks(["apps", "get", args.appName, "-o", "json"], {
+      profile: args.profile,
+      timeout: timeoutMs,
+    });
     const info = JSON.parse(stdout) as Record<string, unknown>;
     return {
       exists: true,
@@ -194,9 +194,7 @@ export async function deleteAppEndpoint(args: DeleteAppEndpointArgs): Promise<De
   let found = false;
 
   try {
-    await exec(
-      `databricks apps delete "${escapeShellArg(args.appName)}" --profile "${escapeShellArg(args.profile)}"`,
-      { timeout: timeoutMs }
+    await runDatabricks(["apps", "delete", args.appName], { profile: args.profile, timeout: timeoutMs }
     );
     appDeleted = true;
     found = true;
@@ -216,9 +214,10 @@ export async function deleteAppEndpoint(args: DeleteAppEndpointArgs): Promise<De
 
   if (args.workspacePath) {
     try {
-      await exec(
-        `databricks workspace delete "${escapeShellArg(args.workspacePath)}" --recursive --profile "${escapeShellArg(args.profile)}"`,
-        { timeout: timeoutMs }
+      await runDatabricks(["workspace", "delete", args.workspacePath, "--recursive"], {
+        profile: args.profile,
+        timeout: timeoutMs,
+      }
       );
       workspaceDeleted = true;
     } catch (err) {
@@ -260,10 +259,10 @@ export async function ensureAppEndpoint(args: EnsureAppEndpointArgs): Promise<En
   const lookup = await getAppEndpoint({ appName: args.appName, profile: args.profile });
   let created = false;
   if (!lookup.exists) {
-    await exec(
-      `databricks apps create "${escapeShellArg(args.appName)}" --description "${escapeShellArg(description)}" --profile "${escapeShellArg(args.profile)}"`,
-      { timeout: createTimeoutMs }
-    );
+    await runDatabricks(["apps", "create", args.appName, "--description", description], {
+      profile: args.profile,
+      timeout: createTimeoutMs,
+    });
     created = true;
   }
 
@@ -325,12 +324,11 @@ export async function ensureAppEndpoint(args: EnsureAppEndpointArgs): Promise<En
 export async function getCiAppEndpoint(args: GetCiAppEndpointArgs): Promise<GetCiAppEndpointResult> {
   const appName = args.appName ?? deriveCiAppName(args.instance, args.branch);
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const profileFlag = args.profile ? ` --profile "${escapeShellArg(args.profile)}"` : "";
   try {
-    const stdout = await exec(
-      `databricks apps get "${escapeShellArg(appName)}"${profileFlag} -o json`,
-      { timeout: timeoutMs }
-    );
+    const stdout = await runDatabricks(["apps", "get", appName, "-o", "json"], {
+      profile: args.profile,
+      timeout: timeoutMs,
+    });
     const info = JSON.parse(stdout) as Record<string, unknown>;
     return {
       appName,
@@ -379,6 +377,8 @@ function runDeploy(args: {
   timeoutMs: number;
 }): Promise<DeployResult> {
   return new Promise((resolve, reject) => {
+    // databricks-cli-exempt: long-running STREAMING deploy spawn (minutes) with a
+    // structured-result + timeout contract; threads an explicit required --profile.
     const child = spawn(
       "databricks",
       [
@@ -423,8 +423,4 @@ function runDeploy(args: {
       });
     }, args.timeoutMs);
   });
-}
-
-function escapeShellArg(s: string): string {
-  return s.replace(/"/g, '\\"');
 }

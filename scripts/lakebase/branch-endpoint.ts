@@ -5,7 +5,7 @@
 // Composes with branch-utils.resolveBranchPath so callers can pass uid,
 // sanitized name, or full resource path.
 
-import { execFileSync } from "node:child_process";
+import { runDatabricksSync } from "./databricks-cli.js";
 import { resolveBranchId, resolveBranchPath } from "./branch-utils.js";
 import { mintCredential } from "./get-connection.js";
 import { DEFAULT_ENDPOINT } from "./constants.js";
@@ -37,9 +37,7 @@ export async function getEndpoint(args: GetEndpointArgs): Promise<EndpointInfo |
   }
   let raw: string;
   try {
-    raw = execFileSync("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+    raw = runDatabricksSync(["postgres", "list-endpoints", branchPath, "-o", "json"], {
       timeout: KIT_TIMEOUTS.cliDefault,
     });
   } catch {
@@ -118,12 +116,13 @@ export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<Endpoint
     },
   };
 
-  // Create endpoint (CLI may return immediately or block until ACTIVE)
+  // Create endpoint (CLI may return immediately or block until ACTIVE).
+  // Through the ONE wrapper so it threads the resolved --profile (was a raw
+  // execFileSync that fell back to DEFAULT and died on the refresh token).
   try {
-    execFileSync(
-      "databricks",
+    runDatabricksSync(
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+      { timeout: KIT_TIMEOUTS.cliCreateEndpoint },
     );
   } catch (err) {
     // Race: the endpoint may have been created between our getEndpoint check

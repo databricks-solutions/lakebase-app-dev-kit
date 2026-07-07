@@ -14,13 +14,11 @@
 //                                slug isn't orphaned (a same-name retry would
 //                                otherwise collide with the reserved slug).
 
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { deleteLakebaseProject } from "./lakebase-project.js";
-
-const execFileP = promisify(execFile);
+import { runDatabricks } from "./databricks-cli.js";
 
 export interface PreflightResult {
   ok: boolean;
@@ -38,26 +36,14 @@ function lastLines(s?: string, n = 3): string {
  * login` prereq instead of failing cryptically inside createLakebaseProject.
  */
 export async function checkDatabricksAuth(host?: string): Promise<PreflightResult> {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  const profileArg = process.env.DATABRICKS_CONFIG_PROFILE
-    ? ["--profile", process.env.DATABRICKS_CONFIG_PROFILE]
-    : [];
   try {
-    await execFileP("databricks", ["current-user", "me", "-o", "json", ...profileArg], {
-      env: env as NodeJS.ProcessEnv,
-      timeout: 8_000,
-    });
+    // Through the ONE databricks-CLI wrapper: it sets DATABRICKS_HOST from `host`
+    // and resolves + threads --profile (env -> project .env -> host-match).
+    await runDatabricks(["current-user", "me", "-o", "json"], { host, timeout: 8_000 });
     return { ok: true };
   } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer };
-    const stderr =
-      typeof e.stderr === "string"
-        ? e.stderr
-        : Buffer.isBuffer(e.stderr)
-          ? e.stderr.toString("utf8")
-          : "";
-    return { ok: false, reason: lastLines(stderr, 2) || e.message || "databricks current-user me failed" };
+    const e = err as { stderr?: string; message?: string };
+    return { ok: false, reason: lastLines(e.stderr, 2) || e.message || "databricks current-user me failed" };
   }
 }
 

@@ -15,7 +15,7 @@
 
 import { readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { exec } from "../util/exec.js";
+import { runDatabricks } from "./databricks-cli.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
 
 export interface UploadDirectoryArgs {
@@ -77,14 +77,9 @@ export async function uploadDirectory(args: UploadDirectoryArgs): Promise<Upload
   const errors: UploadDirectoryResult["errors"] = [];
   let filesUploaded = 0;
 
-  const escape = (s: string) => s.replace(/"/g, '\\"');
-
   const ensureRemoteDir = async (remoteDir: string) => {
     if (createdDirs.has(remoteDir)) return;
-    await exec(
-      `databricks workspace mkdirs "${escape(remoteDir)}" --profile "${escape(args.profile)}"`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["workspace", "mkdirs", remoteDir], { profile: args.profile, timeout: timeoutMs });
     createdDirs.add(remoteDir);
   };
 
@@ -99,9 +94,9 @@ export async function uploadDirectory(args: UploadDirectoryArgs): Promise<Upload
       await ensureRemoteDir(remoteDir);
     }
     try {
-      await exec(
-        `databricks workspace import "${escape(remotePath)}" --file "${escape(localFile)}" --format AUTO --overwrite --profile "${escape(args.profile)}"`,
-        { timeout: timeoutMs }
+      await runDatabricks(
+        ["workspace", "import", remotePath, "--file", localFile, "--format", "AUTO", "--overwrite"],
+        { profile: args.profile, timeout: timeoutMs },
       );
       filesUploaded++;
     } catch (err) {

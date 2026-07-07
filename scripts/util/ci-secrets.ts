@@ -6,7 +6,7 @@
 // .env is created later by the post-checkout hook, after CI secrets need to
 // be set), the values have to come from the create-project caller's scope.
 
-import { exec } from "./exec.js";
+import { runDatabricks } from "../lakebase/databricks-cli.js";
 import { setRepoSecrets } from "../github/secrets.js";
 import { getOwnerRepo } from "../git/remote.js";
 
@@ -52,9 +52,9 @@ export async function syncCiSecrets(args: SyncCiSecretsArgs): Promise<void> {
   // re-mint via the in-project refresh-token script), and the caller logs the
   // warning. Auth workflows will fail loudly with a clear message until then.
   try {
-    const tokenRaw = await exec(
-      `databricks tokens create --comment "${comment}" --lifetime-seconds ${lifetime} -o json`,
-      { cwd: args.projectDir, timeout: 30_000, env: { DATABRICKS_HOST: args.databricksHost } }
+    const tokenRaw = await runDatabricks(
+      ["tokens", "create", "--comment", comment, "--lifetime-seconds", String(lifetime), "-o", "json"],
+      { host: args.databricksHost, cwd: args.projectDir, timeout: 30_000 },
     );
     const parsed = JSON.parse(tokenRaw);
     const token = parsed.token_value || parsed.token || "";
