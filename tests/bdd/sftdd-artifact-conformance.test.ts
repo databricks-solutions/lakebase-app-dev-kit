@@ -16,6 +16,7 @@ import {
   scanFeatureConformance,
   checkLayeringDeclared,
   checkFitnessCoverage,
+  checkPersistenceCoverage,
   checkStoryIndependence,
   checkAcIndependence,
   checkServiceBackedDeclaration,
@@ -227,12 +228,13 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("architecture.json", badRole).ok).toBe(false);
   });
 
-  it("accepts a test-list item with kind behavior|fitness; rejects a bad kind", () => {
+  it("accepts a test-list item with kind behavior|fitness (+ invariant_id); rejects a bad kind", () => {
     const withKind = JSON.stringify({
       feature_id: "F1-initial-domain",
       items: [
         { id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" },
         { id: "T2", description: "layering contract", ac_id: "AC1", status: "pending", kind: "fitness" },
+        { id: "T3", description: "unique constraint realized against the branch DB", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-sku-unique" },
       ],
     });
     expect(checkArtifactConformance("test-list.json", withKind).ok).toBe(true);
@@ -646,5 +648,43 @@ describe("checkFitnessCoverage (Gate 3: a layered feature must have a fitness te
   it("EXEMPTS a non-service-backed feature with no fitness item", () => {
     const trivial = JSON.stringify({ feature_id: "F1-x", nfrs: [] });
     expect(checkFitnessCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending" }]), trivial).ok).toBe(true);
+  });
+});
+
+describe("checkPersistenceCoverage (Gate 3: DB coverage tied to the schema's declared invariants)", () => {
+  const arch = (invariants: object[]) =>
+    JSON.stringify({ feature_id: "F1-x", nfrs: [], service_backed: true, layers: [{ role: "repository", module: "app/repositories" }], persistence_invariants: invariants });
+  const inv = [
+    { id: "PI1-sku-location-unique", type: "unique", table: "stock", brief: "duplicate (sku, location) is rejected" },
+    { id: "PI2-qty-nonneg", type: "check", table: "stock", brief: "quantity < 0 is rejected" },
+  ];
+  const tl = (items: object[]) => JSON.stringify({ feature_id: "F1-x", items });
+  it("passes when every declared invariant is covered by an item's invariant_id", () => {
+    const r = checkPersistenceCoverage(
+      tl([
+        { id: "T1", description: "GET /api/stock returns records", ac_id: "AC1", status: "pending", kind: "behavior" },
+        { id: "T2", description: "duplicate insert rejected against the branch", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-sku-location-unique" },
+        { id: "T3", description: "negative quantity rejected against the branch", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI2-qty-nonneg" },
+      ]),
+      arch(inv),
+    );
+    expect(r.ok).toBe(true);
+  });
+  it("FAILS when a declared invariant has no covering item", () => {
+    const r = checkPersistenceCoverage(
+      tl([{ id: "T2", description: "dup rejected", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-sku-location-unique" }]),
+      arch(inv),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/PI2-qty-nonneg/);
+  });
+  it("FAILS a service-backed feature that declares NO persistence_invariants", () => {
+    const r = checkPersistenceCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending", kind: "behavior" }]), arch([]));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.join(" ")).toMatch(/no persistence_invariants/);
+  });
+  it("EXEMPTS a non-service-backed feature", () => {
+    const trivial = JSON.stringify({ feature_id: "F1-x", nfrs: [] });
+    expect(checkPersistenceCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending" }]), trivial).ok).toBe(true);
   });
 });

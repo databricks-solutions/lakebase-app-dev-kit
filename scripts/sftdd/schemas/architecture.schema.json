@@ -43,6 +43,35 @@
         "additionalProperties": false
       }
     },
+    "persistence_invariants": {
+      "type": "array",
+      "description": "The DB-level guarantees the schema must enforce for a service_backed feature (the persistence contract). Each is covered by a real-branch test (test-list item referencing its id via invariant_id); checkPersistenceCoverage hard-blocks Gate 3 when a service_backed feature declares none or leaves one uncovered. These drive DB-integration coverage tied to the schema's own contract, verifying the MIGRATION realized each guarantee against the branch, NOT the ORM's generic behavior.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "brief"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable id, e.g. \"PI1-stock-sku-location-unique\". Referenced by a test-list item's invariant_id."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["unique", "foreign_key", "cascade", "not_null", "check", "transactional", "migration_reversible"],
+            "description": "The class of guarantee: a unique key, an FK, a cascade rule, a NOT NULL, a CHECK, a transactional-atomicity boundary, or migration up-then-down reversibility."
+          },
+          "table": {
+            "type": "string",
+            "description": "The table (and, in brief, columns) the invariant applies to. Omit for a purely transactional/migration invariant."
+          },
+          "brief": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One line: the guarantee to verify against the real branch (e.g. \"inserting two rows with the same (sku, location) is rejected\")."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "nfrs": {
       "type": "array",
       "description": "Non-functional requirements proposed by the architect, adjudicated by the HIL at Gate 2. An empty array is valid (a feature may have no NFRs), but every entry that exists must be HIL-considered, not unconsidered.",

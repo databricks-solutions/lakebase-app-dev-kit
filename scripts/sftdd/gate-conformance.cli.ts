@@ -62,7 +62,7 @@ Usage:
 
 Flags:
   --feature <id>          Feature id (required, e.g. F1-initial-domain)
-  --tdd-dir <path>        .tdd/ root (default: ./.tdd)
+  --tdd-dir <path>        artifact root (default: ./.sftdd, honors a legacy ./.tdd)
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help

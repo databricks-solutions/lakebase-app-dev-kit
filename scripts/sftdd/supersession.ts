@@ -122,11 +122,22 @@ export interface GreenFailure {
    *  it ENRICHES the assess directive so the Navigator's fix covers these code refs
    *  without having to re-localize them. Advisory, present only when refs were found. */
   contractRefs?: string;
-  /** True once the Driver has consumed its one repair attempt (bounds the
-   *  navigator->driver repair to a single pass before the honest-GREEN backstop
-   *  escalates, symmetric to SupersededTests.refactored). */
+  /** True once the Driver has consumed its repair attempt FOR THE CURRENT assess
+   *  round (bounds one assess to one repair; cleared by a re-arm between rounds). */
   repairAttempted?: boolean;
+  /** How many assess->repair rounds have been spent on this failure. The build
+   *  self-heals across up to MAX_REGRESSION_FIX_ATTEMPTS rounds (re-diagnosing the
+   *  RESIDUAL each round: a Driver commonly fixes some-but-not-all flagged items in
+   *  one turn, e.g. deletes an orphan module + dedups one block but leaves another),
+   *  escalating to the HIL only when a verify still fails after the last round. */
+  fixAttempts?: number;
 }
+
+/** Bound on assess->repair self-heal rounds for one GREEN-verify failure before
+ *  the honest-GREEN backstop escalates to the HIL. A single repair often only
+ *  partially closes a multi-item build-quality gate (layering / DRY / adherence),
+ *  so we re-diagnose + re-repair the residual a few times before giving up. */
+export const MAX_REGRESSION_FIX_ATTEMPTS = 3;
 
 export function greenFailureJson(
   tdd: string,
@@ -203,7 +214,8 @@ export function hasPendingRegressionFix(
   return gf !== undefined && gf.assessed === true && typeof gf.fixDirective === "string" && gf.fixDirective.length > 0 && gf.repairAttempted !== true;
 }
 
-/** Mark the regression-fix as attempted (consume the one Driver repair). */
+/** Mark the regression-fix as attempted for the current round + count the round
+ *  toward the self-heal cap. */
 export function markRegressionFixAttempted(
   tdd: string,
   feature: string,
@@ -212,7 +224,63 @@ export function markRegressionFixAttempted(
 ): void {
   const gf = readGreenFailure(tdd, feature, story, ac);
   if (!gf) return;
-  writeGreenFailure(tdd, feature, story, ac, { ...gf, repairAttempted: true });
+  writeGreenFailure(tdd, feature, story, ac, {
+    ...gf,
+    repairAttempted: true,
+    fixAttempts: (gf.fixAttempts ?? 0) + 1,
+  });
+}
+
+/** True once the self-heal rounds are exhausted (a still-failing verify must now
+ *  escalate to the HIL rather than route another round). */
+export function regressionFixExhausted(gf: GreenFailure): boolean {
+  return (gf.fixAttempts ?? 0) >= MAX_REGRESSION_FIX_ATTEMPTS;
+}
+
+/** Compose the green-failure record the assess turn writes when the Navigator
+ *  has assessed a failure (assessed:true + diagnosis/fixDirective from the
+ *  assessment). CRITICAL: it PRESERVES the cross-round `fixAttempts` counter from
+ *  the prior record , the assess turn must not reset the self-heal cap, or
+ *  regressionFixExhausted never fires and the refactor-until-clean loop is
+ *  unbounded. Pure + unit-tested so the preservation can't silently regress. */
+export function composeAssessedGreenFailure(
+  prior: GreenFailure | undefined,
+  regression?: { diagnosis?: string; fixDirective?: string },
+): GreenFailure {
+  return {
+    assessed: true,
+    summary: prior?.summary ?? "",
+    ...(prior?.fixAttempts !== undefined ? { fixAttempts: prior.fixAttempts } : {}),
+    ...(regression?.diagnosis ? { diagnosis: regression.diagnosis } : {}),
+    ...(regression?.fixDirective ? { fixDirective: regression.fixDirective } : {}),
+  };
+}
+
+/** Re-arm a still-failing failure for ANOTHER assess->repair round: clear the
+ *  round-scoped assessment (assessed + fixDirective + repairAttempted) so the next
+ *  readState routes a FRESH Navigator assess that re-runs the gate on the RESIDUAL,
+ *  while preserving the cross-round attempt counter + the verify summary. */
+export function rearmRegressionFix(
+  tdd: string,
+  feature: string,
+  story: string,
+  ac: string,
+): void {
+  const gf = readGreenFailure(tdd, feature, story, ac);
+  if (!gf) return;
+  writeGreenFailure(tdd, feature, story, ac, {
+    assessed: false,
+    summary: gf.summary,
+    fixAttempts: gf.fixAttempts ?? 0,
+    ...(gf.contractRefs ? { contractRefs: gf.contractRefs } : {}),
+  });
+  // Clear the PRIOR round's diagnosis + supersede flag so the next assess turn
+  // re-diagnoses from the CURRENT failing tests, not a stale directive. Without
+  // this the loop reused the previous fixDirective (observed: repeating "delete
+  // app/models.py" long after that was resolved, while the real failures grew),
+  // so the Driver kept applying a no-op repair. Fresh slate per round.
+  fs.rmSync(regressionAssessmentJson(tdd, feature, story, ac), { force: true });
+  fs.rmSync(supersededTestsJson(tdd, feature, story, ac), { force: true });
 }
 
 // ── Navigator's regression assessment (the diagnosis hand-off) ───────────────

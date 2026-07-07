@@ -25,7 +25,7 @@ export type SmellName =
   // Pre-build reflection gate: the Navigator (reflect mode) found a design-time
   // defect in a story's spec or test-list before the build lane. Spec-level +
   // blocking, so it routes to the owning author (bounded one revise) then HITL,
-  // reusing the FEIP-7626 revise-route machinery.
+  // reusing the revise-route machinery.
   | "reflect-spec-defect"
   | "reflect-testlist-defect";
 
@@ -33,7 +33,7 @@ export interface SmellDefinition {
   name: SmellName;
   description: string;
   proposed_remediation: string;
-  /** FEIP-7626 revise-routing taxonomy. `spec` smells are a design-time
+  /** revise-routing taxonomy. `spec` smells are a design-time
    *  decomposition defect the PO can send back to an owning author and resume
    *  (revise-routing); `build`/undefined smells hard-halt to the HIL (genuine
    *  build thrashing, a missing scaffold, etc.), with no automatic author route. */
@@ -274,7 +274,7 @@ export interface SmellHit {
   smell: SmellName;
   cycle_ids: string[];
   detail: string;
-  /** Story the smell was flagged against (FEIP-7626): lets revise-routing know
+  /** Story the smell was flagged against: lets revise-routing know
    *  which story to send back to its owning author. Optional for back-compat. */
   story_id?: string;
   /** AC the smell concerns, when applicable (carried into the revise brief). */
@@ -282,13 +282,52 @@ export interface SmellHit {
 }
 
 /** The revise-routing taxonomy for a smell, or null if it is build-level
- *  (hard-halt, no automatic author route). FEIP-7626. */
+ *  (hard-halt, no automatic author route). */
 export function specLevelSmell(
   name: string,
 ): { owning_role: "spec-author" | "test-strategist"; gate_to_rerun: "spec" | "test_list" } | null {
   const def = SMELL_CATALOG.find((s) => s.name === name);
   if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
   return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
+}
+
+/**
+ * The re-authoring brief handed to a story's owning author when a SPEC-level
+ * smell is auto-revised (revise-route). The brief is SMELL-AWARE because the two
+ * kinds of spec defect demand opposite instructions:
+ *
+ *   - a reflection COVERAGE defect (reflect-testlist-defect / reflect-spec-defect)
+ *     means something REQUIRED is missing (an NFR/AC with no covering test, a
+ *     contradiction to resolve). The author MUST add the named coverage; giving
+ *     them the redundancy "raise an open question rather than fabricate one"
+ *     escape hatch invites them to omit it AGAIN, which is exactly how a coverage
+ *     revise "heals nothing" and burns the one-revise budget straight to HIL.
+ *   - a redundancy/overlap revise (the PO's generic case) means something is
+ *     DUPLICATED; the author must NOT re-emit the overlap and SHOULD raise an open
+ *     question rather than fabricate not-already-delivered behavior.
+ *
+ * Keyed on the smell so the deterministic revise (and any real-human decision
+ * path) share ONE brief, instead of the string living in the smoke-only Human
+ * Proxy.
+ */
+export function composeReviseBrief(input: { smell: string; gate: string; reason: string }): string {
+  const artifact = input.gate === "spec" ? "acceptance criteria" : "ordered test list";
+  const isCoverageDefect =
+    input.smell === "reflect-testlist-defect" || input.smell === "reflect-spec-defect";
+  if (isCoverageDefect) {
+    return (
+      `REVISE (reflection gate): ${input.reason}\n\n` +
+      `Re-author this story's ${artifact} to ADD the specific coverage named above. This coverage is ` +
+      `REQUIRED: add the missing test(s)/criterion that assert the exact behavior described , do NOT ` +
+      `omit it, weaken it, or defer it to an open question. If the stated behavior genuinely cannot be ` +
+      `tested as written, name the concrete blocker; do not punt.`
+    );
+  }
+  return (
+    `REVISE (Product Owner): ${input.reason}\n\n` +
+    `Re-author this story's ${artifact} to address the above. Do NOT re-emit the same overlap/redundancy; ` +
+    `if no honest, not-already-delivered behavior remains, say so as an open question rather than fabricating one.`
+  );
 }
 
 /**
@@ -545,7 +584,7 @@ export interface SmellsLog {
     SmellHit & {
       detected_at: string;
       resolution?: string;
-      /** How a resolved smell was resolved (FEIP-7626): `revised` = the PO sent
+      /** How a resolved smell was resolved: `revised` = the PO sent
        *  it back to the owning author and the loop resumed; `accepted` = the PO
        *  accepted it as-is. Drives the one-revise-per-(smell,story) bound. */
       resolution_kind?: "revised" | "accepted";
@@ -570,7 +609,7 @@ export function readSmellsLog(tddDir: string): SmellsLog {
 }
 
 /** Does an entry concern this (smell, story)? story_id matches when both name it,
- *  or when the caller passes no story (feature-wide match). FEIP-7626. */
+ *  or when the caller passes no story (feature-wide match). */
 function smellMatches(
   entry: SmellHit & { detected_at: string },
   smell: string,
@@ -584,7 +623,7 @@ function smellMatches(
 }
 
 /**
- * Mark the first OPEN matching smell resolved (FEIP-7626). `kind` records how:
+ * Mark the first OPEN matching smell resolved. `kind` records how:
  * `revised` (sent back to the owning author + resumed) or `accepted` (as-is).
  * Returns true iff an open entry was found + resolved.
  */
@@ -604,7 +643,7 @@ export function markSmellResolved(
   return true;
 }
 
-/** How many times this (smell, story) has already been revised (FEIP-7626): the
+/** How many times this (smell, story) has already been revised: the
  *  count of resolved-as-`revised` entries. The one-revise-per-(smell,story) bound
  *  compares against this so a re-fired-then-revised smell can't loop forever. */
 export function priorReviseCount(tddDir: string, smell: string, story_id?: string): number {

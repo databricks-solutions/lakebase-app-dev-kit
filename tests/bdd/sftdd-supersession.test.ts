@@ -19,6 +19,8 @@ import {
   writeRegressionAssessment,
   hasPendingRegressionFix,
   markRegressionFixAttempted,
+  composeAssessedGreenFailure,
+  MAX_REGRESSION_FIX_ATTEMPTS,
 } from "../../scripts/sftdd/supersession.js";
 import { isBuildRefactorRoutableSmell, SMELL_CATALOG } from "../../scripts/sftdd/smells.js";
 
@@ -117,5 +119,30 @@ describe("regression assessment + driver-fix handoff", () => {
     expect(readGreenFailure(tdd, F, S, AC)?.repairAttempted).toBe(true);
     // diagnosis + directive are preserved (the escalation still carries the WHY)
     expect(readGreenFailure(tdd, F, S, AC)?.diagnosis).toBe("why");
+  });
+});
+
+describe("composeAssessedGreenFailure preserves the self-heal counter across the assess turn", () => {
+  it("carries fixAttempts (so the refactor-until-clean cap actually accumulates)", () => {
+    const prior = { assessed: false, summary: "verify FAILED", fixAttempts: 2 };
+    const out = composeAssessedGreenFailure(prior, { diagnosis: "orphan file", fixDirective: "git rm app/models.py" });
+    expect(out.assessed).toBe(true);
+    expect(out.fixAttempts).toBe(2); // NOT reset , the bug that made the loop unbounded
+    expect(out.summary).toBe("verify FAILED");
+    expect(out.diagnosis).toBe("orphan file");
+    expect(out.fixDirective).toBe("git rm app/models.py");
+  });
+  it("across a full round-trip the counter reaches the cap and then exhausts", () => {
+    // Simulate rounds: each round = assess (compose, preserving count) -> repair (increment).
+    let gf = { assessed: false, summary: "x" } as ReturnType<typeof composeAssessedGreenFailure>;
+    for (let round = 1; round <= MAX_REGRESSION_FIX_ATTEMPTS; round++) {
+      gf = composeAssessedGreenFailure(gf, { fixDirective: "fix" });
+      gf = { ...gf, fixAttempts: (gf.fixAttempts ?? 0) + 1 }; // markRegressionFixAttempted
+    }
+    expect(gf.fixAttempts).toBe(MAX_REGRESSION_FIX_ATTEMPTS); // reaches the cap (was stuck at 1 before the fix)
+  });
+  it("omits fixAttempts when the prior record had none (first assess)", () => {
+    const out = composeAssessedGreenFailure({ assessed: false, summary: "x" });
+    expect(out.fixAttempts).toBeUndefined();
   });
 });

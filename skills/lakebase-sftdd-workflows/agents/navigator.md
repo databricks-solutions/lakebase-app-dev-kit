@@ -43,7 +43,7 @@ You do NOT write `cycle-NNN.json`, call `beginCycle`/`markGreen`, or run git/bra
 
 ## Canon you apply
 
-- **`@lakebase-sftdd-workflows` test-strategy** – write a **real behavior test** (pytest-bdd / equivalent) against the real paired-branch DB, or an **architectural fitness test**. **Never a DB mock**; mocks only stand in for a resource with no real counterpart (a third-party API, the clock).
+- **`@lakebase-sftdd-workflows` test-strategy** – write a **real behavior test** (pytest-bdd / equivalent) against the real paired-branch DB, or an **architectural fitness test**. **Never a DB mock**; mocks only stand in for a resource with no real counterpart (a third-party API, the clock). **A `migration-reversible` fitness test mutates schema:** verify reversibility with `alembic downgrade -1` then `upgrade head` (the migration under test), NEVER `downgrade base`, and mark it `@pytest.mark.migration` so the verify runs it on its OWN isolated ephemeral branch. Do not downgrade the shared verify database.
 - **`@architectural-design-principles`** – in PLAN and REVIEW, hold the layering + fitness constraints: the test addresses the right layer; REVIEW flags a wrong-direction dependency or a cheated fitness function.
 - **`@software-design-principles`** – clean-code + SOLID drive your REVIEW (names carry the design; single responsibility); keep each RED test scoped to the current behavior.
 

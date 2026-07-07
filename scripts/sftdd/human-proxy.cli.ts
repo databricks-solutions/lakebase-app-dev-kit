@@ -15,8 +15,10 @@ import {
   drainGatesAsHumanProxy,
   supplyArtifact,
   supplyRequests,
-  decideEscalationAsHumanProxy,
 } from "./human-proxy.js";
+// The revise self-heal is a state-machine transition, not a proxy decision; the
+// CLI verb triggers it but the logic lives in the driver's service layer.
+import { applyReviseSelfHeal } from "./revise.js";
 import { approveSprintPlanGate } from "./sprint-gates.js";
 import type { GateName } from "./gates.js";
 
@@ -92,7 +94,7 @@ function runSupplyRequestsCli(argv: string[]): number {
 }
 
 /**
- * `decide-escalation` subcommand (FEIP-7626): the Human Proxy makes the PO's
+ * `decide-escalation` subcommand: the Human Proxy makes the PO's
  * `revise` decision on a SPEC-level blocking escalation and drives the
  * circle-back (record the decision, reset the story to designing, resolve the
  * smell). The deterministic driver emits this for a `revise-route` action; it is
@@ -139,7 +141,7 @@ function runDecideEscalationCli(argv: string[]): number {
     return 2;
   }
   try {
-    const r = decideEscalationAsHumanProxy({
+    const r = applyReviseSelfHeal({
       featureId: feature,
       story,
       smell,
@@ -222,7 +224,7 @@ Usage:
 Flags:
   --feature <id>          Feature id (required, e.g. F1-initial-domain)
   --gate <name>           Approve only one gate (spec | plan | test_list | promote)
-  --tdd-dir <path>        .tdd/ root (default: ./.tdd)
+  --tdd-dir <path>        artifact root (default: ./.sftdd, honors a legacy ./.tdd)
   --approver <name>       Approver identity (default: human-proxy)
   --promote-ref <str>     promote gate ref string (promote gate is skipped if omitted)
   --json                  Machine-readable JSON output

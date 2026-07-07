@@ -16,6 +16,7 @@ import {
   detectDeadRequirementSignal,
   writeSmellsLog,
   readSmellsLog,
+  composeReviseBrief,
 } from "../../scripts/sftdd/smells";
 import type { CycleArtifact, CycleScope } from "../../scripts/sftdd/run-cycle";
 
@@ -269,5 +270,42 @@ describe("smells detectors", () => {
     });
     const smells = new Set(hits.map((h) => h.smell));
     expect(smells.has("dead-requirement-signal")).toBe(true);
+  });
+});
+
+describe("composeReviseBrief: the revise hand-back is smell-aware", () => {
+  const reason =
+    "NFR-S2-optional-detail-not-tracked has no covering test; no item asserts a listed row missing optional detail defaults to an explicit not tracked.";
+
+  it("FORCES the missing coverage for a reflect test-list defect (no open-question escape)", () => {
+    const brief = composeReviseBrief({ smell: "reflect-testlist-defect", gate: "test_list", reason });
+    expect(brief).toContain(reason);
+    expect(brief).toMatch(/ADD the specific coverage/i);
+    expect(brief).toMatch(/REQUIRED/);
+    expect(brief).toMatch(/ordered test list/);
+    // The permissive escape hatch must NOT appear , it is what let the author omit
+    // again. The brief may FORBID the escape ("do NOT ... defer it to an open
+    // question"), but must not INVITE it ("say so ... rather than fabricating").
+    expect(brief).not.toMatch(/rather than fabricating/i);
+    expect(brief).not.toMatch(/overlap\/redundancy/i);
+    expect(brief).toMatch(/do NOT[\s\S]*defer it to an open question/i);
+  });
+
+  it("FORCES coverage for a reflect spec defect against the acceptance criteria", () => {
+    const brief = composeReviseBrief({ smell: "reflect-spec-defect", gate: "spec", reason });
+    expect(brief).toMatch(/ADD the specific coverage/i);
+    expect(brief).toMatch(/acceptance criteria/);
+    expect(brief).not.toMatch(/rather than fabricating/i);
+  });
+
+  it("keeps the overlap/open-question wording for a non-reflect (redundancy) revise", () => {
+    const brief = composeReviseBrief({
+      smell: "dead-requirement-signal",
+      gate: "test_list",
+      reason: "S2 duplicates S1's browse behavior; nothing new remains.",
+    });
+    expect(brief).toMatch(/overlap\/redundancy/i);
+    expect(brief).toMatch(/open question/i);
+    expect(brief).not.toMatch(/ADD the specific coverage/i);
   });
 });

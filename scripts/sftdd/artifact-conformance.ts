@@ -467,6 +467,60 @@ export function checkFitnessCoverage(testListJson: string, architectureJson: str
 }
 
 /**
+ * Persistence coverage (robust DB testing, not an ORM re-test): a service-backed
+ * feature's architecture MUST declare its `persistence_invariants[]` (the DB-level
+ * guarantees the SCHEMA enforces , a unique key, an FK/cascade, a NOT NULL/CHECK, a
+ * transactional-atomicity boundary, migration up-then-down reversibility), and the
+ * test-list MUST cover EVERY declared invariant with >=1 item referencing its
+ * `invariant_id`. This ties DB test coverage to the schema's own contract rather
+ * than a blunt "one integration test" quota: it forces a test that verifies the
+ * MIGRATION actually realized each invariant against the real branch (model-vs-DB
+ * drift the ORM cannot catch) + the repository honors it, not the ORM's generic
+ * CRUD. Scoped to service_backed features (a trivial feature is exempt). A
+ * service-backed feature that declares NO invariants is itself a gap (it persists
+ * data, so it has at least one). Gate 3 hard-blocks.
+ */
+export function checkPersistenceCoverage(testListJson: string, architectureJson: string): ConformanceResult {
+  let arch: { service_backed?: boolean; persistence_invariants?: Array<{ id?: string }> };
+  try {
+    arch = JSON.parse(architectureJson);
+  } catch {
+    return { ok: true }; // invalid architecture reported elsewhere
+  }
+  if (arch.service_backed !== true) return { ok: true };
+  const invariants = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string" && i.id.length > 0);
+  if (invariants.length === 0) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed but declares no persistence_invariants[] ` +
+          `(name the DB-level guarantees the schema enforces , unique/FK/CHECK/NOT NULL/transactional/migration-reversible , ` +
+          `so each gets a real-branch test; see architecture.schema.json + test-strategy.md)`,
+      ],
+    };
+  }
+  let tl: { items?: Array<{ invariant_id?: string }> };
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const covered = new Set((tl.items ?? []).map((i) => i.invariant_id).filter((x): x is string => typeof x === "string" && x.length > 0));
+  const uncovered = invariants.map((i) => i.id as string).filter((id) => !covered.has(id));
+  if (uncovered.length > 0) {
+    return {
+      ok: false,
+      violations: [
+        `persistence_invariant(s) with no covering test-list item (invariant_id): ${uncovered.join(", ")} ` +
+          `(each declared invariant needs >=1 test that verifies the migration realized it against the real branch , ` +
+          `NOT a test of the ORM's generic round-trip; see test-strategy.md)`,
+      ],
+    };
+  }
+  return { ok: true };
+}
+
+/**
  * Story independence (design-gate enforcement): in a feature with >1 story, every
  * story AFTER the first must record `independence.distinct_from_prior: true` with a
  * non-empty rationale on its story.json. A later story whose behavior an earlier
@@ -717,11 +771,18 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
     });
     const testListPath = join(featureDir, "test-list.json");
     if (existsSync(testListPath)) {
-      const fit = checkFitnessCoverage(readFileSync(testListPath, "utf8"), archContent);
+      const testListContent = readFileSync(testListPath, "utf8");
+      const fit = checkFitnessCoverage(testListContent, archContent);
       entries.push({
         artifact: "test-list.json -> architecture.json (fitness coverage)",
         ok: fit.ok,
         violations: fit.ok ? [] : fit.violations,
+      });
+      const persist = checkPersistenceCoverage(testListContent, archContent);
+      entries.push({
+        artifact: "test-list.json -> architecture.json (persistence-invariant coverage)",
+        ok: persist.ok,
+        violations: persist.ok ? [] : persist.violations,
       });
     }
   }

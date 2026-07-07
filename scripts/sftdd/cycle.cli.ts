@@ -33,6 +33,7 @@ import {
   writeGreenFailure,
   readRegressionAssessment,
   writeRegressionAssessment,
+  composeAssessedGreenFailure,
 } from "./supersession.js";
 import { writeEscalation } from "./escalation.js";
 import { recordReflectionGate } from "./reflection.js";
@@ -124,7 +125,7 @@ async function main(): Promise<number> {
       // In a build replay (LAKEBASE_SFTDD_REPLAY_BUILD_DIR set) the per-turn
       // full-suite honest-GREEN is invalid (a later AC's test is legitimately RED
       // while only the current AC's code is overlaid), so trust the recorded GREEN
-      // for this turn; the final all-ACs state is verified at the deploy gate (FEIP-7702).
+      // for this turn; the final all-ACs state is verified at the deploy gate.
       const r = await greenOpenCycle({ ...base, repair: a.repair, verify: greenVerifierForEnv() });
       if (r.needsAssess) {
         process.stdout.write(`cycle: GREEN verify failed for ${r.testId} -> Navigator assess (supersession vs regression): ${r.summary}\n`);
@@ -175,7 +176,7 @@ async function main(): Promise<number> {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
         return 0;
       }
-      // Same replay-build trust applies to the refactor re-verify (FEIP-7702).
+      // Same replay-build trust applies to the refactor re-verify.
       const r = await refactorAc(tddDir, a.feature, a.story, ac, { verify: greenVerifierForEnv() });
       if (r.escalated) {
         process.stdout.write(`cycle: REFACTOR BLOCKED for ${ac} -> raised to HIL: ${r.summary}\n`);
@@ -244,12 +245,10 @@ async function main(): Promise<number> {
       const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
       const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
       const regression = readRegressionAssessment(tddDir, a.feature, a.story, ac);
-      writeGreenFailure(tddDir, a.feature, a.story, ac, {
-        assessed: true,
-        summary: gf?.summary ?? "",
-        ...(regression?.diagnosis ? { diagnosis: regression.diagnosis } : {}),
-        ...(regression?.fixDirective ? { fixDirective: regression.fixDirective } : {}),
-      });
+      // composeAssessedGreenFailure PRESERVES the cross-round fixAttempts counter
+      // (without it the assess turn reset the self-heal cap every round, so the
+      // refactor-until-clean loop was unbounded , observed 4 rounds, counter stuck at 1).
+      writeGreenFailure(tddDir, a.feature, a.story, ac, composeAssessedGreenFailure(gf, regression));
       if (flagged) {
         process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)\n`);
       } else if (regression?.fixDirective) {

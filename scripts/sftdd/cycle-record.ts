@@ -41,6 +41,8 @@ import {
   readSupersededTests,
   markSupersessionRefactored,
   markRegressionFixAttempted,
+  regressionFixExhausted,
+  rearmRegressionFix,
 } from "./supersession.js";
 import { checkContractClean } from "./contract-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
@@ -142,10 +144,11 @@ export interface StoryTestItem {
   description: string;
   ac_id: string;
   status?: string;
-  /** "behavior" (a pytest-bdd / behavior test, RED-first) or "fitness" (an
-   *  architectural constraint test). A fitness test MAY be born-green , a
-   *  regression guard that already holds , which is not a stall. Surfaced from
-   *  the per-story test-list JSON (the test-strategist writes it). */
+  /** "behavior" (a pytest-bdd / behavior test through the API, RED-first) or
+   *  "fitness" (an architectural constraint test , structural OR a data/persistence
+   *  invariant run against the real branch DB; MAY be born-green, a regression
+   *  guard that already holds, which is not a stall). Surfaced from the per-story
+   *  test-list JSON (the test-strategist writes it). */
   kind?: "behavior" | "fitness";
 }
 
@@ -380,7 +383,7 @@ const defaultGreenVerifier: GreenVerifier = async ({ projectDir, branchId }) => 
 };
 
 /**
- * Replay-build verifier (FEIP-7702): trust the recorded GREEN for this turn
+ * Replay-build verifier: trust the recorded GREEN for this turn
  * instead of re-running the full-suite honest-GREEN against the overlaid code.
  * During a build replay the project tree at an intermediate turn carries the
  * WHOLE recorded test set while only the current AC's code is in place, so a
@@ -477,14 +480,23 @@ export async function greenOpenCycle(
       });
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
-    // Already assessed (the Navigator saw the failing tests) and STILL failing:
-    // a genuine regression the permissive refactor / repair could not honestly
-    // green, or the Navigator confirmed it was no supersession. Escalate to the
-    // HIL, carrying the Navigator's diagnosis when it recorded one (so the human
-    // gets the WHY, not just the verify summary).
+    // Already assessed + repaired this round, STILL failing. A single repair often
+    // only PARTIALLY closes a multi-item build-quality gate (the Driver deletes an
+    // orphan module + dedups one block but leaves another, so the fitness/verify
+    // stays red). Self-heal across a bounded number of assess->repair rounds
+    // (refactor-until-clean): while rounds remain, RE-ARM for a FRESH Navigator
+    // assess that re-runs the gate on the RESIDUAL, then another Driver repair. The
+    // honest verify still gates every round, so this never green-washes; it only
+    // gives the Driver a few focused passes to converge before the HIL.
+    if (!regressionFixExhausted(gf)) {
+      rearmRegressionFix(tddDir, featureId, story, open.ac_id);
+      return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
+    }
+    // Rounds exhausted: escalate to the HIL, carrying the Navigator's diagnosis
+    // when it recorded one (so the human gets the WHY, not just the verify summary).
     const escalation = writeEscalation(tddDir, {
       source: "driver-green",
-      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after assessment${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
+      reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after ${gf.fixAttempts ?? 0} self-heal round(s)${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
       feature_id: featureId,
       story_id: story,
       ac_id: open.ac_id,

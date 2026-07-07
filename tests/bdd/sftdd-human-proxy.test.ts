@@ -299,7 +299,7 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
   it("hard-blocks test_list when a service_backed feature has no fitness item (checkFitnessCoverage, previously unwired)", () => {
     writeFileSync(join(fdir, "feature-spec.json"), FEATURE_JSON);
     writeFileSync(join(fdir, "feature-spec.md"), FEATURE_MD);
-    writeFileSync(join(fdir, "architecture.json"), JSON.stringify({ service_backed: true, layers: [{ role: "boundary", module: "app/routes" }, { role: "service", module: "app/services" }, { role: "repository", module: "app/repositories" }] }));
+    writeFileSync(join(fdir, "architecture.json"), JSON.stringify({ service_backed: true, layers: [{ role: "boundary", module: "app/routes" }, { role: "service", module: "app/services" }, { role: "repository", module: "app/repositories" }], persistence_invariants: [{ id: "PI1-bug-title-not-null", type: "not_null", table: "bug", brief: "a bug with no title is rejected" }] }));
     // test-list with only behavior items -> fitness coverage hard-block.
     writeFileSync(
       join(fdir, "test-list.json"),
@@ -309,10 +309,19 @@ describe("drainGatesAsHumanProxy: hard-blocks non-conformant artifacts (Layer 2)
     expect(blocked.approved).not.toContain("test_list");
     expect(blocked.skipped.find((s) => s.gate === "test_list")?.reason ?? "").toMatch(/fitness coverage failed/i);
 
-    // Add a fitness item -> test_list approves.
+    // Add a fitness item but leave the declared invariant uncovered -> persistence coverage hard-block.
     writeFileSync(
       join(fdir, "test-list.json"),
       JSON.stringify({ feature_id: "F1-initial-domain", items: [{ id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" }, { id: "T2", description: "boundary does not touch the DB session", ac_id: "AC1", status: "pending", kind: "fitness" }] }),
+    );
+    const stillBlocked = drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "test_list" });
+    expect(stillBlocked.approved).not.toContain("test_list");
+    expect(stillBlocked.skipped.find((s) => s.gate === "test_list")?.reason ?? "").toMatch(/persistence coverage failed/i);
+
+    // Cover the declared invariant with a real-branch fitness test (invariant_id) -> test_list approves.
+    writeFileSync(
+      join(fdir, "test-list.json"),
+      JSON.stringify({ feature_id: "F1-initial-domain", items: [{ id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" }, { id: "T2", description: "boundary does not touch the DB session", ac_id: "AC1", status: "pending", kind: "fitness" }, { id: "T3", description: "inserting a bug with a null title is rejected by the branch DB", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-bug-title-not-null" }] }),
     );
     expect(drainGatesAsHumanProxy({ featureId: FEATURE_ID, tddDir: tdd, onlyGate: "test_list" }).approved).toContain("test_list");
   });

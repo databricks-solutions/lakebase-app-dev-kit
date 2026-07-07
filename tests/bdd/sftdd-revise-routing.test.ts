@@ -1,4 +1,4 @@
-// FEIP-7626 revise-routing: a SPEC-level blocking smell the PO can send back to
+// revise-routing: a SPEC-level blocking smell the PO can send back to
 // its owning author and resume, instead of the terminal raise-to-hil halt.
 // Hermetic: smell taxonomy + the pure transition + the effect command + the
 // Human-Proxy self-heal on a tmp .tdd, no model, no real branches.
@@ -26,7 +26,7 @@ import { recordBlockingSmellFlag } from "../../scripts/sftdd/escalation";
 import { nextTransition, actionLane, type DriveState } from "../../scripts/sftdd/orchestrator-drive";
 import { commandsForAction, type DriveEffectsConfig } from "../../scripts/sftdd/orchestrator-effects";
 import { diskArtifactProbe } from "../../scripts/sftdd/orchestrator-probe";
-import { decideEscalationAsHumanProxy } from "../../scripts/sftdd/human-proxy";
+import { applyReviseSelfHeal } from "../../scripts/sftdd/revise";
 import { writePipeline, readPipeline, type StoryPipeline } from "../../scripts/sftdd/story-pipeline";
 import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
 
@@ -35,7 +35,7 @@ const STORY = "S1-file-bug-via-form";
 
 // ---- Phase A: taxonomy -------------------------------------------------------
 
-describe("smell taxonomy (FEIP-7626)", () => {
+describe("smell taxonomy", () => {
   it("tags ac-overlap as spec-level -> spec-author at the spec gate", () => {
     const def = SMELL_CATALOG.find((s) => s.name === "ac-overlap")!;
     expect(def.level).toBe("spec");
@@ -97,7 +97,7 @@ function baseState(escalation: DriveState["escalation"]): DriveState {
   };
 }
 
-describe("nextTransition revise-routing (FEIP-7626)", () => {
+describe("nextTransition revise-routing", () => {
   it("routes a routable spec-level escalation to revise-route (not raise-to-hil)", () => {
     const action = nextTransition(
       baseState({
@@ -134,7 +134,7 @@ describe("nextTransition revise-routing (FEIP-7626)", () => {
 
 // ---- Phase 3: the effect command ---------------------------------------------
 
-describe("commandsForAction(revise-route) (FEIP-7626)", () => {
+describe("commandsForAction(revise-route)", () => {
   it("emits a single human-proxy decide-escalation carrying story/smell/route/verdict", () => {
     const cfg = {
       projectDir: "/proj",
@@ -198,7 +198,7 @@ function seedDesignArtifacts(tdd: string): void {
   );
 }
 
-describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
+describe("applyReviseSelfHeal (the revise self-heal transition)", () => {
   let tdd: string;
   beforeEach(() => {
     tdd = mkdtempSync(join(tmpdir(), "tdd-revise-e2e-"));
@@ -209,7 +209,7 @@ describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
   afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
   it("resets the story to designing, discards the experiment, frees the lane, resolves the smell", () => {
-    const r = decideEscalationAsHumanProxy({
+    const r = applyReviseSelfHeal({
       featureId: FEATURE,
       story: STORY,
       smell: "ac-overlap",
@@ -232,7 +232,7 @@ describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
   });
 
   it("is NOT hollow: stales the owning author's artifacts + writes the verdict brief", () => {
-    decideEscalationAsHumanProxy({
+    applyReviseSelfHeal({
       featureId: FEATURE, story: STORY, smell: "ac-overlap",
       routedTo: "spec-author", gate: "spec", reason: "AC4 implied by AC2", tddDir: tdd,
     });
@@ -249,7 +249,7 @@ describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
   });
 
   it("test_list-gate revise stales the test list but KEEPS the ACs", () => {
-    decideEscalationAsHumanProxy({
+    applyReviseSelfHeal({
       featureId: FEATURE, story: STORY, smell: "test-list-drift",
       routedTo: "test-strategist", gate: "test_list", reason: "T1 already green", tddDir: tdd,
     });
@@ -262,7 +262,7 @@ describe("decideEscalationAsHumanProxy self-heal (FEIP-7626)", () => {
 
 // ---- probe: routable computation off disk ------------------------------------
 
-describe("diskArtifactProbe pendingEscalation.routable (FEIP-7626)", () => {
+describe("diskArtifactProbe pendingEscalation.routable", () => {
   let tdd: string;
   beforeEach(() => {
     tdd = mkdtempSync(join(tmpdir(), "tdd-revise-probe-"));
@@ -295,7 +295,7 @@ describe("diskArtifactProbe pendingEscalation.routable (FEIP-7626)", () => {
 
 // ---- integration: decide -> perform -> re-derive (recover, then bounded halt) -
 
-describe("revise-routing loop integration (FEIP-7626)", () => {
+describe("revise-routing loop integration", () => {
   let tdd: string;
   const ctx = { phase: "feature" as const, breakdownDone: true };
   beforeEach(() => {
@@ -320,7 +320,7 @@ describe("revise-routing loop integration (FEIP-7626)", () => {
 
     // Perform it (the decide-escalation command, run in-process).
     if (a1.kind === "revise-route") {
-      decideEscalationAsHumanProxy({
+      applyReviseSelfHeal({
         featureId: FEATURE,
         story: a1.story,
         smell: "ac-overlap",
@@ -346,7 +346,7 @@ describe("revise-routing loop integration (FEIP-7626)", () => {
     const a1 = transitionNow();
     expect(a1.kind).toBe("revise-route");
     if (a1.kind === "revise-route") {
-      decideEscalationAsHumanProxy({
+      applyReviseSelfHeal({
         featureId: FEATURE, story: a1.story, smell: "ac-overlap",
         routedTo: a1.role, gate: a1.gate, reason: a1.reason, tddDir: tdd,
       });
