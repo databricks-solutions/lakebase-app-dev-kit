@@ -142,6 +142,19 @@ describe("addE2eToRunTestsScript", () => {
     const result = addE2eToRunTestsScript({ projectDir });
     expect(result).toEqual({ patched: false, inserted: false });
   });
+
+  it("the Python E2E block treats pytest exit 5 (no tests collected) as success", () => {
+    // A story that ships no E2E specs yet leaves tests/e2e with only the
+    // scaffolded conftest, so `pytest tests/e2e` collects 0 and exits 5. That
+    // must NOT fail the run (which would false-fail the deploy-verify gate).
+    seedRunTestsScript(projectDir);
+    addE2eToRunTestsScript({ projectDir });
+    const after = fs.readFileSync(path.join(projectDir, "scripts", "run-tests.sh"), "utf8");
+    expect(after).toMatch(/Running Python E2E tests/);
+    // Exit code captured, then exit 5 tolerated while any other non-zero fails.
+    expect(after).toMatch(/e2e_rc=\$\?/);
+    expect(after).toMatch(/if \[ "\$e2e_rc" -ne 0 \] && \[ "\$e2e_rc" -ne 5 \]; then exit "\$e2e_rc"; fi/);
+  });
 });
 
 describe("ensurePythonE2eDeps (pyproject dev-extras patch)", () => {
@@ -316,7 +329,7 @@ describe("pr.yml template: project-root E2E step", () => {
   });
 });
 
-describe("base run-tests.sh: the full run does not collect tests/e2e (FEIP-7702 follow-up)", () => {
+describe("base run-tests.sh: the full run does not collect tests/e2e", () => {
   const script = fs.readFileSync(KIT_RUN_TESTS_SH, "utf8");
 
   it("the no-arg Python run passes --ignore=tests/e2e so e2e is owned by the appended Playwright block", () => {

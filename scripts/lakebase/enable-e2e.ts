@@ -231,9 +231,19 @@ export function addE2eToRunTestsScript(
     '  echo "Running Python E2E tests (pytest tests/e2e)..."',
     // pytest-playwright provides the `page` fixture but needs its browser
     // binaries; install chromium first (idempotent, cached after the first
-    // run), then run the suite. && so a failed browser install fails loudly
+    // run). Kept under `set -e` so a failed browser install still fails loudly
     // instead of letting pytest error with a bare "Executable doesn't exist".
-    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium && uv run --extra dev pytest tests/e2e)',
+    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium)',
+    // Run the suite with the exit code captured. pytest returns 5 when it
+    // collects zero tests; an early story legitimately ships no E2E specs yet
+    // (only the scaffolded conftest), so an empty tests/e2e must NOT fail the
+    // run, exactly as the marker-split base run treats exit 5. Any other
+    // non-zero is a real E2E failure and propagates.
+    "  set +e",
+    '  (cd "$REPO_ROOT" && uv run --extra dev pytest tests/e2e)',
+    "  e2e_rc=$?",
+    "  set -e",
+    '  if [ "$e2e_rc" -ne 0 ] && [ "$e2e_rc" -ne 5 ]; then exit "$e2e_rc"; fi',
     "fi",
     "",
   ].join("\n");

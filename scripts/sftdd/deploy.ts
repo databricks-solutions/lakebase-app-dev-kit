@@ -277,12 +277,20 @@ function pidFile(projectDir: string, target: string): string {
 
 /** Resolve the feature dir under tddDir/features by id prefix (mirrors gates.ts). */
 
-/** Run the feature-verify command against the running app; exit 0 = passed. */
+/** Run the feature-verify command against the running app; exit 0 = passed.
+ *  Captures the combined output so a failure is diagnosable: on non-zero exit
+ *  the last lines are echoed to stderr (they land in the drive log). Without
+ *  this a failed verify recorded only a generic summary and the actual test
+ *  output was discarded, so every failure needed a manual reproduction. */
 function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): boolean {
   try {
-    execSync(cmd, { cwd, stdio: "ignore", env: env ?? process.env });
+    execSync(cmd, { cwd, stdio: "pipe", env: env ?? process.env });
     return true;
-  } catch {
+  } catch (err) {
+    const e = err as { stdout?: Buffer; stderr?: Buffer };
+    const out = `${e.stdout?.toString() ?? ""}${e.stderr?.toString() ?? ""}`.trimEnd();
+    const tail = out.split("\n").slice(-30).join("\n");
+    process.stderr.write(`\n[deploy] feature-verify failed; last output:\n${tail}\n`);
     return false;
   }
 }
