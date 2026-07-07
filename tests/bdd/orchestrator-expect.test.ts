@@ -86,6 +86,18 @@ describe("expectationFor: each role handoff declares its non-null return contrac
     expect(arch.satisfiedBy(baseState())).toBe(true);
   });
 
+  it("architect-reviewer's hand-back names the per-AC architectural_notes gap (the S2 abort: architecture.json already existed from S1)", () => {
+    // Regression: architectAnnotated requires architectural_notes on EVERY AC, but
+    // the directive only emphasized the feature-level architecture.json. On S2 that
+    // file already existed (S1 wrote it), so the role produced 0 and the generic
+    // hand-back never named the real gap. The remediation must name architectural_notes.
+    const arch = expectationFor({ kind: "invoke-role", role: "architect-reviewer", story: "S2-split-columns-migration" } as WorkflowAction)!;
+    expect(arch.remediation).toBeDefined();
+    expect(arch.remediation).toMatch(/architectural_notes/);
+    expect(arch.remediation).toMatch(/every/i); // per-AC, every AC
+    expect(arch.remediation).toMatch(/already exist/i); // even when architecture.json already exists
+  });
+
   it("per-AC review/refactor contracts clear when the AC flag advances", () => {
     const review = expectationFor({ kind: "invoke-role", role: "navigator", story: "S2-submit-create-bug", buildMode: "review", ac: "AC1" } as unknown as WorkflowAction)!;
     const pending = baseState();

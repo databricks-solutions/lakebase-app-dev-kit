@@ -553,9 +553,16 @@ function roleTaskBody(
         ` performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here` +
         ` delays ${s} reaching its spec gate and build, and is rejected at the gate.`
       );
-    case "architect-reviewer":
+    case "architect-reviewer": {
+      const arAcIds = storyAcIds(tddDir, featureId, s);
+      const arAcScope = arAcIds.length ? ` Story ${s}'s ACs are: ${arAcIds.join(", ")}.` : "";
       return (
-        `Annotate AC layers and nfrs.md coverage for story ${s}.` +
+        `Annotate story ${s}'s acceptance criteria + nfrs.md coverage.${arAcScope}` +
+        ` For EVERY one of this story's ACs, write a non-empty "architectural_notes" field into its acs/<AC>.json` +
+        ` (the layer it lives in + how it realizes the design , this is YOUR distinctive per-AC product and the design` +
+        ` gate verifies every AC carries it; the spec-author's "layer" field does NOT count). This is required for THIS` +
+        ` story's ACs even when architecture.json already exists from an earlier story , architecture.json is` +
+        ` feature-level, architectural_notes are per-AC, so a prior story populating it does NOT annotate this story's ACs.` +
         ` In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the` +
         ` feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary,` +
         ` service, and repository layers (plus a "models" PACKAGE app/models/ , one module per domain object, NOT a flat` +
@@ -568,6 +575,7 @@ function roleTaskBody(
         ` transactional-atomicity boundary, and migration reversibility. These are the persistence contract the test-strategist must` +
         ` cover with a real-branch test each; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(tddDir)}`
       );
+    }
     case "test-strategist": {
       // Pass the story's AC ids INLINE so the strategist does not re-scan the
       // acs/ dir to re-derive them (a slow, error-prone step that, on a small
