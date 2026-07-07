@@ -21,6 +21,7 @@ export type SmellName =
   | "e2e-inline-regex-flag"
   | "e2e-row-perma-red"
   | "contract-incompleteness"
+  | "migration-app-coupling"
   | "superseded-tests"
   // Pre-build reflection gate: the Navigator (reflect mode) found a design-time
   // defect in a story's spec or test-list before the build lane. Spec-level +
@@ -252,6 +253,21 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "serializers/DTOs, templates/views) in the same change so the code matches the migrated " +
       "schema. Never edit the migration or a test to hide it. The green-failure fixDirective " +
       "carries the precise file:line list, so this self-heals without a Navigator assess.",
+  },
+  {
+    name: "migration-app-coupling",
+    description:
+      "A migration module imports application code at import scope (e.g. `from app.services... " +
+      "import parse_x`) to reuse app logic in a data migration. A migration is an IMMUTABLE " +
+      "historical artifact; the app is mutable. Coupling the two means a later rename/move/removal " +
+      "of that app symbol breaks replaying the migration from base (the historical revision can no " +
+      "longer import), and every alembic subcommand that builds the revision map (history/heads, " +
+      "not just upgrade) must load the module. It greens under `upgrade` (env.py puts the project " +
+      "root on sys.path) yet can fail elsewhere. The Navigator flags it in REVIEW.",
+    proposed_remediation:
+      "Make the migration self-contained: inline a frozen copy of the needed logic in the migration " +
+      "file (or express the data change in raw SQL). Do not import from app.* at module scope, so " +
+      "the migration stays stable as the app evolves and loads under every alembic subcommand.",
   },
 ];
 
