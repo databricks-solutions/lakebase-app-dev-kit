@@ -615,6 +615,56 @@ export function checkAcIndependence(acs: Array<{ name: string; content: string }
 }
 
 /**
+ * Persistence-invariant coverage must be DISTINCT across stories (test_list-gate
+ * enforcement, the cross-story counterpart to checkPersistenceCoverage). A
+ * declared persistence_invariant is realized ONCE by the feature's schema (the
+ * migration that creates the constraint) and belongs to a fitness test in
+ * EXACTLY ONE story: the story whose migration realizes it (by convention the
+ * earliest story that references it). A later story re-emitting a fitness item
+ * for an invariant an earlier story already covers is a redundant re-test. It
+ * duplicates the earlier story's DB assertion, invites drift (the two copies
+ * diverge: one asserts the field-named validation message, the other only the
+ * raw rejection, which then dead-locks the reflect gate), and is the persistence
+ * face of the story-overlap (S2 subset of S1) that checkStoryIndependence guards
+ * at the story level. The owner is the lowest-S-number story carrying the
+ * invariant; later stories must DROP the duplicate fitness item, or, if their
+ * migration adds a NEW invariant, cover that instead. `perStory` is each story's
+ * id plus the invariant_ids its fitness items reference. Pure. A feature with one
+ * story, or no repeated invariant, is a no-op.
+ */
+export function checkInvariantCoverageDistinct(
+  perStory: Array<{ story: string; invariantIds: string[] }>,
+): ConformanceResult {
+  // invariant_id -> the stories (with S-number) whose fitness items reference it.
+  const carriers = new Map<string, Array<{ story: string; num: number }>>();
+  for (const s of perStory) {
+    const m = /^S(\d+)/.exec(s.story);
+    const num = m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+    for (const inv of new Set(s.invariantIds)) {
+      if (!inv) continue;
+      const arr = carriers.get(inv) ?? [];
+      arr.push({ story: s.story, num });
+      carriers.set(inv, arr);
+    }
+  }
+  const violations: string[] = [];
+  for (const [inv, stories] of carriers) {
+    if (stories.length < 2) continue;
+    const sorted = [...stories].sort((a, b) => a.num - b.num || a.story.localeCompare(b.story));
+    const owner = sorted[0].story;
+    for (const later of sorted.slice(1)) {
+      violations.push(
+        `${later.story} re-tests persistence invariant ${inv} already covered by ${owner}. ` +
+          `A persistence invariant is realized once per feature and belongs to exactly one story's fitness tests; ` +
+          `drop the duplicate fitness item(s) from ${later.story}. If ${later.story}'s migration adds a NEW ` +
+          `invariant, cover that new invariant instead.`,
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+
+/**
  * Map a file path to the canonical artifact name the registry is keyed by.
  * Acceptance-criteria files are named <AC>.json/.md but share the "ac.json"
  * contract, so any *.json under an `acs/` directory normalizes to "ac.json".

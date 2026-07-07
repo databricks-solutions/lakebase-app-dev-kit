@@ -19,6 +19,11 @@ export interface TestListItem {
    *  architectural fitness test (layering, ORM-only, config-in-env, NFR budget).
    *  Default behavior. A service-backed feature needs >=1 fitness item. */
   kind?: "behavior" | "fitness";
+  /** The architecture.json persistence_invariant a data/persistence fitness item
+   *  covers. Set only on fitness items that verify a declared DB invariant against
+   *  the real branch. checkPersistenceCoverage ties coverage to it, and
+   *  checkInvariantCoverageDistinct enforces that exactly one story carries it. */
+  invariant_id?: string;
   notes?: string;
 }
 

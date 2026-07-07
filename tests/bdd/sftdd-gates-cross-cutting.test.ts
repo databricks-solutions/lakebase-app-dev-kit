@@ -24,6 +24,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import { approveGate } from "../../scripts/sftdd/approve-gate";
+import { resolveArtifactInputs } from "../../scripts/sftdd/gate-conformance-guard";
 import { verifyGateIntegrity } from "../../scripts/sftdd/verify-gate-integrity";
 import { withdrawGate } from "../../scripts/sftdd/withdraw-gate";
 import {
@@ -164,6 +165,43 @@ describe("gates cross-cutting: test-list / AC coverage rules", () => {
     const views = viewsForAllAcs(list);
     expect(Object.keys(views)).toEqual(["AC1"]);
     expect(views.AC1.items).toHaveLength(2);
+  });
+
+  it("test_list gate BLOCKS when a later story re-tests an invariant an earlier story covers (persistence passes, distinct fails)", () => {
+    const fdir = makeFeatureDir();
+    makeAcDir("S1-view-stock", "AC1");
+    makeAcDir("S2-view-sku-detail", "AC2");
+    // Architecture declares ONE invariant + is service-backed, so persistence
+    // coverage runs (and passes, PI1 IS covered) BEFORE the distinct check fires.
+    writeFileSync(
+      join(fdir, "architecture.json"),
+      JSON.stringify({
+        feature_id: FEATURE_ID,
+        nfrs: [],
+        service_backed: true,
+        layers: [{ role: "repository", module: "app/repositories" }],
+        persistence_invariants: [{ id: "PI1-sku-location-unique", type: "unique", table: "stock", brief: "duplicate (sku, location) rejected" }],
+      })
+    );
+    // S1's AC1 covers PI1; S2's AC2 re-covers the SAME PI1 (the redundant re-test).
+    writeMasterTestList(tdd, {
+      feature_id: FEATURE_ID,
+      ordered_for: "design-momentum",
+      items: [
+        { id: "T1", description: "GET /stock lists records", ac_id: "AC1", status: "pending", kind: "behavior" },
+        { id: "T2", description: "duplicate (sku, location) insert rejected against the branch", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-sku-location-unique" },
+        { id: "T3", description: "GET /sku/:id shows detail", ac_id: "AC2", status: "pending", kind: "behavior" },
+        { id: "T4", description: "duplicate (sku, location) insert rejected against the branch", ac_id: "AC2", status: "pending", kind: "fitness", invariant_id: "PI1-sku-location-unique" },
+      ],
+    });
+
+    const res = resolveArtifactInputs("test_list", fdir, undefined, tdd, FEATURE_ID);
+    expect("reason" in res).toBe(true);
+    if ("reason" in res) {
+      expect(res.reason).toMatch(/invariant coverage not distinct/);
+      expect(res.reason).toMatch(/PI1-sku-location-unique/);
+      expect(res.reason).toMatch(/S2-view-sku-detail re-tests/);
+    }
   });
 
   it("orphaned test (ac_id pointing at a non-existent AC) surfaces as a coverage gap", () => {

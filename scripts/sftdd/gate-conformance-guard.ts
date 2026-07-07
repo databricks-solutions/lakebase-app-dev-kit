@@ -7,7 +7,7 @@
 // feature-gate drain consult it, so a real human cannot advance a non-conformant
 // gate any more than the headless proxy can.
 
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { GateName } from "./gates.js";
 import {
@@ -19,8 +19,10 @@ import {
   checkNfrCoverage,
   checkFitnessCoverage,
   checkPersistenceCoverage,
+  checkInvariantCoverageDistinct,
   checkServiceBackedDeclaration,
 } from "./artifact-conformance.js";
+import { acsForStory } from "./test-list.js";
 import { featureResolved, architectureJson, nfrsMd, featureNfrsMd } from "./sftdd-paths.js";
 import { readConventions, assertArchitectureConforms } from "./architecture-conventions.js";
 
@@ -211,6 +213,46 @@ function persistenceCoverageReason(tddDir: string, featureId: string, testListJs
 }
 
 /**
+ * Distinct-invariant-coverage test_list-gate condition (the cross-story
+ * counterpart to persistenceCoverageReason): a declared persistence_invariant
+ * belongs to exactly ONE story's fitness tests. A later story re-emitting a
+ * fitness item for an invariant an earlier story already covers is a redundant
+ * re-test that drifts (one copy asserts the field-named message, the other only
+ * the raw rejection) and dead-locks the reflect gate; it is the persistence face
+ * of the S2-subset-of-S1 story overlap. Maps each item's invariant_id to its
+ * story via the acs/ dirs (the same ac->story membership scopeToStory uses), then
+ * hard-blocks a duplicated invariant. Null when distinct / no test-list.
+ */
+function invariantCoverageDistinctReason(tddDir: string, featureId: string, testListJson: string): string | null {
+  let master: { items?: Array<{ ac_id?: string; invariant_id?: string }> };
+  try {
+    master = JSON.parse(testListJson);
+  } catch {
+    return null; // bad JSON reported by conformanceReason
+  }
+  const items = master.items ?? [];
+  const storiesDir = join(featureDir(tddDir, featureId), "stories");
+  if (!existsSync(storiesDir)) return null;
+  const perStory = readdirSync(storiesDir)
+    .filter((s) => {
+      try {
+        return statSync(join(storiesDir, s)).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .map((story) => {
+      const acIds = new Set(acsForStory(tddDir, featureId, story));
+      const invariantIds = items
+        .filter((it) => typeof it.invariant_id === "string" && it.invariant_id.length > 0 && typeof it.ac_id === "string" && acIds.has(it.ac_id))
+        .map((it) => it.invariant_id as string);
+      return { story, invariantIds };
+    });
+  const r = checkInvariantCoverageDistinct(perStory);
+  return r.ok ? null : `invariant coverage not distinct across stories: ${r.violations.join("; ")}`;
+}
+
+/**
  * Service-backed-declaration spec-gate condition (closes the under-declaration
  * escape hatch): the layering + fitness guards all key off `service_backed`, so an
  * architect that omits it / sets it false on a feature that demonstrably persists
@@ -362,6 +404,13 @@ export function resolveArtifactInputs(
         // schema's own contract, not only incidentally through API behavior tests.
         const persistenceReason = persistenceCoverageReason(tddDir, featureId, tlJson);
         if (persistenceReason !== null) return { reason: persistenceReason };
+        // Distinct invariant coverage (Gate 3): each declared invariant belongs
+        // to exactly ONE story's fitness tests. A later story re-testing an
+        // invariant an earlier story already covers is a redundant re-test that
+        // drifts + dead-locks the reflect gate (the persistence face of story
+        // overlap); drop it from the later story.
+        const distinctReason = invariantCoverageDistinctReason(tddDir, featureId, tlJson);
+        if (distinctReason !== null) return { reason: distinctReason };
       }
       return conf;
     }

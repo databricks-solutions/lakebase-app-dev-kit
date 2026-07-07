@@ -17,6 +17,7 @@ import {
   checkLayeringDeclared,
   checkFitnessCoverage,
   checkPersistenceCoverage,
+  checkInvariantCoverageDistinct,
   checkStoryIndependence,
   checkAcIndependence,
   checkServiceBackedDeclaration,
@@ -686,5 +687,71 @@ describe("checkPersistenceCoverage (Gate 3: DB coverage tied to the schema's dec
   it("EXEMPTS a non-service-backed feature", () => {
     const trivial = JSON.stringify({ feature_id: "F1-x", nfrs: [] });
     expect(checkPersistenceCoverage(tl([{ id: "T1", description: "x", ac_id: "AC1", status: "pending" }]), trivial).ok).toBe(true);
+  });
+});
+
+describe("checkInvariantCoverageDistinct (Gate 3: each invariant belongs to exactly one story)", () => {
+  it("passes when each invariant is covered by exactly one story", () => {
+    const r = checkInvariantCoverageDistinct([
+      { story: "S1-view-stock-by-location", invariantIds: ["PI1-unique", "PI2-notnull"] },
+      { story: "S2-view-sku-detail", invariantIds: [] },
+      { story: "S3-file-stock", invariantIds: ["PI3-nonneg"] },
+    ]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("FAILS when a later story re-tests an invariant an earlier story already covers", () => {
+    const r = checkInvariantCoverageDistinct([
+      { story: "S1-view-stock-by-location", invariantIds: ["PI1-unique"] },
+      { story: "S2-view-sku-detail", invariantIds: ["PI1-unique"] },
+    ]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Names the duplicate invariant, the offending later story, and the owner.
+      expect(r.violations.join(" ")).toMatch(/PI1-unique/);
+      expect(r.violations.join(" ")).toMatch(/S2-view-sku-detail re-tests/);
+      expect(r.violations.join(" ")).toMatch(/already covered by S1-view-stock-by-location/);
+    }
+  });
+
+  it("attributes ownership to the lowest S-number story regardless of input order", () => {
+    const r = checkInvariantCoverageDistinct([
+      { story: "S3-late", invariantIds: ["PI1-unique"] },
+      { story: "S1-early", invariantIds: ["PI1-unique"] },
+    ]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.violations.join(" ")).toMatch(/S3-late re-tests/);
+      expect(r.violations.join(" ")).toMatch(/already covered by S1-early/);
+    }
+  });
+
+  it("flags every duplicated invariant (the reflect critic only caught one; the gate catches all)", () => {
+    const r = checkInvariantCoverageDistinct([
+      { story: "S1-owns", invariantIds: ["PI1", "PI2", "PI3", "PI4"] },
+      { story: "S2-dups", invariantIds: ["PI1", "PI2", "PI3", "PI4"] },
+    ]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.violations.length).toBe(4);
+      for (const inv of ["PI1", "PI2", "PI3", "PI4"]) {
+        expect(r.violations.join(" ")).toContain(inv);
+      }
+    }
+  });
+
+  it("is a no-op for a single story or a feature with no invariants", () => {
+    expect(checkInvariantCoverageDistinct([{ story: "S1-only", invariantIds: ["PI1"] }]).ok).toBe(true);
+    expect(
+      checkInvariantCoverageDistinct([
+        { story: "S1-a", invariantIds: [] },
+        { story: "S2-b", invariantIds: [] },
+      ]).ok,
+    ).toBe(true);
+  });
+
+  it("does not flag a story re-listing the SAME invariant twice within itself (only cross-story)", () => {
+    const r = checkInvariantCoverageDistinct([{ story: "S1-a", invariantIds: ["PI1", "PI1"] }]);
+    expect(r.ok).toBe(true);
   });
 });
