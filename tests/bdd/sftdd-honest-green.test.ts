@@ -37,6 +37,7 @@ import {
   writeGreenFailure,
   needsGreenAssess,
   writeSupersededTests,
+  MAX_REGRESSION_FIX_ATTEMPTS,
 } from "../../scripts/sftdd/supersession.js";
 import { nextTransition, type DriveState, type WorkflowAction } from "../../scripts/sftdd/orchestrator-drive.js";
 import { describeAction } from "../../scripts/sftdd/orchestrator-logging.js";
@@ -88,16 +89,40 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
     expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
   });
 
-  it("a STILL-failing verify AFTER the Navigator assessed escalates (genuine regression)", async () => {
+  it("a still-failing repair round RE-ARMS for another assess (refactor-until-clean), not an immediate escalation", async () => {
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
-    // Simulate the assess turn finishing (the Navigator looked, did not flag).
-    writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x" });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
+    // Navigator assessed + gave a driver-fixable directive; the Driver repaired.
+    writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x", fixDirective: "extract shared helper" });
+    // The repair's re-verify STILL fails, but rounds remain: re-arm, do NOT escalate.
+    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
+    expect(r.escalated).toBeFalsy();
+    expect(r.needsAssess).toBe(true);
+    // A fresh assess is armed on the RESIDUAL (assessed reset), round counted.
+    const gf = readGreenFailure(tdd, F, S, "AC1")!;
+    expect(gf.assessed).toBe(false);
+    expect(gf.fixAttempts).toBe(1);
+    expect(readEscalations(tdd).filter((e) => !e.resolved_at).length).toBe(0);
+  });
+
+  it(`escalates only after ${MAX_REGRESSION_FIX_ATTEMPTS} self-heal rounds still fail`, async () => {
+    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    // Simulate having already spent the budget minus one round; the Navigator
+    // assessed the residual again with a directive.
+    writeGreenFailure(tdd, F, S, "AC1", {
+      assessed: true,
+      summary: "x",
+      fixDirective: "extract shared helper",
+      fixAttempts: MAX_REGRESSION_FIX_ATTEMPTS - 1,
+    });
+    // The final repair round still fails -> now escalate (rounds exhausted).
+    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
     expect(r.escalated).toBe(true);
     const escs = readEscalations(tdd).filter((e) => !e.resolved_at);
     expect(escs.length).toBe(1);
     expect(escs[0].source).toBe("driver-green");
+    expect(escs[0].reason).toMatch(/self-heal round/);
   });
 
   it("after a supersession flag, a PASSING permissive verify marks green + clears the marker", async () => {
@@ -125,11 +150,11 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
   });
 });
 
-// FEIP-7702: in replay-build mode the per-turn honest-GREEN full-suite verify is
+// in replay-build mode the per-turn honest-GREEN full-suite verify is
 // invalid mid-build (a later AC's test is legitimately RED while its code is not
 // yet overlaid), so it must NOT fail the cycle. The replay trusts the recorded
 // GREEN per turn; the final all-ACs state is still verified at the deploy gate.
-describe("replay-build: per-turn green trusts the recorded outcome (FEIP-7702)", () => {
+describe("replay-build: per-turn green trusts the recorded outcome", () => {
   it("replayTrustVerifier passes without running a real verify (no deploy)", async () => {
     const r = await replayTrustVerifier({ projectDir: "/does/not/exist", tddDir: tdd, featureId: F, story: S });
     expect(r.passed).toBe(true);

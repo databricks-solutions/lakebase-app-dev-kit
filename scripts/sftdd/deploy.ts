@@ -35,6 +35,47 @@ function readProjectInstance(projectDir: string): string | undefined {
 }
 
 /**
+ * The database the app is CONFIGURED to connect to, read from the project's
+ * .env so the ephemeral verify runs against the SAME database the app ships
+ * against (not a silent `databricks_postgres` fallback). This closes a
+ * test-what-ships hole: an app misconfigured to a database the substrate never
+ * provisioned (e.g. a domain-named `stockflow` that no one CREATE DATABASE'd)
+ * would otherwise pass verify against `databricks_postgres` while the shipped
+ * app cannot connect at all.
+ *
+ * Authoritative source is the DATABASE_URL path segment (what the app actually
+ * connects with; the last non-commented occurrence wins , the post-checkout
+ * hook appends a fresh line on each switch), then DB_NAME. Returns undefined
+ * when neither is set, so callers fall back to the substrate default.
+ */
+export function readAppDatabaseName(projectDir: string): string | undefined {
+  let env: string;
+  try {
+    env = readFileSync(join(projectDir, ".env"), "utf8");
+  } catch {
+    return undefined;
+  }
+  const urlLine = env
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^DATABASE_URL\s*=\s*\S/.test(l))
+    .pop();
+  if (urlLine) {
+    const raw = urlLine.replace(/^DATABASE_URL\s*=\s*/, "").replace(/^["']|["']$/g, "");
+    try {
+      // Normalize dialect-qualified schemes (postgresql+psycopg://) so URL parses.
+      const db = new URL(raw.replace(/^postgresql\+[^:]+:/, "postgresql:")).pathname.replace(/^\//, "");
+      if (db) return decodeURIComponent(db);
+    } catch {
+      /* malformed URL , fall through to DB_NAME */
+    }
+  }
+  const m = env.match(/^\s*DB_NAME\s*=\s*(.+?)\s*$/m);
+  const name = m ? m[1].replace(/^["']|["']$/g, "").trim() : "";
+  return name || undefined;
+}
+
+/**
  * Run the feature-verify, by DEFAULT on a DISPOSABLE child branch. Whenever the
  * deploy is bound to an experiment branch (`lakebaseBranch`) of a resolvable
  * Lakebase project, fork a short-lived child off that branch, point the verify
@@ -59,7 +100,8 @@ async function runVerifyMaybeEphemeral(
     return runVerify(cmd, projectDir, env);
   }
   const childName = ephemeralVerifyBranchName(lakebaseBranch, String(now().getTime()).slice(-7));
-  return withEphemeralVerifyBranch({ instance, parentBranch: lakebaseBranch, childName }, (childDsn) =>
+  const database = readAppDatabaseName(projectDir);
+  return withEphemeralVerifyBranch({ instance, parentBranch: lakebaseBranch, childName, database }, (childDsn) =>
     runVerify(cmd, projectDir, { ...(env ?? process.env), VERIFY_DATABASE_URL: childDsn }),
   );
 }
@@ -342,7 +384,7 @@ export interface DeployArgs {
    * branch so the PO reviews the story on its own DB.
    */
   storyId?: string;
-  /** .tdd root for the evidence write (default: <projectDir>/.tdd). */
+  /** Artifact root for the evidence write (default: <projectDir>/.sftdd, honors a legacy .tdd). */
   tddDir?: string;
   /** Inject for tests: start the run command, return a pid. */
   startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
@@ -653,16 +695,44 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
       summary: `app not reachable at ${url} after ${cfg.readyTimeoutSeconds}s; cannot run GREEN verify`,
     };
   }
+  const nowFn = args.now ?? (() => new Date());
+  // Python projects split the verify across TWO isolated ephemeral branches: the
+  // main pass runs `not migration`, then the `migration`-marked reversibility
+  // tests run on their OWN fresh branch, so a `downgrade` cannot corrupt the
+  // shared suite DB for its siblings (run-tests.sh honors SFTDD_PYTEST_MARKER and
+  // treats "no tests matched" as pass). Other languages have no such marker, so
+  // they keep the single full pass (no double run).
+  const isPython =
+    existsSync(join(args.projectDir, "pyproject.toml")) || existsSync(join(args.projectDir, "requirements.txt"));
   let passed: boolean;
+  let migrationFailed = false;
   try {
-    passed = await runVerifyMaybeEphemeral(
-      runVerify,
-      cfg.verify,
-      args.projectDir,
-      env,
-      args.lakebaseBranch,
-      args.now ?? (() => new Date()),
-    );
+    if (isPython) {
+      const mainPassed = await runVerifyMaybeEphemeral(
+        runVerify,
+        cfg.verify,
+        args.projectDir,
+        { ...env, SFTDD_PYTEST_MARKER: "not migration" },
+        args.lakebaseBranch,
+        nowFn,
+      );
+      // Only isolate the migration pass if the main suite is green (else the
+      // failure is already surfaced; skip the extra branch cut).
+      const migPassed = mainPassed
+        ? await runVerifyMaybeEphemeral(
+            runVerify,
+            cfg.verify,
+            args.projectDir,
+            { ...env, SFTDD_PYTEST_MARKER: "migration" },
+            args.lakebaseBranch,
+            nowFn,
+          )
+        : true;
+      migrationFailed = mainPassed && !migPassed;
+      passed = mainPassed && migPassed;
+    } else {
+      passed = await runVerifyMaybeEphemeral(runVerify, cfg.verify, args.projectDir, env, args.lakebaseBranch, nowFn);
+    }
   } finally {
     stop(args.projectDir, targetName); // never leave the app on the port
   }
@@ -675,9 +745,12 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   // from a Python inline-flag regex can never match the browser. Best-effort,
   // only enriches the message.
   const regexLint = checkE2eRegexClean({ projectDir: args.projectDir });
+  const base = migrationFailed
+    ? "GREEN verify FAILED on the migration pass (the migration-marked reversibility test failed on its own isolated branch)"
+    : "GREEN verify FAILED against the running app";
   const summary = regexLint.clean
-    ? "GREEN verify FAILED against the running app"
-    : `GREEN verify FAILED against the running app: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;
+    ? base
+    : `${base}: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;
   return { passed, reachable: true, summary };
 }
 

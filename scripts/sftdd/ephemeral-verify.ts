@@ -32,10 +32,19 @@ export interface EphemeralVerifyBranchArgs {
   childName: string;
   /** Lakebase TTL ("<seconds>s"); defaults to EPHEMERAL_VERIFY_TTL. */
   ttl?: string;
+  /**
+   * The database the app is CONFIGURED to connect to (from the project's .env).
+   * The child DSN targets THIS database, so the verify runs against the same DB
+   * the app ships against , not a silent `databricks_postgres` fallback. When a
+   * feature is misconfigured to a database the substrate never provisioned, the
+   * verify connection fails and the gate catches it (test-what-ships). Omit to
+   * use the substrate default (`databricks_postgres`).
+   */
+  database?: string;
   // ── injection seams (hermetic tests) ─────────────────────────────────────
   create?: (a: { instance: string; branch: string; parentBranch: string; ttl: string }) => Promise<void>;
   waitReady?: (a: { instance: string; branch: string }) => Promise<void>;
-  resolveDsn?: (a: { instance: string; branch: string }) => Promise<string>;
+  resolveDsn?: (a: { instance: string; branch: string; database?: string }) => Promise<string>;
   remove?: (a: { instance: string; branch: string }) => Promise<void>;
 }
 
@@ -59,13 +68,14 @@ export async function withEphemeralVerifyBranch<T>(
     args.waitReady ?? (async (a) => { await waitForBranchAuthReady({ instance: a.instance, branch: a.branch }); });
   const resolveDsn =
     args.resolveDsn ??
-    (async (a) => (await getConnection({ instance: a.instance, branch: a.branch, output: "dsn" })).url);
+    (async (a) =>
+      (await getConnection({ instance: a.instance, branch: a.branch, database: a.database, output: "dsn" })).url);
   const remove = args.remove ?? (async (a) => { await deleteBranch({ instance: a.instance, branch: a.branch }); });
 
   await create({ instance: args.instance, branch: args.childName, parentBranch: args.parentBranch, ttl });
   try {
     await waitReady({ instance: args.instance, branch: args.childName });
-    const dsn = await resolveDsn({ instance: args.instance, branch: args.childName });
+    const dsn = await resolveDsn({ instance: args.instance, branch: args.childName, database: args.database });
     return await run(dsn);
   } finally {
     // Never fail the verify on teardown , the TTL reaps a leaked child.

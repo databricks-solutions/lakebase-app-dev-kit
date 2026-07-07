@@ -58,6 +58,47 @@ describe("withEphemeralVerifyBranch", () => {
     ]);
   });
 
+  it("targets the app's CONFIGURED database on the child DSN (test-what-ships)", async () => {
+    let seenDatabase: string | undefined = "unset";
+    await withEphemeralVerifyBranch(
+      {
+        instance: "proj-1",
+        parentBranch: "exp",
+        childName: "exp-vrfy-db",
+        database: "stockflow",
+        create: async () => {},
+        waitReady: async () => {},
+        resolveDsn: async (a) => {
+          seenDatabase = a.database; // the child DSN is resolved against the app's DB
+          return "postgresql://child/stockflow";
+        },
+        remove: async () => {},
+      },
+      (childDsn) => childDsn.endsWith("/stockflow"),
+    );
+    expect(seenDatabase).toBe("stockflow");
+  });
+
+  it("leaves database undefined when the app declares none (substrate default applies)", async () => {
+    let seenDatabase: string | undefined = "unset";
+    await withEphemeralVerifyBranch(
+      {
+        instance: "proj-1",
+        parentBranch: "exp",
+        childName: "exp-vrfy-nodb",
+        create: async () => {},
+        waitReady: async () => {},
+        resolveDsn: async (a) => {
+          seenDatabase = a.database;
+          return "postgresql://child/db";
+        },
+        remove: async () => {},
+      },
+      () => true,
+    );
+    expect(seenDatabase).toBeUndefined();
+  });
+
   it("ALWAYS deletes the child even when run throws (and re-throws)", async () => {
     let deleted = false;
     await expect(

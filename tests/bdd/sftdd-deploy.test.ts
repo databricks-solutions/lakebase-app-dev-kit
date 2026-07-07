@@ -499,3 +499,85 @@ describe("Release Engineer deploy lifecycle -> central agent log", () => {
     expect(String(failed.metadata?.reason)).toMatch(/not reachable/);
   });
 });
+
+describe("ensureDeployedAndVerify: migration-isolation two-pass (Python)", () => {
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+
+  it("runs the main (not migration) pass then the migration pass on separate branches", async () => {
+    writeFileSync(join(dir, "pyproject.toml"), "[project]\nname = 'x'\n");
+    const markers: string[] = [];
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => {
+        markers.push(env?.SFTDD_PYTEST_MARKER ?? "<unset>");
+        return true;
+      },
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(true);
+    expect(markers).toEqual(["not migration", "migration"]);
+  });
+
+  it("surfaces a migration-pass failure distinctly", async () => {
+    writeFileSync(join(dir, "pyproject.toml"), "[project]\nname = 'x'\n");
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => env?.SFTDD_PYTEST_MARKER !== "migration",
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(false);
+    expect(res.summary).toMatch(/migration pass/i);
+  });
+
+  it("skips the migration pass when the main pass already failed", async () => {
+    writeFileSync(join(dir, "pyproject.toml"), "[project]\nname = 'x'\n");
+    const markers: string[] = [];
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => {
+        markers.push(env?.SFTDD_PYTEST_MARKER ?? "<unset>");
+        return false;
+      },
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(false);
+    expect(markers).toEqual(["not migration"]); // migration pass not attempted
+  });
+
+  it("a non-Python project keeps ONE full pass (no marker split, no double run)", async () => {
+    const markers: string[] = [];
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir, // no pyproject.toml / requirements.txt
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => {
+        markers.push(env?.SFTDD_PYTEST_MARKER ?? "<unset>");
+        return true;
+      },
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(true);
+    expect(markers).toEqual(["<unset>"]);
+  });
+});

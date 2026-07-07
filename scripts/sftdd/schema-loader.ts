@@ -14,6 +14,13 @@ import Ajv, { type ValidateFunction } from "ajv";
 const SCHEMA_DIR = join(__dirname, "schemas");
 
 const ajv = new Ajv({ allErrors: true, strict: false });
+// Register the `date-time` format as permissive (accept any string). Several
+// schemas annotate a `timestamp` with `format: "date-time"`, but Ajv ships no
+// format validators, so it logged `unknown format "date-time" ignored` on every
+// validation (twice per call), pure console noise. We never validated the format
+// (it was ignored), so a no-op registration preserves behavior + silences it,
+// with no dependency on the transitive ajv-formats.
+ajv.addFormat("date-time", true);
 const validatorCache = new Map<string, ValidateFunction>();
 
 /** Read + parse a schema file from scripts/sftdd/schemas/ by filename. */

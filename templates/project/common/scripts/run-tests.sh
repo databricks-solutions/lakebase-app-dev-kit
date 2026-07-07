@@ -77,8 +77,21 @@ elif [ -f "$REPO_ROOT/requirements.txt" ] || [ -f "$REPO_ROOT/pyproject.toml" ];
   # gate's `run-tests.sh`) must NOT collect tests/e2e, or pytest tries to launch
   # a browser before that install ran and the run dies with "Failed to spawn:
   # playwright" before the e2e block is reached. An explicit path arg is honored
-  # verbatim (the per-cycle layer runner). See FEIP-7702 follow-up.
+  # verbatim (the per-cycle layer runner).
   if [ "$#" -eq 0 ]; then
+    # SFTDD_PYTEST_MARKER lets the verify split the suite across ISOLATED ephemeral
+    # branches: the main pass runs `not migration`, then a second pass runs
+    # `migration`-marked tests on their OWN branch, so a reversibility test's
+    # downgrade cannot corrupt the shared verify DB for its siblings. When a marker
+    # selects zero tests pytest exits 5 (nothing collected); that is not a failure.
+    if [ -n "${SFTDD_PYTEST_MARKER:-}" ]; then
+      set +e
+      uv run --extra dev pytest --ignore=tests/e2e -m "$SFTDD_PYTEST_MARKER"
+      rc=$?
+      set -e
+      [ "$rc" -eq 5 ] && rc=0
+      exit "$rc"
+    fi
     uv run --extra dev pytest --ignore=tests/e2e
   else
     uv run --extra dev pytest "$@"
