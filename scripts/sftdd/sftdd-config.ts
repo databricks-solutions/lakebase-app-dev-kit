@@ -1,23 +1,13 @@
-// Unified TDD run config: ONE declarative source of truth for the per-role +
-// per-turn model/effort matrix and the build/plan/project behavior knobs, so the
-// settings that used to be scattered across `.lakebase/agent-config.json` (models
-// only), hardcoded `buildCfg` defaults, and a dozen `LAKEBASE_SFTDD_*` env vars live
-// in one editable file: `.lakebase/sftdd-config.json`.
+// Project settings live in one file: `.lakebase/sftdd-config.json` (per-role model/
+// effort matrix + build/plan/project knobs). Every project setting resolves
+// sftdd-config.json -> code default, with no env or flag override at read time.
+// Writers: create-project (create-time) and the drive's write-through override
+// flags. The resolved result is what the driver runs with and what run-config.json
+// snapshots. Run-mode knobs (record/replay/headless/debug) are not project settings;
+// they stay explicit env inputs, read via sftddEnv.
 //
-// Resolution for EVERY project setting: sftdd-config.json -> code default. The
-// file is the SINGLE source of truth; there is NO env or flag override at read
-// time (an env door here is what let a UI project silently run with the UX lane
-// off). The only writers of the file are create-project (create-time) and the
-// drive's write-through override flags. The resolved result is what the driver
-// runs with AND what run-config.json snapshots, so a run is reproducible +
-// A/B-comparable. (Per-invocation run-mode knobs , record/replay/headless/debug ,
-// are NOT project settings; they stay explicit env inputs, read elsewhere via
-// sftddEnv, one door each.)
-//
-// Model-side knobs are exactly what `claude -p` (v2.1.x) exposes per invocation:
-// model, effort (low|medium|high|xhigh|max|default), fallbackModel
-// (--fallback-model), maxBudgetUsd (--max-budget-usd). Temperature / token caps /
-// max-turns are NOT CLI-exposed, so they are intentionally absent.
+// Model knobs mirror what `claude -p` exposes: model, effort
+// (low|medium|high|xhigh|max|default), fallbackModel, maxBudgetUsd.
 
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "fs";
 import { dirname, join } from "path";

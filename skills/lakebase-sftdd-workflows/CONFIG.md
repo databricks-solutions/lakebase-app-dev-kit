@@ -21,12 +21,10 @@ There are three homes, and they do not overlap:
 
 ## Why one source
 
-A UI project once ran its entire build with no UX design lane, no design guide, no
-`ia.md`, no design-adherence gate, because `uiTrack` had five contradictory doors and
-the capture harness set a different one than the drive read. The doors disagreed and
-the project silently ran mis-configured. The rule that prevents recurrence: **one way
-in per setting**. A writer funnels a value into the setting's single home; every
-reader reads that home. No parallel readers, no override-at-read.
+**One way in per setting.** A writer funnels a value into the setting's single home;
+every reader reads that home. No parallel readers, no override-at-read. A setting with
+two doors can contradict itself: one door set, the other read, and the project runs
+mis-configured with nothing to flag it.
 
 ## Project settings (home: `.lakebase/sftdd-config.json`)
 

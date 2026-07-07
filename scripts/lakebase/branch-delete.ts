@@ -63,7 +63,6 @@ export async function deleteBranch(args: DeleteBranchArgs): Promise<void> {
   await dbcli(["postgres", "delete-branch", fullPath], args.host);
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts).
 function dbcli(args: string[], host?: string): Promise<string> {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }

@@ -37,8 +37,6 @@ function lastLines(s?: string, n = 3): string {
  */
 export async function checkDatabricksAuth(host?: string): Promise<PreflightResult> {
   try {
-    // Through the ONE databricks-CLI wrapper: it sets DATABRICKS_HOST from `host`
-    // and resolves + threads --profile (env -> project .env -> host-match).
     await runDatabricks(["current-user", "me", "-o", "json"], { host, timeout: 8_000 });
     return { ok: true };
   } catch (err) {

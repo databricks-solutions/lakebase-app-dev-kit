@@ -238,7 +238,7 @@ export async function runScmWorkflowMigrationE2E(
       language: cfg.language,
       runnerType: "self-hosted",
       tiers: 2,
-      enableTdd: false,
+      enableSftdd: false,
       enableE2e: false,
       enableInfra: false,
       skipCommands: true,

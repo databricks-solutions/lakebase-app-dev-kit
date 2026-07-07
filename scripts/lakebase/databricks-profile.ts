@@ -87,8 +87,7 @@ export async function resolveProfileForHost(
   if (!normalizeHost(host)) return undefined;
   let out: string;
   try {
-    // databricks-cli-exempt: this IS the profile discovery the databricks-cli wrapper
-    // calls to resolve a host->profile; routing it through the wrapper would recurse.
+    // databricks-cli-exempt: the resolver the databricks-cli wrapper itself calls.
     out = await exec("databricks auth profiles -o json", { timeout: timeoutMs });
   } catch {
     return undefined;
@@ -110,8 +109,7 @@ export function resolveProfileForHostSync(
   if (!normalizeHost(host)) return undefined;
   let out: string;
   try {
-    // databricks-cli-exempt: the profile discovery the databricks-cli wrapper calls
-    // (sync twin); routing it through the wrapper would recurse.
+    // databricks-cli-exempt: the resolver the databricks-cli wrapper calls (sync twin).
     out = execFileSync("databricks", ["auth", "profiles", "-o", "json"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],

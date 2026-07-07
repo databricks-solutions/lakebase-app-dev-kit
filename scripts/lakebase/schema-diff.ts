@@ -364,8 +364,6 @@ function findDefaultBranch(instance: string): string | undefined {
   }
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts). Profile
-// resolves from the env through the same wrapper; auth failures are uniform.
 function dbcli(args: string[]): string {
   return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }

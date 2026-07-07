@@ -55,9 +55,7 @@ export interface ValidateAppResult {
 export function validateApp(opts: ValidateAppOptions): Promise<ValidateAppResult> {
   const timeoutMs = opts.timeoutMs ?? KIT_TIMEOUTS.cliLong;
   return new Promise((resolve, reject) => {
-    // databricks-cli-exempt: streaming spawn with a structured-result contract
-    // (resolves on ANY exit code, not throw-on-nonzero like the wrapper) + a cwd;
-    // threads an explicit required --profile from the deploy config.
+    // databricks-cli-exempt: streaming spawn, structured result (any exit code) + cwd; threads --profile.
     const child = spawn(
       "databricks",
       ["apps", "validate", "--profile", opts.profile],

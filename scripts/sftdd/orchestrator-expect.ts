@@ -139,7 +139,7 @@ export function expectationFor(action: WorkflowAction): Handoff | null {
       expected: "layer/NFR-annotated ACs",
       satisfiedBy: (s) => storyView(s)?.design.architectAnnotated === true,
       remediation:
-        "Write a non-empty `architectural_notes` field into EVERY one of this story's acs/<AC>.json files (your distinctive per-AC product, the gate checks each AC carries it), AND ensure the feature architecture.json exists. architectural_notes are PER-AC: a prior story populating the feature-level architecture.json does NOT annotate this story's ACs, so annotate them now even if architecture.json already exists.",
+        "Write a non-empty `architectural_notes` field into EVERY one of this story's acs/<AC>.json files (your per-AC product; the gate checks each AC carries it), AND ensure the feature architecture.json exists. architectural_notes are per-AC: annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story.",
     };
   }
   if (responder === "test-strategist") {

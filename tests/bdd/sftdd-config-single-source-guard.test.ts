@@ -1,18 +1,6 @@
-// The forever guard (anti-recurrence). A UI project once ran its entire build with
-// NO UX lane because `uiTrack` had a second door: an env var that resolved to a
-// value contradicting the on-disk config. The fix single-sourced every PROJECT
-// setting into sftdd-config.json (file -> code default, no env / flag at read).
-//
-// This suite is the structural teeth so a second door can NEVER silently reappear:
-//   1. SOURCE guard: the resolver module reads NO env for project settings. This
-//      catches even a FUTURE setting given an env door , the behavioral suite in
-//      sftdd-config.test.ts can only cover settings that exist today.
-//   2. BEHAVIORAL guard: with EVERY known project-setting env var set to a value
-//      that contradicts the file, resolution still returns the FILE's values.
-//
-// Run-mode knobs (record/replay/headless/debug) are NOT project settings; they stay
-// explicit env inputs read elsewhere via sftddEnv, one door each, and are out of
-// scope here on purpose.
+// Guard: project settings come only from sftdd-config.json, never env.
+//   1. SOURCE: resolveSftddSettings's module references no process.env/sftddEnv.
+//   2. BEHAVIORAL: env vars contradicting the file are ignored; the file wins.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "fs";

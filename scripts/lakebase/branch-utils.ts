@@ -447,9 +447,6 @@ function parseBranch(raw: unknown): LakebaseBranchInfo | undefined {
   };
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts): threads the
-// resolved --profile + DATABRICKS_HOST and maps auth failures uniformly. This file
-// only binds the default timeout; the implementation lives in one place.
 function dbcli(args: string[], host?: string): Promise<string> {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }

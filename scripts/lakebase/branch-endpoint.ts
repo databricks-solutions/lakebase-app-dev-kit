@@ -117,8 +117,6 @@ export async function ensureEndpoint(args: EnsureEndpointArgs): Promise<Endpoint
   };
 
   // Create endpoint (CLI may return immediately or block until ACTIVE).
-  // Through the ONE wrapper so it threads the resolved --profile (was a raw
-  // execFileSync that fell back to DEFAULT and died on the refresh token).
   try {
     runDatabricksSync(
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],

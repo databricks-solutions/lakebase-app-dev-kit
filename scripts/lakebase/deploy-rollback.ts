@@ -172,8 +172,7 @@ function runRollbackDeploy(args: {
   timeoutMs: number;
 }): Promise<DeployOut> {
   return new Promise((resolve, reject) => {
-    // databricks-cli-exempt: long-running STREAMING deploy spawn (rollback redeploy)
-    // with a structured-result + timeout contract; threads an explicit required --profile.
+    // databricks-cli-exempt: streaming deploy spawn (rollback redeploy); threads --profile.
     const child = spawn(
       "databricks",
       [

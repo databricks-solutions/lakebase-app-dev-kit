@@ -85,11 +85,9 @@ describe("sftdd-scenarios: framework scaffolding", () => {
   });
 });
 
-// Capture-wiring guard: the exact regression that motivated the single-source
-// refactor. capture-scenario.sh must read scenario.json (the single source for a
-// scenario's conditions) and funnel it into create-project as flags , NOT set the
-// e2e-scaffold door while the drive reads a different uiTrack door. This test locks
-// the funnel so the "UI project runs with no UX lane" contradiction cannot return.
+// Capture-wiring guard: capture-scenario.sh reads scenario.json (the single source
+// for a scenario's conditions) and funnels it into create-project as flags. It must
+// not set the e2e-scaffold door while the drive reads a different uiTrack door.
 describe("capture-scenario.sh funnels scenario.json into create-project (one way in)", () => {
   const src = fs.readFileSync(path.join(SCENARIOS_DIR, "capture-scenario.sh"), "utf8");
 
@@ -107,8 +105,8 @@ describe("capture-scenario.sh funnels scenario.json into create-project (one way
     expect(src).toMatch(/create_flags\+=\(--language/);
     expect(src).toMatch(/create_flags\+=\(--runner/);
     expect(src).toMatch(/--tiers/);
-    // The old hardcode `--language python --runner self-hosted` is gone: language
-    // and runner are only ever passed from the manifest ($SC_LANG / $SC_RUNNER).
+    // Language + runner come only from the manifest ($SC_LANG / $SC_RUNNER), never
+    // a harness hardcode.
     expect(src).not.toMatch(/--language\s+python/);
     expect(src).not.toMatch(/--runner\s+self-hosted/);
   });

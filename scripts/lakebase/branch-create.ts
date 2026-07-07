@@ -337,10 +337,6 @@ async function createWithTtlRecovery(
   }
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts): threads the
-// resolved --profile + DATABRICKS_HOST. Uses the longer create-branch timeout.
-// Failures throw DatabricksCliError (message preserved), which the TTL fallback
-// below matches instead of the old LakebaseBranchError.
 function dbcli(args: string[], host?: string): Promise<string> {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }

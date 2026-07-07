@@ -377,8 +377,7 @@ function runDeploy(args: {
   timeoutMs: number;
 }): Promise<DeployResult> {
   return new Promise((resolve, reject) => {
-    // databricks-cli-exempt: long-running STREAMING deploy spawn (minutes) with a
-    // structured-result + timeout contract; threads an explicit required --profile.
+    // databricks-cli-exempt: streaming deploy spawn (structured result + timeout); threads --profile.
     const child = spawn(
       "databricks",
       [

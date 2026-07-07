@@ -1,9 +1,4 @@
-// The ONE databricks-CLI wrapper: profile is resolved one way and threaded
-// EXPLICITLY as --profile on every call, and auth failures are classified
-// uniformly. These guard the fix for the mid-run "refresh token is invalid"
-// against DEFAULT: six ad-hoc dbcli copies only set DATABRICKS_HOST and left the
-// profile to the ambient shell, so a drive launched without DATABRICKS_CONFIG_PROFILE
-// silently used DEFAULT (wrong workspace, stale token).
+// databricks-cli wrapper: profile resolution + --profile threading + auth-error classification.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
@@ -57,9 +52,6 @@ describe("buildInvocation: profile resolved one way + threaded explicitly", () =
   });
 
   it("resolves the profile from the project's .env (the pinned single source) when env is unset", () => {
-    // The exact failure class: the drive/CLIs run in the project dir but do NOT
-    // source .env, so the pinned DATABRICKS_CONFIG_PROFILE never reaches the process
-    // env. The wrapper reads it straight from <cwd>/.env instead of falling to DEFAULT.
     writeFileSync(
       join(emptyDir, ".env"),
       "DATABRICKS_HOST=https://x.cloud.databricks.com\nDATABRICKS_CONFIG_PROFILE=fevm-serverless-stable-ecparr\n",

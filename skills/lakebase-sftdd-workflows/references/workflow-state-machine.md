@@ -15,7 +15,7 @@ Three entry commands (all shown in the diagrams):
 - **`/plan`** (Tier 2) starts the same planning phase but stops after the PLAN gate (single phase); `/design`, `/build`, `/deploy` likewise run one phase and stop.
 - **`/spike`** is a side entry: throwaway exploration on its own paired branch, OUTSIDE the gated loop. Its notes carry forward into a feature's design-spec gate; its code is never promoted.
 
-Both `/sprint` and `/plan` require project intake (`product-overview.md` + `nfrs.md`, plus `design-brief.md` for UI projects).
+Both `/sprint` and `/plan` require project intake (`product-overview.md` + `nfrs.md`, plus `design-brief.md` when the project is UI, i.e. `project.uiTrack: true` in `sftdd-config.json`).
 
 ## Command tiers
 
@@ -132,10 +132,12 @@ flowchart LR
 
 ### `/design` (SDD lane, Spec Driven Development)
 
-For UI projects (a `design-brief.md` exists at intake) a conditional **UX Designer** step
-runs after discovery: it writes the project-level design guide + information architecture
-that downstream UI must adhere to. The guide must exist before the build lane can dispatch
-any story (a readiness check, shown dashed). Pure API / CLI / Infra features skip it.
+For UI projects (`project.uiTrack: true` in `sftdd-config.json`, set at create via
+`--ui-track`) a conditional **UX Designer** step runs after discovery: it writes the
+project-level design guide + information architecture that downstream UI must adhere to.
+Such projects also require `design-brief.md` at intake. The guide must exist before the build
+lane can dispatch any story (a readiness check, shown dashed). Pure API / CLI / Infra projects
+(`uiTrack: false`) skip the UX lane entirely.
 
 ```mermaid
 flowchart LR
@@ -149,7 +151,7 @@ flowchart LR
     uxguide -. produces .-> dg(["design-guide.md/json, ia.md"])
     uxguide -.->|gates build dispatch| archReview
     AR(("Architect<br/>Reviewer")) -. responsible .-> archReview
-    archReview["② architectural-review<br/>layer, NFR coverage"] -. produces .-> arch(["architecture md/json"])
+    archReview["② architectural-review<br/>per-AC architectural_notes, NFR coverage"] -. produces .-> arch(["architecture md/json"])
     archReview --> SpecGate
     HU1(("human")) -. decides .-> SpecGate
     SpecGate{③ spec gate}
@@ -390,8 +392,8 @@ flowchart TB
 | Project intake | precondition | (none) | `product-overview.md` + `nfrs.md` (+ `design-brief.md` for UI) exist | none (precondition) |
 | `planning` (proposing / sizing / committing) | sprint | `/plan`, `/sprint` | Spec Author proposes breakdown; Architect sizes; PO commits `feature-request.md`; `sync-backlog` builds `backlog.json` | **`plan` gate** |
 | `discovery` | SDD | `/design` | Spec Author drafts `feature-spec` + stories + ACs | feeds `spec` gate |
-| UX design (conditional, UI only) | SDD | `/design` | UX Designer writes the project-level `design-guide.{md,json}` + `ia.md`; readiness gates build dispatch | none (readiness check) |
-| `architectural-review` | SDD | `/design` | Architect Reviewer assigns `layer` + `architectural_notes`, writes `architecture` md/json, covers NFRs | **`spec` gate** (arch folds in) |
+| UX design (conditional, `project.uiTrack: true`) | SDD | `/design` | UX Designer writes the project-level `design-guide.{md,json}` + `ia.md`; readiness gates build dispatch | none (readiness check) |
+| `architectural-review` | SDD | `/design` | Architect Reviewer writes `architectural_notes` on EVERY AC of the story + the feature `architecture` md/json (`service_backed`, layers, `persistence_invariants`), covers NFRs | **`spec` gate** (arch folds in) |
 | `test-list-construction` | SDD | `/design` | Test Strategist builds the Beck-ordered test list, scoped per story | **`test_list` gate** |
 | `design-spec-gate` | SDD | `/design` | Analyzer proposes the experiment plan (N, strategies, budget) to `plan.json`; PO signs off | experiment-plan approval |
 | `implementation` | TDD | `/build` | Per-story experiment; Navigator runs PLAN/RED/REVIEW (+ ASSESS on a failed verify), Driver runs GREEN/REFACTOR (+ REPAIR or permissive-green on a failed verify); each verify runs on a disposable ephemeral child DB; smells after each cycle | per story: **accept / discard / revise** |

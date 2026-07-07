@@ -1,31 +1,13 @@
-// The ONE way the kit runs the `databricks` CLI.
+// The single entry point for running the `databricks` CLI. All callers use
+// runDatabricks (async) or runDatabricksSync (sync); both share one invocation
+// builder + error mapper.
 //
-// Every `databricks ...` subprocess in the kit goes through here. There is a
-// single implementation of the three things that used to be scattered across six
-// ad-hoc `dbcli` copies (branch-create / branch-delete / branch-utils /
-// get-connection / lakebase-project / schema-diff), each of which only set
-// DATABRICKS_HOST and left the PROFILE to whatever the launching shell happened to
-// export. When the shell had no DATABRICKS_CONFIG_PROFILE, the CLI silently fell
-// back to the DEFAULT profile, whose cached token points at a different workspace,
-// so a mid-run call died with "the refresh token is invalid" against the wrong
-// profile. This wrapper removes that entire failure class:
-//
-//   1. PROFILE, resolved ONE way and threaded EXPLICITLY. Precedence:
-//      explicit opts.profile -> env DATABRICKS_CONFIG_PROFILE -> host-match via
-//      `databricks auth profiles` (resolveProfileForHostSync + the shared pure
-//      selector). The resolved name is passed as `--profile <p>` on EVERY call, so
-//      the credential is deterministic regardless of how the process was launched
-//      (interactive shell, the drive, a `claude -p` agent). Resolution is memoized
-//      per host so `auth profiles` is shelled at most once per host per process.
-//   2. HOST, set via DATABRICKS_HOST when given (unchanged behavior).
-//   3. AUTH FAILURE, detected ONE way and surfaced as a single actionable
-//      DatabricksAuthError naming the exact profile + the `databricks auth login
-//      --profile <p>` command, instead of a raw crash from one code path and an
-//      opaque wrapped string from another.
-//
-// Sync + async spawn are both offered (some callers are execFileSync, some
-// execFile) but they share the SAME invocation-building + error-mapping core, so
-// "one way it works" holds across both.
+//   - Profile: resolved as explicit opts.profile -> env DATABRICKS_CONFIG_PROFILE
+//     -> project .env at cwd -> host-match via `databricks auth profiles`
+//     (memoized per host), and threaded as `--profile <p>` on every call.
+//   - Host: DATABRICKS_HOST set when given.
+//   - Auth failure: mapped to DatabricksAuthError naming the profile + the
+//     `databricks auth login` command to run.
 
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
@@ -44,17 +26,13 @@ export interface DatabricksCliOptions {
   profile?: string;
   /** Subprocess timeout (ms). Defaults to KIT_TIMEOUTS.cliDefault. */
   timeout?: number;
-  /** Base environment (test seam). Defaults to process.env. */
+  /** Base environment. Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
-  /** Project dir whose `.env` pins DATABRICKS_CONFIG_PROFILE (the project's declared
-   *  source of truth). Defaults to process.cwd(), which IS the project root for the
-   *  drive + scaffolded CLIs. Consulted after an explicit/env profile, before host-match. */
+  /** Project dir whose `.env` supplies DATABRICKS_CONFIG_PROFILE. Defaults to process.cwd(). */
   cwd?: string;
 }
 
-/** A `databricks` CLI call failed. Message preserves the historical shape
- *  (`databricks <args> failed: <msg>\nstderr: <stderr>`) so callers that match on
- *  it (e.g. the TTL-too-long fallback) keep working. */
+/** A `databricks` CLI call failed. Message: `databricks <args> failed: <msg>\nstderr: <stderr>`. */
 export class DatabricksCliError extends Error {
   constructor(
     message: string,
@@ -66,10 +44,8 @@ export class DatabricksCliError extends Error {
   }
 }
 
-/** A `databricks` call failed because authentication is missing/expired. Only a
- *  human `databricks auth login` can fix it, so the message names the exact profile
- *  and the re-auth command. Subclass of DatabricksCliError so existing catches
- *  still see a CLI error. */
+/** A `databricks` call failed on missing/expired auth. Message names the profile
+ *  and the `databricks auth login` command. Subclass of DatabricksCliError. */
 export class DatabricksAuthError extends DatabricksCliError {
   constructor(profile: string | undefined, detail: string) {
     const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
@@ -83,13 +59,12 @@ export class DatabricksAuthError extends DatabricksCliError {
   }
 }
 
-/** Memoized host -> profile (undefined = resolved-to-nothing, still cached so we
- *  do not re-shell `auth profiles` for a host with no unique match). */
+/** Memoized host -> profile (undefined cached too, to avoid re-shelling). */
 const profileByHost = new Map<string, string | undefined>();
-/** Memoized <cwd> -> DATABRICKS_CONFIG_PROFILE read from that project's .env. */
+/** Memoized <cwd> -> DATABRICKS_CONFIG_PROFILE from that project's .env. */
 const profileByEnvFile = new Map<string, string | undefined>();
 
-/** Test seam: clear the per-process profile memos. */
+/** Clear the per-process profile memos (tests). */
 export function _resetProfileCache(): void {
   profileByHost.clear();
   profileByEnvFile.clear();
@@ -102,12 +77,8 @@ function isAuthFailure(text: string): boolean {
   );
 }
 
-/** Resolve the profile ONE way, in precedence order:
- *    explicit opts.profile -> env DATABRICKS_CONFIG_PROFILE -> project .env
- *    (<cwd>/.env DATABRICKS_CONFIG_PROFILE, the project's declared source) -> host-match.
- *  The project-.env step is what makes the pinned profile reach every call even
- *  though the drive/CLIs do NOT source .env into their process (the DEFAULT-fallback
- *  bug). Both file + host-match reads are memoized. */
+/** Resolve the profile: explicit opts.profile -> env DATABRICKS_CONFIG_PROFILE
+ *  -> `<cwd>/.env` DATABRICKS_CONFIG_PROFILE -> host-match. File + host reads memoized. */
 function resolveProfile(opts: DatabricksCliOptions): string | undefined {
   const base = opts.env ?? process.env;
   if (opts.profile) return opts.profile;
@@ -132,9 +103,7 @@ function resolveProfile(opts: DatabricksCliOptions): string | undefined {
   return resolved;
 }
 
-/** Build the full argv (with `--profile` threaded), child env, and resolved
- *  profile, shared by the sync + async spawns so both behave identically.
- *  Exported as a test seam (pure when a profile is explicit or in opts.env). */
+/** Build the argv (with `--profile` threaded), child env, and resolved profile. */
 export function buildInvocation(args: string[], opts: DatabricksCliOptions): {
   argv: string[];
   env: NodeJS.ProcessEnv;
@@ -144,14 +113,11 @@ export function buildInvocation(args: string[], opts: DatabricksCliOptions): {
   const trimmedHost = opts.host?.replace(/\/+$/, "");
   const env: NodeJS.ProcessEnv = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
   const profile = resolveProfile(opts);
-  // Explicit --profile wins over the ambient env, so the credential is deterministic.
-  // Do not double-add if the caller already passed one.
   const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
   return { argv, env, profile };
 }
 
-/** Map a spawn failure to a typed error, detecting auth failures uniformly.
- *  Exported as a test seam. */
+/** Map a spawn failure to a typed error (DatabricksAuthError on auth failure). */
 export function classifyDatabricksError(err: unknown, argv: string[], profile: string | undefined): DatabricksCliError {
   const e = err as NodeJS.ErrnoException & { stderr?: string | Buffer; stdout?: string | Buffer };
   const stderr =
@@ -167,8 +133,7 @@ export function classifyDatabricksError(err: unknown, argv: string[], profile: s
   );
 }
 
-/** Run the `databricks` CLI (async). Threads the resolved `--profile`, sets
- *  DATABRICKS_HOST, and maps auth failures to DatabricksAuthError. Returns stdout. */
+/** Run the `databricks` CLI (async), returning stdout. */
 export async function runDatabricks(args: string[], opts: DatabricksCliOptions = {}): Promise<string> {
   const { argv, env, profile } = buildInvocation(args, opts);
   try {
@@ -182,8 +147,7 @@ export async function runDatabricks(args: string[], opts: DatabricksCliOptions =
   }
 }
 
-/** Run the `databricks` CLI (sync). Same invocation-building + error-mapping as
- *  runDatabricks; for the execFileSync call sites (get-connection / schema-diff). */
+/** Run the `databricks` CLI (sync), returning stdout. */
 export function runDatabricksSync(args: string[], opts: DatabricksCliOptions = {}): string {
   const { argv, env, profile } = buildInvocation(args, opts);
   try {

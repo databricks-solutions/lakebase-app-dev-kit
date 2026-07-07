@@ -227,7 +227,6 @@ export async function getProjectRetentionDuration(
   return findHistoryRetentionDuration(parsed);
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts).
 function dbcli(args: string[], host?: string): Promise<string> {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }

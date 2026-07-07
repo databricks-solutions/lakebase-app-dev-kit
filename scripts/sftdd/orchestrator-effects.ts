@@ -559,21 +559,19 @@ function roleTaskBody(
       return (
         `Annotate story ${s}'s acceptance criteria + nfrs.md coverage.${arAcScope}` +
         ` For EVERY one of this story's ACs, write a non-empty "architectural_notes" field into its acs/<AC>.json` +
-        ` (the layer it lives in + how it realizes the design , this is YOUR distinctive per-AC product and the design` +
-        ` gate verifies every AC carries it; the spec-author's "layer" field does NOT count). This is required for THIS` +
-        ` story's ACs even when architecture.json already exists from an earlier story , architecture.json is` +
-        ` feature-level, architectural_notes are per-AC, so a prior story populating it does NOT annotate this story's ACs.` +
+        ` (the layer it lives in + how it realizes the design). This is your distinctive per-AC product; the design gate` +
+        ` verifies every AC carries it and the spec-author's "layer" field does NOT count. architectural_notes are per-AC,` +
+        ` so annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story.` +
         ` In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the` +
         ` feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary,` +
-        ` service, and repository layers (plus a "models" PACKAGE app/models/ , one module per domain object, NOT a flat` +
-        ` app/models.py , when it persists entities); set false ONLY for a trivial static/read-through endpoint. A not-service_backed` +
-        ` declaration is cross-checked , an Infra-layer AC or a migration/schema/storage NFR while service_backed is` +
-        ` false hard-blocks the gate.` +
-        ` When service_backed:true you MUST also declare architecture.json persistence_invariants[] , the DB-level guarantees the` +
+        ` service, and repository layers (plus a "models" PACKAGE app/models/, one module per domain object, NOT a flat` +
+        ` app/models.py, when it persists entities); set false ONLY for a trivial static/read-through endpoint. An Infra-layer` +
+        ` AC or a migration/schema/storage NFR while service_backed is false hard-blocks the gate.` +
+        ` When service_backed:true you MUST also declare architecture.json persistence_invariants[]: the DB-level guarantees the` +
         ` schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible,` +
-        ` table, and a one-line brief): the unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints, any` +
-        ` transactional-atomicity boundary, and migration reversibility. These are the persistence contract the test-strategist must` +
-        ` cover with a real-branch test each; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(tddDir)}`
+        ` table, and a one-line brief), covering unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints,` +
+        ` any transactional-atomicity boundary, and migration reversibility. The test-strategist must cover each with a real-branch` +
+        ` test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(tddDir)}`
       );
     }
     case "test-strategist": {

@@ -180,9 +180,6 @@ function buildPostgresUrl(parts: {
   return u.toString();
 }
 
-// Thin binding to the ONE databricks-CLI wrapper (databricks-cli.ts). No workspace
-// host at this layer, so the profile resolves from the env (DATABRICKS_CONFIG_PROFILE)
-// through the same wrapper; auth failures surface as a uniform DatabricksAuthError.
 function dbcli(args: string[]): string {
   return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }

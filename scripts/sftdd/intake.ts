@@ -1,14 +1,12 @@
 // /design intake precondition.
 //
-// Intake artifacts (the HIL's product-overview.md + nfrs.md, the per-feature
-// feature-request.md, and design-brief.md for UI projects) are INPUTS the
-// design roles read. They are NOT per-feature gate deliverables: product
-// -overview.md / nfrs.md are project-level and deliberately LIVING (refined
-// across sprints), so freezing them in a tamper-evident gate would be wrong.
-// Instead they are a PRECONDITION: /design refuses to enter phase 1 unless they
-// exist and conform. The orchestrator facilitates producing them (interactive
-// interview, or Human Proxy supply in headless) to satisfy this check; the
-// check itself is what makes intake un-skippable in real and test alike.
+// Intake artifacts (product-overview.md + nfrs.md, the per-feature
+// feature-request.md, and design-brief.md for UI projects) are INPUTS the design
+// roles read, not gate deliverables: product-overview.md / nfrs.md are
+// project-level and LIVING (refined across sprints), so they are a PRECONDITION,
+// not a tamper-evident gate. /design refuses to enter phase 1 unless they exist
+// and conform; the orchestrator produces them (interactive interview, or Human
+// Proxy supply in headless) to satisfy the check.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -22,9 +20,7 @@ export interface IntakeCheckArgs {
   /** When set, also require this feature's feature-request.md. */
   featureId?: string;
   /** Project root that holds `.lakebase/sftdd-config.json`. Defaults to the
-   *  parent of `tddDir`. Only used to LOCATE the single source of `uiTrack`;
-   *  whether the design-brief is required is read from that config, never from a
-   *  flag or env (the one way in for the UX track). */
+   *  parent of `tddDir`. Locates the config that supplies `uiTrack`. */
   projectDir?: string;
 }
 
@@ -46,12 +42,11 @@ export interface IntakeCheckResult {
 }
 
 /**
- * Verify the intake artifacts that /design requires before phase 1. Project
- * -level product-overview.md + nfrs.md are always required; feature-request.md
- * is required when a featureId is given; design-brief.md when the project is a UI
- * project. Whether it is a UI project is read from the SINGLE source
- * (`project.uiTrack` in sftdd-config.json), never a flag or env.
- * Returns the per-artifact status plus the missing / non-conformant lists.
+ * Verify the intake artifacts /design requires before phase 1. product-overview.md
+ * + nfrs.md are always required; feature-request.md when a featureId is given;
+ * design-brief.md when the project is a UI project (read from `project.uiTrack` in
+ * sftdd-config.json). Returns the per-artifact status plus the missing /
+ * non-conformant lists.
  */
 export function checkIntakePreconditions(args: IntakeCheckArgs = {}): IntakeCheckResult {
   const tddDir = args.tddDir ?? resolveTddDir();

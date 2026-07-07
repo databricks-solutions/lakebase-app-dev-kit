@@ -1,16 +1,6 @@
-// The forever guard against the whack-a-mole that produced repeated mid-run
-// "refresh token is invalid --profile DEFAULT" crashes: the kit had MANY ad-hoc
-// `databricks` spawns (six `dbcli` copies + branch-endpoint + create-preflight +
-// doctor + uc-resources + secret-auth + deploy-* + databricks-host + ci-secrets),
-// and each one that did not thread a profile fell back to DEFAULT. Manual grepping
-// kept missing more (multi-line spawns, differently-formatted exec strings).
-//
-// This test is the exhaustive, ENFORCED audit: it scans every source file and
-// FAILS if it finds a `databricks` subprocess spawned OUTSIDE the one wrapper
-// (scripts/lakebase/databricks-cli.ts), unless the spawn is explicitly tagged
-// `databricks-cli-exempt` with a documented reason. New code cannot reintroduce a
-// bare spawn without either routing it through the wrapper or justifying an
-// exemption in review.
+// Guard: every `databricks` spawn must go through the one wrapper
+// (scripts/lakebase/databricks-cli.ts) or carry a `databricks-cli-exempt` tag.
+// Scans all source and fails on any untagged bare spawn.
 
 import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
@@ -20,12 +10,8 @@ import { fileURLToPath } from "node:url";
 const SCRIPTS_DIR = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..", "..", "scripts");
 const WRAPPER_REL = path.join("lakebase", "databricks-cli.ts");
 
-/** The two forms of spawning the `databricks` CLI:
- *  - execFile / execFileSync / execFileP / spawn / spawnSync with a "databricks"
- *    command literal (the `\s*` spans a multi-line call);
- *  - a bare exec() shell string beginning `databricks`.
- *  These match real spawns, NOT prose (comments / error-message templates), which
- *  never sit immediately after a spawn-fn opening paren. */
+// Spawns of the `databricks` CLI: an execFile/spawn family call with a "databricks"
+// literal, or a bare exec() shell string. `\s*` spans multi-line calls.
 const SPAWN_PATTERNS: RegExp[] = [
   /(?:execFileSync|execFileP|execFile|spawnSync|spawn)\s*\(\s*"databricks"/g,
   /\bexec\(\s*[`"]databricks[\s`"]/g,
@@ -46,9 +32,7 @@ function tsFiles(dir: string): string[] {
   return out;
 }
 
-/** A spawn is allowed only if `databricks-cli-exempt` appears within the ~500
- *  chars preceding it (the tag comment sits directly above the spawn call; the
- *  window covers a multi-line comment + the `const child = spawn(` line). */
+/** Allowed if `databricks-cli-exempt` appears within ~500 chars before the spawn. */
 function isExempt(content: string, matchIndex: number): boolean {
   return content.slice(Math.max(0, matchIndex - 500), matchIndex).includes("databricks-cli-exempt");
 }

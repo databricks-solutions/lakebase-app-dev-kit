@@ -1,14 +1,8 @@
-// The RUN CONDITIONS a recorded scenario must be captured/replayed under, read
-// from its scenario.json manifest (schema: scripts/sftdd/schemas/scenario.schema.json).
-//
-// Why this exists: the manifest is the SOURCE OF TRUTH for a scenario's
-// conditions, but the capture harness used to ignore it and rely on the `--ui`
-// CLI flag alone, which wired only the e2e test harness (--enable-e2e) and left
-// the drive's UX design lane OFF (uiTrack=false). A UI scenario then built its
-// UI stories with no design guide / IA / adherence gate, silently. Reading the
-// manifest here, and having the harness UNION + ENFORCE these, makes that class
-// of silent condition-drop impossible: a scenario that declares uiTrack:true
-// can never be run without the UX lane.
+// The RUN CONDITIONS a recorded scenario is captured/replayed under, read from its
+// scenario.json manifest (schema: scripts/sftdd/schemas/scenario.schema.json). The
+// manifest is the source of truth for a scenario's conditions; the capture harness
+// reads them here and passes them to create-project as flags, so a scenario that
+// declares uiTrack:true always runs with the UX lane.
 //
 // Defaults mirror scenario.schema.json so an absent/partial manifest resolves to
 // the same values the schema documents.
