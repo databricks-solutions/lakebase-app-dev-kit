@@ -6,6 +6,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.10] - 2026-07-07
+
+Design-lane hardening surfaced by the live SFTDD capture (a fresh run that reached
+feature-complete but flagged two design defects along the way).
+
+### Added
+
+- **A persistence invariant belongs to exactly one story (no cross-story
+  re-test).** A declared `persistence_invariant` is realized once by the feature's
+  schema, so its fitness test belongs to the one story whose migration realizes it.
+  A later story re-emitting a fitness item for an invariant an earlier story already
+  covers is a redundant re-test that drifts (one copy asserts the field-named
+  validation message, the other only the raw rejection) and dead-locks the reflect
+  gate. New `checkInvariantCoverageDistinct`, wired into the test_list gate
+  (`gate-conformance-guard`), hard-blocks Gate 3 on the duplicate. The reflect critic
+  caught only the one duplicate phrased weaker; the deterministic gate catches all.
+  Types `invariant_id` on `TestListItem` and adds the rule to the Test Strategist
+  canon.
+
+### Fixed
+
+- **The UX Designer's `design-guide.json` conforms at the source, and the design
+  lane gates on it.** The UX Designer (told never to read the schema) drifted on
+  shape (camelCase keys, a nested `spacing.scale`, extra typography props) and, since
+  the guide was gated only on existence, the non-conformant file rode all the way to
+  the final feature drain. The `typography` schema is expanded to hold the tokens the
+  model legitimately produces (`line_heights`, `font_weights`; the numeric font uses
+  the existing `font_mono`), mapped to `--line-height-*` / `--font-weight-*` in
+  `design-adherence`. The UX Designer now gets the exact JSON shape inline in its
+  prompt plus a response-formatter self-check, and `designGuideReady` requires the
+  guide to EXIST and CONFORM (one shared `designGuideConformance` helper backs both
+  the self-check and the gate), so a malformed guide keeps the role pending instead
+  of surfacing at the drain.
+
 ## [0.3.0-beta.9] - 2026-07-07
 
 Follow-on to beta.8, surfaced by the live SFTDD capture at an S2 REFACTOR that
