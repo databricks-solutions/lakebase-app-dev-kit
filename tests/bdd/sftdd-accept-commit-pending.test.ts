@@ -115,6 +115,37 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     expect(status).toMatch(/scratch\.log/);
   });
 
+  it("commits a root-level uv.lock (real dependency lockfile) so promote's prepare-pr finds a clean tree", async () => {
+    // The live promote stall: the first `uv run` in the build generated uv.lock
+    // at the repo root, but the allow-list staged untracked files only by source
+    // extension or source-root prefix, so `.lock` at the root was left
+    // uncommitted through every green, and scm-prepare-pr then refused the PR on
+    // the dirty tree. A real dependency lock/manifest must ride the commit + PR.
+    const dir = mkTmp();
+    await gitInit(dir);
+    await configIdentity(dir);
+    await writeMigration(dir, "def downgrade():\n    pass\n");
+    await exec("git add -A && git commit -m base", { cwd: dir });
+
+    fs.mkdirSync(path.join(dir, "app"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "app/main.py"), "app = 1\n", "utf8");
+    fs.writeFileSync(path.join(dir, "uv.lock"), "# resolved deps\n", "utf8"); // root lockfile
+    fs.writeFileSync(path.join(dir, "scratch.log"), "noise\n", "utf8"); // root junk (still excluded)
+
+    const committed = await commitExperimentCode(dir, "green: initial app + deps");
+    expect(committed).toBe(true);
+
+    const files = await exec("git show --name-only --pretty=format: HEAD", { cwd: dir });
+    expect(files).toMatch(/uv\.lock/);
+    expect(files).toMatch(/app\/main\.py/);
+    expect(files).not.toMatch(/scratch\.log/);
+
+    // The tree is now clean of the lockfile (prepare-pr would pass); junk remains.
+    const status = await exec("git status --porcelain", { cwd: dir });
+    expect(status).not.toMatch(/uv\.lock/);
+    expect(status).toMatch(/scratch\.log/);
+  });
+
   it("is a no-op (returns false) on an already-clean code tree", async () => {
     const dir = mkTmp();
     await gitInit(dir);

@@ -21,6 +21,20 @@ const SOURCE_EXTENSIONS = new Set<string>([
   ".cfg", ".conf", ".xml", ".md", ".sh", ".bash", ".env", ".gradle", ".properties",
 ]);
 
+/** Real dependency lock/manifest files worth staging by BASENAME even at the repo
+ *  root, where they legitimately live and where no source-root prefix matches.
+ *  A generated lockfile (e.g. `uv.lock`, created by the first `uv run` in the
+ *  build) is genuine project state that MUST ride the commit + feature PR, else
+ *  the merged code lacks its lockfile and `scm-prepare-pr` refuses the PR on a
+ *  dirty tree. `.lock`/`.sum`/`Gemfile`/`go.mod`/`requirements.txt` carry no
+ *  source extension, so match them by name. (`.json`/`.yaml`/`.toml` manifests
+ *  like package.json, pnpm-lock.yaml, pyproject.toml already match by extension.) */
+const ROOT_PROJECT_FILES = new Set<string>([
+  "uv.lock", "poetry.lock", "Pipfile.lock", "requirements.txt", "requirements-dev.txt",
+  "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "npm-shrinkwrap.json",
+  "Cargo.lock", "go.mod", "go.sum", "Gemfile", "Gemfile.lock", "composer.lock",
+]);
+
 export interface CommitArgs {
   cwd: string;
   message: string;
@@ -141,9 +155,11 @@ export async function commitAllIfChanged(args: CommitAllArgs): Promise<boolean> 
       .filter(Boolean);
     for (const f of untracked) {
       if (excludeDirs.some((d) => underDir(f, d))) continue;
+      const slash = f.lastIndexOf("/");
       const dot = f.lastIndexOf(".");
-      const ext = dot > f.lastIndexOf("/") ? f.slice(dot).toLowerCase() : "";
-      if (allow.some((d) => underDir(f, d)) || SOURCE_EXTENSIONS.has(ext)) {
+      const ext = dot > slash ? f.slice(dot).toLowerCase() : "";
+      const base = f.slice(slash + 1);
+      if (allow.some((d) => underDir(f, d)) || SOURCE_EXTENSIONS.has(ext) || ROOT_PROJECT_FILES.has(base)) {
         await exec(`git add -- ${shq(f)}`, { cwd: args.cwd });
       }
     }
