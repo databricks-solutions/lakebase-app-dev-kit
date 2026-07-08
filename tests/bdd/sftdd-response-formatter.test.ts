@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { formatRoleResponse } from "../../scripts/sftdd/response-formatter";
+import { formatRoleResponse, designGuideConformance } from "../../scripts/sftdd/response-formatter";
 
 const F = "F1-file-bug";
 const S = "S2-submit-create-bug";
@@ -184,6 +184,19 @@ describe("response-formatter: ux-designer (design-guide.json conforms to its sch
     const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
     expect(r.ok).toBe(true);
     expect(r.violations).toEqual([]);
+  });
+
+  // The design-lane gate (orchestrator-effects `designGuideReady`) reads .ok from
+  // this SAME helper, so the self-check and the deterministic gate can never
+  // disagree. Lock its contract here.
+  it("designGuideConformance: the shared gate/self-check decision", () => {
+    expect(designGuideConformance(tdd).ok).toBe(false); // missing
+    writeJson(designGuide(), { typography: { fontFamilyPrimary: "x", scale: { base: "15px" } }, colors: { brand: {} }, spacing: {} });
+    const bad = designGuideConformance(tdd);
+    expect(bad.ok).toBe(false);
+    expect(bad.problem).toMatch(/font_family|additional properties/i);
+    writeJson(designGuide(), CONFORMANT);
+    expect(designGuideConformance(tdd)).toEqual({ ok: true });
   });
 });
 

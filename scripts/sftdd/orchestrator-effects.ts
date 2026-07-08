@@ -24,6 +24,7 @@ import { deriveDriveState, effectiveLoopForStory } from "./orchestrator-derive.j
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
 import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./sftdd-paths.js";
+import { designGuideConformance } from "./response-formatter.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
 import { readSupersededTests, readGreenFailure } from "./supersession.js";
 import { readConventions } from "./architecture-conventions.js";
@@ -1342,7 +1343,13 @@ export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
       // UI track: gate the UX Designer step. uiTrack is config (env); the design
       // guide's existence is disk truth (project-level, authored once + reused).
       state.uiTrack = cfg.uiTrack ?? false;
-      state.designGuideReady = fs.existsSync(designGuideJson(cfg.tddDir));
+      // The guide is "ready" only when it EXISTS and CONFORMS to its schema, not
+      // merely exists. Otherwise a non-conformant design-guide.json (the UX
+      // Designer drifting on shape) sails through the design lane and only
+      // surfaces at the final feature drain; gating on conformance keeps the UX
+      // Designer pending until the guide is well-formed. Same check the role's
+      // own response-formatter self-check runs, so gate + self-check agree.
+      state.designGuideReady = designGuideConformance(cfg.tddDir).ok;
       return state;
     },
     async perform(action) {

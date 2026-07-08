@@ -161,26 +161,34 @@ function checkTestStrategist(args: FormatArgs, v: FormatViolation[]): void {
   });
 }
 
+/** Whether the project's design-guide.json exists AND conforms to its schema.
+ *  The one place that reads-and-conforms the guide, shared by the ux-designer
+ *  self-check (below) and the design-lane gate (orchestrator-effects
+ *  `designGuideReady`), so the agent's self-check and the deterministic gate can
+ *  never disagree. `problem` is the specific violation string when not ok. */
+export function designGuideConformance(tddDir: string): { ok: boolean; problem?: string } {
+  const file = designGuideJson(tddDir);
+  if (!existsSync(file)) {
+    return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
+  }
+  let content: string;
+  try {
+    content = readFileSync(file, "utf8");
+  } catch (e) {
+    return { ok: false, problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  const r = checkArtifactConformance(canonicalArtifactName(file), content);
+  return r.ok ? { ok: true } : { ok: false, problem: r.violations.join("; ") };
+}
+
 /** ux-designer (project-level, UI track): the machine-checkable design-guide.json
  *  exists and conforms to design-guide.schema.json. The model is told NOT to read
  *  the schema, so it drifts on shape (camelCase keys, nested spacing, extra
  *  typography props) unless it self-checks; this catches that at the source
  *  instead of at the final feature drain. */
 function checkUxDesigner(args: FormatArgs, v: FormatViolation[]): void {
-  const file = designGuideJson(args.tddDir);
-  if (!existsSync(file)) {
-    v.push({ artifact: "design/design-guide.json", problem: "design-guide.json not written (the machine-checkable token source of truth)" });
-    return;
-  }
-  let content: string;
-  try {
-    content = readFileSync(file, "utf8");
-  } catch (e) {
-    v.push({ artifact: "design/design-guide.json", problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` });
-    return;
-  }
-  const r = checkArtifactConformance(canonicalArtifactName(file), content);
-  if (!r.ok) v.push({ artifact: "design/design-guide.json", problem: r.violations.join("; ") });
+  const r = designGuideConformance(args.tddDir);
+  if (!r.ok) v.push({ artifact: "design/design-guide.json", problem: r.problem ?? "design-guide.json is non-conformant" });
 }
 
 const CHECKERS: Record<string, (a: FormatArgs, v: FormatViolation[]) => void> = {
