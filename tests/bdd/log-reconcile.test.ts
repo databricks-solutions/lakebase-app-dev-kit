@@ -151,4 +151,40 @@ describe("reconcileArtifactLog", () => {
     const second = reconcileArtifactLog({ tddDir, featureId: F });
     expect(second.find((e) => e.event === "reasoning")).toBeFalsy();
   });
+
+  it("establishes the project architecture CANON (NFR posture + AC layers + invariant patterns) and code-emits it", () => {
+    // The cross-cutting sibling of conventions: the first service-backed feature's
+    // standing decisions become the project canon, deterministically + observably.
+    const tddDir = mkTdd();
+    const f = path.join(tddDir, "features", F);
+    write(
+      path.join(f, "architecture.json"),
+      JSON.stringify({
+        service_backed: true,
+        nfrs: [{ category: "performance", requirement: "list endpoints paginate" }],
+        persistence_invariants: [{ id: "PI1", type: "unique", table: "stock", brief: "(sku, location) unique" }],
+      }),
+    );
+    // Two ACs on disk with layers, so featureAcLayers picks them up.
+    write(path.join(f, "stories", "S1", "acs", "AC1.json"), JSON.stringify({ id: "AC1", layer: "API" }));
+    write(path.join(f, "stories", "S1", "acs", "AC2.json"), JSON.stringify({ id: "AC2", layer: "Infra" }));
+
+    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+
+    // canon.json established on disk.
+    expect(fs.existsSync(path.join(tddDir, "architecture", "canon.json"))).toBe(true);
+    const canon = JSON.parse(fs.readFileSync(path.join(tddDir, "architecture", "canon.json"), "utf8"));
+    expect(canon.ac_layers.sort()).toEqual(["API", "Infra"]);
+    expect(canon.nfr_posture).toEqual([{ category: "performance", requirement: "list endpoints paginate" }]);
+    expect(canon.invariant_patterns.map((p: { type: string }) => p.type)).toEqual(["unique"]);
+    // A code-emitted architect reasoning event names the established canon.
+    const reasoning = emitted.find(
+      (e) => e.event === "reasoning" && (e.metadata as { note?: string })?.note?.includes("architecture canon"),
+    );
+    expect(reasoning, "expected a canon reasoning event").toBeTruthy();
+
+    // Idempotent: a second reconcile establishes + emits nothing new for the canon.
+    const second = reconcileArtifactLog({ tddDir, featureId: F });
+    expect(second.find((e) => (e.metadata as { note?: string })?.note?.includes("architecture canon"))).toBeFalsy();
+  });
 });

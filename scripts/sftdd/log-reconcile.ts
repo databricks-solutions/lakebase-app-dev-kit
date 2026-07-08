@@ -20,6 +20,7 @@ import {
 } from "./agent-log.js";
 import { resolveTddDir, featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./sftdd-paths.js";
 import { establishConventionsIfAbsent } from "./architecture-conventions.js";
+import { establishCanonFromDisk } from "./architecture-canon.js";
 
 export interface ReconcileOpts {
   /** Path to the artifact root. Default: resolved (.sftdd, or legacy .tdd). */
@@ -128,6 +129,31 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         event: "reasoning",
         feature_id: opts.featureId,
         slots: { note: `established project architecture conventions: ${layout}` },
+      },
+      { tddDir, now: opts.now },
+    );
+    existing.push(ev);
+    emitted.push(ev);
+  }
+
+  // Deterministically establish the project architecture CANON (the cross-cutting
+  // sibling of conventions): the first service-backed feature's NFR posture + AC
+  // layers + persistence-invariant patterns become the standing rules a later
+  // feature's per-story architect step projects from. Idempotent + code-emitted,
+  // so the establish decision is observable in the log without the role emitting.
+  const canonEst = establishCanonFromDisk(tddDir, opts.featureId, opts.now);
+  if (canonEst.established && canonEst.canon) {
+    const c = canonEst.canon;
+    const summary =
+      `layers=[${c.ac_layers.join(", ")}] nfrs=[${c.nfr_posture.map((n) => n.category).join(", ")}] ` +
+      `invariants=[${c.invariant_patterns.map((p) => p.type).join(", ")}]`;
+    const ev = emitAgentLogEvent(
+      {
+        role: "architect-reviewer",
+        level: "info",
+        event: "reasoning",
+        feature_id: opts.featureId,
+        slots: { note: `established project architecture canon: ${summary}` },
       },
       { tddDir, now: opts.now },
     );
