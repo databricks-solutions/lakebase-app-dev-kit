@@ -108,6 +108,23 @@ bash examples/sftdd-scenarios/capture-scenario.sh \
 Recording lands in `examples/sftdd-scenarios/<name>/` (`turns/`,
 `recorded-artifacts/`, `recorded-build/`).
 
+### Sprint mode (exercise the planning lane + emit `backlog.json`)
+
+Add `--sprint <name>` to drive the whole-sprint orchestrator (planning to the
+plan gate, then per-feature claim+drive) instead of the per-feature loop. The
+backlog is scoped to EXACTLY the `--feature` ids you pass:
+
+```
+... capture-scenario.sh --scenario <name> --create ... \
+  --sprint <sprint-name> --feature <F1> --feature <F2>
+```
+
+The harness pre-commits each feature-request on the entry tier (so the fork
+inherits it) and passes them to planning via `LAKEBASE_SFTDD_SPRINT_REQUESTS`, so
+`sync-backlog` projects `backlog.json` from just those features. Without
+`--sprint`, the per-feature loop drives each `--feature` directly and no
+`backlog.json` is produced (the plan lane never runs).
+
 ## Observe + troubleshoot (through the shim, never around it)
 
 - Read the run log, the recorded turns, and `.sftdd/escalations/*.json`.

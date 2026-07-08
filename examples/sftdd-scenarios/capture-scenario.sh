@@ -27,6 +27,14 @@
 #   # --inputs-from reads intake/{product-overview,nfrs,design-brief}.md +
 #   # recorded-artifacts/features/<id>/feature-request.md from that dir (the
 #   # scenario's own inputs); recording still goes to <this scenario>/.
+#
+#   # Sprint mode: drive the PLANNING lane too (emits backlog.json) with the
+#   # backlog scoped to EXACTLY the --feature ids, instead of the per-feature loop:
+#   capture-scenario.sh --scenario <name> --create ... \
+#     --sprint <sprint-name> --feature F1-... --feature F6-...
+#   # The whole-sprint orchestrator plans to the plan gate (sync-backlog projects
+#   # backlog.json from just these features), then claims + drives each. The
+#   # feature-requests are supplied to planning via LAKEBASE_SFTDD_SPRINT_REQUESTS.
 # Env: DATABRICKS_HOST, DATABRICKS_CONFIG_PROFILE, GITHUB_OWNER.
 #      LAKEBASE_SFTDD_AUTO_CONTINUE=1 to run headless (required for --create).
 #      Do NOT set LAKEBASE_KIT_DIR: the script refuses it (it would split-brain
@@ -45,6 +53,11 @@ SCENARIO=""
 PROJECT_DIR=""
 PAUSE_BEFORE=""
 FEATURES=()
+# --sprint <name>: drive the whole-sprint orchestrator (planning -> plan gate ->
+# per-feature claim+drive) instead of the per-feature loop, so the capture
+# exercises the PLANNING lane and emits backlog.json. The backlog is scoped to
+# EXACTLY the --feature ids (see the drive section).
+SPRINT=""
 # --create: scaffold a fresh project + stage the scenario's own intake (the FULL
 # LIVE design lane, no replay), so one command does create -> stage -> claim ->
 # drive+record. Intake lives at <scenario>/intake/{product-overview,nfrs,design-brief}.md
@@ -61,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --scenario)       SCENARIO="$2"; shift 2 ;;
     --project-dir)    PROJECT_DIR="$2"; shift 2 ;;
     --feature)        FEATURES+=("$2"); shift 2 ;;
+    --sprint)         SPRINT="$2"; shift 2 ;;
     --pause-before)   PAUSE_BEFORE="$2"; shift 2 ;;
     --create)         CREATE=1; shift ;;
     --project-name)   PROJECT_NAME="$2"; shift 2 ;;
@@ -73,7 +87,7 @@ while [[ $# -gt 0 ]]; do
     # Defaults to the record scenario dir; point at an existing corpus to record
     # a fresh live run from the SAME inputs into a NEW scenario dir.
     --inputs-from)    INPUTS_FROM="$2"; shift 2 ;;
-    -h|--help)        sed -n '1,38p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)        sed -n '1,47p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "capture-scenario: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -222,18 +236,43 @@ lk() { "$PROJECT_DIR/scripts/lk" "$@"; }
 SFTDD_DIR="$(lk lakebase-resolve-sftdd-dir --project-dir "$PROJECT_DIR")"
 
 pause_args=(); [[ -n "$PAUSE_BEFORE" ]] && pause_args=( --pause-before "$PAUSE_BEFORE" )
-for FID in "${FEATURES[@]}"; do
-  # In --create mode each feature is claimed HERE (from trunk), right before its
-  # own drive, so only one feature is ever claimed at a time; the prior feature's
-  # drive released its claim. (In --project-dir mode the caller owns claiming.)
-  if [[ -n "$CREATE" ]]; then
-    git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
-    lk lakebase-scm-claim-feature-branch "${FID}" --project-dir "$PROJECT_DIR" --json \
-      || { echo "capture-scenario: claim ${FID} failed" >&2; exit 2; }
-  fi
-  echo "[capture-scenario] recording ${SCENARIO} feature ${FID} into ${SCEN}" >&2
-  lk lakebase-sftdd-drive --feature "$FID" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
-done
+
+if [[ -n "$SPRINT" ]]; then
+  # ── Sprint mode: drive the whole-sprint orchestrator ONCE (planning -> plan
+  #    gate -> per-feature claim+drive), so the capture exercises the PLANNING lane
+  #    and emits backlog.json. The backlog is scoped to EXACTLY the --feature ids:
+  #      - each feature-request is already committed on the entry tier + pushed
+  #        (the --create staging above), so the fork inherits it; AND
+  #      - LAKEBASE_SFTDD_SPRINT_REQUESTS supplies each to the planning
+  #        author-requests step, so sync-backlog projects the backlog from just
+  #        these features (a request the harness did not list is never committed).
+  #    The sprint driver claims each backlog feature itself, so do NOT claim per
+  #    feature here. Planning reads the intake from the working tree, which in
+  #    --create is the entry tier (where intake was staged); stay on it.
+  REQ_SRC="${INPUTS_FROM:-$SCEN}"
+  reqs=""
+  for FID in "${FEATURES[@]}"; do
+    FR="${REQ_SRC}/recorded-artifacts/features/${FID}/feature-request.md"
+    [[ -f "$FR" ]] || { echo "capture-scenario: --sprint needs a recorded feature-request for ${FID} at ${FR}" >&2; exit 2; }
+    reqs+="${FID}"$'\t'"${FR}"$'\n'
+  done
+  export LAKEBASE_SFTDD_SPRINT_REQUESTS="$reqs"
+  echo "[capture-scenario] recording ${SCENARIO} SPRINT '${SPRINT}' (backlog scoped to: ${FEATURES[*]}) into ${SCEN}" >&2
+  lk lakebase-sftdd-drive --sprint "$SPRINT" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
+else
+  for FID in "${FEATURES[@]}"; do
+    # In --create mode each feature is claimed HERE (from trunk), right before its
+    # own drive, so only one feature is ever claimed at a time; the prior feature's
+    # drive released its claim. (In --project-dir mode the caller owns claiming.)
+    if [[ -n "$CREATE" ]]; then
+      git checkout main >/dev/null 2>&1 || git checkout master >/dev/null 2>&1 || true
+      lk lakebase-scm-claim-feature-branch "${FID}" --project-dir "$PROJECT_DIR" --json \
+        || { echo "capture-scenario: claim ${FID} failed" >&2; exit 2; }
+    fi
+    echo "[capture-scenario] recording ${SCENARIO} feature ${FID} into ${SCEN}" >&2
+    lk lakebase-sftdd-drive --feature "$FID" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
+  done
+fi
 
 echo "[capture-scenario] reconstituting agent-log onto the recorded timeline" >&2
 lk lakebase-sftdd-log --reconstitute --tdd-dir "$SFTDD_DIR" || echo "[capture-scenario] reconstitute skipped" >&2
