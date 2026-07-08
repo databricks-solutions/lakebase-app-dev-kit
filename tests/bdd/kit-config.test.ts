@@ -121,6 +121,7 @@ describe("KIT_TIMEOUTS – documented defaults (clean env)", () => {
     expect(Object.keys(KIT_TIMEOUTS).sort()).toEqual(
       [
         "cliDefault",
+        "cliCreateProject",
         "cliCreateBranch",
         "cliCreateEndpoint",
         "readyWait",
@@ -156,6 +157,14 @@ describe("KIT_TIMEOUTS – env-override mechanic", () => {
       LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS: "45000",
     });
     expect(KIT_TIMEOUTS.cliDefault).toBe(45_000);
+  });
+
+  it("cliCreateProject defaults to 180s (heavier than cliDefault) and is env-overridable", async () => {
+    const clean = await loadKitConfig();
+    expect(clean.KIT_TIMEOUTS.cliCreateProject).toBe(180_000);
+    expect(clean.KIT_TIMEOUTS.cliCreateProject).toBeGreaterThan(clean.KIT_TIMEOUTS.cliDefault);
+    const over = await loadKitConfig({ LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS: "240000" });
+    expect(over.KIT_TIMEOUTS.cliCreateProject).toBe(240_000);
   });
 
   it("non-numeric env value falls back to the documented default", async () => {

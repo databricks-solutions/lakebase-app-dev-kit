@@ -130,14 +130,22 @@ export function classifyDatabricksError(err: unknown, argv: string[], profile: s
   }
   // Some CLI failures write to stdout, not stderr; a few exit non-zero with both
   // streams empty. Fold in whatever we have plus the exit code so a silent
-  // failure is still legible rather than a bare "Command failed".
+  // failure is still legible rather than a bare "Command failed". A TIMEOUT kill
+  // is the worst offender: execFile SIGTERMs the process, so stderr/stdout are
+  // empty and the exit code is `null` , name it explicitly (the opaque
+  // "exit null" that masked a too-short create-project budget) so the fix
+  // (raise the matching LAKEBASE_KIT_TIMEOUT_* env var) is obvious.
+  const killed = (e as { killed?: boolean }).killed === true;
+  const signal = (e as { signal?: string | null }).signal ?? undefined;
   const detail = stderr
     ? `\nstderr: ${stderr}`
     : stdout
       ? `\nstdout: ${stdout}`
-      : e.code !== undefined
-        ? `\n(no stderr/stdout; exit ${e.code})`
-        : "";
+      : killed || signal
+        ? `\n(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)`
+        : e.code !== undefined
+          ? `\n(no stderr/stdout; exit ${e.code})`
+          : "";
   return new DatabricksCliError(
     `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
     profile,

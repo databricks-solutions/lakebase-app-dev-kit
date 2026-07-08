@@ -112,4 +112,14 @@ describe("classifyDatabricksError: auth failures surface one actionable error", 
     const mapped = classifyDatabricksError(err, argv, "myprof");
     expect(mapped.message).toContain("(no stderr/stdout; exit 1)");
   });
+
+  it("names a TIMEOUT kill instead of the opaque 'exit null' (the too-short create-project budget)", () => {
+    // execFile timeout SIGTERMs the process: killed:true, signal:'SIGTERM', code:null.
+    const err = Object.assign(new Error("Command failed"), { stderr: "", stdout: "", code: null, killed: true, signal: "SIGTERM" });
+    const mapped = classifyDatabricksError(err, argv, "myprof");
+    expect(mapped.message).toMatch(/killed by SIGTERM/);
+    expect(mapped.message).toMatch(/likely a TIMEOUT/);
+    expect(mapped.message).toMatch(/LAKEBASE_KIT_TIMEOUT_/);
+    expect(mapped.message).not.toContain("exit null");
+  });
 });

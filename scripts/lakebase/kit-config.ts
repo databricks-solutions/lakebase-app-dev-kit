@@ -20,6 +20,11 @@ function intFromEnv(name: string, fallback: number): number {
 export interface KitTimeouts {
   /** Default `databricks` CLI invocation budget (list-branches, get-branch, get-endpoint, etc.). */
   cliDefault: number;
+  /** `databricks postgres create-project` budget. Provisioning a whole project is
+   *  the heaviest postgres op (heavier than a branch/endpoint), so it needs a much
+   *  larger budget than cliDefault, or the CLI is SIGTERM-killed mid-provision
+   *  ("exit null", no output). */
+  cliCreateProject: number;
   /** `databricks postgres create-branch` budget. Slightly higher than the default to absorb the server-side branch provisioning latency. */
   cliCreateBranch: number;
   /** `databricks postgres create-endpoint` budget. Long-running on the server side. */
@@ -77,6 +82,7 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
  */
 export const KIT_TIMEOUTS: KitTimeouts = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 30_000),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 180_000),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 60_000),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 60_000),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 120_000),

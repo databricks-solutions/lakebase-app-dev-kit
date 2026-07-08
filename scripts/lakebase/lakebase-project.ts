@@ -35,7 +35,9 @@ export interface LakebaseProjectArgs {
  * Long-running on the server side; the CLI waits for completion.
  */
 export async function createLakebaseProject(args: LakebaseProjectArgs): Promise<LakebaseProjectInfo> {
-  const raw = await dbcli(["postgres", "create-project", args.projectId, "-o", "json"], args.host);
+  // Provisioning waits server-side; use the create-project budget, NOT cliDefault
+  // (30s), or the CLI is killed mid-provision with an opaque "exit null".
+  const raw = await dbcli(["postgres", "create-project", args.projectId, "-o", "json"], args.host, KIT_TIMEOUTS.cliCreateProject);
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -227,6 +229,6 @@ export async function getProjectRetentionDuration(
   return findHistoryRetentionDuration(parsed);
 }
 
-function dbcli(args: string[], host?: string): Promise<string> {
-  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
+function dbcli(args: string[], host?: string, timeout: number = KIT_TIMEOUTS.cliDefault): Promise<string> {
+  return runDatabricks(args, { host, timeout });
 }
