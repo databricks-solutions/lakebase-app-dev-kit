@@ -750,6 +750,19 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     async readBacklog() {
       return backlogFeatureIds(readSprintBacklog(tddDir, sprint));
     },
+    async commitAndPushRequests() {
+      // Commit the feature-requests planning authored + push the entry tier so
+      // each feature branch (which forks from origin/<parent>) inherits them. The
+      // add + commit are tolerant (a no-op when nothing changed, e.g. the requests
+      // were pre-seeded + already committed); a PUSH failure is loud, since a
+      // silent one resurfaces later as a cryptic Spec Author refusal on the fork.
+      const root = path.basename(tddDir);
+      for (const id of backlogFeatureIds(readSprintBacklog(tddDir, sprint))) {
+        await spawnCmd("git", ["add", "--", `${root}/features/${id}/feature-request.md`], projectDir).catch(() => undefined);
+      }
+      await spawnCmd("git", ["commit", "-m", `plan: ${sprint} feature-requests`], projectDir).catch(() => undefined);
+      await spawnCmd("git", ["push", "origin", "HEAD"], projectDir);
+    },
     async claimFeature(featureId) {
       await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
     },

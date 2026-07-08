@@ -92,6 +92,15 @@ export interface SprintEffects {
   drivePlanning(): Promise<DriveStepResult>;
   /** The sprint's feature ids, in execution order. */
   readBacklog(): Promise<string[]>;
+  /** After planning (the plan gate is approved), commit the feature-requests the
+   *  PO/proxy authored during planning and PUSH the entry tier to `origin`. A
+   *  feature branch forks from `origin/<parent>` (paired-branch resolveForkPoint),
+   *  so a request that only exists on the LOCAL entry tier would not be inherited
+   *  by the fork and the Spec Author would refuse; this makes the just-authored
+   *  requests reachable before any feature is claimed. Idempotent: a no-op when
+   *  nothing changed / already pushed (e.g. the capture pre-seeded + pushed them).
+   *  Optional: absent => the caller propagates request commits itself. */
+  commitAndPushRequests?(): Promise<void>;
   /** Claim a feature's branch (idempotent; the SCM /design Step 0 the driver
    *  does not own). Re-claim on a resume is a no-op. */
   claimFeature(featureId: string): Promise<void>;
@@ -122,6 +131,13 @@ export interface RunSprintResult {
 export async function runSprint(effects: SprintEffects): Promise<RunSprintResult> {
   const planning = await effects.drivePlanning();
   if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
+
+  // Planning authored the feature-requests on the LOCAL entry tier. Push them to
+  // origin BEFORE any feature is claimed, because a feature branch forks from
+  // origin/<parent>; without this the fork inherits no feature-request and the
+  // Spec Author refuses. Runs only once planning is approved (past the gate), so
+  // an interactive halt above returns first and the push fires on the resume.
+  await effects.commitAndPushRequests?.();
 
   const features = await effects.readBacklog();
   for (let i = 0; i < features.length; i++) {

@@ -152,6 +152,21 @@ describe("runSprint (pure over SprintEffects)", () => {
     expect(calls).toEqual(["plan", "claim:F1-a", "drive:F1-a", "claim:F2-b", "drive:F2-b"]);
   });
 
+  it("commits+pushes the authored requests AFTER planning and BEFORE any feature is claimed", async () => {
+    // A feature forks from origin/<parent>, so the PO/proxy-authored requests must
+    // be pushed to origin before the first claim or the fork inherits nothing.
+    const calls: string[] = [];
+    const result = await runSprint({
+      async drivePlanning() { calls.push("plan"); return {}; },
+      async commitAndPushRequests() { calls.push("push-requests"); },
+      async readBacklog() { return ["F1-a", "F2-b"]; },
+      async claimFeature(f) { calls.push(`claim:${f}`); },
+      async driveFeature(f) { calls.push(`drive:${f}`); return {}; },
+    });
+    expect(result.features).toEqual(["F1-a", "F2-b"]);
+    expect(calls).toEqual(["plan", "push-requests", "claim:F1-a", "drive:F1-a", "claim:F2-b", "drive:F2-b"]);
+  });
+
   it("an empty backlog plans then does nothing", async () => {
     const calls: string[] = [];
     const result = await runSprint({
@@ -169,12 +184,14 @@ describe("runSprint (pure over SprintEffects)", () => {
     const planGate = { kind: "approve-plan-gate" as const };
     const result = await runSprint({
       async drivePlanning() { calls.push("plan"); return { pendingGate: planGate }; },
+      async commitAndPushRequests() { calls.push("push-requests"); },
       async readBacklog() { calls.push("backlog"); return ["F1-a"]; },
       async claimFeature() { calls.push("claim"); },
       async driveFeature() { calls.push("drive"); return {}; },
     });
     expect(result.pendingGate).toEqual(planGate);
-    expect(calls).toEqual(["plan"]); // never read the backlog or touched a feature
+    // Halted at the plan gate: no push (requests not yet approved), no backlog/feature work.
+    expect(calls).toEqual(["plan"]);
   });
 
   it("interactive: halts on the feature whose gate is pending (resumable)", async () => {
