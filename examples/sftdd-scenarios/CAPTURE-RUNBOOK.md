@@ -119,11 +119,15 @@ backlog is scoped to EXACTLY the `--feature` ids you pass:
   --sprint <sprint-name> --feature <F1> --feature <F2>
 ```
 
-The harness pre-commits each feature-request on the entry tier (so the fork
-inherits it) and passes them to planning via `LAKEBASE_SFTDD_SPRINT_REQUESTS`, so
-`sync-backlog` projects `backlog.json` from just those features. Without
-`--sprint`, the per-feature loop drives each `--feature` directly and no
-`backlog.json` is produced (the plan lane never runs).
+In `--sprint` the harness does NOT pre-seed the feature-requests: the planning
+lane authors them LIVE (the proxy-as-PO author-requests step, fed by
+`LAKEBASE_SFTDD_SPRINT_REQUESTS`), so `sync-backlog` projects `backlog.json` from
+just those features. After the plan gate, `runSprint`'s `commitAndPushRequests`
+commits + pushes the just-authored requests to `origin/<entry-tier>` before the
+first fork, so each feature branch (forked from origin) inherits its request.
+Without `--sprint`, the per-feature loop pre-seeds each request on the entry tier
+and drives each `--feature` directly, and no `backlog.json` is produced (the plan
+lane never runs).
 
 ## Observe + troubleshoot (through the shim, never around it)
 

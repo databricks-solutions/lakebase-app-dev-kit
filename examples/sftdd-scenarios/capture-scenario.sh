@@ -198,14 +198,22 @@ if [[ -n "$CREATE" ]]; then
   [[ -f "${INTAKE_DIR}/design-brief.md" ]] && clk lakebase-sftdd-human-proxy supply --from "${INTAKE_DIR}/design-brief.md" --to "${SFTDD_DIR}/design/design-brief.md" --artifact design-brief.md
   git add "${SFTDD_REL}" >/dev/null 2>&1 || true
   git commit -m "intake: project product-overview + nfrs + design-brief" >/dev/null 2>&1 || true
-  for FID in "${FEATURES[@]}"; do
-    FR="${INPUTS}/recorded-artifacts/features/${FID}/feature-request.md"
-    [[ -f "$FR" ]] || { echo "capture-scenario: missing feature-request for ${FID} at ${FR}" >&2; exit 2; }
-    mkdir -p "${SFTDD_DIR}/features/${FID}"
-    cp "$FR" "${SFTDD_DIR}/features/${FID}/feature-request.md"
-    git add "${SFTDD_REL}/features/${FID}/feature-request.md" >/dev/null 2>&1 || true
-    git commit -m "plan: feature-request for ${FID}" >/dev/null 2>&1 || true
-  done
+  # PER-FEATURE mode: pre-seed each feature-request on the entry tier so the fork
+  # inherits it. SPRINT mode does NOT pre-seed: the planning lane authors the
+  # feature-requests LIVE (the proxy-as-PO author-requests step, fed by
+  # LAKEBASE_SFTDD_SPRINT_REQUESTS), and runSprint's commitAndPushRequests commits
+  # + pushes them to origin AFTER the plan gate, BEFORE the first fork. Pre-seeding
+  # here would defeat the point of exercising the planning lane.
+  if [[ -z "$SPRINT" ]]; then
+    for FID in "${FEATURES[@]}"; do
+      FR="${INPUTS}/recorded-artifacts/features/${FID}/feature-request.md"
+      [[ -f "$FR" ]] || { echo "capture-scenario: missing feature-request for ${FID} at ${FR}" >&2; exit 2; }
+      mkdir -p "${SFTDD_DIR}/features/${FID}"
+      cp "$FR" "${SFTDD_DIR}/features/${FID}/feature-request.md"
+      git add "${SFTDD_REL}/features/${FID}/feature-request.md" >/dev/null 2>&1 || true
+      git commit -m "plan: feature-request for ${FID}" >/dev/null 2>&1 || true
+    done
+  fi
   # Push the entry tier so the feature branch (forked from origin/<entry-tier>)
   # inherits the intake. This is the throwaway capture project's OWN remote.
   # Retry with backoff: a transient DNS/network blip (github.com briefly
@@ -240,12 +248,16 @@ pause_args=(); [[ -n "$PAUSE_BEFORE" ]] && pause_args=( --pause-before "$PAUSE_B
 if [[ -n "$SPRINT" ]]; then
   # ── Sprint mode: drive the whole-sprint orchestrator ONCE (planning -> plan
   #    gate -> per-feature claim+drive), so the capture exercises the PLANNING lane
-  #    and emits backlog.json. The backlog is scoped to EXACTLY the --feature ids:
-  #      - each feature-request is already committed on the entry tier + pushed
-  #        (the --create staging above), so the fork inherits it; AND
-  #      - LAKEBASE_SFTDD_SPRINT_REQUESTS supplies each to the planning
-  #        author-requests step, so sync-backlog projects the backlog from just
-  #        these features (a request the harness did not list is never committed).
+  #    and emits backlog.json. The backlog is scoped to EXACTLY the --feature ids
+  #    and the feature-requests are authored LIVE by the planning lane (NOT
+  #    pre-seeded above):
+  #      - LAKEBASE_SFTDD_SPRINT_REQUESTS supplies each recorded request to the
+  #        planning author-requests step (proxy-as-PO), so sync-backlog projects
+  #        the backlog from just these features (a request the harness did not list
+  #        is never authored); AND
+  #      - runSprint's commitAndPushRequests commits + pushes the just-authored
+  #        requests to origin/<entry-tier> after the plan gate and before the first
+  #        fork, so each feature branch (forked from origin) inherits its request.
   #    The sprint driver claims each backlog feature itself, so do NOT claim per
   #    feature here. Planning reads the intake from the working tree, which in
   #    --create is the entry tier (where intake was staged); stay on it.
