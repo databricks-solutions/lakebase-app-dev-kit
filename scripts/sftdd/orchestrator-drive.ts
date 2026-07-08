@@ -24,6 +24,13 @@ export interface StoryDesign {
   hasAcs: boolean;
   /** The Architect Reviewer has annotated layers / NFR coverage on the ACs. */
   architectAnnotated: boolean;
+  /** This story's per-AC architectural_notes can be PROJECTED deterministically
+   *  from the project canon (no architect turn): the feature architecture.json
+   *  already exists, the canon is established, and the story is not novel. When
+   *  false the architect is dispatched (to author architecture.json on the first
+   *  story, or clean a novel story + amend the canon). Only consulted while
+   *  architectAnnotated is false. */
+  architectProjectable: boolean;
   /** The Test Strategist has produced this story's ordered test list. */
   testListReady: boolean;
   /** The pre-build reflection critic (Navigator, reflect mode) has PASSED this
@@ -71,6 +78,9 @@ export type DriveAction =
   // spec slice + test-list before the human spec gate. A design-lane use of the
   // build reviewer role; buildMode "reflect" distinguishes it from its build turns.
   | { kind: "invoke-role"; role: "navigator"; story: string; buildMode: "reflect" }
+  // Deterministically project this story's per-AC architectural_notes from the
+  // project canon (no architect turn): the common case when the story maps cleanly.
+  | { kind: "project-architect-notes"; story: string }
   | { kind: "surface-gate"; story: string }
   | { kind: "approve-gate"; story: string }
   | { kind: "design-complete" };
@@ -121,13 +131,21 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
     const design = v?.design ?? {
       hasAcs: false,
       architectAnnotated: false,
+      architectProjectable: false,
       testListReady: false,
       reflectionPassed: false,
       reflectionVerdictWritten: false,
     };
 
     if (!design.hasAcs) return { kind: "invoke-role", role: "spec-author", story };
-    if (!design.architectAnnotated) return { kind: "invoke-role", role: "architect-reviewer", story };
+    // Architect step: PROJECT the per-AC notes from the canon when the story maps
+    // cleanly (no turn); otherwise dispatch the architect live , to author the
+    // feature architecture.json on the first story, or clean a novel story + amend
+    // the canon (the architect-canon-gap self-heal handles a mis-projection later).
+    if (!design.architectAnnotated) {
+      if (design.architectProjectable) return { kind: "project-architect-notes", story };
+      return { kind: "invoke-role", role: "architect-reviewer", story };
+    }
     if (!design.testListReady) return { kind: "invoke-role", role: "test-strategist", story };
     // Pre-build reflection: the Navigator critiques the (now complete) spec +
     // test-list BEFORE the human spec gate + the build. On findings it flags a
@@ -556,6 +574,7 @@ export function actionLane(action: WorkflowAction): ActionLane {
     case "approve-plan-gate":
     case "planning-complete":
       return "planning";
+    case "project-architect-notes":
     case "surface-gate":
     case "approve-gate":
     case "design-complete":

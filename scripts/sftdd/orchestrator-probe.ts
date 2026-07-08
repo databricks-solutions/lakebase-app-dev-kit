@@ -29,6 +29,7 @@ import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js
 import { firstPendingEscalation } from "./escalation.js";
 import { specLevelSmell, priorReviseCount, isBuildRefactorRoutableSmell } from "./smells.js";
 import { reflectionPassed, reflectionVerdictWritten } from "./reflection.js";
+import { readCanon, architectNovelty } from "./architecture-canon.js";
 import {
   cyclesRootDir,
   workflowStateJson,
@@ -175,6 +176,25 @@ export function diskArtifactProbe(
       // feature architecture.json (service_backed + layers + nfrs).
       const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(tddDir, featureId, ac) !== undefined);
       return everyAcNoted && fs.existsSync(architectureJson(tddDir, featureId));
+    },
+
+    architectProjectable(story) {
+      // Project this story's per-AC notes from the canon (no architect turn) when:
+      // the feature architecture.json already exists (an earlier story's architect
+      // authored it, with its feature-specific layers/invariants), the project
+      // canon is established, and the story is NOT novel (every AC maps onto a
+      // known canon layer). Otherwise the architect is dispatched , to author
+      // architecture.json on the feature's first story, or clean a novel story +
+      // amend the canon. An AC missing its layer is not projectable (nothing to
+      // anchor a note on), so it also dispatches.
+      if (!fs.existsSync(architectureJson(tddDir, featureId))) return false;
+      const canon = readCanon(tddDir);
+      if (!canon) return false;
+      const acs = storyAcIds(tddDir, featureId, story);
+      if (acs.length === 0) return false;
+      const layers = acs.map((ac) => readAcLayer(tddDir, featureId, ac));
+      if (layers.some((l) => !l)) return false;
+      return !architectNovelty(canon, layers.map((l) => ({ layer: l! }))).novel;
     },
 
     testListReady(story) {

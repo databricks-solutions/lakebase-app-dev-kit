@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+// CLI for the deterministic architect-notes projection (FEIP-7902): write a
+// story's per-AC architectural_notes from the project canon, with NO architect
+// agent turn, for the common case where the story maps cleanly onto the canon.
+// The design lane's `project-architect-notes` effect calls this; the driver's
+// project-or-dispatch decision (architectProjectable) already established it is
+// safe (feature architecture.json exists, canon established, story not novel).
+//
+// Idempotent: an AC that already carries architectural_notes is left untouched.
+//
+// Usage:
+//   lakebase-sftdd-canon-notes --feature <F> --story <S> [--tdd-dir <path>]
+
+import { projectStoryNotes } from "./architecture-canon.js";
+import { resolveTddDir } from "./sftdd-paths.js";
+
+interface Parsed {
+  feature: string;
+  story: string;
+  tddDir?: string;
+}
+
+function parse(argv: string[]): Parsed {
+  const out: Parsed = { feature: "", story: "" };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
+    else if (a === "--story" && i + 1 < argv.length) out.story = argv[++i];
+    else if (a === "--tdd-dir" && i + 1 < argv.length) out.tddDir = argv[++i];
+    else if (a === "-h" || a === "--help") help();
+  }
+  return out;
+}
+
+function help(): never {
+  process.stdout.write(
+    `lakebase-sftdd-canon-notes , project a story's per-AC architectural_notes from the canon\n\n` +
+      `Usage:\n` +
+      `  lakebase-sftdd-canon-notes --feature <F> --story <S> [--tdd-dir <path>]\n`,
+  );
+  process.exit(0);
+}
+
+const p = parse(process.argv.slice(2));
+if (!p.feature || !p.story) {
+  process.stderr.write("lakebase-sftdd-canon-notes: --feature and --story are required\n");
+  process.exit(2);
+}
+
+const tddDir = p.tddDir ?? resolveTddDir();
+const n = projectStoryNotes(tddDir, p.feature, p.story);
+process.stdout.write(`canon-notes: projected architectural_notes onto ${n} AC(s) for ${p.feature}/${p.story}\n`);
+process.exit(0);

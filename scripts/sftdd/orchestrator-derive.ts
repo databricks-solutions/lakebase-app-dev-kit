@@ -35,6 +35,10 @@ export interface StoryArtifactProbe {
   hasAcs(story: string): boolean;
   /** The Architect annotated layers / NFR coverage on this story's ACs. */
   architectAnnotated(story: string): boolean;
+  /** This story's per-AC notes can be projected from the canon (no architect
+   *  turn): architecture.json exists, the canon is established, the story is not
+   *  novel. */
+  architectProjectable(story: string): boolean;
   /** The Test Strategist produced this story's test list (test-list.json). */
   testListReady(story: string): boolean;
   /** The pre-build reflection critic PASSED this story's spec + test-list
@@ -142,6 +146,7 @@ function storyView(
     design: {
       hasAcs: probe.hasAcs(id),
       architectAnnotated: probe.architectAnnotated(id),
+      architectProjectable: probe.architectProjectable(id),
       testListReady: probe.testListReady(id),
       reflectionPassed: probe.reflectionPassed(id),
       reflectionVerdictWritten: probe.reflectionVerdictWritten(id),

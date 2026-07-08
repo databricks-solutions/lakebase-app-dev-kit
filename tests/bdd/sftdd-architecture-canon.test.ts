@@ -6,7 +6,7 @@
 // grows via amendCanon. Pure module, so these are hermetic.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -17,8 +17,11 @@ import {
   amendCanon,
   architectNovelty,
   projectArchitecturalNotes,
+  projectStoryNotes,
+  writeCanon,
   type ArchitectureCanon,
 } from "../../scripts/sftdd/architecture-canon.js";
+import { diskArtifactProbe } from "../../scripts/sftdd/orchestrator-probe.js";
 
 let tdd: string;
 const NOW = () => new Date("2026-07-08T00:00:00.000Z");
@@ -180,5 +183,77 @@ describe("projectArchitecturalNotes: deterministic per-AC note for the common ca
   it("returns undefined for an AC with no layer to anchor on", () => {
     const canon = deriveCanon(ARCH, ["API"], "F1", NOW)!;
     expect(projectArchitecturalNotes(canon, {})).toBeUndefined();
+  });
+});
+
+// --- Phase 3: project-or-dispatch on disk ----------------------------------
+
+const F = "F2-later";
+function writeAc(story: string, acId: string, extra: Record<string, unknown> = {}): void {
+  const dir = join(tdd, "features", F, "stories", story, "acs");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${acId}.json`), JSON.stringify({ id: acId, layer: "API", ...extra }));
+}
+function writeFeatureArch(): void {
+  const dir = join(tdd, "features", F);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "architecture.json"), JSON.stringify({ feature_id: F, service_backed: true, nfrs: [] }));
+}
+function establishedCanon(): ArchitectureCanon {
+  const c = deriveCanon(ARCH, ["API", "Infra"], "F1-stock-visibility", NOW)!;
+  writeCanon(tdd, c);
+  return c;
+}
+
+describe("projectStoryNotes: write per-AC notes from the canon (idempotent)", () => {
+  it("annotates ACs missing notes, and never clobbers an existing annotation", () => {
+    establishedCanon();
+    writeAc("S1", "AC1");
+    writeAc("S1", "AC2", { architectural_notes: "hand-authored by the architect , keep me" });
+
+    const n = projectStoryNotes(tdd, F, "S1");
+    expect(n).toBe(1); // only AC1 was missing notes
+
+    const ac1 = JSON.parse(readFileSync(join(tdd, "features", F, "stories", "S1", "acs", "AC1.json"), "utf8"));
+    expect(ac1.architectural_notes).toMatch(/Layer API.*canon established by F1-stock-visibility/);
+    const ac2 = JSON.parse(readFileSync(join(tdd, "features", F, "stories", "S1", "acs", "AC2.json"), "utf8"));
+    expect(ac2.architectural_notes).toBe("hand-authored by the architect , keep me");
+
+    // Idempotent: a second pass annotates nothing new.
+    expect(projectStoryNotes(tdd, F, "S1")).toBe(0);
+  });
+
+  it("is a no-op with no canon established", () => {
+    writeAc("S1", "AC1");
+    expect(projectStoryNotes(tdd, F, "S1")).toBe(0);
+  });
+});
+
+describe("diskArtifactProbe.architectProjectable: the project-or-dispatch decision", () => {
+  it("false when no canon is established yet (first feature dispatches the architect)", () => {
+    writeFeatureArch();
+    writeAc("S1", "AC1");
+    expect(diskArtifactProbe(tdd, F).architectProjectable("S1")).toBe(false);
+  });
+
+  it("false when the feature architecture.json does not exist yet", () => {
+    establishedCanon();
+    writeAc("S1", "AC1");
+    expect(diskArtifactProbe(tdd, F).architectProjectable("S1")).toBe(false);
+  });
+
+  it("true when arch.json + canon exist and the story is not novel (maps onto known layers)", () => {
+    establishedCanon();
+    writeFeatureArch();
+    writeAc("S1", "AC1"); // layer API is in the canon
+    expect(diskArtifactProbe(tdd, F).architectProjectable("S1")).toBe(true);
+  });
+
+  it("false when the story is NOVEL (an AC layer the canon has not classified)", () => {
+    // Canon knows API + Infra; an E2E AC is novel -> dispatch the architect.
+    establishedCanon();
+    writeFeatureArch();
+    writeAc("S1", "AC1", { layer: "E2E" });
+    expect(diskArtifactProbe(tdd, F).architectProjectable("S1")).toBe(false);
   });
 });

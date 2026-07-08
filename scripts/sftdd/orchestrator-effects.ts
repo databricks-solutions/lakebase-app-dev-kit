@@ -814,6 +814,7 @@ const LOG_BIN = "lakebase-sftdd-log";
 const TEST_LIST_BIN = "lakebase-sftdd-test-list";
 const DEPLOY_BIN = "lakebase-sftdd-deploy";
 const GATE_CONFORMANCE_BIN = "lakebase-sftdd-gate-conformance";
+const CANON_NOTES_BIN = "lakebase-sftdd-canon-notes";
 // Promote phase, the SCM workflow CLIs (lakebase-scm-workflows). They read +
 // advance the SCM ladder in .lakebase/workflow-state.json, so they take
 // --project-dir (the project root), NOT --feature/--tdd-dir.
@@ -1017,6 +1018,15 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
       return cmds;
     }
+
+    case "project-architect-notes":
+      // Deterministic (no architect turn): write each AC's architectural_notes from
+      // the project canon, then reconcile so the projected annotations are logged
+      // as architect artifacts (observability parity with a live architect turn).
+      return [
+        { kind: "cli", bin: CANON_NOTES_BIN, args: ["--story", action.story, ...tdd] },
+        { kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] },
+      ];
 
     case "surface-gate":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];

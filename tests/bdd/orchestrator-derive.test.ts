@@ -19,6 +19,7 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
   return {
     hasAcs: (s) => get(s, "hasAcs"),
     architectAnnotated: (s) => get(s, "architectAnnotated"),
+    architectProjectable: (s) => get(s, "architectProjectable"),
     testListReady: (s) => get(s, "testListReady"),
     reflectionPassed: (s) => get(s, "reflectionPassed"),
     reflectionVerdictWritten: (s) => get(s, "reflectionVerdictWritten"),
