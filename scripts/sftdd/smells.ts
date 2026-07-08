@@ -29,7 +29,13 @@ export type SmellName =
   // blocking, so it routes to the owning author (bounded one revise) then HITL,
   // reusing the revise-route machinery.
   | "reflect-spec-defect"
-  | "reflect-testlist-defect";
+  | "reflect-testlist-defect"
+  // The deterministic architect-notes projection (FEIP-7902) found a story whose
+  // AC layers / architecture dimensions the project canon does not cover: a blind
+  // projection would guess, so route to the Architect (re-annotate + amend the
+  // canon) via revise-routing. Spec-level, architect-owned. Fail-toward-projection
+  // with a reactive fallback: projection is the default, this is the self-heal.
+  | "architect-canon-gap";
 
 export interface SmellDefinition {
   name: SmellName;
@@ -42,10 +48,11 @@ export interface SmellDefinition {
   level?: "spec" | "build";
   /** For a `spec`-level smell: the design-lane author whose remediation it is
    *  (the verdict routes here on `revise`). */
-  owning_role?: "spec-author" | "test-strategist";
-  /** For a `spec`-level smell: the gate to re-open + re-run (Gate 1 spec vs
-   *  Gate 3 test_list). The story re-enters the design lane at that author. */
-  gate_to_rerun?: "spec" | "test_list";
+  owning_role?: "spec-author" | "test-strategist" | "architect-reviewer";
+  /** For a `spec`-level smell: the gate to re-open + re-run (Gate 1 spec / Gate 2
+   *  architecture / Gate 3 test_list). The story re-enters the design lane at that
+   *  author. */
+  gate_to_rerun?: "spec" | "test_list" | "architecture";
 }
 
 export const SMELL_CATALOG: SmellDefinition[] = [
@@ -182,6 +189,23 @@ export const SMELL_CATALOG: SmellDefinition[] = [
     level: "spec",
     owning_role: "test-strategist",
     gate_to_rerun: "test_list",
+  },
+  {
+    name: "architect-canon-gap",
+    description:
+      "The deterministic architect-notes projection (FEIP-7902) found a story whose AC layers or " +
+      "architecture.json dimensions (a persistence-invariant type or an NFR category) the project " +
+      "canon does not yet cover. Projecting a blind architectural_note would guess at placement the " +
+      "canon cannot justify, so the story is routed to the Architect instead: re-annotate the story " +
+      "AND amend the canon so the next feature inherits the new rule. Spec-level + architect-owned; " +
+      "the projection is the default path and this is its reactive self-heal.",
+    proposed_remediation:
+      "Route to the Architect Reviewer (Gate 2 architecture): annotate the uncovered ACs with real " +
+      "architectural_notes and declare the new dimension in architecture.json so reconcile amends the " +
+      "canon. Bounded to one automatic revise per story; a second escape hard-halts to the human.",
+    level: "spec",
+    owning_role: "architect-reviewer",
+    gate_to_rerun: "architecture",
   },
   {
     name: "layering-violation",
@@ -328,7 +352,10 @@ export interface SmellHit {
  *  (hard-halt, no automatic author route). */
 export function specLevelSmell(
   name: string,
-): { owning_role: "spec-author" | "test-strategist"; gate_to_rerun: "spec" | "test_list" } | null {
+): {
+  owning_role: "spec-author" | "test-strategist" | "architect-reviewer";
+  gate_to_rerun: "spec" | "test_list" | "architecture";
+} | null {
   const def = SMELL_CATALOG.find((s) => s.name === name);
   if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
   return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
@@ -354,7 +381,12 @@ export function specLevelSmell(
  * Proxy.
  */
 export function composeReviseBrief(input: { smell: string; gate: string; reason: string }): string {
-  const artifact = input.gate === "spec" ? "acceptance criteria" : "ordered test list";
+  const artifact =
+    input.gate === "spec"
+      ? "acceptance criteria"
+      : input.gate === "architecture"
+        ? "architectural annotations + architecture.json"
+        : "ordered test list";
   const isCoverageDefect =
     input.smell === "reflect-testlist-defect" || input.smell === "reflect-spec-defect";
   if (isCoverageDefect) {

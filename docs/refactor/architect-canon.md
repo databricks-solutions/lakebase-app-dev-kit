@@ -209,3 +209,31 @@ safety of the reactive route.
   project) and architecture-conventions (established once, deterministic
   conformance). This closes the last per-feature live architect turn by the same
   method.
+
+## Status: implemented (phases 1-5, hermetic; live-capture validation gated)
+
+Landed on `feip-7902-architect-canon`, each phase green:
+
+- **Canon shape (as built)** , the deterministically-derivable dimensions:
+  `ac_layers` (API/E2E/Infra in use), `nfr_posture` (category + requirement), and
+  `invariant_patterns` (one per persistence-invariant type). The illustrative
+  `layer_placement` (AC-shape -> layer rule) above was not built: it is not cleanly
+  derivable from existing artifacts, so it is left to a future refinement.
+- **Honest scoping of the win** , `architectAnnotated` requires the feature-level
+  `architecture.json` (with feature-specific invariants, NOT canon-derivable), so
+  the FIRST story of every feature still runs the architect to author it. The win
+  is per-story WITHIN a feature: later non-novel stories project their per-AC notes
+  deterministically (via `lakebase-sftdd-canon-notes`), plus the canon informs the
+  projected notes across features.
+- **Reactive fallback (the confirmed scope decision)** , the projection recognizer
+  (`evaluateStoryCanon`) raises the `architect-canon-gap` smell (spec-level,
+  `owning_role: architect-reviewer`, `gate_to_rerun: architecture`, BLOCKING)
+  rather than writing a blind note when the canon does not cover the story. The
+  existing revise-routing sends it to the architect (re-annotate + amend the
+  canon); `staleStoryArtifactsForRevise("architecture")` clears the projected notes
+  and `architectProjectable` returns false after one revise, so the architect runs
+  LIVE (non-hollow). Bounded to one revise per (smell, story); a second escape
+  hard-halts to the human.
+- **Gated follow-up** , a live stockflow F1+F6 capture to confirm F1 establishes
+  the canon and F6's clean stories take zero architect turns (compare architect-turn
+  count vs. the recorded baseline). Not run yet.

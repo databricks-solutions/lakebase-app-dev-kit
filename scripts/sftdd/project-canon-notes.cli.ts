@@ -11,8 +11,9 @@
 // Usage:
 //   lakebase-sftdd-canon-notes --feature <F> --story <S> [--tdd-dir <path>]
 
-import { projectStoryNotes } from "./architecture-canon.js";
+import { projectStoryNotes, evaluateStoryCanon } from "./architecture-canon.js";
 import { resolveTddDir } from "./sftdd-paths.js";
+import { writeSmellsLog } from "./smells.js";
 
 interface Parsed {
   feature: string;
@@ -48,6 +49,30 @@ if (!p.feature || !p.story) {
 }
 
 const tddDir = p.tddDir ?? resolveTddDir();
+
+// FAIL-TOWARD-PROJECTION with a reactive fallback: if the canon does NOT cover the
+// story (an AC layer / architecture dimension it has not seen), do NOT write a
+// blind note , raise the architect-canon-gap smell (spec-level, architect-owned).
+// The escalation machinery routes it to the architect (re-annotate + amend the
+// canon) via revise-routing, bounded to one revise then HITL. Otherwise project.
+const coverage = evaluateStoryCanon(tddDir, p.feature, p.story);
+if (!coverage.ok) {
+  writeSmellsLog(tddDir, [
+    {
+      smell: "architect-canon-gap",
+      cycle_ids: [],
+      story_id: p.story,
+      detail:
+        `Canon does not cover ${p.feature}/${p.story}: ${coverage.gaps.join("; ")}. ` +
+        `Route to the Architect to annotate the uncovered ACs + amend the canon.`,
+    },
+  ]);
+  process.stdout.write(
+    `canon-notes: ${p.feature}/${p.story} has a canon gap (${coverage.gaps.length}); raised architect-canon-gap (no blind projection).\n`,
+  );
+  process.exit(0);
+}
+
 const n = projectStoryNotes(tddDir, p.feature, p.story);
 process.stdout.write(`canon-notes: projected architectural_notes onto ${n} AC(s) for ${p.feature}/${p.story}\n`);
 process.exit(0);

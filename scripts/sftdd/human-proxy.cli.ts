@@ -132,12 +132,12 @@ function runDecideEscalationCli(argv: string[]): number {
     );
     return 2;
   }
-  if (routedTo !== "spec-author" && routedTo !== "test-strategist") {
-    process.stderr.write(`Error: --routed-to must be spec-author|test-strategist (got ${routedTo}).\n`);
+  if (routedTo !== "spec-author" && routedTo !== "test-strategist" && routedTo !== "architect-reviewer") {
+    process.stderr.write(`Error: --routed-to must be spec-author|test-strategist|architect-reviewer (got ${routedTo}).\n`);
     return 2;
   }
-  if (gate !== "spec" && gate !== "test_list") {
-    process.stderr.write(`Error: --gate must be spec|test_list (got ${gate}).\n`);
+  if (gate !== "spec" && gate !== "test_list" && gate !== "architecture") {
+    process.stderr.write(`Error: --gate must be spec|test_list|architecture (got ${gate}).\n`);
     return 2;
   }
   try {
@@ -145,8 +145,8 @@ function runDecideEscalationCli(argv: string[]): number {
       featureId: feature,
       story,
       smell,
-      routedTo,
-      gate,
+      routedTo: routedTo as "spec-author" | "test-strategist" | "architect-reviewer",
+      gate: gate as "spec" | "test_list" | "architecture",
       reason: reason ?? `revise ${smell} on ${story}`,
       approver,
       tddDir,

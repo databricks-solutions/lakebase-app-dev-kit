@@ -287,8 +287,8 @@ export interface DriveEscalation {
    *  (build-level smell, an explicit escalation file, or the revise budget spent). */
   routable?: {
     story: string;
-    owning_role: "spec-author" | "test-strategist";
-    gate: "spec" | "test_list";
+    owning_role: "spec-author" | "test-strategist" | "architect-reviewer";
+    gate: "spec" | "test_list" | "architecture";
   };
 }
 
@@ -344,8 +344,8 @@ export type WorkflowAction =
   | {
       kind: "revise-route";
       story: string;
-      role: "spec-author" | "test-strategist";
-      gate: "spec" | "test_list";
+      role: "spec-author" | "test-strategist" | "architect-reviewer";
+      gate: "spec" | "test_list" | "architecture";
       reason: string;
       source: string;
     }

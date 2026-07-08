@@ -47,7 +47,7 @@ export function staleStoryArtifactsForRevise(
   tddDir: string,
   featureId: string,
   story: string,
-  gate: "spec" | "test_list",
+  gate: "spec" | "test_list" | "architecture",
 ): void {
   const acIds = new Set(storyAcIds(tddDir, featureId, story));
   const master = featureTestListJson(tddDir, featureId);
@@ -73,6 +73,29 @@ export function staleStoryArtifactsForRevise(
         if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join(dir, f), { force: true });
       }
     }
+  } else if (gate === "architecture") {
+    // Clear each AC's architectural_notes so architectAnnotated reads false and
+    // the design lane re-dispatches the ARCHITECT (who re-annotates + amends the
+    // canon). The ACs themselves stay (this is not a re-decomposition); only the
+    // architect's product is staled. Projection is separately disabled for this
+    // story after a revise (architectProjectable checks priorReviseCount), so the
+    // architect runs live rather than re-projecting the same gap.
+    const dir = acsDir(tddDir, featureId, story);
+    if (existsSync(dir)) {
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith(".json")) continue;
+        const p = join(dir, f);
+        try {
+          const ac = JSON.parse(readFileSync(p, "utf8")) as Record<string, unknown>;
+          if ("architectural_notes" in ac) {
+            delete ac.architectural_notes;
+            writeFileSync(p, JSON.stringify(ac, null, 2) + "\n");
+          }
+        } catch {
+          // Leave an unparseable AC as-is; the architect turn will surface it.
+        }
+      }
+    }
   }
 }
 
@@ -83,9 +106,10 @@ export interface ReviseSelfHealArgs {
   /** The blocking smell being resolved (e.g. reflect-testlist-defect, ac-overlap). */
   smell: string;
   /** The owning author the verdict routes to. */
-  routedTo: "spec-author" | "test-strategist";
-  /** The gate to re-open + re-run (Gate 1 spec vs Gate 3 test_list). */
-  gate: "spec" | "test_list";
+  routedTo: "spec-author" | "test-strategist" | "architect-reviewer";
+  /** The gate to re-open + re-run (Gate 1 spec / Gate 2 architecture / Gate 3
+   *  test_list). */
+  gate: "spec" | "test_list" | "architecture";
   /** The verdict (the smell's detail): the author's brief on resume. */
   reason: string;
   /** The deciding identity (a real human, or the headless proxy). */

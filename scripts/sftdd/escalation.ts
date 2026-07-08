@@ -66,6 +66,11 @@ export const BLOCKING_SMELLS: ReadonlySet<SmellName> = new Set<SmellName>([
   // element-level design-adherence checks defend it. Build-level (a UI-quality
   // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
   "ux-adherence",
+  // The architect-notes projection found a story the canon does not cover
+  // (FEIP-7902). Blocking + spec-level + architect-owned: it routes to the
+  // Architect (re-annotate + amend the canon) via revise-routing, bounded one
+  // revise then HITL. Halts the design lane until the gap is resolved.
+  "architect-canon-gap",
 ]);
 
 /** A stable, filesystem-safe escalation id from its source + scope, so the same

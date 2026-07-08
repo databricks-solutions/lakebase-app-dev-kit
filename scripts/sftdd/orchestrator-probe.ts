@@ -190,6 +190,10 @@ export function diskArtifactProbe(
       if (!fs.existsSync(architectureJson(tddDir, featureId))) return false;
       const canon = readCanon(tddDir);
       if (!canon) return false;
+      // A story already sent back on an architect-canon-gap revise must NOT be
+      // re-projected (that would re-emit the same blind note and heal nothing):
+      // force the ARCHITECT to run live (re-annotate + amend the canon).
+      if (priorReviseCount(tddDir, "architect-canon-gap", story) > 0) return false;
       const acs = storyAcIds(tddDir, featureId, story);
       if (acs.length === 0) return false;
       const layers = acs.map((ac) => readAcLayer(tddDir, featureId, ac));

@@ -49,6 +49,7 @@ describe("smells catalog", () => {
     expect(names).toEqual(
       [
         "ac-overlap",
+        "architect-canon-gap",
         "api-coherence-drift",
         "boundary-violation",
         "contract-incompleteness",
