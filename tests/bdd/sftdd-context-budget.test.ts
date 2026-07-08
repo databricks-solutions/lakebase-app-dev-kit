@@ -80,21 +80,23 @@ describe("isPromptTooLongSignal (mid-turn overflow detection -> fresh-session re
   });
 });
 
-describe("proactive per-turn cap: heavy roles start each turn fresh", () => {
-  it("the builders (driver, navigator) are heavy by default; design roles are not", () => {
-    expect(startsFreshEachTurn("driver", {})).toBe(true);
-    expect(startsFreshEachTurn("navigator", {})).toBe(true);
-    expect(startsFreshEachTurn("Driver", {})).toBe(true); // case-insensitive
+describe("proactive per-turn cap: OFF by default (builders warm-resume within a story)", () => {
+  it("no role starts fresh by default; the reactive resumeFitsBudget guard is the backstop", () => {
+    // Speed lever: the builders warm-resume across a story's cycles (prompt-cache
+    // reuse), and resumeFitsBudget starts a turn fresh only when the prior context
+    // would overflow the free-window fraction. No proactive always-FRESH cap.
+    expect(startsFreshEachTurn("driver", {})).toBe(false);
+    expect(startsFreshEachTurn("navigator", {})).toBe(false);
     expect(startsFreshEachTurn("spec-author", {})).toBe(false);
-    expect(startsFreshEachTurn("architect-reviewer", {})).toBe(false);
-    expect(startsFreshEachTurn("test-strategist", {})).toBe(false);
-    expect([...DEFAULT_HEAVY_ROLES]).toEqual(["driver", "navigator"]);
+    expect([...DEFAULT_HEAVY_ROLES]).toEqual([]);
+    expect(heavyRoles({}).size).toBe(0);
   });
 
-  it("LAKEBASE_SFTDD_HEAVY_ROLES overrides the set; empty string disables the proactive cap", () => {
-    const only = { LAKEBASE_SFTDD_HEAVY_ROLES: "driver" };
+  it("LAKEBASE_SFTDD_HEAVY_ROLES restores the proactive always-FRESH cap for the named roles", () => {
+    const only = { LAKEBASE_SFTDD_HEAVY_ROLES: "driver,navigator" };
     expect(startsFreshEachTurn("driver", only)).toBe(true);
-    expect(startsFreshEachTurn("navigator", only)).toBe(false);
+    expect(startsFreshEachTurn("Navigator", only)).toBe(true); // case-insensitive
+    expect(startsFreshEachTurn("spec-author", only)).toBe(false);
     const off = { LAKEBASE_SFTDD_HEAVY_ROLES: "" };
     expect(heavyRoles(off).size).toBe(0);
     expect(startsFreshEachTurn("driver", off)).toBe(false);

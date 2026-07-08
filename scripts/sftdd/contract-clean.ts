@@ -27,6 +27,9 @@ export interface ContractCleanArgs {
   /** Production code dirs to scan for residual references (relative to projectDir).
    *  Default: app, src, templates, lib. Tests + migrations are always excluded. */
   codeDirs?: string[];
+  /** Test dirs to scan for prior tests referencing a dropped symbol (relative to
+   *  projectDir). Default: tests, test. Used by supersededTestCandidates. */
+  testDirs?: string[];
 }
 
 export interface ContractViolation {
@@ -53,10 +56,14 @@ export interface ContractCleanResult {
 
 const DEFAULT_MIGRATION_DIRS = ["alembic/versions", "migrations", "db/migrations", "src/migrations"];
 const DEFAULT_CODE_DIRS = ["app", "src", "lib", "templates"];
+const DEFAULT_TEST_DIRS = ["tests", "test"];
 const CODE_EXTS = new Set([".py", ".ts", ".tsx", ".js", ".jsx", ".html", ".jinja", ".jinja2", ".sql"]);
 // Never scan these for residual refs (the migration legitimately names the dropped
 // symbol; tests are refactored via supersession, not this gate; junk dirs).
 const EXCLUDE_DIR = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|\.sftdd|\.tdd|\.lakebase|dist|build|tests?|alembic|migrations)(\/|$)/;
+// Junk/vendor dirs to skip even when the caller WANTS to descend into tests (the
+// supersession-candidate scan): everything above EXCEPT tests?/alembic/migrations.
+const EXCLUDE_DIR_JUNK = /(^|\/)(node_modules|\.git|\.venv|venv|__pycache__|\.sftdd|\.tdd|\.lakebase|dist|build)(\/|$)/;
 
 /** alembic: op.drop_column('table', 'col')  /  op.add_column('table', sa.Column('col' ... */
 const DROP_COLUMN_PY = /op\.drop_column\(\s*['"][^'"]+['"]\s*,\s*['"]([a-zA-Z_][a-zA-Z0-9_]*)['"]/g;
@@ -65,7 +72,7 @@ const ADD_COLUMN_PY = /op\.add_column\(\s*['"][^'"]+['"]\s*,\s*sa\.Column\(\s*['
 const DROP_COLUMN_SQL = /drop\s+column\s+(?:if\s+exists\s+)?["'`]?([a-zA-Z_][a-zA-Z0-9_]*)["'`]?/gi;
 const ADD_COLUMN_SQL = /add\s+column\s+(?:if\s+not\s+exists\s+)?["'`]?([a-zA-Z_][a-zA-Z0-9_]*)["'`]?/gi;
 
-function walk(dir: string, keep: (abs: string) => boolean, out: string[] = []): string[] {
+function walk(dir: string, keep: (abs: string) => boolean, out: string[] = [], excludeDir: RegExp = EXCLUDE_DIR): string[] {
   let entries: string[];
   try {
     entries = readdirSync(dir);
@@ -81,7 +88,7 @@ function walk(dir: string, keep: (abs: string) => boolean, out: string[] = []): 
       continue;
     }
     if (st.isDirectory()) {
-      if (!EXCLUDE_DIR.test(abs)) walk(abs, keep, out);
+      if (!excludeDir.test(abs)) walk(abs, keep, out, excludeDir);
     } else if (st.isFile() && keep(abs)) {
       out.push(abs);
     }
@@ -171,18 +178,17 @@ function symbolRefRegex(symbol: string): RegExp {
   return new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
 }
 
-export function checkContractClean(args: ContractCleanArgs): ContractCleanResult {
-  const { projectDir } = args;
-  const dropped = netDroppedSymbols(projectDir, args.migrationDirs);
-  if (dropped.length === 0) return { clean: true, droppedSymbols: [], violations: [] };
-
+/** Scan `dirs` (relative to projectDir) for source lines that reference any of the
+ *  `dropped` symbols, returning one ContractViolation per matching line. Shared by
+ *  the production-code check (checkContractClean) and the prior-test scan
+ *  (supersededTestCandidates) so both localize refs the identical way. */
+function scanSymbolRefs(projectDir: string, dirs: string[], dropped: string[], excludeDir: RegExp = EXCLUDE_DIR): ContractViolation[] {
   const matchers = dropped.map((s) => ({ symbol: s, re: symbolRefRegex(s) }));
-  const codeDirs = args.codeDirs ?? DEFAULT_CODE_DIRS;
-  const violations: ContractViolation[] = [];
-  for (const cd of codeDirs) {
+  const hits: ContractViolation[] = [];
+  for (const cd of dirs) {
     const abs = join(projectDir, cd);
     if (!existsSync(abs)) continue;
-    for (const file of walk(abs, (p) => CODE_EXTS.has(extname(p)))) {
+    for (const file of walk(abs, (p) => CODE_EXTS.has(extname(p)), [], excludeDir)) {
       let lines: string[];
       try {
         lines = readFileSync(file, "utf8").split("\n");
@@ -192,12 +198,21 @@ export function checkContractClean(args: ContractCleanArgs): ContractCleanResult
       lines.forEach((text, i) => {
         for (const { symbol, re } of matchers) {
           if (re.test(text)) {
-            violations.push({ file: relative(projectDir, file), line: i + 1, symbol, text: text.trim().slice(0, 200) });
+            hits.push({ file: relative(projectDir, file), line: i + 1, symbol, text: text.trim().slice(0, 200) });
           }
         }
       });
     }
   }
+  return hits;
+}
+
+export function checkContractClean(args: ContractCleanArgs): ContractCleanResult {
+  const { projectDir } = args;
+  const dropped = netDroppedSymbols(projectDir, args.migrationDirs);
+  if (dropped.length === 0) return { clean: true, droppedSymbols: [], violations: [] };
+
+  const violations = scanSymbolRefs(projectDir, args.codeDirs ?? DEFAULT_CODE_DIRS, dropped);
   if (violations.length === 0) return { clean: true, droppedSymbols: dropped, violations: [] };
 
   const list = violations.map((v) => `  ${v.file}:${v.line}  [${v.symbol}]  ${v.text}`).join("\n");
@@ -210,4 +225,40 @@ export function checkContractClean(args: ContractCleanArgs): ContractCleanResult
     ` , so the code matches the migrated schema. Do NOT edit the migration or any test to hide this; fix the` +
     ` production code:\n${list}`;
   return { clean: false, droppedSymbols: dropped, violations, remediation };
+}
+
+export interface SupersededTestCandidatesResult {
+  /** Net-dropped symbols (same source as checkContractClean). */
+  droppedSymbols: string[];
+  /** Prior-test lines that still reference a dropped symbol (the supersession candidates). */
+  candidates: ContractViolation[];
+  /** A Navigator-actionable advisory naming those test files, or undefined when none. */
+  advisory?: string;
+}
+
+/**
+ * Pre-compute the PRIOR TESTS that reference a migration-dropped symbol, so the
+ * Navigator's assess turn does not have to SEARCH the test tree for supersession
+ * candidates: it is handed the exact file:line list (the test-side counterpart to
+ * checkContractClean's production-code localization). A column drop supersedes the
+ * prior tests that asserted that column; the Navigator flags EXACTLY these
+ * (path (a)) and the Driver permissively refactors them alongside the code fix.
+ * Deterministic, advisory. Empty when nothing was dropped or no test references it.
+ */
+export function supersededTestCandidates(args: ContractCleanArgs): SupersededTestCandidatesResult {
+  const { projectDir } = args;
+  const dropped = netDroppedSymbols(projectDir, args.migrationDirs);
+  if (dropped.length === 0) return { droppedSymbols: [], candidates: [] };
+  // Descend INTO the test dirs (the default EXCLUDE_DIR skips tests?/ for the
+  // production scan; here they are exactly what we want), still skipping vendor junk.
+  const candidates = scanSymbolRefs(projectDir, args.testDirs ?? DEFAULT_TEST_DIRS, dropped, EXCLUDE_DIR_JUNK);
+  if (candidates.length === 0) return { droppedSymbols: dropped, candidates: [] };
+  const syms = [...new Set(candidates.map((c) => c.symbol))].join(", ");
+  const list = candidates.map((c) => `  ${c.file}:${c.line}  [${c.symbol}]  ${c.text}`).join("\n");
+  const advisory =
+    `SUPERSEDED-TEST CANDIDATES (pre-localized; you do NOT need to search): the migration DROPPED ${syms}, and` +
+    ` these PRIOR test lines still assert it, so the new AC supersedes them. Flag EXACTLY these test file(s) as` +
+    ` superseded (path (a)) so the Driver may permissively refactor them in the SAME repair turn as the code fix.` +
+    ` Do NOT hand-edit them to force green:\n${list}`;
+  return { droppedSymbols: dropped, candidates, advisory };
 }

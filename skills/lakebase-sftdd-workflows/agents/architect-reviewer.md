@@ -43,6 +43,7 @@ This is your only planning-phase artifact. Everything below is `/design`-phase (
 
 - `feature-spec.{md,json}` (Gate 1 signed off); `stories/<S>/story.{md,json}`; `stories/<S>/acs/<AC>.{md,json}`.
 - `.sftdd/nfrs.md` (+ optional `features/<F>/nfrs.md`) – the **HIL's NFR brief**. Its `## Required` items each carry a stable `R<n>` id and are non-negotiable: carry every one into `architecture.json`. Follow `## Preferences` unless you record a contrary decision in `architecture.md`; never propose `## Out of bounds` items.
+- **Use the scope the task INJECTS; don't re-discover it.** The orchestrator names this story's exact AC ids in your task prompt, annotate those, do NOT list/scan the `acs/` dir to find them. Read the full `nfrs.md`/`architecture.json` only for the detail you actually need (the R-items to carry, an inherited layout to reuse), not to re-derive what the prompt already states, each reopen is latency on a per-turn-cost run.
 
 ## Outputs
 

@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { emitAgentLogEvent, readAgentLog } from "../../scripts/sftdd/agent-log";
+import { emitAgentLogEvent, emitAgentLogEvents, readAgentLog } from "../../scripts/sftdd/agent-log";
 
 let tdd: string;
 const clock = () => new Date("2026-06-05T10:00:00.000Z");
@@ -94,5 +94,39 @@ describe("readAgentLog filtering", () => {
     const empty = mkdtempSync(join(tmpdir(), "agent-log-empty-"));
     expect(readAgentLog({ tddDir: empty })).toEqual([]);
     rmSync(empty, { recursive: true, force: true });
+  });
+});
+
+describe("emitAgentLogEvents (batch: one process, one append)", () => {
+  it("writes every event in the batch in order", () => {
+    const written = emitAgentLogEvents(
+      [
+        { role: "navigator", level: "debug", event: "reasoning", feature_id: "F1", slots: { note: "the test forces a seam" } },
+        { role: "navigator", level: "warn", event: "smell.flagged", feature_id: "F1", slots: { smell: "fragility-ratio", severity: "advisory", detail: "x" } },
+      ],
+      { tddDir: tdd, now: clock },
+    );
+    expect(written).toHaveLength(2);
+    const events = readAgentLog({ tddDir: tdd });
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.event)).toEqual(["reasoning", "smell.flagged"]);
+  });
+
+  it("validates ALL events before writing: one invalid event fails the batch, nothing is written", () => {
+    expect(() =>
+      emitAgentLogEvents(
+        [
+          { role: "navigator", level: "debug", event: "reasoning", slots: { note: "ok" } },
+          { role: "driver", level: "info", event: "phase.end", slots: { phase: "story" } }, // missing required outcome
+        ],
+        { tddDir: tdd, now: clock },
+      ),
+    ).toThrow(/missing required slot "outcome"/i);
+    expect(readAgentLog({ tddDir: tdd })).toEqual([]); // atomic: no partial batch
+  });
+
+  it("an empty batch is a no-op", () => {
+    expect(emitAgentLogEvents([], { tddDir: tdd, now: clock })).toEqual([]);
+    expect(readAgentLog({ tddDir: tdd })).toEqual([]);
   });
 });

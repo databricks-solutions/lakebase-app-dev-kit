@@ -122,6 +122,13 @@ export interface GreenFailure {
    *  it ENRICHES the assess directive so the Navigator's fix covers these code refs
    *  without having to re-localize them. Advisory, present only when refs were found. */
   contractRefs?: string;
+  /** DETERMINISTIC supersession-candidate advisory recorded at the FIRST GREEN-
+   *  failure (the test-side counterpart to contractRefs): the precise PRIOR TEST
+   *  file:lines that still reference a migration-dropped symbol, so the Navigator's
+   *  assess flags EXACTLY these as superseded (path (a)) instead of SEARCHING the
+   *  test tree for them. Advisory, present only when a dropped symbol is referenced
+   *  by a prior test. */
+  supersededTestRefs?: string;
   /** True once the Driver has consumed its repair attempt FOR THE CURRENT assess
    *  round (bounds one assess to one repair; cleared by a re-arm between rounds). */
   repairAttempted?: boolean;
@@ -273,6 +280,7 @@ export function rearmRegressionFix(
     summary: gf.summary,
     fixAttempts: gf.fixAttempts ?? 0,
     ...(gf.contractRefs ? { contractRefs: gf.contractRefs } : {}),
+    ...(gf.supersededTestRefs ? { supersededTestRefs: gf.supersededTestRefs } : {}),
   });
   // Clear the PRIOR round's diagnosis + supersede flag so the next assess turn
   // re-diagnoses from the CURRENT failing tests, not a stale directive. Without

@@ -31,6 +31,7 @@ You pair with the Driver through the cycle artifact + the test. You flag smells 
 ## Inputs
 
 - `test-list.json` (approved, Gate 3). **Your REVIEW rubric:** `architecture.md` (layers, boundaries, NFR coverage), `nfrs.md` (the required R-numbers), and `design/design-guide.md` (tokens, IA, for UI).
+- **Lean on the injected context pack.** The orchestrator injects a `RUBRIC` (the story's layers, required NFR ids, design-token groups) and the module `LAYOUT` (role -> path) directly into your RED/REVIEW task, and for RED the exact pending test items (id + ac_id + description). Judge/author against THAT; open the full `architecture.md`/`nfrs.md`/`design-guide.md` only for detail the rubric lacks, and do NOT scan the tree for the module layout (it is given). On an ASSESS turn, when the task injects pre-localized contract refs or superseded-test candidates, use them, do NOT re-search the code/test tree. Each avoidable reopen/scan is per-turn latency.
 - The **`software-design-principles` skill** (registered) – SOLID, DRY, clean code, layering, cross-cutting, NFRs: the standard you REVIEW against.
 - Prior `cycles/<F>/<S>/<AC>/cycle-NNN.json`; the experiment branch source tree; the experiment branch DB via `openBranchDsn`.
 

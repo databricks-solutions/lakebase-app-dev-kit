@@ -34,11 +34,17 @@ export function requiredFreeFraction(env: NodeJS.ProcessEnv = process.env): numb
  * on-disk artifacts (artifact-as-API makes a cold turn always correct), so no turn
  * inherits a prior turn's accumulation and each stays small + focused + fast.
  *
- * Default heavy roles are the two builders; override with a comma list in
- * LAKEBASE_SFTDD_HEAVY_ROLES (empty string disables the proactive cap entirely,
- * falling back to the reactive guard alone).
+ * Default: NO proactive cap. The two builders (Navigator + Driver) warm-resume
+ * across a story's cycles (buildSessionScope "story"), reusing the prompt cache,
+ * which is far cheaper + faster than re-paying full fresh input every RED / GREEN
+ * / REVIEW / REFACTOR. The REACTIVE guard is the backstop: `resumeFitsBudget`
+ * starts a turn FRESH when the prior context would not leave the required free
+ * window fraction, and the mid-turn prompt-too-long retry catches a turn that
+ * balloons anyway , so context growth stays bounded without paying the fresh-start
+ * tax on every turn. Set `LAKEBASE_SFTDD_HEAVY_ROLES=driver,navigator` (or any
+ * comma list) to restore the proactive always-FRESH cap for those roles.
  */
-export const DEFAULT_HEAVY_ROLES = ["driver", "navigator"] as const;
+export const DEFAULT_HEAVY_ROLES = [] as const;
 
 export function heavyRoles(env: NodeJS.ProcessEnv = process.env): Set<string> {
   const raw = env.LAKEBASE_SFTDD_HEAVY_ROLES ?? env.SFTDD_HEAVY_ROLES;

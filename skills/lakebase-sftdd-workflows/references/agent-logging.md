@@ -45,6 +45,17 @@ Shell out through the project's `./scripts/lk` resolver (fast; no npx), always p
 
 Read/tail: `./scripts/lk lakebase-sftdd-log --read --feature F1-initial-domain --min-level info`. In-process callers use `emitAgentLogEvent` / `readAgentLog` from `scripts/sftdd/agent-log.ts`.
 
+**Batch your turn's events into ONE call.** Each `lakebase-sftdd-log` invocation is a subprocess spawn, so a role with several events for a turn (a `reasoning` + a `progress` + a `smell.flagged`) should emit them together with `--events '<json array>'` (one process, one append) rather than N separate calls, that per-turn spawn count is real latency:
+
+```bash
+./scripts/lk lakebase-sftdd-log --events '[
+  {"role":"navigator","level":"debug","event":"reasoning","feature":"F1","cycle":"cycle-003","slots":{"summary":"the test forces a repository seam"}},
+  {"role":"navigator","level":"warn","event":"smell.flagged","feature":"F1","slots":{"smell":"fragility-ratio","severity":"advisory","detail":"..."}}
+]'
+```
+
+Each item takes `role`/`level`/`event` (+ optional `feature`/`phase`/`cycle`/`slots`/`data`); every event is validated first, and if any is off-vocabulary or missing a required slot the whole batch is rejected (exit 3) and nothing is written. Emit as you go if events are far apart in time (progress cadence still matters); batch the ones that land together at the end of a step.
+
 `event` is a CLOSED vocabulary (`scripts/sftdd/agent-log-events.ts`); each event has a fixed message TEMPLATE with `{{ slot }}` placeholders. You pass `--event <name>` + its slots as `--slot key=value` (repeatable); the logger renders the message and REJECTS (exit 3) an off-vocabulary event or a missing required slot. There is no free-text `--message` flag.
 
 **NEVER hand-write the log file.** Do not `echo`/`Write`/`>>` a JSON line into `agent-log.jsonl` or invent fields: a model that hand-writes mangles the schema (e.g. a local wall-clock `timestamp` instead of the required UTC stamp). There is exactly ONE writer, `emitAgentLogEvent` (the CLI is its shell face); `role` is a parameter, not a function per agent. If a field isn't accepted by the CLI, it isn't in the schema.

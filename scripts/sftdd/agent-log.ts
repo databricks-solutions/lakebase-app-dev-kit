@@ -106,9 +106,10 @@ function logFilePath(tddDir: string): string {
  * emit is caught at the source, not discovered later in the log). Returns the
  * full event that was written.
  */
-export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
-  const tddDir = opts.tddDir ?? resolveTddDir();
-  const now = opts.now ?? (() => new Date());
+/** Render + validate ONE event input into a full AgentLogEvent (no write). Throws
+ *  when the event is off-vocabulary, missing a required slot, or schema-invalid.
+ *  Shared by the single + batch emitters so both enforce the identical contract. */
+function buildAgentLogEvent(input: AgentLogEventInput, now: () => Date): AgentLogEvent {
   const slots = input.slots ?? {};
   // The message is RENDERED from the event's template + the render context (the
   // top-level fields the template may reference + the slots). renderEventMessage
@@ -142,14 +143,36 @@ export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpt
     message,
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
-
   const validate = getValidator("agent-log-event.schema.json");
   if (!validate(event)) {
     throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
   }
+  return event;
+}
 
+export function emitAgentLogEvent(input: AgentLogEventInput, opts: AgentLogIoOpts = {}): AgentLogEvent {
+  const tddDir = opts.tddDir ?? resolveTddDir();
+  const now = opts.now ?? (() => new Date());
+  const event = buildAgentLogEvent(input, now);
   appendFileSync(logFilePath(tddDir), `${JSON.stringify(event)}\n`, "utf8");
   return event;
+}
+
+/**
+ * Emit MANY events in ONE process + ONE append (a single `\n`-joined write), so a
+ * role that has several judgment events for a turn (reasoning + a smell flag + a
+ * concern) pays ONE `lakebase-sftdd-log` subprocess spawn instead of N. Every
+ * event is rendered + schema-validated FIRST; if ANY is invalid the whole batch
+ * throws and NOTHING is written (no partial batch on disk). An empty list is a
+ * no-op. Returns the events written.
+ */
+export function emitAgentLogEvents(inputs: AgentLogEventInput[], opts: AgentLogIoOpts = {}): AgentLogEvent[] {
+  if (inputs.length === 0) return [];
+  const tddDir = opts.tddDir ?? resolveTddDir();
+  const now = opts.now ?? (() => new Date());
+  const events = inputs.map((i) => buildAgentLogEvent(i, now)); // validates all before any write
+  appendFileSync(logFilePath(tddDir), events.map((e) => `${JSON.stringify(e)}\n`).join(""), "utf8");
+  return events;
 }
 
 export interface ReadAgentLogOpts extends AgentLogIoOpts {

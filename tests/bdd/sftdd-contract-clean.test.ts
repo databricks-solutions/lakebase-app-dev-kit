@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { checkContractClean, netDroppedSymbols } from "../../scripts/sftdd/contract-clean.js";
+import { checkContractClean, netDroppedSymbols, supersededTestCandidates } from "../../scripts/sftdd/contract-clean.js";
 import {
   beginNextPendingCycle,
   greenOpenCycle,
@@ -173,6 +173,40 @@ describe("checkContractClean", () => {
   });
 });
 
+describe("supersededTestCandidates (pre-localize prior tests for the Navigator, the test-side of contract-clean)", () => {
+  it("flags PRIOR tests that reference a migration-dropped column (file:line) so the Navigator need not search", () => {
+    const dir = mkProject();
+    write(dir, "alembic/versions/0003_drop.py", DROP_INVENTORY_CODE);
+    write(dir, "tests/test_stock_legacy.py", "def test_code():\n    assert row.inventory_code == 'X'\n");
+    write(dir, "tests/architecture/test_schema.py", "def test_col():\n    assert 'inventory_code' in cols\n");
+
+    const r = supersededTestCandidates({ projectDir: dir });
+    expect(r.droppedSymbols).toEqual(["inventory_code"]);
+    const blob = r.candidates.map((c) => `${c.file}:${c.line}`).join("\n");
+    expect(blob).toMatch(/tests\/test_stock_legacy\.py:\d+/);
+    expect(blob).toMatch(/tests\/architecture\/test_schema\.py:\d+/);
+    expect(r.advisory).toMatch(/SUPERSEDED-TEST CANDIDATES/);
+    expect(r.advisory).toMatch(/do NOT need to search/i);
+    expect(r.advisory).toMatch(/inventory_code/);
+  });
+
+  it("is empty when no prior test references the dropped column (nothing to pre-localize)", () => {
+    const dir = mkProject();
+    write(dir, "alembic/versions/0003_drop.py", DROP_INVENTORY_CODE);
+    write(dir, "tests/test_other.py", "def test_x():\n    assert row.batch_number == 'B'\n");
+    const r = supersededTestCandidates({ projectDir: dir });
+    expect(r.droppedSymbols).toEqual(["inventory_code"]);
+    expect(r.candidates).toEqual([]);
+    expect(r.advisory).toBeUndefined();
+  });
+
+  it("is empty when no migration dropped anything", () => {
+    const dir = mkProject();
+    write(dir, "tests/test_x.py", "assert row.inventory_code\n");
+    expect(supersededTestCandidates({ projectDir: dir }).candidates).toEqual([]);
+  });
+});
+
 // The greenOpenCycle wiring: a FIRST verify failure runs the deterministic gate
 // before routing the model assess. tddDir lives at <project>/.sftdd so
 // dirname(tddDir) === the project root the gate scans.
@@ -202,6 +236,9 @@ describe("greenOpenCycle: contract-incompleteness self-heals deterministically",
   it("a failing verify with a residual reference to a dropped column routes the Navigator assess + records a contractRefs ADVISORY (does NOT short-circuit)", async () => {
     write(project, "alembic/versions/0003_drop.py", DROP_INVENTORY_CODE);
     write(project, "app/models/stock.py", "class Stock(Base):\n    inventory_code = Column(String)\n");
+    // A prior test that asserts the dropped column: a supersession candidate the
+    // gate pre-localizes so the assess flags it (path a) without searching.
+    write(project, "tests/test_legacy_code.py", "def test_code():\n    assert row.inventory_code == 'X'\n");
 
     beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
     const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
@@ -215,6 +252,9 @@ describe("greenOpenCycle: contract-incompleteness self-heals deterministically",
     expect(gf?.assessed).toBe(false); // assess still runs (supersession needs it)
     expect(gf?.contractRefs).toMatch(/inventory_code/);
     expect(gf?.contractRefs).toMatch(/hard rule 9/);
+    // The test-side pre-localization rode into the same green-failure marker.
+    expect(gf?.supersededTestRefs).toMatch(/SUPERSEDED-TEST CANDIDATES/);
+    expect(gf?.supersededTestRefs).toMatch(/test_legacy_code\.py/);
     expect(needsGreenAssess(tdd, F, S, "AC1")).toBe(true);
   });
 

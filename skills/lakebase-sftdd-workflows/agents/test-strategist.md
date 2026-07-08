@@ -32,6 +32,7 @@ You communicate with other roles only through artifacts on disk.
 ## Inputs
 
 - `.sftdd/features/<F>/feature-spec.json`; `stories/<S>/acs/<AC>.json` (each has `layer` + `architectural_notes`); `architecture.{md,json}` (HIL-adjudicated `nfrs[]`). Cover the accepted NFRs when ordering.
+- **Use the scope the task INJECTS; don't re-discover it.** The orchestrator names this story's exact AC ids AND (for a service-backed feature) the declared persistence invariants directly in your task prompt. Map tests to those AC ids and cover those invariants without re-scanning the `acs/` dir or re-reading `architecture.json` for the invariant list, open the full file only for detail the injected summary lacks. Every avoidable reopen is per-turn latency.
 
 ## Outputs
 

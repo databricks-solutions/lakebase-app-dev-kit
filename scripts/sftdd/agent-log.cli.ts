@@ -15,6 +15,7 @@ import { isCliEntry } from "../util/cli-entry.js";
 import { resolveTddDir } from "./sftdd-paths.js";
 import {
   emitAgentLogEvent,
+  emitAgentLogEvents,
   readAgentLog,
   type AgentRole,
   type AgentLogLevel,
@@ -42,6 +43,9 @@ interface ParsedArgs {
   data?: string;
   /** Template slot values from repeatable --slot key=value. */
   slots?: Record<string, unknown>;
+  /** JSON array of event inputs, emitted in ONE process + ONE append (batch mode)
+   *  so a turn's several judgment events cost one subprocess spawn, not N. */
+  events?: string;
   tddDir?: string;
   json?: boolean;
   help?: boolean;
@@ -69,6 +73,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--phase": out.phase = argv[++i]; break;
       case "--cycle": out.cycle = argv[++i]; break;
       case "--data": out.data = argv[++i]; break;
+      case "--events": out.events = argv[++i]; break;
       case "--tdd-dir": out.tddDir = argv[++i]; break;
       case "--json": out.json = true; break;
       case "--help": case "-h": out.help = true; break;
@@ -94,6 +99,13 @@ Emit:
                the specifics. NOTE: cycle.* events are CODE-emitted by the
                orchestration, agents do not emit them.
     --feature <id>   --phase <p>   --cycle <id>   --data '<json of extra slots>'
+
+Batch emit (ONE process + ONE append for a turn's several events, not N spawns):
+  lakebase-sftdd-log --events '[{"role":"navigator","level":"info","event":"reasoning",
+    "feature":"F1","cycle":"cycle-003","slots":{...}}, {"role":"navigator","level":"warn",
+    "event":"smell.flagged","slots":{"smell":"...","severity":"...","detail":"..."}}]'
+    Each item takes role/level/event (+ optional feature/phase/cycle/slots/data). Every
+    event is validated FIRST; if any is invalid the whole batch fails and nothing is written.
 
 Read:
   lakebase-sftdd-log --read [--role <r>] [--min-level <l>] [--feature <id>] [--json]
@@ -183,8 +195,59 @@ export function runAgentLogCli(argv: string[]): number {
     return 0;
   }
 
+  // Batch mode: emit MANY events in one process + one append (a turn's several
+  // judgment events cost ONE subprocess spawn, not N). --events is a JSON array of
+  // { role, level, event, feature?, phase?, cycle?, slots?, data? }.
+  if (a.events !== undefined) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(a.events);
+    } catch (e) {
+      process.stderr.write(`Error: --events is not valid JSON: ${(e as Error).message}\n`);
+      return 2;
+    }
+    if (!Array.isArray(raw)) {
+      process.stderr.write(`Error: --events must be a JSON array of event objects.\n`);
+      return 2;
+    }
+    const inputs: AgentLogEventInput[] = [];
+    for (const el of raw as Array<Record<string, unknown>>) {
+      if (!el || typeof el.role !== "string" || typeof el.level !== "string" || typeof el.event !== "string") {
+        process.stderr.write(`Error: each --events item needs string role, level, event.\n`);
+        return 2;
+      }
+      const slots: Record<string, unknown> = { ...((el.slots as Record<string, unknown>) ?? {}) };
+      if (typeof el.data === "string") {
+        try {
+          Object.assign(slots, JSON.parse(el.data) as Record<string, unknown>);
+        } catch (e) {
+          process.stderr.write(`Error: an --events item's data is not valid JSON: ${(e as Error).message}\n`);
+          return 2;
+        }
+      }
+      inputs.push({
+        role: el.role as AgentRole,
+        level: el.level as AgentLogLevel,
+        event: el.event as AgentLogEventName,
+        feature_id: typeof el.feature === "string" ? el.feature : undefined,
+        phase: typeof el.phase === "string" ? el.phase : undefined,
+        cycle_id: typeof el.cycle === "string" ? el.cycle : undefined,
+        slots,
+      });
+    }
+    try {
+      emitAgentLogEvents(inputs, { tddDir: a.tddDir });
+      // Mirror any BLOCKING smell in the batch to smells.json, same as single emit.
+      for (const inp of inputs) mirrorBlockingSmell(a.tddDir ?? resolveTddDir(), inp.event, inp.slots ?? {});
+      return 0;
+    } catch (e) {
+      process.stderr.write(`lakebase-sftdd-log --events: ${(e as Error).message}\n`);
+      return 3;
+    }
+  }
+
   if (!a.role || !a.level || !a.event) {
-    process.stderr.write(`Error: emit requires --role --level --event (+ the event's --slot values).\n\n${HELP}\n`);
+    process.stderr.write(`Error: emit requires --role --level --event (+ the event's --slot values), or --events for a batch.\n\n${HELP}\n`);
     return 2;
   }
   const slots: Record<string, unknown> = { ...(a.slots ?? {}) };
@@ -207,28 +270,25 @@ export function runAgentLogCli(argv: string[]): number {
   };
   try {
     emitAgentLogEvent(input, { tddDir: a.tddDir });
-    // A role-flagged BLOCKING smell must HALT the loop, not just log: mirror it
-    // into smells.json so the driver's firstPendingEscalation -> raise-to-hil
-    // fires before the next dispatch. No-op for advisory/unknown smell names.
-    if (a.event === "smell.flagged" && typeof slots.smell === "string") {
-      // Carry story/ac scope when the role names it (slots), so revise-routing
-      // knows which story to send back. The probe also falls back to
-      // the active build story when scope is absent.
-      recordBlockingSmellFlag(
-        a.tddDir ?? resolveTddDir(),
-        slots.smell,
-        typeof slots.detail === "string" ? slots.detail : undefined,
-        {
-          story_id: typeof slots.story === "string" ? slots.story : undefined,
-          ac_id: typeof slots.ac === "string" ? slots.ac : undefined,
-        },
-      );
-    }
+    mirrorBlockingSmell(a.tddDir ?? resolveTddDir(), input.event, slots);
     return 0;
   } catch (e) {
     process.stderr.write(`lakebase-sftdd-log: ${(e as Error).message}\n`);
     return 3;
   }
+}
+
+/** A role-flagged BLOCKING smell must HALT the loop, not just log: mirror it into
+ *  smells.json so the driver's firstPendingEscalation -> raise-to-hil fires before
+ *  the next dispatch. No-op for a non-smell event or an advisory/unknown smell.
+ *  Carries story/ac scope when the role named it (slots) so revise-routing knows
+ *  which story to send back (the probe falls back to the active build story). */
+function mirrorBlockingSmell(tddDir: string, event: string, slots: Record<string, unknown>): void {
+  if (event !== "smell.flagged" || typeof slots.smell !== "string") return;
+  recordBlockingSmellFlag(tddDir, slots.smell, typeof slots.detail === "string" ? slots.detail : undefined, {
+    story_id: typeof slots.story === "string" ? slots.story : undefined,
+    ac_id: typeof slots.ac === "string" ? slots.ac : undefined,
+  });
 }
 
 if (isCliEntry(import.meta.url)) {

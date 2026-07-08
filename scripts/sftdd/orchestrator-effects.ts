@@ -678,8 +678,13 @@ function roleTaskBody(
             ` dropped column as superseded (path (a)) , a column drop needs BOTH the code fix and the test refactor` +
             ` in the same repair turn:\n${gfAssess.contractRefs}\n\n`
           : "";
+        // The test-side counterpart: DETERMINISTIC pre-localization of the PRIOR
+        // TESTS that reference the dropped symbol, so the Navigator flags EXACTLY
+        // these as superseded (path (a)) instead of searching the test tree.
+        const supersededAdvisory = gfAssess?.supersededTestRefs ? `${gfAssess.supersededTestRefs}\n\n` : "";
         return (
           contractAdvisory +
+          supersededAdvisory +
           `ASSESS a failed honest-GREEN verify for AC ${action.ac} in story ${s}. The Driver made the current` +
           ` test pass, but the full-suite verify against the running app FAILED, some OTHER test(s) now fail.` +
           ` Inspect EVERY failing test (the COMPLETE set, not a sample) and decide per test:\n` +

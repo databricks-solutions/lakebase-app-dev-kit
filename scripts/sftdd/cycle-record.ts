@@ -44,7 +44,7 @@ import {
   regressionFixExhausted,
   rearmRegressionFix,
 } from "./supersession.js";
-import { checkContractClean } from "./contract-clean.js";
+import { checkContractClean, supersededTestCandidates } from "./contract-clean.js";
 import { checkMigrationAppClean } from "./migration-app-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
@@ -488,9 +488,14 @@ export async function greenOpenCycle(
       // (no re-localizing , the live ceiling) AND flags the superseded tests in
       // the same turn.
       let contractRefs: string | undefined;
+      let supersededTestRefs: string | undefined;
       try {
         const contract = checkContractClean({ projectDir: dirname(tddDir) });
         if (!contract.clean && contract.remediation) contractRefs = contract.remediation;
+        // The test-side counterpart: prior tests that reference a dropped symbol are
+        // supersession candidates the Navigator flags (path (a)) without searching.
+        const superseded = supersededTestCandidates({ projectDir: dirname(tddDir) });
+        if (superseded.advisory) supersededTestRefs = superseded.advisory;
       } catch {
         /* advisory only: a gate error must never fail the cycle */
       }
@@ -498,6 +503,7 @@ export async function greenOpenCycle(
         assessed: false,
         summary: result.summary,
         ...(contractRefs ? { contractRefs } : {}),
+        ...(supersededTestRefs ? { supersededTestRefs } : {}),
       });
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
