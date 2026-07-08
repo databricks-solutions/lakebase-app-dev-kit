@@ -55,9 +55,15 @@ PAUSE_BEFORE=""
 FEATURES=()
 # --sprint <name>: drive the whole-sprint orchestrator (planning -> plan gate ->
 # per-feature claim+drive) instead of the per-feature loop, so the capture
-# exercises the PLANNING lane and emits backlog.json. The backlog is scoped to
-# EXACTLY the --feature ids (see the drive section).
-SPRINT=""
+# exercises the PLANNING lane and emits backlog.json. REPEATABLE: each --sprint
+# opens a new sprint whose backlog is the --feature ids that FOLLOW it, so
+#   --sprint s1 --feature F1 --sprint s2 --feature F6
+# drives s1 (backlog F1) then s2 (backlog F6) in order on the ONE project. A
+# single --sprint with several --features puts them all in that one sprint.
+SPRINT=""                 # legacy single-sprint name (last --sprint; back-compat)
+SPRINT_NAMES=()           # ordered sprint names
+SPRINT_FEATS=()           # parallel: space-separated feature ids per sprint
+CUR_SPRINT_IDX=-1         # index of the sprint --feature currently attaches to
 # --create: scaffold a fresh project + stage the scenario's own intake (the FULL
 # LIVE design lane, no replay), so one command does create -> stage -> claim ->
 # drive+record. Intake lives at <scenario>/intake/{product-overview,nfrs,design-brief}.md
@@ -73,8 +79,19 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --scenario)       SCENARIO="$2"; shift 2 ;;
     --project-dir)    PROJECT_DIR="$2"; shift 2 ;;
-    --feature)        FEATURES+=("$2"); shift 2 ;;
-    --sprint)         SPRINT="$2"; shift 2 ;;
+    --feature)
+      FEATURES+=("$2")
+      # A --feature after a --sprint belongs to that sprint's backlog.
+      if [[ $CUR_SPRINT_IDX -ge 0 ]]; then
+        SPRINT_FEATS[$CUR_SPRINT_IDX]="${SPRINT_FEATS[$CUR_SPRINT_IDX]} $2"
+      fi
+      shift 2 ;;
+    --sprint)
+      SPRINT="$2"
+      SPRINT_NAMES+=("$2")
+      SPRINT_FEATS+=("")
+      CUR_SPRINT_IDX=$(( ${#SPRINT_NAMES[@]} - 1 ))
+      shift 2 ;;
     --pause-before)   PAUSE_BEFORE="$2"; shift 2 ;;
     --create)         CREATE=1; shift ;;
     --project-name)   PROJECT_NAME="$2"; shift 2 ;;
@@ -204,7 +221,7 @@ if [[ -n "$CREATE" ]]; then
   # LAKEBASE_SFTDD_SPRINT_REQUESTS), and runSprint's commitAndPushRequests commits
   # + pushes them to origin AFTER the plan gate, BEFORE the first fork. Pre-seeding
   # here would defeat the point of exercising the planning lane.
-  if [[ -z "$SPRINT" ]]; then
+  if [[ ${#SPRINT_NAMES[@]} -eq 0 ]]; then
     for FID in "${FEATURES[@]}"; do
       FR="${INPUTS}/recorded-artifacts/features/${FID}/feature-request.md"
       [[ -f "$FR" ]] || { echo "capture-scenario: missing feature-request for ${FID} at ${FR}" >&2; exit 2; }
@@ -245,32 +262,38 @@ SFTDD_DIR="$(lk lakebase-resolve-sftdd-dir --project-dir "$PROJECT_DIR")"
 
 pause_args=(); [[ -n "$PAUSE_BEFORE" ]] && pause_args=( --pause-before "$PAUSE_BEFORE" )
 
-if [[ -n "$SPRINT" ]]; then
-  # ── Sprint mode: drive the whole-sprint orchestrator ONCE (planning -> plan
-  #    gate -> per-feature claim+drive), so the capture exercises the PLANNING lane
-  #    and emits backlog.json. The backlog is scoped to EXACTLY the --feature ids
-  #    and the feature-requests are authored LIVE by the planning lane (NOT
-  #    pre-seeded above):
-  #      - LAKEBASE_SFTDD_SPRINT_REQUESTS supplies each recorded request to the
-  #        planning author-requests step (proxy-as-PO), so sync-backlog projects
-  #        the backlog from just these features (a request the harness did not list
-  #        is never authored); AND
+if [[ ${#SPRINT_NAMES[@]} -gt 0 ]]; then
+  # ── Sprint mode: drive the whole-sprint orchestrator per sprint IN ORDER
+  #    (planning -> plan gate -> per-feature claim+drive), so the capture exercises
+  #    the PLANNING lane and emits backlog.json. Each sprint's backlog is EXACTLY
+  #    its own --feature group, and the feature-requests are authored LIVE by the
+  #    planning lane (NOT pre-seeded above):
+  #      - LAKEBASE_SFTDD_SPRINT_REQUESTS supplies THIS sprint's recorded requests
+  #        to the planning author-requests step (proxy-as-PO), so sync-backlog
+  #        projects the backlog from just this sprint's features; AND
   #      - runSprint's commitAndPushRequests commits + pushes the just-authored
   #        requests to origin/<entry-tier> after the plan gate and before the first
   #        fork, so each feature branch (forked from origin) inherits its request.
   #    The sprint driver claims each backlog feature itself, so do NOT claim per
-  #    feature here. Planning reads the intake from the working tree, which in
-  #    --create is the entry tier (where intake was staged); stay on it.
+  #    feature here. Sprints run sequentially on the ONE project; the driver clears
+  #    the prior feature/sprint's terminal coarse phase at each feature start
+  #    (resetStaleTerminalPhase), so sprint 2 does not inherit sprint 1's "shipped".
   REQ_SRC="${INPUTS_FROM:-$SCEN}"
-  reqs=""
-  for FID in "${FEATURES[@]}"; do
-    FR="${REQ_SRC}/recorded-artifacts/features/${FID}/feature-request.md"
-    [[ -f "$FR" ]] || { echo "capture-scenario: --sprint needs a recorded feature-request for ${FID} at ${FR}" >&2; exit 2; }
-    reqs+="${FID}"$'\t'"${FR}"$'\n'
+  for si in "${!SPRINT_NAMES[@]}"; do
+    sname="${SPRINT_NAMES[$si]}"
+    # shellcheck disable=SC2206
+    sfeats=(${SPRINT_FEATS[$si]})
+    [[ ${#sfeats[@]} -gt 0 ]] || { echo "capture-scenario: sprint '${sname}' has no --feature after it" >&2; exit 2; }
+    reqs=""
+    for FID in "${sfeats[@]}"; do
+      FR="${REQ_SRC}/recorded-artifacts/features/${FID}/feature-request.md"
+      [[ -f "$FR" ]] || { echo "capture-scenario: --sprint '${sname}' needs a recorded feature-request for ${FID} at ${FR}" >&2; exit 2; }
+      reqs+="${FID}"$'\t'"${FR}"$'\n'
+    done
+    export LAKEBASE_SFTDD_SPRINT_REQUESTS="$reqs"
+    echo "[capture-scenario] recording ${SCENARIO} SPRINT '${sname}' (backlog: ${sfeats[*]}) into ${SCEN}" >&2
+    lk lakebase-sftdd-drive --sprint "$sname" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
   done
-  export LAKEBASE_SFTDD_SPRINT_REQUESTS="$reqs"
-  echo "[capture-scenario] recording ${SCENARIO} SPRINT '${SPRINT}' (backlog scoped to: ${FEATURES[*]}) into ${SCEN}" >&2
-  lk lakebase-sftdd-drive --sprint "$SPRINT" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
 else
   for FID in "${FEATURES[@]}"; do
     # In --create mode each feature is claimed HERE (from trunk), right before its

@@ -111,13 +111,27 @@ Recording lands in `examples/sftdd-scenarios/<name>/` (`turns/`,
 ### Sprint mode (exercise the planning lane + emit `backlog.json`)
 
 Add `--sprint <name>` to drive the whole-sprint orchestrator (planning to the
-plan gate, then per-feature claim+drive) instead of the per-feature loop. The
-backlog is scoped to EXACTLY the `--feature` ids you pass:
+plan gate, then per-feature claim+drive) instead of the per-feature loop. Each
+sprint's backlog is EXACTLY the `--feature` ids that FOLLOW its `--sprint`.
+`--sprint` is REPEATABLE: sprints run sequentially on the ONE project, so you can
+put each feature in its own sprint and the run continues to the next sprint after
+the prior completes.
 
 ```
+# one sprint, two features:
 ... capture-scenario.sh --scenario <name> --create ... \
   --sprint <sprint-name> --feature <F1> --feature <F2>
+
+# two sprints, one feature each (F1 in sprint 1, F6 in sprint 2):
+... capture-scenario.sh --scenario <name> --create ... \
+  --sprint <name>-s1 --feature <F1> \
+  --sprint <name>-s2 --feature <F6>
 ```
+
+Continuing to the next sprint works because the driver clears the prior
+feature/sprint's terminal coarse phase at each feature start
+(`resetStaleTerminalPhase`), so sprint 2 does not inherit sprint 1's `shipped`
+phase and no-op.
 
 In `--sprint` the harness does NOT pre-seed the feature-requests: the planning
 lane authors them LIVE (the proxy-as-PO author-requests step, fed by

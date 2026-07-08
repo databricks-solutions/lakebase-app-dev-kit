@@ -26,7 +26,7 @@ SCENARIO="stockflow-live"
 INPUTS="${KIT}/examples/sftdd-scenarios/stockflow"
 RECORD_DIR="${KIT}/examples/sftdd-scenarios/${SCENARIO}"
 PATTERN="stockflow-live-cap-"
-SPRINT="${SPRINT_NAME:-stockflow-s1}"   # the sprint name (arbitrary; scopes the backlog + run-config)
+SPRINT="${SPRINT_NAME:-stockflow}"   # base sprint name; the run drives ${SPRINT}-s1 (F1) then ${SPRINT}-s2 (F6)
 
 echo "=== discovering every ${PATTERN}* project (local + Lakebase + GitHub + runner) ==="
 # Union of slugs from all four sources, so a resource orphaned on any one is caught.
@@ -89,6 +89,6 @@ LAKEBASE_SFTDD_AUTO_CONTINUE=1 DATABRICKS_CONFIG_PROFILE="$PROFILE" \
     --databricks-host "$HOST" --github-owner "$OWNER" \
     --tiers 2 --ui \
     --inputs-from "$INPUTS" \
-    --sprint "$SPRINT" \
-    --feature F1-stock-visibility --feature F6-split-tracking-code \
+    --sprint "${SPRINT}-s1" --feature F1-stock-visibility \
+    --sprint "${SPRINT}-s2" --feature F6-split-tracking-code \
   2>&1 | tee "$LOG"
