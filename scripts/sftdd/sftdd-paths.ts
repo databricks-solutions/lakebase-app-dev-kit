@@ -84,6 +84,13 @@ export const designGuideJson = (tdd: string): string => join(tdd, "design", "des
 export const architectureDir = (tdd: string): string => join(tdd, "architecture");
 export const architectureConventionsJson = (tdd: string): string =>
   join(architectureDir(tdd), "conventions.json");
+/** Project-level architecture CANON: the cross-cutting standing decisions (NFR
+ *  posture, AC layers in use, persistence-invariant patterns) the first service-
+ *  backed feature establishes and later features conform to. The conventions.json
+ *  sibling for the architect's cross-cutting rules, so the per-story architect turn
+ *  can project deterministically and only run live on novelty. */
+export const architectureCanonJson = (tdd: string): string =>
+  join(architectureDir(tdd), "canon.json");
 /** The Spec Author's sprint proposal. ONE canonical location (project-level,
  *  sequential across sprints) , the path the spec-author actually writes. */
 export const featureProposalsMd = (tdd: string): string => join(planningDir(tdd), "feature-proposals.md");
