@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // CLI surface for the SINGLE point of entry that resolves a project's runtime
-// artifact dir: resolveTddDir (prefer .sftdd, fall back to legacy .tdd). Lets
+// artifact dir: resolveSftddDir (prefer .sftdd, fall back to legacy .tdd). Lets
 // bash callers (the smoke orchestrators in particular) derive the dir from the
 // ONE rule instead of hardcoding ".sftdd" / ".tdd" in shell, so a future rename
 // of the artifact root only changes sftdd-paths.ts.
@@ -9,7 +9,7 @@
 //   lakebase-resolve-sftdd-dir [--project-dir <dir>]
 // Prints the absolute runtime artifact dir to stdout (default project-dir: cwd).
 
-import { resolveTddDir } from "../sftdd/sftdd-paths.js";
+import { resolveSftddDir } from "../sftdd/sftdd-paths.js";
 
 function parseProjectDir(argv: string[]): string | undefined {
   for (let i = 0; i < argv.length; i++) {
@@ -23,4 +23,4 @@ function parseProjectDir(argv: string[]): string | undefined {
 }
 
 const projectDir = parseProjectDir(process.argv.slice(2));
-process.stdout.write(resolveTddDir(projectDir ?? process.cwd()) + "\n");
+process.stdout.write(resolveSftddDir(projectDir ?? process.cwd()) + "\n");

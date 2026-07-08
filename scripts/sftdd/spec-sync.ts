@@ -92,35 +92,35 @@ function makeValidator() {
   };
 }
 
-export function readFeature(tddDir: string, featureId: string): Feature {
-  const dir = findFeatureDir(tddDir, featureId);
+export function readFeature(sftddDir: string, featureId: string): Feature {
+  const dir = findFeatureDir(sftddDir, featureId);
   const jsonPath = join(dir, "feature-spec.json");
   return JSON.parse(readFileSync(jsonPath, "utf8"));
 }
 
-export function writeFeature(tddDir: string, feature: Feature): void {
-  const dir = findFeatureDir(tddDir, feature.id);
+export function writeFeature(sftddDir: string, feature: Feature): void {
+  const dir = findFeatureDir(sftddDir, feature.id);
   const jsonPath = join(dir, "feature-spec.json");
   writeFileSync(jsonPath, JSON.stringify(feature, null, 2) + "\n");
 }
 
-export function readWorkflowState(tddDir: string): WorkflowState | null {
-  const file = join(tddDir, "workflow-state.json");
+export function readWorkflowState(sftddDir: string): WorkflowState | null {
+  const file = join(sftddDir, "workflow-state.json");
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-export function writeWorkflowState(tddDir: string, state: WorkflowState): void {
-  const file = join(tddDir, "workflow-state.json");
+export function writeWorkflowState(sftddDir: string, state: WorkflowState): void {
+  const file = join(sftddDir, "workflow-state.json");
   writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 
-export function validateSpec(tddDir: string): DriftReport[] {
+export function validateSpec(sftddDir: string): DriftReport[] {
   const reports: DriftReport[] = [];
   const v = makeValidator();
 
   // Workflow state
-  const wsPath = join(tddDir, "workflow-state.json");
+  const wsPath = join(sftddDir, "workflow-state.json");
   if (existsSync(wsPath)) {
     const ws = JSON.parse(readFileSync(wsPath, "utf8"));
     if (!v.workflowState(ws)) {
@@ -129,7 +129,7 @@ export function validateSpec(tddDir: string): DriftReport[] {
   }
 
   // Features
-  const featuresDir = featuresDirOf(tddDir);
+  const featuresDir = featuresDirOf(sftddDir);
   if (!existsSync(featuresDir)) return reports;
   for (const featureDirName of readdirSync(featuresDir)) {
     const featureDir = join(featuresDir, featureDirName);

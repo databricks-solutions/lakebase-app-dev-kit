@@ -37,7 +37,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
     await expect(
       synthesizeExperiments({
         instance: "irrelevant",
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
@@ -57,7 +57,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
     await expect(
       synthesizeExperiments({
         instance: "irrelevant",
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
@@ -74,7 +74,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
     await expect(
       synthesizeExperiments({
         instance: "irrelevant",
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
@@ -96,7 +96,7 @@ describe("synthesizeExperiments (hermetic – pre-cut validation + on-disk side 
     try {
       await synthesizeExperiments({
         instance: "irrelevant",
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
@@ -139,7 +139,7 @@ liveDescribe("synthesizeExperiments (live – LAKEBASE_TEST_E2E=1)", () => {
     const instance = process.env.LAKEBASE_TEST_INSTANCE!;
     const result = await synthesizeExperiments({
       instance,
-      tddDir: tdd,
+      sftddDir: tdd,
       projectDir: tdd,
       featureId: "F1",
       storyId: "S1",

@@ -35,7 +35,7 @@ export interface FormatResult {
 
 export interface FormatArgs {
   role: string;
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   /** Required for the per-story roles (spec-author / architect-reviewer / test-strategist). */
   story?: string;
@@ -61,10 +61,10 @@ function needStory(role: string, story: string | undefined, violations: FormatVi
 /** spec-author (per story): >=1 AC, and every acs/<AC>.json conforms to ac.schema
  *  (AC<n> id pattern, required fields). The malformed-AC / slug-id source. */
 function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
-  const { tddDir, featureId, story } = args;
+  const { sftddDir, featureId, story } = args;
   if (!needStory("spec-author", story, v)) return;
-  const dir = acsDir(tddDir, featureId, story);
-  const ids = storyAcIds(tddDir, featureId, story);
+  const dir = acsDir(sftddDir, featureId, story);
+  const ids = storyAcIds(sftddDir, featureId, story);
   if (ids.length === 0) {
     v.push({ artifact: `stories/${story}/acs`, problem: "no acceptance criteria written (expected >=1 AC<n>.json)" });
     return;
@@ -110,15 +110,15 @@ function checkSpecAuthor(args: FormatArgs, v: FormatViolation[]): void {
 
 /** architect-reviewer (per story): every AC has a valid layer annotation. */
 function checkArchitect(args: FormatArgs, v: FormatViolation[]): void {
-  const { tddDir, featureId, story } = args;
+  const { sftddDir, featureId, story } = args;
   if (!needStory("architect-reviewer", story, v)) return;
-  const ids = storyAcIds(tddDir, featureId, story);
+  const ids = storyAcIds(sftddDir, featureId, story);
   if (ids.length === 0) {
     v.push({ artifact: `stories/${story}/acs`, problem: "no ACs to annotate (spec-author output missing)" });
     return;
   }
   for (const ac of ids) {
-    if (readAcLayer(tddDir, featureId, ac) === undefined) {
+    if (readAcLayer(sftddDir, featureId, ac) === undefined) {
       v.push({ artifact: `stories/${story}/acs/${ac}.json`, problem: "missing/invalid `layer` (expected API | E2E | Infra)" });
     }
   }
@@ -128,9 +128,9 @@ function checkArchitect(args: FormatArgs, v: FormatViolation[]): void {
  *  item, and EVERY item's ac_id maps to one of the story's ACs. The S2 live
  *  stall was exactly this: items with ac_id:null / unmapped -> empty scope. */
 function checkTestStrategist(args: FormatArgs, v: FormatViolation[]): void {
-  const { tddDir, featureId, story } = args;
+  const { sftddDir, featureId, story } = args;
   if (!needStory("test-strategist", story, v)) return;
-  const file = storyTestListJson(tddDir, featureId, story);
+  const file = storyTestListJson(sftddDir, featureId, story);
   if (!existsSync(file)) {
     v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "per-story test list not written" });
     return;
@@ -147,7 +147,7 @@ function checkTestStrategist(args: FormatArgs, v: FormatViolation[]): void {
     v.push({ artifact: `stories/${story}/test-list-per-story.json`, problem: "empty `items` (expected >=1 test mapped to the story's ACs)" });
     return;
   }
-  const acIds = new Set(storyAcIds(tddDir, featureId, story));
+  const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   items.forEach((item, i) => {
     const acId = item.ac_id;
     if (typeof acId !== "string" || acId.length === 0) {
@@ -166,8 +166,8 @@ function checkTestStrategist(args: FormatArgs, v: FormatViolation[]): void {
  *  self-check (below) and the design-lane gate (orchestrator-effects
  *  `designGuideReady`), so the agent's self-check and the deterministic gate can
  *  never disagree. `problem` is the specific violation string when not ok. */
-export function designGuideConformance(tddDir: string): { ok: boolean; problem?: string } {
-  const file = designGuideJson(tddDir);
+export function designGuideConformance(sftddDir: string): { ok: boolean; problem?: string } {
+  const file = designGuideJson(sftddDir);
   if (!existsSync(file)) {
     return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
   }
@@ -187,7 +187,7 @@ export function designGuideConformance(tddDir: string): { ok: boolean; problem?:
  *  typography props) unless it self-checks; this catches that at the source
  *  instead of at the final feature drain. */
 function checkUxDesigner(args: FormatArgs, v: FormatViolation[]): void {
-  const r = designGuideConformance(args.tddDir);
+  const r = designGuideConformance(args.sftddDir);
   if (!r.ok) v.push({ artifact: "design/design-guide.json", problem: r.problem ?? "design-guide.json is non-conformant" });
 }
 

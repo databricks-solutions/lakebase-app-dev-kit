@@ -13,20 +13,20 @@ import {
   resetStaleTerminalPhase,
 } from "../../scripts/sftdd/workflow-phase.js";
 
-let tddDir: string;
-const stateFile = () => path.join(tddDir, "workflow-state.json");
+let sftddDir: string;
+const stateFile = () => path.join(sftddDir, "workflow-state.json");
 const readState = () => JSON.parse(fs.readFileSync(stateFile(), "utf8"));
 
 beforeEach(() => {
-  tddDir = fs.mkdtempSync(path.join(os.tmpdir(), "wf-phase-"));
+  sftddDir = fs.mkdtempSync(path.join(os.tmpdir(), "wf-phase-"));
 });
 afterEach(() => {
-  fs.rmSync(tddDir, { recursive: true, force: true });
+  fs.rmSync(sftddDir, { recursive: true, force: true });
 });
 
 describe("writeWorkflowPhase", () => {
   it("creates the file + writes the phase when none exists", () => {
-    writeWorkflowPhase(tddDir, "implementation");
+    writeWorkflowPhase(sftddDir, "implementation");
     expect(readState().phase).toBe("implementation");
   });
 
@@ -35,7 +35,7 @@ describe("writeWorkflowPhase", () => {
       stateFile(),
       JSON.stringify({ phase: "discovery", started_at: "2026-06-12T00:00:00Z" }),
     );
-    writeWorkflowPhase(tddDir, "review");
+    writeWorkflowPhase(sftddDir, "review");
     const s = readState();
     expect(s.phase).toBe("review");
     expect(s.started_at).toBe("2026-06-12T00:00:00Z");
@@ -49,7 +49,7 @@ describe("resetStaleTerminalPhase", () => {
         stateFile(),
         JSON.stringify({ phase: terminal, started_at: "2026-06-12T00:00:00Z" }),
       );
-      expect(resetStaleTerminalPhase(tddDir)).toBe(true);
+      expect(resetStaleTerminalPhase(sftddDir)).toBe(true);
       const s = readState();
       expect(s.phase).toBeUndefined();
       // Non-phase fields survive the reset.
@@ -66,24 +66,24 @@ describe("resetStaleTerminalPhase", () => {
   ]) {
     it(`leaves a mid-flight "${midFlight}" phase intact (resume still works)`, () => {
       fs.writeFileSync(stateFile(), JSON.stringify({ phase: midFlight }));
-      expect(resetStaleTerminalPhase(tddDir)).toBe(false);
+      expect(resetStaleTerminalPhase(sftddDir)).toBe(false);
       expect(readState().phase).toBe(midFlight);
     });
   }
 
   it("is a no-op (false) when the file does not exist", () => {
-    expect(resetStaleTerminalPhase(tddDir)).toBe(false);
+    expect(resetStaleTerminalPhase(sftddDir)).toBe(false);
     expect(fs.existsSync(stateFile())).toBe(false);
   });
 
   it("is a no-op (false) on a malformed file", () => {
     fs.writeFileSync(stateFile(), "{ not json");
-    expect(resetStaleTerminalPhase(tddDir)).toBe(false);
+    expect(resetStaleTerminalPhase(sftddDir)).toBe(false);
   });
 
   it("is a no-op (false) when there is no phase field at all", () => {
     fs.writeFileSync(stateFile(), JSON.stringify({ started_at: "x" }));
-    expect(resetStaleTerminalPhase(tddDir)).toBe(false);
+    expect(resetStaleTerminalPhase(sftddDir)).toBe(false);
     expect(readState().started_at).toBe("x");
   });
 });

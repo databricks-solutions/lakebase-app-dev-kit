@@ -49,33 +49,33 @@ const acFile = () => join(tdd, "features", F, "stories", S, "acs", "AC1.json");
 
 describe("replayDesignTurn: each stage's output is replayed per-turn", () => {
   it("spec-author breakdown copies feature-spec + story stubs, NOT the ACs", () => {
-    expect(replayDesignTurn({ turn: { role: "spec-author", mode: "breakdown" }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(true);
+    expect(replayDesignTurn({ turn: { role: "spec-author", mode: "breakdown" }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(existsSync(join(tdd, "features", F, "feature-spec.json"))).toBe(true);
     expect(existsSync(join(tdd, "features", F, "stories", S, "story.json"))).toBe(true);
     expect(existsSync(acFile())).toBe(false); // ACs are the per-story Spec Author turn
   });
 
   it("spec-author per-story copies the ACs with `layer` STRIPPED (Architect still has work)", () => {
-    expect(replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(true);
+    expect(replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(existsSync(acFile())).toBe(true);
     expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBeUndefined();
   });
 
   it("architect-reviewer restores the layer-annotated ACs + copies architecture", () => {
-    replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, tddDir: tdd, featureId: F }); // strip
-    expect(replayDesignTurn({ turn: { role: "architect-reviewer", story: S }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(true);
+    replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F }); // strip
+    expect(replayDesignTurn({ turn: { role: "architect-reviewer", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBe("E2E"); // restored
     expect(existsSync(join(tdd, "features", F, "architecture.json"))).toBe(true);
   });
 
   it("test-strategist copies the feature test-list; ux-designer copies the design guide", () => {
-    expect(replayDesignTurn({ turn: { role: "test-strategist", story: S }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(true);
+    expect(replayDesignTurn({ turn: { role: "test-strategist", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(existsSync(join(tdd, "features", F, "test-list.json"))).toBe(true);
-    expect(replayDesignTurn({ turn: { role: "ux-designer" }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(true);
+    expect(replayDesignTurn({ turn: { role: "ux-designer" }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(existsSync(join(tdd, "design", "design-guide.json"))).toBe(true);
   });
 
   it("a story the corpus does not cover returns false (driver falls back to the real agent)", () => {
-    expect(replayDesignTurn({ turn: { role: "spec-author", story: "S2-not-recorded" }, replayDir: corpus, tddDir: tdd, featureId: F })).toBe(false);
+    expect(replayDesignTurn({ turn: { role: "spec-author", story: "S2-not-recorded" }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(false);
   });
 });

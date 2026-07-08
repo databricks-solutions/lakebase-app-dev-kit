@@ -4,7 +4,7 @@ export type SpecEntity = Feature | Story | AC;
 export type Status = string;
 
 export interface AdapterContext {
-  tddDir: string;
+  sftddDir: string;
   config?: Record<string, unknown>;
 }
 

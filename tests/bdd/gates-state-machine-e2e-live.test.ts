@@ -83,7 +83,7 @@ describe.skipIf(!RUN_SUITE)(
     let repoName: string;
     let ownerRepo: string;
     let workDir: string;
-    let tddDir: string;
+    let sftddDir: string;
     let featureDir: string;
     /**
      * Sanitized git branch name returned by createPairedBranch (lowercases,
@@ -107,8 +107,8 @@ describe.skipIf(!RUN_SUITE)(
       repoName = `lbscm-7366-bdd-${ts}`;
       ownerRepo = `${GITHUB_OWNER}/${repoName}`;
       workDir = fs.mkdtempSync(path.join(os.tmpdir(), `lbscm-7366-${ts}-`));
-      tddDir = path.join(workDir, ".tdd");
-      featureDir = path.join(tddDir, "features", FEATURE_ID);
+      sftddDir = path.join(workDir, ".tdd");
+      featureDir = path.join(sftddDir, "features", FEATURE_ID);
       fs.mkdirSync(featureDir, { recursive: true });
 
       console.log(`  [S0] provisioning Lakebase project ${projectId} on ${DATABRICKS_HOST}`);
@@ -188,11 +188,11 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
-        tddDir,
+        sftddDir,
       });
       expect(result.state.gates.spec.status).toBe("approved");
       expect(fs.existsSync(path.join(featureDir, "gates.json"))).toBe(true);
-      expect(fs.existsSync(path.join(tddDir, "selection-log.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sftddDir, "selection-log.md"))).toBe(true);
     });
 
     it("S2: approveGate(plan) chains cleanly", () => {
@@ -203,7 +203,7 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "plan.json": PLAN_JSON },
-        tddDir,
+        sftddDir,
       });
       expect(result.state.gates.plan.status).toBe("approved");
       expect(result.state.gates.spec.status).toBe("approved");
@@ -217,7 +217,7 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "test-list.json": TEST_LIST_JSON },
-        tddDir,
+        sftddDir,
       });
       for (const name of GATE_NAMES) {
         if (name === "promote") {
@@ -233,7 +233,7 @@ describe.skipIf(!RUN_SUITE)(
         featureId: FEATURE_ID,
         gate: "spec",
         currentInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
-        tddDir,
+        sftddDir,
       });
       expect(ok.status).toBe("ok");
 
@@ -241,7 +241,7 @@ describe.skipIf(!RUN_SUITE)(
         featureId: FEATURE_ID,
         gate: "spec",
         currentInputs: { "feature-spec.md": SPEC_MD_PRETTIER, "feature-spec.json": FEATURE_JSON },
-        tddDir,
+        sftddDir,
       });
       expect(okAfterReformat.status).toBe("ok");
     });
@@ -254,7 +254,7 @@ describe.skipIf(!RUN_SUITE)(
           "feature-spec.md": "# F-AUDIT: per-branch migration audit log\n\nDIFFERENT body\n",
           "feature-spec.json": FEATURE_JSON,
         },
-        tddDir,
+        sftddDir,
       });
       expect(v.status).toBe("drift");
     });
@@ -265,10 +265,10 @@ describe.skipIf(!RUN_SUITE)(
         gate: "spec",
         approver: APPROVER,
         reason: "scope rewrite",
-        tddDir,
+        sftddDir,
       });
       expect(result.withdrawn_gates.sort()).toEqual(["plan", "spec", "test_list"]);
-      const state = readGates(FEATURE_ID, { tddDir });
+      const state = readGates(FEATURE_ID, { sftddDir });
       expect(state.gates.spec.status).toBe("withdrawn");
       expect(state.gates.plan.status).toBe("withdrawn");
       expect(state.gates.test_list.status).toBe("withdrawn");
@@ -283,7 +283,7 @@ describe.skipIf(!RUN_SUITE)(
       // defaultGatesState; the orchestrator does that on synthesis. Here
       // we exercise that the substrate permits the flow (rather than
       // testing the orchestrator wrapper).
-      writeGates(defaultGatesState(FEATURE_ID), { tddDir });
+      writeGates(defaultGatesState(FEATURE_ID), { sftddDir });
 
       approveGate({
         featureId: FEATURE_ID,
@@ -291,7 +291,7 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "feature-spec.md": SPEC_MD, "feature-spec.json": FEATURE_JSON },
-        tddDir,
+        sftddDir,
       });
       approveGate({
         featureId: FEATURE_ID,
@@ -299,7 +299,7 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "plan.json": PLAN_JSON },
-        tddDir,
+        sftddDir,
       });
       approveGate({
         featureId: FEATURE_ID,
@@ -307,9 +307,9 @@ describe.skipIf(!RUN_SUITE)(
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "test-list.json": TEST_LIST_JSON },
-        tddDir,
+        sftddDir,
       });
-      const state = readGates(FEATURE_ID, { tddDir });
+      const state = readGates(FEATURE_ID, { sftddDir });
       expect(state.gates.spec.status).toBe("approved");
       expect(state.gates.plan.status).toBe("approved");
       expect(state.gates.test_list.status).toBe("approved");
@@ -326,7 +326,7 @@ describe.skipIf(!RUN_SUITE)(
         throw new Error(`git push failed (status ${pushF.status}):\n${pushF.stderr}`);
       }
 
-      const state = readGates(FEATURE_ID, { tddDir });
+      const state = readGates(FEATURE_ID, { sftddDir });
       const gatesSummary = GATE_NAMES.map((name) => {
         const g = state.gates[name];
         const hashes = g.artifact_hashes

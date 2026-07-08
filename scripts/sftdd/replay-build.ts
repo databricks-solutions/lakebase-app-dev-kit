@@ -72,7 +72,7 @@ export interface ReplayBuildTurnArgs {
   /** The target project working tree (the experiment branch is checked out). */
   projectDir: string;
   /** The target project .tdd dir. */
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   story: string;
   /** 1-based ordinal of THIS Navigator/Driver turn within the story's build. */
@@ -96,7 +96,7 @@ export interface ReplayBuildTurnArgs {
  * two artifacts a turn actually produces (code, and the review verdict).
  */
 export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
-  const { replayBuildDir, projectDir, tddDir, featureId, story, turnIndex } = args;
+  const { replayBuildDir, projectDir, sftddDir, featureId, story, turnIndex } = args;
   const turns = listBuildTurns(replayBuildDir, featureId, story);
   if (turnIndex < 1 || turnIndex > turns.length) return false; // uncovered -> live
   const turnDir = join(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
@@ -110,7 +110,7 @@ export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
   // live cycle-record CLIs own everything else in .tdd (RED/GREEN, review.json).
   const cyclesSrc = join(turnDir, "tdd", "cycles");
   if (existsSync(cyclesSrc)) {
-    cpSync(cyclesSrc, cyclesRootDir(tddDir), {
+    cpSync(cyclesSrc, cyclesRootDir(sftddDir), {
       recursive: true,
       force: true,
       filter: (src) => statSync(src).isDirectory() || src.endsWith("review-verdict.json"),

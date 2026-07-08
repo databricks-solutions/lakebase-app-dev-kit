@@ -31,7 +31,7 @@ function approveSpec(specMd: string, featureJson: string): void {
     approver: APPROVER,
     hitlApproved: true,
     artifactInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
-    tddDir: tdd,
+    sftddDir: tdd,
     now: FIXED_NOW,
   });
 }
@@ -52,7 +52,7 @@ describe("verifyGateIntegrity: S5 no-drift after formatter-equivalent reformat",
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# spec\n\nbody\n", "feature-spec.json": '{"id":"F1"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("ok");
   });
@@ -68,7 +68,7 @@ describe("verifyGateIntegrity: S5 no-drift after formatter-equivalent reformat",
         "feature-spec.md": "# spec   \r\n\r\n\r\nbody  \r\n",
         "feature-spec.json": '{"id":"F1"}',
       },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("ok");
   });
@@ -82,7 +82,7 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# spec\n\nDIFFERENT body\n", "feature-spec.json": '{"id":"F1"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
@@ -98,7 +98,7 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# SPEC\n\nbody\n", "feature-spec.json": '{"id":"F2"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
@@ -113,7 +113,7 @@ describe("verifyGateIntegrity: S5b drift on semantic edits", () => {
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# spec\n\nbody\n", "feature-spec.json": '{"id":"DIFFERENT"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("drift");
     if (result.status !== "drift") return;
@@ -128,7 +128,7 @@ describe("verifyGateIntegrity: gate-not-approved verdicts", () => {
       featureId: FEATURE_ID,
       gate: "plan",
       currentInputs: { "plan.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("gate-not-approved");
     if (result.status !== "gate-not-approved") return;
@@ -139,12 +139,12 @@ describe("verifyGateIntegrity: gate-not-approved verdicts", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.plan = { status: "withdrawn", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "plan",
       currentInputs: { "plan.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("gate-not-approved");
     if (result.status !== "gate-not-approved") return;
@@ -155,12 +155,12 @@ describe("verifyGateIntegrity: gate-not-approved verdicts", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.spec = { status: "superseded", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = verifyGateIntegrity({
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.status).toBe("gate-not-approved");
   });
@@ -175,7 +175,7 @@ describe("verifyGateIntegrity: artifact name mismatch refusal", () => {
         featureId: FEATURE_ID,
         gate: "spec",
         currentInputs: { "feature-spec.md": "# spec\n" },
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/missing: feature-spec\.json/);
   });
@@ -192,7 +192,7 @@ describe("verifyGateIntegrity: artifact name mismatch refusal", () => {
           "feature-spec.json": '{"id":"F1"}',
           "extra.txt": "uninvited",
         },
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/unexpected: extra\.txt/);
   });
@@ -209,7 +209,7 @@ describe("verifyGateIntegrity: pure-read invariant", () => {
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# spec\n", "feature-spec.json": '{"id":"F1"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     const after = readFileSync(gatesPath, "utf8");
     expect(after).toBe(before);
@@ -225,7 +225,7 @@ describe("verifyGateIntegrity: pure-read invariant", () => {
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": "# CHANGED\n", "feature-spec.json": '{"id":"F1"}' },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(readFileSync(gatesPath, "utf8")).toBe(before);
   });

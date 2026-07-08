@@ -17,7 +17,7 @@
 
 import { spawn } from "node:child_process";
 import { sftddEnv } from "./sftdd-env.js";
-import { resolveTddDir, ARTIFACT_ROOT, LEGACY_ARTIFACT_ROOT } from "./sftdd-paths.js";
+import { resolveSftddDir, ARTIFACT_ROOT, LEGACY_ARTIFACT_ROOT } from "./sftdd-paths.js";
 import { migrateLegacyArtifactDir } from "./migrate-artifact-dir.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
@@ -74,7 +74,7 @@ interface ParsedArgs {
   feature?: string;
   sprint?: string;
   projectDir?: string;
-  tddDir?: string;
+  sftddDir?: string;
   instance?: string;
   deployTarget?: string;
   approver?: string;
@@ -95,7 +95,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--feature": out.feature = argv[++i]; break;
       case "--sprint": out.sprint = argv[++i]; break;
       case "--project-dir": out.projectDir = argv[++i]; break;
-      case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--tdd-dir": out.sftddDir = argv[++i]; break;
       case "--instance": out.instance = argv[++i]; break;
       case "--deploy-target": out.deployTarget = argv[++i]; break;
       case "--approver": out.approver = argv[++i]; break;
@@ -278,13 +278,13 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
   return {
     async run(cmd: DriveCommand) {
       if (cmd.kind === "set-phase") {
-        writeWorkflowPhase(cfg.tddDir, cmd.phase);
+        writeWorkflowPhase(cfg.sftddDir, cmd.phase);
         return;
       }
       if (cmd.kind === "sync-backlog") {
         // Deterministic, in-process (no CLI): project backlog.json from the
         // PO's committed feature-requests + the Architect's estimates.
-        syncBacklog(cfg.tddDir, cmd.sprint);
+        syncBacklog(cfg.sftddDir, cmd.sprint);
         return;
       }
       if (cmd.kind === "claude") {
@@ -304,7 +304,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           const replayed = replayBuildTurn({
             replayBuildDir,
             projectDir: cfg.projectDir,
-            tddDir: cfg.tddDir,
+            sftddDir: cfg.sftddDir,
             featureId: cfg.featureId,
             story,
             turnIndex,
@@ -330,7 +330,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           const replayed = replayDesignTurn({
             turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
             replayDir,
-            tddDir: cfg.tddDir,
+            sftddDir: cfg.sftddDir,
             featureId: cfg.featureId,
           });
           if (replayed) {
@@ -443,7 +443,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
                   ...(cmd.replay?.mode ? { phase: cmd.replay.mode } : {}),
                 },
               },
-              { tddDir: cfg.tddDir },
+              { sftddDir: cfg.sftddDir },
             );
           } catch {
             /* usage logging is observability, never load-bearing */
@@ -467,7 +467,7 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
 /** Build a DriveEffectsConfig for a feature (or planning, featureId ""). */
 function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? resolveTddDir(projectDir);
+  const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
   // Resolve the Lakebase instance + the feature's branch from the SCM workflow
   // state (.lakebase/workflow-state.json, written at claim). The per-story
   // experiment ops need both: the instance to create/merge the paired branch,
@@ -479,7 +479,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
   const settings = resolveSftddSettings({ projectDir });
   return {
     projectDir,
-    tddDir,
+    sftddDir,
     featureId,
     sprintName: args.sprint,
     instance: args.instance ?? scm?.project_id,
@@ -530,7 +530,7 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
       // The resolvers stamp each per-turn phase.start with the model + effort it
       // ran with (right after `role`).
       makeOnAction({
-        tddDir,
+        sftddDir,
         featureId,
         modelForRole: (role) => settings.models[role],
         effortForTurn: (role, turn) => {
@@ -630,7 +630,7 @@ function withBuildRecording(inner: DriveEffects, cfg: DriveEffectsConfig): Drive
         const dir = recordBuildTurn({
           recordBuildDir,
           projectDir: cfg.projectDir,
-          tddDir: cfg.tddDir,
+          sftddDir: cfg.sftddDir,
           featureId: cfg.featureId,
           story: action.story,
           turn,
@@ -663,7 +663,7 @@ function withTurnRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveE
   // Seed the delta baseline with the current (post-scaffold/intake) state ONCE,
   // so the first recorded turn reports only what it produced, not the pre-existing
   // scaffold. A no-op once a baseline exists (later drive processes in the run).
-  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir });
+  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, sftddDir: cfg.sftddDir });
   return {
     readState: () => inner.readState(),
     onAction: inner.onAction ? (a, i) => inner.onAction!(a, i) : undefined,
@@ -671,7 +671,7 @@ function withTurnRecording(inner: DriveEffects, cfg: DriveEffectsConfig): DriveE
     async perform(action) {
       await inner.perform(action);
       if (action.kind === "done") return; // terminal no-op, produces nothing
-      const rec = recordTurn({ recordDir, projectDir: cfg.projectDir, tddDir: cfg.tddDir, action, step: 0 });
+      const rec = recordTurn({ recordDir, projectDir: cfg.projectDir, sftddDir: cfg.sftddDir, action, step: 0 });
       process.stderr.write(
         `[record] turn ${rec.ordinal} (${rec.dir}): ${rec.produced.length} produced` +
           `${rec.deleted.length ? `, ${rec.deleted.length} deleted` : ""}\n`,
@@ -717,7 +717,7 @@ function reportGate(gate: WorkflowAction): void {
 async function runSprintMode(args: ParsedArgs): Promise<number> {
   const sprint = args.sprint as string;
   const projectDir = args.projectDir ?? process.cwd();
-  const tddDir = args.tddDir ?? resolveTddDir(projectDir);
+  const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
@@ -734,7 +734,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       snapshotRunConfig(cfg,"plan");
       const planning: DriveEffects = {
         // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
-        readState: async () => deriveSprintPlanningState(tddDir, sprint, { skipSizing }),
+        readState: async () => deriveSprintPlanningState(sftddDir, sprint, { skipSizing }),
         async perform(action) {
           for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
         },
@@ -748,7 +748,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       return { pendingGate: pendingGateOf(r) };
     },
     async readBacklog() {
-      return backlogFeatureIds(readSprintBacklog(tddDir, sprint));
+      return backlogFeatureIds(readSprintBacklog(sftddDir, sprint));
     },
     async commitAndPushRequests() {
       // Commit the feature-requests planning authored + push the entry tier so
@@ -756,8 +756,8 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       // add + commit are tolerant (a no-op when nothing changed, e.g. the requests
       // were pre-seeded + already committed); a PUSH failure is loud, since a
       // silent one resurfaces later as a cryptic Spec Author refusal on the fork.
-      const root = path.basename(tddDir);
-      for (const id of backlogFeatureIds(readSprintBacklog(tddDir, sprint))) {
+      const root = path.basename(sftddDir);
+      for (const id of backlogFeatureIds(readSprintBacklog(sftddDir, sprint))) {
         await spawnCmd("git", ["add", "--", `${root}/features/${id}/feature-request.md`], projectDir).catch(() => undefined);
       }
       await spawnCmd("git", ["commit", "-m", `plan: ${sprint} feature-requests`], projectDir).catch(() => undefined);
@@ -813,7 +813,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
 function snapshotRunConfig(cfg: DriveEffectsConfig, bound: string): void {
   writeRunConfig({
     projectDir: cfg.projectDir,
-    tddDir: cfg.tddDir,
+    sftddDir: cfg.sftddDir,
     bound,
     // gates from sftdd-config.json (the --gates flag wrote through to it), so the
     // snapshot records what the drive actually used, never a stale flag default.
@@ -839,7 +839,7 @@ async function main(): Promise<number> {
   // Auto-migrate a legacy ".tdd" artifact dir to ".sftdd" before any mode runs,
   // so existing projects move to the current name on their next orchestrated run
   // (no-op once ".sftdd" exists). History follows via git mv when possible.
-  if (!args.tddDir) {
+  if (!args.sftddDir) {
     const projectDir = args.projectDir ?? process.cwd();
     const m = migrateLegacyArtifactDir(projectDir);
     if (m.migrated) {
@@ -901,7 +901,7 @@ async function main(): Promise<number> {
   // TDD phase (the per-project .tdd/workflow-state.json carries "shipped"/"done"
   // from the last feature). Clear it so the feature being driven now re-derives
   // its phase from disk artifacts instead of exiting "done in 1".
-  resetStaleTerminalPhase(cfg.tddDir);
+  resetStaleTerminalPhase(cfg.sftddDir);
 
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);
@@ -924,13 +924,13 @@ async function main(): Promise<number> {
     const pendingGate = pendingGateOf(result);
     if (result.escalated) {
       // Surface + halt: a blocking problem was raised to the HIL. The escalation
-      // is recorded under ${path.basename(cfg.tddDir)}/escalations/; exit non-zero so the run fails loud
+      // is recorded under ${path.basename(cfg.sftddDir)}/escalations/; exit non-zero so the run fails loud
       // (the increment is genuinely not done) and a human resolves it.
       const e = result.escalation;
       process.stderr.write(
         `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.\n` +
           `        source: ${e?.source}\n        reason: ${e?.reason}\n` +
-          `        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; resolve it, then re-run to resume.\n`,
+          `        recorded under ${path.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.\n`,
       );
       return 3;
     } else if (result.stoppedAtMax) {
@@ -951,7 +951,7 @@ async function main(): Promise<number> {
     if (err instanceof ProtocolViolationError) {
       const h = err.handoff;
       try {
-        writeEscalation(cfg.tddDir, {
+        writeEscalation(cfg.sftddDir, {
           source: `protocol:${h.responder}`,
           reason: err.message,
           feature_id: cfg.featureId,
@@ -965,19 +965,19 @@ async function main(): Promise<number> {
             feature_id: cfg.featureId,
             slots: { source: `protocol:${h.responder}`, reason: err.message, ...(h.story ? { story: h.story } : {}) },
           },
-          { tddDir: cfg.tddDir },
+          { sftddDir: cfg.sftddDir },
         );
       } catch {
         /* logging/escalation is best-effort; the abort below is the real signal */
       }
-      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; fix the responder, then re-run.\n`);
+      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.\n`);
       return 3;
     }
     // A wrong / unexpected caller (concurrent dispatch): a callback arrived from a
     // role we are not awaiting. Record + abort, same as a contract violation.
     if (err instanceof UnexpectedCallbackError) {
       try {
-        writeEscalation(cfg.tddDir, {
+        writeEscalation(cfg.sftddDir, {
           source: `protocol:unexpected-caller:${err.from}`,
           reason: err.message,
           feature_id: cfg.featureId,
@@ -991,12 +991,12 @@ async function main(): Promise<number> {
             feature_id: cfg.featureId,
             slots: { source: `protocol:unexpected-caller:${err.from}`, reason: err.message, ...(err.scope.story ? { story: err.scope.story } : {}) },
           },
-          { tddDir: cfg.tddDir },
+          { sftddDir: cfg.sftddDir },
         );
       } catch {
         /* best-effort */
       }
-      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.tddDir)}/escalations/ ; resolve it, then re-run.\n`);
+      process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.\n`);
       return 3;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);

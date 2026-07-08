@@ -178,20 +178,20 @@ describe("renderComparisonReport: HITL decision block", () => {
 });
 
 describe("writeComparisonReport", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("write");
+    sftddDir = mkTempTdd("write");
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("writes the rendered markdown to features/<F>/comparison-<timestamp>.md and appends a selection-log entry", () => {
     const report = mkReport({});
-    const result = writeComparisonReport({ tddDir, featureId: "F1", report });
+    const result = writeComparisonReport({ sftddDir, featureId: "F1", report });
     expect(fs.existsSync(result.reportPath)).toBe(true);
     expect(result.reportPath).toMatch(/features\/F1\/comparison-2026-06-02T08-15-00\.000Z\.md$/);
     expect(result.content).toMatch(/# Comparison report: F1-checkout/);
     expect(result.logEntryAppended).toBe(true);
-    const log = fs.readFileSync(path.join(tddDir, "selection-log.md"), "utf8");
+    const log = fs.readFileSync(path.join(sftddDir, "selection-log.md"), "utf8");
     expect(log).toMatch(/Comparison report for F1/);
     expect(log).toMatch(/comparison-2026-06-02T08-15-00\.000Z\.md/);
   });
@@ -199,7 +199,7 @@ describe("writeComparisonReport", () => {
   it("honors filenameTimestamp override for deterministic paths", () => {
     const report = mkReport({});
     const result = writeComparisonReport({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       report,
       filenameTimestamp: "fixed-ts",
@@ -209,19 +209,19 @@ describe("writeComparisonReport", () => {
 
   it("skipSelectionLog=true skips the breadcrumb append", () => {
     const result = writeComparisonReport({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       report: mkReport({}),
       skipSelectionLog: true,
     });
     expect(result.logEntryAppended).toBe(false);
-    expect(fs.existsSync(path.join(tddDir, "selection-log.md"))).toBe(false);
+    expect(fs.existsSync(path.join(sftddDir, "selection-log.md"))).toBe(false);
   });
 
   it("appends to an existing selection-log without clobbering prior content", () => {
-    const logPath = path.join(tddDir, "selection-log.md");
+    const logPath = path.join(sftddDir, "selection-log.md");
     fs.writeFileSync(logPath, "# Selection log\n\nPrior entry.\n");
-    writeComparisonReport({ tddDir, featureId: "F1", report: mkReport({}) });
+    writeComparisonReport({ sftddDir, featureId: "F1", report: mkReport({}) });
     const log = fs.readFileSync(logPath, "utf8");
     expect(log).toMatch(/Prior entry\./);
     expect(log).toMatch(/Comparison report for F1/);

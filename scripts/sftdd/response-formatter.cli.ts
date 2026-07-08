@@ -11,14 +11,14 @@
 // Exit: 0 conforms; 1 violations (printed to stderr); 2 bad args.
 
 import { join } from "path";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { formatRoleResponse, FORMATTED_ROLES } from "./response-formatter.js";
 
 interface Args {
   role?: string;
   feature?: string;
   story?: string;
-  tddDir?: string;
+  sftddDir?: string;
 }
 
 function parse(argv: string[]): Args {
@@ -28,7 +28,7 @@ function parse(argv: string[]): Args {
       case "--role": out.role = argv[++i]; break;
       case "--feature": out.feature = argv[++i]; break;
       case "--story": out.story = argv[++i]; break;
-      case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--tdd-dir": out.sftddDir = argv[++i]; break;
     }
   }
   return out;
@@ -46,9 +46,9 @@ function main(): number {
   const a = parse(process.argv.slice(2));
   if (!a.role) return usage("Error: --role is required.");
   if (!a.feature) return usage("Error: --feature is required.");
-  const tddDir = a.tddDir ?? resolveTddDir();
+  const sftddDir = a.sftddDir ?? resolveSftddDir();
 
-  const result = formatRoleResponse({ role: a.role, tddDir, featureId: a.feature, story: a.story });
+  const result = formatRoleResponse({ role: a.role, sftddDir, featureId: a.feature, story: a.story });
   if (result.ok) {
     process.stdout.write(`response-formatter: ${a.role}${a.story ? ` (${a.story})` : ""} output conforms.\n`);
     return 0;

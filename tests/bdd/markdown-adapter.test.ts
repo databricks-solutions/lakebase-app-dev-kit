@@ -21,22 +21,22 @@ function rm(dir: string): void {
   }
 }
 
-function seedFeature(tddDir: string, feature: Feature): void {
-  const dir = path.join(tddDir, "features", `${feature.id}-canonical`);
+function seedFeature(sftddDir: string, feature: Feature): void {
+  const dir = path.join(sftddDir, "features", `${feature.id}-canonical`);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "feature-spec.json"), JSON.stringify(feature, null, 2));
 }
 
-function seedStory(tddDir: string, featureId: string, story: Story): void {
-  const featureDir = path.join(tddDir, "features", `${featureId}-canonical`);
+function seedStory(sftddDir: string, featureId: string, story: Story): void {
+  const featureDir = path.join(sftddDir, "features", `${featureId}-canonical`);
   const storyDir = path.join(featureDir, "stories", `${story.id}-canonical`);
   fs.mkdirSync(storyDir, { recursive: true });
   fs.writeFileSync(path.join(storyDir, "story.json"), JSON.stringify(story, null, 2));
 }
 
-function seedAc(tddDir: string, featureId: string, storyId: string, ac: AC): void {
+function seedAc(sftddDir: string, featureId: string, storyId: string, ac: AC): void {
   const acsDir = path.join(
-    tddDir,
+    sftddDir,
     "features",
     `${featureId}-canonical`,
     "stories",
@@ -84,13 +84,13 @@ function mkAc(overrides: Partial<AC>): AC {
 describe("MarkdownAdapter: push emits typed external_ids", () => {
   let adapter: MarkdownAdapter;
   let ctx: AdapterContext;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     adapter = new MarkdownAdapter();
-    tddDir = mkTempTdd("push");
-    ctx = { tddDir };
+    sftddDir = mkTempTdd("push");
+    ctx = { sftddDir };
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("pushFeature emits markdown:feature:<id>", async () => {
     const result = await adapter.pushFeature(mkFeature({ id: "F1-checkout" }), ctx);
@@ -125,34 +125,34 @@ describe("MarkdownAdapter: push emits typed external_ids", () => {
 describe("MarkdownAdapter: pull resolves typed external_ids from disk", () => {
   let adapter: MarkdownAdapter;
   let ctx: AdapterContext;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     adapter = new MarkdownAdapter();
-    tddDir = mkTempTdd("pull");
-    ctx = { tddDir };
+    sftddDir = mkTempTdd("pull");
+    ctx = { sftddDir };
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("pulls a Feature by its typed external_id", async () => {
     const feature = mkFeature({ id: "F1-checkout", name: "Cart checkout" });
-    seedFeature(tddDir, feature);
+    seedFeature(sftddDir, feature);
     const result = await adapter.pull("markdown:feature:F1-checkout", ctx);
     expect((result as Feature).id).toBe("F1-checkout");
     expect((result as Feature).name).toBe("Cart checkout");
   });
 
   it("pulls a Story by its typed external_id", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
-    seedStory(tddDir, "F1", mkStory({ id: "S1", iWantTo: "checkout fast" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
+    seedStory(sftddDir, "F1", mkStory({ id: "S1", iWantTo: "checkout fast" }));
     const result = await adapter.pull("markdown:story:F1:S1", ctx);
     expect((result as Story).id).toBe("S1");
     expect((result as Story).iWantTo).toBe("checkout fast");
   });
 
   it("pulls an AC by its typed external_id (walks features when feature id is '_')", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
-    seedStory(tddDir, "F1", mkStory({ id: "S1" }));
-    seedAc(tddDir, "F1", "S1", mkAc({ id: "AC1", then: "201 returned" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
+    seedStory(sftddDir, "F1", mkStory({ id: "S1" }));
+    seedAc(sftddDir, "F1", "S1", mkAc({ id: "AC1", then: "201 returned" }));
     const result = await adapter.pull("markdown:ac:_:S1:AC1", ctx);
     expect((result as AC).id).toBe("AC1");
     expect((result as AC).then).toBe("201 returned");
@@ -160,7 +160,7 @@ describe("MarkdownAdapter: pull resolves typed external_ids from disk", () => {
 
   it("pull round-trips through push for a Feature", async () => {
     const feature = mkFeature({ id: "F1-roundtrip", name: "Round trip" });
-    seedFeature(tddDir, feature);
+    seedFeature(sftddDir, feature);
     const { externalId } = await adapter.pushFeature(feature, ctx);
     const pulled = await adapter.pull(externalId, ctx);
     expect((pulled as Feature).id).toBe(feature.id);
@@ -168,19 +168,19 @@ describe("MarkdownAdapter: pull resolves typed external_ids from disk", () => {
   });
 
   it("pull round-trips through push for a Story", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
     const story = mkStory({ id: "S1-roundtrip", feature_id: "F1" });
-    seedStory(tddDir, "F1", story);
+    seedStory(sftddDir, "F1", story);
     const { externalId } = await adapter.pushStory(story, ctx);
     const pulled = await adapter.pull(externalId, ctx);
     expect((pulled as Story).id).toBe(story.id);
   });
 
   it("pull round-trips through push for an AC", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
-    seedStory(tddDir, "F1", mkStory({ id: "S1" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
+    seedStory(sftddDir, "F1", mkStory({ id: "S1" }));
     const ac = mkAc({ id: "AC1-roundtrip", story_id: "S1" });
-    seedAc(tddDir, "F1", "S1", ac);
+    seedAc(sftddDir, "F1", "S1", ac);
     const { externalId } = await adapter.pushAC(ac, ctx);
     const pulled = await adapter.pull(externalId, ctx);
     expect((pulled as AC).id).toBe(ac.id);
@@ -190,37 +190,37 @@ describe("MarkdownAdapter: pull resolves typed external_ids from disk", () => {
 describe("MarkdownAdapter: legacy markdown:<id> form", () => {
   let adapter: MarkdownAdapter;
   let ctx: AdapterContext;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     adapter = new MarkdownAdapter();
-    tddDir = mkTempTdd("legacy");
-    ctx = { tddDir };
+    sftddDir = mkTempTdd("legacy");
+    ctx = { sftddDir };
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("resolves a Feature from a legacy markdown:<feature-id> external_id", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1-legacy", name: "Legacy" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1-legacy", name: "Legacy" }));
     const pulled = await adapter.pull("markdown:F1-legacy", ctx);
     expect((pulled as Feature).id).toBe("F1-legacy");
   });
 
   it("resolves a Story from a legacy markdown:<story-id> external_id", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
-    seedStory(tddDir, "F1", mkStory({ id: "S1-legacy" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
+    seedStory(sftddDir, "F1", mkStory({ id: "S1-legacy" }));
     const pulled = await adapter.pull("markdown:S1-legacy", ctx);
     expect((pulled as Story).id).toBe("S1-legacy");
   });
 
   it("resolves an AC from a legacy markdown:<ac-id> external_id", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
-    seedStory(tddDir, "F1", mkStory({ id: "S1" }));
-    seedAc(tddDir, "F1", "S1", mkAc({ id: "AC1-legacy" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
+    seedStory(sftddDir, "F1", mkStory({ id: "S1" }));
+    seedAc(sftddDir, "F1", "S1", mkAc({ id: "AC1-legacy" }));
     const pulled = await adapter.pull("markdown:AC1-legacy", ctx);
     expect((pulled as AC).id).toBe("AC1-legacy");
   });
 
   it("throws when the legacy id matches no entity under the .tdd tree", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
     await expect(adapter.pull("markdown:does-not-exist", ctx)).rejects.toThrow(
       /no entity with id "does-not-exist" found/
     );
@@ -230,13 +230,13 @@ describe("MarkdownAdapter: legacy markdown:<id> form", () => {
 describe("MarkdownAdapter: error contract", () => {
   let adapter: MarkdownAdapter;
   let ctx: AdapterContext;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     adapter = new MarkdownAdapter();
-    tddDir = mkTempTdd("err");
-    ctx = { tddDir };
+    sftddDir = mkTempTdd("err");
+    ctx = { sftddDir };
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("rejects non-markdown external_ids loudly", async () => {
     await expect(adapter.pull("jira:JIRA-123", ctx)).rejects.toThrow(
@@ -251,7 +251,7 @@ describe("MarkdownAdapter: error contract", () => {
   });
 
   it("throws a clear message when the story is missing under an existing feature", async () => {
-    seedFeature(tddDir, mkFeature({ id: "F1" }));
+    seedFeature(sftddDir, mkFeature({ id: "F1" }));
     await expect(adapter.pull("markdown:story:F1:S-missing", ctx)).rejects.toThrow(
       /story S-missing not found/
     );
@@ -266,16 +266,16 @@ describe("MarkdownAdapter: error contract", () => {
 
 describe("MarkdownAdapter: updateStatus is still a no-op", () => {
   it("returns undefined without throwing", async () => {
-    const tddDir = mkTempTdd("status");
+    const sftddDir = mkTempTdd("status");
     try {
       const result = await new MarkdownAdapter().updateStatus(
         "markdown:feature:F1",
         "in-progress",
-        { tddDir }
+        { sftddDir }
       );
       expect(result).toBeUndefined();
     } finally {
-      rm(tddDir);
+      rm(sftddDir);
     }
   });
 });

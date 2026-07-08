@@ -40,7 +40,7 @@ function ts(e: AgentLogEvent): number {
 }
 
 export interface ReconstituteOpts {
-  tddDir: string;
+  sftddDir: string;
   /** Path to the corpus design-lane log (agent-log.design.jsonl). */
   designLogPath: string;
 }
@@ -67,7 +67,7 @@ function readJsonl(file: string): AgentLogEvent[] {
  * their original relative order after the last design turn).
  */
 export function reconstituteAgentLog(opts: ReconstituteOpts): AgentLogEvent[] {
-  const projectLog = join(opts.tddDir, "agent-log.jsonl");
+  const projectLog = join(opts.sftddDir, "agent-log.jsonl");
   const design = readJsonl(opts.designLogPath).sort((a, b) => ts(a) - ts(b));
   if (design.length === 0) return readJsonl(projectLog); // nothing to reconstitute against
 

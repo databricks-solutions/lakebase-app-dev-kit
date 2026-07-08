@@ -67,7 +67,7 @@ function makeAcDir(storyId: string, acId: string): void {
 
 function makeScope(): CycleScope {
   return {
-    tddDir: tdd,
+    sftddDir: tdd,
     feature_id: FEATURE_ID,
     story_id: "S1",
     ac_id: "AC1",
@@ -235,7 +235,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "test-list.json": baselineJson },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -251,7 +251,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
       featureId: FEATURE_ID,
       gate: "test_list",
       currentInputs: { "test-list.json": JSON.stringify(mutated) },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(v.status).toBe("drift");
     if (v.status !== "drift") return;
@@ -268,7 +268,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "spec", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -278,7 +278,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "test-list.json": JSON.stringify(BASELINE_TEST_LIST) },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -291,7 +291,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
       gate: "test_list",
       approver: APPROVER,
       reason: "integrity drift: T2 removed",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -303,7 +303,7 @@ describe("gates cross-cutting: test_list gate integrity catches test mutations",
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "test-list.json": JSON.stringify(BASELINE_TEST_LIST) },
-        tddDir: tdd,
+        sftddDir: tdd,
         now: FIXED_NOW,
         writeSelectionLog: false,
       })

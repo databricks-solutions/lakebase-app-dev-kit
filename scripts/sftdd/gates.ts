@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
-import { resolveTddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
+import { resolveSftddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
 
 export const GATES_SCHEMA_VERSION = 1;
 
@@ -58,7 +58,7 @@ export interface GatesState {
 
 export interface GatesIoOpts {
   /** Path to the .sftdd/ root. Default: "./.sftdd". */
-  tddDir?: string;
+  sftddDir?: string;
 }
 
 export function defaultGatesState(featureId: string): GatesState {
@@ -84,8 +84,8 @@ export function defaultGatesState(featureId: string): GatesState {
  * exists but is malformed.
  */
 export function readGates(featureId: string, opts: GatesIoOpts = {}): GatesState {
-  const tddDir = opts.tddDir ?? resolveTddDir();
-  const file = gatesFilePath(tddDir, featureId);
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const file = gatesFilePath(sftddDir, featureId);
   if (!existsSync(file)) {
     return defaultGatesState(featureId);
   }
@@ -114,8 +114,8 @@ export function writeGates(state: GatesState, opts: GatesIoOpts = {}): void {
   if (state.feature_id.length === 0) {
     throw new Error("writeGates: state.feature_id must not be empty");
   }
-  const tddDir = opts.tddDir ?? resolveTddDir();
-  const file = gatesFilePath(tddDir, state.feature_id);
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const file = gatesFilePath(sftddDir, state.feature_id);
   const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
   const payload = JSON.stringify(state, null, 2) + "\n";
   writeFileSync(tempFile, payload, "utf8");
@@ -131,8 +131,8 @@ export function writeGates(state: GatesState, opts: GatesIoOpts = {}): void {
   }
 }
 
-function gatesFilePath(tddDir: string, featureId: string): string {
-  return join(findFeatureDir(tddDir, featureId), "gates.json");
+function gatesFilePath(sftddDir: string, featureId: string): string {
+  return join(findFeatureDir(sftddDir, featureId), "gates.json");
 }
 
 

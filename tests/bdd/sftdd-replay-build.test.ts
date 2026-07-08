@@ -60,7 +60,7 @@ describe("replayBuildTurn (per-turn build replay)", () => {
   });
 
   it("overlays the Kth turn's code, skipping scaffold-owned + junk + secrets", () => {
-    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 1 })).toBe(true);
+    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 1 })).toBe(true);
     // turn 1 RED test landed
     expect(readFileSync(join(proj, "tests", "test_ac1.py"), "utf8")).toMatch(/assert False/);
     // scaffold-owned scripts/lk untouched
@@ -72,18 +72,18 @@ describe("replayBuildTurn (per-turn build replay)", () => {
   });
 
   it("advances turn by turn: turn 2 overlays the GREEN impl over turn 1", () => {
-    replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 1 });
-    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 2 })).toBe(true);
+    replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 1 });
+    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 2 })).toBe(true);
     expect(readFileSync(join(proj, "tests", "test_ac1.py"), "utf8")).toMatch(/assert True/); // RED -> GREEN
     expect(existsSync(join(proj, "app", "main.py"))).toBe(true);
   });
 
   it("returns false past the last recorded turn (falls back to the live agent)", () => {
-    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 3 })).toBe(false);
+    expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 3 })).toBe(false);
   });
 
   it("returns false for a story the corpus does not cover", () => {
-    const ok = replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: "S2-uncovered", turnIndex: 1 });
+    const ok = replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: "S2-uncovered", turnIndex: 1 });
     expect(ok).toBe(false);
     expect(existsSync(join(proj, "app"))).toBe(false);
   });
@@ -96,7 +96,7 @@ describe("replayBuildTurn (per-turn build replay)", () => {
     writeFileSync(join(c, "cycle-001.json"), JSON.stringify({ red_at: "t", green_at: "t" }));
     writeTurn("003-navigator-review-AC1", { "app/main.py": "# reviewed\n" });
 
-    const ok = replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, tddDir: tdd, featureId: F, story: S, turnIndex: 3 });
+    const ok = replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 3 });
     expect(ok).toBe(true);
     // verdict delivered into .tdd/cycles (so the live review drives the refactor)
     const dst = join(tdd, "cycles", F, S, "AC1");

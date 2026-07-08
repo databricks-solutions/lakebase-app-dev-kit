@@ -399,7 +399,7 @@ describe("feature-status gates field (G8 /)", () => {
       approver: "po@example.com",
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: () => new Date("2026-05-31T20:00:00Z"),
       writeSelectionLog: false,
     });
@@ -440,7 +440,7 @@ describe("feature-status gates field (G8 /)", () => {
       approver: "po@example.com",
       hitlApproved: true,
       artifactInputs: { "plan.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: () => new Date("2026-05-31T21:00:00Z"),
       writeSelectionLog: false,
     });

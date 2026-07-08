@@ -116,7 +116,7 @@ describe("experiment lifecycle (hermetic)", () => {
     writeFileSync(join(dir, "branch.txt"), "feature/test-exp-1");
     await deleteExperiment({
       instance: "irrelevant",
-      tddDir: tdd,
+      sftddDir: tdd,
       projectDir: tdd,
       featureId: "F1",
       storyId: "S1",
@@ -132,7 +132,7 @@ describe("experiment lifecycle (hermetic)", () => {
     await expect(
       deleteExperiment({
         instance: "irrelevant",
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir: tdd,
         featureId: "F1",
         storyId: "S1",
@@ -166,7 +166,7 @@ liveDescribe("experiment lifecycle (live, LAKEBASE_TEST_E2E=1)", () => {
       const slug = `exp-test-${Date.now()}`;
       const rec = await cutExperiment({
         instance,
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir,
         featureId: "F1",
         storyId: "S1",
@@ -184,7 +184,7 @@ liveDescribe("experiment lifecycle (live, LAKEBASE_TEST_E2E=1)", () => {
       expect(branches).toContain(rec.branch_id);
       await deleteExperiment({
         instance,
-        tddDir: tdd,
+        sftddDir: tdd,
         projectDir,
         featureId: "F1",
         storyId: "S1",

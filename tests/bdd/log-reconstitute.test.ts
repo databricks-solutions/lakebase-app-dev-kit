@@ -15,18 +15,18 @@ afterEach(() => {
   while (tmps.length) { const d = tmps.pop(); if (d) try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* */ } }
 });
 
-function setup(): { tddDir: string; designLog: string } {
+function setup(): { sftddDir: string; designLog: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lbscm-recon2-"));
   tmps.push(root);
-  const tddDir = path.join(root, ".sftdd");
-  fs.mkdirSync(tddDir, { recursive: true });
-  return { tddDir, designLog: path.join(root, "agent-log.design.jsonl") };
+  const sftddDir = path.join(root, ".sftdd");
+  fs.mkdirSync(sftddDir, { recursive: true });
+  return { sftddDir, designLog: path.join(root, "agent-log.design.jsonl") };
 }
 const jl = (events: object[]) => events.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
 describe("reconstituteAgentLog", () => {
   it("uses recorded design entries verbatim (date + cost), drops reconciled, re-dates live build onto the design timeline", () => {
-    const { tddDir, designLog } = setup();
+    const { sftddDir, designLog } = setup();
 
     // Recorded design lane (original capture day 2026-06-15), incl. real costs.
     fs.writeFileSync(designLog, jl([
@@ -37,14 +37,14 @@ describe("reconstituteAgentLog", () => {
     // Live project log (this run, 2026-06-24): a synthetic reconciled placeholder,
     // a live duplicate of the PO intake (wrong run date), a live F6 breakdown turn
     // (not in the corpus), and a live build turn , all on the run's clock.
-    fs.writeFileSync(path.join(tddDir, "agent-log.jsonl"), jl([
+    fs.writeFileSync(path.join(sftddDir, "agent-log.jsonl"), jl([
       { timestamp: "2026-06-24T11:00:00.000Z", level: "info", role: "product-owner", event: "gate.approved", message: "product-owner approved intake", metadata: { feature_id: "F1" } },
       { timestamp: "2026-06-24T11:01:00.000Z", level: "info", role: "spec-author", event: "artifact.written", message: "spec-author wrote architecture.json , present on disk (reconciled)", metadata: { feature_id: "F1", reconciled: true, path: "x" } },
       { timestamp: "2026-06-24T11:05:00.000Z", level: "info", role: "spec-author", event: "turn.usage", message: "spec-author turn used 9 input + 99 output tokens", metadata: { feature_id: "F6", input_tokens: 9, output_tokens: 99, cost_usd: 0.05, story: "S1" } },
       { timestamp: "2026-06-24T11:30:00.000Z", level: "info", role: "driver", event: "turn.usage", message: "driver turn used 1 input + 2 output tokens", metadata: { feature_id: "F1", input_tokens: 1, output_tokens: 2, cost_usd: 0.5 } },
     ]));
 
-    const final = reconstituteAgentLog({ tddDir, designLogPath: designLog });
+    const final = reconstituteAgentLog({ sftddDir, designLogPath: designLog });
 
     // No synthetic reconciled placeholders survive.
     expect(final.some((e) => e.metadata?.reconciled === true)).toBe(false);

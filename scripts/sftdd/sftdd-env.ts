@@ -5,7 +5,7 @@
 // file are now `sftdd`, so the canonical prefix is `LAKEBASE_SFTDD_*`. This
 // accessor reads the new name and falls back to the legacy `LAKEBASE_TDD_*` one,
 // so existing scripts / shells / scaffolded projects that still export the old
-// names keep working (the same dual-read convention `resolveTddDir` uses for the
+// names keep working (the same dual-read convention `resolveSftddDir` uses for the
 // `.tdd` -> `.sftdd` artifact-root rename). Prefer this over `process.env.X`.
 export function sftddEnv(
   suffix: string,

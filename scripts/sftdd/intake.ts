@@ -11,16 +11,16 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { checkArtifactConformance } from "./artifact-conformance.js";
-import { resolveTddDir, featureRequestMd } from "./sftdd-paths.js";
+import { resolveSftddDir, featureRequestMd } from "./sftdd-paths.js";
 import { resolveSftddSettings } from "./sftdd-config.js";
 
 export interface IntakeCheckArgs {
   /** Artifact root. Default ./.sftdd (honors a legacy ./.tdd) */
-  tddDir?: string;
+  sftddDir?: string;
   /** When set, also require this feature's feature-request.md. */
   featureId?: string;
   /** Project root that holds `.lakebase/sftdd-config.json`. Defaults to the
-   *  parent of `tddDir`. Locates the config that supplies `uiTrack`. */
+   *  parent of `sftddDir`. Locates the config that supplies `uiTrack`. */
   projectDir?: string;
 }
 
@@ -49,22 +49,22 @@ export interface IntakeCheckResult {
  * non-conformant lists.
  */
 export function checkIntakePreconditions(args: IntakeCheckArgs = {}): IntakeCheckResult {
-  const tddDir = args.tddDir ?? resolveTddDir();
-  const projectDir = args.projectDir ?? dirname(tddDir);
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const projectDir = args.projectDir ?? dirname(sftddDir);
   // The one way in for the UX track: the persisted project setting, not a flag.
   const uiTrack = resolveSftddSettings({ projectDir }).project.uiTrack;
 
   const required: Array<{ artifact: string; path: string }> = [
-    { artifact: "product-overview.md", path: join(tddDir, "product-overview.md") },
-    { artifact: "nfrs.md", path: join(tddDir, "nfrs.md") },
+    { artifact: "product-overview.md", path: join(sftddDir, "product-overview.md") },
+    { artifact: "nfrs.md", path: join(sftddDir, "nfrs.md") },
   ];
   if (uiTrack) {
-    required.push({ artifact: "design-brief.md", path: join(tddDir, "design", "design-brief.md") });
+    required.push({ artifact: "design-brief.md", path: join(sftddDir, "design", "design-brief.md") });
   }
   if (args.featureId) {
     // featureRequestMd resolves the on-disk feature dir (exact or <id>-<slug>),
     // falling back to the exact path when it does not exist yet (reports absent).
-    required.push({ artifact: "feature-request.md", path: featureRequestMd(tddDir, args.featureId) });
+    required.push({ artifact: "feature-request.md", path: featureRequestMd(sftddDir, args.featureId) });
   }
 
   const statuses: IntakeArtifactStatus[] = required.map(({ artifact, path }) => {

@@ -112,8 +112,8 @@ describe("greenOpenCycle: migration-app-coupling is caught proactively at GREEN"
     const { project, tdd } = scaffold();
     write(project, "alembic/versions/0002_split.py", APP_IMPORT_MIGRATION);
 
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
 
     expect(r.recorded).toBe(false);
     expect(r.needsAssess).toBe(true);
@@ -125,8 +125,8 @@ describe("greenOpenCycle: migration-app-coupling is caught proactively at GREEN"
     const { project, tdd } = scaffold();
     write(project, "alembic/versions/0002_split.py", "from alembic import op\n\ndef upgrade():\n    op.add_column('stock', None)\n");
 
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
 
     expect(r.recorded).toBe(true);
   });

@@ -77,8 +77,8 @@ describe("resolveDeployTarget", () => {
 
 describe("deployToTarget: foreign-port guard (gate deploys)", () => {
   it("refuses + escalates when the port is already serving before deploy (rejectForeignPort)", async () => {
-    const tddDir = join(dir, ".tdd");
-    mkdirSync(join(tddDir, "features", "F1"), { recursive: true });
+    const sftddDir = join(dir, ".tdd");
+    mkdirSync(join(sftddDir, "features", "F1"), { recursive: true });
     let started = false;
     const result = await deployToTarget({
       projectDir: dir,
@@ -86,7 +86,7 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
       featureId: "F1",
       storyId: "S1",
       lakebaseBranch: "experiment-s1",
-      tddDir,
+      sftddDir,
       rejectForeignPort: true,
       reachable: async () => true, // a foreign/stale app stays on the port (stop does not free it)
       startProcess: () => {
@@ -107,12 +107,12 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
     expect(result.reason).toMatch(/already serving|foreign|stale/i);
     // honest evidence: reachable=false, verify failed (we did NOT verify the foreign app).
     const ev = JSON.parse(
-      readFileSync(join(tddDir, "features", "F1", "stories", "S1", "deploy-evidence.json"), "utf8"),
+      readFileSync(join(sftddDir, "features", "F1", "stories", "S1", "deploy-evidence.json"), "utf8"),
     );
     expect(ev.reachable).toBe(false);
     expect(ev.verify.passed).toBe(false);
     // and it raised an escalation for the HIL (deploy-verify source).
-    const escs = readEscalations(tddDir).filter((e) => !e.resolved_at);
+    const escs = readEscalations(sftddDir).filter((e) => !e.resolved_at);
     expect(escs.some((e) => e.source === "deploy-verify" && e.story_id === "S1")).toBe(true);
   });
 
@@ -120,8 +120,8 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
     // The per-story await-acceptance deploy leaves our app running on the port
     // for PO review; a re-issued gate deploy must stop that own instance and
     // proceed, NOT refuse it as foreign.
-    const tddDir = join(dir, ".tdd");
-    mkdirSync(join(tddDir, "features", "F1", "stories", "S1"), { recursive: true });
+    const sftddDir = join(dir, ".tdd");
+    mkdirSync(join(sftddDir, "features", "F1", "stories", "S1"), { recursive: true });
     let occupied = true; // our own prior app is on the port...
     let stopped = false;
     let started = false;
@@ -130,7 +130,7 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
       targetName: "localv",
       featureId: "F1",
       storyId: "S1",
-      tddDir,
+      sftddDir,
       rejectForeignPort: true,
       reachable: async () => (started ? true : occupied), // busy until stopped; up once we start
       stop: () => {
@@ -150,7 +150,7 @@ describe("deployToTarget: foreign-port guard (gate deploys)", () => {
     expect(result.ok).toBe(true);
     expect(result.verify?.passed).toBe(true);
     // no escalation: this was OUR app, self-healed, not a foreign squatter.
-    const escs = readEscalations(tddDir).filter((e) => !e.resolved_at);
+    const escs = readEscalations(sftddDir).filter((e) => !e.resolved_at);
     expect(escs.some((e) => e.source === "deploy-verify")).toBe(false);
   });
 
@@ -471,12 +471,12 @@ describe("Release Engineer deploy lifecycle -> central agent log", () => {
   afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
   it("emits release-engineer deploy.start + deploy.verified + phase.end for a successful deploy", () => {
-    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", tddDir: tdd, now: clock };
+    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", sftddDir: tdd, now: clock };
     logReleaseEngineerDeployStart(ctx);
     const ok: DeployResult = { ok: true, url: "http://localhost:8000/", pid: 123, verify: { passed: true, summary: "feature-verify passed" } };
     logReleaseEngineerDeployOutcome(ctx, ok);
 
-    const re = readAgentLog({ tddDir: tdd }).filter((e) => e.role === "release-engineer");
+    const re = readAgentLog({ sftddDir: tdd }).filter((e) => e.role === "release-engineer");
     expect(re.map((e) => e.event)).toEqual(["deploy.start", "deploy.verified", "phase.end"]);
     const verified = re.find((e) => e.event === "deploy.verified")!;
     expect(verified.metadata?.feature_id).toBe(FEATURE);
@@ -488,11 +488,11 @@ describe("Release Engineer deploy lifecycle -> central agent log", () => {
   });
 
   it("emits a deploy.failed (error) + phase.end for a failed deploy, carrying the reason", () => {
-    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", tddDir: tdd, now: clock };
+    const ctx = { featureId: FEATURE, storyId: STORY, target: "local", sftddDir: tdd, now: clock };
     const bad: DeployResult = { ok: false, reason: "not reachable within timeout", verify: { passed: false, summary: "n/a" } };
     logReleaseEngineerDeployOutcome(ctx, bad);
 
-    const re = readAgentLog({ tddDir: tdd }).filter((e) => e.role === "release-engineer");
+    const re = readAgentLog({ sftddDir: tdd }).filter((e) => e.role === "release-engineer");
     expect(re.map((e) => e.event)).toEqual(["deploy.failed", "phase.end"]);
     const failed = re.find((e) => e.event === "deploy.failed")!;
     expect(failed.level).toBe("error");

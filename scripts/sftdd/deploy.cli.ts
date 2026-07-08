@@ -24,7 +24,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
   let lakebaseBranch: string | undefined;
   let featureId: string | undefined;
   let storyId: string | undefined;
-  let tddDir: string | undefined;
+  let sftddDir: string | undefined;
   let gate = false;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
@@ -33,7 +33,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
       case "--lakebase-branch": lakebaseBranch = argv[++i]; break;
       case "--feature": featureId = argv[++i]; break;
       case "--story": storyId = argv[++i]; break;
-      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--tdd-dir": sftddDir = argv[++i]; break;
       case "--gate": gate = true; break;
       case "--stop": stop = true; break;
       case "--json": json = true; break;
@@ -65,7 +65,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
   // the deterministic deploy logs its own start + outcome so the RE's work is in
   // the central stream, not only in deploy-evidence.json. Only for feature/story
   // deploys (a bare port deploy/teardown stays silent).
-  const reCtx = featureId ? { featureId, storyId, target, tddDir } : undefined;
+  const reCtx = featureId ? { featureId, storyId, target, sftddDir } : undefined;
   if (reCtx) logReleaseEngineerDeployStart(reCtx);
 
   const result = await deployToTarget({
@@ -74,7 +74,7 @@ export async function runDeployCli(argv: string[]): Promise<number> {
     lakebaseBranch,
     featureId,
     storyId,
-    tddDir,
+    sftddDir,
     // Gate mode (orchestration-run deploy): reject a foreign occupant of the
     // port so we never verify against the wrong app, and record honest evidence.
     rejectForeignPort: gate,

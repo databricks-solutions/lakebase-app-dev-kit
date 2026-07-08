@@ -27,12 +27,12 @@ const CORPUS = join(KIT, "examples/sftdd-scenarios/stockflow/recorded-artifacts"
 const FEATURE = "F1-stock-visibility";
 const STORY = "S1-record-stock";
 
-function stage(mode: "clean" | "clean_patched" | "corrupt" | "minimal_clean"): { proj: string; tddDir: string } {
+function stage(mode: "clean" | "clean_patched" | "corrupt" | "minimal_clean"): { proj: string; sftddDir: string } {
   const proj = mkdtempSync(join(tmpdir(), `live-reflect-${mode}-`));
-  const tddDir = join(proj, ".tdd");
+  const sftddDir = join(proj, ".tdd");
   mkdirSync(join(proj, ".claude", "agents"), { recursive: true });
   cpSync(join(KIT, "skills/lakebase-sftdd-workflows/agents/navigator.md"), join(proj, ".claude", "agents", "navigator.md"));
-  const featDst = join(tddDir, "features", FEATURE);
+  const featDst = join(sftddDir, "features", FEATURE);
   mkdirSync(featDst, { recursive: true });
 
   if (mode === "minimal_clean") {
@@ -59,20 +59,20 @@ function stage(mode: "clean" | "clean_patched" | "corrupt" | "minimal_clean"): {
       id: "AC2-empty-is-empty-array", given: "no stock records exist", when: "the operator requests GET /api/stock",
       then: "the API responds 200 with an empty JSON array", layer: "API",
     }, null, 2));
-    writeFileSync(storyTestListJson(tddDir, FEATURE, STORY), JSON.stringify({
+    writeFileSync(storyTestListJson(sftddDir, FEATURE, STORY), JSON.stringify({
       feature_id: FEATURE, story_id: STORY, items: [
         { id: "T1", ac_id: "AC1-lists-records", kind: "behavior", status: "pending", description: "GET /api/stock with two records returns 200 and a JSON array of exactly those two records" },
         { id: "T2", ac_id: "AC2-empty-is-empty-array", kind: "behavior", status: "pending", description: "GET /api/stock with no records returns 200 and an empty JSON array" },
         { id: "T3", ac_id: "AC1-lists-records", kind: "fitness", status: "pending", description: "Fitness (NFR-1): GET /api/stock p99 latency is under 200ms over 100 sequential calls against the real branch DB" },
       ],
     }, null, 2));
-    return { proj, tddDir };
+    return { proj, sftddDir };
   }
 
   cpSync(join(CORPUS, "features", FEATURE), featDst, { recursive: true });
   if (mode === "corrupt") {
     writeFileSync(
-      join(acsDir(tddDir, FEATURE, STORY), "AC9-blank-submits-ok.json"),
+      join(acsDir(sftddDir, FEATURE, STORY), "AC9-blank-submits-ok.json"),
       JSON.stringify(
         {
           id: "AC9-blank-submits-ok",
@@ -89,16 +89,16 @@ function stage(mode: "clean" | "clean_patched" | "corrupt" | "minimal_clean"): {
   const master = JSON.parse(readFileSync(join(featDst, "test-list.json"), "utf8")) as {
     items?: Array<{ ac_id?: string }>;
   };
-  const acs = new Set(storyAcIds(tddDir, FEATURE, STORY));
+  const acs = new Set(storyAcIds(sftddDir, FEATURE, STORY));
   const items = (master.items ?? []).filter((it) => it.ac_id && acs.has(it.ac_id)) as Array<Record<string, unknown>>;
-  writeFileSync(storyTestListJson(tddDir, FEATURE, STORY), JSON.stringify({ feature_id: FEATURE, story_id: STORY, items }, null, 2));
-  return { proj, tddDir };
+  writeFileSync(storyTestListJson(sftddDir, FEATURE, STORY), JSON.stringify({ feature_id: FEATURE, story_id: STORY, items }, null, 2));
+  return { proj, sftddDir };
 }
 
-function runReflect(proj: string, tddDir: string) {
+function runReflect(proj: string, sftddDir: string) {
   const cmds = commandsForAction(
     { kind: "invoke-role", role: "navigator", story: STORY, buildMode: "reflect" },
-    { projectDir: proj, tddDir, featureId: FEATURE, runner: { async run() {} }, modelForRole: () => "sonnet" },
+    { projectDir: proj, sftddDir, featureId: FEATURE, runner: { async run() {} }, modelForRole: () => "sonnet" },
   );
   const claudeCmd = cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string; model: string };
   const res = spawnSync(
@@ -108,13 +108,13 @@ function runReflect(proj: string, tddDir: string) {
   );
   // eslint-disable-next-line no-console
   console.log(`[live reflect] claude exit=${res.status}`, res.status !== 0 ? (res.stderr || "").slice(-800) : "");
-  return { verdict: readReflectVerdict(tddDir, FEATURE, STORY), hits: recordReflectionGate(tddDir, FEATURE, STORY) };
+  return { verdict: readReflectVerdict(sftddDir, FEATURE, STORY), hits: recordReflectionGate(sftddDir, FEATURE, STORY) };
 }
 
 describe.skipIf(!process.env.RUN_LIVE_REFLECT)("LIVE reflection gate on recorded stockflow F1 (real Navigator turn)", () => {
   it("no-false-positive control: a hand-built, defect-free design passes in one round, no smell", () => {
-    const { proj, tddDir } = stage("minimal_clean");
-    const { verdict, hits } = runReflect(proj, tddDir);
+    const { proj, sftddDir } = stage("minimal_clean");
+    const { verdict, hits } = runReflect(proj, sftddDir);
     // eslint-disable-next-line no-console
     console.log("[live minimal_clean] verdict:", JSON.stringify(verdict));
     expect(verdict, "the agent must write a verdict").toBeDefined();
@@ -123,8 +123,8 @@ describe.skipIf(!process.env.RUN_LIVE_REFLECT)("LIVE reflection gate on recorded
   }, 300_000);
 
   it("detection: an injected contradictory AC is caught + routed to the spec author", () => {
-    const { proj, tddDir } = stage("corrupt");
-    const { verdict, hits } = runReflect(proj, tddDir);
+    const { proj, sftddDir } = stage("corrupt");
+    const { verdict, hits } = runReflect(proj, sftddDir);
     // eslint-disable-next-line no-console
     console.log("[live corrupt] verdict:", JSON.stringify(verdict));
     expect(verdict, "the agent must write a verdict").toBeDefined();

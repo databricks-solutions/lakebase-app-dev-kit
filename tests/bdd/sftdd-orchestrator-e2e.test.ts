@@ -99,7 +99,7 @@ describe("orchestrator e2e (hermetic – stubbed Navigator + Driver, real script
     });
 
     // --- Phase 4: Implementation (stubbed Navigator + Driver) ---
-    const scope = { tddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
+    const scope = { sftddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
     const c1 = beginCycle({
       ...scope,
       test_id: "T1",
@@ -134,7 +134,7 @@ describe("orchestrator e2e (hermetic – stubbed Navigator + Driver, real script
   });
 
   it("surfaces cycle-stall when 3 consecutive cycles have no GREEN", () => {
-    const scope = { tddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
+    const scope = { sftddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
     beginCycle({ ...scope, test_id: "T1", test_description: "x" });
     beginCycle({ ...scope, test_id: "T2", test_description: "y" });
     beginCycle({ ...scope, test_id: "T3", test_description: "z" });

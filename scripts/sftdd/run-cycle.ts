@@ -22,9 +22,9 @@ import { readAcLayer as readAcLayerFromPaths } from "./sftdd-paths.js";
  * pattern as the Human Proxy logging its gate decisions. Best-effort:
  * logging is observability, never a reason to fail a cycle.
  */
-function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
+function logCycleEvent(sftddDir: string, event: AgentLogEventInput): void {
   try {
-    emitAgentLogEvent(event, { tddDir });
+    emitAgentLogEvent(event, { sftddDir });
   } catch {
     // swallow: never let logging break a cycle transition
   }
@@ -72,17 +72,17 @@ export interface CycleArtifact {
 }
 
 /**
- * Walk every story under `<tddDir>/features/<featureId>/stories/` and
+ * Walk every story under `<sftddDir>/features/<featureId>/stories/` and
  * return the matching AC's `layer` value. Used by beginCycle to
  * auto-stamp the layer on the cycle artifact without forcing callers
  * to thread it through. Returns undefined when the AC file is absent
  * or the field is missing (a brownfield project that pre-dates the
  * layer enum).
  */
-export function readAcLayer(tddDir: string, featureId: string, acId: string): AcLayer | undefined {
+export function readAcLayer(sftddDir: string, featureId: string, acId: string): AcLayer | undefined {
   // Single source of truth: delegate to sftdd-paths so the AC-layer read lives in
   // exactly one place. Re-exported under this name for the existing importers.
-  return readAcLayerFromPaths(tddDir, featureId, acId);
+  return readAcLayerFromPaths(sftddDir, featureId, acId);
 }
 
 /**
@@ -99,7 +99,7 @@ export function coveredTestIds(c: Pick<CycleArtifact, "test_id" | "test_ids">): 
 }
 
 export interface CycleScope {
-  tddDir: string;
+  sftddDir: string;
   feature_id: string;
   story_id: string;
   ac_id: string;
@@ -108,7 +108,7 @@ export interface CycleScope {
 }
 
 function cyclesDir(scope: CycleScope): string {
-  return join(scope.tddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
+  return join(scope.sftddDir, "cycles", scope.feature_id, scope.story_id, scope.ac_id);
 }
 
 export function nextCycleId(scope: CycleScope): string {
@@ -183,7 +183,7 @@ export interface BeginCycleArgs extends CycleScope {
 
 export function beginCycle(args: BeginCycleArgs): CycleArtifact {
   const cycle_id = nextCycleId(args);
-  const layer = args.layer ?? readAcLayer(args.tddDir, args.feature_id, args.ac_id);
+  const layer = args.layer ?? readAcLayer(args.sftddDir, args.feature_id, args.ac_id);
   const artifact: CycleArtifact = {
     cycle_id,
     feature_id: args.feature_id,
@@ -200,7 +200,7 @@ export function beginCycle(args: BeginCycleArgs): CycleArtifact {
     ...(args.chunk ? { chunk: args.chunk } : {}),
   };
   writeCycleArtifact(args, artifact);
-  logCycleEvent(args.tddDir, {
+  logCycleEvent(args.sftddDir, {
     role: "navigator",
     level: "info",
     event: "cycle.red",
@@ -264,11 +264,11 @@ export function recordRunnerOutcome(args: RecordRunnerOutcomeArgs): RecordRunner
   }
   const tag = acLayerToTag(layer);
   const outcomes =
-    readOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug) ?? {
+    readOutcomes(args.scope.sftddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug) ?? {
       status: "running",
     };
   recordTagRun(outcomes, tag, args.passed);
-  writeOutcomes(args.scope.tddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug, outcomes);
+  writeOutcomes(args.scope.sftddDir, args.scope.feature_id, args.scope.story_id, args.experimentSlug, outcomes);
   // Stamp the layer back onto the cycle when it was inferred from the
   // argument so subsequent reads see it.
   if (!cycle.layer && args.layer) {
@@ -292,7 +292,7 @@ export function markGreen(
   // always means the runner-dispatch map was wrong (npm test invoked
   // for an [E2E] row, [Infra] row with no runner wired, etc.).
   if (a.layer && a.experiment_slug) {
-    const outcomes = readOutcomes(scope.tddDir, scope.feature_id, scope.story_id, a.experiment_slug);
+    const outcomes = readOutcomes(scope.sftddDir, scope.feature_id, scope.story_id, a.experiment_slug);
     const tag = acLayerToTag(a.layer);
     const runs = outcomes ? tagRunCount(outcomes, tag) : 0;
     if (runs === 0) {
@@ -309,7 +309,7 @@ export function markGreen(
   a.driver_changes = driverChanges;
   a.navigator_verdict = "passed";
   writeCycleArtifact(scope, a);
-  logCycleEvent(scope.tddDir, {
+  logCycleEvent(scope.sftddDir, {
     role: "driver",
     level: "info",
     event: "cycle.green",
@@ -326,7 +326,7 @@ export function markRefactored(scope: CycleScope, cycleId: string, refactorNotes
   a.refactored_at = new Date().toISOString();
   a.refactor_notes = refactorNotes;
   writeCycleArtifact(scope, a);
-  logCycleEvent(scope.tddDir, {
+  logCycleEvent(scope.sftddDir, {
     role: "driver",
     level: "info",
     event: "cycle.refactored",

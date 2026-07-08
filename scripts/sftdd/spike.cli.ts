@@ -14,7 +14,7 @@
 // Exit codes: 0 ok, 2 bad args, 7 substrate failure.
 
 import * as path from "node:path";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 
 import { isCliEntry } from "../util/cli-entry.js";
 import { cutSpike, listSpikes, deleteSpike, spikeNotes } from "./spike.js";
@@ -27,7 +27,7 @@ interface ParsedArgs {
   instance?: string;
   host?: string;
   projectDir?: string;
-  tddDir?: string;
+  sftddDir?: string;
   keepBranch?: boolean;
   json?: boolean;
 }
@@ -43,7 +43,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--instance": out.instance = argv[++i]; break;
       case "--host": out.host = argv[++i]; break;
       case "--project-dir": out.projectDir = argv[++i]; break;
-      case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--tdd-dir": out.sftddDir = argv[++i]; break;
       case "--keep-branch": out.keepBranch = true; break;
       case "--json": out.json = true; break;
     }
@@ -63,7 +63,7 @@ notes so the learning carries forward into that feature's design-spec gate.
 `;
 
 function tddDirFor(args: ParsedArgs): string {
-  return args.tddDir ?? resolveTddDir(args.projectDir ?? ".");
+  return args.sftddDir ?? resolveSftddDir(args.projectDir ?? ".");
 }
 
 export async function runSpikeCli(argv: string[]): Promise<number> {
@@ -73,7 +73,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
     return sub ? 0 : 2;
   }
   const args = parseArgs(argv.slice(1));
-  const tddDir = tddDirFor(args);
+  const sftddDir = tddDirFor(args);
 
   try {
     if (sub === "cut") {
@@ -82,7 +82,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
         return 2;
       }
       const rec = await cutSpike({
-        tddDir,
+        sftddDir,
         projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         branch: `spike/${args.slug}`,
@@ -101,7 +101,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
     }
 
     if (sub === "list") {
-      const spikes = listSpikes(tddDir);
+      const spikes = listSpikes(sftddDir);
       process.stdout.write(
         args.json
           ? `${JSON.stringify(spikes)}\n`
@@ -118,7 +118,7 @@ export async function runSpikeCli(argv: string[]): Promise<number> {
         return 2;
       }
       await deleteSpike({
-        tddDir,
+        sftddDir,
         projectDir: args.projectDir ?? process.cwd(),
         spikeSlug: args.slug,
         deleteBranchToo: !args.keepBranch,

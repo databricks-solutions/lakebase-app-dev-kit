@@ -13,7 +13,7 @@
 // Exit: 0 ok; 2 bad args; 1 op failure (e.g. no open RED cycle to green).
 
 import { join } from "path";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import {
   beginNextPendingCycle,
   beginNextPendingBatch,
@@ -43,7 +43,7 @@ interface Args {
   feature?: string;
   story?: string;
   ac?: string;
-  tddDir?: string;
+  sftddDir?: string;
   /** P8b: "hybrid-a" makes `begin` stamp a layer-batch RED (vs one test). */
   loop?: string;
   /** P8b: layer-batch cap for `begin --loop hybrid-a`. */
@@ -67,7 +67,7 @@ function parse(argv: string[]): Args {
       case "--feature": out.feature = argv[++i]; break;
       case "--story": out.story = argv[++i]; break;
       case "--ac": out.ac = argv[++i]; break;
-      case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--tdd-dir": out.sftddDir = argv[++i]; break;
       case "--loop": out.loop = argv[++i]; break;
       case "--test": (out.tests ??= []).push(argv[++i]); break;
       case "--reason": out.reason = argv[++i]; break;
@@ -94,8 +94,8 @@ function usage(msg: string): number {
 async function main(): Promise<number> {
   const a = parse(process.argv.slice(2));
   if (!a.feature || !a.story) return usage("Error: --feature and --story are required.");
-  const tddDir = a.tddDir ?? resolveTddDir();
-  const base = { tddDir, featureId: a.feature, story: a.story };
+  const sftddDir = a.sftddDir ?? resolveSftddDir();
+  const base = { sftddDir, featureId: a.feature, story: a.story };
 
   switch (a.cmd) {
     case "begin": {
@@ -140,17 +140,17 @@ async function main(): Promise<number> {
       // story granularity (default): the Navigator REVIEWs the WHOLE story in
       // one turn (review-verdict.json at the story root); no AC.
       if (a.loop === "story") {
-        const r = reviewStory(tddDir, a.feature, a.story);
+        const r = reviewStory(sftddDir, a.feature, a.story);
         process.stdout.write(`cycle: REVIEWED story ${a.story}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}\n`);
         return 0;
       }
       // Record the Navigator's REVIEW of an AC (after its tests are all green).
-      const ac = a.ac ?? firstReviewPendingAc(tddDir, a.feature, a.story);
+      const ac = a.ac ?? firstReviewPendingAc(sftddDir, a.feature, a.story);
       if (!ac) {
         process.stdout.write(`cycle: no AC awaiting review for ${a.story}\n`);
         return 0;
       }
-      const r = reviewAc(tddDir, a.feature, a.story, ac);
+      const r = reviewAc(sftddDir, a.feature, a.story, ac);
       process.stdout.write(`cycle: REVIEWED ${ac}${r.refactorRequested ? " (refactor requested)" : " (looks good)"}\n`);
       return 0;
     }
@@ -163,7 +163,7 @@ async function main(): Promise<number> {
       // story granularity (default): the Driver REFACTORs the WHOLE story in
       // one turn; honest re-verify gates stamping (same as the per-AC path).
       if (a.loop === "story") {
-        const r = await refactorStory(tddDir, a.feature, a.story, { verify: greenVerifierForEnv() });
+        const r = await refactorStory(sftddDir, a.feature, a.story, { verify: greenVerifierForEnv() });
         if (r.escalated) {
           process.stdout.write(`cycle: REFACTOR BLOCKED for story ${a.story} -> raised to HIL: ${r.summary}\n`);
         } else {
@@ -171,13 +171,13 @@ async function main(): Promise<number> {
         }
         return 0;
       }
-      const ac = a.ac ?? firstRefactorPendingAc(tddDir, a.feature, a.story);
+      const ac = a.ac ?? firstRefactorPendingAc(sftddDir, a.feature, a.story);
       if (!ac) {
         process.stdout.write(`cycle: no AC awaiting refactor for ${a.story}\n`);
         return 0;
       }
       // Same replay-build trust applies to the refactor re-verify.
-      const r = await refactorAc(tddDir, a.feature, a.story, ac, { verify: greenVerifierForEnv() });
+      const r = await refactorAc(sftddDir, a.feature, a.story, ac, { verify: greenVerifierForEnv() });
       if (r.escalated) {
         process.stdout.write(`cycle: REFACTOR BLOCKED for ${ac} -> raised to HIL: ${r.summary}\n`);
       } else {
@@ -192,7 +192,7 @@ async function main(): Promise<number> {
       if (!a.ac) return usage("flag-superseded: --ac is required.");
       if (!a.tests || a.tests.length === 0) return usage("flag-superseded: at least one --test is required.");
       if (!a.reason) return usage("flag-superseded: --reason is required.");
-      writeSupersededTests(tddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
+      writeSupersededTests(sftddDir, a.feature, a.story, a.ac, { tests: a.tests, reason: a.reason });
       process.stdout.write(`cycle: flagged ${a.tests.length} superseded test(s) for ${a.story}/${a.ac}\n`);
       return 0;
     }
@@ -204,7 +204,7 @@ async function main(): Promise<number> {
       // driver-fixable and assess-green will escalate carrying the diagnosis.
       if (!a.ac) return usage("assess-regression: --ac is required.");
       if (!a.diagnosis) return usage("assess-regression: --diagnosis is required.");
-      writeRegressionAssessment(tddDir, a.feature, a.story, a.ac, {
+      writeRegressionAssessment(sftddDir, a.feature, a.story, a.ac, {
         diagnosis: a.diagnosis,
         ...(a.fixDirective ? { fixDirective: a.fixDirective } : {}),
       });
@@ -220,7 +220,7 @@ async function main(): Promise<number> {
       // story. The existing revise-route/escalation machinery then routes +
       // bounds + escalates. A passed/absent verdict flags nothing.
       if (!a.story) return usage("reflect-gate: --story is required.");
-      const hits = recordReflectionGate(tddDir, a.feature, a.story);
+      const hits = recordReflectionGate(sftddDir, a.feature, a.story);
       process.stdout.write(
         hits.length === 0
           ? `cycle: reflect gate passed for ${a.story} (no design defect)\n`
@@ -242,13 +242,13 @@ async function main(): Promise<number> {
       //       the bare verify summary (the prior, diagnosis-free fallback).
       const ac = a.ac;
       if (!ac) return usage("assess-green: --ac is required.");
-      const gf = readGreenFailure(tddDir, a.feature, a.story, ac);
-      const flagged = readSupersededTests(tddDir, a.feature, a.story, ac);
-      const regression = readRegressionAssessment(tddDir, a.feature, a.story, ac);
+      const gf = readGreenFailure(sftddDir, a.feature, a.story, ac);
+      const flagged = readSupersededTests(sftddDir, a.feature, a.story, ac);
+      const regression = readRegressionAssessment(sftddDir, a.feature, a.story, ac);
       // composeAssessedGreenFailure PRESERVES the cross-round fixAttempts counter
       // (without it the assess turn reset the self-heal cap every round, so the
       // refactor-until-clean loop was unbounded , observed 4 rounds, counter stuck at 1).
-      writeGreenFailure(tddDir, a.feature, a.story, ac, composeAssessedGreenFailure(gf, regression));
+      writeGreenFailure(sftddDir, a.feature, a.story, ac, composeAssessedGreenFailure(gf, regression));
       if (flagged) {
         process.stdout.write(`cycle: assessed ${a.story}/${ac} -> superseded (${flagged.tests.length} test(s) flagged; Driver may permissively green)\n`);
       } else if (regression?.fixDirective) {
@@ -257,7 +257,7 @@ async function main(): Promise<number> {
         process.stdout.write(`cycle: assessed ${a.story}/${ac} -> driver-fixable regression; routing Driver repair: ${regression.diagnosis}\n`);
       } else {
         const why = regression?.diagnosis ?? gf?.summary ?? "";
-        writeEscalation(tddDir, {
+        writeEscalation(sftddDir, {
           source: "driver-green",
           reason: `GREEN verify failed for ${ac} in ${a.feature}/${a.story}: Navigator assessed it as a genuine regression${regression ? " (not driver-fixable)" : " (no superseded tests flagged)"}${why ? ` , ${why}` : ""}`,
           feature_id: a.feature,

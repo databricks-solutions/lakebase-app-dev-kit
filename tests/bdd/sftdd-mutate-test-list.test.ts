@@ -54,7 +54,7 @@ function approveTestListGate(list: TestList): void {
     approver: ORIGINAL_APPROVER,
     hitlApproved: true,
     artifactInputs: { "test-list.json": content },
-    tddDir: tdd,
+    sftddDir: tdd,
     now: FIXED_NOW,
     writeSelectionLog: false,
   });
@@ -77,7 +77,7 @@ describe("mutateTestList: argument validation", () => {
         newTestList: BASE_LIST,
         approver: "",
         hitlReapproved: false,
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/approver/);
   });
@@ -90,7 +90,7 @@ describe("mutateTestList: argument validation", () => {
         newTestList: { ...BASE_LIST, feature_id: "F-OTHER" },
         approver: APPROVER,
         hitlReapproved: false,
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/featureId mismatch/);
   });
@@ -104,7 +104,7 @@ describe("mutateTestList: unprotected states (write goes through)", () => {
       newTestList: BASE_LIST,
       approver: APPROVER,
       hitlReapproved: false,
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.reapproved).toBe(false);
     const back = readMasterTestList(tdd, FEATURE_ID);
@@ -115,13 +115,13 @@ describe("mutateTestList: unprotected states (write goes through)", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.test_list = { status: "withdrawn", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = mutateTestList({
       featureId: FEATURE_ID,
       newTestList: BASE_LIST,
       approver: APPROVER,
       hitlReapproved: false,
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.reapproved).toBe(false);
   });
@@ -130,13 +130,13 @@ describe("mutateTestList: unprotected states (write goes through)", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.test_list = { status: "superseded", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = mutateTestList({
       featureId: FEATURE_ID,
       newTestList: BASE_LIST,
       approver: APPROVER,
       hitlReapproved: false,
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(result.reapproved).toBe(false);
   });
@@ -155,7 +155,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
         newTestList: mutated,
         approver: APPROVER,
         hitlReapproved: false,
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(TestListImmutabilityError);
   });
@@ -172,7 +172,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
         newTestList: { ...BASE_LIST, items: [] },
         approver: APPROVER,
         hitlReapproved: false,
-        tddDir: tdd,
+        sftddDir: tdd,
       });
     } catch {
       // expected
@@ -200,7 +200,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
       newTestList: mutated,
       approver: APPROVER,
       hitlReapproved: true,
-      tddDir: tdd,
+      sftddDir: tdd,
       now: RE_APPROVE_NOW,
     });
 
@@ -208,7 +208,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
     const expectedHash = hashArtifact(JSON.stringify(mutated, null, 2) + "\n");
     expect(result.capturedHash).toBe(expectedHash);
 
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back.gates.test_list.status).toBe("approved");
     expect(back.gates.test_list.approver).toBe(APPROVER);
     expect(back.gates.test_list.approved_at).toBe("2026-06-01T10:00:00.000Z");
@@ -225,11 +225,11 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
       newTestList: { ...BASE_LIST, items: BASE_LIST.items.slice(0, 1) },
       approver: APPROVER,
       hitlReapproved: true,
-      tddDir: tdd,
+      sftddDir: tdd,
       now: RE_APPROVE_NOW,
     });
 
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     const history = back.gates.test_list.history;
     expect(history).toHaveLength(3);
     expect(history[0].action).toBe("approved");
@@ -255,7 +255,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
       newTestList: mutated,
       approver: APPROVER,
       hitlReapproved: true,
-      tddDir: tdd,
+      sftddDir: tdd,
       now: RE_APPROVE_NOW,
     });
 
@@ -268,7 +268,7 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
       featureId: FEATURE_ID,
       gate: "test_list",
       currentInputs: { "test-list.json": currentContent },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(v.status).toBe("ok");
   });
@@ -276,26 +276,26 @@ describe("mutateTestList: approved gate refusal + re-approval", () => {
 
 describe("mutateTestList: isTestListProtected predicate", () => {
   it("returns false when the feature does not exist", () => {
-    expect(isTestListProtected(FEATURE_ID, { tddDir: tdd })).toBe(false);
+    expect(isTestListProtected(FEATURE_ID, { sftddDir: tdd })).toBe(false);
   });
 
   it("returns false when the gate is open", () => {
     makeFeatureDir();
-    expect(isTestListProtected(FEATURE_ID, { tddDir: tdd })).toBe(false);
+    expect(isTestListProtected(FEATURE_ID, { sftddDir: tdd })).toBe(false);
   });
 
   it("returns true when the gate is approved", () => {
     makeFeatureDir();
     writeMasterTestList(tdd, BASE_LIST);
     approveTestListGate(BASE_LIST);
-    expect(isTestListProtected(FEATURE_ID, { tddDir: tdd })).toBe(true);
+    expect(isTestListProtected(FEATURE_ID, { sftddDir: tdd })).toBe(true);
   });
 
   it("returns false when the gate is withdrawn", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.test_list = { status: "withdrawn", history: [] };
-    writeGates(state, { tddDir: tdd });
-    expect(isTestListProtected(FEATURE_ID, { tddDir: tdd })).toBe(false);
+    writeGates(state, { sftddDir: tdd });
+    expect(isTestListProtected(FEATURE_ID, { sftddDir: tdd })).toBe(false);
   });
 });

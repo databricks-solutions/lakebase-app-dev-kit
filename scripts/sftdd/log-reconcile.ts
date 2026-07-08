@@ -18,32 +18,32 @@ import {
   type AgentLogEvent,
   type AgentRole,
 } from "./agent-log.js";
-import { resolveTddDir, featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./sftdd-paths.js";
+import { resolveSftddDir, featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./sftdd-paths.js";
 import { establishConventionsIfAbsent } from "./architecture-conventions.js";
 import { establishCanonFromDisk } from "./architecture-canon.js";
 
 export interface ReconcileOpts {
   /** Path to the artifact root. Default: resolved (.sftdd, or legacy .tdd). */
-  tddDir?: string;
+  sftddDir?: string;
   featureId: string;
   /** Test seam for a deterministic clock. */
   now?: () => Date;
 }
 
 interface ArtifactSpec {
-  /** Path relative to tddDir (the form the reconciled event records). */
+  /** Path relative to sftddDir (the form the reconciled event records). */
   path: string;
   role: AgentRole;
   message: string;
 }
 
 /** The design artifacts a feature produces, attributed to their owning role. */
-function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
+function discoverArtifacts(sftddDir: string, featureId: string): ArtifactSpec[] {
   const out: ArtifactSpec[] = [];
-  const fdir = featureResolved(tddDir, featureId);
+  const fdir = featureResolved(sftddDir, featureId);
   if (!existsSync(fdir)) return out;
   const add = (abs: string, role: AgentRole, message: string) => {
-    if (existsSync(abs)) out.push({ path: relative(tddDir, abs), role, message });
+    if (existsSync(abs)) out.push({ path: relative(sftddDir, abs), role, message });
   };
 
   // Feature-level artifacts.
@@ -55,14 +55,14 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
   // Like the design-guide, it lives outside the feature dir and is inherited
   // across features, so reconcile it at its project path or a ux-style turn that
   // produced/inherited it would log nothing for it.
-  add(architectureConventionsJson(tddDir), "architect-reviewer", "architecture conventions (project)");
+  add(architectureConventionsJson(sftddDir), "architect-reviewer", "architecture conventions (project)");
 
   // UX design system , PROJECT-level, under .tdd/design/ (NOT the feature dir).
   // The ux-designer writes design-guide.{md,json} + ia.md there (designGuideJson
   // resolves tdd/design/design-guide.json); reconciling them at the feature dir
   // found nothing, so a ux-designer turn logged a phase.start but no
   // artifact.written for what it produced.
-  const designDir = dirname(designGuideJson(tddDir));
+  const designDir = dirname(designGuideJson(sftddDir));
   add(join(designDir, "design-guide.json"), "ux-designer", "design-guide.json");
   add(join(designDir, "design-guide.md"), "ux-designer", "design-guide.md");
   add(join(designDir, "ia.md"), "ux-designer", "ia.md");
@@ -82,7 +82,7 @@ function discoverArtifacts(tddDir: string, featureId: string): ArtifactSpec[] {
           }
         }
       }
-      add(storyTestListJson(tddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
+      add(storyTestListJson(sftddDir, featureId, s), "test-strategist", `per-story test list for ${s}`);
     }
   }
   return out;
@@ -106,8 +106,8 @@ function alreadyLogged(events: AgentLogEvent[], relPath: string): boolean {
  * emitted (empty when the log is already complete). Idempotent.
  */
 export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
-  const tddDir = opts.tddDir ?? resolveTddDir();
-  const existing = readAgentLog({ tddDir, featureId: opts.featureId });
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const existing = readAgentLog({ sftddDir, featureId: opts.featureId });
   const emitted: AgentLogEvent[] = [];
 
   // Deterministically establish the project architecture conventions from this
@@ -119,7 +119,7 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
   // the role model remembering to emit (the same structural-observability intent
   // as the artifact reconcile below). Idempotent: establish returns established
   // only on the first reconcile that sees architecture.json.
-  const est = establishConventionsIfAbsent(tddDir, opts.featureId, opts.now);
+  const est = establishConventionsIfAbsent(sftddDir, opts.featureId, opts.now);
   if (est.established && est.conventions) {
     const layout = est.conventions.layers.map((l) => `${l.role}=${l.module}`).join(", ");
     const ev = emitAgentLogEvent(
@@ -130,7 +130,7 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         feature_id: opts.featureId,
         slots: { note: `established project architecture conventions: ${layout}` },
       },
-      { tddDir, now: opts.now },
+      { sftddDir, now: opts.now },
     );
     existing.push(ev);
     emitted.push(ev);
@@ -141,7 +141,7 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
   // layers + persistence-invariant patterns become the standing rules a later
   // feature's per-story architect step projects from. Idempotent + code-emitted,
   // so the establish decision is observable in the log without the role emitting.
-  const canonEst = establishCanonFromDisk(tddDir, opts.featureId, opts.now);
+  const canonEst = establishCanonFromDisk(sftddDir, opts.featureId, opts.now);
   if (canonEst.established && canonEst.canon) {
     const c = canonEst.canon;
     const summary =
@@ -155,13 +155,13 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         feature_id: opts.featureId,
         slots: { note: `established project architecture canon: ${summary}` },
       },
-      { tddDir, now: opts.now },
+      { sftddDir, now: opts.now },
     );
     existing.push(ev);
     emitted.push(ev);
   }
 
-  for (const art of discoverArtifacts(tddDir, opts.featureId)) {
+  for (const art of discoverArtifacts(sftddDir, opts.featureId)) {
     if (alreadyLogged(existing, art.path)) continue;
     const ev = emitAgentLogEvent(
       {
@@ -171,7 +171,7 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
         feature_id: opts.featureId,
         slots: { artifact: art.message, summary: "present on disk (reconciled)", path: art.path, reconciled: true },
       },
-      { tddDir, now: opts.now },
+      { sftddDir, now: opts.now },
     );
     existing.push(ev); // so a duplicate within this same pass is also deduped
     emitted.push(ev);

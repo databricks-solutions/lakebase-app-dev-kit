@@ -73,7 +73,7 @@ describe("beginNextPendingBatch: one RED cycle per layer-chunk", () => {
       ["AC2", "API", ["T2"]],
       ["AC3", "API", ["T3"]],
     ]);
-    const r = beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S });
+    const r = beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S });
     expect(r.recorded).toBe(true);
     const cycles = storyCycles(tdd, F, S);
     expect(cycles).toHaveLength(1);
@@ -93,7 +93,7 @@ describe("beginNextPendingBatch: one RED cycle per layer-chunk", () => {
       ["AC4", "API", ["T4"]],
     ]);
     expect(DEFAULT_BATCH_CAP).toBe(3);
-    beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S });
+    beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S });
     const p = storyTestProgress(tdd, F, S);
     expect(p.pending.map((i) => i.id)).toEqual(["T4"]);
   });
@@ -104,7 +104,7 @@ describe("beginNextPendingBatch: one RED cycle per layer-chunk", () => {
       ["AC2", "API", ["T2"]],
       ["AC3", "E2E", ["T3"]],
     ]);
-    const r = beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S });
+    const r = beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S });
     expect(r.recorded).toBe(true);
     expect(coveredTestIds(storyCycles(tdd, F, S)[0])).toEqual(["T1", "T2"]); // API only
     expect(storyTestProgress(tdd, F, S).pending.map((i) => i.id)).toEqual(["T3"]); // E2E waits
@@ -112,9 +112,9 @@ describe("beginNextPendingBatch: one RED cycle per layer-chunk", () => {
 
   it("recorded:false when nothing is pending", () => {
     seedStory([["AC1", "API", ["T1"]]]);
-    beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S });
+    beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S });
     // openRed exists but nothing pending -> a second begin records nothing.
-    expect(beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S }).recorded).toBe(false);
+    expect(beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S }).recorded).toBe(false);
   });
 });
 
@@ -124,8 +124,8 @@ describe("batch GREEN: one cycle greens every covered item + the per-AC review q
       ["AC1", "API", ["T1"]],
       ["AC2", "API", ["T2"]],
     ]);
-    beginNextPendingBatch({ tddDir: tdd, featureId: F, story: S });
-    const g = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingBatch({ sftddDir: tdd, featureId: F, story: S });
+    const g = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
     expect(g.recorded).toBe(true);
     // The whole batch is green: storyTestProgress.allGreen, no open RED.
     const p = storyTestProgress(tdd, F, S);

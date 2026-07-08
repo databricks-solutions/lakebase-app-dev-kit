@@ -41,7 +41,7 @@ describe("approveGate: HITL gate enforcement", () => {
         approver: APPROVER,
         hitlApproved: false,
         artifactInputs: { "feature-spec.md": "x" },
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/hitlApproved/);
   });
@@ -55,7 +55,7 @@ describe("approveGate: HITL gate enforcement", () => {
         approver: "",
         hitlApproved: true,
         artifactInputs: { "feature-spec.md": "x" },
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/approver/);
   });
@@ -69,7 +69,7 @@ describe("approveGate: HITL gate enforcement", () => {
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: {},
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/at least one artifact/);
   });
@@ -86,7 +86,7 @@ describe("approveGate: S2 spec gate approval", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
 
@@ -108,10 +108,10 @@ describe("approveGate: S2 spec gate approval", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back.gates.spec.status).toBe("approved");
     expect(back.gates.plan.status).toBe("open");
     expect(back.gates.test_list.status).toBe("open");
@@ -129,7 +129,7 @@ describe("approveGate: S3 plan gate approval", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "plan.json": planJson },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(result.state.gates.plan.status).toBe("approved");
@@ -148,7 +148,7 @@ describe("approveGate: S4 test_list gate approval", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "test-list.json": testList },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(result.state.gates.test_list.status).toBe("approved");
@@ -166,7 +166,7 @@ describe("approveGate: promote gate approval (string ref hashing)", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { promote_ref: promoteRef },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(result.state.gates.promote.status).toBe("approved");
@@ -183,7 +183,7 @@ describe("approveGate: re-approval rejection", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(() =>
@@ -193,7 +193,7 @@ describe("approveGate: re-approval rejection", () => {
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "feature-spec.md": "y", "feature-spec.json": "{}" },
-        tddDir: tdd,
+        sftddDir: tdd,
         now: FIXED_NOW,
       })
     ).toThrow(GateAlreadyClosedError);
@@ -203,7 +203,7 @@ describe("approveGate: re-approval rejection", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.plan = { status: "withdrawn", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     expect(() =>
       approveGate({
         featureId: FEATURE_ID,
@@ -211,7 +211,7 @@ describe("approveGate: re-approval rejection", () => {
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "plan.json": "{}" },
-        tddDir: tdd,
+        sftddDir: tdd,
         now: FIXED_NOW,
       })
     ).toThrow(GateAlreadyClosedError);
@@ -226,14 +226,14 @@ describe("approveGate: history accumulation", () => {
       { action: "withdrawn", at: "2026-05-30T00:00:00.000Z", approver: APPROVER, reason: "first pass" },
     ];
     state.gates.spec.status = "open";
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = approveGate({
       featureId: FEATURE_ID,
       gate: "spec",
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(result.state.gates.spec.history).toHaveLength(2);
@@ -251,7 +251,7 @@ describe("approveGate: selection-log dual-write", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     const logPath = join(tdd, "selection-log.md");
@@ -274,7 +274,7 @@ describe("approveGate: selection-log dual-write", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "plan.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     const log = readFileSync(logPath, "utf8");
@@ -290,7 +290,7 @@ describe("approveGate: selection-log dual-write", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });

@@ -21,7 +21,7 @@ import {
 import type { CycleArtifact, CycleScope } from "../../scripts/sftdd/run-cycle";
 
 let tdd: string;
-const scope: CycleScope = { tddDir: "", feature_id: "F1", story_id: "S1", ac_id: "AC1" };
+const scope: CycleScope = { sftddDir: "", feature_id: "F1", story_id: "S1", ac_id: "AC1" };
 
 function artifact(overrides: Partial<CycleArtifact>): CycleArtifact {
   return {

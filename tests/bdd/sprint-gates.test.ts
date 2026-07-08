@@ -33,18 +33,18 @@ function writeProposal(content = PROPOSAL): void {
 
 describe("readSprintGates", () => {
   it("returns the default (plan open) when no gates.json exists", () => {
-    expect(readSprintGates(SPRINT, { tddDir: tdd })).toEqual(defaultSprintGatesState(SPRINT));
-    expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("open");
+    expect(readSprintGates(SPRINT, { sftddDir: tdd })).toEqual(defaultSprintGatesState(SPRINT));
+    expect(readSprintGates(SPRINT, { sftddDir: tdd }).gates.plan.status).toBe("open");
   });
 });
 
 describe("approveSprintPlanGate (teeth)", () => {
   it("approves when feature-proposals.md exists + conforms", () => {
     writeProposal();
-    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
     expect(res.ok).toBe(true);
     if (res.ok) expect(res.alreadyApproved).toBe(false);
-    expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("approved");
+    expect(readSprintGates(SPRINT, { sftddDir: tdd }).gates.plan.status).toBe("approved");
   });
 
   it("approves when the proposal is at .tdd/planning/ (where the Spec Author writes it)", () => {
@@ -54,35 +54,35 @@ describe("approveSprintPlanGate (teeth)", () => {
     const planning = join(tdd, "planning");
     mkdirSync(planning, { recursive: true });
     writeFileSync(join(planning, PLAN_GATE_ARTIFACT), PROPOSAL);
-    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
     expect(res.ok).toBe(true);
-    expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("approved");
+    expect(readSprintGates(SPRINT, { sftddDir: tdd }).gates.plan.status).toBe("approved");
   });
 
   it("REFUSES when the proposal is absent (no plan to review)", () => {
-    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toMatch(/not found/);
-    expect(readSprintGates(SPRINT, { tddDir: tdd }).gates.plan.status).toBe("open");
+    expect(readSprintGates(SPRINT, { sftddDir: tdd }).gates.plan.status).toBe("open");
   });
 
   it("REFUSES when the proposal is non-conformant (no H1 / empty body)", () => {
     writeProposal("no heading, just prose");
-    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toMatch(/not conformant/);
   });
 
   it("REFUSES without hitlApproved (the gate is HITL)", () => {
     writeProposal();
-    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: false, tddDir: tdd });
+    const res = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: false, sftddDir: tdd });
     expect(res.ok).toBe(false);
   });
 
   it("is idempotent: a second approve is a no-op (alreadyApproved)", () => {
     writeProposal();
-    approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
-    const again = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, tddDir: tdd });
+    approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
+    const again = approveSprintPlanGate({ sprint: SPRINT, approver: "human-proxy", hitlApproved: true, sftddDir: tdd });
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.alreadyApproved).toBe(true);
   });

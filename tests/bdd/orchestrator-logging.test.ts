@@ -191,10 +191,10 @@ describe("makeOnAction: code-emits through the ONE common logger", () => {
   afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
   it("appends valid, ts-stamped orchestrator events to .tdd/agent-log.jsonl", () => {
-    const onAction = makeOnAction({ tddDir: tdd, featureId: "F1-initial-domain" });
+    const onAction = makeOnAction({ sftddDir: tdd, featureId: "F1-initial-domain" });
     onAction({ kind: "invoke-role", role: "spec-author", story: "S1" } as WorkflowAction, 0);
 
-    const events = readAgentLog({ tddDir: tdd });
+    const events = readAgentLog({ sftddDir: tdd });
     expect(events.length).toBeGreaterThanOrEqual(2); // handoff + phase.start
     // emitAgentLogEvent stamps a real UTC timestamp; this proves we go through
     // the logger (not a role writing its own line with a local clock).

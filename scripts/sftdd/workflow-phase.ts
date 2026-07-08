@@ -11,8 +11,8 @@ import { workflowStateJson } from "./sftdd-paths.js";
 const TERMINAL_PHASES = new Set(["done", "shipped"]);
 
 /** Persist the driver's coarse phase, preserving any other fields on the file. */
-export function writeWorkflowPhase(tddDir: string, phase: string): void {
-  const file = workflowStateJson(tddDir);
+export function writeWorkflowPhase(sftddDir: string, phase: string): void {
+  const file = workflowStateJson(sftddDir);
   let state: Record<string, unknown> = {};
   if (fs.existsSync(file)) {
     try {
@@ -22,7 +22,7 @@ export function writeWorkflowPhase(tddDir: string, phase: string): void {
     }
   }
   state.phase = phase;
-  fs.mkdirSync(tddDir, { recursive: true });
+  fs.mkdirSync(sftddDir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 
@@ -38,8 +38,8 @@ export function writeWorkflowPhase(tddDir: string, phase: string): void {
  *
  * Returns true iff a stale terminal phase was cleared.
  */
-export function resetStaleTerminalPhase(tddDir: string): boolean {
-  const file = workflowStateJson(tddDir);
+export function resetStaleTerminalPhase(sftddDir: string): boolean {
+  const file = workflowStateJson(sftddDir);
   if (!fs.existsSync(file)) return false;
   let state: Record<string, unknown>;
   try {

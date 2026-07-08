@@ -60,7 +60,7 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
 
     // Turn 0 , a design turn writes a feature spec under .tdd.
     writeTdd(tdd, "features/F1/feature-spec.json", JSON.stringify({ id: "F1" }));
-    const t0 = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author", mode: "breakdown", story: "S1" }) });
+    const t0 = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author", mode: "breakdown", story: "S1" }) });
     expect(t0.ordinal).toBe(0);
     expect(t0.dir).toBe("0000-spec-author-breakdown");
     expect(t0.produced).toContain(".tdd/features/F1/feature-spec.json");
@@ -73,7 +73,7 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
 
     // Turn 1 , a build turn writes production code (NOT under .tdd).
     writeFileSync(join(proj, "main.py"), "x = 1\n");
-    const t1 = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 1, action: act({ kind: "invoke-role", role: "driver", buildMode: "green" }) });
+    const t1 = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 1, action: act({ kind: "invoke-role", role: "driver", buildMode: "green" }) });
     expect(t1.ordinal).toBe(1);
     expect(t1.produced).toContain("main.py");
     expect(existsSync(join(record, "turns", t1.dir, "files", "main.py"))).toBe(true);
@@ -82,7 +82,7 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
 
     // Turn 2 , modify an existing .tdd artifact: delta picks up only the change.
     writeTdd(tdd, "features/F1/feature-spec.json", JSON.stringify({ id: "F1", v: 2 }));
-    const t2 = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 2, action: act({ kind: "invoke-role", role: "architect-reviewer", story: "S1" }) });
+    const t2 = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 2, action: act({ kind: "invoke-role", role: "architect-reviewer", story: "S1" }) });
     expect(t2.produced).toEqual([".tdd/features/F1/feature-spec.json"]);
     expect(readJson(join(record, "recorded-artifacts", "features/F1/feature-spec.json")).v).toBe(2);
 
@@ -95,11 +95,11 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
   it("records deletions + removes them from the cumulative mirror", () => {
     const { proj, tdd, record } = mkProject();
     writeTdd(tdd, "features/F1/stories/S1/story.json", JSON.stringify({ id: "S1" }));
-    recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author" }) });
+    recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author" }) });
     expect(existsSync(join(record, "recorded-artifacts", "features/F1/stories/S1/story.json"))).toBe(true);
 
     rmSync(join(tdd, "features/F1/stories/S1/story.json"));
-    const t = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 1, action: act({ kind: "invoke-role", role: "spec-author" }) });
+    const t = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 1, action: act({ kind: "invoke-role", role: "spec-author" }) });
     expect(t.deleted).toContain(".tdd/features/F1/stories/S1/story.json");
     expect(existsSync(join(record, "recorded-artifacts", "features/F1/stories/S1/story.json"))).toBe(false);
   });
@@ -110,12 +110,12 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
     writeTdd(tdd, "product-overview.md", "# overview");
     writeFileSync(join(proj, "pyproject.toml"), "[project]\n");
     // Seed the baseline (what withTurnRecording does at construction).
-    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, tddDir: tdd })).toBe(true);
+    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, sftddDir: tdd })).toBe(true);
     // Re-seed is a no-op once a baseline exists.
-    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, tddDir: tdd })).toBe(false);
+    expect(seedRecorderBaseline({ recordDir: record, projectDir: proj, sftddDir: tdd })).toBe(false);
     // Turn 0 produces ONE new artifact.
     writeTdd(tdd, "planning/feature-proposals.md", "# proposals");
-    const t = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author", mode: "propose" }) });
+    const t = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "spec-author", mode: "propose" }) });
     expect(t.produced).toEqual([".tdd/planning/feature-proposals.md"]); // ONLY the new file
     expect(t.produced).not.toContain(".tdd/product-overview.md"); // pre-existing, not attributed
   });
@@ -124,7 +124,7 @@ describe("recordTurn: per-turn timeline + cumulative .tdd mirror", () => {
     const { proj, tdd, record } = mkProject();
     writeFileSync(join(tdd, "agent-log.jsonl"), '{"e":1}\n');
     writeTdd(tdd, "design/design-guide.json", "{}");
-    const t = recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "ux-designer" }) });
+    const t = recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "ux-designer" }) });
     expect(t.produced).toContain(".tdd/design/design-guide.json");
     expect(t.produced).not.toContain(".tdd/agent-log.jsonl");
   });
@@ -137,7 +137,7 @@ describe("record -> replay round-trip", () => {
     writeTdd(tdd, "design/design-guide.json", JSON.stringify({ tokens: { color: "#111" } }));
     writeTdd(tdd, "design/design-guide.md", "# Guide\n");
     writeTdd(tdd, "design/ia.md", "# IA\n");
-    recordTurn({ recordDir: record, projectDir: proj, tddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "ux-designer" }) });
+    recordTurn({ recordDir: record, projectDir: proj, sftddDir: tdd, step: 0, action: act({ kind: "invoke-role", role: "ux-designer" }) });
 
     // Replay that design turn into a FRESH project .tdd from the recorded-artifacts mirror.
     const fresh = mkdtempSync(join(tmpdir(), "turn-rec-replay-"));
@@ -147,7 +147,7 @@ describe("record -> replay round-trip", () => {
     const ok = replayDesignTurn({
       turn: { role: "ux-designer" },
       replayDir: join(record, "recorded-artifacts"),
-      tddDir: freshTdd,
+      sftddDir: freshTdd,
       featureId: "F1",
     });
     expect(ok).toBe(true);

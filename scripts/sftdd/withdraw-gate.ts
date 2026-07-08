@@ -20,7 +20,7 @@
 // schema_version bump).
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { join } from "path";
 import { withGatesLock } from "./gates-lock";
 import {
@@ -53,7 +53,7 @@ export interface WithdrawGateArgs {
   gate: GateName;
   approver: string;
   reason: string;
-  tddDir?: string;
+  sftddDir?: string;
   /** Test seam: deterministic clock. */
   now?: () => Date;
   /** Append a narrative entry to selection-log.md. Default: true. */
@@ -76,7 +76,7 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
     throw new Error("withdrawGate: reason must not be empty");
   }
 
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 
@@ -85,7 +85,7 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
   return withGatesLock(
     args.featureId,
     (): WithdrawGateResult => {
-      const state = readGates(args.featureId, { tddDir });
+      const state = readGates(args.featureId, { sftddDir });
       const sourceRecord = state.gates[args.gate];
 
       // Idempotent no-op: source gate is not currently approved.
@@ -120,10 +120,10 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
       }
 
       const updatedState: GatesState = { ...state, gates: nextGates };
-      writeGates(updatedState, { tddDir });
+      writeGates(updatedState, { sftddDir });
 
       if (writeLog) {
-        appendSelectionLog(tddDir, {
+        appendSelectionLog(sftddDir, {
           ts,
           featureId: args.featureId,
           sourceGate: args.gate,
@@ -135,7 +135,7 @@ export function withdrawGate(args: WithdrawGateArgs): WithdrawGateResult {
 
       return { state: updatedState, withdrawn_gates: withdrawn, noop: false };
     },
-    { tddDir }
+    { sftddDir }
   );
 }
 
@@ -170,8 +170,8 @@ interface SelectionLogEntry {
   cascadedGates: GateName[];
 }
 
-function appendSelectionLog(tddDir: string, entry: SelectionLogEntry): void {
-  const logPath = join(tddDir, "selection-log.md");
+function appendSelectionLog(sftddDir: string, entry: SelectionLogEntry): void {
+  const logPath = join(sftddDir, "selection-log.md");
   const cascadeLine =
     entry.cascadedGates.length > 0
       ? `- **Cascade:** ${entry.cascadedGates.join(", ")}`

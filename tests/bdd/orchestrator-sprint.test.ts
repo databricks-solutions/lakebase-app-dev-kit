@@ -114,7 +114,7 @@ describe("deriveSprintPlanningState", () => {
   });
 
   it("gateApproved when the sprint plan gate is approved", () => {
-    writeSprintGates({ sprint: SPRINT, schema_version: 1, gates: { plan: { status: "approved", history: [] } } }, { tddDir: tdd });
+    writeSprintGates({ sprint: SPRINT, schema_version: 1, gates: { plan: { status: "approved", history: [] } } }, { sftddDir: tdd });
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.gateApproved).toBe(true);
   });
 

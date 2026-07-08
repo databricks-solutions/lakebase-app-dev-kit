@@ -53,7 +53,7 @@ function grepFiles(pattern: string, dir: string, include?: string): string[] {
 
 /** A deterministic TS producer: the event name appears as a quoted string
  *  literal in a non-plumbing scripts/ *.ts file , either inline (`event: "x"`)
- *  or passed to an emit helper (`logDeployEvent(tddDir, "x", ...)`). Both are
+ *  or passed to an emit helper (`logDeployEvent(sftddDir, "x", ...)`). Both are
  *  real emit sites; the guard must not force one syntax. Restricted to .ts (so
  *  the schema JSON enum + docs do not count) and PLUMBING is excluded, so only
  *  true producers register. */

@@ -21,7 +21,7 @@ import { dirname, join, relative } from "path";
 import { experimentDir } from "./experiment";
 
 export interface WriteArtifactArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
@@ -43,12 +43,12 @@ export interface ArtifactEntry {
   modified: string;
 }
 
-function artifactsRoot(tddDir: string, featureId: string, storyId: string, experimentSlug: string): string {
-  return join(experimentDir(tddDir, featureId, storyId, experimentSlug), "artifacts");
+function artifactsRoot(sftddDir: string, featureId: string, storyId: string, experimentSlug: string): string {
+  return join(experimentDir(sftddDir, featureId, storyId, experimentSlug), "artifacts");
 }
 
-function cycleDir(args: { tddDir: string; featureId: string; storyId: string; experimentSlug: string; cycleId: string }): string {
-  return join(artifactsRoot(args.tddDir, args.featureId, args.storyId, args.experimentSlug), args.cycleId);
+function cycleDir(args: { sftddDir: string; featureId: string; storyId: string; experimentSlug: string; cycleId: string }): string {
+  return join(artifactsRoot(args.sftddDir, args.featureId, args.storyId, args.experimentSlug), args.cycleId);
 }
 
 export function writeArtifact(args: WriteArtifactArgs): string {
@@ -67,13 +67,13 @@ export function writeArtifact(args: WriteArtifactArgs): string {
  * cycle-relative names so consumers can stable-sort by (cycle_id, name).
  */
 export function listArtifacts(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   storyId: string,
   experimentSlug: string,
   cycleId?: string
 ): ArtifactEntry[] {
-  const root = artifactsRoot(tddDir, featureId, storyId, experimentSlug);
+  const root = artifactsRoot(sftddDir, featureId, storyId, experimentSlug);
   if (!existsSync(root)) return [];
   const entries: ArtifactEntry[] = [];
   const cycleIds = cycleId
@@ -97,7 +97,7 @@ export function listArtifacts(
 }
 
 export function readArtifact(args: {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;

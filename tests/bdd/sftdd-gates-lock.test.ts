@@ -46,7 +46,7 @@ describe("withGatesLock: acquire + release semantics", () => {
         observedDuringFn = existsSync(lockPath());
         return null;
       },
-      { tddDir: tdd }
+      { sftddDir: tdd }
     );
     expect(observedDuringFn).toBe(true);
     expect(existsSync(lockPath())).toBe(false);
@@ -57,7 +57,7 @@ describe("withGatesLock: acquire + release semantics", () => {
     const result = withGatesLock(
       FEATURE_ID,
       () => 42,
-      { tddDir: tdd }
+      { sftddDir: tdd }
     );
     expect(result).toBe(42);
   });
@@ -71,7 +71,7 @@ describe("withGatesLock: acquire + release semantics", () => {
         pidOnDisk = readFileSync(lockPath(), "utf8");
         return null;
       },
-      { tddDir: tdd }
+      { sftddDir: tdd }
     );
     expect(pidOnDisk).toBe(String(process.pid));
   });
@@ -84,7 +84,7 @@ describe("withGatesLock: acquire + release semantics", () => {
         () => {
           throw new Error("inner failure");
         },
-        { tddDir: tdd }
+        { sftddDir: tdd }
       )
     ).toThrow(/inner failure/);
     expect(existsSync(lockPath())).toBe(false);
@@ -105,7 +105,7 @@ describe("withGatesLock: lock-busy retry + exhaustion", () => {
     const result = withGatesLock(
       FEATURE_ID,
       () => "acquired",
-      { tddDir: tdd, sleep, maxRetries: 5, initialBackoffMs: 1 }
+      { sftddDir: tdd, sleep, maxRetries: 5, initialBackoffMs: 1 }
     );
     expect(result).toBe("acquired");
     expect(attempts).toBeGreaterThanOrEqual(releasedOnAttempt);
@@ -120,7 +120,7 @@ describe("withGatesLock: lock-busy retry + exhaustion", () => {
     let thrown: unknown = null;
     try {
       withGatesLock(FEATURE_ID, () => null, {
-        tddDir: tdd,
+        sftddDir: tdd,
         maxRetries: 2,
         initialBackoffMs: 1,
         sleep,
@@ -141,7 +141,7 @@ describe("withGatesLock: lock-busy retry + exhaustion", () => {
     let thrown: GatesLockBusyError | null = null;
     try {
       withGatesLock(FEATURE_ID, () => null, {
-        tddDir: tdd,
+        sftddDir: tdd,
         maxRetries: 1,
         initialBackoffMs: 1,
         sleep,
@@ -163,7 +163,7 @@ describe("withGatesLock: approveGate + withdrawGate retrofit", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -178,7 +178,7 @@ describe("withGatesLock: approveGate + withdrawGate retrofit", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -189,7 +189,7 @@ describe("withGatesLock: approveGate + withdrawGate retrofit", () => {
         approver: APPROVER,
         hitlApproved: true,
         artifactInputs: { "feature-spec.md": "y", "feature-spec.json": "{}" },
-        tddDir: tdd,
+        sftddDir: tdd,
         now: FIXED_NOW,
         writeSelectionLog: false,
       })
@@ -205,7 +205,7 @@ describe("withGatesLock: approveGate + withdrawGate retrofit", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -214,7 +214,7 @@ describe("withGatesLock: approveGate + withdrawGate retrofit", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "rescope",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -244,7 +244,7 @@ describe("withGatesLock: S8 concurrent-call mutual exclusion", () => {
         secondCallerStartedDuringFirst = !firstReleased;
         return "second-acquired";
       },
-      { tddDir: tdd, maxRetries: 5, initialBackoffMs: 1, sleep }
+      { sftddDir: tdd, maxRetries: 5, initialBackoffMs: 1, sleep }
     );
     expect(result).toBe("second-acquired");
     // Inner fn must NOT have started while the lockfile still existed.
@@ -261,7 +261,7 @@ describe("withGatesLock: S8 concurrent-call mutual exclusion", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "feature-spec.md": "x", "feature-spec.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -271,11 +271,11 @@ describe("withGatesLock: S8 concurrent-call mutual exclusion", () => {
       approver: APPROVER,
       hitlApproved: true,
       artifactInputs: { "plan.json": "{}" },
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back.gates.spec.status).toBe("approved");
     expect(back.gates.plan.status).toBe("approved");
   });

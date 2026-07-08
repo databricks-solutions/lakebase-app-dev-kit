@@ -73,8 +73,8 @@ function cycle(ac: string): Record<string, unknown> {
 
 describe("honest GREEN: greenOpenCycle runs a real verify before stamping green", () => {
   it("the FIRST failing verify routes a Navigator ASSESS (no escalation yet), not an immediate HIL halt", async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail });
 
     expect(r.recorded).toBe(false);
     // Reactive supersession trigger: the break may be a prior test this AC
@@ -90,12 +90,12 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
   });
 
   it("a still-failing repair round RE-ARMS for another assess (refactor-until-clean), not an immediate escalation", async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
     // Navigator assessed + gave a driver-fixable directive; the Driver repaired.
     writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x", fixDirective: "extract shared helper" });
     // The repair's re-verify STILL fails, but rounds remain: re-arm, do NOT escalate.
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
     expect(r.escalated).toBeFalsy();
     expect(r.needsAssess).toBe(true);
     // A fresh assess is armed on the RESIDUAL (assessed reset), round counted.
@@ -106,8 +106,8 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
   });
 
   it(`escalates only after ${MAX_REGRESSION_FIX_ATTEMPTS} self-heal rounds still fail`, async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
     // Simulate having already spent the budget minus one round; the Navigator
     // assessed the residual again with a directive.
     writeGreenFailure(tdd, F, S, "AC1", {
@@ -117,7 +117,7 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
       fixAttempts: MAX_REGRESSION_FIX_ATTEMPTS - 1,
     });
     // The final repair round still fails -> now escalate (rounds exhausted).
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail, repair: true });
     expect(r.escalated).toBe(true);
     const escs = readEscalations(tdd).filter((e) => !e.resolved_at);
     expect(escs.length).toBe(1);
@@ -126,12 +126,12 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
   });
 
   it("after a supersession flag, a PASSING permissive verify marks green + clears the marker", async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail }); // 1st -> assess
     // Navigator assessed + flagged the prior test as superseded; Driver refactored it.
     writeGreenFailure(tdd, F, S, "AC1", { assessed: true, summary: "x" });
     writeSupersededTests(tdd, F, S, "AC1", { tests: ["tests/old_test.py"], reason: "superseded by AC1" });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
     expect(r.recorded).toBe(true);
     expect(r.escalated).toBeFalsy();
     expect(cycle("AC1").green_at).toBeTruthy();
@@ -141,8 +141,8 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
   });
 
   it("a PASSING verify marks green + propagates (the happy path is unchanged)", async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
     expect(r.recorded).toBe(true);
     expect(r.escalated).toBeFalsy();
     expect(cycle("AC1").green_at).toBeTruthy();
@@ -156,14 +156,14 @@ describe("honest GREEN: greenOpenCycle runs a real verify before stamping green"
 // GREEN per turn; the final all-ACs state is still verified at the deploy gate.
 describe("replay-build: per-turn green trusts the recorded outcome", () => {
   it("replayTrustVerifier passes without running a real verify (no deploy)", async () => {
-    const r = await replayTrustVerifier({ projectDir: "/does/not/exist", tddDir: tdd, featureId: F, story: S });
+    const r = await replayTrustVerifier({ projectDir: "/does/not/exist", sftddDir: tdd, featureId: F, story: S });
     expect(r.passed).toBe(true);
     expect(r.summary).toMatch(/replay-build/i);
   });
 
   it("greenOpenCycle with the replay verifier greens an open RED cycle where a real full-suite verify would fail", async () => {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: replayTrustVerifier });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: replayTrustVerifier });
     expect(r.recorded).toBe(true);
     expect(r.escalated).toBeFalsy();
     expect(r.needsAssess).toBeFalsy();
@@ -175,7 +175,7 @@ describe("replay-build: per-turn green trusts the recorded outcome", () => {
     expect(greenVerifierForEnv({})).toBeUndefined();
     const v = greenVerifierForEnv({ LAKEBASE_SFTDD_REPLAY_BUILD_DIR: "/corpus" });
     expect(v).toBeDefined();
-    const r = await v!({ projectDir: "/x", tddDir: tdd, featureId: F, story: S });
+    const r = await v!({ projectDir: "/x", sftddDir: tdd, featureId: F, story: S });
     expect(r.passed).toBe(true);
   });
 });
@@ -188,8 +188,8 @@ describe("honest REFACTOR: refactorAc re-verifies before stamping refactored_at"
   // Drive AC1 to a refactor-pending state: green its test, then a REVIEW that
   // requested a refactor.
   async function toRefactorPending(): Promise<void> {
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
     writeJson(join(tdd, "cycles", F, S, "AC1", "review-verdict.json"), { refactor: true, notes: "extract a helper" });
     reviewAc(tdd, F, S, "AC1");
     expect(firstRefactorPendingAc(tdd, F, S)).toBe("AC1");

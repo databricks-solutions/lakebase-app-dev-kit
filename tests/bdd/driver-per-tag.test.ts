@@ -40,10 +40,10 @@ function rmTempTdd(dir: string): void {
 }
 
 function seedFeatureAndAc(
-  tddDir: string,
+  sftddDir: string,
   opts: { featureId: string; storyId: string; acId: string; layer?: "API" | "E2E" | "Infra" }
 ): void {
-  const acDir = path.join(tddDir, "features", opts.featureId, "stories", opts.storyId, "acs");
+  const acDir = path.join(sftddDir, "features", opts.featureId, "stories", opts.storyId, "acs");
   fs.mkdirSync(acDir, { recursive: true });
   const ac: Record<string, unknown> = {
     id: opts.acId,
@@ -56,8 +56,8 @@ function seedFeatureAndAc(
   fs.writeFileSync(path.join(acDir, `${opts.acId}.json`), JSON.stringify(ac, null, 2));
 }
 
-function seedExperiment(tddDir: string, featureId: string, slug: string, storyId = "S1"): void {
-  const dir = path.join(tddDir, "experiments", featureId, storyId, slug);
+function seedExperiment(sftddDir: string, featureId: string, slug: string, storyId = "S1"): void {
+  const dir = path.join(sftddDir, "experiments", featureId, storyId, slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "branch.txt"), "test-branch");
   const outcomes: ExperimentOutcomes = { status: "running" };
@@ -96,43 +96,43 @@ describe("recordTagRun + tagRunCount", () => {
 });
 
 describe("readAcLayer", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("readac");
+    sftddDir = mkTempTdd("readac");
   });
-  afterEach(() => rmTempTdd(tddDir));
+  afterEach(() => rmTempTdd(sftddDir));
 
   it("returns the layer when the AC declares one", () => {
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
-    expect(readAcLayer(tddDir, "F1", "AC1")).toBe("E2E");
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
+    expect(readAcLayer(sftddDir, "F1", "AC1")).toBe("E2E");
   });
 
   it("returns undefined when the AC is missing", () => {
-    expect(readAcLayer(tddDir, "F1", "AC1")).toBeUndefined();
+    expect(readAcLayer(sftddDir, "F1", "AC1")).toBeUndefined();
   });
 
   it("returns undefined when the AC has no layer field", () => {
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1" });
-    expect(readAcLayer(tddDir, "F1", "AC1")).toBeUndefined();
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1" });
+    expect(readAcLayer(sftddDir, "F1", "AC1")).toBeUndefined();
   });
 
   it("scans across stories to find the AC", () => {
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S2", acId: "AC42", layer: "API" });
-    expect(readAcLayer(tddDir, "F1", "AC42")).toBe("API");
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S2", acId: "AC42", layer: "API" });
+    expect(readAcLayer(sftddDir, "F1", "AC42")).toBe("API");
   });
 });
 
 describe("beginCycle stamps layer", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("begin");
+    sftddDir = mkTempTdd("begin");
   });
-  afterEach(() => rmTempTdd(tddDir));
+  afterEach(() => rmTempTdd(sftddDir));
 
   it("auto-discovers AC.layer when not provided", () => {
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
     const cycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC1",
@@ -143,9 +143,9 @@ describe("beginCycle stamps layer", () => {
   });
 
   it("honors explicit layer over AC.layer", () => {
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
     const cycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC1",
@@ -158,7 +158,7 @@ describe("beginCycle stamps layer", () => {
 
   it("leaves layer undefined when neither source supplies one", () => {
     const cycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC1",
@@ -170,21 +170,21 @@ describe("beginCycle stamps layer", () => {
 });
 
 describe("recordRunnerOutcome", () => {
-  let tddDir: string;
+  let sftddDir: string;
   let scope: CycleScope;
   beforeEach(() => {
-    tddDir = mkTempTdd("runner");
+    sftddDir = mkTempTdd("runner");
     scope = {
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC1",
       experiment_slug: "exp",
     };
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
-    seedExperiment(tddDir, "F1", "exp");
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
+    seedExperiment(sftddDir, "F1", "exp");
   });
-  afterEach(() => rmTempTdd(tddDir));
+  afterEach(() => rmTempTdd(sftddDir));
 
   it("bumps outcomes by_tag for the cycle's layer and returns the count", () => {
     const cycle = beginCycle({
@@ -200,13 +200,13 @@ describe("recordRunnerOutcome", () => {
     });
     expect(result.tag).toBe("e2e");
     expect(result.runsForTag).toBe(1);
-    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
+    const outcomes = readOutcomes(sftddDir, "F1", "S1", "exp")!;
     expect(outcomes.by_tag?.e2e).toEqual({ passed: 1, failed: 0 });
   });
 
   it("throws when no layer can be resolved", () => {
     const cycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC-missing",
@@ -226,7 +226,7 @@ describe("recordRunnerOutcome", () => {
 
   it("backfills layer onto the cycle when caller supplies one", () => {
     const cycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC-bare",
@@ -248,21 +248,21 @@ describe("recordRunnerOutcome", () => {
 });
 
 describe("markGreen runner-contract", () => {
-  let tddDir: string;
+  let sftddDir: string;
   let scope: CycleScope;
   beforeEach(() => {
-    tddDir = mkTempTdd("green");
+    sftddDir = mkTempTdd("green");
     scope = {
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC1",
       experiment_slug: "exp",
     };
-    seedFeatureAndAc(tddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
-    seedExperiment(tddDir, "F1", "exp");
+    seedFeatureAndAc(sftddDir, { featureId: "F1", storyId: "S1", acId: "AC1", layer: "E2E" });
+    seedExperiment(sftddDir, "F1", "exp");
   });
-  afterEach(() => rmTempTdd(tddDir));
+  afterEach(() => rmTempTdd(sftddDir));
 
   it("refuses to advance when the layer has zero recorded runs", () => {
     const cycle = beginCycle({
@@ -294,7 +294,7 @@ describe("markGreen runner-contract", () => {
 
   it("is permissive when the cycle has no layer (brownfield)", () => {
     const bareCycle = beginCycle({
-      tddDir,
+      sftddDir,
       feature_id: "F1",
       story_id: "S1",
       ac_id: "AC-bare",
@@ -357,17 +357,17 @@ describe("SKILL.md + driver.md: tagToRunner documentation", () => {
 
 describe("writeOutcomes pass-through (regression)", () => {
   it("recordTagRun mutation persists when written through writeOutcomes", () => {
-    const tddDir = mkTempTdd("write");
+    const sftddDir = mkTempTdd("write");
     try {
-      seedExperiment(tddDir, "F1", "exp");
-      const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
+      seedExperiment(sftddDir, "F1", "exp");
+      const outcomes = readOutcomes(sftddDir, "F1", "S1", "exp")!;
       recordTagRun(outcomes, "infra", false);
-      writeOutcomes(tddDir, "F1", "S1", "exp", outcomes);
-      const reread = readOutcomes(tddDir, "F1", "S1", "exp")!;
+      writeOutcomes(sftddDir, "F1", "S1", "exp", outcomes);
+      const reread = readOutcomes(sftddDir, "F1", "S1", "exp")!;
       expect(reread.by_tag?.infra).toEqual({ passed: 0, failed: 1 });
       expect(reread.tests_failed).toBe(1);
     } finally {
-      rmTempTdd(tddDir);
+      rmTempTdd(sftddDir);
     }
   });
 });

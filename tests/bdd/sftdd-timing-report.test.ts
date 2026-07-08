@@ -139,7 +139,7 @@ describe("timingReportFromLog + CLI", () => {
 
   it("reads + computes from a .tdd/agent-log.jsonl", () => {
     const tdd = seedLog();
-    const r = timingReportFromLog({ tddDir: tdd, featureId: "F1" });
+    const r = timingReportFromLog({ sftddDir: tdd, featureId: "F1" });
     expect(r.events).toBe(6);
     expect(r.byRole[0].key).toBe("test-strategist");
   });

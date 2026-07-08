@@ -87,7 +87,7 @@ function seedExperimentRich(
   if (opts.artifacts) {
     for (const name of opts.artifacts) {
       writeArtifact({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: slug,

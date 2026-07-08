@@ -112,16 +112,16 @@ export interface ExperimentOutcomes {
 // .tdd/experiments/<feature>/<story>/<slug>/. These two helpers are the single
 // source of truth for that path, so every reader/writer (here + archive +
 // artifacts + cap) stays in lockstep.
-export function experimentsRoot(tddDir: string, featureId: string, storyId: string): string {
-  return join(tddDir, "experiments", featureId, storyId);
+export function experimentsRoot(sftddDir: string, featureId: string, storyId: string): string {
+  return join(sftddDir, "experiments", featureId, storyId);
 }
 
-export function experimentDir(tddDir: string, featureId: string, storyId: string, slug: string): string {
-  return join(experimentsRoot(tddDir, featureId, storyId), slug);
+export function experimentDir(sftddDir: string, featureId: string, storyId: string, slug: string): string {
+  return join(experimentsRoot(sftddDir, featureId, storyId), slug);
 }
 
 export interface CutExperimentArgs extends BranchLookupOpts {
-  tddDir: string;
+  sftddDir: string;
   /** Project root (.git + .env). Required: the experiment branch is PAIRED. */
   projectDir: string;
   featureId: string;
@@ -143,7 +143,7 @@ export interface ExperimentRecord {
 }
 
 export async function cutExperiment(args: CutExperimentArgs): Promise<ExperimentRecord> {
-  const { tddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
+  const { sftddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
   // PAIRED cut through the substrate: Lakebase branch + git branch + .env sync,
   // atomically. The experiment is a child of the feature branch (parentBranch),
   // so it forks Lakebase from the feature branch and git-branches off the
@@ -176,7 +176,7 @@ export async function cutExperiment(args: CutExperimentArgs): Promise<Experiment
   }
   const branchId = branchIdOf(paired.branch);
 
-  const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
+  const dir = experimentDir(sftddDir, featureId, storyId, experimentSlug);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "branch.txt"), branchId);
   writeFileSync(
@@ -205,16 +205,16 @@ export async function cutExperiment(args: CutExperimentArgs): Promise<Experiment
 }
 
 /** Story ids that have an experiments subtree under a feature (each is a story dir). */
-export function listExperimentStories(tddDir: string, featureId: string): string[] {
-  const root = join(tddDir, "experiments", featureId);
+export function listExperimentStories(sftddDir: string, featureId: string): string[] {
+  const root = join(sftddDir, "experiments", featureId);
   if (!existsSync(root)) return [];
   return readdirSync(root)
     .filter((d) => statSync(join(root, d)).isDirectory())
     .sort();
 }
 
-export function listExperiments(tddDir: string, featureId: string, storyId: string): ExperimentRecord[] {
-  const root = experimentsRoot(tddDir, featureId, storyId);
+export function listExperiments(sftddDir: string, featureId: string, storyId: string): ExperimentRecord[] {
+  const root = experimentsRoot(sftddDir, featureId, storyId);
   if (!existsSync(root)) return [];
   const out: ExperimentRecord[] = [];
   for (const slug of readdirSync(root)) {
@@ -235,29 +235,29 @@ export function listExperiments(tddDir: string, featureId: string, storyId: stri
 }
 
 export function readOutcomes(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   storyId: string,
   slug: string
 ): ExperimentOutcomes | null {
-  const file = join(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
+  const file = join(experimentDir(sftddDir, featureId, storyId, slug), "outcomes.json");
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
 export function writeOutcomes(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   storyId: string,
   slug: string,
   outcomes: ExperimentOutcomes
 ): void {
-  const file = join(experimentDir(tddDir, featureId, storyId, slug), "outcomes.json");
+  const file = join(experimentDir(sftddDir, featureId, storyId, slug), "outcomes.json");
   writeFileSync(file, JSON.stringify(outcomes, null, 2) + "\n");
 }
 
 export interface DeleteExperimentArgs extends BranchLookupOpts {
-  tddDir: string;
+  sftddDir: string;
   /** Project root (.git). Required when deleteBranchToo: the teardown is PAIRED. */
   projectDir: string;
   featureId: string;
@@ -268,8 +268,8 @@ export interface DeleteExperimentArgs extends BranchLookupOpts {
 }
 
 export async function deleteExperiment(args: DeleteExperimentArgs): Promise<void> {
-  const { tddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo, ...lookup } = args;
-  const dir = experimentDir(tddDir, featureId, storyId, experimentSlug);
+  const { sftddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo, ...lookup } = args;
+  const dir = experimentDir(sftddDir, featureId, storyId, experimentSlug);
   if (!existsSync(dir)) {
     throw new Error(`experiment ${featureId}/${storyId}/${experimentSlug} not found at ${dir}`);
   }

@@ -5,7 +5,7 @@ import { readFeature, writeFeature } from "./spec-sync";
 import { archiveExperiment } from "./archive-experiment";
 
 export interface PromoteArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   winnerSlug: string;
@@ -51,8 +51,8 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
   if (!args.hitlApproved) {
     throw new Error("promoteExperiment requires hitlApproved: true (HITL Gate)");
   }
-  const { tddDir, featureId, storyId, winnerSlug, approverEmail } = args;
-  const experiments = listExperiments(tddDir, featureId, storyId);
+  const { sftddDir, featureId, storyId, winnerSlug, approverEmail } = args;
+  const experiments = listExperiments(sftddDir, featureId, storyId);
   const winner = experiments.find((e) => e.experiment_slug === winnerSlug);
   if (!winner) {
     throw new Error(`winner ${winnerSlug} not found among experiments for ${featureId}/${storyId}`);
@@ -60,8 +60,8 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
   const losers = experiments.filter((e) => e.experiment_slug !== winnerSlug);
 
   // Mark winner succeeded
-  const winnerOutcome = readOutcomes(tddDir, featureId, storyId, winnerSlug);
-  writeOutcomes(tddDir, featureId, storyId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
+  const winnerOutcome = readOutcomes(sftddDir, featureId, storyId, winnerSlug);
+  writeOutcomes(sftddDir, featureId, storyId, winnerSlug, { ...(winnerOutcome ?? {}), status: "succeeded" });
 
   // Archive each loser via the lifecycle primitive. Each
   // archive is atomic + HITL-gated; promote inherits the HITL approval
@@ -69,7 +69,7 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
   const archivedSlugs: string[] = [];
   for (const loser of losers) {
     await archiveExperiment({
-      tddDir,
+      sftddDir,
       featureId,
       storyId,
       experimentSlug: loser.experiment_slug,
@@ -83,16 +83,16 @@ export async function promoteExperiment(args: PromoteArgs): Promise<PromoteResul
 
   // Feature → ready-for-review
   try {
-    const feature = readFeature(tddDir, featureId);
+    const feature = readFeature(sftddDir, featureId);
     feature.status = "ready-for-review";
-    writeFeature(tddDir, feature);
+    writeFeature(sftddDir, feature);
   } catch {
     // No feature-spec.json – caller's responsibility. Don't block promotion.
   }
 
   // Append a single "Promote" entry to selection log on top of the
   // per-loser "Archive" entries archiveExperiment writes.
-  const logPath = join(tddDir, "selection-log.md");
+  const logPath = join(sftddDir, "selection-log.md");
   const ts = new Date().toISOString();
   const lines = [
     "",

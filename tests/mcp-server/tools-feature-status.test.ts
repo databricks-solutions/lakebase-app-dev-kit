@@ -70,7 +70,7 @@ describe("MCP tool: lakebase_feature_status", () => {
     const tool = findTool("lakebase_feature_status")!;
     const result = (await tool.handler({
       featureId: FEATURE_ID,
-      tddDir: tdd,
+      sftddDir: tdd,
     })) as FeatureStatusSnapshot;
 
     expect(result.feature_id).toBe(FEATURE_ID);
@@ -84,23 +84,23 @@ describe("MCP tool: lakebase_feature_status", () => {
     expect(result.selection_log_recent.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("handler defaults tddDir to ./.tdd when omitted", async () => {
+  it("handler defaults sftddDir to ./.tdd when omitted", async () => {
     // The default would resolve relative to process.cwd(); we only assert
     // the handler accepts the omission without erroring on schema validation.
     // Behavior against the default path is exercised by integration tests.
     const tool = findTool("lakebase_feature_status")!;
     // Point at our fixture so the handler returns; the assertion is that
-    // omitting tddDir is shape-legal.
+    // omitting sftddDir is shape-legal.
     const result = (await tool.handler({
       featureId: FEATURE_ID,
-      tddDir: tdd, // still pass so the read succeeds
+      sftddDir: tdd, // still pass so the read succeeds
     })) as FeatureStatusSnapshot;
     expect(result.feature_id).toBe(FEATURE_ID);
   });
 
   it("handler rejects when featureId is missing", async () => {
     const tool = findTool("lakebase_feature_status")!;
-    await expect(tool.handler({ tddDir: tdd })).rejects.toThrow(/featureId/);
+    await expect(tool.handler({ sftddDir: tdd })).rejects.toThrow(/featureId/);
   });
 
   it("handler returns a snapshot with documented top-level keys (stable shape)", async () => {
@@ -108,7 +108,7 @@ describe("MCP tool: lakebase_feature_status", () => {
     const tool = findTool("lakebase_feature_status")!;
     const result = (await tool.handler({
       featureId: FEATURE_ID,
-      tddDir: tdd,
+      sftddDir: tdd,
     })) as Record<string, unknown>;
     expect(Object.keys(result).sort()).toEqual(
       [

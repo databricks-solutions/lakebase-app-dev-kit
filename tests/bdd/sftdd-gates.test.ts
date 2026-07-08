@@ -55,18 +55,18 @@ describe("gates: defaultGatesState", () => {
 describe("gates: readGates (S1.1 default-open + S1.3 malformed)", () => {
   it("S1.1: returns default-open shape when gates.json is absent", () => {
     makeFeatureDir();
-    const state = readGates(FEATURE_ID, { tddDir: tdd });
+    const state = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(state).toEqual(defaultGatesState(FEATURE_ID));
   });
 
   it("S1.1: does NOT create gates.json on a default-open read", () => {
     const dir = makeFeatureDir();
-    readGates(FEATURE_ID, { tddDir: tdd });
+    readGates(FEATURE_ID, { sftddDir: tdd });
     expect(existsSync(join(dir, "gates.json"))).toBe(false);
   });
 
   it("throws when the feature directory does not exist", () => {
-    expect(() => readGates(FEATURE_ID, { tddDir: tdd })).toThrow(
+    expect(() => readGates(FEATURE_ID, { sftddDir: tdd })).toThrow(
       /does not exist|not found/
     );
   });
@@ -74,7 +74,7 @@ describe("gates: readGates (S1.1 default-open + S1.3 malformed)", () => {
   it("S1.3: throws a clear error on invalid JSON", () => {
     const dir = makeFeatureDir();
     writeFileSync(join(dir, "gates.json"), "{ not valid json");
-    expect(() => readGates(FEATURE_ID, { tddDir: tdd })).toThrow(/not valid JSON/);
+    expect(() => readGates(FEATURE_ID, { sftddDir: tdd })).toThrow(/not valid JSON/);
   });
 
   it("S1.3: throws when feature_id is missing", () => {
@@ -83,7 +83,7 @@ describe("gates: readGates (S1.1 default-open + S1.3 malformed)", () => {
       join(dir, "gates.json"),
       JSON.stringify({ schema_version: 1, gates: {} })
     );
-    expect(() => readGates(FEATURE_ID, { tddDir: tdd })).toThrow(/feature_id/);
+    expect(() => readGates(FEATURE_ID, { sftddDir: tdd })).toThrow(/feature_id/);
   });
 
   it("S1.3: throws when a gate has an invalid status", () => {
@@ -99,7 +99,7 @@ describe("gates: readGates (S1.1 default-open + S1.3 malformed)", () => {
       },
     };
     writeFileSync(join(dir, "gates.json"), JSON.stringify(bad));
-    expect(() => readGates(FEATURE_ID, { tddDir: tdd })).toThrow(/invalid status/);
+    expect(() => readGates(FEATURE_ID, { sftddDir: tdd })).toThrow(/invalid status/);
   });
 });
 
@@ -130,15 +130,15 @@ describe("gates: writeGates (S1.2 round-trip + S1.4 atomicity)", () => {
         deploy: { status: "open", history: [] },
       },
     };
-    writeGates(state, { tddDir: tdd });
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back).toEqual(state);
   });
 
   it("S1.2: overwrites a prior gates.json on subsequent writes", () => {
     makeFeatureDir();
     const first = defaultGatesState(FEATURE_ID);
-    writeGates(first, { tddDir: tdd });
+    writeGates(first, { sftddDir: tdd });
     const second: GatesState = {
       ...first,
       gates: {
@@ -146,21 +146,21 @@ describe("gates: writeGates (S1.2 round-trip + S1.4 atomicity)", () => {
         spec: { status: "withdrawn", withdrawal_reason: "po retracted", history: [] },
       },
     };
-    writeGates(second, { tddDir: tdd });
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    writeGates(second, { sftddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back.gates.spec.status).toBe("withdrawn");
     expect(back.gates.spec.withdrawal_reason).toBe("po retracted");
   });
 
   it("S1.4: leaves no temp file behind on a successful write", () => {
     const dir = makeFeatureDir();
-    writeGates(defaultGatesState(FEATURE_ID), { tddDir: tdd });
+    writeGates(defaultGatesState(FEATURE_ID), { sftddDir: tdd });
     const stray = readdirSync(dir).filter((f) => f.includes(".tmp."));
     expect(stray).toEqual([]);
   });
 
   it("rejects an empty feature_id", () => {
     const bad: GatesState = { ...defaultGatesState(FEATURE_ID), feature_id: "" };
-    expect(() => writeGates(bad, { tddDir: tdd })).toThrow(/feature_id/);
+    expect(() => writeGates(bad, { sftddDir: tdd })).toThrow(/feature_id/);
   });
 });

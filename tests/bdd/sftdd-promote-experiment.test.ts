@@ -36,14 +36,14 @@ describe("promoteExperiment", () => {
   it("throws when hitlApproved is false", async () => {
     seedExperiment("exp-winner", { status: "succeeded" });
     await expect(
-      promoteExperiment({ tddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "exp-winner", hitlApproved: false })
+      promoteExperiment({ sftddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "exp-winner", hitlApproved: false })
     ).rejects.toThrow(/HITL/);
   });
 
   it("throws when winnerSlug does not exist", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
     await expect(
-      promoteExperiment({ tddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "ghost", hitlApproved: true })
+      promoteExperiment({ sftddDir: tdd, featureId: "F1", storyId: "S1", winnerSlug: "ghost", hitlApproved: true })
     ).rejects.toThrow(/not found/);
   });
 
@@ -52,7 +52,7 @@ describe("promoteExperiment", () => {
     seedExperiment("exp-b", { status: "running" });
     seedExperiment("exp-c", { status: "running" });
     const result = await promoteExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       winnerSlug: "exp-a",
@@ -74,7 +74,7 @@ describe("promoteExperiment", () => {
     seedFeature();
     seedExperiment("exp-a", { status: "succeeded" });
     const result = await promoteExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       winnerSlug: "exp-a",
@@ -90,7 +90,7 @@ describe("promoteExperiment", () => {
   it("appends a decision record to selection-log.md", async () => {
     seedExperiment("exp-a", { status: "succeeded" });
     await promoteExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       winnerSlug: "exp-a",

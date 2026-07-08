@@ -54,17 +54,17 @@ export {
  * `--no-sizing` to skip the Architect estimate turn.
  */
 export function deriveSprintPlanningState(
-  tddDir: string,
+  sftddDir: string,
   sprint: string,
   opts: { skipSizing?: boolean } = {},
 ): DriveState {
-  const proposed = fs.existsSync(featureProposalsMd(tddDir));
-  const estimated = hasEstimates(tddDir);
-  const backlog = readBacklog(tddDir, sprint).features;
-  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(tddDir, f.id));
+  const proposed = fs.existsSync(featureProposalsMd(sftddDir));
+  const estimated = hasEstimates(sftddDir);
+  const backlog = readBacklog(sftddDir, sprint).features;
+  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(sftddDir, f.id));
   let gateApproved = false;
   try {
-    gateApproved = readSprintGates(sprint, { tddDir }).gates.plan.status === "approved";
+    gateApproved = readSprintGates(sprint, { sftddDir }).gates.plan.status === "approved";
   } catch {
     gateApproved = false;
   }

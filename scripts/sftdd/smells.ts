@@ -443,8 +443,8 @@ export function isBuildRefactorRoutableSmell(name: string): boolean {
  * behavior; if a residual violation remains it re-surfaces with no refactor
  * pending and escalates (the backstop stays intact).
  */
-export function hasOpenBuildRefactorRoutableSmell(tddDir: string, story_id?: string): boolean {
-  return readSmellsLog(tddDir).detected.some(
+export function hasOpenBuildRefactorRoutableSmell(sftddDir: string, story_id?: string): boolean {
+  return readSmellsLog(sftddDir).detected.some(
     (d) =>
       !d.resolution &&
       isBuildRefactorRoutableSmell(d.smell) &&
@@ -667,8 +667,8 @@ export interface SmellsLog {
   >;
 }
 
-export function writeSmellsLog(tddDir: string, hits: SmellHit[]): SmellsLog {
-  const file = join(tddDir, "smells.json");
+export function writeSmellsLog(sftddDir: string, hits: SmellHit[]): SmellsLog {
+  const file = join(sftddDir, "smells.json");
   const existing: SmellsLog = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : { detected: [] };
   const ts = new Date().toISOString();
   const newEntries = hits.map((h) => ({ ...h, detected_at: ts }));
@@ -677,8 +677,8 @@ export function writeSmellsLog(tddDir: string, hits: SmellHit[]): SmellsLog {
   return merged;
 }
 
-export function readSmellsLog(tddDir: string): SmellsLog {
-  const file = join(tddDir, "smells.json");
+export function readSmellsLog(sftddDir: string): SmellsLog {
+  const file = join(sftddDir, "smells.json");
   if (!existsSync(file)) return { detected: [] };
   return JSON.parse(readFileSync(file, "utf8"));
 }
@@ -703,11 +703,11 @@ function smellMatches(
  * Returns true iff an open entry was found + resolved.
  */
 export function markSmellResolved(
-  tddDir: string,
+  sftddDir: string,
   smell: string,
   opts: { story_id?: string; kind: "revised" | "accepted"; note?: string },
 ): boolean {
-  const file = join(tddDir, "smells.json");
+  const file = join(sftddDir, "smells.json");
   if (!existsSync(file)) return false;
   const log: SmellsLog = JSON.parse(readFileSync(file, "utf8"));
   const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
@@ -721,14 +721,14 @@ export function markSmellResolved(
 /** How many times this (smell, story) has already been revised: the
  *  count of resolved-as-`revised` entries. The one-revise-per-(smell,story) bound
  *  compares against this so a re-fired-then-revised smell can't loop forever. */
-export function priorReviseCount(tddDir: string, smell: string, story_id?: string): number {
-  return readSmellsLog(tddDir).detected.filter(
+export function priorReviseCount(sftddDir: string, smell: string, story_id?: string): number {
+  return readSmellsLog(sftddDir).detected.filter(
     (d) => d.resolution_kind === "revised" && smellMatches(d, smell, story_id),
   ).length;
 }
 
 export function runDetectorsForScope(
-  tddDir: string,
+  sftddDir: string,
   scope: CycleScope,
   testListSizeAtStart?: number,
   testListSizeNow?: number

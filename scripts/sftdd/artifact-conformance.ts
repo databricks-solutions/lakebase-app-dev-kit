@@ -677,7 +677,7 @@ export function canonicalArtifactName(path: string): string {
 }
 
 export interface FeatureConformanceEntry {
-  /** Path relative to tddDir, for display. */
+  /** Path relative to sftddDir, for display. */
   artifact: string;
   ok: boolean;
   violations: string[];
@@ -697,8 +697,8 @@ export interface FeatureConformanceReport {
  * answers "do the artifacts that exist adhere to their format?". The standalone
  * counterpart to the gate-time check the human-proxy runs.
  */
-export function scanFeatureConformance(tddDir: string, featureId: string): FeatureConformanceReport {
-  const featuresDir = featuresDirOf(tddDir);
+export function scanFeatureConformance(sftddDir: string, featureId: string): FeatureConformanceReport {
+  const featuresDir = featuresDirOf(sftddDir);
   const candidates = existsSync(featuresDir)
     ? readdirSync(featuresDir).filter((d) => d.startsWith(featureId))
     : [];
@@ -713,12 +713,12 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
   };
 
   // Top-level Product Owner project overview.
-  pushIfExists(join(tddDir, "product-overview.md"));
+  pushIfExists(join(sftddDir, "product-overview.md"));
   // HIL NFR brief: project-level + optional per-feature override.
-  pushIfExists(join(tddDir, "nfrs.md"));
+  pushIfExists(join(sftddDir, "nfrs.md"));
   // Project-level UX Designer artifacts (UI projects; absent otherwise).
   for (const name of ["design-brief.md", "design-guide.md", "design-guide.json", "ia.md"]) {
-    pushIfExists(join(tddDir, "design", name));
+    pushIfExists(join(sftddDir, "design", name));
   }
   // Feature-level artifacts.
   for (const name of ["feature-request.md", "feature-spec.json", "feature-spec.md", "nfrs.md", "architecture.md", "plan.json", "test-list.json", "test-list.md"]) {
@@ -758,7 +758,7 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
     const content = readFileSync(p, "utf8");
     const result = checkArtifactConformance(canonicalArtifactName(p), content);
     return {
-      artifact: p.startsWith(tddDir) ? p.slice(tddDir.length).replace(/^\//, "") : p,
+      artifact: p.startsWith(sftddDir) ? p.slice(sftddDir.length).replace(/^\//, "") : p,
       ok: result.ok,
       violations: result.ok ? [] : result.violations,
     };
@@ -799,10 +799,10 @@ export function scanFeatureConformance(tddDir: string, featureId: string): Featu
   const archPath = join(featureDir, "architecture.json");
   if (existsSync(archPath)) {
     const archContent = readFileSync(archPath, "utf8");
-    for (const nfrsPath of [join(tddDir, "nfrs.md"), join(featureDir, "nfrs.md")]) {
+    for (const nfrsPath of [join(sftddDir, "nfrs.md"), join(featureDir, "nfrs.md")]) {
       if (!existsSync(nfrsPath)) continue;
       const cov = checkNfrCoverage(readFileSync(nfrsPath, "utf8"), archContent);
-      const rel = nfrsPath.startsWith(tddDir) ? nfrsPath.slice(tddDir.length).replace(/^\//, "") : nfrsPath;
+      const rel = nfrsPath.startsWith(sftddDir) ? nfrsPath.slice(sftddDir.length).replace(/^\//, "") : nfrsPath;
       entries.push({
         artifact: `${rel} -> architecture.json (NFR coverage)`,
         ok: cov.ok,

@@ -130,19 +130,19 @@ export function initPipeline(featureId: string): StoryPipeline {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
 
-function pipelinePath(tddDir: string, featureId: string): string {
-  return pipelineJson(tddDir, featureId);
+function pipelinePath(sftddDir: string, featureId: string): string {
+  return pipelineJson(sftddDir, featureId);
 }
 
 /** Read .tdd/features/<F>/pipeline.json, or an empty pipeline when absent. */
-export function readPipeline(tddDir: string, featureId: string): StoryPipeline {
-  const p = pipelinePath(tddDir, featureId);
+export function readPipeline(sftddDir: string, featureId: string): StoryPipeline {
+  const p = pipelinePath(sftddDir, featureId);
   if (!existsSync(p)) return initPipeline(featureId);
   return JSON.parse(readFileSync(p, "utf8")) as StoryPipeline;
 }
 
-export function writePipeline(tddDir: string, pipeline: StoryPipeline): void {
-  const p = pipelinePath(tddDir, pipeline.feature_id);
+export function writePipeline(sftddDir: string, pipeline: StoryPipeline): void {
+  const p = pipelinePath(sftddDir, pipeline.feature_id);
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify(pipeline, null, 2) + "\n");
 }
@@ -173,11 +173,11 @@ export function setStoryStatus(
  * Returns the newly-added ids + the full tracked set.
  */
 export function syncBreakdownToPipeline(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
 ): { added: string[]; total: string[] } {
-  const storiesDir = storiesDirOf(tddDir, featureId);
-  const pipeline = readPipeline(tddDir, featureId);
+  const storiesDir = storiesDirOf(sftddDir, featureId);
+  const pipeline = readPipeline(sftddDir, featureId);
   const added: string[] = [];
   if (existsSync(storiesDir)) {
     for (const storyId of readdirSync(storiesDir).sort()) {
@@ -194,7 +194,7 @@ export function syncBreakdownToPipeline(
       }
     }
   }
-  if (added.length > 0) writePipeline(tddDir, pipeline);
+  if (added.length > 0) writePipeline(sftddDir, pipeline);
   return { added, total: Object.keys(pipeline.stories) };
 }
 
@@ -248,8 +248,8 @@ export function completeActive(pipeline: StoryPipeline): string | null {
 // into a hard error so the run can't proceed until the draft is one-story-scoped.
 
 /** True when stories/<S>/acs/ holds at least one `*.json` AC artifact. */
-function storyHasAcceptanceCriteria(tddDir: string, featureId: string, storyId: string): boolean {
-  const acsDir = acsDirOf(tddDir, featureId, storyId);
+function storyHasAcceptanceCriteria(sftddDir: string, featureId: string, storyId: string): boolean {
+  const acsDir = acsDirOf(sftddDir, featureId, storyId);
   if (!existsSync(acsDir)) return false;
   return readdirSync(acsDir).some((f) => f.endsWith(".json"));
 }
@@ -265,17 +265,17 @@ function storyHasAcceptanceCriteria(tddDir: string, featureId: string, storyId: 
  * ids, sorted; empty when the draft is correctly scoped to one story.
  */
 export function findBatchedDraftStories(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   pipeline: StoryPipeline,
   gatingStoryId: string,
 ): string[] {
-  const storiesDir = storiesDirOf(tddDir, featureId);
+  const storiesDir = storiesDirOf(sftddDir, featureId);
   if (!existsSync(storiesDir)) return [];
   const offenders: string[] = [];
   for (const storyId of readdirSync(storiesDir)) {
     if (storyId === gatingStoryId) continue;
-    if (!storyHasAcceptanceCriteria(tddDir, featureId, storyId)) continue;
+    if (!storyHasAcceptanceCriteria(sftddDir, featureId, storyId)) continue;
     const status = pipeline.stories[storyId]?.status;
     // `designing` = not yet surfaced for its gate; undefined = not even tracked.
     // Either way ACs for it now means the draft ran ahead of the gate.

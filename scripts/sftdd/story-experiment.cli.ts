@@ -21,7 +21,7 @@
 // Exit: 0 ok; 2 bad args; 1 op failure.
 
 import { cutExperiment, deleteExperiment } from "./experiment";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import {
   mergeExperimentIntoFeature,
   discardExperimentBranch,
@@ -46,9 +46,9 @@ import { join } from "path";
  *  verbs have no deterministic driver action (they are HIL acceptance decisions
  *  applied via this CLI), so this is the substrate home for their events , the
  *  sibling of experiment.cut/accepted, which the orchestrator emits. */
-function logExperimentEvent(tddDir: string, event: "experiment.discarded" | "experiment.revised", story: string, reason: string): void {
+function logExperimentEvent(sftddDir: string, event: "experiment.discarded" | "experiment.revised", story: string, reason: string): void {
   try {
-    emitAgentLogEvent({ role: "orchestrator", level: "info", event, slots: { story, reason } }, { tddDir });
+    emitAgentLogEvent({ role: "orchestrator", level: "info", event, slots: { story, reason } }, { sftddDir });
   } catch {
     // swallow: logging never blocks the lifecycle transition
   }
@@ -85,14 +85,14 @@ const realOps: ExperimentBranchOps = {
   runMigrations: async ({ instance, branch, projectDir }) => {
     await applySchemaMigrations({ instance, branch, projectDir });
   },
-  teardown: async ({ tddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
-    await deleteExperiment({ instance, tddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
+  teardown: async ({ sftddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
+    await deleteExperiment({ instance, sftddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
   },
 };
 
 async function main(): Promise<number> {
   const args = parseExperimentArgs(process.argv.slice(2));
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const projectDir = args.projectDir ?? process.cwd();
   const invalid = validateExperimentArgs(args);
   if (invalid) return usage(invalid);
@@ -108,7 +108,7 @@ async function main(): Promise<number> {
     case "cut": {
       const rec = await cutExperiment({
         instance,
-        tddDir,
+        sftddDir,
         projectDir,
         featureId: feature,
         storyId: story,
@@ -117,21 +117,21 @@ async function main(): Promise<number> {
         parentBranch: args.parent as string,
         ttl: args.ttl,
       });
-      const p = readPipeline(tddDir, feature);
+      const p = readPipeline(sftddDir, feature);
       cutStoryExperiment(p, story, {
         slug,
         branch: rec.branch_id,
         parent: args.parent as string,
         at,
       });
-      writePipeline(tddDir, p);
+      writePipeline(sftddDir, p);
       process.stdout.write(`cut experiment ${slug} on ${rec.branch_id} (parent ${args.parent})\n`);
       return 0;
     }
     case "merge": {
       await mergeExperimentIntoFeature(
         {
-          tddDir,
+          sftddDir,
           featureId: feature,
           storyId: story,
           experimentSlug: slug,
@@ -142,18 +142,18 @@ async function main(): Promise<number> {
         },
         realOps,
       );
-      const p = readPipeline(tddDir, feature);
+      const p = readPipeline(sftddDir, feature);
       acceptStory(p, story, { approver: args.approver as string, at });
-      writePipeline(tddDir, p);
+      writePipeline(sftddDir, p);
       process.stdout.write(`merged ${slug} into ${args.featureBranch}; story ${story} accepted + done\n`);
       return 0;
     }
     case "discard": {
       await discardExperimentBranch(
-        { tddDir, projectDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
+        { sftddDir, projectDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
         realOps,
       );
-      const p = readPipeline(tddDir, feature);
+      const p = readPipeline(sftddDir, feature);
       const approver = args.approver as string;
       const reason = args.reason as string;
       if (args.revise) {
@@ -161,8 +161,8 @@ async function main(): Promise<number> {
       } else {
         discardStory(p, story, { approver, at, reason });
       }
-      writePipeline(tddDir, p);
-      logExperimentEvent(tddDir, args.revise ? "experiment.revised" : "experiment.discarded", story, reason);
+      writePipeline(sftddDir, p);
+      logExperimentEvent(sftddDir, args.revise ? "experiment.revised" : "experiment.discarded", story, reason);
       process.stdout.write(
         `${args.revise ? "revised" : "discarded"} ${slug}; experiment torn down; story ${story} ${args.revise ? "-> designing" : "out of sprint"}\n`,
       );

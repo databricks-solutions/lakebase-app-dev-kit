@@ -19,11 +19,11 @@ import {
 import type { CycleArtifact, CycleScope } from "../../scripts/sftdd/run-cycle";
 import type { TestList } from "../../scripts/sftdd/test-list";
 
-function mkTempProject(prefix: string): { projectDir: string; tddDir: string } {
+function mkTempProject(prefix: string): { projectDir: string; sftddDir: string } {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), `feip7094-p4-${prefix}-`));
-  const tddDir = path.join(projectDir, ".tdd");
-  fs.mkdirSync(tddDir, { recursive: true });
-  return { projectDir, tddDir };
+  const sftddDir = path.join(projectDir, ".tdd");
+  fs.mkdirSync(sftddDir, { recursive: true });
+  return { projectDir, sftddDir };
 }
 
 function rmTempProject(dir: string): void {
@@ -35,21 +35,21 @@ function rmTempProject(dir: string): void {
 }
 
 function seedAc(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   storyId: string,
   acId: string,
   layer?: "API" | "E2E" | "Infra"
 ): void {
-  const dir = path.join(tddDir, "features", featureId, "stories", storyId, "acs");
+  const dir = path.join(sftddDir, "features", featureId, "stories", storyId, "acs");
   fs.mkdirSync(dir, { recursive: true });
   const ac: Record<string, unknown> = { id: acId, given: "g", when: "w", then: "t", status: "draft" };
   if (layer) ac.layer = layer;
   fs.writeFileSync(path.join(dir, `${acId}.json`), JSON.stringify(ac, null, 2));
 }
 
-function seedTestList(tddDir: string, featureId: string, list: TestList): void {
-  const dir = path.join(tddDir, "features", featureId);
+function seedTestList(sftddDir: string, featureId: string, list: TestList): void {
+  const dir = path.join(sftddDir, "features", featureId);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "test-list.json"), JSON.stringify(list, null, 2));
 }
@@ -74,7 +74,7 @@ function cycle(
 }
 
 const SCOPE: CycleScope = {
-  tddDir: "ignored-by-detectors",
+  sftddDir: "ignored-by-detectors",
   feature_id: "F1",
   story_id: "S1",
   ac_id: "AC-E2E",
@@ -82,40 +82,40 @@ const SCOPE: CycleScope = {
 
 describe("checkE2eGate", () => {
   let projectDir: string;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     const t = mkTempProject("gate");
     projectDir = t.projectDir;
-    tddDir = t.tddDir;
+    sftddDir = t.sftddDir;
   });
   afterEach(() => rmTempProject(projectDir));
 
   it("returns [] when the test list has no E2E rows", () => {
-    seedAc(tddDir, "F1", "S1", "AC1", "API");
+    seedAc(sftddDir, "F1", "S1", "AC1", "API");
     const list: TestList = {
       feature_id: "F1",
       items: [{ id: "T1", description: "api test", ac_id: "AC1", status: "pending" }],
     };
-    expect(checkE2eGate({ tddDir, featureId: "F1", list, projectDir })).toEqual([]);
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
   });
 
   it("returns [] when E2E rows exist AND playwright.config.ts is present", () => {
-    seedAc(tddDir, "F1", "S1", "AC-E2E", "E2E");
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
     fs.writeFileSync(path.join(projectDir, "playwright.config.ts"), "// stub\n");
     const list: TestList = {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e test", ac_id: "AC-E2E", status: "pending" }],
     };
-    expect(checkE2eGate({ tddDir, featureId: "F1", list, projectDir })).toEqual([]);
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
   });
 
   it("returns a blocker when E2E rows exist but no playwright.config* is present", () => {
-    seedAc(tddDir, "F1", "S1", "AC-E2E", "E2E");
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
     const list: TestList = {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e test", ac_id: "AC-E2E", status: "pending" }],
     };
-    const blockers = checkE2eGate({ tddDir, featureId: "F1", list, projectDir });
+    const blockers = checkE2eGate({ sftddDir, featureId: "F1", list, projectDir });
     expect(blockers).toHaveLength(1);
     expect(blockers[0].kind).toBe("e2e-without-playwright");
     expect(blockers[0].ac_ids).toEqual(["AC-E2E"]);
@@ -123,31 +123,31 @@ describe("checkE2eGate", () => {
   });
 
   it("accepts playwright.config.js and playwright.config.mjs", () => {
-    seedAc(tddDir, "F1", "S1", "AC-E2E", "E2E");
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
     const list: TestList = {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e test", ac_id: "AC-E2E", status: "pending" }],
     };
     fs.writeFileSync(path.join(projectDir, "playwright.config.js"), "module.exports = {};\n");
-    expect(checkE2eGate({ tddDir, featureId: "F1", list, projectDir })).toEqual([]);
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
     fs.rmSync(path.join(projectDir, "playwright.config.js"));
     fs.writeFileSync(path.join(projectDir, "playwright.config.mjs"), "export default {};\n");
-    expect(checkE2eGate({ tddDir, featureId: "F1", list, projectDir })).toEqual([]);
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
   });
 
   it("ignores ACs without a declared layer (brownfield safety)", () => {
-    seedAc(tddDir, "F1", "S1", "AC-bare");
+    seedAc(sftddDir, "F1", "S1", "AC-bare");
     const list: TestList = {
       feature_id: "F1",
       items: [{ id: "T1", description: "ambiguous", ac_id: "AC-bare", status: "pending" }],
     };
-    expect(checkE2eGate({ tddDir, featureId: "F1", list, projectDir })).toEqual([]);
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
   });
 
   it("collects every offending AC into a single blocker", () => {
-    seedAc(tddDir, "F1", "S1", "AC-1", "E2E");
-    seedAc(tddDir, "F1", "S1", "AC-2", "E2E");
-    seedAc(tddDir, "F1", "S1", "AC-3", "API");
+    seedAc(sftddDir, "F1", "S1", "AC-1", "E2E");
+    seedAc(sftddDir, "F1", "S1", "AC-2", "E2E");
+    seedAc(sftddDir, "F1", "S1", "AC-3", "API");
     const list: TestList = {
       feature_id: "F1",
       items: [
@@ -156,7 +156,7 @@ describe("checkE2eGate", () => {
         { id: "T3", description: "api c", ac_id: "AC-3", status: "pending" },
       ],
     };
-    const blockers = checkE2eGate({ tddDir, featureId: "F1", list, projectDir });
+    const blockers = checkE2eGate({ sftddDir, featureId: "F1", list, projectDir });
     expect(blockers).toHaveLength(1);
     expect(blockers[0].ac_ids).toEqual(["AC-1", "AC-2"]);
   });
@@ -164,45 +164,45 @@ describe("checkE2eGate", () => {
 
 describe("analyzeForGate transition_blockers integration", () => {
   let projectDir: string;
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
     const t = mkTempProject("integration");
     projectDir = t.projectDir;
-    tddDir = t.tddDir;
+    sftddDir = t.sftddDir;
   });
   afterEach(() => rmTempProject(projectDir));
 
   it("surfaces E2E blockers in the analysis returned to the orchestrator", () => {
-    seedAc(tddDir, "F1", "S1", "AC-E2E", "E2E");
-    seedTestList(tddDir, "F1", {
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
+    seedTestList(sftddDir, "F1", {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e", ac_id: "AC-E2E", status: "pending" }],
     });
-    const analysis = analyzeForGate(tddDir, "F1", "S1", { projectDir });
+    const analysis = analyzeForGate(sftddDir, "F1", "S1", { projectDir });
     expect(analysis.transition_blockers).toHaveLength(1);
     expect(analysis.transition_blockers[0].kind).toBe("e2e-without-playwright");
   });
 
   it("returns transition_blockers: [] when the gate is clean", () => {
-    seedAc(tddDir, "F1", "S1", "AC1", "API");
-    seedTestList(tddDir, "F1", {
+    seedAc(sftddDir, "F1", "S1", "AC1", "API");
+    seedTestList(sftddDir, "F1", {
       feature_id: "F1",
       items: [{ id: "T1", description: "api", ac_id: "AC1", status: "pending" }],
     });
-    const analysis = analyzeForGate(tddDir, "F1", "S1", { projectDir });
+    const analysis = analyzeForGate(sftddDir, "F1", "S1", { projectDir });
     expect(analysis.transition_blockers).toEqual([]);
   });
 
-  it("defaults projectDir to dirname(tddDir) when not supplied", () => {
+  it("defaults projectDir to dirname(sftddDir) when not supplied", () => {
     // Default convention: <projectDir>/.tdd/. We seed playwright.config
     // at the implicit projectDir and assert no blocker fires.
-    seedAc(tddDir, "F1", "S1", "AC-E2E", "E2E");
-    seedTestList(tddDir, "F1", {
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
+    seedTestList(sftddDir, "F1", {
       feature_id: "F1",
       items: [{ id: "T1", description: "e2e", ac_id: "AC-E2E", status: "pending" }],
     });
     fs.writeFileSync(path.join(projectDir, "playwright.config.ts"), "// stub\n");
-    const analysis = analyzeForGate(tddDir, "F1", "S1");
+    const analysis = analyzeForGate(sftddDir, "F1", "S1");
     expect(analysis.transition_blockers).toEqual([]);
   });
 });

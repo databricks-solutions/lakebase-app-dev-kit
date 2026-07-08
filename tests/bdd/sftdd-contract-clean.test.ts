@@ -208,8 +208,8 @@ describe("supersededTestCandidates (pre-localize prior tests for the Navigator, 
 });
 
 // The greenOpenCycle wiring: a FIRST verify failure runs the deterministic gate
-// before routing the model assess. tddDir lives at <project>/.sftdd so
-// dirname(tddDir) === the project root the gate scans.
+// before routing the model assess. sftddDir lives at <project>/.sftdd so
+// dirname(sftddDir) === the project root the gate scans.
 describe("greenOpenCycle: contract-incompleteness self-heals deterministically", () => {
   const F = "F1";
   const S = "S1";
@@ -240,8 +240,8 @@ describe("greenOpenCycle: contract-incompleteness self-heals deterministically",
     // gate pre-localizes so the assess flags it (path a) without searching.
     write(project, "tests/test_legacy_code.py", "def test_code():\n    assert row.inventory_code == 'X'\n");
 
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail });
 
     expect(r.recorded).toBe(false);
     // Routes the Navigator assess (which also handles superseded prior tests),
@@ -260,8 +260,8 @@ describe("greenOpenCycle: contract-incompleteness self-heals deterministically",
 
   it("a failing verify with NO migration drop falls through to the Navigator assess with no contractRefs", async () => {
     // no migration, just a verify failure (e.g. a superseded sibling test)
-    beginNextPendingCycle({ tddDir: tdd, featureId: F, story: S });
-    const r = await greenOpenCycle({ tddDir: tdd, featureId: F, story: S, verify: fail });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    const r = await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: fail });
 
     expect(r.recorded).toBe(false);
     expect(r.needsAssess).toBe(true);

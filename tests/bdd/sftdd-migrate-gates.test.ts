@@ -57,7 +57,7 @@ describe("migrateGatesFromSelectionLog: S7 full backfill", () => {
   it("synthesizes gates.json from a complete approval log", () => {
     makeFeatureDir();
     writeLog(FULL_APPROVAL_LOG);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
 
     expect(result.migrated).toBe(true);
     expect(result.entry_counts.spec).toBe(1);
@@ -73,7 +73,7 @@ describe("migrateGatesFromSelectionLog: S7 full backfill", () => {
   it("records the original approver + timestamp from the log heading", () => {
     makeFeatureDir();
     writeLog(FULL_APPROVAL_LOG);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.state.gates.spec.approver).toBe(APPROVER);
     expect(result.state.gates.spec.approved_at).toBe("2026-05-01T10:00:00.000Z");
     expect(result.state.gates.plan.approved_at).toBe("2026-05-02T10:00:00.000Z");
@@ -82,7 +82,7 @@ describe("migrateGatesFromSelectionLog: S7 full backfill", () => {
   it("flags every synthesized history entry as migrated", () => {
     makeFeatureDir();
     writeLog(FULL_APPROVAL_LOG);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.state.gates.spec.history).toHaveLength(1);
     expect(result.state.gates.spec.history[0].migrated).toBe(true);
     expect(result.state.gates.spec.history[0].action).toBe("migrated");
@@ -91,8 +91,8 @@ describe("migrateGatesFromSelectionLog: S7 full backfill", () => {
   it("persists the synthesized state: subsequent readGates returns the same shape", () => {
     makeFeatureDir();
     writeLog(FULL_APPROVAL_LOG);
-    migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
-    const back = readGates(FEATURE_ID, { tddDir: tdd });
+    migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
+    const back = readGates(FEATURE_ID, { sftddDir: tdd });
     expect(back.gates.spec.status).toBe("approved");
     expect(back.gates.plan.status).toBe("approved");
     expect(back.gates.test_list.status).toBe("approved");
@@ -107,7 +107,7 @@ describe("migrateGatesFromSelectionLog: partial-approval logs", () => {
 ## 2026-05-01T10:00:00.000Z – Approve spec for ${FEATURE_ID}
 - **Approved by:** ${APPROVER}
 `);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.state.gates.spec.status).toBe("approved");
     expect(result.state.gates.plan.status).toBe("open");
     expect(result.state.gates.test_list.status).toBe("open");
@@ -126,7 +126,7 @@ describe("migrateGatesFromSelectionLog: partial-approval logs", () => {
 - **Reason:** rescope
 - **Cascade:** none
 `);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.state.gates.spec.status).toBe("withdrawn");
     expect(result.state.gates.spec.history).toHaveLength(2);
   });
@@ -142,7 +142,7 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
     const testList = '{"items":[]}';
     const result = migrateGatesFromSelectionLog({
       featureId: FEATURE_ID,
-      tddDir: tdd,
+      sftddDir: tdd,
       currentInputsByGate: {
         spec: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
         plan: { "plan.json": planJson },
@@ -160,7 +160,7 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
     const featureJson = '{"id":"F1"}';
     migrateGatesFromSelectionLog({
       featureId: FEATURE_ID,
-      tddDir: tdd,
+      sftddDir: tdd,
       currentInputsByGate: {
         spec: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
       },
@@ -169,7 +169,7 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
       featureId: FEATURE_ID,
       gate: "spec",
       currentInputs: { "feature-spec.md": specMd, "feature-spec.json": featureJson },
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(v.status).toBe("ok");
   });
@@ -177,7 +177,7 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
   it("leaves artifact_hashes undefined when the caller does not provide inputs", () => {
     makeFeatureDir();
     writeLog(FULL_APPROVAL_LOG);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.state.gates.spec.artifact_hashes).toBeUndefined();
     expect(result.state.gates.plan.artifact_hashes).toBeUndefined();
   });
@@ -186,20 +186,20 @@ describe("migrateGatesFromSelectionLog: artifact hashing via currentInputsByGate
 describe("migrateGatesFromSelectionLog: refusal cases", () => {
   it("refuses when gates.json already exists (force=false default)", () => {
     makeFeatureDir();
-    writeGates(defaultGatesState(FEATURE_ID), { tddDir: tdd });
+    writeGates(defaultGatesState(FEATURE_ID), { sftddDir: tdd });
     writeLog(FULL_APPROVAL_LOG);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.migrated).toBe(false);
     expect(result.reason).toBe("gates-json-exists");
   });
 
   it("overwrites when force: true", () => {
     makeFeatureDir();
-    writeGates(defaultGatesState(FEATURE_ID), { tddDir: tdd });
+    writeGates(defaultGatesState(FEATURE_ID), { sftddDir: tdd });
     writeLog(FULL_APPROVAL_LOG);
     const result = migrateGatesFromSelectionLog({
       featureId: FEATURE_ID,
-      tddDir: tdd,
+      sftddDir: tdd,
       force: true,
     });
     expect(result.migrated).toBe(true);
@@ -208,7 +208,7 @@ describe("migrateGatesFromSelectionLog: refusal cases", () => {
 
   it("returns reason=selection-log-absent when there is no log", () => {
     makeFeatureDir();
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.migrated).toBe(false);
     expect(result.reason).toBe("selection-log-absent");
   });
@@ -216,7 +216,7 @@ describe("migrateGatesFromSelectionLog: refusal cases", () => {
   it("returns reason=no-entries-found when log has no Approve headers for this feature", () => {
     makeFeatureDir();
     writeLog("# Log\n\n## 2026-05-01T10:00:00.000Z – Approve spec for OTHER-FEATURE\n- **Approved by:** anyone\n");
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.migrated).toBe(false);
     expect(result.reason).toBe("no-entries-found");
   });
@@ -228,7 +228,7 @@ describe("migrateGatesFromSelectionLog: feature-id matching", () => {
     writeLog(`## 2026-05-01T10:00:00.000Z – Approve spec for F1
 - **Approved by:** ${APPROVER}
 `);
-    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, tddDir: tdd });
+    const result = migrateGatesFromSelectionLog({ featureId: FEATURE_ID, sftddDir: tdd });
     expect(result.migrated).toBe(true);
     expect(result.state.gates.spec.status).toBe("approved");
   });

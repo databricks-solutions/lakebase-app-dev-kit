@@ -51,10 +51,10 @@ interface ScannedFile {
 export interface RecordTurnArgs {
   /** LAKEBASE_SFTDD_RECORD_DIR , the corpus root. */
   recordDir: string;
-  /** Project working tree root (dirname of tddDir). */
+  /** Project working tree root (dirname of sftddDir). */
   projectDir: string;
   /** The project .tdd dir. */
-  tddDir: string;
+  sftddDir: string;
   /** The action just performed. */
   action: WorkflowAction;
   /** The driver loop iteration (per-process; not globally unique , the recorder
@@ -125,12 +125,12 @@ function walk(dir: string, keep?: (abs: string) => boolean): string[] {
 /** Scan the watched roots (.tdd in full + the code tree via codeTreeFilter) into
  *  a stable relpath->ScannedFile map. The code filter also excludes .tdd, so the
  *  two roots never double-count. */
-function scan(projectDir: string, tddDir: string): Map<string, ScannedFile> {
+function scan(projectDir: string, sftddDir: string): Map<string, ScannedFile> {
   const map = new Map<string, ScannedFile>();
   // .tdd in full (minus the recorder's own append-only log).
-  for (const abs of walk(tddDir)) {
+  for (const abs of walk(sftddDir)) {
     const rel = relative(projectDir, abs);
-    if (NON_ARTIFACT_TDD.has(relative(tddDir, abs))) continue;
+    if (NON_ARTIFACT_TDD.has(relative(sftddDir, abs))) continue;
     map.set(rel, { abs, rel, underTdd: true, sha: sha1(abs) });
   }
   // The code tree (app/, tests/, alembic/, etc.) via the shared filter, which
@@ -163,9 +163,9 @@ function writeRecorderState(recordDir: string, cur: Map<string, ScannedFile>): v
  * (e.g. a later drive process in the same run, which must keep the running state
  * from the prior process). Call at recorder construction, after scaffold/intake.
  */
-export function seedRecorderBaseline(args: { recordDir: string; projectDir: string; tddDir: string }): boolean {
+export function seedRecorderBaseline(args: { recordDir: string; projectDir: string; sftddDir: string }): boolean {
   if (existsSync(join(args.recordDir, ".recorder-state.json"))) return false;
-  writeRecorderState(args.recordDir, scan(args.projectDir, args.tddDir));
+  writeRecorderState(args.recordDir, scan(args.projectDir, args.sftddDir));
   return true;
 }
 
@@ -216,11 +216,11 @@ function pad(n: number): string {
  * timeline is correct even though each feature/sprint is a separate process.
  */
 export function recordTurn(args: RecordTurnArgs): RecordedTurn {
-  const { recordDir, projectDir, tddDir, action, step } = args;
+  const { recordDir, projectDir, sftddDir, action, step } = args;
   const a = action as Record<string, unknown>;
 
   const prior = readState(recordDir);
-  const cur = scan(projectDir, tddDir);
+  const cur = scan(projectDir, sftddDir);
 
   const produced: string[] = [];
   for (const [rel, f] of cur) {
@@ -249,7 +249,7 @@ export function recordTurn(args: RecordTurnArgs): RecordedTurn {
     mkdirSync(dirname(dst), { recursive: true });
     cpSync(f.abs, dst);
     if (f.underTdd) {
-      const mirror = join(artifactsDir, relative(tddDir, f.abs));
+      const mirror = join(artifactsDir, relative(sftddDir, f.abs));
       mkdirSync(dirname(mirror), { recursive: true });
       cpSync(f.abs, mirror);
     }
@@ -257,8 +257,8 @@ export function recordTurn(args: RecordTurnArgs): RecordedTurn {
   // Remove cumulative-mirror entries for deleted .tdd files.
   for (const rel of deleted) {
     const abs = join(projectDir, rel);
-    if (abs.startsWith(tddDir)) {
-      const mirror = join(artifactsDir, relative(tddDir, abs));
+    if (abs.startsWith(sftddDir)) {
+      const mirror = join(artifactsDir, relative(sftddDir, abs));
       if (existsSync(mirror)) rmSync(mirror, { force: true });
     }
   }

@@ -48,7 +48,7 @@ import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
-import { featureRequestMd, resolveTddDir } from "./sftdd-paths.js";
+import { featureRequestMd, resolveSftddDir } from "./sftdd-paths.js";
 // The gate CONDITION (what makes a gate advanceable) is a state-machine property,
 // not a proxy decision; it lives in the guard and is enforced on the advance path.
 import { resolveArtifactInputs, featureDir } from "./gate-conformance-guard.js";
@@ -60,7 +60,7 @@ import { resolveArtifactInputs, featureDir } from "./gate-conformance-guard.js";
  * identity in `data`). Best-effort: logging must never break gate approval.
  */
 function logHitlDecision(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   approver: string,
   decision:
@@ -77,7 +77,7 @@ function logHitlDecision(
           feature_id: featureId,
           slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true },
         },
-        { tddDir },
+        { sftddDir },
       );
     } else {
       emitAgentLogEvent(
@@ -88,7 +88,7 @@ function logHitlDecision(
           feature_id: featureId,
           slots: { gate: decision.gate, reason: decision.reason, approver, validated: false },
         },
-        { tddDir },
+        { sftddDir },
       );
     }
   } catch {
@@ -100,7 +100,7 @@ export const HUMAN_PROXY = "human-proxy";
 
 export interface HumanProxyArgs {
   featureId: string;
-  tddDir?: string;
+  sftddDir?: string;
   /** Override the approver identity. Defaults to "human-proxy". */
   approver?: string;
   /** Limit to a single gate; default approves every open gate whose artifacts exist. */
@@ -117,11 +117,11 @@ export interface HumanProxyResult {
 
 
 export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const approver = args.approver ?? HUMAN_PROXY;
-  const fdir = featureDir(tddDir, args.featureId);
+  const fdir = featureDir(sftddDir, args.featureId);
 
-  let state = readGates(args.featureId, { tddDir });
+  let state = readGates(args.featureId, { sftddDir });
   const approved: GateName[] = [];
   const skipped: HumanProxyResult["skipped"] = [];
 
@@ -134,12 +134,12 @@ export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
       skipped.push({ gate, reason: `status=${record.status}` });
       continue;
     }
-    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef, tddDir, args.featureId);
+    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef, sftddDir, args.featureId);
     if ("reason" in resolved) {
       skipped.push({ gate, reason: resolved.reason });
       // The HITL reviewer refused: the artifact was missing or did not carry
       // its expected elements. Record that interaction.
-      logHitlDecision(tddDir, args.featureId, approver, {
+      logHitlDecision(sftddDir, args.featureId, approver, {
         kind: "refused",
         gate,
         reason: resolved.reason,
@@ -152,12 +152,12 @@ export function drainGatesAsHumanProxy(args: HumanProxyArgs): HumanProxyResult {
       approver,
       hitlApproved: true,
       artifactInputs: resolved.inputs,
-      tddDir,
+      sftddDir,
     });
     approved.push(gate);
     state = result.state;
     // The HITL reviewer validated the expected elements + approved. Record it.
-    logHitlDecision(tddDir, args.featureId, approver, {
+    logHitlDecision(sftddDir, args.featureId, approver, {
       kind: "approved",
       gate,
       artifacts: Object.keys(resolved.inputs),
@@ -186,7 +186,7 @@ export interface SupplyArgs {
   /** Canonical artifact name for conformance keying. Defaults to basename(to). */
   artifact?: string;
   /** .tdd/ root, for logging. */
-  tddDir?: string;
+  sftddDir?: string;
   /** Feature id, for logging (intake artifacts may be project- or feature-level). */
   featureId?: string;
   /** Proxy identity. Defaults to "human-proxy". */
@@ -204,7 +204,7 @@ export interface SupplyResult {
 export function supplyArtifact(args: SupplyArgs): SupplyResult {
   const approver = args.approver ?? HUMAN_PROXY;
   const artifact = args.artifact ?? basename(args.to);
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
 
   const refuse = (reason: string): SupplyResult => {
     try {
@@ -216,7 +216,7 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
           feature_id: args.featureId,
           slots: { artifact, to: args.to, reason, approver, validated: false },
         },
-        { tddDir },
+        { sftddDir },
       );
     } catch {
       /* logging is observability, never a gate */
@@ -245,7 +245,7 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
         feature_id: args.featureId,
         slots: { artifact, from: args.from, to: args.to, approver, validated: true },
       },
-      { tddDir },
+      { sftddDir },
     );
   } catch {
     /* logging is observability, never a gate */
@@ -269,7 +269,7 @@ export function supplyArtifact(args: SupplyArgs): SupplyResult {
 // human provides them out-of-band); the driver still advances once they exist.
 
 export interface SupplyRequestsArgs {
-  tddDir?: string;
+  sftddDir?: string;
   approver?: string;
   /** Override the recorded pairs; defaults to $LAKEBASE_SFTDD_SPRINT_REQUESTS. */
   pairs?: Array<{ featureId: string; from: string }>;
@@ -301,16 +301,16 @@ function recordedRequestPairs(): Array<{ featureId: string; from: string }> {
  * interaction. Returns what was supplied + skipped.
  */
 export function supplyRequests(args: SupplyRequestsArgs = {}): SupplyRequestsResult {
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const pairs = args.pairs ?? recordedRequestPairs();
   const supplied: string[] = [];
   const skipped: SupplyRequestsResult["skipped"] = [];
   for (const { featureId, from } of pairs) {
     const res = supplyArtifact({
       from,
-      to: featureRequestMd(tddDir, featureId),
+      to: featureRequestMd(sftddDir, featureId),
       artifact: "feature-request.md",
-      tddDir,
+      sftddDir,
       featureId,
       approver: args.approver,
     });

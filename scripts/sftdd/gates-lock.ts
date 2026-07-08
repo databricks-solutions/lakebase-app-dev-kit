@@ -34,7 +34,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { GatesIoOpts } from "./gates";
-import { resolveTddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
+import { resolveSftddDir, requireFeatureDir as findFeatureDir } from "./sftdd-paths.js";
 
 export interface WithGatesLockOpts extends GatesIoOpts {
   /** Max retry attempts before giving up. Default 5. */
@@ -76,12 +76,12 @@ export function withGatesLock<T>(
   fn: () => T,
   opts: WithGatesLockOpts = {}
 ): T {
-  const tddDir = opts.tddDir ?? resolveTddDir();
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const maxRetries = opts.maxRetries ?? 5;
   const initialBackoffMs = opts.initialBackoffMs ?? 20;
   const sleep = opts.sleep ?? defaultSleep;
 
-  const lockPath = gatesLockFilePath(tddDir, featureId);
+  const lockPath = gatesLockFilePath(sftddDir, featureId);
   let acquired = false;
   let attempts = 0;
 
@@ -132,8 +132,8 @@ function readHeldByPid(lockPath: string): number | null {
   }
 }
 
-function gatesLockFilePath(tddDir: string, featureId: string): string {
-  const dir = findFeatureDir(tddDir, featureId);
+function gatesLockFilePath(sftddDir: string, featureId: string): string {
+  const dir = findFeatureDir(sftddDir, featureId);
   // Ensure the feature dir exists for the lockfile placement; gates.ts
   // also enforces this for the gates.json path. We mirror that behavior
   // so the lock can be acquired even on a fresh feature.

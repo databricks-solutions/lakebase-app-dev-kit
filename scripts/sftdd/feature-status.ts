@@ -84,8 +84,8 @@ function readJsonIfExists<T>(path: string): T | null {
 }
 
 /** Story ids under features/<F>/stories/ (each may carry a plan.json). */
-function listFeatureStories(tddDir: string, featureId: string): string[] {
-  const storiesDir = storiesDirOf(tddDir, featureId);
+function listFeatureStories(sftddDir: string, featureId: string): string[] {
+  const storiesDir = storiesDirOf(sftddDir, featureId);
   if (!existsSync(storiesDir)) return [];
   return readdirSync(storiesDir)
     .filter((d) => statSync(join(storiesDir, d)).isDirectory())
@@ -100,11 +100,11 @@ function timelineCycleCount(experimentDir: string): number {
 }
 
 function summarizeTestList(
-  tddDir: string,
+  sftddDir: string,
   featureId: string
 ): TestListSummary | null {
   try {
-    const list = readMasterTestList(tddDir, featureId);
+    const list = readMasterTestList(sftddDir, featureId);
     const counters: Record<TestListStatus, number> = {
       pending: 0,
       red: 0,
@@ -126,10 +126,10 @@ function summarizeTestList(
 }
 
 function readSelectionLogRecent(
-  tddDir: string,
+  sftddDir: string,
   limit: number
 ): SelectionLogEntry[] {
-  const path = join(tddDir, "selection-log.md");
+  const path = join(sftddDir, "selection-log.md");
   if (!existsSync(path)) return [];
   const text = readFileSync(path, "utf8");
   // selection-log entries start with `## <ISO-timestamp> – <title>` (en-dash, U+2013).
@@ -142,12 +142,12 @@ function readSelectionLogRecent(
   return entries.slice(-limit);
 }
 
-function readGatesSummary(tddDir: string, featureId: string): GatesSummary | null {
+function readGatesSummary(sftddDir: string, featureId: string): GatesSummary | null {
   // readGates throws when the feature directory does not exist (a clean
   // signal that no spec has been authored yet). Surface as null so the
   // snapshot stays renderable for not-yet-started features.
   try {
-    const state = readGates(featureId, { tddDir });
+    const state = readGates(featureId, { sftddDir });
     const out = {} as GatesSummary;
     for (const name of GATE_NAMES) {
       const rec = state.gates[name];
@@ -163,7 +163,7 @@ function readGatesSummary(tddDir: string, featureId: string): GatesSummary | nul
   }
 }
 
-function readWorkflowState(tddDir: string): {
+function readWorkflowState(sftddDir: string): {
   phase: string | null;
   pointer: WorkflowPointer | null;
 } {
@@ -174,7 +174,7 @@ function readWorkflowState(tddDir: string): {
     ac_id?: string | null;
     cycle_id?: string | null;
     experiment_id?: string | null;
-  }>(join(tddDir, "workflow-state.json"));
+  }>(join(sftddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,
@@ -189,23 +189,23 @@ function readWorkflowState(tddDir: string): {
 }
 
 export function getFeatureStatus(
-  tddDir: string,
+  sftddDir: string,
   featureId: string
 ): FeatureStatusSnapshot {
   // Plans live per story now: one plan.json under each
   // features/<F>/stories/<story>/. Collect every story that has one.
   const plans: PlanStatusEntry[] = [];
-  for (const storyId of listFeatureStories(tddDir, featureId)) {
-    const p = readPlan(tddDir, featureId, storyId);
+  for (const storyId of listFeatureStories(sftddDir, featureId)) {
+    const p = readPlan(sftddDir, featureId, storyId);
     if (p) plans.push({ story_id: storyId, plan: p });
   }
 
   // Experiments live under stories now: collect across every
   // story that has an experiments subtree.
   const experiments: ExperimentStatusEntry[] = [];
-  for (const storyId of listExperimentStories(tddDir, featureId)) {
-    for (const rec of listExperiments(tddDir, featureId, storyId)) {
-      const outcomes = readOutcomes(tddDir, featureId, storyId, rec.experiment_slug);
+  for (const storyId of listExperimentStories(sftddDir, featureId)) {
+    for (const rec of listExperiments(sftddDir, featureId, storyId)) {
+      const outcomes = readOutcomes(sftddDir, featureId, storyId, rec.experiment_slug);
       experiments.push({
         story_id: storyId,
         slug: rec.experiment_slug,
@@ -221,23 +221,23 @@ export function getFeatureStatus(
 
   let smells: SmellsLog["detected"] = [];
   try {
-    smells = readSmellsLog(tddDir).detected.filter((d) => !d.resolution);
+    smells = readSmellsLog(sftddDir).detected.filter((d) => !d.resolution);
   } catch {
     smells = [];
   }
 
-  const { phase, pointer } = readWorkflowState(tddDir);
+  const { phase, pointer } = readWorkflowState(sftddDir);
 
   return {
     feature_id: featureId,
     current_workflow_phase: phase,
     current_workflow_pointer: pointer,
     plans,
-    test_list: summarizeTestList(tddDir, featureId),
+    test_list: summarizeTestList(sftddDir, featureId),
     experiments,
-    selection_log_recent: readSelectionLogRecent(tddDir, MAX_RECENT_LOG_ENTRIES),
+    selection_log_recent: readSelectionLogRecent(sftddDir, MAX_RECENT_LOG_ENTRIES),
     open_smells: smells,
-    gates: readGatesSummary(tddDir, featureId),
+    gates: readGatesSummary(sftddDir, featureId),
   };
 }
 

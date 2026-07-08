@@ -11,7 +11,7 @@ import { join } from "node:path";
 import {
   ARTIFACT_ROOT,
   LEGACY_ARTIFACT_ROOT,
-  resolveTddDir,
+  resolveSftddDir,
 } from "../../scripts/sftdd/sftdd-paths";
 import { migrateLegacyArtifactDir } from "../../scripts/sftdd/migrate-artifact-dir";
 
@@ -30,20 +30,20 @@ describe("artifact root names", () => {
   });
 });
 
-describe("resolveTddDir (dual-read, prefers .sftdd)", () => {
+describe("resolveSftddDir (dual-read, prefers .sftdd)", () => {
   it("defaults a fresh project to .sftdd", () => {
-    expect(resolveTddDir(dir)).toBe(join(dir, ".sftdd"));
+    expect(resolveSftddDir(dir)).toBe(join(dir, ".sftdd"));
   });
 
   it("honors a legacy .tdd dir when that is what exists", () => {
     mkdirSync(join(dir, ".tdd"));
-    expect(resolveTddDir(dir)).toBe(join(dir, ".tdd"));
+    expect(resolveSftddDir(dir)).toBe(join(dir, ".tdd"));
   });
 
   it("prefers .sftdd over a legacy .tdd when both exist", () => {
     mkdirSync(join(dir, ".tdd"));
     mkdirSync(join(dir, ".sftdd"));
-    expect(resolveTddDir(dir)).toBe(join(dir, ".sftdd"));
+    expect(resolveSftddDir(dir)).toBe(join(dir, ".sftdd"));
   });
 });
 

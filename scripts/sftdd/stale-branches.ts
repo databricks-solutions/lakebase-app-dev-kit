@@ -28,8 +28,8 @@ export interface StaleBranchFinding {
 }
 
 /** Feature ids that have a pipeline.json (each dir under .tdd/features/). */
-function listPipelineFeatures(tddDir: string): string[] {
-  const featuresDir = featuresDirOf(tddDir);
+function listPipelineFeatures(sftddDir: string): string[] {
+  const featuresDir = featuresDirOf(sftddDir);
   if (!existsSync(featuresDir)) return [];
   return readdirSync(featuresDir)
     .filter((d) => statSync(join(featuresDir, d)).isDirectory())
@@ -42,11 +42,11 @@ function listPipelineFeatures(tddDir: string): string[] {
  * findings (kind: "experiment" | "spike"); the caller (scm-doctor) surfaces
  * them as advisory warnings naming each kind.
  */
-export function findStaleBranches(tddDir: string): StaleBranchFinding[] {
+export function findStaleBranches(sftddDir: string): StaleBranchFinding[] {
   const findings: StaleBranchFinding[] = [];
 
-  for (const featureId of listPipelineFeatures(tddDir)) {
-    const pipeline = readPipeline(tddDir, featureId);
+  for (const featureId of listPipelineFeatures(sftddDir)) {
+    const pipeline = readPipeline(sftddDir, featureId);
     for (const [storyId, story] of Object.entries(pipeline.stories)) {
       const exp = story.experiment;
       if (!exp) continue;
@@ -64,7 +64,7 @@ export function findStaleBranches(tddDir: string): StaleBranchFinding[] {
     }
   }
 
-  for (const spike of listSpikes(tddDir)) {
+  for (const spike of listSpikes(sftddDir)) {
     findings.push({
       kind: "spike",
       slug: spike.spike_slug,

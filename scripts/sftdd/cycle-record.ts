@@ -120,9 +120,9 @@ export async function commitExperimentCode(projectDir: string, message: string):
   });
 }
 
-async function commitCycleWork(tddDir: string, message: string): Promise<void> {
+async function commitCycleWork(sftddDir: string, message: string): Promise<void> {
   try {
-    await commitExperimentCode(dirname(tddDir), message);
+    await commitExperimentCode(dirname(sftddDir), message);
   } catch {
     // swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
@@ -137,9 +137,9 @@ async function commitCycleWork(tddDir: string, message: string): Promise<void> {
  * REFACTOR (the gap that left cycle.review/cycle.refactored absent). Mirrors
  * run-cycle's logCycleEvent: observability never breaks a cycle transition.
  */
-function logCycleEvent(tddDir: string, event: AgentLogEventInput): void {
+function logCycleEvent(sftddDir: string, event: AgentLogEventInput): void {
   try {
-    emitAgentLogEvent(event, { tddDir });
+    emitAgentLogEvent(event, { sftddDir });
   } catch {
     // swallow: never let logging break a review/refactor record
   }
@@ -158,8 +158,8 @@ export interface StoryTestItem {
   kind?: "behavior" | "fitness";
 }
 
-function readStoryItems(tddDir: string, featureId: string, story: string): StoryTestItem[] {
-  const file = storyTestListJson(tddDir, featureId, story);
+function readStoryItems(sftddDir: string, featureId: string, story: string): StoryTestItem[] {
+  const file = storyTestListJson(sftddDir, featureId, story);
   if (!existsSync(file)) {
     throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
   }
@@ -168,8 +168,8 @@ function readStoryItems(tddDir: string, featureId: string, story: string): Story
 }
 
 /** The story's recorded experiment (slug + branch), so cycles tie to its DB. */
-function storyExperiment(tddDir: string, featureId: string, story: string): { slug?: string; branch?: string } {
-  const exps = listExperiments(tddDir, featureId, story);
+function storyExperiment(sftddDir: string, featureId: string, story: string): { slug?: string; branch?: string } {
+  const exps = listExperiments(sftddDir, featureId, story);
   const e = exps[0];
   return { slug: e?.experiment_slug, branch: e?.branch_id };
 }
@@ -180,8 +180,8 @@ function storyExperiment(tddDir: string, featureId: string, story: string): { sl
  * iterating a test-list's ac_ids, means progress is correct even before / apart
  * from the test-list (and matches the probe's own scan).
  */
-export function storyCycles(tddDir: string, featureId: string, story: string): CycleArtifact[] {
-  const base = join(cyclesRootDir(tddDir), featureId, story);
+export function storyCycles(sftddDir: string, featureId: string, story: string): CycleArtifact[] {
+  const base = join(cyclesRootDir(sftddDir), featureId, story);
   if (!existsSync(base)) return [];
   const out: CycleArtifact[] = [];
   for (const acDir of readdirSync(base)) {
@@ -221,14 +221,14 @@ export interface StoryTestProgress {
  * "navigator vs driver vs done" decision and the cycle CLI's "which test next"
  * can never drift. Tolerant of a missing test-list (returns total:0).
  */
-export function storyTestProgress(tddDir: string, featureId: string, story: string): StoryTestProgress {
+export function storyTestProgress(sftddDir: string, featureId: string, story: string): StoryTestProgress {
   let items: StoryTestItem[] = [];
   try {
-    items = readStoryItems(tddDir, featureId, story);
+    items = readStoryItems(sftddDir, featureId, story);
   } catch {
     items = [];
   }
-  const cycles = storyCycles(tddDir, featureId, story);
+  const cycles = storyCycles(sftddDir, featureId, story);
   // A cycle covers one (per-test) or several (P8b batch) test ids; coveredTestIds
   // reads either shape, so progress is correct in both loop-granularity modes.
   const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
@@ -247,15 +247,15 @@ export function storyTestProgress(tddDir: string, featureId: string, story: stri
  * must not hard-halt , the GREEN run is the real arbiter.
  */
 export function pendingItemKind(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
 ): "behavior" | "fitness" | undefined {
-  return storyTestProgress(tddDir, featureId, story).pending[0]?.kind;
+  return storyTestProgress(sftddDir, featureId, story).pending[0]?.kind;
 }
 
 export interface CycleRecordArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   story: string;
 }
@@ -274,13 +274,13 @@ export interface BeginResult {
  * cycle (nothing pending).
  */
 export function beginNextPendingCycle(args: CycleRecordArgs): BeginResult {
-  const { tddDir, featureId, story } = args;
-  const pending = storyTestProgress(tddDir, featureId, story).pending[0];
+  const { sftddDir, featureId, story } = args;
+  const pending = storyTestProgress(sftddDir, featureId, story).pending[0];
   if (!pending) return { recorded: false };
 
-  const exp = storyExperiment(tddDir, featureId, story);
+  const exp = storyExperiment(sftddDir, featureId, story);
   const art = beginCycle({
-    tddDir,
+    sftddDir,
     feature_id: featureId,
     story_id: story,
     ac_id: pending.ac_id,
@@ -313,35 +313,35 @@ export const DEFAULT_BATCH_CAP = 3;
  *  SINGLE source both beginNextPendingBatch (what it stamps) and the Navigator's
  *  RED directive (what tests to write) read, so they cannot drift. */
 export function nextPendingBatch(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
   cap: number = DEFAULT_BATCH_CAP,
 ): StoryTestItem[] {
   const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
-  const pending = storyTestProgress(tddDir, featureId, story).pending;
+  const pending = storyTestProgress(sftddDir, featureId, story).pending;
   if (pending.length === 0) return [];
-  const layerOf = (acId: string): string => readAcLayer(tddDir, featureId, acId) ?? "_nolayer";
+  const layerOf = (acId: string): string => readAcLayer(sftddDir, featureId, acId) ?? "_nolayer";
   const headLayer = layerOf(pending[0].ac_id);
   return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
 }
 
 export function beginNextPendingBatch(args: CycleRecordArgs, opts?: { cap?: number }): BeginResult {
-  const { tddDir, featureId, story } = args;
+  const { sftddDir, featureId, story } = args;
   const cap = opts?.cap && opts.cap > 0 ? opts.cap : DEFAULT_BATCH_CAP;
-  const batch = nextPendingBatch(tddDir, featureId, story, cap);
+  const batch = nextPendingBatch(sftddDir, featureId, story, cap);
   if (batch.length === 0) return { recorded: false }; // nothing pending / empty-batch guard
 
-  const headLayer = readAcLayer(tddDir, featureId, batch[0].ac_id) ?? "_nolayer";
+  const headLayer = readAcLayer(sftddDir, featureId, batch[0].ac_id) ?? "_nolayer";
   const head = batch[0];
-  const exp = storyExperiment(tddDir, featureId, story);
+  const exp = storyExperiment(sftddDir, featureId, story);
   // chunk index: how many cycles already exist for this layer in the story, + 1.
-  const priorForLayer = storyCycles(tddDir, featureId, story).filter(
+  const priorForLayer = storyCycles(sftddDir, featureId, story).filter(
     (c) => (c.layer ?? "_nolayer") === headLayer,
   ).length;
   const explicitLayer = headLayer === "_nolayer" ? undefined : (headLayer as AcLayer);
   const art = beginCycle({
-    tddDir,
+    sftddDir,
     feature_id: featureId,
     story_id: story,
     ac_id: head.ac_id,
@@ -377,7 +377,7 @@ export interface GreenResult {
  *  is the real deploy-during-build verifier. */
 export type GreenVerifier = (args: {
   projectDir: string;
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   story: string;
   branchId?: string;
@@ -424,8 +424,8 @@ export function greenVerifierForEnv(env: NodeJS.ProcessEnv = process.env): Green
 export async function greenOpenCycle(
   args: CycleRecordArgs & { driverChanges?: string; verify?: GreenVerifier; repair?: boolean },
 ): Promise<GreenResult> {
-  const { tddDir, featureId, story } = args;
-  const open = storyTestProgress(tddDir, featureId, story).openRed
+  const { sftddDir, featureId, story } = args;
+  const open = storyTestProgress(sftddDir, featureId, story).openRed
     .sort((a, b) => (a.red_at! < b.red_at! ? 1 : -1))[0];
   if (!open) {
     throw new Error(`no open RED cycle for ${featureId}/${story}; nothing to mark GREEN`);
@@ -434,10 +434,10 @@ export async function greenOpenCycle(
   // driver-fixable regression). Consume the one repair attempt up front so a still-
   // failing verify escalates instead of routing another repair turn.
   if (args.repair) {
-    markRegressionFixAttempted(tddDir, featureId, story, open.ac_id);
+    markRegressionFixAttempted(sftddDir, featureId, story, open.ac_id);
   }
   const scope: CycleScope = {
-    tddDir,
+    sftddDir,
     feature_id: featureId,
     story_id: story,
     ac_id: open.ac_id,
@@ -451,7 +451,7 @@ export async function greenOpenCycle(
   // here leaves the cycle RED and raises an escalation to the HIL; the
   // orchestration then routes to raise-to-hil rather than advancing.
   const verify = args.verify ?? defaultGreenVerifier;
-  let result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: open.branch_id });
+  let result = await verify({ projectDir: dirname(sftddDir), sftddDir, featureId, story, branchId: open.branch_id });
   // Proactive migration-self-containment gate. Even when the honest verify PASSES
   // (local `alembic upgrade` runs env.py, so an app-importing migration imports
   // fine), a migration that imports app code at module scope breaks CI's
@@ -461,7 +461,7 @@ export async function greenOpenCycle(
   // recorded corpus is trusted; re-gating it would fail on historical migrations).
   if (result.passed && !sftddEnv("REPLAY_BUILD_DIR")) {
     try {
-      const mig = checkMigrationAppClean({ projectDir: dirname(tddDir) });
+      const mig = checkMigrationAppClean({ projectDir: dirname(sftddDir) });
       if (!mig.clean && mig.remediation) result = { passed: false, summary: mig.remediation };
     } catch {
       /* advisory scan: a gate error must never fail the cycle */
@@ -471,7 +471,7 @@ export async function greenOpenCycle(
     recordRunnerOutcome({ scope, cycleId: open.cycle_id, experimentSlug: open.experiment_slug, passed: result.passed });
   }
   if (!result.passed) {
-    const gf = readGreenFailure(tddDir, featureId, story, open.ac_id);
+    const gf = readGreenFailure(sftddDir, featureId, story, open.ac_id);
     if (!gf?.assessed) {
       // First failure: the break may be a PRIOR test the new AC legitimately
       // supersedes (only the full-suite verify reveals it). Route a Navigator
@@ -490,16 +490,16 @@ export async function greenOpenCycle(
       let contractRefs: string | undefined;
       let supersededTestRefs: string | undefined;
       try {
-        const contract = checkContractClean({ projectDir: dirname(tddDir) });
+        const contract = checkContractClean({ projectDir: dirname(sftddDir) });
         if (!contract.clean && contract.remediation) contractRefs = contract.remediation;
         // The test-side counterpart: prior tests that reference a dropped symbol are
         // supersession candidates the Navigator flags (path (a)) without searching.
-        const superseded = supersededTestCandidates({ projectDir: dirname(tddDir) });
+        const superseded = supersededTestCandidates({ projectDir: dirname(sftddDir) });
         if (superseded.advisory) supersededTestRefs = superseded.advisory;
       } catch {
         /* advisory only: a gate error must never fail the cycle */
       }
-      writeGreenFailure(tddDir, featureId, story, open.ac_id, {
+      writeGreenFailure(sftddDir, featureId, story, open.ac_id, {
         assessed: false,
         summary: result.summary,
         ...(contractRefs ? { contractRefs } : {}),
@@ -516,12 +516,12 @@ export async function greenOpenCycle(
     // honest verify still gates every round, so this never green-washes; it only
     // gives the Driver a few focused passes to converge before the HIL.
     if (!regressionFixExhausted(gf)) {
-      rearmRegressionFix(tddDir, featureId, story, open.ac_id);
+      rearmRegressionFix(sftddDir, featureId, story, open.ac_id);
       return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, needsAssess: true, summary: result.summary };
     }
     // Rounds exhausted: escalate to the HIL, carrying the Navigator's diagnosis
     // when it recorded one (so the human gets the WHY, not just the verify summary).
-    const escalation = writeEscalation(tddDir, {
+    const escalation = writeEscalation(sftddDir, {
       source: "driver-green",
       reason: `GREEN verify failed for ${open.test_id} (${open.ac_id}) in ${featureId}/${story} after ${gf.fixAttempts ?? 0} self-heal round(s)${gf.diagnosis ? ` , ${gf.diagnosis}` : ""}: ${result.summary}`,
       feature_id: featureId,
@@ -531,9 +531,9 @@ export async function greenOpenCycle(
     return { recorded: false, cycleId: open.cycle_id, testId: open.test_id, escalated: true, escalation, summary: result.summary };
   }
   // Verify passed: clear the failure marker + consume any supersession attempt.
-  clearGreenFailure(tddDir, featureId, story, open.ac_id);
-  if (readSupersededTests(tddDir, featureId, story, open.ac_id)) {
-    markSupersessionRefactored(tddDir, featureId, story, open.ac_id);
+  clearGreenFailure(sftddDir, featureId, story, open.ac_id);
+  if (readSupersededTests(sftddDir, featureId, story, open.ac_id)) {
+    markSupersessionRefactored(sftddDir, featureId, story, open.ac_id);
   }
   markGreen(scope, open.cycle_id, args.driverChanges);
   // Propagate green to the artifacts the acceptance/deploy consumers read: the
@@ -545,7 +545,7 @@ export async function greenOpenCycle(
   // cycle is just the single-element case). Best-effort: never fail a green here.
   for (const tid of coveredTestIds(open)) {
     try {
-      markTestItemGreen(tddDir, featureId, story, tid);
+      markTestItemGreen(sftddDir, featureId, story, tid);
     } catch {
       /* status propagation is observability for downstream consumers, not a gate */
     }
@@ -555,7 +555,7 @@ export async function greenOpenCycle(
   // prepare-pr sees a clean tree.
   const greened = coveredTestIds(open);
   const greenedLabel = greened.length > 1 ? `${greened.join(", ")} (${open.ac_id} batch)` : `${open.test_id} (${open.ac_id})`;
-  await commitCycleWork(tddDir, `green: ${greenedLabel}`);
+  await commitCycleWork(sftddDir, `green: ${greenedLabel}`);
   return { recorded: true, cycleId: open.cycle_id, testId: open.test_id, summary: result.summary };
 }
 
@@ -588,8 +588,8 @@ interface ReviewRecord {
   refactored_at?: string;
 }
 
-function readReview(tddDir: string, featureId: string, story: string, acId: string): ReviewRecord {
-  const f = acReviewJson(tddDir, featureId, story, acId);
+function readReview(sftddDir: string, featureId: string, story: string, acId: string): ReviewRecord {
+  const f = acReviewJson(sftddDir, featureId, story, acId);
   if (!existsSync(f)) return {};
   try {
     return JSON.parse(readFileSync(f, "utf8")) as ReviewRecord;
@@ -599,15 +599,15 @@ function readReview(tddDir: string, featureId: string, story: string, acId: stri
 }
 
 /** Per-AC review state, in test-list AC order (first occurrence of each ac_id). */
-export function acReviewStates(tddDir: string, featureId: string, story: string): AcReviewState[] {
+export function acReviewStates(sftddDir: string, featureId: string, story: string): AcReviewState[] {
   let items: StoryTestItem[] = [];
   try {
-    items = readStoryItems(tddDir, featureId, story);
+    items = readStoryItems(sftddDir, featureId, story);
   } catch {
     items = [];
   }
   const greenTestIds = new Set(
-    storyCycles(tddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)),
+    storyCycles(sftddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)),
   );
   const acOrder: string[] = [];
   const acTests = new Map<string, string[]>();
@@ -620,7 +620,7 @@ export function acReviewStates(tddDir: string, featureId: string, story: string)
   }
   return acOrder.map((acId) => {
     const tests = acTests.get(acId)!;
-    const r = readReview(tddDir, featureId, story, acId);
+    const r = readReview(sftddDir, featureId, story, acId);
     return {
       acId,
       allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
@@ -632,8 +632,8 @@ export function acReviewStates(tddDir: string, featureId: string, story: string)
 }
 
 /** First AC whose tests are all green but not yet REVIEWed (-> Navigator REVIEW). */
-export function firstReviewPendingAc(tddDir: string, featureId: string, story: string): string | null {
-  return acReviewStates(tddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
+export function firstReviewPendingAc(sftddDir: string, featureId: string, story: string): string | null {
+  return acReviewStates(sftddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
 }
 
 /** First AC REVIEWed with a refactor request not yet satisfied (-> Driver REFACTOR).
@@ -650,11 +650,11 @@ export function firstReviewPendingAc(tddDir: string, featureId: string, story: s
  *     preserves behavior; one attempt per AC, after which a residual violation
  *     re-surfaces with no refactor pending and escalates (backstop intact).
  */
-export function firstRefactorPendingAc(tddDir: string, featureId: string, story: string): string | null {
-  const states = acReviewStates(tddDir, featureId, story);
+export function firstRefactorPendingAc(sftddDir: string, featureId: string, story: string): string | null {
+  const states = acReviewStates(sftddDir, featureId, story);
   const explicit = states.find((a) => a.reviewed && a.refactorRequested && !a.refactored);
   if (explicit) return explicit.acId;
-  if (hasOpenBuildRefactorRoutableSmell(tddDir, story)) {
+  if (hasOpenBuildRefactorRoutableSmell(sftddDir, story)) {
     return states.find((a) => a.reviewed && !a.refactored)?.acId ?? null;
   }
   return null;
@@ -666,9 +666,9 @@ export function firstRefactorPendingAc(tddDir: string, featureId: string, story:
  * reviewed_at + refactor_requested. No verdict present => refactor_requested
  * false ("looks good"), so a Navigator that finds nothing to fix never stalls.
  */
-export function reviewAc(tddDir: string, featureId: string, story: string, acId: string): { reviewed: boolean; refactorRequested: boolean } {
+export function reviewAc(sftddDir: string, featureId: string, story: string, acId: string): { reviewed: boolean; refactorRequested: boolean } {
   let verdict: { refactor?: boolean; notes?: string } = {};
-  const vf = acReviewVerdictJson(tddDir, featureId, story, acId);
+  const vf = acReviewVerdictJson(sftddDir, featureId, story, acId);
   if (existsSync(vf)) {
     try {
       verdict = JSON.parse(readFileSync(vf, "utf8")) as { refactor?: boolean; notes?: string };
@@ -677,8 +677,8 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
     }
   }
   const refactorRequested = verdict.refactor === true;
-  const file = acReviewJson(tddDir, featureId, story, acId);
-  const prior = readReview(tddDir, featureId, story, acId);
+  const file = acReviewJson(sftddDir, featureId, story, acId);
+  const prior = readReview(sftddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
     file,
@@ -690,7 +690,7 @@ export function reviewAc(tddDir: string, featureId: string, story: string, acId:
   );
   // The Navigator's review verdict is a first-class cycle transition: emit it so
   // the central log shows REVIEW between GREEN and (optional) REFACTOR.
-  logCycleEvent(tddDir, {
+  logCycleEvent(sftddDir, {
     role: "navigator",
     level: "info",
     event: "cycle.review",
@@ -730,18 +730,18 @@ export interface RefactorResult {
  * GREEN); the orchestration then routes to raise-to-hil rather than advancing.
  */
 export async function refactorAc(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
   acId: string,
   opts?: { verify?: GreenVerifier },
 ): Promise<RefactorResult> {
   // Honest post-refactor verify against the story's experiment branch.
-  const exp = storyExperiment(tddDir, featureId, story);
+  const exp = storyExperiment(sftddDir, featureId, story);
   const verify = opts?.verify ?? defaultGreenVerifier;
-  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  const result = await verify({ projectDir: dirname(sftddDir), sftddDir, featureId, story, branchId: exp.branch });
   if (!result.passed) {
-    const escalation = writeEscalation(tddDir, {
+    const escalation = writeEscalation(sftddDir, {
       source: "driver-refactor",
       reason: `REFACTOR verify failed for ${acId} in ${featureId}/${story}: ${result.summary}`,
       feature_id: featureId,
@@ -751,8 +751,8 @@ export async function refactorAc(
     return { refactored: false, escalated: true, escalation, summary: result.summary };
   }
 
-  const file = acReviewJson(tddDir, featureId, story, acId);
-  const prior = readReview(tddDir, featureId, story, acId);
+  const file = acReviewJson(sftddDir, featureId, story, acId);
+  const prior = readReview(sftddDir, featureId, story, acId);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
   // Build-level self-heal: a refactor-routable build smell (layering-violation,
@@ -761,9 +761,9 @@ export async function refactorAc(
   // refactor-less) terminal escalation on the next readState. The post-refactor
   // verify above preserved behavior; the deploy/promote gate is the final teeth
   // if a residual violation remains.
-  for (const d of readSmellsLog(tddDir).detected) {
+  for (const d of readSmellsLog(sftddDir).detected) {
     if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === undefined || d.story_id === story)) {
-      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored: ${acId}` });
+      markSmellResolved(sftddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored: ${acId}` });
     }
   }
   // The Driver's refactor is a cycle transition: emit it so the central log
@@ -772,7 +772,7 @@ export async function refactorAc(
   const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
     ? `addressed: ${prior.refactor_notes}`
     : "structure improved";
-  logCycleEvent(tddDir, {
+  logCycleEvent(sftddDir, {
     role: "driver",
     level: "info",
     event: "cycle.refactored",
@@ -781,7 +781,7 @@ export async function refactorAc(
   });
   // Commit the behavior-preserving refactor as its own commit (the second half
   // of the "commit when green, then commit the refactor" rhythm).
-  await commitCycleWork(tddDir, `refactor: ${acId} (${change})`);
+  await commitCycleWork(sftddDir, `refactor: ${acId} (${change})`);
   return { refactored: true, summary: result.summary };
 }
 
@@ -807,8 +807,8 @@ export interface StoryReviewState {
   refactored: boolean;
 }
 
-function readStoryReview(tddDir: string, featureId: string, story: string): ReviewRecord {
-  const f = storyReviewJson(tddDir, featureId, story);
+function readStoryReview(sftddDir: string, featureId: string, story: string): ReviewRecord {
+  const f = storyReviewJson(sftddDir, featureId, story);
   if (!existsSync(f)) return {};
   try {
     return JSON.parse(readFileSync(f, "utf8")) as ReviewRecord;
@@ -820,19 +820,19 @@ function readStoryReview(tddDir: string, featureId: string, story: string): Revi
 /** Whether every test-list item in the story is green (story ready to REVIEW).
  *  Mirrors the probe's codeWritten: test-list-driven when a list exists, else a
  *  legacy fallback over the raw RED/GREEN cycles. */
-function storyAllTestsGreen(tddDir: string, featureId: string, story: string): boolean {
-  const p = storyTestProgress(tddDir, featureId, story);
+function storyAllTestsGreen(sftddDir: string, featureId: string, story: string): boolean {
+  const p = storyTestProgress(sftddDir, featureId, story);
   if (p.total === 0) {
-    const reds = storyCycles(tddDir, featureId, story).filter((c) => Boolean(c.red_at));
+    const reds = storyCycles(sftddDir, featureId, story).filter((c) => Boolean(c.red_at));
     return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
   }
   return p.allGreen;
 }
 
-export function storyReviewState(tddDir: string, featureId: string, story: string): StoryReviewState {
-  const r = readStoryReview(tddDir, featureId, story);
+export function storyReviewState(sftddDir: string, featureId: string, story: string): StoryReviewState {
+  const r = readStoryReview(sftddDir, featureId, story);
   return {
-    allTestsGreen: storyAllTestsGreen(tddDir, featureId, story),
+    allTestsGreen: storyAllTestsGreen(sftddDir, featureId, story),
     reviewed: Boolean(r.reviewed_at),
     refactorRequested: Boolean(r.refactor_requested),
     refactored: Boolean(r.refactored_at),
@@ -841,8 +841,8 @@ export function storyReviewState(tddDir: string, featureId: string, story: strin
 
 /** The story's REVIEW is pending: all its tests are green but the Navigator has
  *  not yet REVIEWed the story (-> Navigator story-level REVIEW turn). */
-export function reviewPending(tddDir: string, featureId: string, story: string): boolean {
-  const s = storyReviewState(tddDir, featureId, story);
+export function reviewPending(sftddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(sftddDir, featureId, story);
   return s.allTestsGreen && !s.reviewed;
 }
 
@@ -852,11 +852,11 @@ export function reviewPending(tddDir: string, featureId: string, story: string):
  *  gate IS the refactor signal, so a reviewed-but-unrefactored story routes to
  *  REFACTOR even when the verdict said refactor:false). One attempt; a residual
  *  violation after refactorStory re-surfaces with no refactor pending + escalates. */
-export function refactorPending(tddDir: string, featureId: string, story: string): boolean {
-  const s = storyReviewState(tddDir, featureId, story);
+export function refactorPending(sftddDir: string, featureId: string, story: string): boolean {
+  const s = storyReviewState(sftddDir, featureId, story);
   if (!s.reviewed || s.refactored) return false;
   if (s.refactorRequested) return true;
-  return hasOpenBuildRefactorRoutableSmell(tddDir, story);
+  return hasOpenBuildRefactorRoutableSmell(sftddDir, story);
 }
 
 /** Record the Navigator's REVIEW of the WHOLE story: read its verdict
@@ -865,12 +865,12 @@ export function refactorPending(tddDir: string, featureId: string, story: string
  *  false ("looks good"), so a Navigator that finds nothing to fix never stalls.
  *  Story-scoped sibling of reviewAc. */
 export function reviewStory(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
 ): { reviewed: boolean; refactorRequested: boolean } {
   let verdict: { refactor?: boolean; notes?: string } = {};
-  const vf = storyReviewVerdictJson(tddDir, featureId, story);
+  const vf = storyReviewVerdictJson(sftddDir, featureId, story);
   if (existsSync(vf)) {
     try {
       verdict = JSON.parse(readFileSync(vf, "utf8")) as { refactor?: boolean; notes?: string };
@@ -879,8 +879,8 @@ export function reviewStory(
     }
   }
   const refactorRequested = verdict.refactor === true;
-  const file = storyReviewJson(tddDir, featureId, story);
-  const prior = readStoryReview(tddDir, featureId, story);
+  const file = storyReviewJson(sftddDir, featureId, story);
+  const prior = readStoryReview(sftddDir, featureId, story);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
     file,
@@ -890,7 +890,7 @@ export function reviewStory(
       2,
     ) + "\n",
   );
-  logCycleEvent(tddDir, {
+  logCycleEvent(sftddDir, {
     role: "navigator",
     level: "info",
     event: "cycle.review",
@@ -911,16 +911,16 @@ export function reviewStory(
  *  stamping refactored_at; on failure the story stays refactor-pending and an
  *  escalation is raised to the HIL. */
 export async function refactorStory(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
   opts?: { verify?: GreenVerifier },
 ): Promise<RefactorResult> {
-  const exp = storyExperiment(tddDir, featureId, story);
+  const exp = storyExperiment(sftddDir, featureId, story);
   const verify = opts?.verify ?? defaultGreenVerifier;
-  const result = await verify({ projectDir: dirname(tddDir), tddDir, featureId, story, branchId: exp.branch });
+  const result = await verify({ projectDir: dirname(sftddDir), sftddDir, featureId, story, branchId: exp.branch });
   if (!result.passed) {
-    const escalation = writeEscalation(tddDir, {
+    const escalation = writeEscalation(sftddDir, {
       source: "driver-refactor",
       reason: `REFACTOR verify failed for story ${featureId}/${story}: ${result.summary}`,
       feature_id: featureId,
@@ -929,25 +929,25 @@ export async function refactorStory(
     return { refactored: false, escalated: true, escalation, summary: result.summary };
   }
 
-  const file = storyReviewJson(tddDir, featureId, story);
-  const prior = readStoryReview(tddDir, featureId, story);
+  const file = storyReviewJson(sftddDir, featureId, story);
+  const prior = readStoryReview(sftddDir, featureId, story);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify({ ...prior, refactored_at: new Date().toISOString() }, null, 2) + "\n");
-  for (const d of readSmellsLog(tddDir).detected) {
+  for (const d of readSmellsLog(sftddDir).detected) {
     if (!d.resolution && isBuildRefactorRoutableSmell(d.smell) && (d.story_id === undefined || d.story_id === story)) {
-      markSmellResolved(tddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored story: ${story}` });
+      markSmellResolved(sftddDir, d.smell, { story_id: d.story_id, kind: "accepted", note: `refactored story: ${story}` });
     }
   }
   const change = typeof prior.refactor_notes === "string" && prior.refactor_notes.length > 0
     ? `addressed: ${prior.refactor_notes}`
     : "structure improved";
-  logCycleEvent(tddDir, {
+  logCycleEvent(sftddDir, {
     role: "driver",
     level: "info",
     event: "cycle.refactored",
     feature_id: featureId,
     slots: { ac: story, change, story },
   });
-  await commitCycleWork(tddDir, `refactor: story ${story} (${change})`);
+  await commitCycleWork(sftddDir, `refactor: story ${story} (${change})`);
   return { refactored: true, summary: result.summary };
 }

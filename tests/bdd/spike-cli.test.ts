@@ -32,18 +32,18 @@ describe("spikeNotes carry-forward tagging", () => {
     const notes = spikeNotes("idea-x");
     expect(notes).not.toMatch(/for_feature/);
     seedSpike("idea-x", notes);
-    expect(collectSpikeInputs({ tddDir: tdd, featureId: "F1-a" })).toHaveLength(0);
+    expect(collectSpikeInputs({ sftddDir: tdd, featureId: "F1-a" })).toHaveLength(0);
   });
 
   it("--for tags the notes so the feature's design-spec gate picks them up", () => {
     const notes = spikeNotes("idea-x", "F1-a");
     expect(notes).toMatch(/^---\nfor_feature: F1-a\n---/);
     seedSpike("idea-x", notes);
-    const inputs = collectSpikeInputs({ tddDir: tdd, featureId: "F1-a" });
+    const inputs = collectSpikeInputs({ sftddDir: tdd, featureId: "F1-a" });
     expect(inputs).toHaveLength(1);
     expect(inputs[0].slug).toBe("idea-x");
     // ... but not for a different feature.
-    expect(collectSpikeInputs({ tddDir: tdd, featureId: "F2-b" })).toHaveLength(0);
+    expect(collectSpikeInputs({ sftddDir: tdd, featureId: "F2-b" })).toHaveLength(0);
   });
 });
 

@@ -10,18 +10,18 @@ import { join } from "node:path";
 import { diskArtifactProbe, readDriveContext } from "../../scripts/sftdd/orchestrator-probe";
 import { writeCycleArtifact, type CycleArtifact } from "../../scripts/sftdd/run-cycle";
 
-let tddDir: string;
+let sftddDir: string;
 const FEATURE = "F1";
 
 beforeEach(() => {
-  tddDir = mkdtempSync(join(tmpdir(), "drive-probe-"));
+  sftddDir = mkdtempSync(join(tmpdir(), "drive-probe-"));
 });
 afterEach(() => {
-  rmSync(tddDir, { recursive: true, force: true });
+  rmSync(sftddDir, { recursive: true, force: true });
 });
 
 function storyDir(story: string): string {
-  return join(tddDir, "features", FEATURE, "stories", story);
+  return join(sftddDir, "features", FEATURE, "stories", story);
 }
 function writeStory(story: string, acs: string[]): void {
   mkdirSync(storyDir(story), { recursive: true });
@@ -38,7 +38,7 @@ function writeAcNotes(story: string, ac: string, layer: string, notes: string): 
   writeFileSync(join(dir, `${ac}.json`), JSON.stringify({ id: ac, layer, architectural_notes: notes }));
 }
 function writeArchitecture(): void {
-  const dir = join(tddDir, "features", FEATURE);
+  const dir = join(sftddDir, "features", FEATURE);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "architecture.json"), JSON.stringify({ feature_id: FEATURE, service_backed: true, layers: [], nfrs: [] }));
 }
@@ -51,7 +51,7 @@ function writeTestList(story: string, items: unknown[]): void {
 }
 function cycle(story: string, ac: string, id: string, extra: Partial<CycleArtifact>): void {
   writeCycleArtifact(
-    { tddDir, feature_id: FEATURE, story_id: story, ac_id: ac },
+    { sftddDir, feature_id: FEATURE, story_id: story, ac_id: ac },
     {
       cycle_id: id,
       feature_id: FEATURE,
@@ -66,7 +66,7 @@ function cycle(story: string, ac: string, id: string, extra: Partial<CycleArtifa
 
 describe("diskArtifactProbe: design facts", () => {
   it("hasAcs reflects story.json acs (and is false when the story file is absent)", () => {
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     expect(probe.hasAcs("S1")).toBe(false);
     writeStory("S1", ["AC1", "AC2"]);
     expect(probe.hasAcs("S1")).toBe(true);
@@ -79,7 +79,7 @@ describe("diskArtifactProbe: design facts", () => {
     // story.json `acs` null. Disk is the truth, so the probe must see them;
     // otherwise the story looks un-drafted forever and the driver stalls
     // re-issuing the same invoke-role.
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     mkdirSync(storyDir("S3"), { recursive: true });
     writeFileSync(join(storyDir("S3"), "story.json"), JSON.stringify({ id: "S3", acs: null }));
     expect(probe.hasAcs("S3")).toBe(false); // no acs/ files yet
@@ -93,7 +93,7 @@ describe("diskArtifactProbe: design facts", () => {
     // fills, so keying architectAnnotated on `layer` made it true the instant the
     // spec-author wrote the ACs , the architect-reviewer was ALWAYS skipped, so
     // no architecture.json + no layering/service_backed enforcement ever ran.
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     writeStory("S1", ["AC1", "AC2"]);
     expect(probe.architectAnnotated("S1")).toBe(false);
     // Spec-author wrote ACs WITH the required layer , architect has NOT run yet.
@@ -110,7 +110,7 @@ describe("diskArtifactProbe: design facts", () => {
   });
 
   it("testListReady requires a non-empty test list", () => {
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     expect(probe.testListReady("S1")).toBe(false);
     writeTestList("S1", []);
     expect(probe.testListReady("S1")).toBe(false);
@@ -121,7 +121,7 @@ describe("diskArtifactProbe: design facts", () => {
 
 describe("diskArtifactProbe: build facts from cycle artifacts", () => {
   it("testsWritten once a RED cycle exists; codeWritten once every RED is GREEN", () => {
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     expect(probe.testsWritten("S1")).toBe(false);
     expect(probe.codeWritten("S1")).toBe(false);
 
@@ -142,7 +142,7 @@ describe("diskArtifactProbe: build facts from cycle artifacts", () => {
   });
 
   it("scopes cycles per story (S2's cycles do not affect S1)", () => {
-    const probe = diskArtifactProbe(tddDir, FEATURE);
+    const probe = diskArtifactProbe(sftddDir, FEATURE);
     cycle("S2", "AC1", "cycle-001", { red_at: "2026-06-07T10:00:00Z" });
     expect(probe.testsWritten("S1")).toBe(false);
     expect(probe.testsWritten("S2")).toBe(true);
@@ -150,14 +150,14 @@ describe("diskArtifactProbe: build facts from cycle artifacts", () => {
 });
 
 describe("readDriveContext", () => {
-  const featureDir = () => join(tddDir, "features", FEATURE);
+  const featureDir = () => join(sftddDir, "features", FEATURE);
   const writeFeatureFile = (name: string, content: string) => {
     mkdirSync(featureDir(), { recursive: true });
     writeFileSync(join(featureDir(), name), content);
   };
 
   it("an empty project reads as conservative defaults (phase feature, nothing done)", () => {
-    const ctx = readDriveContext(tddDir, FEATURE);
+    const ctx = readDriveContext(sftddDir, FEATURE);
     expect(ctx.phase).toBe("feature");
     expect(ctx.breakdownDone).toBe(false);
     expect(ctx.planning).toEqual({ proposed: false, estimated: false, requestsAuthored: false });
@@ -188,13 +188,13 @@ describe("readDriveContext", () => {
   }
 
   it("maps workflow-state phase + planning/deploy sub-flags from on-disk artifacts", () => {
-    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "implementation" }));
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "implementation" }));
     writeFeatureFile("feature-request.md", "# request");
     writeFeatureFile("feature-spec.json", JSON.stringify({ id: FEATURE, stories: ["S1", "S2"] }));
     writeEvidence(); // deploy ran -> deployed:true
     writeFeatureFile("gates.json", gatesJson("open")); // gate not yet approved
 
-    const ctx = readDriveContext(tddDir, FEATURE);
+    const ctx = readDriveContext(sftddDir, FEATURE);
     expect(ctx.phase).toBe("feature"); // implementation -> feature
     expect(ctx.breakdownDone).toBe(true);
     expect(ctx.planning).toEqual({ proposed: true, estimated: false, requestsAuthored: true });
@@ -203,18 +203,18 @@ describe("readDriveContext", () => {
   });
 
   it("reads deploy phase + approved deploy gate (evidence + strict gate read)", () => {
-    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
     writeEvidence();
     writeFeatureFile("gates.json", gatesJson("approved"));
-    const ctx = readDriveContext(tddDir, FEATURE);
+    const ctx = readDriveContext(sftddDir, FEATURE);
     expect(ctx.phase).toBe("deploy");
     expect(ctx.deploy).toEqual({ deployed: true, gateApproved: true });
   });
 
   it("deployed=false when no deploy-evidence.json was written, even with an approved gate", () => {
-    writeFileSync(join(tddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
     writeFeatureFile("gates.json", gatesJson("approved"));
-    const ctx = readDriveContext(tddDir, FEATURE);
+    const ctx = readDriveContext(sftddDir, FEATURE);
     expect(ctx.deploy).toEqual({ deployed: false, gateApproved: true });
   });
 });

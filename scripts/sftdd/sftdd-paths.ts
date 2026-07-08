@@ -17,7 +17,7 @@ import { join } from "node:path";
 // ".sftdd" to match the lakebase-sftdd-workflows skill. It was historically
 // ".tdd" and that name was copy-pasted as a default across ~20 call sites; this
 // is the one place the name is now defined. Existing projects keep their legacy
-// ".tdd" (dual-read via resolveTddDir) and are auto-migrated to ".sftdd" by the
+// ".tdd" (dual-read via resolveSftddDir) and are auto-migrated to ".sftdd" by the
 // orchestrator on the next run (see migrate-artifact-dir.ts).
 export const ARTIFACT_ROOT = ".sftdd";
 export const LEGACY_ARTIFACT_ROOT = ".tdd";
@@ -27,7 +27,7 @@ export const LEGACY_ARTIFACT_ROOT = ".tdd";
  *  to ".sftdd" for a fresh project. Pure read: never creates or renames. Pass
  *  the project dir (defaults to the current working directory) and use the
  *  result anywhere a ".tdd"/"./.tdd" default literal used to be hardcoded. */
-export function resolveTddDir(projectDir: string = process.cwd()): string {
+export function resolveSftddDir(projectDir: string = process.cwd()): string {
   const next = join(projectDir, ARTIFACT_ROOT);
   if (fs.existsSync(next)) return next;
   const legacy = join(projectDir, LEGACY_ARTIFACT_ROOT);

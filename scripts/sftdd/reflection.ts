@@ -45,23 +45,23 @@ const SMELL_FOR_OWNER: Record<ReflectOwner, SmellName> = {
 
 /** Write a story's reflect verdict (the Navigator reflect turn's output). */
 export function writeReflectVerdict(
-  tddDir: string,
+  sftddDir: string,
   feature: string,
   story: string,
   verdict: ReflectVerdict,
 ): void {
-  const p = reflectVerdictJson(tddDir, feature, story);
+  const p = reflectVerdictJson(sftddDir, feature, story);
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify(verdict, null, 2) + "\n");
 }
 
 /** Read a story's reflect verdict, or undefined when none has been written. */
 export function readReflectVerdict(
-  tddDir: string,
+  sftddDir: string,
   feature: string,
   story: string,
 ): ReflectVerdict | undefined {
-  const p = reflectVerdictJson(tddDir, feature, story);
+  const p = reflectVerdictJson(sftddDir, feature, story);
   if (!existsSync(p)) return undefined;
   try {
     return JSON.parse(readFileSync(p, "utf8")) as ReflectVerdict;
@@ -73,8 +73,8 @@ export function readReflectVerdict(
 /** The design-lane predicate: has this story's reflection PASSED? A missing or
  *  failed verdict is not passed (the design lane runs / re-runs the critic; a
  *  failed verdict drives the smell + escalation elsewhere). */
-export function reflectionPassed(tddDir: string, feature: string, story: string): boolean {
-  return readReflectVerdict(tddDir, feature, story)?.passed === true;
+export function reflectionPassed(sftddDir: string, feature: string, story: string): boolean {
+  return readReflectVerdict(sftddDir, feature, story)?.passed === true;
 }
 
 /** Did the reflect turn produce a readable verdict at all (pass OR fail)? The
@@ -83,8 +83,8 @@ export function reflectionPassed(tddDir: string, feature: string, story: string)
  *  "the critic ran and produced a verdict" from "no verdict on disk", so the
  *  driver can guard a reflect turn that produced nothing (escalate) instead of
  *  silently re-invoking it into a stall. */
-export function reflectionVerdictWritten(tddDir: string, feature: string, story: string): boolean {
-  return readReflectVerdict(tddDir, feature, story) !== undefined;
+export function reflectionVerdictWritten(sftddDir: string, feature: string, story: string): boolean {
+  return readReflectVerdict(sftddDir, feature, story) !== undefined;
 }
 
 /**
@@ -96,8 +96,8 @@ export function reflectionVerdictWritten(tddDir: string, feature: string, story:
  * the smell log's job (priorReviseCount), so re-running after a revise re-flags
  * and the cap then escalates to HITL.
  */
-export function recordReflectionGate(tddDir: string, feature: string, story: string): SmellHit[] {
-  const verdict = readReflectVerdict(tddDir, feature, story);
+export function recordReflectionGate(sftddDir: string, feature: string, story: string): SmellHit[] {
+  const verdict = readReflectVerdict(sftddDir, feature, story);
   if (!verdict || verdict.passed) return [];
   // One smell per DISTINCT owner among the findings (a story can have both a
   // spec defect and a test-list defect; each routes to its own author).
@@ -118,6 +118,6 @@ export function recordReflectionGate(tddDir: string, feature: string, story: str
       story_id: story,
     };
   });
-  writeSmellsLog(tddDir, hits);
+  writeSmellsLog(sftddDir, hits);
   return hits;
 }

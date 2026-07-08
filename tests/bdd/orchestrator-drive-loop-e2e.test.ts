@@ -34,16 +34,16 @@ import {
 
 const AT = "2026-06-07T00:00:00.000Z";
 
-let tddDir: string;
+let sftddDir: string;
 beforeEach(() => {
-  tddDir = mkdtempSync(join(tmpdir(), "drive-e2e-"));
+  sftddDir = mkdtempSync(join(tmpdir(), "drive-e2e-"));
 });
 afterEach(() => {
-  rmSync(tddDir, { recursive: true, force: true });
+  rmSync(sftddDir, { recursive: true, force: true });
 });
 
 function featureDir(feature: string): string {
-  return join(tddDir, "features", feature);
+  return join(sftddDir, "features", feature);
 }
 function storyDir(feature: string, story: string): string {
   return join(featureDir(feature), "stories", story);
@@ -52,7 +52,7 @@ function writeJson(file: string, data: unknown): void {
   writeFileSync(file, JSON.stringify(data));
 }
 function setPhase(phase: string): void {
-  writeJson(join(tddDir, "workflow-state.json"), { phase });
+  writeJson(join(sftddDir, "workflow-state.json"), { phase });
 }
 function ac(story: string): string {
   return `${story}-AC1`;
@@ -62,7 +62,7 @@ function ac(story: string): string {
 function seedFeature(feature: string): void {
   mkdirSync(featureDir(feature), { recursive: true });
   writeFileSync(join(featureDir(feature), "feature-request.md"), "# request\n");
-  writePipeline(tddDir, { version: 1, feature_id: feature, stories: {}, build_queue: [], build_active: null });
+  writePipeline(sftddDir, { version: 1, feature_id: feature, stories: {}, build_queue: [], build_active: null });
   setPhase("implementation"); // -> driver "feature" phase
 }
 
@@ -72,17 +72,17 @@ function replayEffects(feature: string, stories: string[]) {
   const eff: DriveEffects = {
     async readState() {
       return deriveDriveState(
-        readPipeline(tddDir, feature),
-        diskArtifactProbe(tddDir, feature),
-        readDriveContext(tddDir, feature),
+        readPipeline(sftddDir, feature),
+        diskArtifactProbe(sftddDir, feature),
+        readDriveContext(sftddDir, feature),
       );
     },
     onAction(a) {
       log.push(a);
     },
     async perform(action) {
-      const p = () => readPipeline(tddDir, feature);
-      const save = (pl: ReturnType<typeof p>) => writePipeline(tddDir, pl);
+      const p = () => readPipeline(sftddDir, feature);
+      const save = (pl: ReturnType<typeof p>) => writePipeline(sftddDir, pl);
       switch (action.kind) {
         case "invoke-role": {
           if ("mode" in action) {
@@ -91,7 +91,7 @@ function replayEffects(feature: string, stories: string[]) {
                 mkdirSync(storyDir(feature, s), { recursive: true });
                 writeJson(join(storyDir(feature, s), "story.json"), { id: s, acs: [] });
               }
-              syncBreakdownToPipeline(tddDir, feature);
+              syncBreakdownToPipeline(sftddDir, feature);
             }
             // propose / author-requests: planning, not exercised here
             return;
@@ -147,19 +147,19 @@ function replayEffects(feature: string, stories: string[]) {
             } else if (action.buildMode === "review") {
               // Story-level REVIEW (the default granularity): simulate "looks good"
               // (no refactor requested), recorded once at the story's cycles root.
-              writeJson(storyReviewJson(tddDir, feature, s), { reviewed_at: AT, refactor_requested: false });
+              writeJson(storyReviewJson(sftddDir, feature, s), { reviewed_at: AT, refactor_requested: false });
             } else {
               writeCycleArtifact(
-                { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
+                { sftddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
                 { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT },
               );
             }
           } else if (action.role === "driver") {
             if (action.buildMode === "refactor") {
-              writeJson(storyReviewJson(tddDir, feature, s), { reviewed_at: AT, refactor_requested: true, refactored_at: AT });
+              writeJson(storyReviewJson(sftddDir, feature, s), { reviewed_at: AT, refactor_requested: true, refactored_at: AT });
             } else {
               writeCycleArtifact(
-                { tddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
+                { sftddDir, feature_id: feature, story_id: s, ac_id: ac(s) },
                 { cycle_id: "cycle-001", feature_id: feature, story_id: s, ac_id: ac(s), test_id: "T1", test_description: "t", red_at: AT, green_at: AT },
               );
             }
@@ -285,7 +285,7 @@ describe("driver full loop (hermetic, replay roles + real pipeline state)", () =
     // Reached the promote boundary cleanly (no stall): the TDD loop + deploy ran.
     expect(result.stoppedAtBound).toBe(true);
     expect(result.iterations).toBeGreaterThan(0);
-    const finalPipeline = readPipeline(tddDir, feature);
+    const finalPipeline = readPipeline(sftddDir, feature);
     // Both stories built + accepted (done), lane idle.
     for (const s of ["S1", "S2"]) {
       expect(finalPipeline.stories[s].status, `${s} status`).toBe("done");

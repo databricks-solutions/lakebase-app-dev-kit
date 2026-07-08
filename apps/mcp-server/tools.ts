@@ -22,7 +22,7 @@ import {
   type SchemaMigrationLanguage,
 } from "../../scripts/lakebase/schema-migrate.js";
 import { getFeatureStatus } from "../../scripts/sftdd/feature-status.js";
-import { resolveTddDir } from "../../scripts/sftdd/sftdd-paths.js";
+import { resolveSftddDir } from "../../scripts/sftdd/sftdd-paths.js";
 // PR-flow MCP tools.
 import {
   createPullRequest,
@@ -337,14 +337,14 @@ export const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         featureId: { type: "string", description: "Feature id (e.g., 'F1-checkout')." },
-        tddDir: { type: "string", description: "Path to the .tdd/ directory. Default: './.tdd'." },
+        sftddDir: { type: "string", description: "Path to the .tdd/ directory. Default: './.tdd'." },
       },
       required: ["featureId"],
       additionalProperties: false,
     },
     handler: async (args) => {
       return getFeatureStatus(
-        optionalString(args, "tddDir") ?? resolveTddDir(),
+        optionalString(args, "sftddDir") ?? resolveSftddDir(),
         requireString(args, "featureId")
       );
     },

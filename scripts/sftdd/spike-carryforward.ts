@@ -39,12 +39,12 @@ export interface SpikeInput {
 }
 
 export interface CollectSpikeInputsArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
 }
 
 /**
- * Scan `<tddDir>/spikes/` and return every spike that references
+ * Scan `<sftddDir>/spikes/` and return every spike that references
  * `featureId` via the documented tagging conventions. Results are
  * sorted by spike slug for deterministic output.
  *
@@ -53,7 +53,7 @@ export interface CollectSpikeInputsArgs {
  * (a malformed notes.md is treated as "untagged").
  */
 export function collectSpikeInputs(args: CollectSpikeInputsArgs): SpikeInput[] {
-  const spikesDir = join(args.tddDir, "spikes");
+  const spikesDir = join(args.sftddDir, "spikes");
   if (!existsSync(spikesDir)) return [];
   const out: SpikeInput[] = [];
   for (const slug of readdirSync(spikesDir)) {
@@ -121,7 +121,7 @@ function escapeRegex(s: string): string {
 }
 
 export interface AttachSpikeInputsArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   /**
    * Spike slugs to attach. Use `collectSpikeInputs` to discover
@@ -138,19 +138,19 @@ export interface AttachSpikeInputsResult {
 }
 
 /**
- * Persist `spike_inputs` onto `<tddDir>/features/<featureId>/plan.json`
+ * Persist `spike_inputs` onto `<sftddDir>/features/<featureId>/plan.json`
  * under the existing `rationale` block. Re-running with the same slugs
  * is a no-op (idempotent); passing an empty slug list clears the field.
  * Throws if plan.json does not exist (the gate has not run yet).
  */
 export function attachSpikeInputs(args: AttachSpikeInputsArgs): AttachSpikeInputsResult {
-  const planPath = featurePlanJson(args.tddDir, args.featureId);
+  const planPath = featurePlanJson(args.sftddDir, args.featureId);
   if (!existsSync(planPath)) {
     throw new Error(
       `attachSpikeInputs: plan.json not found at ${planPath}. Run the design-spec gate first.`
     );
   }
-  const candidates = collectSpikeInputs({ tddDir: args.tddDir, featureId: args.featureId });
+  const candidates = collectSpikeInputs({ sftddDir: args.sftddDir, featureId: args.featureId });
   const bySlug = new Map(candidates.map((c) => [c.slug, c]));
   const attached: SpikeInput[] = [];
   const unresolved: string[] = [];

@@ -20,14 +20,14 @@ import { checkIntakePreconditions } from "./intake.js";
 
 export function runIntakeCli(argv: string[]): number {
   let featureId: string | undefined;
-  let tddDir: string | undefined;
+  let sftddDir: string | undefined;
   let projectDir: string | undefined;
   let json = false;
   let pretty = false;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--feature": featureId = argv[++i]; break;
-      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--tdd-dir": sftddDir = argv[++i]; break;
       case "--project-dir": projectDir = argv[++i]; break;
       case "--json": json = true; break;
       case "--pretty": pretty = true; break;
@@ -42,7 +42,7 @@ export function runIntakeCli(argv: string[]): number {
     }
   }
 
-  const result = checkIntakePreconditions({ tddDir, featureId, projectDir });
+  const result = checkIntakePreconditions({ sftddDir, featureId, projectDir });
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, pretty ? 2 : 0)}\n`);
   } else if (result.ok) {

@@ -14,7 +14,7 @@ import { featureResolved } from "./sftdd-paths.js";
 import type { ComparisonReport, ExperimentRow, TagMatrixRow } from "./compare-experiments.js";
 
 export interface WriteComparisonReportArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   report: ComparisonReport;
   /**
@@ -42,8 +42,8 @@ export interface WriteComparisonReportResult {
 
 /**
  * Write the rendered comparison report under
- * `<tddDir>/features/<featureId>/comparison-<timestamp>.md` and
- * append a one-line breadcrumb to `<tddDir>/selection-log.md` so the
+ * `<sftddDir>/features/<featureId>/comparison-<timestamp>.md` and
+ * append a one-line breadcrumb to `<sftddDir>/selection-log.md` so the
  * existing narrative-of-record points readers at the new file.
  *
  * The timestamp in the filename is the `generated_at` field from the
@@ -52,7 +52,7 @@ export interface WriteComparisonReportResult {
  * platforms.
  */
 export function writeComparisonReport(args: WriteComparisonReportArgs): WriteComparisonReportResult {
-  const featureDir = featureResolved(args.tddDir, args.featureId);
+  const featureDir = featureResolved(args.sftddDir, args.featureId);
   mkdirSync(featureDir, { recursive: true });
   const rawTs = args.filenameTimestamp ?? args.report.generated_at;
   const safeTs = rawTs.replace(/[:]/g, "-");
@@ -62,7 +62,7 @@ export function writeComparisonReport(args: WriteComparisonReportArgs): WriteCom
 
   let logEntryAppended = false;
   if (!args.skipSelectionLog) {
-    const logPath = join(args.tddDir, "selection-log.md");
+    const logPath = join(args.sftddDir, "selection-log.md");
     const breadcrumb =
       `\n## ${args.report.generated_at} - Comparison report for ${args.featureId}\n` +
       `- **Recommendation:** ${args.report.recommendation}\n` +

@@ -22,7 +22,7 @@ let scope: CycleScope;
 
 beforeEach(() => {
   tdd = mkdtempSync(join(tmpdir(), "tdd-cycle-"));
-  scope = { tddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
+  scope = { sftddDir: tdd, feature_id: "F1", story_id: "S1", ac_id: "AC1" };
 });
 
 afterEach(() => {
@@ -67,7 +67,7 @@ describe("run-cycle (hermetic)", () => {
     // pass it explicitly here since this hermetic scope has no AC file to derive it from.
     const a = beginCycle({ ...scope, test_id: "T1", test_description: "POST /bugs returns 404", layer: "API" });
     markGreen(scope, a.cycle_id, "added route handler");
-    const log = readAgentLog({ tddDir: tdd });
+    const log = readAgentLog({ sftddDir: tdd });
     const red = log.find((e) => e.event === "cycle.red");
     const green = log.find((e) => e.event === "cycle.green");
     expect(red?.role).toBe("navigator");

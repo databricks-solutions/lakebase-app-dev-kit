@@ -8,13 +8,13 @@
 // Exit codes: 0 ok; 2 bad args.
 
 import { join } from "path";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { isCliEntry } from "../util/cli-entry.js";
 import { timingReportFromLog, formatTimingReport } from "./timing-report.js";
 import { readRunConfig, formatRunConfig } from "./run-config.js";
 
 interface ParsedArgs {
-  tddDir?: string;
+  sftddDir?: string;
   feature?: string;
   top?: number;
   json?: boolean;
@@ -25,7 +25,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
   const out: ParsedArgs = {};
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
-      case "--tdd-dir": out.tddDir = argv[++i]; break;
+      case "--tdd-dir": out.sftddDir = argv[++i]; break;
       case "--feature": out.feature = argv[++i]; break;
       case "--top": {
         const n = Number(argv[++i]);
@@ -66,13 +66,13 @@ export function runTimingCli(argv: string[]): number {
     return 0;
   }
   const report = timingReportFromLog(
-    { tddDir: parsed.tddDir, featureId: parsed.feature },
+    { sftddDir: parsed.sftddDir, featureId: parsed.feature },
     { topN: parsed.top },
   );
   // P0.1: pair the timing with the run's model + option matrix so it is
   // self-describing and two reports are A/B-comparable. Read from the same .tdd.
-  const tddDir = parsed.tddDir ?? resolveTddDir();
-  const config = readRunConfig(tddDir) ?? null;
+  const sftddDir = parsed.sftddDir ?? resolveSftddDir();
+  const config = readRunConfig(sftddDir) ?? null;
   if (parsed.json) {
     process.stdout.write(`${JSON.stringify({ config, timing: report }, null, 2)}\n`);
   } else {

@@ -33,7 +33,7 @@ export interface RunMigrationsArgs {
 }
 
 export interface TeardownArgs {
-  tddDir: string;
+  sftddDir: string;
   /** Project root (.git). The teardown deletes the experiment's PAIRED branch (Lakebase + git). */
   projectDir: string;
   featureId: string;
@@ -58,7 +58,7 @@ export interface ExperimentBranchOps {
 }
 
 export interface MergeExperimentArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
@@ -93,7 +93,7 @@ export async function mergeExperimentIntoFeature(
   await ops.gitMerge({ from: args.experimentBranch, into: args.featureBranch, projectDir: args.projectDir });
   await ops.runMigrations({ instance: args.instance, branch: args.featureBranch, projectDir: args.projectDir });
   await ops.teardown({
-    tddDir: args.tddDir,
+    sftddDir: args.sftddDir,
     projectDir: args.projectDir,
     featureId: args.featureId,
     storyId: args.storyId,
@@ -104,7 +104,7 @@ export async function mergeExperimentIntoFeature(
 }
 
 export interface DiscardExperimentArgs {
-  tddDir: string;
+  sftddDir: string;
   /** Project root (.git). The teardown deletes the experiment's PAIRED branch (Lakebase + git). */
   projectDir: string;
   featureId: string;
@@ -123,7 +123,7 @@ export async function discardExperimentBranch(
   ops: ExperimentBranchOps,
 ): Promise<void> {
   await ops.teardown({
-    tddDir: args.tddDir,
+    sftddDir: args.sftddDir,
     projectDir: args.projectDir,
     featureId: args.featureId,
     storyId: args.storyId,

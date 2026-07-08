@@ -35,7 +35,7 @@ export interface ReplayArgs {
   /** The recorded-artifacts corpus root (LAKEBASE_SFTDD_REPLAY_DIR). */
   replayDir: string;
   /** The target project .tdd dir. */
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
 }
 
@@ -92,14 +92,14 @@ function stripLayer(name: string, text: string): string {
  * recording) so the caller falls back to spawning the real agent.
  */
 export function replayDesignTurn(args: ReplayArgs): boolean {
-  const { turn, replayDir, tddDir, featureId } = args;
+  const { turn, replayDir, sftddDir, featureId } = args;
   const cf = join(featuresDir(replayDir), featureId); // corpus feature dir
-  const tf = join(featuresDir(tddDir), featureId); // target feature dir
+  const tf = join(featuresDir(sftddDir), featureId); // target feature dir
 
   switch (turn.role) {
     case "spec-author": {
       if (turn.mode === "propose") {
-        return cp(join(replayDir, "planning", "feature-proposals.md"), join(tddDir, "planning", "feature-proposals.md"));
+        return cp(join(replayDir, "planning", "feature-proposals.md"), join(sftddDir, "planning", "feature-proposals.md"));
       }
       if (turn.mode === "breakdown") {
         let ok = cp(join(cf, "feature-spec.json"), join(tf, "feature-spec.json"));
@@ -144,9 +144,9 @@ export function replayDesignTurn(args: ReplayArgs): boolean {
       return ok;
     }
     case "ux-designer": {
-      let ok = cp(join(replayDir, "design", "design-guide.json"), join(tddDir, "design", "design-guide.json"));
-      cp(join(replayDir, "design", "design-guide.md"), join(tddDir, "design", "design-guide.md"));
-      cp(join(replayDir, "design", "ia.md"), join(tddDir, "design", "ia.md"));
+      let ok = cp(join(replayDir, "design", "design-guide.json"), join(sftddDir, "design", "design-guide.json"));
+      cp(join(replayDir, "design", "design-guide.md"), join(sftddDir, "design", "design-guide.md"));
+      cp(join(replayDir, "design", "ia.md"), join(sftddDir, "design", "ia.md"));
       return ok;
     }
     default:

@@ -58,7 +58,7 @@ export const RUN_CONFIG_REL = join(ARTIFACT_ROOT, "run-config.json");
  *  full DriveEffectsConfig (and stays trivially unit-testable). */
 export interface RunConfigInputs {
   projectDir: string;
-  tddDir: string;
+  sftddDir: string;
   bound?: string;
   gates?: string;
   uiTrack?: boolean;
@@ -129,8 +129,8 @@ export function writeRunConfig(inputs: RunConfigInputs): RunConfig {
   const cfg = buildRunConfig(inputs);
   const body = JSON.stringify(cfg, null, 2) + "\n";
   try {
-    mkdirSync(inputs.tddDir, { recursive: true });
-    writeFileSync(join(inputs.tddDir, "run-config.json"), body);
+    mkdirSync(inputs.sftddDir, { recursive: true });
+    writeFileSync(join(inputs.sftddDir, "run-config.json"), body);
     const recordDir = sftddEnv("RECORD_DIR", inputs.env ?? process.env)?.trim();
     if (recordDir) {
       mkdirSync(recordDir, { recursive: true });
@@ -143,8 +143,8 @@ export function writeRunConfig(inputs: RunConfigInputs): RunConfig {
 }
 
 /** Read `.sftdd/run-config.json` for a project (or undefined when absent). */
-export function readRunConfig(tddDir: string): RunConfig | undefined {
-  const f = join(tddDir, "run-config.json");
+export function readRunConfig(sftddDir: string): RunConfig | undefined {
+  const f = join(sftddDir, "run-config.json");
   if (!existsSync(f)) return undefined;
   try {
     return JSON.parse(readFileSync(f, "utf8")) as RunConfig;

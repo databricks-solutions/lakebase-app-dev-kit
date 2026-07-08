@@ -36,7 +36,7 @@ const pairedResult = (over: Record<string, unknown>) => ({
 
 const cutArgs = () => ({
   instance: "inst",
-  tddDir: tdd,
+  sftddDir: tdd,
   projectDir: proj,
   featureId: "F1",
   storyId: "S1",

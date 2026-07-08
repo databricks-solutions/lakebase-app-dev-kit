@@ -25,7 +25,7 @@ import { experimentDir, readOutcomes, writeOutcomes, type ExperimentCap, type Ex
 import type { PerExperimentCap } from "./design-spec-gate";
 
 export interface CheckPerExperimentCapArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
@@ -81,7 +81,7 @@ export function checkPerExperimentCap(args: CheckPerExperimentCapArgs): CheckPer
   }
 
   if (cap.max_wall_clock_minutes && cap.max_wall_clock_minutes > 0) {
-    const startedAtMs = readExperimentStartMs(args.tddDir, args.featureId, args.storyId, args.experimentSlug);
+    const startedAtMs = readExperimentStartMs(args.sftddDir, args.featureId, args.storyId, args.experimentSlug);
     if (startedAtMs !== undefined) {
       const now = args.now ?? Date.now();
       const elapsedMin = (now - startedAtMs) / 60_000;
@@ -103,7 +103,7 @@ export function checkPerExperimentCap(args: CheckPerExperimentCapArgs): CheckPer
 }
 
 export interface RecordExperimentCapArgs {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
@@ -120,14 +120,14 @@ export interface RecordExperimentCapArgs {
  * yet, so there is nothing to cap).
  */
 export function recordExperimentCap(args: RecordExperimentCapArgs): ExperimentOutcomes {
-  const outcomes = readOutcomes(args.tddDir, args.featureId, args.storyId, args.experimentSlug);
+  const outcomes = readOutcomes(args.sftddDir, args.featureId, args.storyId, args.experimentSlug);
   if (!outcomes) {
     throw new Error(
       `recordExperimentCap: outcomes.json not found for ${args.featureId}/${args.storyId}/${args.experimentSlug}`
     );
   }
   outcomes.capped = { ...args.hit };
-  writeOutcomes(args.tddDir, args.featureId, args.storyId, args.experimentSlug, outcomes);
+  writeOutcomes(args.sftddDir, args.featureId, args.storyId, args.experimentSlug, outcomes);
   return outcomes;
 }
 
@@ -136,26 +136,26 @@ export function recordExperimentCap(args: RecordExperimentCapArgs): ExperimentOu
  * "continue"). No-op when no cap is currently recorded.
  */
 export function clearExperimentCap(args: {
-  tddDir: string;
+  sftddDir: string;
   featureId: string;
   storyId: string;
   experimentSlug: string;
 }): ExperimentOutcomes | null {
-  const outcomes = readOutcomes(args.tddDir, args.featureId, args.storyId, args.experimentSlug);
+  const outcomes = readOutcomes(args.sftddDir, args.featureId, args.storyId, args.experimentSlug);
   if (!outcomes) return null;
   if (!outcomes.capped) return outcomes;
   delete outcomes.capped;
-  writeOutcomes(args.tddDir, args.featureId, args.storyId, args.experimentSlug, outcomes);
+  writeOutcomes(args.sftddDir, args.featureId, args.storyId, args.experimentSlug, outcomes);
   return outcomes;
 }
 
 function readExperimentStartMs(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   storyId: string,
   slug: string
 ): number | undefined {
-  const file = join(experimentDir(tddDir, featureId, storyId, slug), "timeline.json");
+  const file = join(experimentDir(sftddDir, featureId, storyId, slug), "timeline.json");
   if (!existsSync(file)) return undefined;
   try {
     const payload = JSON.parse(readFileSync(file, "utf8")) as {

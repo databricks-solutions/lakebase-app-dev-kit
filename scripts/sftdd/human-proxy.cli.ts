@@ -35,14 +35,14 @@ function runSupplyCli(argv: string[]): number {
   let from: string | undefined;
   let to: string | undefined;
   let artifact: string | undefined;
-  let tddDir: string | undefined;
+  let sftddDir: string | undefined;
   let feature: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--from": from = argv[++i]; break;
       case "--to": to = argv[++i]; break;
       case "--artifact": artifact = argv[++i]; break;
-      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--tdd-dir": sftddDir = argv[++i]; break;
       case "--feature": feature = argv[++i]; break;
     }
   }
@@ -50,7 +50,7 @@ function runSupplyCli(argv: string[]): number {
     process.stderr.write("Error: supply requires --from <recorded> and --to <path>.\n");
     return 2;
   }
-  const result = supplyArtifact({ from, to, artifact, tddDir, featureId: feature });
+  const result = supplyArtifact({ from, to, artifact, sftddDir, featureId: feature });
   if (result.ok) {
     process.stdout.write(`human-proxy: supplied ${result.artifact} -> ${result.to}\n`);
     return 0;
@@ -71,15 +71,15 @@ function runSupplyCli(argv: string[]): number {
  *   lakebase-sftdd-human-proxy supply-requests [--tdd-dir <dir>] [--approver <name>]
  */
 function runSupplyRequestsCli(argv: string[]): number {
-  let tddDir: string | undefined;
+  let sftddDir: string | undefined;
   let approver: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
-      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--tdd-dir": sftddDir = argv[++i]; break;
       case "--approver": approver = argv[++i]; break;
     }
   }
-  const result = supplyRequests({ tddDir, approver });
+  const result = supplyRequests({ sftddDir, approver });
   if (result.supplied.length > 0) {
     process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}\n`);
   } else {
@@ -111,7 +111,7 @@ function runDecideEscalationCli(argv: string[]): number {
   let gate: string | undefined;
   let reason: string | undefined;
   let approver: string | undefined;
-  let tddDir: string | undefined;
+  let sftddDir: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--feature": feature = argv[++i]; break;
@@ -121,7 +121,7 @@ function runDecideEscalationCli(argv: string[]): number {
       case "--gate": gate = argv[++i]; break;
       case "--reason": reason = argv[++i]; break;
       case "--approver": approver = argv[++i]; break;
-      case "--tdd-dir": tddDir = argv[++i]; break;
+      case "--tdd-dir": sftddDir = argv[++i]; break;
       // --project-dir is accepted (the effect passes it) but unused here.
       case "--project-dir": i++; break;
     }
@@ -149,7 +149,7 @@ function runDecideEscalationCli(argv: string[]): number {
       gate: gate as "spec" | "test_list" | "architecture",
       reason: reason ?? `revise ${smell} on ${story}`,
       approver,
-      tddDir,
+      sftddDir,
     });
     process.stdout.write(
       `human-proxy: revised ${story} (smell ${smell} -> ${r.routedTo}); ` +
@@ -166,7 +166,7 @@ interface ParsedArgs {
   feature?: string;
   sprint?: string;
   gate?: GateName;
-  tddDir?: string;
+  sftddDir?: string;
   approver?: string;
   promoteRef?: string;
   json?: boolean;
@@ -189,7 +189,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.gate = argv[++i] as GateName;
         break;
       case "--tdd-dir":
-        out.tddDir = argv[++i];
+        out.sftddDir = argv[++i];
         break;
       case "--approver":
         out.approver = argv[++i];
@@ -253,7 +253,7 @@ export function runHumanProxyCli(argv: string[]): number {
       sprint: args.sprint,
       approver: args.approver ?? "human-proxy",
       hitlApproved: true,
-      tddDir: args.tddDir,
+      sftddDir: args.sftddDir,
     });
     if (res.ok) {
       process.stdout.write(
@@ -271,7 +271,7 @@ export function runHumanProxyCli(argv: string[]): number {
   try {
     const result = drainGatesAsHumanProxy({
       featureId: args.feature,
-      tddDir: args.tddDir,
+      sftddDir: args.sftddDir,
       approver: args.approver,
       onlyGate: args.gate,
       promoteRef: args.promoteRef,

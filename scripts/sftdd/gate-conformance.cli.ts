@@ -15,12 +15,12 @@
 //   3 = scan failure (e.g. feature not found)
 
 import { isCliEntry } from "../util/cli-entry.js";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { scanFeatureConformance } from "./artifact-conformance.js";
 
 interface ParsedArgs {
   feature?: string;
-  tddDir?: string;
+  sftddDir?: string;
   json?: boolean;
   pretty?: boolean;
   help?: boolean;
@@ -34,7 +34,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         out.feature = argv[++i];
         break;
       case "--tdd-dir":
-        out.tddDir = argv[++i];
+        out.sftddDir = argv[++i];
         break;
       case "--json":
         out.json = true;
@@ -80,7 +80,7 @@ export function runGateConformanceCli(argv: string[]): number {
   }
   let report;
   try {
-    report = scanFeatureConformance(args.tddDir ?? resolveTddDir(), args.feature);
+    report = scanFeatureConformance(args.sftddDir ?? resolveSftddDir(), args.feature);
   } catch (e) {
     process.stderr.write(`gate-conformance: ${(e as Error).message}\n`);
     return 3;

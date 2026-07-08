@@ -155,7 +155,7 @@ describe("revise: architecture-gate staling + non-hollow re-run + bounded", () =
       routedTo: "architect-reviewer",
       gate: "architecture",
       reason: "canon gap: invariant check",
-      tddDir: tdd,
+      sftddDir: tdd,
     });
     expect(r.decided).toBe("revise");
     expect(r.resolvedSmell).toBe(true);

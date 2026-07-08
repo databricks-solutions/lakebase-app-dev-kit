@@ -50,7 +50,7 @@ describe("response-formatter: test-strategist (the S2 contract)", () => {
 
   it("FLAGS an empty per-story test list", () => {
     writeJson(perStoryList(), { feature_id: F, story_id: S, items: [] });
-    const r = formatRoleResponse({ role: "test-strategist", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "test-strategist", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
     expect(r.violations[0].problem).toMatch(/empty `items`/);
   });
@@ -61,7 +61,7 @@ describe("response-formatter: test-strategist (the S2 contract)", () => {
       story_id: S,
       items: [{ id: "T7", description: "x", ac_id: null, status: "pending" }],
     });
-    const r = formatRoleResponse({ role: "test-strategist", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "test-strategist", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
     expect(r.violations[0].problem).toMatch(/null\/empty ac_id/);
   });
@@ -72,7 +72,7 @@ describe("response-formatter: test-strategist (the S2 contract)", () => {
       story_id: S,
       items: [{ id: "T1", description: "x", ac_id: "AC9-not-a-real-ac", status: "pending" }],
     });
-    const r = formatRoleResponse({ role: "test-strategist", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "test-strategist", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
     expect(r.violations[0].problem).toMatch(/not one of the story's ACs/);
   });
@@ -86,7 +86,7 @@ describe("response-formatter: test-strategist (the S2 contract)", () => {
         { id: "T2", description: "redirect", ac_id: "AC2-redirected-to-detail-page", status: "pending" },
       ],
     });
-    const r = formatRoleResponse({ role: "test-strategist", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "test-strategist", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(true);
     expect(r.violations).toEqual([]);
   });
@@ -102,19 +102,19 @@ describe("response-formatter: spec-author + architect-reviewer contracts", () =>
       then: "t",
       status: "draft",
     });
-    let r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    let r = formatRoleResponse({ role: "spec-author", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
 
     rmSync(join(acsDir(), "create-form.json"));
     writeAc("AC1-create-form");
-    r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    r = formatRoleResponse({ role: "spec-author", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(true);
   });
 
   it("architect-reviewer FLAGS an AC missing its layer", () => {
     // No `layer` -> architect contract unmet. (Write a raw AC w/o layer.)
     writeJson(join(acsDir(), "AC1-form.json"), { id: "AC1-form", given: "g", when: "w", then: "t", status: "draft" });
-    const r = formatRoleResponse({ role: "architect-reviewer", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "architect-reviewer", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
     expect(r.violations.some((v) => /missing\/invalid `layer`/.test(v.problem))).toBe(true);
   });
@@ -125,7 +125,7 @@ describe("response-formatter: spec-author + architect-reviewer contracts", () =>
     // whitespace + case insensitive.
     writeAc("AC1-submit-files-bug", { then: "Redirects to /bugs/{id}" });
     writeAc("AC2-land-on-bug-url", { then: "redirects to  /bugs/{id}" });
-    const r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "spec-author", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(false);
     expect(r.violations.some((v) => /identical `then`/.test(v.problem))).toBe(true);
   });
@@ -133,7 +133,7 @@ describe("response-formatter: spec-author + architect-reviewer contracts", () =>
   it("spec-author PASSES ACs with distinct `then` clauses", () => {
     writeAc("AC1-shows-form", { then: "the create-bug form is shown" });
     writeAc("AC2-files-bug", { then: "a new bug row is created" });
-    const r = formatRoleResponse({ role: "spec-author", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "spec-author", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(true);
   });
 });
@@ -155,7 +155,7 @@ describe("response-formatter: ux-designer (design-guide.json conforms to its sch
   };
 
   it("FLAGS a missing design-guide.json", () => {
-    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    const r = formatRoleResponse({ role: "ux-designer", sftddDir: tdd, featureId: F });
     expect(r.ok).toBe(false);
     expect(r.violations[0].problem).toMatch(/not written/);
   });
@@ -172,7 +172,7 @@ describe("response-formatter: ux-designer (design-guide.json conforms to its sch
       colors: { brand: { red: "#FF3621" } },
       spacing: { unit: "4px", scale: { "space-4": "16px" } },
     });
-    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    const r = formatRoleResponse({ role: "ux-designer", sftddDir: tdd, featureId: F });
     expect(r.ok).toBe(false);
     const problem = r.violations.map((v) => v.problem).join(" ");
     expect(problem).toMatch(/font_family/);
@@ -181,7 +181,7 @@ describe("response-formatter: ux-designer (design-guide.json conforms to its sch
 
   it("PASSES a conformant guide with the expanded typography tokens", () => {
     writeJson(designGuide(), CONFORMANT);
-    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    const r = formatRoleResponse({ role: "ux-designer", sftddDir: tdd, featureId: F });
     expect(r.ok).toBe(true);
     expect(r.violations).toEqual([]);
   });
@@ -202,7 +202,7 @@ describe("response-formatter: ux-designer (design-guide.json conforms to its sch
 
 describe("response-formatter: roles with no deterministic contract pass", () => {
   it("an unknown/uncovered role is a no-op PASS", () => {
-    const r = formatRoleResponse({ role: "navigator", tddDir: tdd, featureId: F, story: S });
+    const r = formatRoleResponse({ role: "navigator", sftddDir: tdd, featureId: F, story: S });
     expect(r.ok).toBe(true);
   });
 });

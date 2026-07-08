@@ -30,7 +30,7 @@ function approve(gate: GateName, inputs: Record<string, string>): void {
     approver: APPROVER,
     hitlApproved: true,
     artifactInputs: inputs,
-    tddDir: tdd,
+    sftddDir: tdd,
     now: FIXED_NOW,
     writeSelectionLog: false,
   });
@@ -53,7 +53,7 @@ describe("withdrawGate: argument validation", () => {
         gate: "spec",
         approver: "",
         reason: "test",
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/approver/);
   });
@@ -66,7 +66,7 @@ describe("withdrawGate: argument validation", () => {
         gate: "spec",
         approver: APPROVER,
         reason: "",
-        tddDir: tdd,
+        sftddDir: tdd,
       })
     ).toThrow(/reason/);
   });
@@ -84,7 +84,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "scope rewrite",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -106,7 +106,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "scope rewrite",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -127,7 +127,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "rescope",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -147,7 +147,7 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "rescope",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -161,20 +161,20 @@ describe("withdrawGate: S6 spec withdraw cascades to plan + test_list", () => {
   it("preserves the prior approver + approved_at + artifact_hashes on withdrawn gates", () => {
     makeFeatureDir();
     approve("spec", { "feature-spec.md": "x", "feature-spec.json": "{}" });
-    const beforeApprover = readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.approver;
-    const beforeHashes = readGates(FEATURE_ID, { tddDir: tdd }).gates.spec.artifact_hashes;
+    const beforeApprover = readGates(FEATURE_ID, { sftddDir: tdd }).gates.spec.approver;
+    const beforeHashes = readGates(FEATURE_ID, { sftddDir: tdd }).gates.spec.artifact_hashes;
 
     withdrawGate({
       featureId: FEATURE_ID,
       gate: "spec",
       approver: APPROVER,
       reason: "rescope",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
 
-    const after = readGates(FEATURE_ID, { tddDir: tdd }).gates.spec;
+    const after = readGates(FEATURE_ID, { sftddDir: tdd }).gates.spec;
     expect(after.approver).toBe(beforeApprover);
     expect(after.artifact_hashes).toEqual(beforeHashes);
   });
@@ -192,7 +192,7 @@ describe("withdrawGate: S6b plan withdraw cascades to test_list only", () => {
       gate: "plan",
       approver: APPROVER,
       reason: "plan rewrite",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -217,7 +217,7 @@ describe("withdrawGate: leaf gates do not cascade", () => {
       gate: "test_list",
       approver: APPROVER,
       reason: "test rewrite",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -239,7 +239,7 @@ describe("withdrawGate: leaf gates do not cascade", () => {
       gate: "promote",
       approver: APPROVER,
       reason: "wrong winner picked",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -259,7 +259,7 @@ describe("withdrawGate: idempotent no-op semantics", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "test",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -275,7 +275,7 @@ describe("withdrawGate: idempotent no-op semantics", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "first",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -284,7 +284,7 @@ describe("withdrawGate: idempotent no-op semantics", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "second",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -295,13 +295,13 @@ describe("withdrawGate: idempotent no-op semantics", () => {
     makeFeatureDir();
     const state = defaultGatesState(FEATURE_ID);
     state.gates.spec = { status: "superseded", history: [] };
-    writeGates(state, { tddDir: tdd });
+    writeGates(state, { sftddDir: tdd });
     const result = withdrawGate({
       featureId: FEATURE_ID,
       gate: "spec",
       approver: APPROVER,
       reason: "test",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
       writeSelectionLog: false,
     });
@@ -320,7 +320,7 @@ describe("withdrawGate: selection-log dual-write", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "rescope",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
 
@@ -343,7 +343,7 @@ describe("withdrawGate: selection-log dual-write", () => {
       gate: "test_list",
       approver: APPROVER,
       reason: "test rewrite",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
 
@@ -358,7 +358,7 @@ describe("withdrawGate: selection-log dual-write", () => {
       gate: "spec",
       approver: APPROVER,
       reason: "test",
-      tddDir: tdd,
+      sftddDir: tdd,
       now: FIXED_NOW,
     });
     expect(existsSync(join(tdd, "selection-log.md"))).toBe(false);

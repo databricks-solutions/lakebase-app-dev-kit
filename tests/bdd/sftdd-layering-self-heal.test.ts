@@ -39,7 +39,7 @@ beforeEach(() => {
   writeJson(join(expDir, "outcomes.json"), { status: "running" });
   // One GREEN cycle for T1 so AC1's tests are all green (REVIEW-eligible).
   writeCycleArtifact(
-    { tddDir: tdd, feature_id: F, story_id: S, ac_id: "AC1", experiment_slug: "exp1" },
+    { sftddDir: tdd, feature_id: F, story_id: S, ac_id: "AC1", experiment_slug: "exp1" },
     { cycle_id: "cycle-001", feature_id: F, story_id: S, ac_id: "AC1", test_id: "T1", test_description: "first", red_at: "2026-01-01T00:00:00Z", green_at: "2026-01-01T00:01:00Z" },
   );
 });

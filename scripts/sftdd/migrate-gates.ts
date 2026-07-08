@@ -27,7 +27,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { hashArtifact } from "./gate-hash";
-import { resolveTddDir, findFeatureDir } from "./sftdd-paths.js";
+import { resolveSftddDir, findFeatureDir } from "./sftdd-paths.js";
 import {
   defaultGatesState,
   readGates,
@@ -49,7 +49,7 @@ export interface MigrateGatesArgs {
    * gate-not-approved style errors when called against them.
    */
   currentInputsByGate?: Partial<Record<GateName, Record<string, string>>>;
-  tddDir?: string;
+  sftddDir?: string;
   /** Overwrite an existing gates.json. Default: false. */
   force?: boolean;
 }
@@ -79,19 +79,19 @@ const APPROVED_BY_RE = /\*\*(?:Approved|Withdrawn) by:\*\*\s*(\S.*?)\s*$/;
 export function migrateGatesFromSelectionLog(
   args: MigrateGatesArgs
 ): MigrateGatesResult {
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
 
   // Refusal: existing gates.json without force.
   try {
-    readGates(args.featureId, { tddDir });
+    readGates(args.featureId, { sftddDir });
     // Reach here only when the feature dir exists AND a parseable gates.json
     // exists OR the default-open shape was returned. Distinguish by file
     // presence.
-    if (gatesFileExists(tddDir, args.featureId) && !args.force) {
+    if (gatesFileExists(sftddDir, args.featureId) && !args.force) {
       return {
         migrated: false,
         reason: "gates-json-exists",
-        state: readGates(args.featureId, { tddDir }),
+        state: readGates(args.featureId, { sftddDir }),
         entry_counts: emptyCounts(),
       };
     }
@@ -100,7 +100,7 @@ export function migrateGatesFromSelectionLog(
     // path catches that.
   }
 
-  const logPath = join(tddDir, "selection-log.md");
+  const logPath = join(sftddDir, "selection-log.md");
   if (!existsSync(logPath)) {
     return {
       migrated: false,
@@ -155,13 +155,13 @@ export function migrateGatesFromSelectionLog(
     }
   }
 
-  writeGates(state, { tddDir });
+  writeGates(state, { sftddDir });
   return { migrated: true, state, entry_counts: counts };
 }
 
-function gatesFileExists(tddDir: string, featureId: string): boolean {
+function gatesFileExists(sftddDir: string, featureId: string): boolean {
   // One feature-dir resolution rule (sftdd-paths), not a local copy.
-  const dir = findFeatureDir(tddDir, featureId);
+  const dir = findFeatureDir(sftddDir, featureId);
   return dir ? existsSync(join(dir, "gates.json")) : false;
 }
 

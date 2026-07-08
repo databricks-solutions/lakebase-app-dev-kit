@@ -24,12 +24,12 @@ function rm(dir: string): void {
 }
 
 function seedExperiment(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   slug: string,
   opts: { cutAt?: string; storyId?: string } = {}
 ): void {
-  const dir = path.join(tddDir, "experiments", featureId, opts.storyId ?? "S1", slug);
+  const dir = path.join(sftddDir, "experiments", featureId, opts.storyId ?? "S1", slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "branch.txt"), `feature-${slug}`);
   fs.writeFileSync(path.join(dir, "outcomes.json"), JSON.stringify({ status: "running" }, null, 2) + "\n");
@@ -42,7 +42,7 @@ function seedExperiment(
 describe("checkPerExperimentCap: no cap configured", () => {
   it("returns capped=false when cap is undefined", () => {
     const result = checkPerExperimentCap({
-      tddDir: "/tmp/anywhere",
+      sftddDir: "/tmp/anywhere",
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -53,7 +53,7 @@ describe("checkPerExperimentCap: no cap configured", () => {
 
   it("returns capped=false when cap is an empty object", () => {
     const result = checkPerExperimentCap({
-      tddDir: "/tmp/anywhere",
+      sftddDir: "/tmp/anywhere",
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -65,7 +65,7 @@ describe("checkPerExperimentCap: no cap configured", () => {
 
   it("treats max_cycles <= 0 as no cap", () => {
     const result = checkPerExperimentCap({
-      tddDir: "/tmp/anywhere",
+      sftddDir: "/tmp/anywhere",
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -77,16 +77,16 @@ describe("checkPerExperimentCap: no cap configured", () => {
 });
 
 describe("checkPerExperimentCap: max_cycles", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("cycles");
-    seedExperiment(tddDir, "F1", "exp");
+    sftddDir = mkTempTdd("cycles");
+    seedExperiment(sftddDir, "F1", "exp");
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("fires when cycleCount reaches the threshold", () => {
     const result = checkPerExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -101,7 +101,7 @@ describe("checkPerExperimentCap: max_cycles", () => {
 
   it("does not fire when cycleCount is below the threshold", () => {
     const result = checkPerExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -113,7 +113,7 @@ describe("checkPerExperimentCap: max_cycles", () => {
 
   it("fires deterministically before the wall-clock cap when both could trip", () => {
     const result = checkPerExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -126,16 +126,16 @@ describe("checkPerExperimentCap: max_cycles", () => {
 });
 
 describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("wallclock");
-    seedExperiment(tddDir, "F1", "exp", { cutAt: "2026-06-02T08:00:00.000Z" });
+    sftddDir = mkTempTdd("wallclock");
+    seedExperiment(sftddDir, "F1", "exp", { cutAt: "2026-06-02T08:00:00.000Z" });
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("fires when elapsed minutes meet the threshold", () => {
     const result = checkPerExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -151,7 +151,7 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
 
   it("does not fire when elapsed minutes are below the threshold", () => {
     const result = checkPerExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
@@ -167,7 +167,7 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
     try {
       fs.mkdirSync(path.join(bareTdd, "experiments", "F1", "S1", "exp"), { recursive: true });
       const result = checkPerExperimentCap({
-        tddDir: bareTdd,
+        sftddDir: bareTdd,
         featureId: "F1",
       storyId: "S1",
         experimentSlug: "exp",
@@ -183,41 +183,41 @@ describe("checkPerExperimentCap: max_wall_clock_minutes", () => {
 });
 
 describe("recordExperimentCap + clearExperimentCap", () => {
-  let tddDir: string;
+  let sftddDir: string;
   beforeEach(() => {
-    tddDir = mkTempTdd("record");
-    seedExperiment(tddDir, "F1", "exp");
+    sftddDir = mkTempTdd("record");
+    seedExperiment(sftddDir, "F1", "exp");
   });
-  afterEach(() => rm(tddDir));
+  afterEach(() => rm(sftddDir));
 
   it("persists the cap hit onto outcomes.json", () => {
     recordExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
-    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
+    const outcomes = readOutcomes(sftddDir, "F1", "S1", "exp")!;
     expect(outcomes.capped).toEqual({ reason: "max_cycles", at_cycle: 10, cap_value: 10 });
   });
 
   it("overwrites an existing cap on subsequent calls", () => {
     recordExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
     recordExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_wall_clock_minutes", at_cycle: 12, cap_value: 60, at_minutes: 61.2 },
     });
-    const outcomes = readOutcomes(tddDir, "F1", "S1", "exp")!;
+    const outcomes = readOutcomes(sftddDir, "F1", "S1", "exp")!;
     expect(outcomes.capped?.reason).toBe("max_wall_clock_minutes");
     expect(outcomes.capped?.at_minutes).toBe(61.2);
   });
@@ -227,7 +227,7 @@ describe("recordExperimentCap + clearExperimentCap", () => {
     try {
       expect(() =>
         recordExperimentCap({
-          tddDir: empty,
+          sftddDir: empty,
           featureId: "F1",
       storyId: "S1",
           experimentSlug: "exp",
@@ -241,17 +241,17 @@ describe("recordExperimentCap + clearExperimentCap", () => {
 
   it("clearExperimentCap removes the capped field; second call is a no-op", () => {
     recordExperimentCap({
-      tddDir,
+      sftddDir,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp",
       hit: { reason: "max_cycles", at_cycle: 10, cap_value: 10 },
     });
-    clearExperimentCap({ tddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" });
-    expect(readOutcomes(tddDir, "F1", "S1", "exp")?.capped).toBeUndefined();
+    clearExperimentCap({ sftddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" });
+    expect(readOutcomes(sftddDir, "F1", "S1", "exp")?.capped).toBeUndefined();
     // Idempotent.
     expect(() =>
-      clearExperimentCap({ tddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" })
+      clearExperimentCap({ sftddDir, featureId: "F1", storyId: "S1", experimentSlug: "exp" })
     ).not.toThrow();
   });
 });
@@ -260,19 +260,19 @@ describe("analyzeForGate populates a default per-experiment cap", () => {
   it("proposed_plan.budget.per_experiment carries default max_cycles + max_wall_clock_minutes", async () => {
     const { analyzeForGate } = await import("../../scripts/sftdd/design-spec-gate");
     const { writeMasterTestList } = await import("../../scripts/sftdd/test-list");
-    const tddDir = mkTempTdd("analyze");
+    const sftddDir = mkTempTdd("analyze");
     try {
-      fs.mkdirSync(path.join(tddDir, "features", "F1"), { recursive: true });
-      writeMasterTestList(tddDir, {
+      fs.mkdirSync(path.join(sftddDir, "features", "F1"), { recursive: true });
+      writeMasterTestList(sftddDir, {
         feature_id: "F1",
         items: [{ id: "T1", description: "any", ac_id: "AC1", status: "pending" }],
       });
-      const analysis = analyzeForGate(tddDir, "F1", "S1");
+      const analysis = analyzeForGate(sftddDir, "F1", "S1");
       expect(analysis.proposed_plan.budget.per_experiment).toBeDefined();
       expect(analysis.proposed_plan.budget.per_experiment?.max_cycles).toBeGreaterThan(0);
       expect(analysis.proposed_plan.budget.per_experiment?.max_wall_clock_minutes).toBeGreaterThan(0);
     } finally {
-      rm(tddDir);
+      rm(sftddDir);
     }
   });
 });
@@ -280,22 +280,22 @@ describe("analyzeForGate populates a default per-experiment cap", () => {
 describe("compareExperiments surfaces capped outcomes", () => {
   it("classifies signal as 'capped' and copies the cap onto the experiment row", async () => {
     const { compareExperiments } = await import("../../scripts/sftdd/compare-experiments");
-    const tddDir = mkTempTdd("compare");
+    const sftddDir = mkTempTdd("compare");
     try {
-      seedExperiment(tddDir, "F1", "exp-a");
+      seedExperiment(sftddDir, "F1", "exp-a");
       recordExperimentCap({
-        tddDir,
+        sftddDir,
         featureId: "F1",
       storyId: "S1",
         experimentSlug: "exp-a",
         hit: { reason: "max_cycles", at_cycle: 30, cap_value: 30 },
       });
-      const report = compareExperiments(tddDir, "F1", "S1");
+      const report = compareExperiments(sftddDir, "F1", "S1");
       const row = report.rows.find((r) => r.experiment_slug === "exp-a")!;
       expect(row.signal).toBe("capped");
       expect(row.capped?.reason).toBe("max_cycles");
     } finally {
-      rm(tddDir);
+      rm(sftddDir);
     }
   });
 });

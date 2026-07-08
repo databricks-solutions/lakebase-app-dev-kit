@@ -54,7 +54,7 @@ import {
   type StoryPipeline,
 } from "./story-pipeline";
 import { join } from "path";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 
 interface Args {
   cmd?: string;
@@ -71,7 +71,7 @@ interface Args {
   parentSha?: string;
   lakebaseUid?: string;
   n?: string;
-  tddDir?: string;
+  sftddDir?: string;
   json?: boolean;
 }
 
@@ -93,7 +93,7 @@ function parse(argv: string[]): Args {
     else if (a === "--parent-sha") out.parentSha = argv[++i];
     else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
     else if (a === "--n") out.n = argv[++i];
-    else if (a === "--tdd-dir") out.tddDir = argv[++i];
+    else if (a === "--tdd-dir") out.sftddDir = argv[++i];
     else if (a === "--json") out.json = true;
   }
   return out;
@@ -124,12 +124,12 @@ function usage(msg: string): number {
  * guidance when batched; null when the draft is correctly one-story-scoped.
  */
 function rejectBatchedDraft(
-  tddDir: string,
+  sftddDir: string,
   feature: string,
   pipeline: StoryPipeline,
   story: string,
 ): number | null {
-  const batched = findBatchedDraftStories(tddDir, feature, pipeline, story);
+  const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length === 0) return null;
   process.stderr.write(
     `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, ` +
@@ -145,13 +145,13 @@ function rejectBatchedDraft(
 
 function main(): number {
   const args = parse(process.argv.slice(2));
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   if (!args.cmd) return usage("missing subcommand");
   if (!args.feature && args.cmd !== "help") return usage("missing --feature");
   const feature = args.feature as string;
 
   if (args.cmd === "status") {
-    const p = readPipeline(tddDir, feature);
+    const p = readPipeline(sftddDir, feature);
     if (args.json) {
       process.stdout.write(JSON.stringify(p, null, 2) + "\n");
     } else {
@@ -166,14 +166,14 @@ function main(): number {
     return 0;
   }
 
-  const pipeline = readPipeline(tddDir, feature);
+  const pipeline = readPipeline(sftddDir, feature);
 
   switch (args.cmd) {
     case "sync-breakdown": {
       // Seed the pipeline from the on-disk breakdown (stories/<S>/ dirs). Used
       // by the driver right after spec-author breakdown so the streaming lanes
       // have stories to advance. Re-reads + writes the pipeline itself.
-      const r = syncBreakdownToPipeline(tddDir, feature);
+      const r = syncBreakdownToPipeline(sftddDir, feature);
       process.stdout.write(
         `sync-breakdown: +${r.added.length} (${r.added.join(", ") || "none"}); ${r.total.length} tracked\n`,
       );
@@ -185,27 +185,27 @@ function main(): number {
         return usage(`set needs a valid --status (${STORY_STATUSES.join("|")})`);
       }
       setStoryStatus(pipeline, args.story, args.status as StoryStatus);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`${args.story} -> ${args.status}\n`);
       return 0;
     }
     case "surface": {
       if (!args.story) return usage("surface needs --story");
-      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      const batched = rejectBatchedDraft(sftddDir, feature, pipeline, args.story);
       if (batched !== null) return batched;
       surfaceForGate(pipeline, args.story);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`surfaced ${args.story} for the per-story spec gate (awaiting-gate)\n`);
       return 0;
     }
     case "approve-gate": {
       if (!args.story) return usage("approve-gate needs --story");
       if (!args.approver) return usage("approve-gate needs --approver");
-      const batched = rejectBatchedDraft(tddDir, feature, pipeline, args.story);
+      const batched = rejectBatchedDraft(sftddDir, feature, pipeline, args.story);
       if (batched !== null) return batched;
       const at = args.at ?? new Date().toISOString();
       approveStoryGate(pipeline, args.story, { approver: args.approver, at, spec_hash: args.specHash });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(
         `approved gate for ${args.story} (by ${args.approver}); ready + queued (queue: ${pipeline.build_queue.join(", ")})\n`,
       );
@@ -217,20 +217,20 @@ function main(): number {
       if (!args.reason) return usage("withdraw-gate needs --reason");
       const at = args.at ?? new Date().toISOString();
       withdrawStoryGate(pipeline, args.story, { approver: args.approver, at, reason: args.reason });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`withdrew gate for ${args.story} (${args.reason}); back to awaiting-gate\n`);
       return 0;
     }
     case "enqueue": {
       if (!args.story) return usage("enqueue needs --story");
       enqueueReady(pipeline, args.story);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`enqueued ${args.story} (queue: ${pipeline.build_queue.join(", ")})\n`);
       return 0;
     }
     case "dispatch": {
       const dispatched = dispatchNext(pipeline);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(
         dispatched
           ? `dispatched ${dispatched} to the build lane\n`
@@ -240,7 +240,7 @@ function main(): number {
     }
     case "complete": {
       const completed = completeActive(pipeline);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(completed ? `completed ${completed}; lane idle\n` : `no active story to complete\n`);
       return 0;
     }
@@ -258,14 +258,14 @@ function main(): number {
         n: args.n !== undefined ? Number(args.n) : undefined,
         at: args.at ?? new Date().toISOString(),
       });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`cut experiment ${args.slug} for ${args.story} on ${args.branch} (parent ${args.parent})\n`);
       return 0;
     }
     case "await-acceptance": {
       if (!args.story) return usage("await-acceptance needs --story");
       awaitAcceptance(pipeline, args.story);
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`${args.story} -> awaiting-acceptance (PO reviewing the running story)\n`);
       return 0;
     }
@@ -273,7 +273,7 @@ function main(): number {
       if (!args.story) return usage("accept needs --story");
       if (!args.approver) return usage("accept needs --approver");
       acceptStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString() });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`accepted ${args.story}; experiment merged, story done, lane freed\n`);
       return 0;
     }
@@ -282,7 +282,7 @@ function main(): number {
       if (!args.approver) return usage("discard needs --approver");
       if (!args.reason) return usage("discard needs --reason");
       discardStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed\n`);
       return 0;
     }
@@ -291,7 +291,7 @@ function main(): number {
       if (!args.approver) return usage("revise needs --approver");
       if (!args.reason) return usage("revise needs --reason");
       reviseStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
-      writePipeline(tddDir, pipeline);
+      writePipeline(sftddDir, pipeline);
       process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed\n`);
       return 0;
     }

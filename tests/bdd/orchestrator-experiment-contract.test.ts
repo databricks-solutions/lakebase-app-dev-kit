@@ -19,7 +19,7 @@ const EXPERIMENT_BIN = "lakebase-sftdd-experiment";
 function cfg(over: Partial<DriveEffectsConfig> = {}): DriveEffectsConfig {
   return {
     projectDir: "/p",
-    tddDir: "/p/.tdd",
+    sftddDir: "/p/.tdd",
     featureId: "F1-file-bug",
     runner: { async run() {} },
     modelForRole: () => "sonnet",

@@ -102,7 +102,7 @@ describe("MCP tool registry", () => {
     expect(required ?? []).toEqual([]);
   });
 
-  it("feature_status: requires featureId, tddDir optional", () => {
+  it("feature_status: requires featureId, sftddDir optional", () => {
     const tool = findTool("lakebase_feature_status")!;
     const schema = tool.inputSchema as {
       required?: string[];
@@ -110,7 +110,7 @@ describe("MCP tool registry", () => {
     };
     expect(schema.required).toEqual(["featureId"]);
     expect(schema.properties).toHaveProperty("featureId");
-    expect(schema.properties).toHaveProperty("tddDir");
+    expect(schema.properties).toHaveProperty("sftddDir");
   });
 });
 

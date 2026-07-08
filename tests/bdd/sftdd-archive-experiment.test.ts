@@ -37,7 +37,7 @@ describe("archiveExperiment", () => {
     seedExperiment("exp-a", { status: "running" });
     await expect(
       archiveExperiment({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: "exp-a",
@@ -49,7 +49,7 @@ describe("archiveExperiment", () => {
   it("throws when experimentSlug does not exist", async () => {
     await expect(
       archiveExperiment({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: "ghost",
@@ -61,7 +61,7 @@ describe("archiveExperiment", () => {
   it("moves the dir under _archive/, marks outcomes abandoned, appends selection-log", async () => {
     seedExperiment("exp-a", { status: "running", api_pass: true });
     const result = await archiveExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-a",
@@ -90,7 +90,7 @@ describe("archiveExperiment", () => {
     seedExperiment("exp-a", { status: "running" });
     const seen: string[] = [];
     const result = await archiveExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-a",
@@ -107,7 +107,7 @@ describe("archiveExperiment", () => {
     seedExperiment("exp-a", { status: "running" });
     await expect(
       archiveExperiment({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: "exp-a",
@@ -137,7 +137,7 @@ describe("archiveExperiment", () => {
     let lakebaseCalled = false;
     await expect(
       archiveExperiment({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: "F1",
         storyId: "S1",
         experimentSlug: "exp-a",
@@ -162,14 +162,14 @@ describe("archiveExperiment", () => {
   it("is idempotent: re-archiving an already-archived experiment writes a re-run log entry", async () => {
     seedExperiment("exp-a", { status: "running" });
     await archiveExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-a",
       hitlApproved: true,
     });
     const second = await archiveExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-a",
@@ -185,7 +185,7 @@ describe("archiveExperiment", () => {
   it("when no callbacks are provided, both deletion flags are false but archive still succeeds", async () => {
     seedExperiment("exp-a", { status: "running" });
     const result = await archiveExperiment({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: "F1",
       storyId: "S1",
       experimentSlug: "exp-a",

@@ -22,7 +22,7 @@
 //     the log see the same approval the structured state records.
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { join } from "path";
 import { hashArtifact } from "./gate-hash";
 import { withGatesLock } from "./gates-lock";
@@ -59,7 +59,7 @@ export interface ApproveGateArgs {
    * a promote_ref string) enforced at the call site, not here.
    */
   artifactInputs: Record<string, string>;
-  tddDir?: string;
+  sftddDir?: string;
   /** Test seam: inject a deterministic clock for reproducible timestamps. */
   now?: () => Date;
   /**
@@ -89,7 +89,7 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
     );
   }
 
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const now = args.now ?? (() => new Date());
   const writeLog = args.writeSelectionLog ?? true;
 
@@ -98,7 +98,7 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
   return withGatesLock(
     args.featureId,
     (): ApproveGateResult => {
-      const state = readGates(args.featureId, { tddDir });
+      const state = readGates(args.featureId, { sftddDir });
       const record = state.gates[args.gate];
       if (record.status !== "open") {
         throw new GateAlreadyClosedError(args.gate, record.status);
@@ -132,10 +132,10 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
         },
       };
 
-      writeGates(updatedState, { tddDir });
+      writeGates(updatedState, { sftddDir });
 
       if (writeLog) {
-        appendSelectionLog(tddDir, {
+        appendSelectionLog(sftddDir, {
           ts,
           gate: args.gate,
           featureId: args.featureId,
@@ -146,7 +146,7 @@ export function approveGate(args: ApproveGateArgs): ApproveGateResult {
 
       return { state: updatedState, capturedHashes };
     },
-    { tddDir }
+    { sftddDir }
   );
 }
 
@@ -158,8 +158,8 @@ interface SelectionLogEntry {
   capturedHashes: Record<string, string>;
 }
 
-function appendSelectionLog(tddDir: string, entry: SelectionLogEntry): void {
-  const logPath = join(tddDir, "selection-log.md");
+function appendSelectionLog(sftddDir: string, entry: SelectionLogEntry): void {
+  const logPath = join(sftddDir, "selection-log.md");
   const hashList = Object.entries(entry.capturedHashes)
     .map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``)
     .join("\n");

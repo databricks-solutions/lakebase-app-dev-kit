@@ -26,7 +26,7 @@ import {
   acsDir,
   handbackFile,
   storyAcIds,
-  resolveTddDir,
+  resolveSftddDir,
 } from "./sftdd-paths.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
 import { markSmellResolved, composeReviseBrief } from "./smells.js";
@@ -44,13 +44,13 @@ export const REVISE_APPROVER = "human-proxy";
  * so hasAcs reads false and the spec-author re-drafts.
  */
 export function staleStoryArtifactsForRevise(
-  tddDir: string,
+  sftddDir: string,
   featureId: string,
   story: string,
   gate: "spec" | "test_list" | "architecture",
 ): void {
-  const acIds = new Set(storyAcIds(tddDir, featureId, story));
-  const master = featureTestListJson(tddDir, featureId);
+  const acIds = new Set(storyAcIds(sftddDir, featureId, story));
+  const master = featureTestListJson(sftddDir, featureId);
   if (existsSync(master)) {
     try {
       const data = JSON.parse(readFileSync(master, "utf8")) as { items?: Array<{ ac_id?: string }> };
@@ -63,11 +63,11 @@ export function staleStoryArtifactsForRevise(
       // below still forces a re-run.
     }
   }
-  const perStory = storyTestListJson(tddDir, featureId, story);
+  const perStory = storyTestListJson(sftddDir, featureId, story);
   if (existsSync(perStory)) rmSync(perStory, { force: true });
 
   if (gate === "spec") {
-    const dir = acsDir(tddDir, featureId, story);
+    const dir = acsDir(sftddDir, featureId, story);
     if (existsSync(dir)) {
       for (const f of readdirSync(dir)) {
         if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join(dir, f), { force: true });
@@ -80,7 +80,7 @@ export function staleStoryArtifactsForRevise(
     // architect's product is staled. Projection is separately disabled for this
     // story after a revise (architectProjectable checks priorReviseCount), so the
     // architect runs live rather than re-projecting the same gap.
-    const dir = acsDir(tddDir, featureId, story);
+    const dir = acsDir(sftddDir, featureId, story);
     if (existsSync(dir)) {
       for (const f of readdirSync(dir)) {
         if (!f.endsWith(".json")) continue;
@@ -114,7 +114,7 @@ export interface ReviseSelfHealArgs {
   reason: string;
   /** The deciding identity (a real human, or the headless proxy). */
   approver?: string;
-  tddDir?: string;
+  sftddDir?: string;
 }
 
 export interface ReviseSelfHealResult {
@@ -131,7 +131,7 @@ export interface ReviseSelfHealResult {
  * routable (budget not yet spent), so it always spends from 0 -> 1.
  */
 export function applyReviseSelfHeal(args: ReviseSelfHealArgs): ReviseSelfHealResult {
-  const tddDir = args.tddDir ?? resolveTddDir();
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
   const approver = args.approver ?? REVISE_APPROVER;
   const at = new Date().toISOString();
 
@@ -153,24 +153,24 @@ export function applyReviseSelfHeal(args: ReviseSelfHealArgs): ReviseSelfHealRes
           approver,
         },
       },
-      { tddDir },
+      { sftddDir },
     );
   } catch {
     // Logging is observability, never block the heal.
   }
 
   // 2. Reset the story to designing (discard experiment + reopen gate + free lane).
-  const pipeline = readPipeline(tddDir, args.featureId);
+  const pipeline = readPipeline(sftddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
-  writePipeline(tddDir, pipeline);
+  writePipeline(sftddDir, pipeline);
 
   // 2b. Force the owning author to actually RE-AUTHOR: stale its artifact so the
   // design lane re-invokes it, and deliver the verdict as a smell-aware hand-back
   // brief (composeReviseBrief FORCES missing coverage for a reflect defect, keeps
   // the open-question escape only for the redundancy case).
-  staleStoryArtifactsForRevise(tddDir, args.featureId, args.story, args.gate);
+  staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
-    const hb = handbackFile(tddDir, args.featureId, args.routedTo, args.story);
+    const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
     mkdirSync(dirname(hb), { recursive: true });
     writeFileSync(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
@@ -178,7 +178,7 @@ export function applyReviseSelfHeal(args: ReviseSelfHealArgs): ReviseSelfHealRes
   }
 
   // 3. Resolve the smell as `revised` (spends the budget; a re-fire is a hard halt).
-  const resolvedSmell = markSmellResolved(tddDir, args.smell, {
+  const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
     story_id: args.story,
     kind: "revised",
     note: `revised by ${approver}: routed to ${args.routedTo} (${args.gate} gate)`,

@@ -27,8 +27,8 @@ function write(p: string, body = "{}"): void {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, body);
 }
-function scaffoldFeature(tddDir: string): void {
-  const f = path.join(tddDir, "features", F);
+function scaffoldFeature(sftddDir: string): void {
+  const f = path.join(sftddDir, "features", F);
   write(path.join(f, "feature-spec.json"));
   write(path.join(f, "stories", "S1", "story.json"));
   write(path.join(f, "stories", "S1", "acs", "AC1.json"));
@@ -38,10 +38,10 @@ function scaffoldFeature(tddDir: string): void {
 
 describe("reconcileArtifactLog", () => {
   it("emits an artifact.written for every on-disk artifact the log does not cover", () => {
-    const tddDir = mkTdd();
-    scaffoldFeature(tddDir);
+    const sftddDir = mkTdd();
+    scaffoldFeature(sftddDir);
 
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
 
     const paths = emitted.map((e) => e.metadata?.path).sort();
     expect(paths).toEqual([
@@ -56,37 +56,37 @@ describe("reconcileArtifactLog", () => {
     expect(emitted.every((e) => e.role === "spec-author")).toBe(true);
     expect(emitted.every((e) => e.event === "artifact.written" && e.metadata?.reconciled === true)).toBe(true);
     // The events are actually on disk in the log.
-    expect(readAgentLog({ tddDir, featureId: F }).length).toBe(5);
+    expect(readAgentLog({ sftddDir, featureId: F }).length).toBe(5);
   });
 
   it("is idempotent: a second reconcile emits nothing", () => {
-    const tddDir = mkTdd();
-    scaffoldFeature(tddDir);
-    reconcileArtifactLog({ tddDir, featureId: F });
-    const second = reconcileArtifactLog({ tddDir, featureId: F });
+    const sftddDir = mkTdd();
+    scaffoldFeature(sftddDir);
+    reconcileArtifactLog({ sftddDir, featureId: F });
+    const second = reconcileArtifactLog({ sftddDir, featureId: F });
     expect(second).toEqual([]);
   });
 
   it("does not duplicate an artifact a role already logged (exact path)", () => {
-    const tddDir = mkTdd();
-    scaffoldFeature(tddDir);
+    const sftddDir = mkTdd();
+    scaffoldFeature(sftddDir);
     // The spec-author DID log AC1 itself.
     emitAgentLogEvent(
       { role: "spec-author", level: "info", event: "artifact.written",
         feature_id: F, slots: { artifact: "AC1", summary: "authored", path: `features/${F}/stories/S1/acs/AC1.json` } },
-      { tddDir },
+      { sftddDir },
     );
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
     expect(emitted.map((e) => e.metadata?.path)).not.toContain(`features/${F}/stories/S1/acs/AC1.json`);
     expect(emitted.length).toBe(4); // the other four artifacts
   });
 
   it("attributes architecture + test-list to their owning roles", () => {
-    const tddDir = mkTdd();
-    const f = path.join(tddDir, "features", F);
+    const sftddDir = mkTdd();
+    const f = path.join(sftddDir, "features", F);
     write(path.join(f, "architecture.json"));
     write(path.join(f, "test-list.json"));
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
     const byPath = Object.fromEntries(emitted.map((e) => [e.metadata?.path, e.role]));
     expect(byPath[`features/${F}/architecture.json`]).toBe("architect-reviewer");
     expect(byPath[`features/${F}/test-list.json`]).toBe("test-strategist");
@@ -97,12 +97,12 @@ describe("reconcileArtifactLog", () => {
     // .tdd/design/ (project-level; designGuideReady probes there too), but
     // reconcile looked under .tdd/features/<F>/ , so a ux-designer turn logged a
     // phase.start with NO artifact.written for what it produced.
-    const tddDir = mkTdd();
-    write(path.join(tddDir, "features", F, "feature-spec.json")); // the drive's feature dir exists
-    write(path.join(tddDir, "design", "design-guide.json"));
-    write(path.join(tddDir, "design", "design-guide.md"), "# guide");
-    write(path.join(tddDir, "design", "ia.md"), "# ia");
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const sftddDir = mkTdd();
+    write(path.join(sftddDir, "features", F, "feature-spec.json")); // the drive's feature dir exists
+    write(path.join(sftddDir, "design", "design-guide.json"));
+    write(path.join(sftddDir, "design", "design-guide.md"), "# guide");
+    write(path.join(sftddDir, "design", "ia.md"), "# ia");
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
     const byPath = Object.fromEntries(emitted.map((e) => [e.metadata?.path, e.role]));
     expect(byPath["design/design-guide.json"]).toBe("ux-designer");
     expect(byPath["design/design-guide.md"]).toBe("ux-designer");
@@ -110,8 +110,8 @@ describe("reconcileArtifactLog", () => {
   });
 
   it("returns [] for a feature with no artifacts yet", () => {
-    const tddDir = mkTdd();
-    expect(reconcileArtifactLog({ tddDir, featureId: F })).toEqual([]);
+    const sftddDir = mkTdd();
+    expect(reconcileArtifactLog({ sftddDir, featureId: F })).toEqual([]);
   });
 
   it("establishes project architecture conventions from a service-backed architecture.json AND code-emits the architect's layout decision (fixes architect silence)", () => {
@@ -120,8 +120,8 @@ describe("reconcileArtifactLog", () => {
     // deterministically derives the project conventions from architecture.json and
     // emits the decision as a `reasoning` event attributed to the architect, so a
     // model that emits nothing still produces an observable, structural record.
-    const tddDir = mkTdd();
-    const f = path.join(tddDir, "features", F);
+    const sftddDir = mkTdd();
+    const f = path.join(sftddDir, "features", F);
     write(
       path.join(f, "architecture.json"),
       JSON.stringify({
@@ -133,10 +133,10 @@ describe("reconcileArtifactLog", () => {
         ],
       }),
     );
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
 
     // conventions.json was established on disk.
-    expect(fs.existsSync(path.join(tddDir, "architecture", "conventions.json"))).toBe(true);
+    expect(fs.existsSync(path.join(sftddDir, "architecture", "conventions.json"))).toBe(true);
     // A code-emitted architect `reasoning` event names the established layout.
     const reasoning = emitted.find((e) => e.event === "reasoning" && e.role === "architect-reviewer");
     expect(reasoning, "expected an architect-reviewer reasoning event").toBeTruthy();
@@ -148,15 +148,15 @@ describe("reconcileArtifactLog", () => {
     expect(byPath["architecture/conventions.json"]).toBe("architect-reviewer");
 
     // Idempotent: a second reconcile re-establishes nothing + re-emits no reasoning.
-    const second = reconcileArtifactLog({ tddDir, featureId: F });
+    const second = reconcileArtifactLog({ sftddDir, featureId: F });
     expect(second.find((e) => e.event === "reasoning")).toBeFalsy();
   });
 
   it("establishes the project architecture CANON (NFR posture + AC layers + invariant patterns) and code-emits it", () => {
     // The cross-cutting sibling of conventions: the first service-backed feature's
     // standing decisions become the project canon, deterministically + observably.
-    const tddDir = mkTdd();
-    const f = path.join(tddDir, "features", F);
+    const sftddDir = mkTdd();
+    const f = path.join(sftddDir, "features", F);
     write(
       path.join(f, "architecture.json"),
       JSON.stringify({
@@ -169,11 +169,11 @@ describe("reconcileArtifactLog", () => {
     write(path.join(f, "stories", "S1", "acs", "AC1.json"), JSON.stringify({ id: "AC1", layer: "API" }));
     write(path.join(f, "stories", "S1", "acs", "AC2.json"), JSON.stringify({ id: "AC2", layer: "Infra" }));
 
-    const emitted = reconcileArtifactLog({ tddDir, featureId: F });
+    const emitted = reconcileArtifactLog({ sftddDir, featureId: F });
 
     // canon.json established on disk.
-    expect(fs.existsSync(path.join(tddDir, "architecture", "canon.json"))).toBe(true);
-    const canon = JSON.parse(fs.readFileSync(path.join(tddDir, "architecture", "canon.json"), "utf8"));
+    expect(fs.existsSync(path.join(sftddDir, "architecture", "canon.json"))).toBe(true);
+    const canon = JSON.parse(fs.readFileSync(path.join(sftddDir, "architecture", "canon.json"), "utf8"));
     expect(canon.ac_layers.sort()).toEqual(["API", "Infra"]);
     expect(canon.nfr_posture).toEqual([{ category: "performance", requirement: "list endpoints paginate" }]);
     expect(canon.invariant_patterns.map((p: { type: string }) => p.type)).toEqual(["unique"]);
@@ -184,7 +184,7 @@ describe("reconcileArtifactLog", () => {
     expect(reasoning, "expected a canon reasoning event").toBeTruthy();
 
     // Idempotent: a second reconcile establishes + emits nothing new for the canon.
-    const second = reconcileArtifactLog({ tddDir, featureId: F });
+    const second = reconcileArtifactLog({ sftddDir, featureId: F });
     expect(second.find((e) => (e.metadata as { note?: string })?.note?.includes("architecture canon"))).toBeFalsy();
   });
 });

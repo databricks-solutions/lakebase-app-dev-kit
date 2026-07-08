@@ -21,7 +21,7 @@ export interface ExperimentArgs {
   at?: string;
   revise?: boolean;
   projectDir?: string;
-  tddDir?: string;
+  sftddDir?: string;
 }
 
 /** Parse the experiment CLI argv (argv[0] is the subcommand). */
@@ -43,7 +43,7 @@ export function parseExperimentArgs(argv: string[]): ExperimentArgs {
     else if (a === "--at") out.at = argv[++i];
     else if (a === "--revise") out.revise = true;
     else if (a === "--project-dir") out.projectDir = argv[++i];
-    else if (a === "--tdd-dir") out.tddDir = argv[++i];
+    else if (a === "--tdd-dir") out.sftddDir = argv[++i];
   }
   return out;
 }

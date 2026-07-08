@@ -18,14 +18,14 @@ export interface BudgetViolation {
   message: string;
 }
 
-export function snapshotBudget(tddDir: string, featureId: string, storyId: string): BudgetSnapshot | null {
-  const plan = readPlan(tddDir, featureId, storyId);
+export function snapshotBudget(sftddDir: string, featureId: string, storyId: string): BudgetSnapshot | null {
+  const plan = readPlan(sftddDir, featureId, storyId);
   if (!plan) return null;
   // Experiments + their budget are story-scoped: the race budget
   // bounds this story's competing experiments.
-  const experiments = listExperiments(tddDir, featureId, storyId);
+  const experiments = listExperiments(sftddDir, featureId, storyId);
   const inUse = experiments.filter((e) => {
-    const o: ExperimentOutcomes | null = readOutcomes(tddDir, featureId, storyId, e.experiment_slug);
+    const o: ExperimentOutcomes | null = readOutcomes(sftddDir, featureId, storyId, e.experiment_slug);
     return !o || o.status === "running";
   }).length;
   const wallClockMinutes =
@@ -63,8 +63,8 @@ export function checkBudget(snapshot: BudgetSnapshot): BudgetViolation[] {
   return violations;
 }
 
-export function canCutAnotherExperiment(tddDir: string, featureId: string, storyId: string): { ok: boolean; reason?: string } {
-  const snap = snapshotBudget(tddDir, featureId, storyId);
+export function canCutAnotherExperiment(sftddDir: string, featureId: string, storyId: string): { ok: boolean; reason?: string } {
+  const snap = snapshotBudget(sftddDir, featureId, storyId);
   if (!snap) return { ok: false, reason: "no plan recorded – run design-spec-gate first" };
   if (snap.concurrent_branches_in_use >= snap.concurrent_branches_limit) {
     return {

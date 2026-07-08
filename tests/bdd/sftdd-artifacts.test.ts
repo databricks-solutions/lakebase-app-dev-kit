@@ -24,7 +24,7 @@ afterEach(() => {
 describe("artifact persistence", () => {
   it("writeArtifact creates the cycle dir on demand and returns the absolute path", () => {
     const path = writeArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,
@@ -39,7 +39,7 @@ describe("artifact persistence", () => {
 
   it("writeArtifact accepts nested name paths (creates intermediate dirs)", () => {
     const path = writeArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,
@@ -54,7 +54,7 @@ describe("artifact persistence", () => {
   it("writeArtifact rejects path-traversal names", () => {
     expect(() =>
       writeArtifact({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: FEATURE_ID,
       storyId: STORY_ID,
         experimentSlug: EXP,
@@ -68,7 +68,7 @@ describe("artifact persistence", () => {
   it("writeArtifact rejects absolute paths", () => {
     expect(() =>
       writeArtifact({
-        tddDir: tdd,
+        sftddDir: tdd,
         featureId: FEATURE_ID,
       storyId: STORY_ID,
         experimentSlug: EXP,
@@ -80,11 +80,11 @@ describe("artifact persistence", () => {
   });
 
   it("listArtifacts scoped to a cycle returns just that cycle's files (sorted)", () => {
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+    writeArtifact({ sftddDir: tdd, featureId: FEATURE_ID,
       storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "b.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+    writeArtifact({ sftddDir: tdd, featureId: FEATURE_ID,
       storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+    writeArtifact({ sftddDir: tdd, featureId: FEATURE_ID,
       storyId: STORY_ID, experimentSlug: EXP, cycleId: "C2", name: "z.log", content: "" });
     const c1 = listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP, "C1");
     expect(c1.map((e) => e.name)).toEqual(["a.log", "b.log"]);
@@ -92,9 +92,9 @@ describe("artifact persistence", () => {
   });
 
   it("listArtifacts without cycleId enumerates across all cycles", () => {
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+    writeArtifact({ sftddDir: tdd, featureId: FEATURE_ID,
       storyId: STORY_ID, experimentSlug: EXP, cycleId: "C1", name: "a.log", content: "" });
-    writeArtifact({ tddDir: tdd, featureId: FEATURE_ID,
+    writeArtifact({ sftddDir: tdd, featureId: FEATURE_ID,
       storyId: STORY_ID, experimentSlug: EXP, cycleId: "C2", name: "a.log", content: "" });
     const all = listArtifacts(tdd, FEATURE_ID, STORY_ID, EXP);
     expect(all).toHaveLength(2);
@@ -108,7 +108,7 @@ describe("artifact persistence", () => {
 
   it("each ArtifactEntry has the documented shape (name, path, cycle_id, size, modified)", () => {
     writeArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,
@@ -125,7 +125,7 @@ describe("artifact persistence", () => {
   it("readArtifact round-trips bytes written by writeArtifact", () => {
     const payload = Buffer.from("trace-blob", "utf8");
     writeArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,
@@ -134,7 +134,7 @@ describe("artifact persistence", () => {
       content: payload,
     });
     const round = readArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,
@@ -146,7 +146,7 @@ describe("artifact persistence", () => {
 
   it("readArtifact returns null when the artifact does not exist", () => {
     const round = readArtifact({
-      tddDir: tdd,
+      sftddDir: tdd,
       featureId: FEATURE_ID,
       storyId: STORY_ID,
       experimentSlug: EXP,

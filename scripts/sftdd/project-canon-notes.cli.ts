@@ -12,13 +12,13 @@
 //   lakebase-sftdd-canon-notes --feature <F> --story <S> [--tdd-dir <path>]
 
 import { projectStoryNotes, evaluateStoryCanon } from "./architecture-canon.js";
-import { resolveTddDir } from "./sftdd-paths.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
 import { writeSmellsLog } from "./smells.js";
 
 interface Parsed {
   feature: string;
   story: string;
-  tddDir?: string;
+  sftddDir?: string;
 }
 
 function parse(argv: string[]): Parsed {
@@ -27,7 +27,7 @@ function parse(argv: string[]): Parsed {
     const a = argv[i];
     if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
     else if (a === "--story" && i + 1 < argv.length) out.story = argv[++i];
-    else if (a === "--tdd-dir" && i + 1 < argv.length) out.tddDir = argv[++i];
+    else if (a === "--tdd-dir" && i + 1 < argv.length) out.sftddDir = argv[++i];
     else if (a === "-h" || a === "--help") help();
   }
   return out;
@@ -48,16 +48,16 @@ if (!p.feature || !p.story) {
   process.exit(2);
 }
 
-const tddDir = p.tddDir ?? resolveTddDir();
+const sftddDir = p.sftddDir ?? resolveSftddDir();
 
 // FAIL-TOWARD-PROJECTION with a reactive fallback: if the canon does NOT cover the
 // story (an AC layer / architecture dimension it has not seen), do NOT write a
 // blind note , raise the architect-canon-gap smell (spec-level, architect-owned).
 // The escalation machinery routes it to the architect (re-annotate + amend the
 // canon) via revise-routing, bounded to one revise then HITL. Otherwise project.
-const coverage = evaluateStoryCanon(tddDir, p.feature, p.story);
+const coverage = evaluateStoryCanon(sftddDir, p.feature, p.story);
 if (!coverage.ok) {
-  writeSmellsLog(tddDir, [
+  writeSmellsLog(sftddDir, [
     {
       smell: "architect-canon-gap",
       cycle_ids: [],
@@ -73,6 +73,6 @@ if (!coverage.ok) {
   process.exit(0);
 }
 
-const n = projectStoryNotes(tddDir, p.feature, p.story);
+const n = projectStoryNotes(sftddDir, p.feature, p.story);
 process.stdout.write(`canon-notes: projected architectural_notes onto ${n} AC(s) for ${p.feature}/${p.story}\n`);
 process.exit(0);
