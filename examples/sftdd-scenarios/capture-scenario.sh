@@ -107,22 +107,21 @@ SCEN="${SCEN_DIR_ROOT}/${SCENARIO}"
 # kit than the driver. To force EVERYONE onto ONE kit , this working tree , we pin
 # a dev ref whose cache slot is a symlink to this checkout, export it for the
 # orchestrator, and write it into the project for the agents. Never LAKEBASE_KIT_DIR.
+# Shared single source for local-kit pinning (cache symlink + recovery hint),
+# used here AND by the teardown/restart coordinators so the wiring lives once.
+source "${SCEN_DIR_ROOT}/lib/pin-local-kit.sh"
 KIT_ROOT="$(cd "${SCEN_DIR_ROOT}/../.." && pwd)"
-CAPTURE_KIT_REF="${CAPTURE_KIT_REF:-sftdd-capture-local}"
-CACHE_ROOT="${XDG_CACHE_HOME:-$HOME/.cache}/lakebase-app-dev-kit"
-KIT_CACHE_LINK="${CACHE_ROOT}/${CAPTURE_KIT_REF}/node_modules/@databricks-solutions/lakebase-app-dev-kit"
+CAPTURE_KIT_REF="${CAPTURE_KIT_REF:-$LOCAL_KIT_REF_DEFAULT}"
+KIT_CACHE_LINK="$(local_kit_cache_link "$CAPTURE_KIT_REF")"
 
 if [[ -n "${LAKEBASE_KIT_DIR:-}" ]]; then
   echo "capture-scenario: refuse to run with LAKEBASE_KIT_DIR set , it redirects only the orchestrator and leaves the claude -p agents on the stale cache (split-brain). Unset it; this script pins ref '${CAPTURE_KIT_REF}' for everyone." >&2
   exit 2
 fi
-[[ -d "${KIT_ROOT}/dist" ]] || { echo "capture-scenario: kit dist missing at ${KIT_ROOT}/dist , run 'npm run build' in the kit first (the shim runs dist/, not source)." >&2; exit 2; }
-# Point the ref's cache slot at THIS working tree: a bin run then finds dist with
-# no GitHub install, and because this ref is not a remote ref a moved-branch
-# reinstall can never apply and clobber it. Idempotent.
-mkdir -p "$(dirname "$KIT_CACHE_LINK")"
-rm -rf "$KIT_CACHE_LINK"
-ln -s "$KIT_ROOT" "$KIT_CACHE_LINK"
+# Point the ref's cache slot at THIS working tree (idempotent; fails loud if dist
+# is missing). A bin run then finds dist with no GitHub install, and because this
+# ref is not a remote ref a moved-branch reinstall can never clobber it.
+pin_local_kit_cache "$KIT_ROOT" "$CAPTURE_KIT_REF" || exit 2
 export LAKEBASE_KIT_REF="$CAPTURE_KIT_REF"
 echo "[capture-scenario] kit pinned , ref '${CAPTURE_KIT_REF}' -> ${KIT_ROOT} (cache symlink + LAKEBASE_KIT_REF; LAKEBASE_KIT_DIR unset)" >&2
 
@@ -131,8 +130,9 @@ echo "[capture-scenario] kit pinned , ref '${CAPTURE_KIT_REF}' -> ${KIT_ROOT} (c
 # can never silently execute a stale/other kit.
 assert_kit_single_source() {
   local project_dir="$1"
-  mkdir -p "${project_dir}/.lakebase"
-  printf '%s\n' "$CAPTURE_KIT_REF" > "${project_dir}/.lakebase/kit-ref"
+  # Write kit-ref (so env-less agents resolve the ref) + kit-local-dir (so lk can
+  # self-heal the cache symlink if it is ever lost mid-run).
+  record_local_kit_hint "$project_dir" "$KIT_ROOT" "$CAPTURE_KIT_REF"
   local want got
   want="$(cd "$KIT_ROOT" && pwd -P)"
   got="$(cd "$KIT_CACHE_LINK" 2>/dev/null && pwd -P || true)"

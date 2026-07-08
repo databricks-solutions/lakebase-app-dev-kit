@@ -32,15 +32,25 @@ if [ -n "${LAKEBASE_KIT_DIR:-}" ]; then
   kit_dir="$LAKEBASE_KIT_DIR"
   if [ "$bin" = "--warm" ] || [ "$bin" = "--rewarm" ]; then exit 0; fi
 else
-  # ref: env -> .lakebase/kit-ref (from the repo root or cwd) -> main
+  # Always resolve the repo root: the ref may come from env, but the local-dir
+  # recovery hint below is always read from the project.
+  root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  # ref: env -> .lakebase/kit-ref -> main
   ref="${LAKEBASE_KIT_REF:-}"
-  if [ -z "$ref" ]; then
-    root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-    if [ -f "$root/.lakebase/kit-ref" ]; then
-      ref="$(tr -d '[:space:]' < "$root/.lakebase/kit-ref")"
-    fi
+  if [ -z "$ref" ] && [ -f "$root/.lakebase/kit-ref" ]; then
+    ref="$(tr -d '[:space:]' < "$root/.lakebase/kit-ref")"
   fi
   ref="${ref:-main}"
+
+  # A LOCAL-ONLY ref (a capture/dev ref pinned to a working tree) exists nowhere
+  # on GitHub, so it resolves ONLY via its cache symlink. If that symlink is lost
+  # mid-run a GitHub re-resolve is impossible and lk would hard-fail. .lakebase/
+  # kit-local-dir records the kit path for exactly that case, so lk can re-plant
+  # the symlink + self-heal instead of bricking the run.
+  local_dir=""
+  if [ -f "$root/.lakebase/kit-local-dir" ]; then
+    local_dir="$(tr -d '[:space:]' < "$root/.lakebase/kit-local-dir")"
+  fi
 
   cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/lakebase-app-dev-kit"
   cache="${cache_root}/${ref}"
@@ -103,6 +113,26 @@ else
     fi
     [ -d "${kit_dir}/dist" ] || { echo "lk: could not warm the kit for ref '${ref}' (cache: ${cache})" >&2; exit 1; }
     exit 0
+  fi
+
+  # A bin run: install once if the cache is cold (fast path , no network when
+  # warm, so per-turn agent calls stay ~0.09s; freshness for a moving branch is
+  # the warm step's job).
+  #
+  # LK_NO_INSTALL: callers on a latency-sensitive, best-effort path (e.g. the
+  # prepare-commit-msg schema-diff enrichment) set this so a COLD cache never
+  # triggers a synchronous `npm install` (the ~70s commit stall). With it set we
+  # skip the install and exit 97 ("kit cache cold, install skipped"); the caller
+  # treats that as "enrichment unavailable" and proceeds. Warming stays the job
+  # of `lk --warm` at scaffold/create time, never of a commit.
+  # Self-heal a lost cache for a LOCAL ref FIRST: a ref recorded in kit-local-dir
+  # exists only as a local symlink (never on GitHub), so recover from the hint and
+  # skip the doomed network install. Re-plant the symlink so later calls hit the
+  # fast cache path, and use it for this call.
+  if [ ! -d "${kit_dir}/dist" ] && [ -n "$local_dir" ] && [ -d "${local_dir}/dist" ]; then
+    mkdir -p "$(dirname "$kit_dir")" && rm -rf "$kit_dir" && ln -s "$local_dir" "$kit_dir" 2>/dev/null || true
+    [ -d "${kit_dir}/dist" ] || kit_dir="$local_dir"
+    echo "lk: cache for ref '${ref}' was missing; recovered from .lakebase/kit-local-dir (${local_dir})." >&2
   fi
 
   # A bin run: install once if the cache is cold (fast path , no network when

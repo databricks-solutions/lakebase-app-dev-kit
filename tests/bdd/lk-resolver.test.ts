@@ -5,7 +5,7 @@
 // fake kit dir + a pre-seeded cache, so they never hit the network/npm.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -71,6 +71,27 @@ describe("lk resolver shim", () => {
     const r = runLk(["lakebase-sftdd-log"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "" }, proj);
     expect(r.status, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual([]);
+  });
+
+  it("self-heals a lost cache for a local-only ref from .lakebase/kit-local-dir (offline)", () => {
+    // A local-only ref (e.g. a capture pinned to a working tree) exists nowhere
+    // on GitHub, so if its cache symlink is lost mid-run lk cannot re-resolve it
+    // and would hard-fail. With .lakebase/kit-local-dir recorded, lk recovers the
+    // kit path from the hint, re-plants the cache symlink, and runs the bin , all
+    // without touching the network (the doomed GitHub install is skipped).
+    const cache = join(work, "cache");
+    const kitLocal = fakeKitDir(join(work, "kitlocal"));
+    const proj = join(work, "proj");
+    mkdirSync(join(proj, ".lakebase"), { recursive: true });
+    writeFileSync(join(proj, ".lakebase", "kit-ref"), "sftdd-capture-local\n");
+    writeFileSync(join(proj, ".lakebase", "kit-local-dir"), `${kitLocal}\n`);
+    // Cache is COLD (never seeded) for this ref.
+    const r = runLk(["lakebase-sftdd-log", "--z"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "" }, proj);
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual(["--z"]);
+    expect(r.stderr).toMatch(/recovered from .*kit-local-dir/);
+    // Re-planted the cache symlink so later calls hit the fast path.
+    expect(existsSync(join(cache, "lakebase-app-dev-kit", "sftdd-capture-local", "node_modules", PKG))).toBe(true);
   });
 
   it("exits non-zero for an unknown bin", () => {

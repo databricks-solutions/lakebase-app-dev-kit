@@ -68,6 +68,16 @@ echo "=== teardown done ==="
 echo "=== rebuilding kit dist ==="
 ( cd "$KIT" && npm run build ) || { echo "kit build failed; fix before relaunch" >&2; exit 1; }
 
+# Pre-plant the local-only capture kit ref (cache symlink -> this worktree) via the
+# shared helper BEFORE relaunch. capture-scenario --create also does this, but doing
+# it here makes the coordinator self-sufficient; and if the symlink is ever lost
+# mid-run, the scaffolded scripts/lk self-heals from .lakebase/kit-local-dir (which
+# capture-scenario records into the project), so a sprint capture cannot be bricked
+# by a vanished local ref.
+echo "=== pinning local kit ref (cache symlink) ==="
+source "${KIT}/examples/sftdd-scenarios/lib/pin-local-kit.sh"
+pin_local_kit_cache "$KIT" || { echo "failed to pin local kit ref; fix before relaunch" >&2; exit 1; }
+
 # ── relaunch one fresh capture, driven from a SPRINT PLAN (backlog = F1 + F6) ──
 # --sprint runs the whole-sprint orchestrator: planning -> plan gate (sync-backlog
 # projects backlog.json from just these two features) -> claim + drive each.
