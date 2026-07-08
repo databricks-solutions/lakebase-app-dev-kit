@@ -862,7 +862,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       // exactly what was supplied. No LLM is spawned to invent the requests.
       if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
         return [
-          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.sftddDir, "--approver", approver] },
+          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.sftddDir, "--approver", approver, "--sprint", cfg.sprintName ?? "sprint"] },
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
         ];
       }

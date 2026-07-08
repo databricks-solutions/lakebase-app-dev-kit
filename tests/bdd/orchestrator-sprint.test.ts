@@ -113,6 +113,17 @@ describe("deriveSprintPlanningState", () => {
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.requestsAuthored).toBe(true);
   });
 
+  it("syncBacklog SCOPES to the sprint's requested.json (a later sprint excludes an earlier sprint's built feature)", () => {
+    // Multi-sprint regression: F1 was built in sprint 1 and its feature-request.md
+    // stays on disk. Sprint 2 supplied only F6, recorded in sprints/<S>/requested.json.
+    // syncBacklog must project ONLY F6 for sprint 2 (not re-drive F1).
+    writeRequest("F1-stock");
+    writeRequest("F6-split");
+    mkdirSync(join(tdd, "sprints", SPRINT), { recursive: true });
+    writeFileSync(join(tdd, "sprints", SPRINT, "requested.json"), JSON.stringify(["F6-split"]));
+    expect(syncBacklog(tdd, SPRINT).features).toEqual([{ id: "F6-split" }]);
+  });
+
   it("gateApproved when the sprint plan gate is approved", () => {
     writeSprintGates({ sprint: SPRINT, schema_version: 1, gates: { plan: { status: "approved", history: [] } } }, { sftddDir: tdd });
     expect(deriveSprintPlanningState(tdd, SPRINT).planning?.gateApproved).toBe(true);

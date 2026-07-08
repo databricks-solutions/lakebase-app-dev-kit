@@ -73,13 +73,15 @@ function runSupplyCli(argv: string[]): number {
 function runSupplyRequestsCli(argv: string[]): number {
   let sftddDir: string | undefined;
   let approver: string | undefined;
+  let sprint: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case "--tdd-dir": sftddDir = argv[++i]; break;
       case "--approver": approver = argv[++i]; break;
+      case "--sprint": sprint = argv[++i]; break;
     }
   }
-  const result = supplyRequests({ sftddDir, approver });
+  const result = supplyRequests({ sftddDir, approver, sprint });
   if (result.supplied.length > 0) {
     process.stdout.write(`human-proxy: supplied ${result.supplied.length} feature-request(s): ${result.supplied.join(", ")}\n`);
   } else {

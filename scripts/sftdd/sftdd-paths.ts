@@ -181,6 +181,13 @@ export const cycleFile = (tdd: string, f: string, s: string, ac: string, n: numb
 export const sprintDir = (tdd: string, sprint: string): string => join(sprintsDir(tdd), sprint);
 export const sprintGatesJson = (tdd: string, sprint: string): string => join(sprintDir(tdd, sprint), "gates.json");
 export const backlogJson = (tdd: string, sprint: string): string => join(sprintDir(tdd, sprint), "backlog.json");
+/** The feature ids REQUESTED for a sprint (the PO/proxy's per-sprint commitment).
+ *  syncBacklog scopes the sprint's backlog to these, so a multi-sprint run does
+ *  not pull an EARLIER sprint's already-built features (whose feature-request.md
+ *  still exists on disk) into a LATER sprint's backlog. Absent => single-sprint /
+ *  legacy: the backlog is every committed feature-request (back-compat). */
+export const sprintRequestedJson = (tdd: string, sprint: string): string =>
+  join(sprintDir(tdd, sprint), "requested.json");
 
 // ── findFeatureDir: ONE definition, one behavior ──────────────────
 /**
@@ -409,12 +416,28 @@ export function writeBacklog(tdd: string, backlog: SprintBacklog): void {
 export function syncBacklog(tdd: string, sprint: string): SprintBacklog {
   const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size] as const));
   const root = featuresDir(tdd);
+  // Sprint scope: the features REQUESTED for THIS sprint (requested.json), so a
+  // later sprint's backlog excludes an earlier sprint's already-built features
+  // whose feature-request.md still sits on disk. Absent => single-sprint/legacy:
+  // every committed request is in scope (unchanged behavior).
+  let scope: Set<string> | undefined;
+  const reqFile = sprintRequestedJson(tdd, sprint);
+  if (fs.existsSync(reqFile)) {
+    try {
+      const ids = JSON.parse(fs.readFileSync(reqFile, "utf8")) as unknown;
+      if (Array.isArray(ids)) scope = new Set(ids.filter((x): x is string => typeof x === "string"));
+    } catch {
+      scope = undefined;
+    }
+  }
   const committed = fs.existsSync(root)
     ? fs
         .readdirSync(root)
         .filter((d) => {
           try {
-            return fs.statSync(join(root, d)).isDirectory() && fs.existsSync(join(root, d, "feature-request.md"));
+            if (!fs.statSync(join(root, d)).isDirectory()) return false;
+            if (!fs.existsSync(join(root, d, "feature-request.md"))) return false;
+            return scope ? scope.has(d) : true;
           } catch {
             return false;
           }
