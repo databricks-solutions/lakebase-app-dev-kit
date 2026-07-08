@@ -768,6 +768,15 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     },
     async driveFeature(featureId) {
       const cfg = buildCfg(args, featureId);
+      // A fresh feature in the sprint loop (feature 2+, or the first feature of a
+      // later sprint on the same project) must NOT inherit the PRIOR feature's
+      // terminal TDD phase: the per-project workflow-state.json carries
+      // "shipped"/"done" from the last feature, and neither the SCM claim nor
+      // anything else clears it, so the next feature's drive reads phase === done
+      // and exits at turn 000 without building. Same guard the single-feature
+      // drive applies (see runFeatureMode); only a terminal phase is cleared, so a
+      // resumed mid-flight feature is untouched.
+      resetStaleTerminalPhase(cfg.sftddDir);
       cfg.runner = execRunner(cfg);
       snapshotRunConfig(cfg,"full");
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {

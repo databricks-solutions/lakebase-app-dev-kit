@@ -169,3 +169,34 @@ describe("revise: architecture-gate staling + non-hollow re-run + bounded", () =
     expect(diskArtifactProbe(tdd, F).pendingEscalation()?.routable).toBeUndefined();
   });
 });
+
+describe("the establishing feature is exempt (no self-thrash against its own canon)", () => {
+  // The canon is established_by "F1-stock-visibility"; that feature's own stories
+  // must never be gap-checked against, or projected from, the canon they build.
+  const EST = "F1-stock-visibility";
+  function writeEstAc(story: string, acId: string, extra: Record<string, unknown> = {}): void {
+    const dir = join(tdd, "features", EST, "stories", story, "acs");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${acId}.json`), JSON.stringify({ id: acId, layer: "API", ...extra }));
+  }
+
+  it("evaluateStoryCanon is OK for the establishing feature even when it would otherwise gap", () => {
+    establishCanon(); // established_by = F1-stock-visibility
+    mkdirSync(join(tdd, "features", EST), { recursive: true });
+    // A NOVEL invariant type the canon lacks: a later feature would gap here.
+    writeFileSync(
+      join(tdd, "features", EST, "architecture.json"),
+      JSON.stringify({ feature_id: EST, service_backed: true, nfrs: [], persistence_invariants: [{ id: "PIx", type: "check", brief: "q>=0" }] }),
+    );
+    writeEstAc("S2", "AC1", { layer: "E2E" }); // E2E not in canon either
+    expect(evaluateStoryCanon(tdd, EST, "S2")).toEqual({ ok: true });
+  });
+
+  it("architectProjectable is false for the establishing feature (it runs the architect, not projection)", () => {
+    establishCanon();
+    mkdirSync(join(tdd, "features", EST), { recursive: true });
+    writeFileSync(join(tdd, "features", EST, "architecture.json"), JSON.stringify({ feature_id: EST, service_backed: true, nfrs: [] }));
+    writeEstAc("S2", "AC1"); // clean layer , a LATER feature would be projectable, but the establisher is not
+    expect(diskArtifactProbe(tdd, EST).architectProjectable("S2")).toBe(false);
+  });
+});

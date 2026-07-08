@@ -190,6 +190,12 @@ export function diskArtifactProbe(
       if (!fs.existsSync(architectureJson(sftddDir, featureId))) return false;
       const canon = readCanon(sftddDir);
       if (!canon) return false;
+      // The feature that ESTABLISHED the canon runs the architect for its own
+      // stories, it does not project against the canon it is itself building
+      // (that self-conform routed F1's own later stories through the architect
+      // gap-route). Projection is a LATER-feature optimization; only features
+      // other than established_by project.
+      if (canon.established_by === featureId) return false;
       // A story already sent back on an architect-canon-gap revise must NOT be
       // re-projected (that would re-emit the same blind note and heal nothing):
       // force the ARCHITECT to run live (re-annotate + amend the canon).
