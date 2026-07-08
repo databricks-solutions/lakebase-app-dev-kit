@@ -16,7 +16,7 @@
 // every item maps to one of the story's ACs (the S2 live-stall bug).
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { storyAcIds, readAcLayer, storyTestListJson, acsDir } from "./sftdd-paths.js";
+import { storyAcIds, readAcLayer, storyTestListJson, acsDir, designGuideJson } from "./sftdd-paths.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 
 export interface FormatViolation {
@@ -47,6 +47,7 @@ export const FORMATTED_ROLES = new Set([
   "spec-author",
   "architect-reviewer",
   "test-strategist",
+  "ux-designer",
 ]);
 
 function needStory(role: string, story: string | undefined, violations: FormatViolation[]): story is string {
@@ -160,10 +161,33 @@ function checkTestStrategist(args: FormatArgs, v: FormatViolation[]): void {
   });
 }
 
+/** ux-designer (project-level, UI track): the machine-checkable design-guide.json
+ *  exists and conforms to design-guide.schema.json. The model is told NOT to read
+ *  the schema, so it drifts on shape (camelCase keys, nested spacing, extra
+ *  typography props) unless it self-checks; this catches that at the source
+ *  instead of at the final feature drain. */
+function checkUxDesigner(args: FormatArgs, v: FormatViolation[]): void {
+  const file = designGuideJson(args.tddDir);
+  if (!existsSync(file)) {
+    v.push({ artifact: "design/design-guide.json", problem: "design-guide.json not written (the machine-checkable token source of truth)" });
+    return;
+  }
+  let content: string;
+  try {
+    content = readFileSync(file, "utf8");
+  } catch (e) {
+    v.push({ artifact: "design/design-guide.json", problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` });
+    return;
+  }
+  const r = checkArtifactConformance(canonicalArtifactName(file), content);
+  if (!r.ok) v.push({ artifact: "design/design-guide.json", problem: r.violations.join("; ") });
+}
+
 const CHECKERS: Record<string, (a: FormatArgs, v: FormatViolation[]) => void> = {
   "spec-author": checkSpecAuthor,
   "architect-reviewer": checkArchitect,
   "test-strategist": checkTestStrategist,
+  "ux-designer": checkUxDesigner,
 };
 
 /**

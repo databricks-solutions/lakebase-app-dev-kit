@@ -20,7 +20,13 @@
 // so the kit core needs no hard @playwright/test dependency.
 
 export interface DesignGuide {
-  typography: { font_family: string; font_mono?: string; scale: Record<string, string> };
+  typography: {
+    font_family: string;
+    font_mono?: string;
+    scale: Record<string, string>;
+    line_heights?: Record<string, string>;
+    font_weights?: Record<string, string>;
+  };
   colors: Record<string, Record<string, string>>;
   spacing: Record<string, string>;
   radius?: Record<string, string>;
@@ -33,10 +39,12 @@ export interface DesignGuide {
  * define on :root. Convention (matches the real theme.css token namespace):
  *   typography.font_family       -> --font-family
  *   typography.font_mono         -> --font-mono
- *   typography.scale[k]          -> --<k>          (text-base -> --text-base)
- *   colors[group][k]             -> --color-<k>    (brand-red -> --color-brand-red)
+ *   typography.scale[k]          -> --<k>                 (text-base -> --text-base)
+ *   typography.line_heights[k]   -> --line-height-<k>     (body -> --line-height-body)
+ *   typography.font_weights[k]   -> --font-weight-<k>     (medium -> --font-weight-medium)
+ *   colors[group][k]             -> --color-<k>           (brand-red -> --color-brand-red)
  *   spacing[k] / radius[k] /
- *   shadows[k] / breakpoints[k]  -> --<k>          (space-4 -> --space-4)
+ *   shadows[k] / breakpoints[k]  -> --<k>                 (space-4 -> --space-4)
  * Token keys are stored WITHOUT the leading "--"; colors additionally drop the
  * group and gain a "color-" prefix on the leaf key.
  */
@@ -48,6 +56,12 @@ export function designGuideToCssVars(guide: DesignGuide): Record<string, string>
   }
   for (const [k, v] of Object.entries(guide.typography.scale)) {
     vars[`--${k}`] = v;
+  }
+  for (const [k, v] of Object.entries(guide.typography.line_heights ?? {})) {
+    vars[`--line-height-${k}`] = v;
+  }
+  for (const [k, v] of Object.entries(guide.typography.font_weights ?? {})) {
+    vars[`--font-weight-${k}`] = v;
   }
   for (const group of Object.values(guide.colors)) {
     for (const [k, v] of Object.entries(group)) {

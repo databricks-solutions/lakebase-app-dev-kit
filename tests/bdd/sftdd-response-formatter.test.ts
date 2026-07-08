@@ -138,6 +138,55 @@ describe("response-formatter: spec-author + architect-reviewer contracts", () =>
   });
 });
 
+describe("response-formatter: ux-designer (design-guide.json conforms to its schema)", () => {
+  function designGuide(): string {
+    return join(tdd, "design", "design-guide.json");
+  }
+  const CONFORMANT = {
+    typography: {
+      font_family: "'DM Sans', sans-serif",
+      font_mono: "'DM Mono', monospace",
+      scale: { "text-base": "15px" },
+      line_heights: { body: "1.5" },
+      font_weights: { medium: "500" },
+    },
+    colors: { brand: { "brand-red": "#FF3621" } },
+    spacing: { "space-4": "16px" },
+  };
+
+  it("FLAGS a missing design-guide.json", () => {
+    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    expect(r.ok).toBe(false);
+    expect(r.violations[0].problem).toMatch(/not written/);
+  });
+
+  it("FLAGS the exact live drift (camelCase keys, nested spacing, extra typography props)", () => {
+    writeJson(designGuide(), {
+      typography: {
+        fontFamilyPrimary: "'DM Sans', sans-serif",
+        fontFamilyNumeric: "'DM Mono', monospace",
+        scale: { base: "15px" },
+        lineHeightBody: "1.5",
+        fontWeights: [400, 500],
+      },
+      colors: { brand: { red: "#FF3621" } },
+      spacing: { unit: "4px", scale: { "space-4": "16px" } },
+    });
+    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    expect(r.ok).toBe(false);
+    const problem = r.violations.map((v) => v.problem).join(" ");
+    expect(problem).toMatch(/font_family/);
+    expect(problem).toMatch(/additional properties/i);
+  });
+
+  it("PASSES a conformant guide with the expanded typography tokens", () => {
+    writeJson(designGuide(), CONFORMANT);
+    const r = formatRoleResponse({ role: "ux-designer", tddDir: tdd, featureId: F });
+    expect(r.ok).toBe(true);
+    expect(r.violations).toEqual([]);
+  });
+});
+
 describe("response-formatter: roles with no deterministic contract pass", () => {
   it("an unknown/uncovered role is a no-op PASS", () => {
     const r = formatRoleResponse({ role: "navigator", tddDir: tdd, featureId: F, story: S });

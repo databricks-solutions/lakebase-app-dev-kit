@@ -34,6 +34,27 @@ describe("designGuideToCssVars: flattens a guide to CSS custom properties", () =
     expect(vars["--space-4"]).toBe("16px");
     expect(vars["--radius-none"]).toBe("0px");
   });
+
+  it("maps the expanded typography tokens (line_heights, font_weights) to prefixed vars", () => {
+    const vars = designGuideToCssVars({
+      ...GUIDE,
+      typography: {
+        ...GUIDE.typography,
+        line_heights: { body: "1.5", heading: "1.25" },
+        font_weights: { regular: "400", medium: "500" },
+      },
+    });
+    expect(vars["--line-height-body"]).toBe("1.5");
+    expect(vars["--line-height-heading"]).toBe("1.25");
+    expect(vars["--font-weight-regular"]).toBe("400");
+    expect(vars["--font-weight-medium"]).toBe("500");
+  });
+
+  it("omits the expanded typography vars when the guide does not declare them", () => {
+    const vars = designGuideToCssVars(GUIDE);
+    expect(Object.keys(vars).some((k) => k.startsWith("--line-height-"))).toBe(false);
+    expect(Object.keys(vars).some((k) => k.startsWith("--font-weight-"))).toBe(false);
+  });
 });
 
 describe("checkTokenAdherence: rendered :root vars vs declared tokens", () => {

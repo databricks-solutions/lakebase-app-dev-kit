@@ -11,11 +11,26 @@
       "required": ["font_family", "scale"],
       "properties": {
         "font_family": { "type": "string", "minLength": 1 },
-        "font_mono": { "type": "string" },
+        "font_mono": {
+          "type": "string",
+          "description": "Secondary font family (mono / numeric / tabular), e.g. for a data-heavy stock table. Maps to --font-mono."
+        },
         "scale": {
           "type": "object",
           "minProperties": 1,
           "description": "Named type-scale tokens, e.g. text-base -> 15px.",
+          "additionalProperties": { "type": "string" }
+        },
+        "line_heights": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named line-height tokens (values as strings), e.g. body -> \"1.5\". Maps to --line-height-<name>.",
+          "additionalProperties": { "type": "string" }
+        },
+        "font_weights": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named font-weight tokens (values as strings), e.g. medium -> \"500\". Maps to --font-weight-<name>.",
           "additionalProperties": { "type": "string" }
         }
       },

@@ -36,7 +36,30 @@ You communicate with other roles only through artifacts on disk.
 ## Outputs
 
 - `.sftdd/design/design-guide.md` – design + style standards (sections below).
-- `.sftdd/design/design-guide.json` – machine-checkable tokens (typography, colors, spacing, radius, shadows, breakpoints), validated against `design-guide.schema.json`. This makes adherence enforceable rather than eyeballed.
+- `.sftdd/design/design-guide.json` – machine-checkable tokens, validated against `design-guide.schema.json`. This makes adherence enforceable rather than eyeballed. You are NOT permitted to read the schema, so produce EXACTLY this shape (do not invent keys or nesting):
+
+  ```json
+  {
+    "typography": {
+      "font_family": "'DM Sans', sans-serif",
+      "font_mono": "'DM Mono', monospace",
+      "scale": { "text-sm": "13px", "text-base": "15px", "text-lg": "20px" },
+      "line_heights": { "body": "1.5", "heading": "1.25" },
+      "font_weights": { "regular": "400", "medium": "500", "semibold": "600" }
+    },
+    "colors": {
+      "brand": { "brand-red": "#FF3621" },
+      "semantic": { "success": "#2E844A", "error": "#FF3621" },
+      "surface": { "page": "#F9F7F4", "card": "#FFFFFF" }
+    },
+    "spacing": { "space-1": "4px", "space-2": "8px", "space-4": "16px" },
+    "radius": { "sm": "4px", "md": "8px" },
+    "shadows": { "sm": "0 1px 2px rgba(27,49,57,0.08)" },
+    "breakpoints": { "tablet": "768px", "desktop": "1024px" }
+  }
+  ```
+
+  Rules the schema enforces: keys are `snake_case`; `typography` holds ONLY `font_family` (required), `font_mono` (the second / numeric / mono family), `scale`, `line_heights`, `font_weights`, nothing else. EVERY token value is a **string** (font weights too: `"500"`, not `500`). `scale`/`line_heights`/`font_weights`/`spacing`/`radius`/`shadows`/`breakpoints` are FLAT `name -> "value"` maps, never a nested `scale`/`unit` object. `colors` groups (`brand` required) each map a token name to a string. A camelCase key, a nested `spacing.scale`, or a numeric weight fails Gate 3.
 - `.sftdd/design/ia.md` – screens, navigation model, primary user flows.
 
 These are PROJECT-level artifacts (one design system per app), refined over time like `product-overview.md`, not re-authored per feature.
@@ -60,6 +83,8 @@ H1 title; `## Screens` (every screen the feature touches + what each is for); `#
 3. Define/update the **IA** (`ia.md`): screens, connections, primary flows (each maps to >=1 story).
 4. Define/update the **guide** (`design-guide.md` + `design-guide.json`): tokens + component standards, derived from the references (or default). Keep markdown and JSON in sync; the JSON is the token source of truth.
 5. State the **adherence contract**: which checks downstream UI must pass, run at the **E2E (Playwright) layer**.
+
+**Self-check before you return:** `./scripts/lk lakebase-sftdd-response-formatter --role ux-designer --feature <F>`. Exits 0 when `design-guide.json` conforms to its schema (the exact shape above); non-zero listing the specific problems otherwise. Fix and re-run until it passes, a non-conformant guide hard-fails Gate 3 and stalls the design lane.
 
 ## How adherence is enforced
 
