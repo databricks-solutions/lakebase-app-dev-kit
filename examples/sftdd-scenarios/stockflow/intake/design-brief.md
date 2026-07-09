@@ -11,6 +11,19 @@ interview). The UI is small (a home stock-by-location view, a SKU
 detail page, an adjustment / receipt / pick form, a search), and this
 brief is deliberately small.
 
+## UI delivery
+
+StockFlow ships as a single-page application, not server-rendered
+pages. The client is a React + TypeScript app under `client/` (Vite),
+talking to the backend over a JSON API; the design tokens below live in
+`client/src/styles/` and are consumed as `var(--token)`. Screens are
+client-side routed (home, SKU detail, the forms) with no full-page
+reloads, and every state (empty, loading, success, validation error)
+is a component state with a stable `data-testid` seam. The framework
+choice itself is the Architect's to record (`renders_via`); this brief
+states the product intent: a React SPA client plus a JSON API backend,
+each tested on its own side.
+
 ## References
 
 The design language is teased from these references; the UX Designer

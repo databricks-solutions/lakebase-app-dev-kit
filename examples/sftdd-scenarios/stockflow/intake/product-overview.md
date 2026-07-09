@@ -57,6 +57,15 @@ warehouse. Concretely:
 Everything beyond V1 is open. The Product Owner expects to revisit and
 extend this overview between iterations once V1 is in real use.
 
+## How it is delivered
+
+StockFlow is a modern single-page web application: a React and
+TypeScript client the warehouse-floor tablet loads once and navigates
+without page reloads, backed by a JSON API. The operator experience
+(scan, adjust, and watch the stock row move in place) is a rich
+client-side interaction, not a set of server-rendered form-submit
+round-trips.
+
 ## How I want to work
 
 After each sprint I want to see **working software I can actually use**,
