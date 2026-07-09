@@ -110,13 +110,21 @@ fi
 # (no positional path arg, so a per-cycle backend-layer invocation does not drag
 # in the client suite), and only when a client/ workspace is present. The
 # client's e2e (Playwright) is owned by CI / the E2E block; this is the fast unit
-# lane. node_modules is installed by the post-checkout hook + CI; skip with a
-# note if it is missing so a bare checkout does not hard-fail here.
+# lane. This is part of the AUTHORITATIVE full run (the build's honest-GREEN
+# verify and the deploy gate both use it), so the client tests must ACTUALLY RUN,
+# never be skipped: a silent skip when client/node_modules is absent would green
+# UI code whose tests never executed (a false GREEN), and the break would surface
+# only later at the deploy gate. So install the client deps if missing, then run;
+# a failing client test fails the run (set -e) exactly like a backend one.
 if [ "$#" -eq 0 ] && [ -f "$REPO_ROOT/client/package.json" ]; then
-  if [ -d "$REPO_ROOT/client/node_modules" ]; then
-    echo "Running client unit tests (Vitest)..."
-    (cd "$REPO_ROOT/client" && npm test)
-  else
-    echo "client/node_modules missing - skipping client unit tests (run 'npm --prefix client install')."
+  if [ ! -d "$REPO_ROOT/client/node_modules" ]; then
+    echo "client/node_modules missing - installing client deps so the client tests actually run..."
+    if [ -f "$REPO_ROOT/client/package-lock.json" ]; then
+      ( cd "$REPO_ROOT/client" && npm ci )
+    else
+      ( cd "$REPO_ROOT/client" && npm install )
+    fi
   fi
+  echo "Running client unit tests (Vitest)..."
+  ( cd "$REPO_ROOT/client" && npm test )
 fi

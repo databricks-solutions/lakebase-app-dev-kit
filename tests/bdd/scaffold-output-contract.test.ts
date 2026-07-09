@@ -57,6 +57,27 @@ describe("scaffold output contract: run-dev.sh", () => {
   });
 });
 
+describe("scaffold output contract: run-tests.sh client lane", () => {
+  it("runs the client Vitest suite on a full run, installing deps if missing, never silently skipping", () => {
+    // The honest-GREEN verify + the deploy gate both run run-tests.sh. If the
+    // client block SKIPPED when client/node_modules is absent (the old
+    // behavior), a broken client test would green in-build (its tests never
+    // ran) and only fail at the deploy gate , a false GREEN. So the block must
+    // install-then-run, and must actually invoke the client test command.
+    const sh = readTemplate("common/scripts/run-tests.sh");
+    // Gated on a client workspace + a full run (no positional arg).
+    expect(sh).toMatch(/client\/package\.json/);
+    // Installs deps when missing (ci when a lockfile exists, else install)
+    // instead of skipping.
+    expect(sh).toMatch(/npm ci/);
+    expect(sh).toMatch(/npm install/);
+    // And ALWAYS runs the client tests (the failing-path that must exist).
+    expect(sh).toMatch(/cd "\$REPO_ROOT\/client" && npm test/);
+    // The false-GREEN skip must be gone: no "skipping client" branch.
+    expect(sh).not.toMatch(/skipping client/i);
+  });
+});
+
 describe("scaffold output contract: connect-main-branch.sh", () => {
   it("delegates to the kit's lakebase-branch sync-env CLI (no inline substrate logic)", () => {
     // scaffolded shells that previously duplicated substrate
