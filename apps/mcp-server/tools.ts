@@ -393,13 +393,13 @@ export const TOOLS: ToolDefinition[] = [
     handler: async (args) => {
       const num = args.pullNumber;
       if (typeof num !== "number") throw new Error("'pullNumber' must be a number");
-      const message = await mergePullRequest({
+      const { message, sha } = await mergePullRequest({
         ownerRepo: requireString(args, "ownerRepo"),
         pullNumber: num,
         method: optionalString(args, "method") as "merge" | "squash" | "rebase" | undefined,
         deleteRemoteBranch: typeof args.deleteRemoteBranch === "boolean" ? (args.deleteRemoteBranch as boolean) : undefined,
       });
-      return { message };
+      return { message, sha };
     },
   },
   {

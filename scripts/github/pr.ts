@@ -82,6 +82,12 @@ export interface WorkflowRunSummary {
   conclusion: string;
   branch: string;
   event: string;
+  /** The commit SHA the run executed against (GitHub's `head_sha`). For a
+   * `push` run this is the new tip the push created, so it equals the merge
+   * commit SHA that `pulls.merge` returned. Matching a downstream migrate run
+   * by this SHA is clock-independent, unlike a `createdAt >= mergedAt` window,
+   * which false-negatives when the local merge bookkeeping lags GitHub's clock. */
+  headSha?: string;
   /** ISO 8601 timestamp from GitHub. Useful for filtering out runs older than
    * a session start time or detecting stuck/orphaned runs whose updated_at
    * lags. May be `undefined` if the API omitted it. */
@@ -303,8 +309,20 @@ export interface MergePullRequestArgs {
   deleteRemoteBranch?: boolean;
 }
 
+/** The outcome of merging a PR. */
+export interface MergePullRequestResult {
+  /** GitHub's merge confirmation message. */
+  message: string;
+  /** The SHA of the commit the merge created on the base branch (squash/merge/
+   *  rebase all report the new base tip here). This is the `head_sha` the
+   *  downstream `push` workflow run will carry, so callers can match that run
+   *  by SHA instead of by a merge-timestamp window. `undefined` if the API
+   *  omitted it. */
+  sha?: string;
+}
+
 /** Merge a PR. Optionally deletes the remote head branch. */
-export async function mergePullRequest(args: MergePullRequestArgs): Promise<string> {
+export async function mergePullRequest(args: MergePullRequestArgs): Promise<MergePullRequestResult> {
   const method = args.method ?? "merge";
   const deleteRemoteBranch = args.deleteRemoteBranch !== false;
   try {
@@ -329,7 +347,10 @@ export async function mergePullRequest(args: MergePullRequestArgs): Promise<stri
         /* branch may already be gone */
       }
     }
-    return data.message || `Merged PR #${args.pullNumber}`;
+    return {
+      message: data.message || `Merged PR #${args.pullNumber}`,
+      sha: data.sha || undefined,
+    };
   } catch (err) {
     wrap(err, "Failed to merge pull request");
   }
@@ -355,6 +376,7 @@ export async function listWorkflowRuns(
       conclusion: r.conclusion || "",
       branch: r.head_branch || "",
       event: r.event || "",
+      headSha: r.head_sha || undefined,
       createdAt: r.created_at || undefined,
       updatedAt: r.updated_at || undefined,
     }));
@@ -446,6 +468,9 @@ export interface MergePairedPullRequestResult {
   headBranch: string;
   /** True iff the matching feature Lakebase branch was deleted. */
   lakebaseBranchDeleted: boolean;
+  /** The SHA the merge created on the base branch (see MergePullRequestResult.sha).
+   *  Downstream migrate-run matching keys on this. `undefined` if the API omitted it. */
+  mergeCommitSha?: string;
   warnings: string[];
 }
 
@@ -484,7 +509,7 @@ export async function mergePairedPullRequest(
   }
 
   // 2. Merge the PR (delegates remote-branch cleanup based on flag)
-  const message = await mergePullRequest({
+  const { message, sha: mergeCommitSha } = await mergePullRequest({
     ownerRepo: args.ownerRepo,
     pullNumber: args.pullNumber,
     method: args.method,
@@ -507,5 +532,5 @@ export async function mergePairedPullRequest(
     warnings.push("Skipped Lakebase branch cleanup – could not resolve PR head branch name");
   }
 
-  return { message, headBranch, lakebaseBranchDeleted, warnings };
+  return { message, headBranch, lakebaseBranchDeleted, mergeCommitSha, warnings };
 }

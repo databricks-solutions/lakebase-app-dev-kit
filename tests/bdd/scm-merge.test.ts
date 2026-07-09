@@ -220,7 +220,7 @@ describe("mergeFeature wait-migrate", () => {
     status: string,
     conclusion: string,
     createdAt: string,
-    overrides: Partial<{ event: string; branch: string; id: number }> = {},
+    overrides: Partial<{ event: string; branch: string; id: number; headSha: string }> = {},
   ) {
     return {
       id: overrides.id ?? 9999,
@@ -229,6 +229,7 @@ describe("mergeFeature wait-migrate", () => {
       conclusion,
       branch: overrides.branch ?? "staging",
       event: overrides.event ?? "push",
+      headSha: overrides.headSha,
       createdAt,
       updatedAt: createdAt,
     };
@@ -394,5 +395,123 @@ describe("mergeFeature wait-migrate", () => {
         migrateTimeoutMs: 60_000,
       }),
     ).rejects.toMatchObject({ code: "migrate-timeout" });
+  });
+});
+
+describe("mergeFeature wait-migrate SHA matching (clock-skew regression)", () => {
+  const MERGE_SHA = "abc123def456abc123def456abc123def456abcd";
+
+  function makeRun(
+    status: string,
+    conclusion: string,
+    createdAt: string,
+    overrides: Partial<{ event: string; branch: string; id: number; headSha: string }> = {},
+  ) {
+    return {
+      id: overrides.id ?? 9999,
+      name: "merge",
+      status,
+      conclusion,
+      branch: overrides.branch ?? "staging",
+      event: overrides.event ?? "push",
+      headSha: overrides.headSha,
+      createdAt,
+      updatedAt: createdAt,
+    };
+  }
+
+  // The regression: mergedAt is captured AFTER the local post-merge cleanup
+  // (checkout / fetch / ff / branch delete), so it reads a clock LATER than the
+  // moment GitHub created the merge commit + its push run. The timestamp window
+  // (`createdAt >= mergedAt - 5s`) then drops the real run forever. SHA matching
+  // is immune: it keys on the merge commit the API returned.
+  it("matches the downstream run by merge-commit SHA even when its createdAt precedes mergedAt", async () => {
+    seedCiGreen();
+    mockMergePaired.mockResolvedValueOnce({
+      message: "Merged",
+      headBranch: "feature/x",
+      lakebaseBranchDeleted: true,
+      mergeCommitSha: MERGE_SHA,
+      warnings: [],
+    });
+    // mergedAt reads 12:00:30 (30s of local cleanup skew); the real run was
+    // created at 12:00:05, BEFORE mergedAt, so the old timestamp predicate
+    // would have rejected it.
+    let tick = Date.parse("2026-06-03T12:00:30Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 100;
+      return out;
+    };
+    const fetchRuns = vi.fn().mockResolvedValue([
+      makeRun("completed", "success", "2026-06-03T12:00:05Z", { headSha: MERGE_SHA }),
+    ]);
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      fetchRuns,
+      sleep: () => Promise.resolve(),
+      now: clock,
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+    });
+    expect(result.migrate?.conclusion).toBe("success");
+    expect(result.state.migrate_run_url).toContain("/actions/runs/9999");
+    expect(result.state.migrate_completed_at).toBeDefined();
+  });
+
+  it("does NOT match a run whose headSha differs from the merge commit (even if it is newer)", async () => {
+    seedCiGreen();
+    mockMergePaired.mockResolvedValueOnce({
+      message: "Merged",
+      headBranch: "feature/x",
+      lakebaseBranchDeleted: true,
+      mergeCommitSha: MERGE_SHA,
+      warnings: [],
+    });
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 30_000; // burn the budget quickly
+      return out;
+    };
+    const fetchRuns = vi.fn().mockResolvedValue([
+      makeRun("completed", "success", "2026-06-03T12:05:00Z", {
+        headSha: "0000000000000000000000000000000000000000",
+      }),
+    ]);
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        fetchRuns,
+        sleep: () => Promise.resolve(),
+        now: clock,
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-timeout" });
+  });
+
+  it("falls back to the timestamp window when the merge SHA is unavailable", async () => {
+    seedCiGreen();
+    // Default mock returns NO mergeCommitSha, so the timestamp predicate is used.
+    let tick = Date.parse("2026-06-03T12:00:00Z");
+    const clock = () => {
+      const out = new Date(tick);
+      tick += 100;
+      return out;
+    };
+    // No headSha on the run either; timestamp match (createdAt >= mergedAt-5s) wins.
+    const fetchRuns = vi.fn().mockResolvedValue([
+      makeRun("completed", "success", "2026-06-03T12:00:05Z"),
+    ]);
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      fetchRuns,
+      sleep: () => Promise.resolve(),
+      now: clock,
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+    });
+    expect(result.migrate?.conclusion).toBe("success");
   });
 });
