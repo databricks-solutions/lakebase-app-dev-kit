@@ -18,7 +18,7 @@
 // drift , the bug that stalled the live smoke (the Navigator hand-wrote a
 // cycle with `status:"red"` instead of the `red_at` the probe reads).
 
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, rmSync } from "fs";
 import { sftddEnv } from "./sftdd-env.js";
 import { join, dirname } from "path";
 import {
@@ -254,6 +254,49 @@ export function pendingItemKind(
   story: string,
 ): "behavior" | "fitness" | "client" | undefined {
   return storyTestProgress(sftddDir, featureId, story).pending[0]?.kind;
+}
+
+/**
+ * Reset a story's BUILD state so a revised story genuinely re-drives instead of
+ * re-deploying its stale GREENs. `storyTestProgress` derives "pending" from the
+ * cycle records on disk (a test with a cycle is not pending), so a revise that
+ * only flips the pipeline status to "designing" leaves every test still
+ * "covered" , the build lane sees allGreen, does nothing, and the drive goes
+ * straight back to deploy with the same code. Removing the story's cycle
+ * artifacts makes all its test-list items pending again; the test-list item
+ * statuses are also flipped back to "pending" so the recorded state is honest.
+ * Idempotent + tolerant of missing files. Returns what it cleared.
+ */
+export function resetStoryBuildState(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+): { cyclesCleared: boolean; testItemsReset: number } {
+  const cyclesDir = join(cyclesRootDir(sftddDir), featureId, story);
+  let cyclesCleared = false;
+  if (existsSync(cyclesDir)) {
+    rmSync(cyclesDir, { recursive: true, force: true });
+    cyclesCleared = true;
+  }
+  let testItemsReset = 0;
+  const tlPath = storyTestListJson(sftddDir, featureId, story);
+  if (existsSync(tlPath)) {
+    try {
+      const tl = JSON.parse(readFileSync(tlPath, "utf8")) as {
+        items?: Array<{ status?: string }>;
+      };
+      for (const item of tl.items ?? []) {
+        if (item.status && item.status !== "pending") {
+          item.status = "pending";
+          testItemsReset++;
+        }
+      }
+      writeFileSync(tlPath, JSON.stringify(tl, null, 2) + "\n");
+    } catch {
+      /* a malformed test-list must never block the reset */
+    }
+  }
+  return { cyclesCleared, testItemsReset };
 }
 
 export interface CycleRecordArgs {

@@ -36,7 +36,7 @@ import {
   reviseStory,
 } from "./story-pipeline";
 import { mergePaired } from "../lakebase/paired-branch";
-import { commitExperimentCode } from "./cycle-record";
+import { commitExperimentCode, resetStoryBuildState } from "./cycle-record";
 import { applySchemaMigrations } from "../lakebase/schema-migrate";
 import { parseExperimentArgs, validateExperimentArgs } from "./experiment-args";
 import { emitAgentLogEvent } from "./agent-log";
@@ -158,6 +158,11 @@ async function main(): Promise<number> {
       const reason = args.reason as string;
       if (args.revise) {
         reviseStory(p, story, { approver, at, reason });
+        // reviseStory only flips the pipeline status to "designing"; the build
+        // lane derives "pending" from the cycle records on disk, so without also
+        // clearing them the revised story reads as allGreen and re-deploys its
+        // stale build. Reset the build state so it genuinely re-drives.
+        resetStoryBuildState(sftddDir, feature, story);
       } else {
         discardStory(p, story, { approver, at, reason });
       }

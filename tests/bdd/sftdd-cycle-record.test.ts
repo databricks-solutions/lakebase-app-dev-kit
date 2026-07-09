@@ -24,6 +24,7 @@ import {
   reviewStory,
   refactorStory,
   storyReviewState,
+  resetStoryBuildState,
   type GreenVerifier,
 } from "../../scripts/sftdd/cycle-record.js";
 import { readAgentLog } from "../../scripts/sftdd/agent-log.js";
@@ -104,6 +105,36 @@ describe("cycle-record: orchestration stamps RED/GREEN the probe can read", asyn
     // markGreen's runner contract was satisfied: an outcome was recorded.
     const outcomes = JSON.parse(readFileSync(join(tdd, "experiments", F, S, "exp1", "outcomes.json"), "utf8"));
     expect(outcomes.by_tag).toBeTruthy();
+  });
+
+  it("resetStoryBuildState clears cycles + resets test-list statuses so a revised story re-drives", async () => {
+    // Drive both tests GREEN so the story reads allGreen (the pre-revise state
+    // that made a revised story re-deploy its stale build instead of rebuilding).
+    await beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
+    beginNextPendingCycle({ sftddDir: tdd, featureId: F, story: S });
+    await greenOpenCycle({ sftddDir: tdd, featureId: F, story: S, verify: pass });
+    expect(storyTestProgress(tdd, F, S).allGreen).toBe(true);
+    // Mirror a really-built story: per-story test-list statuses are green too.
+    const tlPath = join(tdd, "features", F, "stories", S, "test-list-per-story.json");
+    const tl = JSON.parse(readFileSync(tlPath, "utf8")) as { items: Array<{ status: string }> };
+    tl.items.forEach((i) => (i.status = "green"));
+    writeFileSync(tlPath, JSON.stringify(tl, null, 2) + "\n");
+
+    const r = resetStoryBuildState(tdd, F, S);
+    expect(r.cyclesCleared).toBe(true);
+    expect(r.testItemsReset).toBe(2);
+    // Cycles gone -> every test-list item is pending again, story is NOT allGreen,
+    // so the build lane re-drives RED/GREEN instead of skipping to deploy.
+    const prog = storyTestProgress(tdd, F, S);
+    expect(prog.pending.map((i) => i.id)).toEqual(["T1", "T2"]);
+    expect(prog.allGreen).toBe(false);
+    expect(cyclesFor("AC1")).toEqual([]);
+    // Recorded state is honest again.
+    const after = JSON.parse(readFileSync(tlPath, "utf8")) as { items: Array<{ status: string }> };
+    expect(after.items.every((i) => i.status === "pending")).toBe(true);
+    // Idempotent: a second call is a clean no-op.
+    expect(resetStoryBuildState(tdd, F, S)).toEqual({ cyclesCleared: false, testItemsReset: 0 });
   });
 
   it("sequences one test at a time: begin -> green -> begin advances to the next pending", async () => {
