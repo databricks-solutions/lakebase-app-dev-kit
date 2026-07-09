@@ -30,14 +30,32 @@ fi
 
 # Detect project language
 if [ -f "$REPO_ROOT/pom.xml" ]; then
-  # Java / Maven / Flyway – export SPRING_DATASOURCE_* for Maven/Spring
+  # Java / Maven / Flyway. No token is stored in .env; mint a FRESH short-lived
+  # Lakebase credential for this migration run from the connection metadata via
+  # the kit's get-connection seam, then derive SPRING_DATASOURCE_* from it.
+  if [ -z "${SPRING_DATASOURCE_PASSWORD:-}" ] && [ -x "$SCRIPT_DIR/lk" ] \
+      && [ -n "${LAKEBASE_PROJECT_ID:-}" ] && [ -n "${LAKEBASE_BRANCH_ID:-}" ]; then
+    _DSN="$("$SCRIPT_DIR/lk" lakebase-get-connection --output dsn \
+      --instance "$LAKEBASE_PROJECT_ID" --branch "$LAKEBASE_BRANCH_ID" 2>/dev/null || true)"
+    if [ -n "$_DSN" ]; then
+      # postgresql://<encoded-user>:<token>@<host:port/db?...>
+      _noproto="${_DSN#postgresql://}"
+      _creds="${_noproto%%@*}"
+      _hostpart="${_noproto#*@}"
+      SPRING_DATASOURCE_URL="jdbc:postgresql://${_hostpart}"
+      SPRING_DATASOURCE_USERNAME="${DB_USERNAME:-${_creds%%:*}}"
+      SPRING_DATASOURCE_PASSWORD="${_creds#*:}"
+    fi
+  fi
+  # Fall back to an explicit DATABASE_URL override (a CI secret) if still unset.
   if [ -z "${SPRING_DATASOURCE_URL:-}" ] && [ -n "${DATABASE_URL:-}" ]; then
     SPRING_DATASOURCE_URL="jdbc:$(echo "$DATABASE_URL" | sed 's|^postgresql://[^@]*@|postgresql://|')"
     SPRING_DATASOURCE_USERNAME="${DB_USERNAME:-}"
-    SPRING_DATASOURCE_PASSWORD="${DB_PASSWORD:-}"
+    _np="${DATABASE_URL#postgresql://}"; _cr="${_np%%@*}"
+    SPRING_DATASOURCE_PASSWORD="${_cr#*:}"
   fi
-  if [ -z "${SPRING_DATASOURCE_URL:-}" ]; then
-    echo "DATABASE_URL (or SPRING_DATASOURCE_URL) not set in .env."
+  if [ -z "${SPRING_DATASOURCE_URL:-}" ] || [ -z "${SPRING_DATASOURCE_PASSWORD:-}" ]; then
+    echo "Could not resolve a Lakebase credential for Flyway (need LAKEBASE_PROJECT_ID + LAKEBASE_BRANCH_ID + the kit's lk resolver, or an explicit DATABASE_URL)." >&2
     exit 1
   fi
   export SPRING_DATASOURCE_URL SPRING_DATASOURCE_USERNAME SPRING_DATASOURCE_PASSWORD
