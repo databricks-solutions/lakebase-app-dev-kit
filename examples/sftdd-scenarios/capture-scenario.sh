@@ -292,7 +292,15 @@ if [[ ${#SPRINT_NAMES[@]} -gt 0 ]]; then
     done
     export LAKEBASE_SFTDD_SPRINT_REQUESTS="$reqs"
     echo "[capture-scenario] recording ${SCENARIO} SPRINT '${sname}' (backlog: ${sfeats[*]}) into ${SCEN}" >&2
-    lk lakebase-sftdd-drive --sprint "$sname" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}
+    # Honor the drive's exit code: a raise-to-HIL (or any failure) exits non-zero,
+    # and the sprint's feature is still claimed. Advancing to the NEXT sprint would
+    # then trip `already-claimed-other` on the open feature. Stop the capture here
+    # so the human resolves the escalation and re-runs (the drive is resumable).
+    if ! lk lakebase-sftdd-drive --sprint "$sname" --project-dir "$PROJECT_DIR" --gates proxy ${pause_args[@]+"${pause_args[@]}"}; then
+      rc=$?
+      echo "[capture-scenario] sprint '${sname}' halted (drive exit ${rc}); stopping before later sprints." >&2
+      exit "$rc"
+    fi
   done
 else
   for FID in "${FEATURES[@]}"; do

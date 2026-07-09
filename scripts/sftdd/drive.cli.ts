@@ -54,6 +54,7 @@ import {
   syncBacklog,
   deriveSprintPlanningState,
   type SprintEffects,
+  type DriveStepResult,
 } from "./orchestrator-sprint.js";
 import { resolveModelForRole } from "./agent-models.js";
 import { resolveSftddSettings, applyProjectOverrides } from "./sftdd-config.js";
@@ -698,6 +699,15 @@ function pendingGateOf(r: RunDriverResult): WorkflowAction | undefined {
   return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : undefined;
 }
 
+/** Map a driver result to the sprint's DriveStepResult. Carries BOTH halt kinds:
+ *  a clean interactive pause (pendingGate) AND a raise-to-HIL (escalated), so the
+ *  sprint orchestrator stops on either instead of counting an escalated feature
+ *  "complete" and advancing (which then trips the next claim's already-claimed
+ *  guard). Mirrors the single-feature drive's escalated/pendingGate handling. */
+function stepResultOf(r: RunDriverResult): DriveStepResult {
+  return { pendingGate: pendingGateOf(r), escalated: r.escalated, escalation: r.escalation };
+}
+
 function reportGate(gate: WorkflowAction): void {
   // Reuse the shared action narration (DRY) instead of dumping raw JSON; the
   // full action is available under LAKEBASE_SFTDD_TRACE for debugging.
@@ -745,7 +755,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
         ...base,
         stopWhen: gatedStopWhen(base.stopWhen, interactive),
       });
-      return { pendingGate: pendingGateOf(r) };
+      return stepResultOf(r);
     },
     async readBacklog() {
       return backlogFeatureIds(readSprintBacklog(sftddDir, sprint));
@@ -782,7 +792,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(undefined, interactive),
       });
-      return { pendingGate: pendingGateOf(r) };
+      return stepResultOf(r);
     },
     onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}\n`),
   };
@@ -802,6 +812,22 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
 
   try {
     const result = await runSprint(effects);
+    if (result.escalated) {
+      // A step RAISED TO HIL: the sprint is NOT complete. Surface + halt (exit
+      // non-zero) exactly like the single-feature drive, so the capture harness
+      // stops instead of advancing to the next sprint (whose claim would trip
+      // `already-claimed-other` on the still-open feature). Resumable after the
+      // human resolves the escalation recorded under <sftddDir>/escalations/.
+      const e = result.escalation;
+      const on = result.pendingFeature ? ` on ${result.pendingFeature}` : "";
+      process.stderr.write(
+        `[sprint] RAISED TO HIL${on} , halting sprint ${sprint}.\n` +
+          (e?.source ? `        source: ${e.source}\n` : "") +
+          (e?.reason ? `        reason: ${e.reason}\n` : "") +
+          `        recorded under ${path.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.\n`,
+      );
+      return 3;
+    }
     if (result.pendingGate) {
       if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}\n`);
       reportGate(result.pendingGate);

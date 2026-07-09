@@ -80,10 +80,19 @@ export function deriveSprintPlanningState(
 
 // --- The sprint orchestrator (pure over the effect seam) ---------------------
 
-/** A drive step's outcome: ran to its scope, or halted at a HITL gate awaiting
- *  the human (interactive mode). `pendingGate` set => the step did not finish. */
+/** A drive step's outcome: ran to its scope, or halted. Two halt kinds:
+ *  `pendingGate` set => paused at a HITL gate awaiting the human (interactive,
+ *  a clean pause); `escalated` set => a blocking problem was RAISED TO HIL
+ *  (surface + halt, a failure). Either one means the step did not finish, and
+ *  the sprint must stop rather than advance to the next feature/sprint (else a
+ *  later claim hits `already-claimed-other` on the still-open feature). */
 export interface DriveStepResult {
   pendingGate?: WorkflowAction;
+  /** A blocking problem was raised to the HIL (deploy-verify failed, blocking
+   *  smell, protocol violation). The feature is NOT done; halt the sprint. */
+  escalated?: boolean;
+  /** The raise-to-hil action that halted the step (its reason + source). */
+  escalation?: WorkflowAction & { kind: "raise-to-hil" };
 }
 
 export interface SprintEffects {
@@ -116,7 +125,12 @@ export interface RunSprintResult {
   features: string[];
   /** The HITL gate the run halted at (interactive mode), awaiting the human. */
   pendingGate?: WorkflowAction;
-  /** The feature whose gate the run halted at, if any. */
+  /** Set when the run halted because a step RAISED TO HIL (a blocking failure,
+   *  not a clean interactive pause). The caller exits non-zero. */
+  escalated?: boolean;
+  /** The raise-to-hil action that halted the run (its reason + source). */
+  escalation?: WorkflowAction & { kind: "raise-to-hil" };
+  /** The feature whose gate/escalation the run halted at, if any. */
   pendingFeature?: string;
 }
 
@@ -130,6 +144,7 @@ export interface RunSprintResult {
  */
 export async function runSprint(effects: SprintEffects): Promise<RunSprintResult> {
   const planning = await effects.drivePlanning();
+  if (planning.escalated) return { features: [], escalated: true, escalation: planning.escalation };
   if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
 
   // Planning authored the feature-requests on the LOCAL entry tier. Push them to
@@ -145,6 +160,13 @@ export async function runSprint(effects: SprintEffects): Promise<RunSprintResult
     effects.onFeature?.(featureId, i);
     await effects.claimFeature(featureId);
     const driven = await effects.driveFeature(featureId);
+    // A raise-to-HIL is a blocking halt: the feature is NOT done and its SCM
+    // claim is still open, so advancing to the next feature/sprint would hit
+    // `already-claimed-other`. Stop on the escalating feature (resumable after
+    // the human resolves it), exactly like a pending gate.
+    if (driven.escalated) {
+      return { features, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
+    }
     if (driven.pendingGate) {
       return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
     }

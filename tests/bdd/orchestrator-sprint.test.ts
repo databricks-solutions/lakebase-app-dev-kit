@@ -205,6 +205,45 @@ describe("runSprint (pure over SprintEffects)", () => {
     expect(calls).toEqual(["plan"]);
   });
 
+  it("halts (escalated) on the feature that RAISED TO HIL; never advances to the next", async () => {
+    // Regression: a deploy-verify failure raises to HIL. driveFeature must report
+    // escalated so the sprint STOPS on that feature. Before the fix it returned
+    // "complete" (pendingGate undefined) and advanced, and the next feature's
+    // claim tripped `already-claimed-other` on the still-open feature.
+    const calls: string[] = [];
+    const escalation = { kind: "raise-to-hil" as const, source: "deploy-verify", reason: "feature-verify FAILED" };
+    const result = await runSprint({
+      async drivePlanning() { return {}; },
+      async readBacklog() { return ["F1-a", "F2-b"]; },
+      async claimFeature(f) { calls.push(`claim:${f}`); },
+      async driveFeature(f) {
+        calls.push(`drive:${f}`);
+        return f === "F1-a" ? { escalated: true, escalation } : {};
+      },
+    });
+    expect(result.escalated).toBe(true);
+    expect(result.escalation).toEqual(escalation);
+    expect(result.pendingFeature).toBe("F1-a");
+    // Stops on F1-a's escalation; F2-b is never claimed or driven.
+    expect(calls).toEqual(["claim:F1-a", "drive:F1-a"]);
+  });
+
+  it("halts (escalated) when PLANNING raises to HIL, before any feature", async () => {
+    const calls: string[] = [];
+    const escalation = { kind: "raise-to-hil" as const, source: "planning", reason: "blocking smell" };
+    const result = await runSprint({
+      async drivePlanning() { calls.push("plan"); return { escalated: true, escalation }; },
+      async commitAndPushRequests() { calls.push("push-requests"); },
+      async readBacklog() { calls.push("backlog"); return ["F1-a"]; },
+      async claimFeature() { calls.push("claim"); },
+      async driveFeature() { calls.push("drive"); return {}; },
+    });
+    expect(result.escalated).toBe(true);
+    expect(result.features).toEqual([]);
+    // No push, no backlog, no feature work.
+    expect(calls).toEqual(["plan"]);
+  });
+
   it("interactive: halts on the feature whose gate is pending (resumable)", async () => {
     const calls: string[] = [];
     const gate = { kind: "accept" as const, story: "S1" };
