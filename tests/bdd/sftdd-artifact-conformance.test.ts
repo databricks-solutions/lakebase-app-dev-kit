@@ -229,13 +229,14 @@ describe("checkArtifactConformance: JSON artifacts (schema-validated)", () => {
     expect(checkArtifactConformance("architecture.json", badRole).ok).toBe(false);
   });
 
-  it("accepts a test-list item with kind behavior|fitness (+ invariant_id); rejects a bad kind", () => {
+  it("accepts a test-list item with kind behavior|fitness|client (+ invariant_id); rejects a bad kind", () => {
     const withKind = JSON.stringify({
       feature_id: "F1-initial-domain",
       items: [
         { id: "T1", description: "files a bug", ac_id: "AC1", status: "pending", kind: "behavior" },
         { id: "T2", description: "layering contract", ac_id: "AC1", status: "pending", kind: "fitness" },
         { id: "T3", description: "unique constraint realized against the branch DB", ac_id: "AC1", status: "pending", kind: "fitness", invariant_id: "PI1-sku-unique" },
+        { id: "T4", description: "the empty form renders its fields (client component)", ac_id: "AC1", status: "pending", kind: "client", scenario_file: "client/tests/pages/CreateForm.test.tsx" },
       ],
     });
     expect(checkArtifactConformance("test-list.json", withKind).ok).toBe(true);

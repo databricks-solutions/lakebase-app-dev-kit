@@ -135,6 +135,20 @@ describe("checkE2eGate", () => {
     expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
   });
 
+  it("accepts a Playwright config under client/ (React SPA e2e config)", () => {
+    // A React-SPA project ships its Playwright at client/playwright.config.ts,
+    // not the project root; an E2E AC on such a project must NOT trip
+    // e2e-without-playwright (the FEIP-7915 client test lane).
+    seedAc(sftddDir, "F1", "S1", "AC-E2E", "E2E");
+    const list: TestList = {
+      feature_id: "F1",
+      items: [{ id: "T1", description: "spa e2e test", ac_id: "AC-E2E", status: "pending" }],
+    };
+    fs.mkdirSync(path.join(projectDir, "client"), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, "client", "playwright.config.ts"), "export default {};\n");
+    expect(checkE2eGate({ sftddDir, featureId: "F1", list, projectDir })).toEqual([]);
+  });
+
   it("ignores ACs without a declared layer (brownfield safety)", () => {
     seedAc(sftddDir, "F1", "S1", "AC-bare");
     const list: TestList = {
