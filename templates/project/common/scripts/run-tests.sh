@@ -105,3 +105,18 @@ else
   echo "Could not detect project language. Expected pom.xml (Java), pyproject.toml/requirements.txt (Python), or package.json (Node.js)."
   exit 1
 fi
+
+# React SPA client unit tests (Vitest + Testing Library). Only on a full run
+# (no positional path arg, so a per-cycle backend-layer invocation does not drag
+# in the client suite), and only when a client/ workspace is present. The
+# client's e2e (Playwright) is owned by CI / the E2E block; this is the fast unit
+# lane. node_modules is installed by the post-checkout hook + CI; skip with a
+# note if it is missing so a bare checkout does not hard-fail here.
+if [ "$#" -eq 0 ] && [ -f "$REPO_ROOT/client/package.json" ]; then
+  if [ -d "$REPO_ROOT/client/node_modules" ]; then
+    echo "Running client unit tests (Vitest)..."
+    (cd "$REPO_ROOT/client" && npm test)
+  else
+    echo "client/node_modules missing - skipping client unit tests (run 'npm --prefix client install')."
+  fi
+fi
