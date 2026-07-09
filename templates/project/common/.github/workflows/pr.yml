@@ -102,6 +102,16 @@ jobs:
         working-directory: client
         run: npm run build --if-present
 
+      # Run the client's unit tests (Vitest + Testing Library, jsdom) when a
+      # client/ workspace is present. These need no database, so they run before
+      # the CI branch is provisioned and fail fast. `--if-present` no-ops a
+      # client with no `test` script. The client's Playwright E2E runs later
+      # (its own step, gated on client/playwright.config.ts).
+      - name: Run client unit tests
+        if: hashFiles('client/package.json') != ''
+        working-directory: client
+        run: npm run test --if-present
+
       # The official action installs to a user-writable path (no sudo). It's
       # a no-op if a compatible databricks CLI is already on PATH.
       - name: Install Databricks CLI

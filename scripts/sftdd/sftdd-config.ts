@@ -54,7 +54,12 @@ export interface SftddConfigFile {
     sessionScope?: "story" | "cycle";
   };
   plan?: { sizing?: boolean };
-  project?: { uiTrack?: boolean; gates?: "interactive" | "proxy"; deployTarget?: string };
+  project?: {
+    uiTrack?: boolean;
+    gates?: "interactive" | "proxy";
+    deployTarget?: string;
+    clientFramework?: "react" | "none";
+  };
 }
 
 /** The fully-resolved settings the driver runs with (file -> code default). */
@@ -72,7 +77,12 @@ export interface ResolvedSettings {
   effortFor(role: string, turn?: BuildTurn): EffortLevel;
   build: { loopGranularity: "story" | "ac" | "hybrid-a"; batchCap?: number; sessionScope: "story" | "cycle" };
   plan: { sizing: boolean };
-  project: { uiTrack: boolean; gates: "interactive" | "proxy"; deployTarget: string };
+  project: {
+    uiTrack: boolean;
+    gates: "interactive" | "proxy";
+    deployTarget: string;
+    clientFramework: "react" | "none";
+  };
 }
 
 /** Read `.lakebase/sftdd-config.json` (canonical), falling back to the legacy
@@ -156,6 +166,7 @@ export function resolveSftddSettings(inputs: ResolveInputs): ResolvedSettings {
     uiTrack: file?.project?.uiTrack ?? false,
     gates: (file?.project?.gates ?? "proxy") as "interactive" | "proxy",
     deployTarget: file?.project?.deployTarget ?? "local",
+    clientFramework: (file?.project?.clientFramework ?? "none") as "react" | "none",
   };
 
   const plan = { sizing: file?.plan?.sizing ?? true };
@@ -187,7 +198,7 @@ export function defaultSftddConfig(): SftddConfigFile {
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { uiTrack: false, gates: "proxy", deployTarget: "local" },
+    project: { uiTrack: false, gates: "proxy", deployTarget: "local", clientFramework: "none" },
   };
 }
 

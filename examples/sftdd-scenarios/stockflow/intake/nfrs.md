@@ -31,6 +31,16 @@ StockFlow's requirements, not the substrate's.
 - R4: integration tests run against the paired Lakebase branch, not a
   mock or in-memory substitute. The CI workflow refuses to merge a PR
   whose integration tests do not run against a real branch.
+- R5: the UI is a single-page web application. The warehouse-floor
+  tablet loads the app once and navigates client-side (home, SKU
+  detail, the receipt / pick / adjustment forms) with no full-page
+  reloads; a stock adjustment updates the affected row in place
+  (optimistic update, reconciled against the server response) rather
+  than re-rendering the page. The client is a React + TypeScript
+  application under `client/`, and the backend is a JSON API (the
+  boundary layer returns data, not server-rendered HTML). The client
+  ships its own component tests; the API is covered by the branch
+  integration tests in R4.
 
 ## Preferences
 
