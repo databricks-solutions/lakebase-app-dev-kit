@@ -134,6 +134,15 @@ export function detectWorkflowDrift(
     ? fs.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml"))
     : [];
 
+  // Substitute {{LAKEBASE_KIT_VERSION}} in the template BEFORE comparing, the
+  // same substitution updateWorkflows() writes and detectCommandDrift() applies.
+  // A correctly-scaffolded project carries the version pin (placeholder already
+  // resolved), so diffing against the RAW template would report permanent,
+  // spurious drift on every version-pinned file. Comparing against the
+  // substituted template makes detect consistent with update: drift iff a
+  // refresh would actually change the file.
+  const version = readKitVersion(kitWorkflowsDir);
+
   const seen = new Set<string>();
   const files: WorkflowFileStatus[] = [];
 
@@ -146,7 +155,7 @@ export function detectWorkflowDrift(
       continue;
     }
     const projectContent = fs.readFileSync(projectPath, "utf8");
-    const templateContent = fs.readFileSync(templatePath, "utf8");
+    const templateContent = applyPlaceholders(fs.readFileSync(templatePath, "utf8"), version);
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {

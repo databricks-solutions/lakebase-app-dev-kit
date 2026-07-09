@@ -12,7 +12,7 @@ A short-lived `postgresql://` URL for language-agnostic callers (Flyway, Alembic
 
 ```bash
 lakebase-get-connection --output dsn --instance <project-id> --branch <branch-id>
-# -> postgresql://user%40databricks.com:eyJ...@host:5432/databricks_postgres?sslmode=require
+# -> postgresql://user%40databricks.com:<jwt-token>@host:5432/databricks_postgres?sslmode=require
 
 # Pipe straight into psql:
 psql "$(lakebase-get-connection --output dsn --instance proj-abc --branch br-feature)"
