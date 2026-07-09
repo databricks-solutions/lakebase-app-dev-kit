@@ -107,4 +107,23 @@ describe("deployClientProject", () => {
     expect(vite).toContain("VITE_PROXY_TARGET");
     expect(vite).toContain("/api");
   });
+
+  it("Playwright config takes its ports from env with defaults, so CI can hand it FREE ports", () => {
+    // Resiliency: in CI (reuseExistingServer:false) a stale server on the default
+    // port would make webServer hard-fail. The config reads E2E_BACKEND_PORT /
+    // E2E_CLIENT_PORT (CI allocates free ones via port-utils.sh) and defaults to
+    // the conventional 8000/5173 locally. The backend port must flow into the
+    // uvicorn command, the /health poll URL, AND the Vite proxy target.
+    const target = mkTarget();
+    deployClientProject(target, "demoapp", { templatesDir: TEMPLATES });
+    const cfg = read(target, "client/playwright.config.ts");
+    expect(cfg).toMatch(/E2E_BACKEND_PORT/);
+    expect(cfg).toMatch(/E2E_CLIENT_PORT/);
+    expect(cfg).toMatch(/\?\?\s*"8000"/);
+    expect(cfg).toMatch(/\?\?\s*"5173"/);
+    // The uvicorn webServer command binds the resolved backend port, not a literal.
+    expect(cfg).toMatch(/uvicorn app\.main:app --port \$\{BACKEND_PORT\}/);
+    // The Vite dev proxy is pointed at the resolved backend so /api still reaches it.
+    expect(cfg).toMatch(/VITE_PROXY_TARGET:\s*BACKEND_URL/);
+  });
 });

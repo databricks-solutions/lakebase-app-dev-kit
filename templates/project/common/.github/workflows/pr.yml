@@ -371,6 +371,31 @@ jobs:
       # `ECONNREFUSED` on every /api/* call. See
       # templates/project/common/client-reference/playwright.config.ts for
       # a full-stack reference.
+      # Resiliency: a self-hosted runner can leave a stale uvicorn/vite from a
+      # prior run holding :8000 / :5173, which makes the client Playwright
+      # webServer (reuseExistingServer:false in CI) hard-fail with
+      # "http://localhost:8000/health is already used". Mirror run-dev.sh's port
+      # safeguard: probe upward for FREE ports (scripts/port-utils.sh) and hand
+      # them to the config via E2E_BACKEND_PORT / E2E_CLIENT_PORT (multi-tenant
+      # safe , we MOVE off a busy port, never kill it). $GITHUB_ENV propagates
+      # them to the Playwright step below. A retrofit project without the shared
+      # helper falls back to the conventional defaults.
+      - name: Allocate free E2E ports
+        if: hashFiles('client/playwright.config.ts', 'client/playwright.config.js', 'client/playwright.config.mjs') != ''
+        run: |
+          if [ -f scripts/port-utils.sh ]; then
+            # shellcheck source=/dev/null
+            source scripts/port-utils.sh
+            BACKEND_PORT="$(free_port 8000)"
+            CLIENT_PORT="$(free_port 5173)"
+          else
+            BACKEND_PORT=8000
+            CLIENT_PORT=5173
+          fi
+          echo "E2E_BACKEND_PORT=$BACKEND_PORT" >> $GITHUB_ENV
+          echo "E2E_CLIENT_PORT=$CLIENT_PORT" >> $GITHUB_ENV
+          echo "E2E ports: backend=$BACKEND_PORT client=$CLIENT_PORT"
+
       - name: Install Playwright browsers
         if: hashFiles('client/playwright.config.ts', 'client/playwright.config.js', 'client/playwright.config.mjs') != ''
         working-directory: client

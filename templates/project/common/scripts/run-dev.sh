@@ -63,33 +63,33 @@ fi
 
 HOST="${HOST:-127.0.0.1}"
 
-# Is something LISTENING on this TCP port? Prefer lsof: it sees BOTH IPv4 and
-# IPv6 listeners. The old /dev/tcp/127.0.0.1 probe missed IPv6-only listeners
-# (Vite binds ::1), so it reported a busy port as free, then Vite died on
-# --strictPort with "Port already in use". Fall back to /dev/tcp where lsof is
-# absent.
-port_in_use() {
-  local p="$1"
-  if command -v lsof >/dev/null 2>&1; then
-    lsof -iTCP:"$p" -sTCP:LISTEN -n -P >/dev/null 2>&1
-  else
-    (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
-  fi
-}
-
-# Pick a free TCP port, probing upward from the requested one, so run-dev does
-# NOT collide with a deploy server (the deploy target also uses 8000), a stale
-# dev server, or another listener already on the port. PORT pins the start.
-free_port() {
-  local p="$1" tries=0
-  while [ "$tries" -lt 20 ]; do
-    if ! port_in_use "$p"; then
-      printf '%s' "$p"; return 0
+# port_in_use + free_port live in the shared scripts/port-utils.sh so run-dev
+# (local serve) and CI's E2E free-port allocation can't drift. free_port probes
+# upward from the requested port, so run-dev does NOT collide with a deploy
+# server (the deploy target also uses 8000), a stale dev server, or another
+# listener already on the port. PORT pins the start. Fall back to inline stubs
+# if a retrofit project predates the shared helper.
+if [ -f "$SCRIPT_DIR/port-utils.sh" ]; then
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/port-utils.sh"
+else
+  port_in_use() {
+    local p="$1"
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -iTCP:"$p" -sTCP:LISTEN -n -P >/dev/null 2>&1
+    else
+      (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
     fi
-    p=$((p + 1)); tries=$((tries + 1))
-  done
-  printf '%s' "$1"
-}
+  }
+  free_port() {
+    local p="$1" tries=0
+    while [ "$tries" -lt 20 ]; do
+      if ! port_in_use "$p"; then printf '%s' "$p"; return 0; fi
+      p=$((p + 1)); tries=$((tries + 1))
+    done
+    printf '%s' "$1"
+  }
+fi
 
 # Resolve the listen port from the per-language default (or PORT), then bump off
 # any busy port. Announce the bump so the URL printed below is the real one.

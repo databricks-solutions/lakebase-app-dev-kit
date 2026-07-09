@@ -323,7 +323,14 @@ export async function createProject(
   // ── Step 5c: Playwright E2E wire-up (phase 2) ────────
   if (enableE2e) {
     report("Wiring Playwright E2E support...");
-    const e2e = enableE2eForProject({ projectDir, language });
+    // A React SPA client owns the e2e lane (client/ Playwright); tell the seam
+    // so it does not ALSO scaffold the backend's server-rendered e2e harness
+    // (which would collide on the backend port in CI).
+    const e2e = enableE2eForProject({
+      projectDir,
+      language,
+      clientOwnsE2e: clientFramework !== "none",
+    });
     if (e2e.templatesWritten.length > 0) {
       report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
     }

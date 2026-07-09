@@ -57,6 +57,27 @@ describe("scaffold output contract: run-dev.sh", () => {
   });
 });
 
+describe("scaffold output contract: port-utils.sh (shared port safeguard)", () => {
+  it("defines port_in_use + free_port ONCE so run-dev + CI can't drift", () => {
+    // The port safeguard (don't hard-fail on a busy port , probe upward for a
+    // free one) lives in one sourced helper. run-dev.sh serves locally and CI's
+    // E2E step allocates free ports; both must use the SAME probe or they drift.
+    const sh = readTemplate("common/scripts/port-utils.sh");
+    expect(sh).toMatch(/port_in_use\(\)/);
+    expect(sh).toMatch(/free_port\(\)/);
+    // lsof-first (sees IPv6 listeners Vite binds) with a /dev/tcp fallback.
+    expect(sh).toMatch(/lsof -iTCP/);
+    expect(sh).toMatch(/\/dev\/tcp/);
+  });
+
+  it("run-dev.sh SOURCES the shared helper (no duplicated port logic)", () => {
+    const sh = readTemplate("common/scripts/run-dev.sh");
+    expect(sh).toMatch(/source "\$SCRIPT_DIR\/port-utils\.sh"/);
+    // run-dev still uses free_port to move off a busy backend/client port.
+    expect(sh).toMatch(/free_port/);
+  });
+});
+
 describe("scaffold output contract: run-tests.sh client lane", () => {
   it("runs the client Vitest suite on a full run, installing deps if missing, never silently skipping", () => {
     // The honest-GREEN verify + the deploy gate both run run-tests.sh. If the

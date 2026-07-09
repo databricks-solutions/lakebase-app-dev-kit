@@ -264,6 +264,15 @@ export interface EnableE2eForProjectArgs {
    *  When omitted, falls back to package.json (Node) / pyproject.toml (Python)
    *  detection so retrofits work without it. */
   language?: string;
+  /** The project scaffolds a React SPA under `client/`, whose own Playwright
+   *  suite (client/tests/e2e, client/playwright.config.ts) IS the end-to-end
+   *  lane. When true, this seam must NOT also scaffold the backend's
+   *  server-rendered e2e harness (the Node root playwright.config or the Python
+   *  `tests/e2e` live_server): two e2e harnesses booting the same backend port
+   *  collide in CI (reuseExistingServer=false → "port already used"), and the
+   *  client suite already covers the browser loop. Backend BDD (pytest-bdd) is
+   *  unaffected. */
+  clientOwnsE2e?: boolean;
 }
 
 export interface EnableE2eForProjectResult {
@@ -288,6 +297,29 @@ export interface EnableE2eForProjectResult {
 export function enableE2eForProject(
   args: EnableE2eForProjectArgs
 ): EnableE2eForProjectResult {
+  // React SPA: the client/ Playwright suite is the SOLE e2e (it drives the
+  // rendered SPA against the backend). Do NOT also scaffold the backend's
+  // server-rendered e2e harness , two e2e lanes on one backend port collide in
+  // CI (reuseExistingServer=false), and the client suite already covers the
+  // browser loop. Keep the backend's pytest-bdd (Python) for its BDD surface;
+  // no root playwright.config, no Python tests/e2e conftest, no run-tests e2e
+  // block. Short-circuits before the language branches so it holds for a Node
+  // backend + React client too.
+  if (args.clientOwnsE2e) {
+    const isPython =
+      args.language === "python" ||
+      fs.existsSync(path.join(args.projectDir, "pyproject.toml"));
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
+    return {
+      templatesWritten: [],
+      templatesSkipped: [
+        ...new Set([...PLAYWRIGHT_TEMPLATE_FILES, ...PYTHON_E2E_TEMPLATE_FILES]),
+      ],
+      packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      pyproject: { patched: false, depAdded: false },
+      runTestsScript: { patched: false, inserted: false },
+    };
+  }
   // Guard: only ship playwright templates when the npm side can be wired
   // (i.e. a root package.json exists). Python / Java / non-Node project
   // shapes had previously written playwright.config.ts unconditionally;

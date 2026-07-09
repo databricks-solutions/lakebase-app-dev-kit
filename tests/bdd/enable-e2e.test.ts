@@ -308,6 +308,56 @@ describe("enableE2eForProject orchestrator", () => {
     expect(second.packageJson.depAdded).toBe(false);
     expect(second.runTestsScript.inserted).toBe(false);
   });
+
+  it("React SPA (clientOwnsE2e): the client/ Playwright suite is the SOLE e2e , no backend e2e harness", () => {
+    // A React SPA owns the browser loop in client/ (client/playwright.config.ts +
+    // client/tests/e2e). Scaffolding the backend's server-rendered e2e too would
+    // put a SECOND Playwright/webServer on the same backend port, which collides
+    // in CI (reuseExistingServer=false → "port already used"). So for a Python
+    // SPA: NO tests/e2e/conftest.py, NO pytest-playwright, NO run-tests e2e block.
+    // Backend BDD (pytest-bdd) is still wired , it is orthogonal to e2e.
+    fs.writeFileSync(
+      path.join(projectDir, "pyproject.toml"),
+      '[project]\nname = "x"\n\n[project.optional-dependencies]\ndev = [\n    "pytest>=8.0.0",\n]\n',
+    );
+    seedRunTestsScript(projectDir);
+    const result = enableE2eForProject({
+      projectDir,
+      language: "python",
+      clientOwnsE2e: true,
+      templatesDir: REPO_TEMPLATES,
+    });
+    expect(result.templatesWritten).toEqual([]);
+    // The Python live_server conftest must NOT ship , the client suite owns e2e.
+    expect(fs.existsSync(path.join(projectDir, "tests", "e2e", "conftest.py"))).toBe(false);
+    // No pytest-playwright (no Python e2e to run it), and run-tests.sh untouched
+    // (its client Vitest block is in the base scaffold; the e2e block is skipped).
+    expect(result.pyproject).toEqual({ patched: false, depAdded: false });
+    expect(result.runTestsScript).toEqual({ patched: false, inserted: false });
+    const pyproject = fs.readFileSync(path.join(projectDir, "pyproject.toml"), "utf8");
+    expect(pyproject).not.toMatch(/pytest-playwright/);
+    // Backend BDD is unaffected: pytest-bdd is still declared.
+    expect(pyproject).toMatch(/pytest-bdd/);
+  });
+
+  it("React SPA on a Node backend (clientOwnsE2e): no root playwright.config either", () => {
+    // clientOwnsE2e short-circuits BEFORE the language branch, so a Node backend
+    // + React client does not get the ROOT Node playwright.config/smoke spec that
+    // a plain Node project would , the client/ suite is the only e2e.
+    seedNodeProject(projectDir);
+    seedRunTestsScript(projectDir);
+    const result = enableE2eForProject({
+      projectDir,
+      language: "nodejs",
+      clientOwnsE2e: true,
+      templatesDir: REPO_TEMPLATES,
+    });
+    expect(result.templatesWritten).toEqual([]);
+    expect(result.packageJson).toEqual({ patched: false, scriptAdded: false, depAdded: false });
+    for (const rel of NODE_E2E_TEMPLATE_FILES) {
+      expect(fs.existsSync(path.join(projectDir, rel))).toBe(false);
+    }
+  });
 });
 
 describe("pr.yml template: project-root E2E step", () => {
@@ -326,6 +376,24 @@ describe("pr.yml template: project-root E2E step", () => {
     expect(yml).toMatch(/BASE_URL:\s*\$\{\{\s*env\.LAKEBASE_APP_ENDPOINT\s*\}\}/);
     // FEIP marker is present so a sloppy revert is easy to flag.
     expect(yml).toMatch(/Phase 2/);
+  });
+
+  it("allocates FREE E2E ports before the client Playwright step (run-dev.sh port safeguard)", () => {
+    const yml = fs.readFileSync(
+      path.join(REPO_TEMPLATES, "common", ".github", "workflows", "pr.yml"),
+      "utf8"
+    );
+    // A stale server on 8000/5173 from a prior self-hosted run would make the
+    // client Playwright webServer (reuseExistingServer:false) hard-fail. The
+    // preflight sources the shared helper, probes upward for free ports, and
+    // exports them so the config moves off a busy port instead of colliding.
+    expect(yml).toMatch(/Allocate free E2E ports/);
+    expect(yml).toMatch(/source scripts\/port-utils\.sh/);
+    expect(yml).toMatch(/E2E_BACKEND_PORT=/);
+    expect(yml).toMatch(/E2E_CLIENT_PORT=/);
+    // Gated on the client Playwright config exactly like the E2E steps it feeds.
+    expect(yml).toMatch(/free_port 8000/);
+    expect(yml).toMatch(/free_port 5173/);
   });
 });
 
