@@ -56,6 +56,20 @@ function deployCommand(projectDir: string, name: string, pinnedVersion?: string)
   fs.writeFileSync(dst, content);
 }
 
+// A real scaffold resolves {{LAKEBASE_KIT_VERSION}} in the workflow templates as
+// it writes them; the fixture must do the same so the umbrella's workflow
+// surface reads "unchanged" (detect substitutes before comparing).
+function deployWorkflow(projectDir: string, name: string): void {
+  const src = path.join(
+    REPO_ROOT, "templates", "project", "common", ".github", "workflows", name
+  );
+  const dst = path.join(projectDir, ".github", "workflows", name);
+  const content = fs
+    .readFileSync(src, "utf8")
+    .replace(/\{\{LAKEBASE_KIT_VERSION\}\}/g, kitVersion());
+  fs.writeFileSync(dst, content);
+}
+
 describe("detectCommandDrift", () => {
   it("reports overall=ok when plan.md, design.md, build.md, and deploy.md match the kit", () => {
     const dir = mkProject();
@@ -193,9 +207,7 @@ describe("detectScaffoldedDrift umbrella", () => {
     deployCommand(dir, "deploy.md");
     deployCommand(dir, "spike.md");
     for (const name of ["pr.yml", "merge.yml", "cleanup-orphans.yml"]) {
-      const src = path.join(REPO_ROOT, "templates", "project", "common", ".github", "workflows", name);
-      const dst = path.join(dir, ".github", "workflows", name);
-      fs.copyFileSync(src, dst);
+      deployWorkflow(dir, name);
     }
     const report = detectScaffoldedDrift({ projectDir: dir });
     expect(report.overall).toBe("ok");
@@ -208,9 +220,7 @@ describe("detectScaffoldedDrift umbrella", () => {
     deployCommand(dir, "build.md");
     fs.writeFileSync(path.join(dir, ".claude", "commands", "design.md"), "# customized\n");
     for (const name of ["pr.yml", "merge.yml", "cleanup-orphans.yml"]) {
-      const src = path.join(REPO_ROOT, "templates", "project", "common", ".github", "workflows", name);
-      const dst = path.join(dir, ".github", "workflows", name);
-      fs.copyFileSync(src, dst);
+      deployWorkflow(dir, name);
     }
     const report = detectScaffoldedDrift({ projectDir: dir });
     expect(report.overall).toBe("drift");

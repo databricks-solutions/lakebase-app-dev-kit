@@ -201,15 +201,27 @@ describe("updateWorkflows – synthetic kit fixture", () => {
 });
 
 describe("updateWorkflows + detectWorkflowDrift integration", () => {
-  it("after a raw refresh (substitute=false) the project reads back as overall=ok against the same kit", () => {
-    // detectWorkflowDrift does a byte-equality comparison
-    // against the raw template content. When updateWorkflows substitutes
-    // {{LAKEBASE_KIT_VERSION}}, the post-refresh project differs from
-    // the template by exactly those substituted lines (a known
-    // limitation of the drift detector; tracked as a separate FEIP).
-    // To exercise the real-template round-trip we disable substitution
-    // here; substitution semantics are covered in the synthetic-kit
-    // suite above.
+  it("after a real refresh (substitution on) the project reads back as overall=ok against the same kit", () => {
+    // Round-trip: updateWorkflows substitutes {{LAKEBASE_KIT_VERSION}} as it
+    // writes (the real default), and detectWorkflowDrift substitutes the same
+    // placeholder before comparing. So a freshly-refreshed project reads back
+    // as unchanged. (Previously the detector compared against the RAW template
+    // and reported spurious drift on every version-pinned file; this exercises
+    // the fix.)
+    const project = mkProject();
+    const result = updateWorkflows({
+      projectDir: project,
+      kitDir: REPO_ROOT,
+    });
+    expect(result.changed).toBe(true);
+    const drift = detectWorkflowDrift({ projectDir: project, kitDir: REPO_ROOT });
+    expect(drift.overall).toBe("ok");
+  });
+
+  it("a raw refresh (substitute=false) leaves the version pin unresolved, which the detector reports as drift", () => {
+    // The inverse guard: writing the RAW template (placeholder intact) is NOT a
+    // correct scaffold, so detect (which substitutes) correctly flags it as
+    // drifted against the version-pinned template.
     const project = mkProject();
     const result = updateWorkflows({
       projectDir: project,
@@ -218,6 +230,6 @@ describe("updateWorkflows + detectWorkflowDrift integration", () => {
     });
     expect(result.changed).toBe(true);
     const drift = detectWorkflowDrift({ projectDir: project, kitDir: REPO_ROOT });
-    expect(drift.overall).toBe("ok");
+    expect(drift.overall).toBe("drift");
   });
 });
