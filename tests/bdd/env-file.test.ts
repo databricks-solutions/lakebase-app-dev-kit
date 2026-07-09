@@ -52,13 +52,16 @@ describe("writeEnvFile", () => {
     expect(contents).not.toMatch(/databricks\.com\//);
   });
 
-  it("leaves connection values commented (filled in per-branch later)", () => {
+  it("leaves connection METADATA commented (filled in per-branch later; no token)", () => {
     const dir = mkTmp();
     writeEnvFile({ projectDir: dir, databricksHost: "https://h", lakebaseProjectId: "p" });
     const contents = fs.readFileSync(path.join(dir, ".env"), "utf8");
-    expect(contents).toMatch(/^# DATABASE_URL=$/m);
+    expect(contents).toMatch(/^# LAKEBASE_BRANCH_ID=$/m);
+    expect(contents).toMatch(/^# LAKEBASE_HOST=$/m);
+    expect(contents).toMatch(/^# LAKEBASE_ENDPOINT=primary$/m);
     expect(contents).toMatch(/^# DB_USERNAME=$/m);
-    expect(contents).toMatch(/^# DB_PASSWORD=$/m);
+    // No token placeholder is scaffolded , the app mints at runtime.
+    expect(contents).not.toMatch(/^# DB_PASSWORD=/m);
   });
 
   it("overwrites an existing .env", () => {

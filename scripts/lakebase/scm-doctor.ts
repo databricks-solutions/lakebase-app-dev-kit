@@ -31,7 +31,7 @@ import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { findStaleBranches } from "../sftdd/stale-branches.js";
 import { exec } from "../util/exec.js";
 import { collapseMigrationHeads } from "./schema-migrate.js";
-import { updateEnvConnection } from "./env-file.js";
+import { updateEnvConnection, readEnvVar } from "./env-file.js";
 
 export type DoctorSeverity = "ok" | "warn" | "fail";
 
@@ -407,14 +407,18 @@ export async function fixFinding(
           );
         }
         const sanitized = sanitizeBranchName(branch);
+        // Metadata-only rewrite: preserve the existing project id + host so the
+        // app can still mint at runtime; the username/token are re-derived by the
+        // next post-checkout (or the app's own mint). No token is written here.
+        const envFile = path.join(args.projectDir, ".env");
         updateEnvConnection({
-          envPath: path.join(args.projectDir, ".env"),
+          envPath: envFile,
+          projectId: readEnvVar(envFile, "LAKEBASE_PROJECT_ID") ?? "",
           branchId: sanitized,
-          databaseUrl: "",
-          username: "",
-          password: "",
+          username: readEnvVar(envFile, "DB_USERNAME") ?? "",
+          endpointHost: readEnvVar(envFile, "LAKEBASE_HOST"),
         });
-        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (metadata only; the app mints its token at runtime)`;
         break;
       }
       case "head-branch-drift": {

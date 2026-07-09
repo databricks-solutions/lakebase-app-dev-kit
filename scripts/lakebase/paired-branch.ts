@@ -344,15 +344,16 @@ export async function createPairedBranch(
         branch: sanitized,
         timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait,
       });
-      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-      const dsn = buildDsn(ep.host, database, email, token);
+      // Mint here as a branch-auth READINESS probe (a fresh branch may not be
+      // able to issue credentials yet); the token is NOT persisted , the .env
+      // carries only metadata and the app mints its own token at runtime.
+      const { email } = await mintCredential(endpointPath(args.instance, sanitized));
       const envPath = path.join(args.cwd, ".env");
       updateEnvConnection({
         envPath,
+        projectId: args.instance,
         branchId: sanitized,
-        databaseUrl: dsn,
         username: email,
-        password: token,
         endpointHost: ep.host,
       });
       await ensureProfilePinned({ envPath }).catch(() => undefined);
@@ -545,15 +546,17 @@ export async function syncEnvToCurrentBranch(args: SyncEnvArgs): Promise<SyncEnv
       `No endpoint host yet for branch "${sanitized}" in instance "${instance}" – branch may still be provisioning`
     );
   }
+  // Mint a fresh credential for the RETURN dsn (an in-memory convenience for a
+  // caller that connects right now); the .env gets metadata only, so nothing
+  // persists a token , the app mints its own at runtime.
   const { token, email } = await getCredential({ instance, branch: sanitized });
   const dsn = buildDsn(ep.host, database, email, token);
 
   updateEnvConnection({
     envPath,
+    projectId: instance,
     branchId: sanitized,
-    databaseUrl: dsn,
     username: email,
-    password: token,
     endpointHost: ep.host,
   });
   // Pin the matching CLI profile so the hooks' post-source preflight works
@@ -756,7 +759,8 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
     lakebaseBranch = branchId;
   }
 
-  // 5. Ensure endpoint, mint credential, write .env
+  // 5. Ensure endpoint, mint a fresh credential for the RETURN dsn (in-memory
+  // convenience), write METADATA-only .env (no token; the app mints at runtime).
   const ep = await ensureEndpoint({
     instance,
     branch: lakebaseBranch,
@@ -766,10 +770,9 @@ export async function checkoutPaired(args: CheckoutPairedArgs): Promise<Checkout
   const dsn = buildDsn(ep.host, database, email, token);
   updateEnvConnection({
     envPath,
+    projectId: instance,
     branchId: lakebaseBranch,
-    databaseUrl: dsn,
     username: email,
-    password: token,
     endpointHost: ep.host,
   });
   await ensureProfilePinned({ envPath }).catch(() => undefined);

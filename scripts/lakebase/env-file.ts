@@ -46,10 +46,14 @@ export function writeEnvFile(args: WriteEnvFileArgs): string {
     `DATABRICKS_HOST=${host}`,
     `LAKEBASE_PROJECT_ID=${args.lakebaseProjectId}`,
     "",
-    "# Connection (auto-populated on branch switch)",
-    "# DATABASE_URL=",
+    "# Connection METADATA (auto-populated on branch switch). No DB token is",
+    "# stored here: the app + migrations mint a short-lived Lakebase credential",
+    "# at runtime from this metadata (endpoint projects/<id>/branches/<branch>/",
+    "# endpoints/<endpoint>). Set DATABASE_URL explicitly to override (CI/Docker).",
+    "# LAKEBASE_BRANCH_ID=",
+    "# LAKEBASE_HOST=",
+    "# LAKEBASE_ENDPOINT=primary",
     "# DB_USERNAME=",
-    "# DB_PASSWORD=",
     "",
   ].join("\n");
   const envPath = path.join(args.projectDir, ".env");
@@ -60,41 +64,42 @@ export function writeEnvFile(args: WriteEnvFileArgs): string {
 export interface UpdateEnvConnectionArgs {
   /** Absolute path to the .env file. */
   envPath: string;
+  /** Lakebase instance / project id (projects/<id>/...); needed so the app can
+   *  rebuild the endpoint path and mint a token at runtime. */
+  projectId: string;
   /** Lakebase branch id this .env now points at (sanitized name). */
   branchId: string;
-  /** Full postgresql:// DSN, or "" when connection is pending. */
-  databaseUrl: string;
   /** Lakebase user (email). */
   username: string;
-  /** Short-lived OAuth token. */
-  password: string;
-  /** Optional Lakebase endpoint host. Spring's application-local.properties and
-   * the post-checkout.sh hook both write LAKEBASE_HOST=... so consumers like
-   * the JDBC URL builder can derive jdbc:postgresql://${host}:... independently
-   * of DATABASE_URL parsing. */
+  /** Lakebase endpoint host. */
   endpointHost?: string;
+  /** Endpoint name under the branch (default "primary"). */
+  endpoint?: string;
   /** Optional comment line prepended to the connection block. */
   comment?: string;
 }
 
+// Keys the connection block owns. We STRIP all of these (including the legacy
+// DATABASE_URL/DB_PASSWORD token lines) before rewriting, so re-running on an
+// old .env purges any baked-in credential , the app mints at runtime instead.
 const CONNECTION_KEYS = [
   "DATABASE_URL",
-  "DB_USERNAME",
   "DB_PASSWORD",
+  "DB_USERNAME",
+  "LAKEBASE_PROJECT_ID",
   "LAKEBASE_BRANCH_ID",
   "LAKEBASE_HOST",
+  "LAKEBASE_ENDPOINT",
 ] as const;
 
 /**
- * Update the connection block (LAKEBASE_BRANCH_ID, DATABASE_URL, DB_USERNAME,
- * DB_PASSWORD) in an existing .env file, preserving every other line.
+ * Update the connection METADATA block in an existing .env, preserving every
+ * other line. No DB token is written: the app + migrations mint a short-lived
+ * Lakebase credential at runtime from this metadata. Any legacy DATABASE_URL /
+ * DB_PASSWORD line is stripped (not rewritten), so switching branches purges a
+ * stale baked-in token.
  *
- * Algorithm matches templates/project/common/scripts/post-checkout.sh:
- *   1. Read existing .env
- *   2. Drop any line starting with one of the four connection keys
- *   3. Append the fresh block (with optional leading comment)
- *
- * If the file doesn't exist, it's created with just the connection block –
+ * If the file doesn't exist it's created with just the metadata block , the
  * caller can subsequently writeEnvFile() to add the project-level keys.
  */
 export function updateEnvConnection(args: UpdateEnvConnectionArgs): void {
@@ -115,13 +120,13 @@ export function updateEnvConnection(args: UpdateEnvConnectionArgs): void {
   if (args.comment !== undefined) {
     lines.push(args.comment);
   }
+  lines.push(`LAKEBASE_PROJECT_ID=${args.projectId}`);
   if (args.endpointHost !== undefined) {
     lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
   }
   lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
-  lines.push(`DATABASE_URL=${args.databaseUrl}`);
+  lines.push(`LAKEBASE_ENDPOINT=${args.endpoint ?? "primary"}`);
   lines.push(`DB_USERNAME=${args.username}`);
-  lines.push(`DB_PASSWORD=${args.password}`);
   lines.push("");
   const block = lines.join("\n");
 
