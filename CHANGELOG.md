@@ -6,6 +6,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.13] - 2026-07-09
+
+Hardening surfaced by a live React-SPA capture: the SFTDD build now has a
+first-class client test lane, a SPA's e2e no longer collides with the backend's
+in CI, and the scaffolded full run can no longer green client code whose tests
+never ran. Plus a downstream-migrate matching fix.
+
+### Added
+
+- **Client test lane for SFTDD (FEIP-7915).** The test-list gains a `client`
+  kind: the test-strategist routes client-verified ACs to it, the navigator
+  authors them under `client/tests/`, and the driver dispatches them to the
+  client's Vitest/Playwright runners. The reflect gate is aware of the lane, so
+  a client-verified AC can no longer be silently proven by a backend test.
+
+### Fixed
+
+- **A React SPA owns its e2e lane (FEIP-7916).** A SPA was scaffolded with two
+  e2e harnesses , the `client/` Playwright suite and the backend's
+  server-rendered Python `tests/e2e` live_server , both binding the backend
+  port, which collided in CI (`reuseExistingServer:false`) with
+  "http://localhost:8000/health is already used". `create-project` /
+  `enable-e2e` now make the client Playwright suite the sole e2e for a SPA (no
+  Python `tests/e2e`, no root `playwright.config` on a Node backend).
+- **CI e2e port resiliency (FEIP-7916).** `port_in_use` + `free_port` are
+  factored into a shared `scripts/port-utils.sh` (run-dev.sh sources it);
+  `client/playwright.config.ts` takes `E2E_BACKEND_PORT` / `E2E_CLIENT_PORT`
+  (defaults 8000/5173) threaded into the uvicorn command, the `/health` poll,
+  and the Vite proxy; and `pr.yml` gains an "Allocate free E2E ports" preflight
+  that moves off a stale port instead of hard-failing (multi-tenant safe).
+- **The full run can no longer false-GREEN client code (FEIP-7915).**
+  `run-tests.sh` installs client deps and runs the client suite instead of
+  silently skipping when `client/node_modules` is absent, so a broken client
+  test fails in-build, not at the deploy gate.
+- **`discard --revise` resets the story's build state (FEIP-7915).**
+  Reviving a story now clears its cycle records + test-list statuses so the
+  build lane genuinely re-drives instead of reading the stale build as allGreen.
+- **`scm-merge --wait-migrate` matches the downstream run by merge-commit SHA**
+  instead of a `mergedAt` time window, ending the false "(no matching run)"
+  timeout when `mergedAt` reflected a post-cleanup local clock.
+
 ## [0.3.0-beta.12] - 2026-07-09
 
 A first-class React SPA client scaffold (a single-page app is now the path of
