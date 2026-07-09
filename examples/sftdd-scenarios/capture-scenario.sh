@@ -317,6 +317,18 @@ else
   done
 fi
 
-echo "[capture-scenario] reconstituting agent-log onto the recorded timeline" >&2
-lk lakebase-sftdd-log --reconstitute --tdd-dir "$SFTDD_DIR" || echo "[capture-scenario] reconstitute skipped" >&2
+# Reconstitute stitches a RECORDED design-lane log (agent-log.design.jsonl) onto
+# the live build timeline; it only applies to a replay/partial capture that has
+# such a corpus. A fully-live capture designs live (straight into the project's
+# agent-log.jsonl) and produces no design-lane log, so reconstitute does not
+# apply , run it only when the design log exists, else skip cleanly (not as an
+# error). The design log lives at the corpus root, matching the replay scripts.
+DESIGN_LOG="${SCEN}/agent-log.design.jsonl"
+if [ -f "$DESIGN_LOG" ]; then
+  echo "[capture-scenario] reconstituting agent-log onto the recorded timeline" >&2
+  lk lakebase-sftdd-log --reconstitute --design-log "$DESIGN_LOG" --tdd-dir "$SFTDD_DIR" \
+    || echo "[capture-scenario] reconstitute skipped" >&2
+else
+  echo "[capture-scenario] no recorded design-lane log (design ran live); skipping reconstitute" >&2
+fi
 echo "[capture-scenario] ${SCENARIO} captured -> ${SCEN} (add scenario.json, then commit)" >&2
