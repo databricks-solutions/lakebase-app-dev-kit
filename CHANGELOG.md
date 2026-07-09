@@ -6,6 +6,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.12] - 2026-07-09
+
+A first-class React SPA client scaffold (a single-page app is now the path of
+least resistance for a UI project, not a build-from-scratch fight), plus two
+scaffold-hygiene fixes that every Databricks-internal adopter was hitting.
+
+### Added
+
+- **First-class React SPA client scaffold (FEIP-7910).** `templates/project/
+  client/` ships a React 18 + TypeScript + Vite single-page app, layered into
+  `api/` (the only `fetch` layer), `hooks/`, `components/`, `pages/`, and
+  `styles/` (Databricks design tokens as CSS custom properties), with Vitest +
+  Testing Library (jsdom) unit tests and a Playwright e2e example. A new
+  `clientFramework` knob (`create-project --client react|none`) defaults to
+  `react` for a `--ui-track` project and `none` otherwise, and is persisted to
+  `sftdd-config.json` (`project.clientFramework`). The Python backend serves the
+  built client from `client/dist` in production (single-process deploy), the
+  client's Vitest suite runs in CI (`pr.yml`) and `run-tests.sh`, and the
+  Architect and Driver now treat the React SPA as a first-class `renders_via`
+  path, defaulting to it when a client was scaffolded. The dev/CI/hook plumbing
+  keyed on `client/package.json` (Vite boot, client build + Playwright, npm
+  install) now has a real scaffold to find.
+
+### Fixed
+
+- **scm-doctor no longer reports permanent false workflow drift (FEIP-7911).**
+  `detectWorkflowDrift` now substitutes `{{LAKEBASE_KIT_VERSION}}` in the
+  template before comparing (the same substitution the writer and the command
+  drift detector already applied), so a correctly version-pinned project reads
+  as `unchanged` instead of standing drift.
+- **get-connection reference no longer trips the secret scanner (FEIP-7912).**
+  The example DSN's fake `eyJ...` JWT is replaced with a `<jwt-token>`
+  placeholder, so the doc no longer blocks commits behind a Databricks
+  secret-scan pre-commit hook.
+
 ## [0.3.0-beta.11] - 2026-07-09
 
 Architect-canon design-lane optimization (FEIP-7902) plus a cluster of live-capture
