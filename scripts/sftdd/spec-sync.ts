@@ -2,7 +2,7 @@ import { readFileSync, existsSync, readdirSync, writeFileSync, statSync } from "
 import { join, basename } from "path";
 import type Ajv from "ajv";
 import { getValidator } from "./schema-loader";
-import { requireFeatureDir as findFeatureDir, featuresDir as featuresDirOf } from "./sftdd-paths.js";
+import { requireFeatureDir as findFeatureDir, featuresDir as featuresDirOf, storiesDir } from "./sftdd-paths.js";
 
 type Phase =
   | "discovery"
@@ -96,6 +96,54 @@ export function readFeature(sftddDir: string, featureId: string): Feature {
   const dir = findFeatureDir(sftddDir, featureId);
   const jsonPath = join(dir, "feature-spec.json");
   return JSON.parse(readFileSync(jsonPath, "utf8"));
+}
+
+// The properties story.schema.json allows (additionalProperties:false). Kept in
+// sync with the schema by a guard test. A story.json is under features/<F>/, so
+// feature_id is optional; `status` is pipeline runtime state, NOT spec.
+const STORY_ALLOWED_KEYS = new Set(["id", "asA", "iWantTo", "soThat", "acs", "feature_id", "independence", "external_ref"]);
+
+/**
+ * Bring each of a feature's story.json files into story.schema conformance, the
+ * deterministic way the spec-author LLM tends to drift: map a stray `feature` to
+ * the canonical `feature_id`, and STRIP any property the schema forbids (e.g.
+ * `status`, which belongs to pipeline.json, not the spec). Idempotent; returns the
+ * story ids it changed. Runs at the reconcile seam so the feature-complete
+ * conformance gate sees a conformant artifact WITHOUT depending on the role model
+ * emitting the exact shape (the same structural-not-model-dependent intent as
+ * reconcileArtifactLog + the conventions/canon establishment).
+ */
+export function normalizeStoryJson(sftddDir: string, featureId: string): string[] {
+  const stories = storiesDir(sftddDir, featureId);
+  if (!existsSync(stories)) return [];
+  const changed: string[] = [];
+  for (const s of readdirSync(stories)) {
+    const file = join(stories, s, "story.json");
+    if (!existsSync(file)) continue;
+    let obj: Record<string, unknown>;
+    try {
+      obj = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+    } catch {
+      continue; // malformed; the gate will surface it
+    }
+    let mutated = false;
+    // Preserve the LLM's intent: a stray `feature` becomes the canonical feature_id.
+    if (typeof obj.feature === "string" && obj.feature_id === undefined) {
+      obj.feature_id = obj.feature;
+      mutated = true;
+    }
+    for (const key of Object.keys(obj)) {
+      if (!STORY_ALLOWED_KEYS.has(key)) {
+        delete obj[key];
+        mutated = true;
+      }
+    }
+    if (mutated) {
+      writeFileSync(file, JSON.stringify(obj, null, 2) + "\n");
+      changed.push(s);
+    }
+  }
+  return changed;
 }
 
 export function writeFeature(sftddDir: string, feature: Feature): void {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -8,6 +8,7 @@ import {
   writeFeature,
   readWorkflowState,
   writeWorkflowState,
+  normalizeStoryJson,
   type Feature,
   type WorkflowState,
 } from "../../scripts/sftdd/spec-sync";
@@ -127,5 +128,54 @@ describe("spec-sync", () => {
 
   it("readWorkflowState returns null when no state file exists", () => {
     expect(readWorkflowState(tdd)).toBeNull();
+  });
+});
+
+describe("normalizeStoryJson", () => {
+  const storyDir = () => join(tdd, "features", "F1-test-feature", "stories", "S1-test-story");
+
+  it("maps a stray `feature` to feature_id and strips non-spec keys, leaving a conformant object", () => {
+    // The exact field-drift the spec-author LLM produced live: `feature` instead of
+    // feature_id + `status` (pipeline runtime state, not in story.schema).
+    writeFileSync(
+      join(storyDir(), "story.json"),
+      JSON.stringify({ id: "S1", asA: "user", iWantTo: "do thing", soThat: "outcome", feature: "F1", status: "draft" })
+    );
+    const changed = normalizeStoryJson(tdd, "F1");
+    expect(changed).toEqual(["S1-test-story"]);
+    const obj = JSON.parse(readFileSync(join(storyDir(), "story.json"), "utf8"));
+    expect(obj).toEqual({ id: "S1", asA: "user", iWantTo: "do thing", soThat: "outcome", feature_id: "F1" });
+    // The normalized artifact now passes the schema-backed validator.
+    writeFileSync(join(storyDir(), "story.md"), "# Story\n\nNarrative long enough to satisfy the length check.\n");
+    const featureDir = join(tdd, "features", "F1-test-feature");
+    writeFileSync(join(featureDir, "feature-spec.json"), JSON.stringify(fixture()));
+    writeFileSync(join(featureDir, "feature-spec.md"), "# Test Feature\n\nNarrative body long enough to pass.\n");
+    expect(validateSpec(tdd).find((r) => r.file.endsWith("story.json"))).toBeUndefined();
+  });
+
+  it("does not clobber an existing feature_id when both feature and feature_id are present", () => {
+    writeFileSync(
+      join(storyDir(), "story.json"),
+      JSON.stringify({ id: "S1", asA: "u", iWantTo: "w", soThat: "s", feature: "WRONG", feature_id: "F1" })
+    );
+    normalizeStoryJson(tdd, "F1");
+    const obj = JSON.parse(readFileSync(join(storyDir(), "story.json"), "utf8"));
+    expect(obj.feature_id).toBe("F1");
+    expect(obj.feature).toBeUndefined();
+  });
+
+  it("is idempotent + a no-op (returns []) for an already-conformant story", () => {
+    writeFileSync(
+      join(storyDir(), "story.json"),
+      JSON.stringify({ id: "S1", asA: "u", iWantTo: "w", soThat: "s", feature_id: "F1" })
+    );
+    expect(normalizeStoryJson(tdd, "F1")).toEqual([]);
+    // Second pass over a file it already normalized also changes nothing.
+    writeFileSync(
+      join(storyDir(), "story.json"),
+      JSON.stringify({ id: "S1", asA: "u", iWantTo: "w", soThat: "s", feature: "F1", status: "draft" })
+    );
+    expect(normalizeStoryJson(tdd, "F1")).toEqual(["S1-test-story"]);
+    expect(normalizeStoryJson(tdd, "F1")).toEqual([]);
   });
 });

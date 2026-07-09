@@ -21,6 +21,7 @@ import {
 import { resolveSftddDir, featureResolved, storyTestListJson, designGuideJson, architectureConventionsJson } from "./sftdd-paths.js";
 import { establishConventionsIfAbsent } from "./architecture-conventions.js";
 import { establishCanonFromDisk } from "./architecture-canon.js";
+import { normalizeStoryJson } from "./spec-sync.js";
 
 export interface ReconcileOpts {
   /** Path to the artifact root. Default: resolved (.sftdd, or legacy .tdd). */
@@ -109,6 +110,12 @@ export function reconcileArtifactLog(opts: ReconcileOpts): AgentLogEvent[] {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const existing = readAgentLog({ sftddDir, featureId: opts.featureId });
   const emitted: AgentLogEvent[] = [];
+
+  // Deterministically normalize the spec-author's story.json stubs into
+  // story.schema conformance (map a stray `feature` -> feature_id, strip non-spec
+  // keys like `status`). Runs here, at the post-turn reconcile seam, so the
+  // feature-complete conformance gate never hard-blocks on the LLM's field drift.
+  normalizeStoryJson(sftddDir, opts.featureId);
 
   // Deterministically establish the project architecture conventions from this
   // feature's architecture.json (a no-op once they exist, or when the feature is
