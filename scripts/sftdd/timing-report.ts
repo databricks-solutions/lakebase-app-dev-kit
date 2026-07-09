@@ -54,6 +54,27 @@ export interface GroupRollup {
   avgSeconds: number;
   /** Largest single span in the group. */
   maxSeconds: number;
+  /** Total USD across the group (turn.usage rollups only; 0 for gap rollups). */
+  costUsd?: number;
+}
+
+/** One role turn, from the driver's `turn.usage` event. Unlike the inter-event
+ *  spans above, this is the driver's OWN measurement of a role subprocess's
+ *  wall-time (duration_ms), so it is the clean per-turn compute cost , no idle
+ *  gap, no cold-boot blind spot. This is the signal to compare against a
+ *  baseline. */
+export interface TurnUsage {
+  role: string;
+  model?: string;
+  /** The fine activity token (propose/estimate/design/red/green/...). */
+  phase?: string;
+  /** Coarse lifecycle phase, derived so planning is filterable. */
+  coarsePhase: string;
+  story?: string;
+  seconds: number;
+  costUsd: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export interface TimingReport {
@@ -75,16 +96,66 @@ export interface TimingReport {
   byKind: GroupRollup[];
   /** The N slowest individual spans (desc) , the outliers to attack. */
   slowest: TurnTiming[];
+  /** MEASURED role turns from `turn.usage` events (the driver's own per-turn
+   *  wall-time). Empty on older logs that predate turn.usage. When
+   *  `skipPlanning` is set, planning-phase turns are excluded from these. */
+  turnUsage: TurnUsage[];
+  /** turn.usage rolled up by role (desc by seconds), with cost. The clean
+   *  per-role turn-time signal , compare this to a baseline, not the gap rollup. */
+  byRoleTurns: GroupRollup[];
+  /** turn.usage rolled up by role/model (desc), so a per-turn second is compared
+   *  within its own model tier (opus vs sonnet vs haiku are not comparable). */
+  byModelTurns: GroupRollup[];
+  /** Total measured turn compute + cost (after any planning filter). */
+  turnSeconds: number;
+  turnCostUsd: number;
 }
 
 export interface ComputeTimingOpts {
   /** How many slowest spans to surface (default 10). */
   topN?: number;
+  /** Drop planning-phase turns (propose/estimate/author-requests/plan) from the
+   *  turn.usage rollups , the sprint-planning lane has no design/build baseline. */
+  skipPlanning?: boolean;
 }
 
 function metaStr(ev: AgentLogEvent, key: string): string | undefined {
   const v = ev.metadata?.[key];
   return typeof v === "string" && v.length > 0 ? v : undefined;
+}
+
+function metaNum(ev: AgentLogEvent, key: string): number | undefined {
+  const v = ev.metadata?.[key];
+  return typeof v === "number" && !Number.isNaN(v) ? v : undefined;
+}
+
+/** Roll up measured turns (turn.usage) by a key, summing seconds + cost. */
+function rollupTurns(turns: TurnUsage[], keyOf: (t: TurnUsage) => string | undefined): GroupRollup[] {
+  const acc = new Map<string, { seconds: number; count: number; max: number; cost: number }>();
+  for (const t of turns) {
+    const key = keyOf(t);
+    if (key === undefined) continue;
+    const cur = acc.get(key) ?? { seconds: 0, count: 0, max: 0, cost: 0 };
+    cur.seconds += t.seconds;
+    cur.count += 1;
+    cur.max = Math.max(cur.max, t.seconds);
+    cur.cost += t.costUsd;
+    acc.set(key, cur);
+  }
+  return [...acc.entries()]
+    .map(([key, v]) => ({
+      key,
+      seconds: round(v.seconds),
+      count: v.count,
+      avgSeconds: round(v.seconds / v.count),
+      maxSeconds: round(v.max),
+      costUsd: round100(v.cost),
+    }))
+    .sort((a, b) => b.seconds - a.seconds);
+}
+
+function round100(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 /** Map a fine activity token (the orchestrator's handoff/phase.start `phase`
@@ -174,7 +245,10 @@ export function computeTiming(events: AgentLogEvent[], opts: ComputeTimingOpts =
     .sort((a, b) => a.t - b.t || a.i - b.i);
 
   if (stamped.length === 0) {
-    return { events: 0, totalSeconds: 0, turns: [], byPhase: [], byRole: [], byKind: [], slowest: [] };
+    return {
+      events: 0, totalSeconds: 0, turns: [], byPhase: [], byRole: [], byKind: [], slowest: [],
+      turnUsage: [], byRoleTurns: [], byModelTurns: [], turnSeconds: 0, turnCostUsd: 0,
+    };
   }
 
   const turns: TurnTiming[] = [];
@@ -201,6 +275,32 @@ export function computeTiming(events: AgentLogEvent[], opts: ComputeTimingOpts =
   const last = stamped[stamped.length - 1];
   const slowest = [...turns].sort((a, b) => b.seconds - a.seconds).slice(0, topN);
 
+  // MEASURED turns: the driver's own per-turn wall-time from turn.usage events
+  // (duration_ms), the clean per-turn compute cost , no idle gap. This is the
+  // signal to compare against a baseline; the gap rollups above stay for finding
+  // inter-event overhead. Optionally drop the planning lane (no design/build
+  // baseline). Older logs without turn.usage yield an empty list (graceful).
+  let turnUsage: TurnUsage[] = events
+    .filter((ev) => ev.event === "turn.usage")
+    .map((ev) => {
+      const phase = metaStr(ev, "phase");
+      const durMs = metaNum(ev, "duration_ms") ?? 0;
+      return {
+        role: ev.role,
+        model: ev.model,
+        phase,
+        coarsePhase: deriveCoarsePhase(ev.role, "turn.usage", phase),
+        story: metaStr(ev, "story"),
+        seconds: round(durMs / 1000),
+        costUsd: metaNum(ev, "cost_usd") ?? 0,
+        inputTokens: metaNum(ev, "input_tokens"),
+        outputTokens: metaNum(ev, "output_tokens"),
+      };
+    });
+  if (opts.skipPlanning) {
+    turnUsage = turnUsage.filter((t) => t.coarsePhase !== "planning");
+  }
+
   return {
     events: stamped.length,
     totalSeconds: round((last.t - first.t) / 1000),
@@ -211,6 +311,11 @@ export function computeTiming(events: AgentLogEvent[], opts: ComputeTimingOpts =
     byRole: rollup(turns, (t) => t.role),
     byKind: rollup(turns, (t) => `${t.role}/${t.event}`),
     slowest,
+    turnUsage,
+    byRoleTurns: rollupTurns(turnUsage, (t) => t.role),
+    byModelTurns: rollupTurns(turnUsage, (t) => `${t.role}/${t.model ?? "?"}`),
+    turnSeconds: round(turnUsage.reduce((s, t) => s + t.seconds, 0)),
+    turnCostUsd: round100(turnUsage.reduce((s, t) => s + t.costUsd, 0)),
   };
 }
 
@@ -242,6 +347,19 @@ function rollupBlock(title: string, rows: GroupRollup[]): string {
   return `${title}\n${lines.join("\n")}\n`;
 }
 
+/** Like rollupBlock, for measured turn.usage rollups , shows avg/max + cost. */
+function turnRollupBlock(title: string, rows: GroupRollup[]): string {
+  if (rows.length === 0) return `${title}\n  (none)\n`;
+  const keyW = Math.max(title.length, ...rows.map((r) => r.key.length));
+  const lines = rows.map(
+    (r) =>
+      `  ${r.key.padEnd(keyW)}  ${String(r.count).padStart(3)}x  ` +
+      `avg ${fmtSecs(r.avgSeconds).padStart(8)}  max ${fmtSecs(r.maxSeconds).padStart(8)}  ` +
+      `$${(r.costUsd ?? 0).toFixed(2)}`,
+  );
+  return `${title}\n${lines.join("\n")}\n`;
+}
+
 /** Render a human-readable report. The JSON form (TimingReport) is the machine API. */
 export function formatTimingReport(report: TimingReport): string {
   if (report.events === 0) return "agent-log timing: no timestamped events found.\n";
@@ -251,6 +369,18 @@ export function formatTimingReport(report: TimingReport): string {
       `(${report.startedAt} -> ${report.endedAt})`,
   );
   out.push("");
+  // Measured per-turn compute (turn.usage) , the durable, baseline-comparable
+  // signal. Lead with it; the gap rollups below are for inter-event overhead.
+  if (report.turnUsage.length > 0) {
+    const planNote = report.turnUsage.some((t) => t.coarsePhase === "planning") ? "" : " , planning excluded";
+    out.push(
+      `MEASURED turns (turn.usage): ${report.turnUsage.length} turns, ` +
+        `${fmtSecs(report.turnSeconds)} compute, $${report.turnCostUsd.toFixed(2)}${planNote}`,
+    );
+    out.push(turnRollupBlock("by role (measured)", report.byRoleTurns));
+    out.push(turnRollupBlock("by role/model (measured, tier-matched)", report.byModelTurns));
+    out.push("");
+  }
   out.push(rollupBlock("by phase (coarse lifecycle)", report.byPhase));
   out.push(rollupBlock("by role", report.byRole));
   out.push(rollupBlock("by kind (role/event)", report.byKind));

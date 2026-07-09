@@ -31,6 +31,60 @@ function sampleEvents(): AgentLogEvent[] {
   ];
 }
 
+/** A turn.usage event (the driver's own per-turn measurement) with model + the
+ *  metadata the rollup reads (duration_ms, phase, cost_usd). */
+function usage(role: string, model: string, phase: string, ms: number, cost: number): AgentLogEvent {
+  return {
+    timestamp: "2026-06-09T00:00:00.000Z",
+    level: "info",
+    role: role as AgentLogEvent["role"],
+    model: model as AgentLogEvent["model"],
+    event: "turn.usage",
+    message: `${role} turn`,
+    metadata: { duration_ms: ms, phase, cost_usd: cost, input_tokens: 10, output_tokens: 20 },
+  };
+}
+
+describe("measured turns (turn.usage rollup)", () => {
+  const events = [
+    usage("spec-author", "opus", "propose", 60000, 0.3),        // planning
+    usage("architect-reviewer", "opus", "estimate", 14000, 0.1), // planning
+    usage("navigator", "sonnet", "red", 120000, 0.5),
+    usage("navigator", "sonnet", "review", 20000, 0.1),
+    usage("driver", "sonnet", "green", 300000, 0.9),
+    usage("spec-author", "opus", "design", 100000, 0.4),
+  ];
+
+  it("rolls up turn.usage by role + role/model with summed cost", () => {
+    const r = computeTiming(events);
+    expect(r.turnUsage).toHaveLength(6);
+    const nav = r.byRoleTurns.find((x) => x.key === "navigator");
+    expect(nav).toMatchObject({ count: 2, seconds: 140, avgSeconds: 70, maxSeconds: 120, costUsd: 0.6 });
+    // role/model key keeps tiers separate for comparison.
+    expect(r.byModelTurns.find((x) => x.key === "navigator/sonnet")?.count).toBe(2);
+    expect(r.byModelTurns.find((x) => x.key === "spec-author/opus")?.count).toBe(2);
+  });
+
+  it("skipPlanning drops propose/estimate/author-requests from the measured rollups", () => {
+    const r = computeTiming(events, { skipPlanning: true });
+    // propose + estimate gone; 4 build/design turns remain.
+    expect(r.turnUsage).toHaveLength(4);
+    expect(r.turnUsage.some((t) => t.phase === "propose" || t.phase === "estimate")).toBe(false);
+    expect(r.byRoleTurns.find((x) => x.key === "architect-reviewer")).toBeUndefined();
+    // spec-author keeps only its design turn (100s), not the 60s propose.
+    expect(r.byRoleTurns.find((x) => x.key === "spec-author")).toMatchObject({ count: 1, seconds: 100 });
+    expect(r.turnSeconds).toBe(540); // 120+20+300+100
+    expect(r.turnCostUsd).toBe(1.9); // 0.5+0.1+0.9+0.4
+  });
+
+  it("a log with no turn.usage events yields empty measured rollups (older logs)", () => {
+    const r = computeTiming(sampleEvents());
+    expect(r.turnUsage).toEqual([]);
+    expect(r.byRoleTurns).toEqual([]);
+    expect(r.turnSeconds).toBe(0);
+  });
+});
+
 describe("computeTiming", () => {
   it("returns an empty report for no events", () => {
     const r = computeTiming([]);
@@ -39,6 +93,7 @@ describe("computeTiming", () => {
     expect(r.turns).toEqual([]);
     expect(r.byPhase).toEqual([]);
     expect(r.slowest).toEqual([]);
+    expect(r.turnUsage).toEqual([]);
   });
 
   it("a single event has no spans", () => {

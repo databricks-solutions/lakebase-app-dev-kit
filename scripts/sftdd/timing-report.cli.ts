@@ -18,6 +18,7 @@ interface ParsedArgs {
   feature?: string;
   top?: number;
   json?: boolean;
+  skipPlanning?: boolean;
   help?: boolean;
 }
 
@@ -34,6 +35,7 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
         break;
       }
       case "--json": out.json = true; break;
+      case "--skip-planning": out.skipPlanning = true; break;
       case "--help": case "-h": out.help = true; break;
       default: return { error: `unknown arg: ${argv[i]}` };
     }
@@ -43,15 +45,18 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
 
 const HELP = `lakebase-sftdd-timing
 
-Per-turn timing report from the agent log (.tdd/agent-log.jsonl). Spans are the
-gaps between consecutive log events, attributed to the ending event, then rolled
-up by phase, role, and role/event kind, with the slowest spans surfaced.
+Per-turn timing report from the agent log (.tdd/agent-log.jsonl). Leads with the
+MEASURED per-turn compute (the driver's turn.usage duration_ms, rolled up by role
+and role/model with cost), the durable, baseline-comparable signal. Also rolls up
+inter-event gaps by phase / role / kind (for finding orchestration overhead).
 
   lakebase-sftdd-timing [flags]
-    --tdd-dir <path>  artifact root (default ./.sftdd, honors a legacy ./.tdd)
-    --feature <id>    only this feature's events
-    --top <n>         how many slowest spans to surface (default 10)
-    --json            emit the TimingReport as JSON (the machine API)
+    --tdd-dir <path>   artifact root (default ./.sftdd, honors a legacy ./.tdd)
+    --feature <id>     only this feature's events
+    --top <n>          how many slowest spans to surface (default 10)
+    --skip-planning    drop the sprint-planning lane (propose/estimate/author-
+                       requests) from the measured-turn rollups
+    --json             emit the TimingReport as JSON (the machine API)
     -h, --help
 `;
 
@@ -67,7 +72,7 @@ export function runTimingCli(argv: string[]): number {
   }
   const report = timingReportFromLog(
     { sftddDir: parsed.sftddDir, featureId: parsed.feature },
-    { topN: parsed.top },
+    { topN: parsed.top, skipPlanning: parsed.skipPlanning },
   );
   // P0.1: pair the timing with the run's model + option matrix so it is
   // self-describing and two reports are A/B-comparable. Read from the same .tdd.
