@@ -28,13 +28,19 @@ The substrate API takes explicit args (`instance`, `branch`, etc.) on every publ
 **Connection-block keys** (managed by `syncEnvToCurrentBranch` / `updateEnvConnection` / `post-checkout.sh`):
 
 ```
+LAKEBASE_PROJECT_ID=proj-abc
 LAKEBASE_BRANCH_ID=feature-x
-DATABASE_URL=postgresql://user%40databricks.com:tok@host:5432/databricks_postgres?sslmode=require
+LAKEBASE_HOST=ep-....database.cloud.databricks.com
+LAKEBASE_ENDPOINT=primary
 DB_USERNAME=user@databricks.com
-DB_PASSWORD=tok
 ```
 
-These four are the rewritten set on every branch switch. Anything else in `.env` is preserved verbatim.
+This is connection METADATA only , **no DB token is persisted**. The app + its
+migrations (alembic / knex / flyway) mint a fresh short-lived Lakebase
+credential at runtime from this metadata (via the `lakebase-get-connection`
+seam), so a token can never go stale on disk. Set `DATABASE_URL` explicitly to
+override with a fixed credential (CI secret / Docker). This block is the
+rewritten set on every branch switch; anything else in `.env` is preserved verbatim.
 
 **Project-level keys** (written once by `writeEnvFile` during project bootstrap, never rewritten):
 

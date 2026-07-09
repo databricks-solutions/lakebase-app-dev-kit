@@ -20,9 +20,16 @@ psql "$(lakebase-get-connection --output dsn --instance proj-abc --branch br-fea
 # Flyway:
 flyway -url="$(lakebase-get-connection --output dsn --instance proj-abc --branch br-feature)" migrate
 
-# Alembic – write to .env:
-echo "DATABASE_URL=$(lakebase-get-connection --output dsn ...)" > .env
+# Ad-hoc explicit override (CI secret / Docker) , the app + migrations otherwise
+# mint their own token at runtime, so a scaffolded .env holds NO token:
+export DATABASE_URL="$(lakebase-get-connection --output dsn --instance proj-abc --branch br-feature)"
 ```
+
+> A scaffolded project never persists a token to `.env`. The app, alembic, knex,
+> and flyway mint a fresh short-lived credential at runtime from the `.env`
+> connection metadata (`LAKEBASE_PROJECT_ID` / `LAKEBASE_BRANCH_ID` /
+> `LAKEBASE_ENDPOINT`) via this same seam. Set `DATABASE_URL` explicitly only to
+> override with a fixed credential.
 
 Add `--json` to get the parsed components in JSON:
 
