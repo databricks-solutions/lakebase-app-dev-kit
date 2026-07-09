@@ -6,6 +6,53 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.11] - 2026-07-09
+
+Architect-canon design-lane optimization (FEIP-7902) plus a cluster of live-capture
+hardening fixes surfaced by a full stockflow F1+F6 sprint run.
+
+### Added
+
+- **Architecture canon (FEIP-7902).** The architect's cross-cutting standing
+  decisions (NFR posture, AC layer placement, persistence-invariant patterns) are
+  established once into a project-level `architecture/canon.json` (twin of
+  `conventions.json`). Per-story architectural notes are then PROJECTED
+  deterministically with no live architect turn in the common case; a live turn
+  fires only when a story is novel, recovered through the existing revise-routing
+  self-heal (`architect-canon-gap` smell, owning role architect-reviewer). The
+  establishing feature is exempt from gap-checking its own stories.
+- **Durable per-turn timing.** `lakebase-sftdd-timing` now rolls up the driver's
+  measured `turn.usage` durations by role and role/model (with cost), independent
+  of stdout capture, plus a `--skip-planning` flag. The old inter-event gap
+  rollups remain for orchestration-overhead analysis.
+- **Multi-sprint capture.** `capture-scenario.sh` accepts repeatable `--sprint`
+  groups driven sequentially on one project; the backlog is scoped per sprint
+  (`sprints/<sprint>/requested.json`), so a later sprint no longer re-drives an
+  earlier sprint's feature.
+
+### Changed
+
+- **Apps mint their Lakebase DB credential at RUNTIME; no token is stored in
+  `.env`.** Scaffolded Python and Node apps (and all-language migrations) build
+  from connection metadata and mint a short-lived Postgres token on demand via the
+  databricks CLI; `.env` carries metadata only. An explicit `DATABASE_URL` still
+  overrides (CI/Docker). This fixes deployed apps and long runs failing once the
+  old baked-in token expired. (Java/Kotlin Spring app-runtime minting is tracked
+  separately as a follow-up.)
+
+### Fixed
+
+- **The sprint halts on a raise-to-HIL instead of advancing.** A feature that
+  escalates (e.g. a failed deploy-verify) now stops the sprint and exits non-zero,
+  rather than being counted "complete", which previously advanced to the next
+  sprint and crashed the next feature's claim with `already-claimed-other`.
+- **`story.json` field drift no longer hard-fails the feature-complete gate.** The
+  reconcile seam normalizes a stray `feature` to `feature_id` and strips non-spec
+  keys (e.g. `status`) into `story.schema` conformance.
+- **Capture reconstitute only runs when a design-lane log exists.** A fully-live
+  capture (which designs straight into the project agent-log) no longer prints a
+  spurious "requires --design-log" error.
+
 ## [0.3.0-beta.10] - 2026-07-07
 
 Design-lane hardening surfaced by the live SFTDD capture (a fresh run that reached
