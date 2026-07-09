@@ -11,10 +11,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { deployLanguageProject } from "./scaffold-language.js";
-import type { ProjectLanguage } from "./scaffold-language.js";
+import type { ProjectLanguage, ClientFramework } from "./scaffold-language.js";
+import { copyDirSubstituted } from "../util/copy-dir-substituted.js";
 import type { SpringInitializrClient } from "./spring-initializr.js";
 
-export type { ProjectLanguage };
+export type { ProjectLanguage, ClientFramework };
 export type RunnerType = "self-hosted" | "github-hosted";
 export type ScaffoldReportFn = (message: string, detail?: string) => void;
 
@@ -61,6 +62,22 @@ function langDir(language: ProjectLanguage, opts?: ScaffoldOptions): string {
   return path.join(templatesRoot(opts), language);
 }
 
+function clientTemplateDir(opts?: ScaffoldOptions): string {
+  return path.join(templatesRoot(opts), "client");
+}
+
+/** Recursively list files under dir, as paths relative to dir. */
+function listFilesRelative(dir: string, relPrefix = ""): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir)) {
+    const p = path.join(dir, entry);
+    const rel = relPrefix ? path.join(relPrefix, entry) : entry;
+    if (fs.statSync(p).isDirectory()) out.push(...listFilesRelative(p, rel));
+    else out.push(rel);
+  }
+  return out;
+}
+
 /**
  * Recursively copy srcDir into destDir. Returns paths relative to destDir
  * (e.g. ["foo.sh", "ci/bar.sh"]) – fixes the bug in the extension's
@@ -95,6 +112,26 @@ function copyDir(srcDir: string, destDir: string, makeExecutable: boolean, relPr
 /** Deploy all scripts from common/scripts/. Files become executable. */
 export async function deployScripts(targetDir: string, opts?: ScaffoldOptions): Promise<string[]> {
   return copyDir(path.join(commonDir(opts), "scripts"), path.join(targetDir, "scripts"), true);
+}
+
+/**
+ * Deploy the first-class React SPA client (templates/project/client) into
+ * `<targetDir>/client`, substituting {{PROJECT_NAME}}. The dev/CI/hook plumbing
+ * (run-dev.sh Vite boot, pr.yml client build, post-checkout npm install) is
+ * already keyed on `client/package.json`, so this is the substrate they find.
+ * Returns the written paths relative to targetDir; a no-op ([]) when the client
+ * template is absent (older kit checkout).
+ */
+export function deployClientProject(
+  targetDir: string,
+  projectName: string | undefined,
+  opts?: ScaffoldOptions
+): string[] {
+  const src = clientTemplateDir(opts);
+  if (!fs.existsSync(src)) return [];
+  const destDir = path.join(targetDir, "client");
+  copyDirSubstituted(src, destDir, { projectName });
+  return listFilesRelative(destDir).map((r) => path.join("client", r));
 }
 
 export interface DeployClaudeCommandsResult {
@@ -531,6 +568,12 @@ export interface ScaffoldStaticAllArgs extends ScaffoldOptions {
 export interface ScaffoldAllArgs extends ScaffoldStaticAllArgs {
   /** Optional Initializr client override for tests. */
   initializrClient?: SpringInitializrClient;
+  /**
+   * Frontend to scaffold. "react" lays down the SPA client under `client/`;
+   * "none" (default) ships no client. create-project defaults this to "react"
+   * for a uiTrack project.
+   */
+  clientFramework?: ClientFramework;
 }
 
 export interface ScaffoldStaticAllResult {
@@ -543,6 +586,9 @@ export interface ScaffoldStaticAllResult {
   claudeAgents: string[];
   /** `.claude/skills/*` skill dirs written this run. Empty when skipped. */
   claudeSkills: string[];
+  /** `client/*` files written when the React SPA client was scaffolded
+   *  (clientFramework="react"); empty/omitted otherwise. */
+  client?: string[];
 }
 
 /**
@@ -645,6 +691,17 @@ export async function scaffoldAll(args: ScaffoldAllArgs): Promise<ScaffoldStatic
   // substrate's java/.gitignore.extra already covers the JVM entries
   // Initializr would have contributed.
   await deployGitignore(args.targetDir, language, { templatesDir: args.templatesDir });
+
+  // React SPA client (client/): deployed last, into its own subdir, so it never
+  // shadows the backend src/ or the scaffold scripts. The dev/CI/hook plumbing
+  // is already keyed on client/package.json.
+  if (args.clientFramework === "react") {
+    report("Deploying React SPA client (client/)");
+    const client = deployClientProject(args.targetDir, projectName, {
+      templatesDir: args.templatesDir,
+    });
+    if (client.length > 0) staticResult.client = client;
+  }
 
   return staticResult;
 }

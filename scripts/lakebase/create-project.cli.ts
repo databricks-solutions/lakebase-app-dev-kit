@@ -23,6 +23,7 @@ interface ParsedArgs {
   enableE2e?: boolean;
   enableInfra?: boolean;
   uiTrack?: boolean;
+  clientFramework?: "react" | "none";
   skipCommands?: boolean;
   agentModels?: Partial<Record<SpawnableAgentRole, string>>;
   help?: boolean;
@@ -94,6 +95,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--no-ui-track":
         out.uiTrack = false;
         break;
+      case "--client":
+        out.clientFramework = argv[++i] as ParsedArgs["clientFramework"];
+        break;
       case "--skip-commands":
         out.skipCommands = true;
         break;
@@ -158,6 +162,10 @@ Flags:
   --no-ui-track       UX track: persists project.uiTrack (the drive reads it to
                       run the UX Designer + design-guide/IA + adherence gate) and,
                       when on, always wires the e2e harness. Default: off.
+  --client            react | none. Frontend to scaffold under client/.
+                      "react" lays down the first-class React + TS + Vite SPA
+                      (Vitest + Testing Library + Playwright). Default: react
+                      for a --ui-track project, none otherwise.
   --skip-commands     Skip scaffolding .claude/commands/{design,build}.md
                       (default: commands are written)
   --agent-model       <role>=<model>, repeatable. Override a TDD role agent's
@@ -204,6 +212,7 @@ async function main(): Promise<number> {
       enableE2e: args.enableE2e,
       enableInfra: args.enableInfra,
       uiTrack: args.uiTrack,
+      clientFramework: args.clientFramework,
       skipCommands: args.skipCommands,
       agentModels: args.agentModels,
     };

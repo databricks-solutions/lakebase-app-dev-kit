@@ -26,6 +26,7 @@ import {
   withLakebaseRollback,
 } from "./create-preflight.js";
 import { scaffoldAll } from "./scaffold.js";
+import type { ClientFramework } from "./scaffold-language.js";
 import { createLongRunningBranch } from "./long-running-branch.js";
 import { enableE2eForProject } from "./enable-e2e.js";
 import { enableInfraForProject } from "./enable-infra.js";
@@ -85,6 +86,15 @@ export interface CreateProjectArgs {
    * is no separate env/flag door; this input is the one way in. Default: false.
    */
   uiTrack?: boolean;
+  /**
+   * Frontend the project ships. "react" scaffolds the first-class SPA client
+   * under `client/` (React + TS + Vite + Vitest + Playwright); "none" ships no
+   * client (server-rendered or pure JSON/CLI backend). When omitted, defaults
+   * to "react" for a uiTrack project and "none" otherwise, so a UI project gets
+   * a single-page app as the path of least resistance. Persisted to
+   * sftdd-config.json (project.clientFramework).
+   */
+  clientFramework?: ClientFramework;
   /** Lay down the .sftdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
   enableSftdd?: boolean;
   /**
@@ -178,6 +188,11 @@ export async function createProject(
     uiTrack || (input.enableE2e !== undefined ? input.enableE2e : language === "nodejs");
   // Invariant guard (belt-and-suspenders against a future edit): a UI project can
   // never be produced without its e2e harness.
+  // Frontend: default to a React SPA for a UI project (the path of least
+  // resistance), "none" otherwise. Explicit input always wins, so a uiTrack
+  // project can still opt into server-rendered by passing clientFramework:"none".
+  const clientFramework: ClientFramework =
+    input.clientFramework ?? (uiTrack ? "react" : "none");
   if (uiTrack && !enableE2e) {
     throw new Error(
       "create-project: uiTrack requires the e2e harness; a UI project cannot be scaffolded without it.",
@@ -295,6 +310,7 @@ export async function createProject(
     language,
     runnerType,
     skipCommands,
+    clientFramework,
     report: (m, d) => report(m, d),
   });
 
@@ -422,7 +438,12 @@ export async function createProject(
         }
       }
       // uiTrack: the single persisted source the drive reads for the UX lane.
-      if (sftddConfig.project) sftddConfig.project.uiTrack = uiTrack;
+      if (sftddConfig.project) {
+        sftddConfig.project.uiTrack = uiTrack;
+        // clientFramework: records whether a React SPA client was scaffolded, so
+        // the architect defaults the UI boundary's renders_via to the SPA path.
+        sftddConfig.project.clientFramework = clientFramework;
+      }
       writeSftddConfig(projectDir, sftddConfig);
     } catch (err) {
       warnings.push(

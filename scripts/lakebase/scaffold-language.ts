@@ -15,6 +15,15 @@ import {
 
 export type ProjectLanguage = "java" | "kotlin" | "python" | "nodejs";
 
+/**
+ * The frontend the project ships. "react" scaffolds the first-class SPA client
+ * under `client/` (templates/project/client); "none" leaves the boundary to
+ * render server-side (e.g. Jinja2) or be a pure JSON/CLI backend. A UI project
+ * (uiTrack) defaults to "react" so a single-page app is the path of least
+ * resistance rather than a build-from-scratch fight.
+ */
+export type ClientFramework = "react" | "none";
+
 export interface DeployLanguageProjectArgs {
   targetDir: string;
   language: ProjectLanguage;
