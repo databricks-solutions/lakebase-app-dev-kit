@@ -154,8 +154,10 @@ export interface StoryTestItem {
    *  "fitness" (an architectural constraint test , structural OR a data/persistence
    *  invariant run against the real branch DB; MAY be born-green, a regression
    *  guard that already holds, which is not a stall). Surfaced from the per-story
-   *  test-list JSON (the test-strategist writes it). */
-  kind?: "behavior" | "fitness";
+   *  test-list JSON (the test-strategist writes it). "client" (a Vitest/RTL or
+   *  Playwright test under client/tests/) is RED-first like "behavior", never a
+   *  born-green guard. */
+  kind?: "behavior" | "fitness" | "client";
 }
 
 function readStoryItems(sftddDir: string, featureId: string, story: string): StoryTestItem[] {
@@ -250,7 +252,7 @@ export function pendingItemKind(
   sftddDir: string,
   featureId: string,
   story: string,
-): "behavior" | "fitness" | undefined {
+): "behavior" | "fitness" | "client" | undefined {
   return storyTestProgress(sftddDir, featureId, story).pending[0]?.kind;
 }
 

@@ -16,9 +16,12 @@ export interface TestListItem {
   status: "pending" | "red" | "green" | "refactored" | "skipped";
   scenario_file?: string;
   /** behavior = an AC scenario (pytest-bdd for Python); fitness = an
-   *  architectural fitness test (layering, ORM-only, config-in-env, NFR budget).
-   *  Default behavior. A service-backed feature needs >=1 fitness item. */
-  kind?: "behavior" | "fitness";
+   *  architectural fitness test (layering, ORM-only, config-in-env, NFR budget);
+   *  client = a UI-presentation AC the architecture assigns to the SPA's client
+   *  harness (Vitest/RTL component or Playwright e2e under client/tests/), not the
+   *  backend pytest-bdd suite. Default behavior. A service-backed feature needs
+   *  >=1 fitness item. */
+  kind?: "behavior" | "fitness" | "client";
   /** The architecture.json persistence_invariant a data/persistence fitness item
    *  covers. Set only on fitness items that verify a declared DB invariant against
    *  the real branch. checkPersistenceCoverage ties coverage to it, and
