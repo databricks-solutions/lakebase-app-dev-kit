@@ -124,6 +124,8 @@ The **orchestrator** is the deterministic driver (`lakebase-sftdd-drive`), **not
 
 Every AC declares a `layer` ("API" / "E2E" / "Infra" in `ac.schema.json`). The Driver dispatches to the runner that matches the current cycle's layer, not a single uniform `npm test`. The substrate enforces this: `markGreen` refuses to advance a layer-tagged cycle until `recordRunnerOutcome` has logged at least one run for the matching tag.
 
+A test-list item's `kind` refines this: a **`kind:"client"`** item (a UI-presentation AC the architecture routes to the SPA's own harness) runs through the CLIENT toolchain regardless of layer , `npm --prefix client test` (Vitest component test) or `npm --prefix client run test:e2e` (Playwright spec), authored under `client/tests/`. `behavior`/`fitness` items run through the layer runner below.
+
 | AC.layer | tag | Default runner | Notes |
 |---|---|---|---|
 | `API` | `api` | `npm test` (Node), `./mvnw test` (Java/Kotlin), `uv run pytest` (Python) | The project's primary test runner. Driver runs it as-is. |

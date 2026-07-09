@@ -184,10 +184,17 @@ export function checkE2eGate(args: {
     }
   }
   if (e2eAcIds.size === 0) return [];
+  // A Playwright runner at the project root (backend-served E2E) OR under
+  // client/ (a React SPA's own e2e config, shipped by the client scaffold)
+  // both satisfy the gate: an E2E AC on a SPA project drives client/tests/e2e
+  // through client/playwright.config.ts, not a root config.
   const configCandidates = [
     "playwright.config.ts",
     "playwright.config.js",
     "playwright.config.mjs",
+    join("client", "playwright.config.ts"),
+    join("client", "playwright.config.js"),
+    join("client", "playwright.config.mjs"),
   ];
   const hasConfig = configCandidates.some((rel) => existsSync(join(args.projectDir, rel)));
   if (hasConfig) return [];
@@ -197,8 +204,8 @@ export function checkE2eGate(args: {
       kind: "e2e-without-playwright",
       detail:
         `Test list references E2E-tagged AC(s) ${acList.map((id) => `[${id}]`).join(", ")} but ` +
-        `no playwright.config.{ts,js,mjs} was found at ${args.projectDir}. ` +
-        "Run installPlaywright() to scaffold the runner, or retag the ACs to a layer with a wired runner.",
+        `no playwright.config.{ts,js,mjs} was found at ${args.projectDir} or its client/ dir. ` +
+        "Run installPlaywright() (or scaffold the React client) to wire the runner, or retag the ACs to a layer with a wired runner.",
       ac_ids: acList,
     },
   ];
