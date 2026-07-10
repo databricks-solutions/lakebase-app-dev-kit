@@ -20,6 +20,11 @@ import { readTargets } from "../lakebase/deploy-targets.js";
 import { pollUntil } from "../util/poll-until.js";
 import { resolveSftddDir, findFeatureDir } from "./sftdd-paths.js";
 import { writeEscalation } from "./escalation.js";
+import {
+  parseFailedNodeIds,
+  classifyDeployVerifyFailure,
+  writeDeployVerifyAssessMarker,
+} from "./deploy-verify-assess.js";
 import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION } from "./e2e-regex-clean.js";
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
 import type { AgentLogEventName } from "./agent-log-events.js";
@@ -89,17 +94,17 @@ export function readAppDatabaseName(projectDir: string): string | undefined {
  * experiment branch / instance to fork from. Always returns the pass/fail boolean.
  */
 async function runVerifyMaybeEphemeral(
-  runVerify: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean,
+  runVerify: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean | { passed: boolean; output?: string },
   cmd: string,
   projectDir: string,
   env: NodeJS.ProcessEnv | undefined,
   lakebaseBranch: string | undefined,
   now: () => Date,
-): Promise<boolean> {
+): Promise<VerifyRun> {
   const instance =
     lakebaseBranch && sftddEnv("EPHEMERAL_VERIFY") !== "0" ? readProjectInstance(projectDir) : undefined;
   if (!instance || !lakebaseBranch) {
-    return runVerify(cmd, projectDir, env);
+    return normalizeVerifyRun(runVerify(cmd, projectDir, env));
   }
   // Unique per attempt: a time prefix (debuggable) plus a random suffix, so a
   // child leaked by a crashed prior run (reaped by its TTL) can never collide
@@ -108,7 +113,7 @@ async function runVerifyMaybeEphemeral(
   const childName = ephemeralVerifyBranchName(lakebaseBranch, nonce);
   const database = readAppDatabaseName(projectDir);
   return withEphemeralVerifyBranch({ instance, parentBranch: lakebaseBranch, childName, database }, (childDsn) =>
-    runVerify(cmd, projectDir, { ...(env ?? process.env), VERIFY_DATABASE_URL: childDsn }),
+    normalizeVerifyRun(runVerify(cmd, projectDir, { ...(env ?? process.env), VERIFY_DATABASE_URL: childDsn })),
   );
 }
 
@@ -330,16 +335,31 @@ function pidFile(projectDir: string, target: string): string {
  *  the last lines are echoed to stderr (they land in the drive log). Without
  *  this a failed verify recorded only a generic summary and the actual test
  *  output was discarded, so every failure needed a manual reproduction. */
-function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): boolean {
+/** A verify run's outcome + its combined stdout/stderr. The output feeds the
+ *  deploy-verify self-heal classifier (parse the failing node-ids). */
+export interface VerifyRun {
+  passed: boolean;
+  output: string;
+}
+
+/** The verify runner may be injected as a plain boolean (the common test shape)
+ *  or a {passed, output}. Normalize to VerifyRun so callers read one shape. */
+function normalizeVerifyRun(raw: boolean | { passed: boolean; output?: string }): VerifyRun {
+  return typeof raw === "boolean"
+    ? { passed: raw, output: "" }
+    : { passed: raw.passed, output: raw.output ?? "" };
+}
+
+function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): VerifyRun {
   try {
-    execSync(cmd, { cwd, stdio: "pipe", env: env ?? process.env });
-    return true;
+    const out = execSync(cmd, { cwd, stdio: "pipe", env: env ?? process.env });
+    return { passed: true, output: out?.toString() ?? "" };
   } catch (err) {
     const e = err as { stdout?: Buffer; stderr?: Buffer };
-    const out = `${e.stdout?.toString() ?? ""}${e.stderr?.toString() ?? ""}`.trimEnd();
-    const tail = out.split("\n").slice(-30).join("\n");
+    const output = `${e.stdout?.toString() ?? ""}${e.stderr?.toString() ?? ""}`.trimEnd();
+    const tail = output.split("\n").slice(-30).join("\n");
     process.stderr.write(`\n[deploy] feature-verify failed; last output:\n${tail}\n`);
-    return false;
+    return { passed: false, output };
   }
 }
 
@@ -397,7 +417,7 @@ export interface DeployArgs {
   /** Inject for tests: reachability probe. */
   reachable?: (url: string) => Promise<boolean>;
   /** Inject for tests: run the feature-verify command; true = passed (exit 0). */
-  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
+  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean | { passed: boolean; output?: string };
   /** Stop the running local app (default stopLocal). Injectable for hermetic tests. */
   stop?: (projectDir: string, targetName: string) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -530,9 +550,12 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
   // meaningful once reachable. No verify command configured -> passed:false,
   // which the strict deploy gate refuses (a shippable target must declare one).
   let verify: VerifyResult = { passed: false };
+  // The failing verify's combined output, kept for the deploy-verify self-heal
+  // classifier (parse the failing node-ids to re-run in isolation).
+  let verifyOutput = "";
   if (reachableNow && cfg.verify) {
     const runVerify = args.runVerify ?? defaultRunVerify;
-    const passed = await runVerifyMaybeEphemeral(
+    const result = await runVerifyMaybeEphemeral(
       runVerify,
       cfg.verify,
       args.projectDir,
@@ -540,6 +563,8 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
       args.lakebaseBranch,
       args.now ?? (() => new Date()),
     );
+    const passed = result.passed;
+    verifyOutput = result.output;
     verify = {
       passed,
       command: cfg.verify,
@@ -600,14 +625,48 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
     // deployVerified teeth stay false, so without this the driver re-issues
     // await-acceptance forever. Surface + halt; a human resolves it.
     if (!(reachableNow && verify.passed)) {
-      writeEscalation(sftddDir, {
-        source: "deploy-verify",
-        reason: `deploy of ${args.featureId}${args.storyId ? `/${args.storyId}` : ""} did not prove working software: ${
-          reachableNow ? verify.summary ?? "verify failed" : `app not reachable at ${url}`
-        }`,
-        feature_id: args.featureId,
-        ...(args.storyId ? { story_id: args.storyId } : {}),
-      });
+      // Deploy-verify self-heal (FEIP-7916): a reachable-but-FAILED verify on a
+      // STORY deploy (where a clean child can be forked to isolate on) MIGHT be
+      // shared-state contamination (a test that does not own its DB state, e.g.
+      // an absolute whole-table aggregate) rather than broken software. Classify
+      // by re-running the failing node-ids in ISOLATION; if they all pass alone,
+      // record the one-shot deploy-verify-assess marker (the orchestrator routes
+      // a Navigator scope turn + re-verify) INSTEAD of the terminal escalation.
+      // Anything else (unreachable, no isolatable branch, or still-fails-alone)
+      // keeps the terminal deploy-verify HIL, byte-identical to before.
+      let contamination = false;
+      if (reachableNow && cfg.verify && args.storyId && args.lakebaseBranch) {
+        const failing = parseFailedNodeIds(verifyOutput);
+        if (failing.length > 0) {
+          const runVerify = args.runVerify ?? defaultRunVerify;
+          const verdict = await classifyDeployVerifyFailure(failing, async (ids) =>
+            (
+              await runVerifyMaybeEphemeral(
+                runVerify,
+                `${cfg.verify} ${ids.join(" ")}`,
+                args.projectDir,
+                env,
+                args.lakebaseBranch,
+                args.now ?? (() => new Date()),
+              )
+            ).passed,
+          );
+          if (verdict === "contamination") {
+            writeDeployVerifyAssessMarker(sftddDir, args.featureId, args.storyId, failing);
+            contamination = true;
+          }
+        }
+      }
+      if (!contamination) {
+        writeEscalation(sftddDir, {
+          source: "deploy-verify",
+          reason: `deploy of ${args.featureId}${args.storyId ? `/${args.storyId}` : ""} did not prove working software: ${
+            reachableNow ? verify.summary ?? "verify failed" : `app not reachable at ${url}`
+          }`,
+          feature_id: args.featureId,
+          ...(args.storyId ? { story_id: args.storyId } : {}),
+        });
+      }
     }
   }
 
@@ -630,7 +689,7 @@ export interface CycleVerifyArgs {
   lakebaseBranch?: string;
   startProcess?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => number;
   reachable?: (url: string) => Promise<boolean>;
-  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean;
+  runVerify?: (cmd: string, cwd: string, env?: NodeJS.ProcessEnv) => boolean | { passed: boolean; output?: string };
   /** Stop the running local app (default stopLocal). Injectable for hermetic tests. */
   stop?: (projectDir: string, targetName: string) => void;
   sleep?: (ms: number) => Promise<void>;
@@ -714,30 +773,30 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   let migrationFailed = false;
   try {
     if (isPython) {
-      const mainPassed = await runVerifyMaybeEphemeral(
+      const mainPassed = (await runVerifyMaybeEphemeral(
         runVerify,
         cfg.verify,
         args.projectDir,
         { ...env, SFTDD_PYTEST_MARKER: "not migration" },
         args.lakebaseBranch,
         nowFn,
-      );
+      )).passed;
       // Only isolate the migration pass if the main suite is green (else the
       // failure is already surfaced; skip the extra branch cut).
       const migPassed = mainPassed
-        ? await runVerifyMaybeEphemeral(
+        ? (await runVerifyMaybeEphemeral(
             runVerify,
             cfg.verify,
             args.projectDir,
             { ...env, SFTDD_PYTEST_MARKER: "migration" },
             args.lakebaseBranch,
             nowFn,
-          )
+          )).passed
         : true;
       migrationFailed = mainPassed && !migPassed;
       passed = mainPassed && migPassed;
     } else {
-      passed = await runVerifyMaybeEphemeral(runVerify, cfg.verify, args.projectDir, env, args.lakebaseBranch, nowFn);
+      passed = (await runVerifyMaybeEphemeral(runVerify, cfg.verify, args.projectDir, env, args.lakebaseBranch, nowFn)).passed;
     }
   } finally {
     stop(args.projectDir, targetName); // never leave the app on the port
