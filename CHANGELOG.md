@@ -53,6 +53,14 @@ never ran. Plus a downstream-migrate matching fix.
   same-feature no-op now covers all in-flight claimed states, so a re-claim
   hands back the existing claim and the drive resumes where it stopped; a
   different feature in one of those states is still `already-claimed-other`.
+- **Whole-table aggregate tests must own their state (FEIP-7916).** A test that
+  asserts an absolute table-wide aggregate (an integrity probe / global
+  `COUNT`/`SUM`) passed on the isolated per-cycle build branch but failed the
+  full-feature deploy-verify once other stories' rows shared the table. The
+  test-strategist + navigator canon now requires scoping the seed AND the
+  assertion to the test's own rows (or a delta), never a global total, enforced
+  by a new spec-level `shared-state-aggregate-assertion` smell the reflect critic
+  surfaces at design time.
 
 ## [0.3.0-beta.12] - 2026-07-09
 
