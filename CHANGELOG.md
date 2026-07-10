@@ -46,6 +46,13 @@ never ran. Plus a downstream-migrate matching fix.
 - **`scm-merge --wait-migrate` matches the downstream run by merge-commit SHA**
   instead of a `mergedAt` time window, ending the false "(no matching run)"
   timeout when `mergedAt` reflected a post-cleanup local clock.
+- **Claiming resumes an in-flight feature instead of refusing (FEIP-7916).**
+  The sprint driver re-claims each backlog feature right before driving it, so
+  resuming a sprint whose feature was mid-promote (`pr-ready` / `ci-green`)
+  failed with "Cannot claim feature branch from state pr-ready". The idempotent
+  same-feature no-op now covers all in-flight claimed states, so a re-claim
+  hands back the existing claim and the drive resumes where it stopped; a
+  different feature in one of those states is still `already-claimed-other`.
 
 ## [0.3.0-beta.12] - 2026-07-09
 
