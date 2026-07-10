@@ -17,6 +17,7 @@ import {
   writeSmellsLog,
   readSmellsLog,
   composeReviseBrief,
+  specLevelSmell,
 } from "../../scripts/sftdd/smells";
 import type { CycleArtifact, CycleScope } from "../../scripts/sftdd/run-cycle";
 
@@ -65,6 +66,7 @@ describe("smells catalog", () => {
         "reflect-spec-defect",
         "reflect-testlist-defect",
         "scaffold-defect",
+        "shared-state-aggregate-assertion",
         "superseded-tests",
         "test-cost-spiral",
         "test-deletion-attempt",
@@ -80,6 +82,22 @@ describe("smells catalog", () => {
       expect(entry.description.length).toBeGreaterThan(10);
       expect(entry.proposed_remediation.length).toBeGreaterThan(10);
     }
+  });
+
+  it("shared-state-aggregate-assertion is a spec-level, test-strategist-owned Gate-3 revise", () => {
+    // A contamination-fragile whole-table aggregate assertion is a test-list
+    // defect: route back to the Test Strategist to scope it (not a build fix).
+    const s = SMELL_CATALOG.find((e) => e.name === "shared-state-aggregate-assertion");
+    expect(s).toBeDefined();
+    expect(s?.level).toBe("spec");
+    expect(s?.owning_role).toBe("test-strategist");
+    expect(s?.gate_to_rerun).toBe("test_list");
+    // It routes through the same spec-level revise machinery as the other
+    // test-strategist smells.
+    expect(specLevelSmell("shared-state-aggregate-assertion")).toEqual({
+      owning_role: "test-strategist",
+      gate_to_rerun: "test_list",
+    });
   });
 });
 

@@ -24,6 +24,12 @@ export type SmellName =
   | "contract-incompleteness"
   | "migration-app-coupling"
   | "superseded-tests"
+  // A test asserts an ABSOLUTE whole-table aggregate (an integrity probe / global
+  // COUNT/SUM) without owning the table state, so it passes on the isolated
+  // per-cycle build branch but fails the full-feature deploy-verify once other
+  // stories' rows share the table. Spec-level, test-strategist-owned: scope the
+  // aggregate + assertion to the test's own rows (or a delta), never a global total.
+  | "shared-state-aggregate-assertion"
   // Pre-build reflection gate: the Navigator (reflect mode) found a design-time
   // defect in a story's spec or test-list before the build lane. Spec-level +
   // blocking, so it routes to the owning author (bounded one revise) then HITL,
@@ -186,6 +192,26 @@ export const SMELL_CATALOG: SmellDefinition[] = [
       "coverage, or move the assertion to the correct layer. Bounded to one automatic revise per " +
       "story; if the critic still finds the defect after the re-scope, it escalates to the human.",
     // A test-list defect the critic surfaces is a test-strategist fix: route back to Gate 3.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list",
+  },
+  {
+    name: "shared-state-aggregate-assertion",
+    description:
+      "A test asserts an ABSOLUTE aggregate over the WHOLE store (an integrity/consistency " +
+      "probe, a global COUNT/SUM , e.g. 'the probe reports exactly 0/2/1 nonconforming rows') " +
+      "without owning the table state it asserts. It passes in the per-cycle build verify (an " +
+      "ISOLATED ephemeral branch holding only its seeded rows) but the honest-GREEN full-feature " +
+      "deploy-verify FAILS it, because that runs the whole suite against the SHARED feature-branch " +
+      "DB where other stories' rows (same nullable columns) inflate the count. A real probe over a " +
+      "real deployed DB can never assert an exact global total anyway.",
+    proposed_remediation:
+      "Route back to the Test Strategist (Gate 3): scope BOTH the seed AND the assertion to the " +
+      "test's own rows (filter the probe/count by the test's SKUs or a marker column, or assert a " +
+      "before-vs-after DELTA), never an absolute whole-table total. Bounded to one automatic revise " +
+      "per story; a second escape escalates to the human.",
+    // A contamination-fragile aggregate assertion is a test-strategist fix: route back to Gate 3.
     level: "spec",
     owning_role: "test-strategist",
     gate_to_rerun: "test_list",
