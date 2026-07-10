@@ -118,7 +118,9 @@ describe("claimFeatureBranch precondition", () => {
     });
   });
 
-  it("refuses claim from pr-ready (bad-precondition)", async () => {
+  it("refuses claim of a DIFFERENT feature from pr-ready (already-claimed-other)", async () => {
+    // An in-flight feature at pr-ready must not be silently abandoned by
+    // claiming a new one. (Same-feature re-claim from pr-ready resumes , see below.)
     seedState({
       version: 1,
       state: "pr-ready",
@@ -137,7 +139,58 @@ describe("claimFeatureBranch precondition", () => {
         projectDir: tmpDir,
         featureId: "new-feature",
       }),
-    ).rejects.toMatchObject({ code: "bad-precondition" });
+    ).rejects.toMatchObject({ code: "already-claimed-other" });
+  });
+
+  it("idempotent re-claim of the SAME feature from pr-ready resumes (no-op, no re-cut)", async () => {
+    // The sprint driver re-claims each backlog feature before driving it. When
+    // that feature is mid-promote (pr-ready), the re-claim must hand back the
+    // existing claim so the drive resumes at wait-ci, not refuse or re-cut.
+    seedState({
+      version: 1,
+      state: "pr-ready",
+      tier_topology: 2,
+      project_id: "p",
+      feature_id: "F1-stock-visibility",
+      branch: "feature-f1-stock-visibility",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-f1",
+      claimed_at: "2026-05-01T00:00:00Z",
+      pr_url: "https://github.com/o/r/pull/1",
+      pushed_at: "2026-05-01T01:00:00Z",
+    });
+    const result = await scm.claimFeatureBranch({
+      projectDir: tmpDir,
+      featureId: "F1-stock-visibility",
+    });
+    expect(result.alreadyClaimed).toBe(true);
+    expect(result.state.state).toBe("pr-ready"); // state untouched, just resumed
+    expect(mockCreateFeaturePairedBranch).not.toHaveBeenCalled();
+  });
+
+  it("idempotent re-claim of the SAME feature from ci-green resumes (no-op)", async () => {
+    seedState({
+      version: 1,
+      state: "ci-green",
+      tier_topology: 2,
+      project_id: "p",
+      feature_id: "F1-stock-visibility",
+      branch: "feature-f1-stock-visibility",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-f1",
+      claimed_at: "2026-05-01T00:00:00Z",
+      pr_url: "https://github.com/o/r/pull/1",
+      pushed_at: "2026-05-01T01:00:00Z",
+      ci_run_url: "https://github.com/o/r/actions/runs/1",
+      ci_green_at: "2026-05-01T02:00:00Z",
+    });
+    const result = await scm.claimFeatureBranch({
+      projectDir: tmpDir,
+      featureId: "F1-stock-visibility",
+    });
+    expect(result.alreadyClaimed).toBe(true);
+    expect(result.state.state).toBe("ci-green");
+    expect(mockCreateFeaturePairedBranch).not.toHaveBeenCalled();
   });
 
   it("refuses re-claim of a DIFFERENT feature when already feature-claimed", async () => {

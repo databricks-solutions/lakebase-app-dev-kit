@@ -71,11 +71,12 @@ export interface ClaimFeatureBranchArgs {
    */
   parentBranchOverride?: string;
   /**
-   * When true, return a no-op success if the workflow is already in
-   * feature-claimed for THE SAME feature-id (matched by sanitized
-   * branch). Defaults to true; pass false to make repeat claims fail
-   * loud. Distinct from `bad-precondition` because nothing is wrong;
-   * the caller just re-ran the bin.
+   * When true, return a no-op success if the workflow is already in an
+   * in-flight claimed state (feature-claimed / pr-ready / ci-green) for THE
+   * SAME feature-id (matched by sanitized branch), so a re-claim resumes the
+   * feature where it stopped instead of failing. Defaults to true; pass false
+   * to make repeat claims fail loud. Distinct from `bad-precondition` because
+   * nothing is wrong; the caller (e.g. the sprint driver) just re-entered.
    */
   idempotent?: boolean;
   /** Optional clock injection for testability. Defaults to `new Date()`. */
@@ -94,6 +95,21 @@ export interface ClaimFeatureBranchResult {
 const STATES_ALLOWING_CLAIM: ScmWorkflowState["state"][] = [
   "scaffold-complete",
   "merged",
+];
+
+/**
+ * States in which a feature is already CLAIMED and in-flight (past claim,
+ * before merge). Re-claiming the SAME feature from any of these is an
+ * idempotent no-op resume, not an error: the sprint driver re-claims each
+ * backlog feature right before driving it, so resuming a feature that is
+ * mid-promote (pr-ready / ci-green) must not re-cut its branch, it must just
+ * hand back the existing claim so the drive continues from where it stopped.
+ * A DIFFERENT feature in one of these states is still `already-claimed-other`.
+ */
+const IN_FLIGHT_CLAIMED_STATES: ScmWorkflowState["state"][] = [
+  "feature-claimed",
+  "pr-ready",
+  "ci-green",
 ];
 
 /**
@@ -181,10 +197,15 @@ export async function claimFeatureBranch(
   const branch = featureBranchName(slug);
   const idempotent = args.idempotent !== false;
 
-  if (current.state === "feature-claimed") {
-    // Same-feature re-claim is an idempotent no-op. Both sides are the
-    // canonical (sanitized) branch name now, so equality holds for a genuine
-    // re-entry regardless of the case or slash/hyphen form the caller typed.
+  if (IN_FLIGHT_CLAIMED_STATES.includes(current.state)) {
+    // A feature is already claimed and in-flight (feature-claimed / pr-ready /
+    // ci-green). Same-feature re-claim is an idempotent no-op RESUME: the sprint
+    // driver re-claims each backlog feature right before driving it, so resuming
+    // a feature that has already advanced to pr-ready or ci-green must hand back
+    // the existing claim (not re-cut its branch, and not refuse) so the drive
+    // continues from where it stopped. Both sides are the canonical (sanitized)
+    // branch name now, so equality holds regardless of the case or slash/hyphen
+    // form the caller typed.
     if (idempotent && current.branch === branch) {
       return {
         state: current,
@@ -192,8 +213,10 @@ export async function claimFeatureBranch(
         alreadyClaimed: true,
       };
     }
+    // A DIFFERENT feature is in-flight, claiming a new one would silently
+    // abandon it.
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
+      `Cannot claim ${branch}: workflow is already at "${current.state}" for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other",
     );
   }

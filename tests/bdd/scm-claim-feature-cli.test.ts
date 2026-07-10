@@ -151,7 +151,7 @@ describe("lakebase-scm-claim-feature-branch CLI", () => {
     expect(parsed.parent_branch).toBe("staging");
   });
 
-  it("--json emits structured JSON on precondition error (exit 2)", async () => {
+  it("--json emits structured JSON on a claim-conflict error (exit 2)", async () => {
     state.writeWorkflowState(tmpDir, {
       version: 1,
       state: "pr-ready",
@@ -174,7 +174,9 @@ describe("lakebase-scm-claim-feature-branch CLI", () => {
     expect(code).toBe(2);
     const parsed = JSON.parse(stdout());
     expect(parsed.ok).toBe(false);
-    expect(parsed.error.code).toBe("bad-precondition");
+    // Claiming a DIFFERENT feature while one is in-flight at pr-ready is a
+    // conflict (would abandon it), not a resume. (Same-feature re-claim resumes.)
+    expect(parsed.error.code).toBe("already-claimed-other");
   });
 
   it("idempotent re-claim of same feature exits 0 with already-claimed flag", async () => {
