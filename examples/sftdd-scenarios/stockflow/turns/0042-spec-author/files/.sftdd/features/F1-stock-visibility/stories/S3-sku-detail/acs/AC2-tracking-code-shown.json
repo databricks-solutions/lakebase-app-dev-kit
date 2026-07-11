@@ -1,0 +1,13 @@
+{
+  "id": "AC2-tracking-code-shown",
+  "given": "a warehouse operator viewing the SKU detail view for a SKU that holds stock",
+  "when": "one of that SKU's location entries is read",
+  "then": "the entry displays the combined inventory_code (tracking code) recorded for that (SKU, location) stock record",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E: the combined inventory_code is a persisted NOT NULL column on stock_records (PI2), read by app/repositories, passed through app/services unchanged, serialized in the app/routes JSON payload, and rendered per location entry by the React SPA. No transformation or business rule lives in the boundary; the tracking code is a straight field projection. Verified over the R4 branch read: seeded rows carry an inventory_code and each detail entry surfaces it.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts every location where the SKU is held appears; this adds the distinct outcome that each entry surfaces its combined inventory_code, which can fail (code omitted) while all locations still list correctly, and can pass while a location is missing."
+  }
+}

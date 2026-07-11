@@ -1,0 +1,47 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S2-stock-by-location-home",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T13",
+      "description": "opening the home screen for a location with seeded stock records returns, through the api boundary, one JSON row per filed (sku, location) with its sku, location, and quantity (real-branch integration)",
+      "ac_id": "AC1-stock-listing-displayed",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-stock-by-location-home.feature"
+    },
+    {
+      "id": "T14",
+      "description": "the stock-by-location table client component renders one row per item from the listing response, each showing its sku, location, and quantity with data-testid seams (client component)",
+      "ac_id": "AC1-stock-listing-displayed",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/StockByLocation.test.tsx"
+    },
+    {
+      "id": "T15",
+      "description": "each quantity cell in the stock-by-location table carries the design-guide right-aligned class / data-testid seam rather than an inline style (client component)",
+      "ac_id": "AC2-quantity-right-aligned",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/StockByLocation.test.tsx"
+    },
+    {
+      "id": "T16",
+      "description": "opening the home screen for a location with zero stock records returns a 2xx empty collection from the api boundary, not an error (real-branch integration)",
+      "ac_id": "AC3-empty-state-shown",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-stock-by-location-home.feature"
+    },
+    {
+      "id": "T17",
+      "description": "when the listing response is an empty collection, the client renders the explicit \"No stock at this location\" message in place of the table, never a blank region (client component)",
+      "ac_id": "AC3-empty-state-shown",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/StockByLocation.test.tsx"
+    }
+  ]
+}

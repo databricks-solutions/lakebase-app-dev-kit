@@ -1,0 +1,25 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S2-detail-view-split-fields",
+  "ac_id": "AC1-batch-and-serial-shown-as-distinct-fields",
+  "test_id": "T11",
+  "test_description": "the SKU detail JSON boundary (app/routes) returns batch_number and serial_number as two separate fields for a stock row with both populated, sourced via stock-service -> stock-repository against the branch DB",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s2-detail-view-split-fields-exp1",
+  "red_at": "2026-07-11T22:58:06.112Z",
+  "layer": "E2E",
+  "test_ids": [
+    "T11",
+    "T12",
+    "T13",
+    "T14",
+    "T15",
+    "T16",
+    "T17",
+    "T18"
+  ],
+  "chunk": "E2E-1",
+  "green_at": "2026-07-11T23:00:17.364Z",
+  "navigator_verdict": "passed"
+}

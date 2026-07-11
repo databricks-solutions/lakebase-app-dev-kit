@@ -1,0 +1,13 @@
+{
+  "id": "AC4-null-serial-shows-none",
+  "given": "a warehouse operator viewing the SKU detail screen for a stock position whose serial has no value",
+  "when": "the detail view renders",
+  "then": "the serial field shows an explicit \"none\" state rather than a blank region or a crash, while its batch field is unaffected",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E: serial_number is a nullable column (S1), so stock-repository returns NULL faithfully, stock-service passes it through, and the boundary (app/routes) serializes it as JSON null; the client SPA maps that to an explicit \"none\" not-tracked state while leaving the batch field unaffected. The optional-field rendering is owned by the client presentation layer, not the domain (usability posture). Owner: client SKU-detail component (serial field).",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC3 covers a missing batch rendering \"none\"; this AC adds the distinct outcome that a missing serial renders \"none\". A row can have a serial NULL while its batch is populated, so the serial none-path can break independently of AC3's batch none-path and of AC1's populated rendering."
+  }
+}

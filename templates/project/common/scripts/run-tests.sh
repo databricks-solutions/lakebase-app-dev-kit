@@ -119,10 +119,14 @@ fi
 if [ "$#" -eq 0 ] && [ -f "$REPO_ROOT/client/package.json" ]; then
   if [ ! -d "$REPO_ROOT/client/node_modules" ]; then
     echo "client/node_modules missing - installing client deps so the client tests actually run..."
+    # --include=dev is REQUIRED: this reinstall commonly runs under the deploy
+    # gate, where NODE_ENV=production is set; without it npm omits devDependencies
+    # and vitest (a devDep) is skipped, so `npm test` below dies with
+    # "vitest: command not found" and the deploy fails on a phantom, not the code.
     if [ -f "$REPO_ROOT/client/package-lock.json" ]; then
-      ( cd "$REPO_ROOT/client" && npm ci )
+      ( cd "$REPO_ROOT/client" && npm ci --include=dev )
     else
-      ( cd "$REPO_ROOT/client" && npm install )
+      ( cd "$REPO_ROOT/client" && npm install --include=dev )
     fi
   fi
   echo "Running client unit tests (Vitest)..."

@@ -1,0 +1,10 @@
+{
+  "id": "S2-stock-by-location-home",
+  "asA": "warehouse operator",
+  "iWantTo": "open a home screen that lists stock by location in a scannable table of SKU, location and right-aligned quantity",
+  "soThat": "I can read back at a glance what is on the shelves, with an explicit empty state when there is none",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "S1 delivers only the record form and its save confirmation; this story adds a separate aggregate listing screen showing all stock records with right-aligned quantities and an explicit 'No stock at this location' empty state, which S1's build does not produce."
+  }
+}

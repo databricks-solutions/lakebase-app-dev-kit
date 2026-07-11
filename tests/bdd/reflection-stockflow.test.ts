@@ -41,6 +41,17 @@ beforeEach(() => {
   // the feature test-list master) , the real design-lane outputs.
   mkdirSync(join(tdd, "features"), { recursive: true });
   cpSync(RECORDED_F1, join(tdd, "features", FEATURE), { recursive: true });
+  // The recording ships each story's reflect-verdict.json (a real design-lane
+  // artifact). These tests DRIVE the reflect gate themselves (write the verdict
+  // under test, leave siblings' absent), so strip the staged verdicts to control
+  // the reflection state , otherwise a sibling reads as already-passed.
+  const storiesDir = join(tdd, "features", FEATURE, "stories");
+  if (existsSync(storiesDir)) {
+    for (const s of readdirSync(storiesDir)) {
+      const v = join(storiesDir, s, "reflect-verdict.json");
+      if (existsSync(v)) rmSync(v);
+    }
+  }
 });
 afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 

@@ -1,0 +1,17 @@
+{
+  "ordinal": 7,
+  "step": 0,
+  "label": "ux-designer",
+  "kind": "invoke-role",
+  "role": "ux-designer",
+  "action": {
+    "kind": "invoke-role",
+    "role": "ux-designer"
+  },
+  "produced": [
+    ".sftdd/design/design-guide.json",
+    ".sftdd/design/design-guide.md",
+    ".sftdd/design/ia.md"
+  ],
+  "deleted": []
+}

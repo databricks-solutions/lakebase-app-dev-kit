@@ -1,14 +1,18 @@
 // replayDesignTurn copies a design role's recorded output per-turn so the
 // fast-forward driver VISITS every stage (not pre-seed-and-skip). The key
-// faithfulness property: the Spec Author turn copies ACs with `layer` STRIPPED
-// (so the Architect still has work), and the Architect turn restores the
-// layer-annotated ACs. A story the corpus lacks returns false (-> real agent).
+// faithfulness property: the Spec Author turn copies each AC VERBATIM (the spec
+// author authors `layer`), and the Architect turn , when dispatched , re-copies
+// them idempotently + adds architecture.json. The design probe dispatches/skips
+// the Architect on architectural_notes + architecture.json + the canon, NOT on
+// `layer`, so the Spec Author must not strip it (a cleanly-mapping story gets its
+// notes PROJECTED with no Architect turn to restore a stripped layer). A story the
+// corpus lacks returns false (-> real agent).
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { replayDesignTurn } from "../../scripts/sftdd/replay-artifacts.js";
+import { replayDesignTurn, restoreReflectVerdict } from "../../scripts/sftdd/replay-artifacts.js";
 
 const F = "F1-file-bug";
 const S = "S1-file-bug";
@@ -55,16 +59,16 @@ describe("replayDesignTurn: each stage's output is replayed per-turn", () => {
     expect(existsSync(acFile())).toBe(false); // ACs are the per-story Spec Author turn
   });
 
-  it("spec-author per-story copies the ACs with `layer` STRIPPED (Architect still has work)", () => {
+  it("spec-author per-story copies the ACs VERBATIM, preserving `layer` (the spec author authors it)", () => {
     expect(replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
     expect(existsSync(acFile())).toBe(true);
-    expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBeUndefined();
+    expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBe("E2E");
   });
 
-  it("architect-reviewer restores the layer-annotated ACs + copies architecture", () => {
-    replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F }); // strip
+  it("architect-reviewer re-copies the ACs (idempotent) + copies architecture", () => {
+    replayDesignTurn({ turn: { role: "spec-author", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F });
     expect(replayDesignTurn({ turn: { role: "architect-reviewer", story: S }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(true);
-    expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBe("E2E"); // restored
+    expect(JSON.parse(readFileSync(acFile(), "utf8")).layer).toBe("E2E");
     expect(existsSync(join(tdd, "features", F, "architecture.json"))).toBe(true);
   });
 
@@ -77,5 +81,22 @@ describe("replayDesignTurn: each stage's output is replayed per-turn", () => {
 
   it("a story the corpus does not cover returns false (driver falls back to the real agent)", () => {
     expect(replayDesignTurn({ turn: { role: "spec-author", story: "S2-not-recorded" }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(false);
+  });
+});
+
+describe("restoreReflectVerdict: the reflect turn's .sftdd verdict (filtered by the code-only build restore)", () => {
+  it("restores the recorded reflect-verdict.json from the design corpus into the project", () => {
+    // The reflect turn replays as a build turn (code only, .sftdd filtered), so its
+    // verdict must be brought back from recorded-artifacts or the drive aborts.
+    const src = join(corpus, "features", F, "stories", S, "reflect-verdict.json");
+    wj(src, { version: 1, passed: true, findings: [] });
+    expect(restoreReflectVerdict({ replayDir: corpus, sftddDir: tdd, featureId: F, story: S })).toBe(true);
+    const dst = join(tdd, "features", F, "stories", S, "reflect-verdict.json");
+    expect(existsSync(dst)).toBe(true);
+    expect(JSON.parse(readFileSync(dst, "utf8")).passed).toBe(true);
+  });
+
+  it("returns false when the corpus has no verdict (no-op, caller runs the real reflect)", () => {
+    expect(restoreReflectVerdict({ replayDir: corpus, sftddDir: tdd, featureId: F, story: S })).toBe(false);
   });
 });

@@ -1,0 +1,20 @@
+{
+  "ordinal": 31,
+  "step": 0,
+  "label": "navigator",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S2-stock-by-location-home"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S2-stock-by-location-home/AC1-stock-listing-displayed/cycle-001.json",
+    "client/tests/pages/StockByLocation.test.tsx",
+    "tests/features/S2-stock-by-location-home.feature",
+    "tests/step_defs/test_S2_stock_by_location_home.py"
+  ],
+  "deleted": []
+}

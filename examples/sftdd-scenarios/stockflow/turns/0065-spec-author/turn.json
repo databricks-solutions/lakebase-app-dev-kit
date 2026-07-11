@@ -1,0 +1,22 @@
+{
+  "ordinal": 65,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S1-split-schema-migration"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC1-backfill-conforming-codes.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC2-nonconforming-left-null.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC3-every-row-survives-unchanged.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC4-combined-column-dropped.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC5-nonconforming-count-reported.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC6-migration-reverses.json"
+  ],
+  "deleted": []
+}

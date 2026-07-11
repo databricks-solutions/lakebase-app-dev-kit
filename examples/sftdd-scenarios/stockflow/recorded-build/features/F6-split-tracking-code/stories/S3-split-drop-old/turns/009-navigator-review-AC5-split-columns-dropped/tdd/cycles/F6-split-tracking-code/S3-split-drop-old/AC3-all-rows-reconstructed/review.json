@@ -1,5 +1,0 @@
-{
-  "reviewed_at": "2026-06-15T14:15:16.692Z",
-  "refactor_requested": false,
-  "refactor_notes": "AC3 (T23) green: down() reconstructs inventory_code with a set-based concat_ws over coalesced split columns (tracking_code/batch_number/serial_number), so every row gets a non-NULL value (NULL segments collapse to empty) and no rows are dropped, exactly what the all-rows-reconstructed AC requires. Layering honored: the reconstruction lives entirely in the single S3 Alembic revision (repository/migration layer); the T23 green diff touches only test files (feature + step defs), no route/service coupling. NFR-F6-S1-2 satisfied (quantity is never written or recomputed by the migration). NFR-F6-S1-4 satisfied: the step defs bind the real paired Lakebase branch via _module_session/SQL text, no mock or in-memory substitute, with seed-row cleanup so the over-every-row assertion is not polluted. NFR-F6-S1-5 satisfied: DSN resolves from env (DB_NAME=stockflow), no hardcoded connection string in the revision. Naming and SRP consistent with the F1/AC1/AC2 conventions; no UI surface in this AC. No concrete rubric-cited improvement warranted."
-}

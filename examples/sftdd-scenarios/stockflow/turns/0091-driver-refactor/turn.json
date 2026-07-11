@@ -1,0 +1,20 @@
+{
+  "ordinal": 91,
+  "step": 0,
+  "label": "driver-refactor",
+  "kind": "invoke-role",
+  "role": "driver",
+  "mode": "refactor",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S2-detail-view-split-fields",
+    "buildMode": "refactor"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/review.json",
+    "client/src/pages/SkuDetail.tsx"
+  ],
+  "deleted": []
+}

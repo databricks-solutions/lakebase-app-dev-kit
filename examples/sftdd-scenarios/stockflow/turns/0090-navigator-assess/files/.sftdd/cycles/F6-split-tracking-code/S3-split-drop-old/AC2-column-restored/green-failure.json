@@ -1,6 +1,0 @@
-{
-  "assessed": true,
-  "summary": "GREEN verify FAILED against the running app",
-  "diagnosis": "Contract-incompleteness (hard rule 9): the S3 up() migration DROPPED inventory_code from stock, but production code still references the dropped column (app/repositories/stock_repository.py:17), so the running app emits SQL for a column the migrated schema no longer has and crashes with 'inventory_code does not exist'. T22 and the migration itself pass, but the full-suite verify fails because every DB/app-touching test hits the crashing app. Not a supersession: the prior inventory_code tests (S2 home-table T15/T16, S3 detail T22, S1 backfill, reversibility T11) were already migrated to tracking_code / pre-split-revision seeding, and T11's down()-reconstructs-inventory_code assertion is the behavior AC2/AC3 of this story mandate, so none are superseded.",
-  "fixDirective": "Remove or replace EVERY remaining inventory_code reference in production code so it matches the migrated schema: start at app/repositories/stock_repository.py:17 (the stale docstring naming the dropped column) and audit the ORM model field, every query/repository, every serializer/DTO and every template/view. Do NOT edit the Alembic migration or any test."
-}

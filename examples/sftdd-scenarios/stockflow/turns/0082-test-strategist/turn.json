@@ -1,0 +1,18 @@
+{
+  "ordinal": 82,
+  "step": 0,
+  "label": "test-strategist",
+  "kind": "invoke-role",
+  "role": "test-strategist",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "invoke-role",
+    "role": "test-strategist",
+    "story": "S2-detail-view-split-fields"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/test-list-per-story.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.json"
+  ],
+  "deleted": []
+}

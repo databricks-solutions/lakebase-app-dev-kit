@@ -1,0 +1,17 @@
+{
+  "ordinal": 25,
+  "step": 0,
+  "label": "navigator-reflect",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "reflect",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S2-stock-by-location-home",
+    "buildMode": "reflect"
+  },
+  "produced": [],
+  "deleted": []
+}

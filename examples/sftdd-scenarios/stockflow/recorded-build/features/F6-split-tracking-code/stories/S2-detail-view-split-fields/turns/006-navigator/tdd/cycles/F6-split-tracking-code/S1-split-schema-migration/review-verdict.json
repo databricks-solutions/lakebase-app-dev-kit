@@ -1,0 +1,4 @@
+{
+  "refactor": false,
+  "notes": "Migration 20260711222318 additively adds batch_number/serial_number, backfills only 3-segment non-empty codes, leaves nonconforming rows NULL, drops inventory_code last, runs in Alembic's single transactional block (AC1-AC3, NFR-F6-durability-migration, NFR-F6-additive-migration-rollout), and downgrade() reconstructs inventory_code for conforming rows with a documented best-effort fallback for nonconforming (AC6). location/(sku,location) uniqueness are untouched (NFR-F6-sku-location-uniqueness-preserved). DATABASE_URL is read via alembic/env.py with no hardcoded DSN (NFR-F6-config-in-env). StockRecord model and stock_repository.py correctly reflect the split columns; repository remains the sole ORM/session boundary per layering. No rubric gap found."
+}

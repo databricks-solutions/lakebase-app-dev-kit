@@ -1,0 +1,8 @@
+{
+  "id": "AC1-batch-and-serial-shown-as-distinct-fields",
+  "given": "a warehouse operator viewing the SKU detail screen for a stock position whose batch and serial are both present",
+  "when": "the detail view renders",
+  "then": "the batch value and the serial value each appear in the region where the combined tracking code used to appear, each as its own separately labelled field naming which is batch and which is serial",
+  "status": "draft",
+  "layer": "E2E"
+}

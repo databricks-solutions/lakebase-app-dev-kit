@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S2-stock-by-location-home",
+  "target": "local",
+  "url": "http://localhost:8000/",
+  "reachable": true,
+  "verify": {
+    "passed": true,
+    "command": "./scripts/run-tests.sh",
+    "summary": "feature-verify passed against the running app"
+  },
+  "lakebase_branch": "experiment-s2-stock-by-location-home-exp1",
+  "deployed_at": "2026-07-11T21:16:25.567Z"
+}

@@ -1,0 +1,11 @@
+{
+  "detected": [
+    {
+      "smell": "architect-canon-gap",
+      "cycle_ids": [],
+      "story_id": "S2-detail-view-split-fields",
+      "detail": "Canon does not cover F6-split-tracking-code/S2-detail-view-split-fields: persistence-invariant type \"transactional\" is not a canon pattern; NFR category \"durability\" is not in the canon posture; NFR category \"correctness\" is not in the canon posture; NFR category \"testability\" is not in the canon posture; NFR category \"usability\" is not in the canon posture; NFR category \"configurability\" is not in the canon posture. Route to the Architect to annotate the uncovered ACs + amend the canon.",
+      "detected_at": "2026-07-11T22:41:04.979Z"
+    }
+  ]
+}

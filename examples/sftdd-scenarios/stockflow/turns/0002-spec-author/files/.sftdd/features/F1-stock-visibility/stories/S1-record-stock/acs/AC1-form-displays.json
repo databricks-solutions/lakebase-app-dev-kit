@@ -1,8 +1,0 @@
-{
-  "id": "AC1-form-displays",
-  "given": "User navigates to the record stock page",
-  "when": "The page loads",
-  "then": "A form is displayed with input fields for SKU, location, quantity, and tracking code",
-  "status": "draft",
-  "architectural_notes": "Outermost boundary is the rendered UI view; no service/DB state is asserted, so E2E. Owner module: client record-stock form view served by the app/routes boundary (app/routes/stock.py). Cross-cutting: input validation is owned at the app/routes boundary per software-design-principles and surfaced inline next to the field (design brief); the form holds no domain logic."
-}

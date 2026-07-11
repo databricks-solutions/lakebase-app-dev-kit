@@ -1,0 +1,4 @@
+{
+  "refactor": true,
+  "notes": "client/src/pages/SkuDetail.tsx was never updated for this story: it still renders a single inventory_code column (NFR-F6-spa-json-boundary/AC1-AC2). Running client/tests/pages/SkuDetail.test.tsx shows 4 of 7 tests failing (sku-detail-batch-0/sku-detail-serial-0 testids do not exist). The Driver must add batch_number/serial_number fields to SkuDetailEntry/SkuDetailView, remove the inventory_code column, and render an explicit 'none' state per NFR-F6-null-field-clean-render before this story can be considered green; do not mark GREEN on API/server changes alone."
+}

@@ -1,0 +1,12 @@
+{
+  "id": "AC2-quantity-right-aligned",
+  "given": "a warehouse operator viewing the home screen stock table with at least one row",
+  "when": "the quantity column is read",
+  "then": "each quantity is right-aligned within its column so the digits line up for scanning",
+  "status": "draft",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts the table lists SKU, location and quantity; this adds the distinct visual outcome that the quantity values are right-aligned, which can fail (left-aligned digits) while the table still renders every row correctly."
+  },
+  "layer": "E2E"
+}

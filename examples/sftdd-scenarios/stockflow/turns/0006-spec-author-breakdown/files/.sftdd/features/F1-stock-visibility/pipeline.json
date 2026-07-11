@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "feature_id": "F1-stock-visibility",
+  "stories": {
+    "S1-record-stock": {
+      "status": "designing"
+    },
+    "S2-stock-by-location-home": {
+      "status": "designing"
+    },
+    "S3-sku-detail": {
+      "status": "designing"
+    }
+  },
+  "build_queue": [],
+  "build_active": null
+}

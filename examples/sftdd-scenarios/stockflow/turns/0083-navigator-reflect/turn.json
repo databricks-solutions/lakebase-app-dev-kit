@@ -1,0 +1,19 @@
+{
+  "ordinal": 83,
+  "step": 0,
+  "label": "navigator-reflect",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "reflect",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S2-detail-view-split-fields",
+    "buildMode": "reflect"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/reflect-verdict.json"
+  ],
+  "deleted": []
+}

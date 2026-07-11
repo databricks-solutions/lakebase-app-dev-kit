@@ -1,0 +1,62 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S3-sku-detail",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T18",
+      "description": "opening the SKU detail view for a SKU that holds stock at more than one seeded location returns, through the api boundary, one JSON entry per location holding only that SKU's records, each entry showing its location and quantity (real-branch integration)",
+      "ac_id": "AC1-detail-lists-all-locations",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-sku-detail.feature"
+    },
+    {
+      "id": "T19",
+      "description": "the SKU detail client component renders one row per location entry from the detail response, each showing its location and quantity with data-testid seams (client component)",
+      "ac_id": "AC1-detail-lists-all-locations",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T20",
+      "description": "the SKU-detail routes/boundary module contains no per-SKU filtering or location-grouping logic; the WHERE sku=:sku scoping and per-location grouping are performed by the repository query alone (layering contract)",
+      "ac_id": "AC1-detail-lists-all-locations",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T21",
+      "description": "each location entry returned by the SKU detail api boundary includes the combined inventory_code (tracking code) recorded for that (SKU, location) stock record, unchanged from the persisted value (real-branch integration)",
+      "ac_id": "AC2-tracking-code-shown",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-sku-detail.feature"
+    },
+    {
+      "id": "T22",
+      "description": "the SKU detail client component renders the combined inventory_code (tracking code) for each location entry with its data-testid seam (client component)",
+      "ac_id": "AC2-tracking-code-shown",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T23",
+      "description": "opening the SKU detail view for a SKU whose par level is not tracked returns a 2xx response from the api boundary with the par level field serialized as null/absent, never a 500 (real-branch integration)",
+      "ac_id": "AC3-par-level-not-tracked",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-sku-detail.feature"
+    },
+    {
+      "id": "T24",
+      "description": "when the par level field in the detail response is null/absent, the SKU detail client component renders an explicit \"not tracked\" indication in place of the par level, with no blank region (client component)",
+      "ac_id": "AC3-par-level-not-tracked",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    }
+  ]
+}

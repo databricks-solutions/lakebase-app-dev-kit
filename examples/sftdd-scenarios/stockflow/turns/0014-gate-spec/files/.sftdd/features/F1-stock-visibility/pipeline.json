@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "feature_id": "F1-stock-visibility",
+  "stories": {
+    "S1-record-stock": {
+      "status": "ready",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T20:21:32.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T20:21:32.996Z"
+      }
+    },
+    "S2-stock-by-location-home": {
+      "status": "designing"
+    },
+    "S3-sku-detail": {
+      "status": "designing"
+    }
+  },
+  "build_queue": [
+    "S1-record-stock"
+  ],
+  "build_active": null
+}

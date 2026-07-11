@@ -1,0 +1,39 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S3-sku-detail",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T18",
+      "description": "opening the SKU detail view for a SKU that holds stock at multiple locations returns, through the api boundary, one JSON entry per location holding that SKU with its location and quantity, and no entries for any other SKU (real-branch integration)",
+      "ac_id": "AC1-detail-lists-all-locations",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-sku-detail.feature"
+    },
+    {
+      "id": "T19",
+      "description": "the SKU detail client component renders one row per location entry from the detail response, each showing its location and quantity with data-testid seams (client component)",
+      "ac_id": "AC1-detail-lists-all-locations",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T20",
+      "description": "opening the SKU detail view for a SKU with stock records returns, through the api boundary, each location entry carrying its persisted inventory_code (tracking code) (real-branch integration)",
+      "ac_id": "AC2-tracking-code-shown",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S3-sku-detail.feature"
+    },
+    {
+      "id": "T21",
+      "description": "each location entry rendered by the SKU detail client component displays its combined inventory_code (tracking code) with a data-testid seam (client component)",
+      "ac_id": "AC2-tracking-code-shown",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    }
+  ]
+}

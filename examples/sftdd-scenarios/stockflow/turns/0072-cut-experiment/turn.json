@@ -1,0 +1,19 @@
+{
+  "ordinal": 72,
+  "step": 0,
+  "label": "cut-experiment",
+  "kind": "cut-experiment",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "cut-experiment",
+    "story": "S1-split-schema-migration"
+  },
+  "produced": [
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-schema-migration/exp1/branch.txt",
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-schema-migration/exp1/notes.md",
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-schema-migration/exp1/outcomes.json",
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-schema-migration/exp1/timeline.json",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

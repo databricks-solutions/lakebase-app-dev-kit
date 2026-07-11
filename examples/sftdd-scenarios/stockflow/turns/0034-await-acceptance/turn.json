@@ -1,0 +1,17 @@
+{
+  "ordinal": 34,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S2-stock-by-location-home"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F1-stock-visibility/pipeline.json",
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/deploy-evidence.json"
+  ],
+  "deleted": []
+}

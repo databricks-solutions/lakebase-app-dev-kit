@@ -1,5 +1,0 @@
-{
-  "reviewed_at": "2026-06-15T09:41:03.748Z",
-  "refactor_requested": true,
-  "refactor_notes": "Two NFR violations found. (1) NFR-F1-1: the Stock model is missing the required 'actor' column; the NFR states each record must carry an unmodifiable created_at timestamp AND actor -- only created_at is present, actor is absent entirely. Add a non-nullable 'actor' column (e.g. String, defaulting to a sentinel like 'system' for V1) to app/models/stock.py and issue an additive Alembic migration. (2) NFR-F1-2: the service rejects quantity == 0 ('must be greater than zero'), but the NFR says non-negative (zero is a valid on-hand count, e.g. stock exhausted but tracked). Change the validation guard to qty < 0 and update the error message to 'Quantity must be zero or greater'. Both are concrete model/service changes; no test assertions need weakening."
-}

@@ -1,0 +1,120 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "service_backed": true,
+  "layers": [
+    {
+      "name": "api-boundary",
+      "role": "boundary",
+      "module": "app/routes/",
+      "may_import": ["service"],
+      "renders_via": "react"
+    },
+    {
+      "name": "stock-service",
+      "role": "service",
+      "module": "app/services/",
+      "may_import": ["repository", "models"]
+    },
+    {
+      "name": "stock-repository",
+      "role": "repository",
+      "module": "app/repositories/",
+      "may_import": ["models"]
+    },
+    {
+      "name": "domain-models",
+      "role": "models",
+      "module": "app/models/",
+      "may_import": []
+    }
+  ],
+  "persistence_invariants": [
+    {
+      "id": "PI1-sku-location-unique",
+      "type": "unique",
+      "table": "stock_records",
+      "brief": "Composite UNIQUE(sku, location): no two rows share the pair; refiling resolves to one row at write time (R3, AC3/AC4)."
+    },
+    {
+      "id": "PI2-required-fields-not-null",
+      "type": "not_null",
+      "table": "stock_records",
+      "brief": "sku, location, quantity, and inventory_code are NOT NULL; a filed record always carries all four (AC1 form fields / AC2 round-trip)."
+    },
+    {
+      "id": "PI3-quantity-non-negative",
+      "type": "check",
+      "table": "stock_records",
+      "brief": "CHECK quantity >= 0: a stored stock level can never be negative (R2 no-negative floor defended at write time)."
+    },
+    {
+      "id": "PI4-migration-reversible",
+      "type": "migration_reversible",
+      "table": "stock_records",
+      "brief": "The Alembic migration creating stock_records applies and reverses cleanly on the branch, and additive changes preserve pre-existing rows (R1)."
+    }
+  ],
+  "nfrs": [
+    {
+      "id": "NFR-F1-durability-migrations",
+      "category": "durability",
+      "applies_to": "F1-stock-visibility",
+      "brief": "Existing stock records survive every additive schema migration with no loss; each record carries an unmodifiable created_at timestamp and actor set by the service and stored immutably by the model. Defended by PI4.",
+      "brief_ref": "R1",
+      "fitness_function": "Real-branch integration test: apply the Alembic revision to the paired branch over seeded rows, assert pre-existing rows and their immutable timestamp/actor survive, and the down revision reverses cleanly.",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-quantity-integrity",
+      "category": "correctness",
+      "applies_to": "F1-stock-visibility",
+      "brief": "Stock levels never persist below zero and never overcommit; an overcommitting write is rejected at write time, never stored negative or double-allocated. S1 files quantity directly; the non-negative floor is the part F1 upholds (PI3), full overcommit rejection lands in the later pick stories.",
+      "brief_ref": "R2",
+      "fitness_function": "Real-branch integration test: a write resulting in a negative quantity is rejected at write time; no negative row is ever stored (CHECK quantity >= 0).",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-sku-location-uniqueness",
+      "category": "correctness",
+      "applies_to": "S1-record-stock",
+      "brief": "Every SKU at every location is uniquely addressable by (sku, location); a collision is resolved at write time (last-write-wins single row) via the composite unique constraint PI1 plus a service-level upsert, never two duplicates (AC3) and never an error page (AC4).",
+      "brief_ref": "R3",
+      "fitness_function": "Real-branch integration test: submit the same (sku, location) pair twice; assert exactly one row holds the newly filed values and the second submit returns a 2xx confirmation, not an error page.",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-real-branch-tests",
+      "category": "testability",
+      "applies_to": "F1-stock-visibility",
+      "brief": "Integration tests run against the paired Lakebase branch (databricks_postgres), never a mock or in-memory substitute; CI refuses to merge a PR whose integration tests do not run against a real branch.",
+      "brief_ref": "R4",
+      "fitness_function": "pytest-bdd suite binds to the branch DB via conftest fixtures with Alembic migrations applied to the branch first and FK-aware targeted-DELETE cleanup; CI gate asserts the real-branch connection is used.",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-spa-json-boundary",
+      "category": "usability",
+      "applies_to": "F1-stock-visibility",
+      "brief": "The UI is a React + TypeScript single-page application under client/ that navigates client-side with no full-page reloads; the boundary layer returns JSON, not server-rendered HTML (boundary renders_via: react). The client ships its own component tests; the API is covered by the R4 branch integration tests.",
+      "brief_ref": "R5",
+      "fitness_function": "Layering/config fitness test: the boundary returns JSON (no server-rendered templates); client/ Vitest + Playwright harness covers SPA navigation with no full-page reload.",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-config-in-env",
+      "category": "configurability",
+      "applies_to": "F1-stock-visibility",
+      "brief": "DB connection resolves from env (the DATABASE_URL the post-checkout hook writes for the paired branch, database databricks_postgres); no hardcoded DSN and no app-specific DB name (twelve-factor config-in-env). Architect-proposed beyond the Required brief.",
+      "fitness_function": "Config-in-env fitness test: no hardcoded DSN; app and Alembic env read the injected DATABASE_URL and connect to databricks_postgres on the paired branch.",
+      "hil_status": "accepted"
+    },
+    {
+      "id": "NFR-F1-field-named-validation",
+      "category": "usability",
+      "applies_to": "S1-record-stock",
+      "brief": "Validation failures return a clear, specific message naming the offending field (e.g. \"quantity must be >= 0\"), not a bare \"bad request\". Owned at the API boundary. PO preference; Architect-proposed beyond the Required brief.",
+      "fitness_function": "Integration test: an invalid filing submit returns a field-named inline error, not a generic 400 body.",
+      "hil_status": "accepted"
+    }
+  ]
+}

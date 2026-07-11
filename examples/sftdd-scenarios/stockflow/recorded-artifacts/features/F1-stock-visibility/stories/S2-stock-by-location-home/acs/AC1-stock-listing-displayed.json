@@ -1,0 +1,9 @@
+{
+  "id": "AC1-stock-listing-displayed",
+  "given": "a warehouse operator with one or more stock records filed across locations",
+  "when": "the home screen is opened",
+  "then": "a table is shown listing one row per filed (SKU, location) record, each row displaying the SKU, the physical location, and the quantity",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "E2E: exercises the full read path from the React SPA (client/) through the app/routes boundary (renders_via react, JSON only), the stock-service that assembles the by-location listing, and the stock-repository that is the sole ORM reader of stock_records against the paired branch. Owner module: app/services (aggregation of one row per filed (sku, location)) fronted by app/routes. Cross-cutting: read-only, so no transaction or authz concern; presentation (table markup, per-row SKU/location/quantity) is owned by the client, never the boundary or domain. Verified end to end against real branch rows seeded per PI2 (all four fields NOT NULL), not a mock."
+}

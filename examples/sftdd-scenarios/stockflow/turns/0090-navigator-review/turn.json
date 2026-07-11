@@ -1,0 +1,20 @@
+{
+  "ordinal": 90,
+  "step": 0,
+  "label": "navigator-review",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "review",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S2-detail-view-split-fields",
+    "buildMode": "review"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/review-verdict.json",
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/review.json"
+  ],
+  "deleted": []
+}

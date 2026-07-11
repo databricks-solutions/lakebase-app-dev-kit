@@ -1,0 +1,15 @@
+{
+  "ordinal": 77,
+  "step": 0,
+  "label": "accept",
+  "kind": "accept",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "accept",
+    "story": "S1-split-schema-migration"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/pipeline.json"
+  ],
+  "deleted": []
+}

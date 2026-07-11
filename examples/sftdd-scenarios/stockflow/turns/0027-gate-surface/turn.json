@@ -1,0 +1,15 @@
+{
+  "ordinal": 27,
+  "step": 0,
+  "label": "gate-surface",
+  "kind": "surface-gate",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "surface-gate",
+    "story": "S2-stock-by-location-home"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

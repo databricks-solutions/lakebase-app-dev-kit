@@ -1,0 +1,19 @@
+{
+  "ordinal": 48,
+  "step": 0,
+  "label": "cut-experiment",
+  "kind": "cut-experiment",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "cut-experiment",
+    "story": "S3-sku-detail"
+  },
+  "produced": [
+    ".sftdd/experiments/F1-stock-visibility/S3-sku-detail/exp1/branch.txt",
+    ".sftdd/experiments/F1-stock-visibility/S3-sku-detail/exp1/notes.md",
+    ".sftdd/experiments/F1-stock-visibility/S3-sku-detail/exp1/outcomes.json",
+    ".sftdd/experiments/F1-stock-visibility/S3-sku-detail/exp1/timeline.json",
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

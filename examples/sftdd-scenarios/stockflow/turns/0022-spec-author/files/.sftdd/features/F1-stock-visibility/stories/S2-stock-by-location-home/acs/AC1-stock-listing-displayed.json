@@ -1,0 +1,8 @@
+{
+  "id": "AC1-stock-listing-displayed",
+  "given": "a warehouse operator with one or more stock records filed across locations",
+  "when": "the home screen is opened",
+  "then": "a table is shown listing one row per filed (SKU, location) record, each row displaying the SKU, the physical location, and the quantity",
+  "status": "draft",
+  "layer": "E2E"
+}

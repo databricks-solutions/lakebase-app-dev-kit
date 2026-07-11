@@ -1,0 +1,20 @@
+{
+  "ordinal": 75,
+  "step": 0,
+  "label": "navigator-review",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "review",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S1-split-schema-migration",
+    "buildMode": "review"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-schema-migration/review-verdict.json",
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-schema-migration/review.json"
+  ],
+  "deleted": []
+}

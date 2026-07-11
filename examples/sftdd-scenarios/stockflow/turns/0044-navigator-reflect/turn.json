@@ -1,0 +1,19 @@
+{
+  "ordinal": 44,
+  "step": 0,
+  "label": "navigator-reflect",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "reflect",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S3-sku-detail",
+    "buildMode": "reflect"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/reflect-verdict.json"
+  ],
+  "deleted": []
+}

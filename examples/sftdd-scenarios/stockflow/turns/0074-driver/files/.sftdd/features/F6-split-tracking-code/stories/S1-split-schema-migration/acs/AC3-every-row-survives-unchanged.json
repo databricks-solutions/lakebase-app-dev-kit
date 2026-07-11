@@ -1,0 +1,13 @@
+{
+  "id": "AC3-every-row-survives-unchanged",
+  "given": "the full set of existing stock rows before the split migration",
+  "when": "the split migration runs",
+  "then": "every original row still exists afterward with its canonical location and quantity unchanged, so no stock position is lost or corrupted",
+  "status": "passing",
+  "layer": "Infra",
+  "architectural_notes": "Infra: the durability/atomicity contract (PI1 migration_reversible, PI2 transactional) that defends R1. The forward revision runs add-columns + backfill + drop-column as one transaction so the branch is never left in a half-migrated state; canonical location and quantity are never touched by the migration. Owner module: the split Alembic revision, wrapped in Alembic's per-revision transaction. Verified by a real-branch test that snapshots seeded rows, runs the migration, and asserts every original row still exists with location and quantity unchanged.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 assert what the new batch/serial columns hold; this AC adds the distinct preservation outcome that the pre-existing rows and their canonical fields are untouched, which can be broken (a dropped or altered row) while the parsing outcomes still hold on surviving rows."
+  }
+}

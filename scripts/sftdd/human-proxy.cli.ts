@@ -15,6 +15,7 @@ import {
   drainGatesAsHumanProxy,
   supplyArtifact,
   supplyRequests,
+  supplyProposals,
 } from "./human-proxy.js";
 // The revise self-heal is a state-machine transition, not a proxy decision; the
 // CLI verb triggers it but the logic lives in the driver's service layer.
@@ -92,6 +93,34 @@ function runSupplyRequestsCli(argv: string[]): number {
       `human-proxy: skipped ${result.skipped.length}: ${result.skipped.map((s) => `${s.featureId} (${s.reason})`).join(", ")}\n`,
     );
   }
+  return 0;
+}
+
+/**
+ * `supply-proposals` subcommand: DETERMINISTIC propose. At the planning propose
+ * step (capture/headless), project feature-proposals.md from the sprint's recorded
+ * feature-requests ($LAKEBASE_SFTDD_SPRINT_REQUESTS) instead of spawning the Spec
+ * Author LLM (which could write nothing then claim the file exists, tripping the
+ * propose protocol-violation abort). Always exits 0: an unset env is a no-op (the
+ * live LLM propose runs for interactive users).
+ *
+ *   lakebase-sftdd-human-proxy supply-proposals [--tdd-dir <dir>] [--ui]
+ */
+function runSupplyProposalsCli(argv: string[]): number {
+  let sftddDir: string | undefined;
+  let uiTrack = false;
+  for (let i = 0; i < argv.length; i++) {
+    switch (argv[i]) {
+      case "--tdd-dir": sftddDir = argv[++i]; break;
+      case "--ui": uiTrack = true; break;
+    }
+  }
+  const result = supplyProposals({ sftddDir, uiTrack });
+  process.stdout.write(
+    result.written
+      ? `human-proxy: projected feature-proposals.md from ${result.count} recorded feature-request(s)\n`
+      : `human-proxy: no recorded feature-requests to project proposals from (${result.reason ?? "unset"})\n`,
+  );
   return 0;
 }
 
@@ -239,6 +268,7 @@ export function runHumanProxyCli(argv: string[]): number {
   // default (no subcommand, or `approve`) drains open gates.
   if (argv[0] === "supply") return runSupplyCli(argv.slice(1));
   if (argv[0] === "supply-requests") return runSupplyRequestsCli(argv.slice(1));
+  if (argv[0] === "supply-proposals") return runSupplyProposalsCli(argv.slice(1));
   if (argv[0] === "decide-escalation") return runDecideEscalationCli(argv.slice(1));
   if (argv[0] === "approve") argv = argv.slice(1);
   const args = parseArgs(argv);

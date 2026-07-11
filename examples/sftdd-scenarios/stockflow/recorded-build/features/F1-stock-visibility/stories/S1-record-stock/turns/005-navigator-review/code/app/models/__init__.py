@@ -1,5 +1,5 @@
-"""Models package -- import all ORM models here so Base.metadata is populated."""
+"""SQLAlchemy models package. One module per domain object."""
 
-from app.models.stock import Stock  # noqa: F401
+from app.models.stock_record import StockRecord
 
-__all__ = ["Stock"]
+__all__ = ["StockRecord"]

@@ -1,0 +1,17 @@
+{
+  "ordinal": 92,
+  "step": 0,
+  "label": "await-acceptance",
+  "kind": "await-acceptance",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "await-acceptance",
+    "story": "S2-detail-view-split-fields"
+  },
+  "produced": [
+    ".sftdd/deploy/local.pid",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/deploy-evidence.json"
+  ],
+  "deleted": []
+}

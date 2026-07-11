@@ -1,0 +1,4 @@
+{
+  "refactor": false,
+  "notes": "Layering clean: route -> service -> repository -> models, no session use outside repository. NFR-F1-durability-migrations upheld (created_at/actor set once, never reassigned on refile). NFR-F1-quantity-integrity's non-negative floor enforced at both model CheckConstraint and route Field(ge=0). Empty-state handled distinctly (empty list, not error) by repository/service, with an explicit client empty-state message (NFR-F1-empty-state-clean-render). Quantity right-alignment uses a class seam (quantity-right) plus data-testid, not inline style, per design-guide. No client fetch/page wiring is in scope for this story's tests (T13-T17 cover only the API boundary and the table component), so nothing further to flag."
+}

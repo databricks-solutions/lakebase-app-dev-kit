@@ -15,7 +15,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { drainGatesAsHumanProxy, supplyArtifact, supplyRequests } from "../../scripts/sftdd/human-proxy";
+import { drainGatesAsHumanProxy, supplyArtifact, supplyRequests, supplyProposals } from "../../scripts/sftdd/human-proxy";
+import { featureProposalsMd } from "../../scripts/sftdd/sftdd-paths";
+import { checkArtifactConformance } from "../../scripts/sftdd/artifact-conformance";
 import { readGates } from "../../scripts/sftdd/gates";
 import { hashArtifact } from "../../scripts/sftdd/gate-hash";
 import { readAgentLog } from "../../scripts/sftdd/agent-log";
@@ -520,6 +522,40 @@ describe("Human Proxy supplyRequests (the PO's artifacts, given when the state m
     } finally {
       if (prev !== undefined) process.env.LAKEBASE_SFTDD_SPRINT_REQUESTS = prev;
     }
+  });
+});
+
+describe("Human Proxy supplyProposals (deterministic propose from recorded requests)", () => {
+  it("projects a CONFORMING feature-proposals.md, one candidate per recorded request", () => {
+    const r1 = join(tdd, "req-f1.md");
+    const r2 = join(tdd, "req-f6.md");
+    writeFileSync(r1, "# Record and view stock by SKU and location\n\nFoundation: file and read back stock.\n");
+    writeFileSync(r2, "# Split the combined tracking code into batch + serial\n\nLater iteration splits the fields.\n");
+
+    const res = supplyProposals({
+      sftddDir: tdd,
+      uiTrack: true,
+      pairs: [
+        { featureId: "F1-stock-visibility", from: r1 },
+        { featureId: "F6-split-tracking-code", from: r2 },
+      ],
+    });
+
+    expect(res.written).toBe(true);
+    expect(res.count).toBe(2);
+    const md = readFileSync(featureProposalsMd(tdd), "utf8");
+    // Both features present, with their one-line ask lifted from the request heading.
+    expect(md).toMatch(/## F1-stock-visibility/);
+    expect(md).toMatch(/## F6-split-tracking-code/);
+    expect(md).toMatch(/Record and view stock by SKU and location/);
+    // Conforms as md-narrative (the plan gate's teeth).
+    expect(checkArtifactConformance("feature-proposals.md", md).ok).toBe(true);
+  });
+
+  it("writes nothing when there are no recorded requests (the live LLM propose runs instead)", () => {
+    const res = supplyProposals({ sftddDir: tdd, pairs: [] });
+    expect(res.written).toBe(false);
+    expect(existsSync(featureProposalsMd(tdd))).toBe(false);
   });
 
   it("skips (does not place) a missing or non-conformant recording", () => {

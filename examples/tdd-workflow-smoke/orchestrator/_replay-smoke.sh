@@ -29,11 +29,18 @@ replay_smoke() {
   set -euo pipefail
 
   local ORCHESTRATOR_DIR ASSERT_DIR CORPUS_DIR BUILD_CORPUS_DIR INTAKE_DIR
-  ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-  # ASSERT_DIR + INTAKE_DIR default next to the sourcing script (the bug-tracker
-  # smoke), but a generic caller (examples/sftdd-scenarios/replay-scenario.sh,
-  # which lives at a different depth) overrides them so it can reuse the shared
-  # assertions + supply a per-scenario intake set.
+  # Resolve from the ENGINE's own path (BASH_SOURCE[0]), not the caller's
+  # (BASH_SOURCE[1]): the engine self-locates to orchestrator/ regardless of the
+  # current directory. In a multi-feature scenario the earlier feature's drive
+  # cd'd into the project, so cwd is no longer where the run was launched; a
+  # cwd-relative caller path would then break on feature N+1. Both callers place
+  # their entry script in orchestrator/ alongside this engine, so [0] and [1]
+  # resolve to the same dir , [0] is just cwd-independent.
+  ORCHESTRATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # ASSERT_DIR + INTAKE_DIR default next to this engine (the bug-tracker smoke),
+  # but a generic caller (examples/sftdd-scenarios/replay-scenario.sh, which lives
+  # at a different depth) overrides them so it can reuse the shared assertions +
+  # supply a per-scenario intake set.
   ASSERT_DIR="${REPLAY_ASSERT_DIR:-${ORCHESTRATOR_DIR}/assertions}"
   INTAKE_DIR="${REPLAY_INTAKE_DIR:-${ORCHESTRATOR_DIR}}"
   CORPUS_DIR="${ORCHESTRATOR_DIR}/../recorded-artifacts"

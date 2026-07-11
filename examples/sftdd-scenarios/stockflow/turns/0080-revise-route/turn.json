@@ -1,0 +1,22 @@
+{
+  "ordinal": 80,
+  "step": 0,
+  "label": "revise-route",
+  "kind": "revise-route",
+  "role": "architect-reviewer",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "revise-route",
+    "story": "S2-detail-view-split-fields",
+    "role": "architect-reviewer",
+    "gate": "architecture",
+    "reason": "blocking smell \"architect-canon-gap\": Canon does not cover F6-split-tracking-code/S2-detail-view-split-fields: persistence-invariant type \"transactional\" is not a canon pattern; NFR category \"durability\" is not in the canon posture; NFR category \"correctness\" is not in the canon posture; NFR category \"testability\" is not in the canon posture; NFR category \"usability\" is not in the canon posture; NFR category \"configurability\" is not in the canon posture. Route to the Architect to annotate the uncovered ACs + amend the canon.",
+    "source": "smell:architect-canon-gap"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/.handback/architect-reviewer.S2-detail-view-split-fields.md",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/smells.json"
+  ],
+  "deleted": []
+}

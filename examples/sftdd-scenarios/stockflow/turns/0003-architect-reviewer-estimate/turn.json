@@ -1,0 +1,17 @@
+{
+  "ordinal": 3,
+  "step": 0,
+  "label": "architect-reviewer-estimate",
+  "kind": "invoke-role",
+  "role": "architect-reviewer",
+  "mode": "estimate",
+  "action": {
+    "kind": "invoke-role",
+    "role": "architect-reviewer",
+    "mode": "estimate"
+  },
+  "produced": [
+    ".sftdd/planning/estimates.json"
+  ],
+  "deleted": []
+}

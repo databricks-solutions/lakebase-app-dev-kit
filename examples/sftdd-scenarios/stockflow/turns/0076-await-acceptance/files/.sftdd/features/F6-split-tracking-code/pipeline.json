@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "feature_id": "F6-split-tracking-code",
+  "stories": {
+    "S1-split-schema-migration": {
+      "status": "awaiting-acceptance",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T21:58:58.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T21:58:58.996Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s1-split-schema-migration-exp1",
+        "parent": "feature-f6-split-tracking-code",
+        "n": 1,
+        "status": "active",
+        "cut_at": "2026-07-11T21:58:59.306Z"
+      },
+      "acceptance": {
+        "decision": null,
+        "history": []
+      }
+    },
+    "S2-detail-view-split-fields": {
+      "status": "designing"
+    }
+  },
+  "build_queue": [],
+  "build_active": "S1-split-schema-migration"
+}

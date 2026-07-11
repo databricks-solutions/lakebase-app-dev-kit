@@ -4,14 +4,25 @@
   "label": "driver",
   "kind": "invoke-role",
   "role": "driver",
-  "story": "S3-split-drop-old",
+  "story": "S2-detail-view-split-fields",
   "action": {
     "kind": "invoke-role",
     "role": "driver",
-    "story": "S3-split-drop-old"
+    "story": "S2-detail-view-split-fields"
   },
   "produced": [
-    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC2-column-restored/green-failure.json"
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/AC1-batch-and-serial-shown-as-distinct-fields/cycle-001.json",
+    ".sftdd/experiments/F6-split-tracking-code/S2-detail-view-split-fields/exp1/outcomes.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC1-batch-and-serial-shown-as-distinct-fields.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC2-combined-code-no-longer-shown.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC3-null-batch-shows-none.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC4-null-serial-shows-none.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/test-list-per-story.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.md",
+    ".tmp/schema-diff.md"
   ],
-  "deleted": []
+  "deleted": [
+    ".sftdd/deploy/local.pid"
+  ]
 }

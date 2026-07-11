@@ -1,0 +1,6 @@
+{
+  "id": "S1-split-schema-migration",
+  "asA": "inventory manager",
+  "iWantTo": "have the combined inventory_code split into first-class batch_number and serial_number columns by a reversible migration that backfills them by delimiter from the existing codes, leaves nonconforming codes NULL, drops the combined column, and reports how many rows did not parse",
+  "soThat": "batch and serial become separately queryable and validatable without losing or corrupting any existing stock row, and the change can be reviewed before acceptance and rolled back safely"
+}

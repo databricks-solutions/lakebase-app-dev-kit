@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "feature_id": "F1-stock-visibility",
+  "stories": {
+    "S1-record-stock": {
+      "status": "done",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T20:21:32.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T20:21:32.996Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s1-record-stock-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "merged",
+        "cut_at": "2026-07-11T20:21:33.277Z",
+        "closed_at": "2026-07-11T20:58:28.708Z"
+      },
+      "acceptance": {
+        "decision": "accepted",
+        "history": [
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T20:58:12.983Z",
+            "approver": "human-proxy"
+          },
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T20:58:28.708Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T20:58:28.708Z"
+      }
+    },
+    "S2-stock-by-location-home": {
+      "status": "done",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T21:08:43.687Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T21:08:43.687Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s2-stock-by-location-home-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "merged",
+        "cut_at": "2026-07-11T21:08:43.989Z",
+        "closed_at": "2026-07-11T21:16:39.649Z"
+      },
+      "acceptance": {
+        "decision": "accepted",
+        "history": [
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T21:16:25.942Z",
+            "approver": "human-proxy"
+          },
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T21:16:39.649Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T21:16:39.649Z"
+      }
+    },
+    "S3-sku-detail": {
+      "status": "building",
+      "acceptance": {
+        "decision": "revise",
+        "history": [
+          {
+            "decision": "revise",
+            "at": "2026-07-11T21:22:32.441Z",
+            "approver": "human-proxy",
+            "reason": "blocking smell \"reflect-spec-defect\": reflection gate: acs/AC3-par-level-not-tracked.json is malformed JSON (line 9 has a stray '}: {' merging the object close with the 'independence' key, so the file does not parse, e.g. `jq .` fails with 'Expected string key before ':' at line 9'). Fix the JSON structure so 'independence' is a proper sibling key of 'architectural_notes' inside one well-formed object."
+          },
+          {
+            "decision": "revise",
+            "at": "2026-07-11T21:22:32.671Z",
+            "approver": "human-proxy",
+            "reason": "blocking smell \"reflect-testlist-defect\": reflection gate: AC3-par-level-not-tracked has no covering test in test-list-per-story.json (only T18-T21 exist, covering AC1 and AC2). Per the S2 sibling pattern (AC3-empty-state-shown got both a 'behavior' real-branch test and a 'client' component test), AC3-par-level-not-tracked needs an equivalent pair: a behavior test asserting the api boundary serializes the untracked par level as null/absent with a 2xx (never a 500), and a client test asserting the SKU detail component renders an explicit 'not tracked' indication with no blank region."
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T21:22:32.671Z",
+        "reason": "blocking smell \"reflect-testlist-defect\": reflection gate: AC3-par-level-not-tracked has no covering test in test-list-per-story.json (only T18-T21 exist, covering AC1 and AC2). Per the S2 sibling pattern (AC3-empty-state-shown got both a 'behavior' real-branch test and a 'client' component test), AC3-par-level-not-tracked needs an equivalent pair: a behavior test asserting the api boundary serializes the untracked par level as null/absent with a 2xx (never a 500), and a client test asserting the SKU detail component renders an explicit 'not tracked' indication with no blank region."
+      },
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T21:27:42.724Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T21:27:42.724Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s3-sku-detail-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "active",
+        "cut_at": "2026-07-11T21:27:43.019Z"
+      }
+    }
+  },
+  "build_queue": [],
+  "build_active": "S3-sku-detail"
+}

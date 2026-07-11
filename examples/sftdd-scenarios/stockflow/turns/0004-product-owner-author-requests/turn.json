@@ -1,0 +1,19 @@
+{
+  "ordinal": 4,
+  "step": 0,
+  "label": "product-owner-author-requests",
+  "kind": "invoke-role",
+  "role": "product-owner",
+  "mode": "author-requests",
+  "action": {
+    "kind": "invoke-role",
+    "role": "product-owner",
+    "mode": "author-requests"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/feature-request.md",
+    ".sftdd/sprints/stockflow-s1/backlog.json",
+    ".sftdd/sprints/stockflow-s1/requested.json"
+  ],
+  "deleted": []
+}

@@ -1,0 +1,32 @@
+{
+  "ordinal": 17,
+  "step": 0,
+  "label": "navigator",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S1-record-stock/AC1-record-form-displayed/cycle-001.json",
+    "client/package-lock.json",
+    "client/tests/pages/RecordStock.test.tsx",
+    "client/vite.config.ts",
+    "tests/architecture/__init__.py",
+    "tests/architecture/test_config_in_env.py",
+    "tests/architecture/test_field_named_validation.py",
+    "tests/architecture/test_json_boundary.py",
+    "tests/architecture/test_layering.py",
+    "tests/architecture/test_persistence_invariants.py",
+    "tests/features/S1-record-stock.feature",
+    "tests/migrations/__init__.py",
+    "tests/migrations/test_stock_records_migration_reversible.py",
+    "tests/step_defs/__init__.py",
+    "tests/step_defs/test_S1_record_stock.py",
+    "uv.lock"
+  ],
+  "deleted": []
+}

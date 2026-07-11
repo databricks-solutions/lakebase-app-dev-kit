@@ -1,5 +1,1 @@
-"""Repositories package."""
-
-from app.repositories.stock_repository import StockRepository  # noqa: F401
-
-__all__ = ["StockRepository"]
+"""Repository package , the ONLY layer that touches the ORM/session."""

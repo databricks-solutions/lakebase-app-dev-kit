@@ -42,7 +42,7 @@ export type DriveCommand =
   // judgment turns (REVIEW) to run them fast (low reasoning effort), the headless
   // realization of "fast mode", since `claude -p` has no `--fast` flag. Omitted =>
   // the model's default effort.
-  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; fallbackModel?: string; maxBudgetUsd?: number; replay?: { mode?: string; story?: string } }
+  | { kind: "claude"; role: string; model: string; task: string; resumeKey?: string; effort?: string; fallbackModel?: string; maxBudgetUsd?: number; replay?: { mode?: string; buildMode?: string; story?: string } }
   | { kind: "cli"; bin: string; args: string[] }
   | { kind: "set-phase"; phase: string }
   // Deterministic sprint-backlog projection (the ONE writer): after the PO
@@ -70,6 +70,13 @@ export interface DriveEffectsConfig {
   approver?: string;
   /** Sprint name, threaded to the sprint plan gate in the planning phase. */
   sprintName?: string;
+  /** Recorded feature-requests are available (capture/replay via
+   *  $LAKEBASE_SFTDD_SPRINT_REQUESTS). When true, the planning PROPOSE step is
+   *  DETERMINISTIC (project feature-proposals.md from those requests via the
+   *  Human Proxy) instead of spawning the Spec Author LLM, which as an LLM could
+   *  write nothing then claim the file exists (the propose protocol-violation
+   *  abort). Interactive users (no recorded requests) still get the live propose. */
+  recordedRequests?: boolean;
   /** Deploy target for the deploy action (e.g. "local"). */
   deployTarget?: string;
   /** Lakebase instance id (the Lakebase project id), threaded to the experiment
@@ -512,7 +519,13 @@ function roleTaskBody(
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
-        return `Propose the sprint's candidate feature breakdown for planning (feature-proposals.md).${uiTrack ? UI_TRACK_PROPOSE : ""}`;
+        // Be explicit that this WRITES the artifact at a concrete path (like the
+        // estimate / ux-designer directives), and that it is authored FRESH: the
+        // vaguer prior wording ("...for planning (feature-proposals.md)") let the
+        // Spec Author treat the file as descriptive, invent candidates in its
+        // reply, write nothing, then on a re-dispatch claim it "already exists"
+        // (the handoff guard then aborts on the empty artifact).
+        return `Propose the sprint's candidate features for planning. WRITE the proposal to ${root}/planning/feature-proposals.md , author it FRESH from ${root}/product-overview.md + ${root}/nfrs.md (do NOT assume one already exists), one candidate feature per section, so the Architect can size them and the Product Owner can commit the backlog.${uiTrack ? UI_TRACK_PROPOSE : ""}`;
       case "estimate":
         return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
       case "author-requests":
@@ -914,6 +927,21 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" },
         ];
       }
+      // DETERMINISTIC propose (capture/replay): when the sprint's feature-requests
+      // are recorded, project feature-proposals.md from them via the Human Proxy
+      // instead of spawning the Spec Author LLM. An LLM propose can write nothing
+      // and then, on the re-dispatch, claim the file "already exists" , the handoff
+      // guard then aborts on the empty artifact. Interactive users (no recorded
+      // requests) still get the live LLM propose below.
+      if (cfg.recordedRequests && "mode" in action && action.role === "spec-author" && action.mode === "propose") {
+        return [
+          {
+            kind: "cli",
+            bin: HUMAN_PROXY_BIN,
+            args: ["supply-proposals", "--tdd-dir", cfg.sftddDir, ...(cfg.uiTrack ? ["--ui"] : [])],
+          },
+        ];
+      }
       // Navigator + Driver are the BUILD roles, invoked in a tight RED/GREEN/
       // REVIEW/REFACTOR loop per AC; the artifact on disk is their only inter-role
       // channel, so correctness never depends on a retained session, only speed.
@@ -986,6 +1014,11 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
           }) + AGENT_TERSE_SUFFIX,
         replay: {
           mode: "mode" in action ? action.mode : undefined,
+          // The build turn's mode (reflect / review / refactor / assess / repair),
+          // distinct from the design-lane `mode` above. The replay path needs it to
+          // recognise the reflect turn (whose recorded output is a .sftdd design
+          // artifact the code-only build restore filters out).
+          buildMode: "buildMode" in action ? action.buildMode : undefined,
           story: "story" in action ? action.story : undefined,
         },
       };

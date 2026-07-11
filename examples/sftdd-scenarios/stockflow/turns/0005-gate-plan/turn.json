@@ -1,0 +1,13 @@
+{
+  "ordinal": 5,
+  "step": 0,
+  "label": "gate-plan",
+  "kind": "approve-plan-gate",
+  "action": {
+    "kind": "approve-plan-gate"
+  },
+  "produced": [
+    ".sftdd/sprints/stockflow-s1/gates.json"
+  ],
+  "deleted": []
+}

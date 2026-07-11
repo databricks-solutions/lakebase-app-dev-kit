@@ -1,0 +1,26 @@
+{
+  "ordinal": 73,
+  "step": 0,
+  "label": "navigator",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S1-split-schema-migration"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-schema-migration/AC1-backfill-conforming-codes/cycle-001.json",
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-schema-migration/AC4-combined-column-dropped/superseded-tests.json",
+    "tests/_split_migration_helpers.py",
+    "tests/architecture/test_split_migration_config_in_env.py",
+    "tests/architecture/test_split_migration_layering.py",
+    "tests/features/S1-split-schema-migration.feature",
+    "tests/migrations/test_split_migration_atomicity.py",
+    "tests/migrations/test_split_migration_reversible.py",
+    "tests/migrations/test_split_migration_uniqueness_preserved.py",
+    "tests/step_defs/test_S1_split_schema_migration.py"
+  ],
+  "deleted": []
+}

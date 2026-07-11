@@ -1,0 +1,22 @@
+{
+  "ordinal": 41,
+  "step": 0,
+  "label": "revise-route",
+  "kind": "revise-route",
+  "role": "test-strategist",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "revise-route",
+    "story": "S3-sku-detail",
+    "role": "test-strategist",
+    "gate": "test_list",
+    "reason": "blocking smell \"reflect-testlist-defect\": reflection gate: AC3-par-level-not-tracked has no covering test in test-list-per-story.json (only T18-T21 exist, covering AC1 and AC2). Per the S2 sibling pattern (AC3-empty-state-shown got both a 'behavior' real-branch test and a 'client' component test), AC3-par-level-not-tracked needs an equivalent pair: a behavior test asserting the api boundary serializes the untracked par level as null/absent with a 2xx (never a 500), and a client test asserting the SKU detail component renders an explicit 'not tracked' indication with no blank region.",
+    "source": "smell:reflect-testlist-defect"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/.handback/test-strategist.S3-sku-detail.md",
+    ".sftdd/features/F1-stock-visibility/pipeline.json",
+    ".sftdd/smells.json"
+  ],
+  "deleted": []
+}

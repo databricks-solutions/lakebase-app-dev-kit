@@ -1,0 +1,12 @@
+{
+  "id": "AC2-combined-code-no-longer-shown",
+  "given": "a warehouse operator viewing the SKU detail screen for a stock position",
+  "when": "the detail view renders",
+  "then": "the opaque combined tracking code is no longer displayed anywhere on the screen; only the distinct batch and serial fields represent that information",
+  "status": "draft",
+  "layer": "E2E",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts the new batch and serial fields are present and labelled; this AC adds the distinct outcome that the old combined code is retired from the view. The combined code could still be shown alongside the new fields (breaking this AC while AC1 stays green), and the new fields could be wrong or unlabelled while the combined code is correctly gone (breaking AC1 while this stays green)."
+  }
+}

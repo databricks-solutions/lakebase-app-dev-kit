@@ -1,0 +1,15 @@
+{
+  "ordinal": 53,
+  "step": 0,
+  "label": "accept",
+  "kind": "accept",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "accept",
+    "story": "S3-sku-detail"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

@@ -1,8 +1,0 @@
-{
-  "id": "S4-split-display",
-  "title": "Display batch and serial separately in stock views",
-  "independence": {
-    "distinct_from_prior": true,
-    "rationale": "S3 completes the database schema changes; S4 updates the user interface to display the split fields instead of the combined code"
-  }
-}

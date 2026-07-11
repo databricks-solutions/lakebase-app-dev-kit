@@ -1,0 +1,20 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S2-stock-by-location-home",
+  "ac_id": "AC1-stock-listing-displayed",
+  "test_id": "T13",
+  "test_description": "opening the home screen for a location with seeded stock records returns, through the api boundary, one JSON row per filed (sku, location) with its sku, location, and quantity (real-branch integration)",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s2-stock-by-location-home-exp1",
+  "red_at": "2026-07-11T21:12:19.980Z",
+  "layer": "E2E",
+  "test_ids": [
+    "T13",
+    "T14",
+    "T15",
+    "T16",
+    "T17"
+  ],
+  "chunk": "E2E-1"
+}

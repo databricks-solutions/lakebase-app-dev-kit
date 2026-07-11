@@ -1,0 +1,23 @@
+{
+  "ordinal": 81,
+  "step": 0,
+  "label": "architect-reviewer",
+  "kind": "invoke-role",
+  "role": "architect-reviewer",
+  "story": "S2-detail-view-split-fields",
+  "action": {
+    "kind": "invoke-role",
+    "role": "architect-reviewer",
+    "story": "S2-detail-view-split-fields"
+  },
+  "produced": [
+    ".sftdd/architecture/canon.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC1-batch-and-serial-shown-as-distinct-fields.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC2-combined-code-no-longer-shown.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC3-null-batch-shows-none.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/acs/AC4-null-serial-shows-none.json"
+  ],
+  "deleted": [
+    ".sftdd/features/F6-split-tracking-code/.handback/architect-reviewer.S2-detail-view-split-fields.md"
+  ]
+}

@@ -13,12 +13,17 @@
 //
 // Faithfulness detail: the corpus holds FINAL artifacts, but each stage is gated
 // by a different on-disk fact, so copying per-turn keeps the next stage's gate
-// unmet until its own turn runs. The ONE overlap is acs/<AC>.json: its existence
-// gates the Spec Author, its `layer` gates the Architect. So the Spec Author turn
-// copies the ACs with `layer` STRIPPED, and the Architect turn re-copies them
-// verbatim (the annotation). That makes both run as distinct turns.
+// unmet until its own turn runs. The Spec Author turn copies each AC VERBATIM
+// (the spec author really does author `layer`); the Architect turn re-copies them
+// verbatim (idempotent) and adds architecture.json. The design probe dispatches or
+// skips the Architect on ITS OWN products (architectural_notes + architecture.json
+// existence + the project canon), NOT on whether the ACs carry `layer` , so the
+// Spec Author must NOT strip `layer`. Stripping it (an earlier hack to give the
+// Architect "work") permanently drops the field for a cleanly-mapping story whose
+// notes are PROJECTED from the canon with no Architect turn to restore it, failing
+// the feature-end conformance gate.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, copyFileSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { featuresDir, planningDir } from "./sftdd-paths.js";
 
@@ -57,32 +62,18 @@ function cp(src: string, dst: string): boolean {
   return true;
 }
 
-/** Copy every file under srcDir into dstDir; optional transform on each file's
- *  text (used to strip `layer` from ACs on the Spec Author turn). */
-function cpDir(srcDir: string, dstDir: string, transform?: (name: string, text: string) => string): boolean {
+/** Copy every file under srcDir into dstDir (verbatim). */
+function cpDir(srcDir: string, dstDir: string): boolean {
   if (!existsSync(srcDir)) return false;
   let copied = false;
   mkdirSync(dstDir, { recursive: true });
   for (const name of readdirSync(srcDir)) {
     const s = join(srcDir, name);
     if (!statSync(s).isFile()) continue;
-    const text = readFileSync(s, "utf8");
-    writeFileSync(join(dstDir, name), transform ? transform(name, text) : text);
+    copyFileSync(s, join(dstDir, name));
     copied = true;
   }
   return copied;
-}
-
-/** Strip the `layer` field from an AC json (so the Architect still has work). */
-function stripLayer(name: string, text: string): string {
-  if (!name.endsWith(".json")) return text;
-  try {
-    const ac = JSON.parse(text) as Record<string, unknown>;
-    delete ac.layer;
-    return JSON.stringify(ac, null, 2) + "\n";
-  } catch {
-    return text;
-  }
 }
 
 /**
@@ -114,10 +105,10 @@ export function replayDesignTurn(args: ReplayArgs): boolean {
         }
         return ok;
       }
-      // Per-story Spec Author turn: the ACs, with `layer` stripped (the Architect
-      // annotates layer on its own turn).
+      // Per-story Spec Author turn: the ACs, verbatim (the spec author authors
+      // `layer`; the Architect , when dispatched , re-copies them idempotently).
       if (turn.story) {
-        return cpDir(join(cf, "stories", turn.story, "acs"), join(tf, "stories", turn.story, "acs"), stripLayer);
+        return cpDir(join(cf, "stories", turn.story, "acs"), join(tf, "stories", turn.story, "acs"));
       }
       return false;
     }
@@ -152,4 +143,26 @@ export function replayDesignTurn(args: ReplayArgs): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * Restore a recorded reflect turn's verdict (reflect-verdict.json) from the design
+ * corpus. The reflect turn is a NAVIGATOR turn, so the build-replay path restores
+ * its code snapshot and keeps the per-story turn-index aligned, but its real output
+ * is a DESIGN artifact under .sftdd/features/<F>/stories/<S>/reflect-verdict.json
+ * that the code-only build restore filters out (it skips .sftdd). Bring it back so
+ * the drive's reflect-verdict expectation is satisfied on replay (else the handoff
+ * guard aborts on the "missing" verdict). Returns true iff the corpus had it.
+ */
+export function restoreReflectVerdict(args: {
+  replayDir: string;
+  sftddDir: string;
+  featureId: string;
+  story: string;
+}): boolean {
+  const { replayDir, sftddDir, featureId, story } = args;
+  return cp(
+    join(featuresDir(replayDir), featureId, "stories", story, "reflect-verdict.json"),
+    join(featuresDir(sftddDir), featureId, "stories", story, "reflect-verdict.json"),
+  );
 }

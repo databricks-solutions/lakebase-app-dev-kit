@@ -1,0 +1,6 @@
+{
+  "tests": [
+    "client/tests/pages/SkuDetail.test.tsx::SkuDetailView > renders the combined inventory_code (tracking code) for each location entry"
+  ],
+  "reason": "AC2-combined-code-no-longer-shown retires the combined inventory_code region from the SkuDetail component (batch_number/serial_number render as two distinct fields instead); the F1/S3-sku-detail-era client test asserting the rendered inventory_code column no longer holds once the Driver removes that column, so it is carried forward/updated rather than treated as a regression"
+}

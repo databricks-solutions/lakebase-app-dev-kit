@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "passed": false,
+  "findings": [
+    {
+      "owner": "spec-author",
+      "detail": "acs/AC3-par-level-not-tracked.json is malformed JSON (line 9 has a stray '}: {' merging the object close with the 'independence' key, so the file does not parse, e.g. `jq .` fails with 'Expected string key before ':' at line 9'). Fix the JSON structure so 'independence' is a proper sibling key of 'architectural_notes' inside one well-formed object."
+    },
+    {
+      "owner": "test-strategist",
+      "detail": "AC3-par-level-not-tracked has no covering test in test-list-per-story.json (only T18-T21 exist, covering AC1 and AC2). Per the S2 sibling pattern (AC3-empty-state-shown got both a 'behavior' real-branch test and a 'client' component test), AC3-par-level-not-tracked needs an equivalent pair: a behavior test asserting the api boundary serializes the untracked par level as null/absent with a 2xx (never a 500), and a client test asserting the SKU detail component renders an explicit 'not tracked' indication with no blank region."
+    }
+  ]
+}

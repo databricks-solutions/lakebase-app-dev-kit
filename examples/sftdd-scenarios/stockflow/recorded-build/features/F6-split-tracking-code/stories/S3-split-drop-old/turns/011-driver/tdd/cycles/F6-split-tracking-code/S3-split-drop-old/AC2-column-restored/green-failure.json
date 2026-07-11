@@ -1,5 +1,0 @@
-{
-  "assessed": false,
-  "summary": "GREEN verify FAILED against the running app",
-  "contractRefs": "CONTRACT-INCOMPLETENESS (software-design-principles hard rule 9): a migration DROPPED inventory_code, but the running code still references it, so the app emits SQL for a column the database no longer has and crashes (\"inventory_code does not exist\") even though the migration succeeded. Remove or replace EVERY reference below in the SAME change , the ORM model field, every query/repository, every serializer/DTO, and every template/view , so the code matches the migrated schema. Do NOT edit the migration or any test to hide this; fix the production code:\n  app/repositories/stock_repository.py:17  [inventory_code]  schema and does not reference the dropped inventory_code column."
-}

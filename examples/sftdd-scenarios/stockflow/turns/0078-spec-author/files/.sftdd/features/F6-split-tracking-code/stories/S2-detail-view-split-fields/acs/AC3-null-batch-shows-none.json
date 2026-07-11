@@ -1,0 +1,12 @@
+{
+  "id": "AC3-null-batch-shows-none",
+  "given": "a warehouse operator viewing the SKU detail screen for a stock position whose batch has no value",
+  "when": "the detail view renders",
+  "then": "the batch field shows an explicit \"none\" state rather than a blank region or a crash, while its serial field is unaffected",
+  "status": "draft",
+  "layer": "E2E",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 use a row with a populated batch; this AC adds the distinct outcome that a missing batch renders an explicit \"none\" instead of a blank region or crash. The missing-batch path could break (blank or crash) without affecting the populated-row rendering of AC1 or the retirement of the combined code in AC2."
+  }
+}

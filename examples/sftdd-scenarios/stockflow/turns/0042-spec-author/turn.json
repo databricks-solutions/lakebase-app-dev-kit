@@ -1,0 +1,21 @@
+{
+  "ordinal": 42,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S3-sku-detail"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC1-detail-lists-all-locations.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC2-tracking-code-shown.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC3-par-level-not-tracked.json"
+  ],
+  "deleted": [
+    ".sftdd/features/F1-stock-visibility/.handback/spec-author.S3-sku-detail.md"
+  ]
+}

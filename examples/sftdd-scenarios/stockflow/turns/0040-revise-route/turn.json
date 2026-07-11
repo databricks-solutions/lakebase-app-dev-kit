@@ -1,0 +1,28 @@
+{
+  "ordinal": 40,
+  "step": 0,
+  "label": "revise-route",
+  "kind": "revise-route",
+  "role": "spec-author",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "revise-route",
+    "story": "S3-sku-detail",
+    "role": "spec-author",
+    "gate": "spec",
+    "reason": "blocking smell \"reflect-spec-defect\": reflection gate: acs/AC3-par-level-not-tracked.json is malformed JSON (line 9 has a stray '}: {' merging the object close with the 'independence' key, so the file does not parse, e.g. `jq .` fails with 'Expected string key before ':' at line 9'). Fix the JSON structure so 'independence' is a proper sibling key of 'architectural_notes' inside one well-formed object.",
+    "source": "smell:reflect-spec-defect"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/.handback/spec-author.S3-sku-detail.md",
+    ".sftdd/features/F1-stock-visibility/pipeline.json",
+    ".sftdd/features/F1-stock-visibility/test-list.json",
+    ".sftdd/smells.json"
+  ],
+  "deleted": [
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC1-detail-lists-all-locations.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC2-tracking-code-shown.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/acs/AC3-par-level-not-tracked.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/test-list-per-story.json"
+  ]
+}

@@ -1,9 +1,0 @@
-{
-  "entries": [
-    {
-      "ts": "2026-06-15T12:24:28.213Z",
-      "kind": "cut",
-      "branch": "experiment-s3-split-drop-old-exp1"
-    }
-  ]
-}

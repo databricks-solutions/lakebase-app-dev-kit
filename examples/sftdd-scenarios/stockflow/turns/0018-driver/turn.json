@@ -1,0 +1,45 @@
+{
+  "ordinal": 18,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S1-record-stock/AC1-record-form-displayed/cycle-001.json",
+    ".sftdd/experiments/F1-stock-visibility/S1-record-stock/exp1/outcomes.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC1-record-form-displayed.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC2-file-new-stock-confirmed.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC3-refile-updates-not-duplicates.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC4-refile-no-error-page.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/test-list-per-story.json",
+    ".sftdd/features/F1-stock-visibility/test-list.json",
+    ".sftdd/features/F1-stock-visibility/test-list.md",
+    ".tmp/schema-diff.md",
+    "alembic/versions/20260711203524_create_stock_records.py",
+    "alembic/versions/20260711203907_add_stock_records_audit_fields.py",
+    "app/main.py",
+    "app/models/__init__.py",
+    "app/models/stock_record.py",
+    "app/repositories/__init__.py",
+    "app/repositories/stock_repository.py",
+    "app/routes/__init__.py",
+    "app/routes/stock_records.py",
+    "app/services/__init__.py",
+    "app/services/stock_service.py",
+    "client/src/App.tsx",
+    "client/src/api/client.ts",
+    "client/src/api/stockRecords.ts",
+    "client/src/hooks/useRecordStock.ts",
+    "client/src/pages/RecordStock.tsx",
+    "client/src/styles/theme.css"
+  ],
+  "deleted": [
+    "app/models.py"
+  ]
+}

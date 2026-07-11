@@ -1,0 +1,24 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S3-sku-detail",
+  "ac_id": "AC1-detail-lists-all-locations",
+  "test_id": "T18",
+  "test_description": "opening the SKU detail view for a SKU that holds stock at more than one seeded location returns, through the api boundary, one JSON entry per location holding only that SKU's records, each entry showing its location and quantity (real-branch integration)",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s3-sku-detail-exp1",
+  "red_at": "2026-07-11T21:32:25.114Z",
+  "layer": "E2E",
+  "test_ids": [
+    "T18",
+    "T19",
+    "T20",
+    "T21",
+    "T22",
+    "T23",
+    "T24"
+  ],
+  "chunk": "E2E-1",
+  "green_at": "2026-07-11T21:35:18.294Z",
+  "navigator_verdict": "passed"
+}

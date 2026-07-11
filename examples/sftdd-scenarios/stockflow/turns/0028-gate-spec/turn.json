@@ -1,0 +1,15 @@
+{
+  "ordinal": 28,
+  "step": 0,
+  "label": "gate-spec",
+  "kind": "approve-gate",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "approve-gate",
+    "story": "S2-stock-by-location-home"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/pipeline.json"
+  ],
+  "deleted": []
+}

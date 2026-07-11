@@ -1,0 +1,9 @@
+{
+  "estimates": [
+    { "feature_id": "FP1", "size": "M", "rationale": "Foundational: full layering (models/repo/service/boundary) plus SPA home grid + SKU detail route with empty state." },
+    { "feature_id": "FP2", "size": "M", "rationale": "Write path with (sku,location) unique constraint refused at write time, plus form with inline validation." },
+    { "feature_id": "FP3", "size": "S", "rationale": "Single mutation on existing model: adjust quantity with never-below-zero rule and in-place optimistic row update." },
+    { "feature_id": "FP4", "size": "M", "rationale": "New receipt behavior with supplier reference raising stock, plus receipt form and confirmation flow." },
+    { "feature_id": "FP5", "size": "M", "rationale": "Outbound pick drawing stock down with write-time overcommit refusal (R2) and inline shortfall messaging." }
+  ]
+}

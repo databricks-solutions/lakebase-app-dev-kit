@@ -1,0 +1,27 @@
+{
+  "ordinal": 6,
+  "step": 0,
+  "label": "spec-author-breakdown",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "mode": "breakdown",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "mode": "breakdown"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/feature-spec.json",
+    ".sftdd/features/F1-stock-visibility/feature-spec.md",
+    ".sftdd/features/F1-stock-visibility/pipeline.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/story.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/story.md",
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/story.json",
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/story.md",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/story.json",
+    ".sftdd/features/F1-stock-visibility/stories/S3-sku-detail/story.md",
+    ".sftdd/run-config.json",
+    ".tmp/schema-diff.md"
+  ],
+  "deleted": []
+}

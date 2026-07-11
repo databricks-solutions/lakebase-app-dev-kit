@@ -24,7 +24,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
 
-import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES } from "./replay-artifacts.js";
+import { replayDesignTurn, REPLAYABLE_DESIGN_ROLES, restoreReflectVerdict } from "./replay-artifacts.js";
 import { replayBuildTurn } from "./replay-build.js";
 import { recordBuildTurn } from "./record-build.js";
 import { recordTurn, seedRecorderBaseline } from "./turn-recorder.js";
@@ -300,6 +300,19 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         const replayBuildDir = sftddEnv("REPLAY_BUILD_DIR");
         const story = cmd.replay?.story;
         if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
+          // The reflect turn is a DESIGN GATE that runs in the build lane: its only
+          // output is reflect-verdict.json (a .sftdd artifact), never code. Restore
+          // JUST the verdict , do NOT restore its recorded code snapshot (that would
+          // overwrite the freshly-scaffolded tree with the recording's project-name-
+          // baked files and leave it dirty, so the pre-build cut-experiment fork
+          // refuses) , and do NOT count it as a build turn (replayBuildTurn's index
+          // skips reflect turns, so RED maps to the first real recorded build turn).
+          if (cmd.replay?.buildMode === "reflect") {
+            const rd = sftddEnv("REPLAY_DIR");
+            if (rd) restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
+            process.stderr.write(`[drive] replayed reflect (navigator ${story}) from corpus , verdict only (no code, not counted)\n`);
+            return;
+          }
           const turnIndex = (buildTurns.get(story) ?? 0) + 1;
           buildTurns.set(story, turnIndex);
           const replayed = replayBuildTurn({
@@ -483,6 +496,10 @@ function buildCfg(args: ParsedArgs, featureId: string): DriveEffectsConfig {
     sftddDir,
     featureId,
     sprintName: args.sprint,
+    // Recorded feature-requests present (capture/replay) => the planning PROPOSE
+    // step is deterministic (project feature-proposals.md from them) instead of an
+    // LLM spawn. Unset (interactive) keeps the live Spec Author propose turn.
+    recordedRequests: !!sftddEnv("SPRINT_REQUESTS")?.trim(),
     instance: args.instance ?? scm?.project_id,
     featureBranch: scm?.branch,
     parentBranch: scm?.parent_branch,

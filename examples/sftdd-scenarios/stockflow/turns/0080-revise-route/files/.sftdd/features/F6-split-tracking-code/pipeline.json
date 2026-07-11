@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "feature_id": "F6-split-tracking-code",
+  "stories": {
+    "S1-split-schema-migration": {
+      "status": "done",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T21:58:58.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T21:58:58.996Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s1-split-schema-migration-exp1",
+        "parent": "feature-f6-split-tracking-code",
+        "n": 1,
+        "status": "merged",
+        "cut_at": "2026-07-11T21:58:59.306Z",
+        "closed_at": "2026-07-11T22:39:08.483Z"
+      },
+      "acceptance": {
+        "decision": "accepted",
+        "history": [
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T22:38:55.410Z",
+            "approver": "human-proxy"
+          },
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T22:39:08.483Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T22:39:08.483Z"
+      }
+    },
+    "S2-detail-view-split-fields": {
+      "status": "designing",
+      "acceptance": {
+        "decision": "revise",
+        "history": [
+          {
+            "decision": "revise",
+            "at": "2026-07-11T22:41:05.429Z",
+            "approver": "human-proxy",
+            "reason": "blocking smell \"architect-canon-gap\": Canon does not cover F6-split-tracking-code/S2-detail-view-split-fields: persistence-invariant type \"transactional\" is not a canon pattern; NFR category \"durability\" is not in the canon posture; NFR category \"correctness\" is not in the canon posture; NFR category \"testability\" is not in the canon posture; NFR category \"usability\" is not in the canon posture; NFR category \"configurability\" is not in the canon posture. Route to the Architect to annotate the uncovered ACs + amend the canon."
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T22:41:05.429Z",
+        "reason": "blocking smell \"architect-canon-gap\": Canon does not cover F6-split-tracking-code/S2-detail-view-split-fields: persistence-invariant type \"transactional\" is not a canon pattern; NFR category \"durability\" is not in the canon posture; NFR category \"correctness\" is not in the canon posture; NFR category \"testability\" is not in the canon posture; NFR category \"usability\" is not in the canon posture; NFR category \"configurability\" is not in the canon posture. Route to the Architect to annotate the uncovered ACs + amend the canon."
+      }
+    }
+  },
+  "build_queue": [],
+  "build_active": null
+}

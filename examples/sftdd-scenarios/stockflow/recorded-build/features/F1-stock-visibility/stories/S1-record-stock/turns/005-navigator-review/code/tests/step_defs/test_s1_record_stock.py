@@ -1,98 +1,159 @@
-"""API-layer step definitions for S1-record-stock T5 (AC5-tracking-code-persisted).
+"""Step definitions for S1-record-stock.feature (T5/AC2, T9/AC3, T11/AC4).
 
-T5 -- persistence round-trip contract: a tracking code POSTed to /receive is
-retrievable from the database with no loss or truncation.  This is an API-layer
-test (boundary -> service -> repository), NOT E2E (no browser).  The real
-paired-branch DB is used via the db_session fixture; TestClient drives the HTTP
-boundary.
+Real-branch integration: exercises the SPA -> JSON api boundary
+(app/routes/) -> service (app/services/) -> repository (app/repositories/)
+-> stock_records write path against the paired Lakebase branch. Never
+mocked (NFR-F1-real-branch-tests).
 """
 
-from __future__ import annotations
+import uuid
 
 import pytest
-from pytest_bdd import given, parsers, scenario, then
+from pytest_bdd import given, scenarios, then, when
 from sqlalchemy import text
 
-_FEATURE = "../features/S1-record-stock.feature"
-_T5_SKU = "T5-SKU"
-_T5_LOCATION = "LOC-T5"
+scenarios("../features/S1-record-stock.feature")
 
 
-@scenario(_FEATURE, "T5 Tracking code submitted on the form is retrievable without loss or truncation")
-def test_t5_tracking_code_persisted_api():
-    """T5: tracking code round-trip through POST /receive -> DB (API layer)."""
+@pytest.fixture()
+def filing_context():
+    return {
+        "sku": f"SKU-{uuid.uuid4().hex[:8]}",
+        "location": f"LOC-{uuid.uuid4().hex[:8]}",
+    }
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_t5_row(db_session):
-    """Remove the T5 test row before and after the scenario to ensure isolation."""
-    _delete_t5(db_session)
+def _cleanup(filing_context, db_session):
     yield
-    _delete_t5(db_session)
-
-
-def _delete_t5(db_session) -> None:
+    db_session.rollback()
     try:
         db_session.execute(
-            text("DELETE FROM stock WHERE sku = :sku AND location = :location"),
-            {"sku": _T5_SKU, "location": _T5_LOCATION},
+            text("DELETE FROM stock_records WHERE sku = :sku AND location = :location"),
+            {"sku": filing_context["sku"], "location": filing_context["location"]},
         )
         db_session.commit()
     except Exception:
         db_session.rollback()
 
 
-# ==================================================================
-# T5 steps -- API boundary (TestClient, not browser)
-# ==================================================================
+@given("a (sku, location) pair with no existing stock record")
+def _no_existing_record(filing_context, db_session):
+    row = db_session.execute(
+        text("SELECT 1 FROM stock_records WHERE sku = :sku AND location = :location"),
+        {"sku": filing_context["sku"], "location": filing_context["location"]},
+    ).first()
+    assert row is None, "test fixture collision: pair already has a stock record"
 
-@given(
-    parsers.parse(
-        'the stock write API receives SKU "{sku}", location "{location}",'
-        " quantity {qty:d}, and tracking code \"{tracking_code}\""
-    )
-)
-def post_stock_via_api(sku: str, location: str, qty: int, tracking_code: str, client) -> None:
-    """POST /receive as the outermost API boundary; follow_redirects=False to
-    assert the write path without depending on the confirmation template."""
-    resp = client.post(
-        "/receive",
-        data={
-            "sku": sku,
-            "location": location,
-            "qty": str(qty),
-            "tracking_code": tracking_code,
+
+@given("an existing stock record for a (sku, location) pair")
+def _existing_record(filing_context, client):
+    response = client.post(
+        "/api/stock-records",
+        json={
+            "sku": filing_context["sku"],
+            "location": filing_context["location"],
+            "quantity": 10,
+            "inventory_code": "INV-ORIGINAL",
         },
-        follow_redirects=False,
     )
-    assert resp.status_code in (200, 303), (
-        f"POST /receive returned HTTP {resp.status_code}; "
-        "expected 303 redirect on success or 200 (AC5 write path must accept the submission)"
+    assert response.status_code in (200, 201), (
+        f"fixture setup failed to seed an existing record: {response.status_code} "
+        f"{response.text}"
     )
 
 
-@then(
-    parsers.parse(
-        'the database record for SKU "{sku}" at location "{location}"'
-        " has tracking code \"{tracking_code}\""
+@when("the operator files a quantity and inventory_code for that pair")
+def _file_new(filing_context, client):
+    filing_context["quantity"] = 7
+    filing_context["inventory_code"] = "INV-NEW-1"
+    filing_context["response"] = client.post(
+        "/api/stock-records",
+        json={
+            "sku": filing_context["sku"],
+            "location": filing_context["location"],
+            "quantity": filing_context["quantity"],
+            "inventory_code": filing_context["inventory_code"],
+        },
     )
-)
-def assert_tracking_code_in_db(sku: str, location: str, tracking_code: str, db_session) -> None:
-    """Query the real paired-branch DB directly; no UI, no mock."""
-    result = db_session.execute(
+
+
+@when("the operator files that same pair again with a different quantity and inventory_code")
+def _refile_different(filing_context, client):
+    filing_context["quantity"] = 42
+    filing_context["inventory_code"] = "INV-UPDATED"
+    filing_context["response"] = client.post(
+        "/api/stock-records",
+        json={
+            "sku": filing_context["sku"],
+            "location": filing_context["location"],
+            "quantity": filing_context["quantity"],
+            "inventory_code": filing_context["inventory_code"],
+        },
+    )
+
+
+@when("the operator files that same pair again")
+def _refile_same(filing_context, client):
+    filing_context["response"] = client.post(
+        "/api/stock-records",
+        json={
+            "sku": filing_context["sku"],
+            "location": filing_context["location"],
+            "quantity": 10,
+            "inventory_code": "INV-ORIGINAL",
+        },
+    )
+
+
+@then("a stock record exists for that pair with the entered quantity and inventory_code")
+def _assert_recorded(filing_context, db_session):
+    row = db_session.execute(
         text(
-            "SELECT tracking_code FROM stock"
-            " WHERE sku = :sku AND location = :location"
+            "SELECT quantity, inventory_code FROM stock_records "
+            "WHERE sku = :sku AND location = :location"
         ),
-        {"sku": sku, "location": location},
+        {"sku": filing_context["sku"], "location": filing_context["location"]},
+    ).first()
+    assert row is not None, "expected a persisted stock_records row for this pair"
+    assert row.quantity == filing_context["quantity"]
+    assert row.inventory_code == filing_context["inventory_code"]
+
+
+@then("a save confirmation is returned")
+def _assert_confirmation(filing_context):
+    assert filing_context["response"].status_code in (200, 201)
+
+
+@then("exactly one stock record exists for that pair")
+def _assert_single_row(filing_context, db_session):
+    count = db_session.execute(
+        text(
+            "SELECT COUNT(*) FROM stock_records WHERE sku = :sku AND location = :location"
+        ),
+        {"sku": filing_context["sku"], "location": filing_context["location"]},
+    ).scalar_one()
+    assert count == 1, f"expected exactly one row for this (sku, location) pair, found {count}"
+
+
+@then("it holds the newly filed quantity and inventory_code")
+def _assert_updated_values(filing_context, db_session):
+    row = db_session.execute(
+        text(
+            "SELECT quantity, inventory_code FROM stock_records "
+            "WHERE sku = :sku AND location = :location"
+        ),
+        {"sku": filing_context["sku"], "location": filing_context["location"]},
+    ).first()
+    assert row is not None
+    assert row.quantity == filing_context["quantity"]
+    assert row.inventory_code == filing_context["inventory_code"]
+
+
+@then("the response is a save confirmation, not an error page")
+def _assert_no_error_page(filing_context):
+    response = filing_context["response"]
+    assert 200 <= response.status_code < 300, (
+        f"expected a 2xx save confirmation on refile, got {response.status_code}"
     )
-    row = result.fetchone()
-    assert row is not None, (
-        f"No stock row found for sku={sku!r} location={location!r} after POST /receive; "
-        "the write did not persist the record (AC5 round-trip contract)"
-    )
-    assert row[0] == tracking_code, (
-        f"Tracking code round-trip failed: submitted {tracking_code!r}, "
-        f"stored {row[0]!r}; the field was lost or truncated "
-        "(AC5-tracking-code-persisted contract)"
-    )
+    assert "<html" not in response.text.lower()

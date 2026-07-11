@@ -1,0 +1,85 @@
+{
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S1-split-schema-migration",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T1",
+      "description": "seeding stock rows whose inventory_code parses as location-batch-serial (e.g. \"A12-B7-S001\"), running the split migration's up() backfills batch_number and serial_number with the parsed segments",
+      "ac_id": "AC1-backfill-conforming-codes",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-split-schema-migration.feature"
+    },
+    {
+      "id": "T3",
+      "description": "the split migration's delimiter-parsing logic lives only in the Alembic revision under migrations/versions/, never in app/services or app/models (layering contract)",
+      "ac_id": "AC1-backfill-conforming-codes",
+      "status": "green",
+      "kind": "fitness"
+    },
+    {
+      "id": "T2",
+      "description": "seeding stock rows whose inventory_code lacks a batch or serial segment (e.g. \"X-1\", bare \"c\"), running the split migration's up() leaves batch_number and serial_number NULL on those rows",
+      "ac_id": "AC2-nonconforming-left-null",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-split-schema-migration.feature"
+    },
+    {
+      "id": "T4",
+      "description": "the Alembic env and app DB config resolve the connection from the injected DATABASE_URL against databricks_postgres on the paired branch, with no hardcoded DSN (config-in-env)",
+      "ac_id": "AC4-combined-column-dropped",
+      "status": "green",
+      "kind": "fitness"
+    },
+    {
+      "id": "T7",
+      "description": "after the split migration, inserting a stock row with a (sku, location) pair duplicating an existing row still raises a unique-constraint IntegrityError against the branch DB, confirming UNIQUE(sku, location) survives the column split",
+      "ac_id": "AC4-combined-column-dropped",
+      "status": "green",
+      "kind": "fitness",
+      "invariant_id": "PI3-sku-location-unique-preserved"
+    },
+    {
+      "id": "T8",
+      "description": "after the split migration, the stock_records schema no longer has an inventory_code column, leaving batch_number and serial_number as the separately queryable fields",
+      "ac_id": "AC4-combined-column-dropped",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-split-schema-migration.feature"
+    },
+    {
+      "id": "T5",
+      "description": "snapshotting all existing stock rows' location and quantity before the split migration, every row still exists afterward with its location and quantity unchanged",
+      "ac_id": "AC3-every-row-survives-unchanged",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-split-schema-migration.feature"
+    },
+    {
+      "id": "T6",
+      "description": "forcing the backfill step to fail mid-migration leaves the branch with neither the new columns added nor inventory_code dropped, confirming the add-columns+backfill+drop-column sequence runs as a single atomic transaction and canonical location/quantity are never touched",
+      "ac_id": "AC3-every-row-survives-unchanged",
+      "status": "green",
+      "kind": "fitness",
+      "invariant_id": "PI2-split-migration-atomic"
+    },
+    {
+      "id": "T9",
+      "description": "seeding a known set of stock rows with a marked subset of nonconforming inventory_codes, the integrity probe run for review reports a count matching exactly that marked nonconforming subset (scoped to this test's own seeded rows, not a whole-table total)",
+      "ac_id": "AC5-nonconforming-count-reported",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-split-schema-migration.feature"
+    },
+    {
+      "id": "T10",
+      "description": "running the split migration's down() after up() on a conforming-code row reconstructs inventory_code from the canonical location plus batch_number and serial_number, matching the pre-migration value, via an isolated single-step downgrade -1 / upgrade head round-trip on its own ephemeral branch",
+      "ac_id": "AC6-migration-reverses",
+      "status": "green",
+      "kind": "fitness",
+      "invariant_id": "PI1-split-migration-reversible"
+    }
+  ]
+}

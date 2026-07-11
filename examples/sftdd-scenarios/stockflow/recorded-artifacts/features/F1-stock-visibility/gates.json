@@ -1,0 +1,54 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "schema_version": 1,
+  "gates": {
+    "spec": {
+      "status": "open",
+      "history": []
+    },
+    "plan": {
+      "status": "open",
+      "history": []
+    },
+    "test_list": {
+      "status": "open",
+      "history": []
+    },
+    "promote": {
+      "status": "approved",
+      "approver": "human-proxy",
+      "approved_at": "2026-07-11T21:41:50.902Z",
+      "artifact_hashes": {
+        "promote_ref": "c6ea6966bc4a492e7c324989d9bac150e83c0c0fee867eb3eed741030fbed949"
+      },
+      "history": [
+        {
+          "action": "approved",
+          "at": "2026-07-11T21:41:50.902Z",
+          "approver": "human-proxy",
+          "artifact_hashes": {
+            "promote_ref": "c6ea6966bc4a492e7c324989d9bac150e83c0c0fee867eb3eed741030fbed949"
+          }
+        }
+      ]
+    },
+    "deploy": {
+      "status": "approved",
+      "approver": "human-proxy",
+      "approved_at": "2026-07-11T21:38:37.017Z",
+      "artifact_hashes": {
+        "deploy-evidence.json": "862e7f839495b1f0b01a7cbbe2d5f973d1e8e52450c93a4bf0a7bf0964fa814e"
+      },
+      "history": [
+        {
+          "action": "approved",
+          "at": "2026-07-11T21:38:37.017Z",
+          "approver": "human-proxy",
+          "artifact_hashes": {
+            "deploy-evidence.json": "862e7f839495b1f0b01a7cbbe2d5f973d1e8e52450c93a4bf0a7bf0964fa814e"
+          }
+        }
+      ]
+    }
+  }
+}

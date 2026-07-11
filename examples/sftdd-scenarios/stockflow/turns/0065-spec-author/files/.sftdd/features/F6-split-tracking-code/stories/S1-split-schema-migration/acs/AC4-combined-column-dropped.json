@@ -1,0 +1,12 @@
+{
+  "id": "AC4-combined-column-dropped",
+  "given": "the stock schema after the split migration has run",
+  "when": "the stock record structure is inspected",
+  "then": "the combined inventory_code column is no longer present, leaving batch_number and serial_number as the separately queryable fields",
+  "status": "draft",
+  "layer": "Infra",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Prior ACs assert the values held in the new columns and row preservation; this AC adds the distinct schema-shape outcome that the old combined column is retired, which can be broken (column still present) without affecting the parsed values or surviving rows."
+  }
+}

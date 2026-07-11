@@ -58,6 +58,12 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
   });
 
+  it("a reflect turn's command carries replay.buildMode='reflect' (so the replay restores its .sftdd verdict)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "reflect" }, cfg());
+    const claude = cmds.find((c) => (c as { kind?: string }).kind === "claude") as { replay?: { buildMode?: string } };
+    expect(claude.replay?.buildMode).toBe("reflect");
+  });
+
   it("navigator ASSESS-DEPLOY: prompts to scope contamination-fragile tests + finalizes via assess-deploy-verify", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "assess-deploy" }, cfg());
     const task = (cmds[0] as { task: string }).task;
@@ -112,9 +118,22 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((cmds[0] as { task: string }).task).not.toMatch(/beginCycle|markGreen|git /i);
   });
 
-  it("propose gets a mode-specific task", () => {
+  it("propose (interactive, no recorded requests) spawns the Spec Author + WRITES the proposal artifact", () => {
     const propose = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg());
-    expect((propose[0] as { task: string }).task).toMatch(/breakdown/i);
+    expect(propose[0]).toMatchObject({ kind: "claude", role: "spec-author" });
+    const task = (propose[0] as { task: string }).task;
+    // Must explicitly instruct writing feature-proposals.md (not just describe it):
+    // the vague prior wording let the Spec Author write nothing then claim it exists.
+    expect(task).toMatch(/feature-proposals\.md/);
+    expect(task).toMatch(/write/i);
+  });
+
+  it("propose (capture: recorded requests) is DETERMINISTIC , projects proposals via the Human Proxy, no LLM", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg({ recordedRequests: true }));
+    // No claude spawn , the artifact is code-emitted from the recorded requests.
+    expect(cmds.some((c) => (c as { kind?: string }).kind === "claude")).toBe(false);
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-human-proxy" });
+    expect((cmds[0] as { args: string[] }).args[0]).toBe("supply-proposals");
   });
 
   it("propose + breakdown carry the UI-track E2E directive only when the UI track is on", () => {

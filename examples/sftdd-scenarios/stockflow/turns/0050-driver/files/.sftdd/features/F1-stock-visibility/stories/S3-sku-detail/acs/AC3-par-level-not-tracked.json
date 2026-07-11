@@ -1,0 +1,13 @@
+{
+  "id": "AC3-par-level-not-tracked",
+  "given": "a warehouse operator viewing the SKU detail view for a SKU whose par level is not tracked",
+  "when": "the par level detail is read",
+  "then": "an explicit \"not tracked\" indication is shown in place of the par level, with no blank region and no error",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "E2E: par level is an untracked (null/absent) attribute; app/services returns the absence distinctly (a null/absent field, not an error), app/routes serializes it as such in JSON, and the React SPA owns the presentation decision to render an explicit 'not tracked' marker in place of a value, mirroring the F1 empty-state clean-render pattern (NFR-F1-empty-state-clean-render). The null-handling is a view/service concern, never a domain crash; the boundary must not 500 on the absent field. Verified via the R4 branch read plus the client harness asserting the 'not tracked' indication with no blank region.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 cover the SKU's locations and tracking code; this adds the distinct outcome that the untracked par level renders as a clear 'not tracked' state, which can fail (blank or crash on the null) while locations and tracking codes still display correctly."
+  }
+}

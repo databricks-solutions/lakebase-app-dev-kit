@@ -1,0 +1,11 @@
+{
+  "tests": [
+    "tests/step_defs/test_S1_record_stock.py",
+    "tests/step_defs/test_S3_sku_detail.py",
+    "tests/architecture/test_json_boundary.py",
+    "tests/architecture/test_field_named_validation.py",
+    "tests/architecture/test_persistence_invariants.py",
+    "tests/migrations/test_stock_records_migration_reversible.py"
+  ],
+  "reason": "AC4 drops the combined inventory_code column (and AC1/AC2 replace it with batch_number/serial_number); every prior test that seeds or asserts on inventory_code via the API or raw SQL breaks once the split migration + model/repository updates land. The Driver may refactor exactly these prior tests (dropping/replacing their inventory_code usage) alongside the split migration, carrying their still-valid intent (save-confirmation, JSON boundary, field-named validation, not-null/unique invariants, migration reversibility) forward onto the new schema shape."
+}

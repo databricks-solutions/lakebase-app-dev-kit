@@ -1,0 +1,10 @@
+{
+  "id": "S3-sku-detail",
+  "asA": "warehouse operator",
+  "iWantTo": "open a SKU detail view showing that SKU's stock across all its locations, including its tracking code",
+  "soThat": "I can see everywhere one SKU is held, with untracked detail such as par level shown clearly rather than as a blank or a crash",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "S2 shows one flat table of all records; this story adds a per-SKU view that groups a single SKU's stock across its locations, surfaces the combined inventory_code, and renders the untracked par level as a clear 'not tracked' state, none of which S1 or S2 build."
+  }
+}

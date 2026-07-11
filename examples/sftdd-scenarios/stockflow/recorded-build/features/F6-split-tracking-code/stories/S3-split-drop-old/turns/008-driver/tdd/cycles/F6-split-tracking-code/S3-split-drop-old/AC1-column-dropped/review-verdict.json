@@ -1,4 +1,0 @@
-{
-  "refactor": false,
-  "notes": "Layering honored: the drop lives in a single Alembic revision (repository/migration layer), no route/service import (T29 fitness green), and the boundary/service are untouched. count_unparseable_codes was correctly migrated off the dropped inventory_code to the post-split batch_number/serial_number IS NULL definition, matching the regression-assessment fix directive; docstring carries the new concept clearly. Downgrade is reversible (reconstructs inventory_code via concat_ws of tracking_code/batch/serial). NFR-F6-S1-2 satisfied (quantity never written/recomputed). NFR-F6-S1-4 satisfied (T30 binds the suite to the real paired branch, no mock). NFR-F6-S1-5 satisfied (DSN resolves from env DB_NAME=stockflow). Naming and SRP consistent with the F1 conventions; no UI surface in this AC. No concrete rubric-cited improvement warranted."
-}

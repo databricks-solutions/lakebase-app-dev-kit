@@ -6,6 +6,51 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.14] - 2026-07-11
+
+A deploy-verify failure caused by a shared-state-fragile prior test can now
+self-heal instead of dead-ending at the human gate. Surfaced by the live
+stockflow capture (F6/S3): three integrity-probe tests written for an earlier
+story asserted an absolute whole-table aggregate, so they passed on their own
+isolated build branch but failed the full-feature deploy-verify once later
+stories' rows shared the table. That is a fragile test, not broken software, but
+the only route was the terminal HIL, and re-driving just re-failed the same
+unscoped test.
+
+### Added
+
+- **Deploy-verify self-heal routing (FEIP-7916).** When a per-story
+  deploy-verify fails, the deploy step re-runs the failing tests in ISOLATION on
+  a fresh child branch. If they all pass alone, the failure is shared-state
+  contamination, so instead of the terminal escalation the orchestrator records
+  a one-shot marker and routes a story-level **Navigator ASSESS-DEPLOY** turn
+  (confirm the fragile set, prescribe how to scope each to own its rows) then a
+  **Driver SCOPE-DEPLOY** turn (refactor only those tests), and re-deploys to
+  re-verify. A passing re-verify clears the marker and the story proceeds to
+  acceptance. The self-heal is bounded to a single attempt: if the re-deploy
+  still fails, the one shot is spent and it raises to the human, so a fragile
+  test can never spin. A genuine regression (any failing test that still fails in
+  isolation) takes the terminal gate exactly as before. Validated live end to
+  end on the stockflow F6/S3 capture.
+
+### Fixed
+
+- **`capture-scenario.sh` relative `--inputs-from`.** The path was consumed after
+  the script `cd`s into the freshly created project, so a relative `--inputs-from`
+  resolved against the project dir and the recorded intake vanished (the
+  human-proxy "recorded source not found: .../intake/product-overview.md"
+  refusal). It is now absolutized up front, and fails loud if the directory is
+  missing.
+- **Deterministic sprint-planning PROPOSE.** The propose directive named its
+  artifact only in passing, so the Spec Author (an LLM) could invent candidates in
+  its reply, write no file, then on a re-dispatch claim it "already exists" , the
+  handoff guard then aborted the run on the empty artifact. The directive is now
+  explicit (WRITE `planning/feature-proposals.md`, author it fresh), and in
+  capture/replay (recorded feature-requests present) the propose step is
+  DETERMINISTIC: a new `lakebase-sftdd-human-proxy supply-proposals` projects a
+  conforming `feature-proposals.md` from the recorded requests instead of spawning
+  the LLM. Interactive users keep the live propose turn.
+
 ## [0.3.0-beta.13] - 2026-07-09
 
 Hardening surfaced by a live React-SPA capture: the SFTDD build now has a

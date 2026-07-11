@@ -1,0 +1,9 @@
+{
+  "id": "AC1-batch-and-serial-shown-as-distinct-fields",
+  "given": "a warehouse operator viewing the SKU detail screen for a stock position whose batch and serial are both present",
+  "when": "the detail view renders",
+  "then": "the batch value and the serial value each appear in the region where the combined tracking code used to appear, each as its own separately labelled field naming which is batch and which is serial",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "E2E: exercised through the React + TypeScript SPA under client/ rendering the SKU detail view against the JSON boundary (app/routes), which returns batch_number and serial_number sourced via stock-service -> stock-repository -> domain-models (app/models). The two values render as separately labelled fields in the region the retired combined code occupied; presentation lives in the client, no business logic sits in the boundary or the component. Owner: client SKU-detail component + the app/routes detail endpoint (usability posture: React SPA over a JSON boundary)."
+}

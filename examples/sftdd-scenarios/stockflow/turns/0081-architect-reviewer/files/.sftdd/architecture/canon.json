@@ -1,0 +1,51 @@
+{
+  "established_by": "F1-stock-visibility",
+  "established_at": "2026-07-11T20:15:44.605Z",
+  "ac_layers": [
+    "E2E"
+  ],
+  "nfr_posture": [
+    {
+      "category": "durability",
+      "requirement": "Existing data survives every schema migration with no loss or corruption; additive changes preserve pre-existing rows and every migration reverses cleanly on the paired branch (R1)."
+    },
+    {
+      "category": "correctness",
+      "requirement": "Domain invariants are enforced at write time, never stored as a violation: quantity never goes negative or overcommits (R2), and every (sku, location) pair stays uniquely addressable (R3)."
+    },
+    {
+      "category": "testability",
+      "requirement": "Integration tests run against the paired Lakebase branch (databricks_postgres), never a mock or in-memory substitute; CI refuses a PR whose integration tests do not run against a real branch (R4)."
+    },
+    {
+      "category": "usability",
+      "requirement": "The UI is a React + TypeScript SPA under client/ over a JSON boundary (no full-page reload, no server-rendered HTML); an absent optional field renders an explicit not-tracked state, never a null crash or a blank region (R5, PO preferences)."
+    },
+    {
+      "category": "configurability",
+      "requirement": "DB connection and Alembic env resolve from the injected DATABASE_URL (paired branch, databricks_postgres); no hardcoded DSN and no app-specific DB name (twelve-factor config-in-env)."
+    }
+  ],
+  "invariant_patterns": [
+    {
+      "type": "unique",
+      "brief": "Composite UNIQUE(sku, location): no two rows share the pair; refiling resolves to one row at write time (R3, AC3/AC4)."
+    },
+    {
+      "type": "not_null",
+      "brief": "sku, location, quantity, and inventory_code are NOT NULL; a filed record always carries all four (AC1 form fields / AC2 round-trip)."
+    },
+    {
+      "type": "check",
+      "brief": "CHECK quantity >= 0: a stored stock level can never be negative (R2 no-negative floor defended at write time)."
+    },
+    {
+      "type": "migration_reversible",
+      "brief": "The Alembic migration creating stock_records applies and reverses cleanly on the branch, and additive changes preserve pre-existing rows (R1)."
+    },
+    {
+      "type": "transactional",
+      "brief": "A multi-step schema change (add columns, backfill, drop column) runs in a single transaction so the branch is never left half-migrated and canonical location/quantity are never altered mid-flight (R1)."
+    }
+  ]
+}

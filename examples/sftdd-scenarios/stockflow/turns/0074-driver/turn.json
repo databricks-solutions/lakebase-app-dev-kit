@@ -1,0 +1,41 @@
+{
+  "ordinal": 74,
+  "step": 0,
+  "label": "driver",
+  "kind": "invoke-role",
+  "role": "driver",
+  "story": "S1-split-schema-migration",
+  "action": {
+    "kind": "invoke-role",
+    "role": "driver",
+    "story": "S1-split-schema-migration"
+  },
+  "produced": [
+    ".sftdd/cycles/F6-split-tracking-code/S1-split-schema-migration/AC1-backfill-conforming-codes/cycle-001.json",
+    ".sftdd/experiments/F6-split-tracking-code/S1-split-schema-migration/exp1/outcomes.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC1-backfill-conforming-codes.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC2-nonconforming-left-null.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC3-every-row-survives-unchanged.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC4-combined-column-dropped.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC5-nonconforming-count-reported.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/acs/AC6-migration-reverses.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/test-list-per-story.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.json",
+    ".sftdd/features/F6-split-tracking-code/test-list.md",
+    ".tmp/schema-diff.md",
+    "alembic/versions/20260711222318_split_inventory_code_into_batch_and_.py",
+    "app/models/stock_record.py",
+    "app/repositories/stock_repository.py",
+    "app/routes/stock_records.py",
+    "app/services/stock_service.py",
+    "migration_tooling/__init__.py",
+    "migration_tooling/integrity_probe.py",
+    "tests/architecture/test_persistence_invariants.py",
+    "tests/migrations/test_stock_records_migration_reversible.py",
+    "tests/step_defs/test_S1_record_stock.py",
+    "tests/step_defs/test_S3_sku_detail.py"
+  ],
+  "deleted": [
+    ".sftdd/deploy/local.pid"
+  ]
+}

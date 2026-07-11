@@ -1,0 +1,12 @@
+{
+  "id": "AC3-par-level-not-tracked",
+  "given": "a warehouse operator viewing the SKU detail view for a SKU whose par level is not tracked",
+  "when": "the par level detail is read",
+  "then": "an explicit \"not tracked\" indication is shown in place of the par level, with no blank region and no error",
+  "status": "draft",
+  "layer": "E2E",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 cover the SKU's locations and tracking code; this adds the distinct outcome that the untracked par level renders as a clear 'not tracked' state, which can fail (blank or crash on the null) while locations and tracking codes still display correctly."
+  }
+}

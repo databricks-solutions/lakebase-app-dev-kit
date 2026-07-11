@@ -1,0 +1,12 @@
+{
+  "id": "AC6-migration-reverses",
+  "given": "the stock schema after the split migration has run, with batch_number and serial_number populated for conforming rows",
+  "when": "the migration's down path is run",
+  "then": "the combined inventory_code is restored on each row, reconstructed from the canonical location plus its batch_number and serial_number",
+  "status": "draft",
+  "layer": "Infra",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Prior ACs assert the forward migration's results; this AC adds the distinct reversibility outcome that the down path reconstructs the combined code, which can be broken (no down path, or a mis-reconstructed code) without affecting any forward-migration outcome."
+  }
+}

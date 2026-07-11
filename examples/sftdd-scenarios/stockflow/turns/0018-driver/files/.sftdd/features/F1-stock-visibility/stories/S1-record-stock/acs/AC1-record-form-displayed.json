@@ -1,0 +1,9 @@
+{
+  "id": "AC1-record-form-displayed",
+  "given": "a warehouse operator on the record-stock screen",
+  "when": "the record-stock form is opened",
+  "then": "the form is displayed with fields for the SKU, the physical location, the quantity, and the combined inventory_code, and a control to file the record",
+  "status": "passing",
+  "layer": "E2E",
+  "architectural_notes": "E2E: the record-stock screen is a React SPA page under client/src/pages that renders the SKU, location, quantity, and inventory_code fields plus the file control; no server round-trip is asserted here, so it exercises only the client boundary (renders_via: react). Owner module: the client stock-record form component/page; the JSON API boundary (app/routes/) is not yet hit. No business rule or persistence is touched; cross-cutting input validation is owned at the API boundary (app/routes/) and mirrored inline in the client, never in the domain. The field set aligns with PI2 (sku, location, quantity, inventory_code are the NOT NULL columns a filed record must carry)."
+}

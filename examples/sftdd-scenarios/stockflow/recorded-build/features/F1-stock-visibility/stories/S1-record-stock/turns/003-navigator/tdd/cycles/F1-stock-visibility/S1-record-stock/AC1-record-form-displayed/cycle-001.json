@@ -1,0 +1,27 @@
+{
+  "cycle_id": "cycle-001",
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S1-record-stock",
+  "ac_id": "AC1-record-form-displayed",
+  "test_id": "T1",
+  "test_description": "the empty record-stock form renders its SKU, location, quantity, and inventory_code fields plus a file control, each with its data-testid seam (client component)",
+  "experiment_slug": "exp1",
+  "branch_id": "experiment-s1-record-stock-exp1",
+  "red_at": "2026-07-11T20:32:40.680Z",
+  "layer": "E2E",
+  "test_ids": [
+    "T1",
+    "T4",
+    "T2",
+    "T3",
+    "T5",
+    "T6",
+    "T7",
+    "T8",
+    "T12",
+    "T9",
+    "T10",
+    "T11"
+  ],
+  "chunk": "E2E-1"
+}

@@ -1,8 +1,0 @@
-{
-  "id": "S2-split-validate",
-  "title": "Validate migration and surface count of unparseable codes",
-  "independence": {
-    "distinct_from_prior": true,
-    "rationale": "S1 adds and backfills columns; S2 verifies the backfill's correctness by detecting and reporting unparseable codes that result in NULL values"
-  }
-}

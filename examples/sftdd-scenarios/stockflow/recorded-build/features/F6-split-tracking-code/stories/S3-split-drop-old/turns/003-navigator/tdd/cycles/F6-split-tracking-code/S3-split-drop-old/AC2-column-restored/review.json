@@ -1,5 +1,0 @@
-{
-  "reviewed_at": "2026-06-15T13:51:23.730Z",
-  "refactor_requested": false,
-  "refactor_notes": "AC2 (T22) green: down() re-adds inventory_code in the single S3 Alembic revision, staying entirely in the repository/migration layer (no route/service import; T29 fitness green). Reconstruction uses a set-based concat_ws UPDATE over coalesced split columns, so empty segments collapse correctly and the round-trip is reversible. NFR-F6-S1-2 satisfied (quantity never written or recomputed). NFR-F6-S1-4 satisfied (suite binds the real paired branch DB, no mock). NFR-F6-S1-5 satisfied (DSN resolves from env DB_NAME=stockflow; no hardcoded DSN). Naming and SRP consistent with the F1/AC1 conventions; no UI surface in this AC. The nullable=True add is correct for AC2 scope -- the NOT NULL constraint is owned by AC6 (T28). No concrete rubric-cited improvement warranted."
-}

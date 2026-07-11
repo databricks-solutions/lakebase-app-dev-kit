@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "feature_id": "F1-stock-visibility",
+  "stories": {
+    "S1-record-stock": {
+      "status": "done",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T20:21:32.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T20:21:32.996Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s1-record-stock-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "merged",
+        "cut_at": "2026-07-11T20:21:33.277Z",
+        "closed_at": "2026-07-11T20:58:28.708Z"
+      },
+      "acceptance": {
+        "decision": "accepted",
+        "history": [
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T20:58:12.983Z",
+            "approver": "human-proxy"
+          },
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T20:58:28.708Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T20:58:28.708Z"
+      }
+    },
+    "S2-stock-by-location-home": {
+      "status": "done",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T21:08:43.687Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T21:08:43.687Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s2-stock-by-location-home-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "merged",
+        "cut_at": "2026-07-11T21:08:43.989Z",
+        "closed_at": "2026-07-11T21:16:39.649Z"
+      },
+      "acceptance": {
+        "decision": "accepted",
+        "history": [
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T21:16:25.942Z",
+            "approver": "human-proxy"
+          },
+          {
+            "decision": "accepted",
+            "at": "2026-07-11T21:16:39.649Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "at": "2026-07-11T21:16:39.649Z"
+      }
+    },
+    "S3-sku-detail": {
+      "status": "designing"
+    }
+  },
+  "build_queue": [],
+  "build_active": null
+}

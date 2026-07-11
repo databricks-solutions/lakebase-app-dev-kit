@@ -1,0 +1,13 @@
+{
+  "id": "AC4-combined-column-dropped",
+  "given": "the stock schema after the split migration has run",
+  "when": "the stock record structure is inspected",
+  "then": "the combined inventory_code column is no longer present, leaving batch_number and serial_number as the separately queryable fields",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a schema-shape contract verified by a parent-aware schema diff against the branch. The forward revision drops the combined inventory_code column after backfill, leaving batch_number and serial_number as the separately queryable fields; the app/models/ stock model drops the inventory_code attribute in step so the ORM mapping matches the migrated schema. Owner module: the split Alembic revision + app/models/ stock model. Verified by inspecting the migrated branch schema and asserting inventory_code is absent.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "Prior ACs assert the values held in the new columns and row preservation; this AC adds the distinct schema-shape outcome that the old combined column is retired, which can be broken (column still present) without affecting the parsed values or surviving rows."
+  }
+}

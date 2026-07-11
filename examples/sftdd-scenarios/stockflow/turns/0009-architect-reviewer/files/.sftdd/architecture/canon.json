@@ -1,0 +1,26 @@
+{
+  "established_by": "F1-stock-visibility",
+  "established_at": "2026-07-11T20:15:44.605Z",
+  "ac_layers": [
+    "E2E"
+  ],
+  "nfr_posture": [],
+  "invariant_patterns": [
+    {
+      "type": "unique",
+      "brief": "Composite UNIQUE(sku, location): no two rows share the pair; refiling resolves to one row at write time (R3, AC3/AC4)."
+    },
+    {
+      "type": "not_null",
+      "brief": "sku, location, quantity, and inventory_code are NOT NULL; a filed record always carries all four (AC1 form fields / AC2 round-trip)."
+    },
+    {
+      "type": "check",
+      "brief": "CHECK quantity >= 0: a stored stock level can never be negative (R2 no-negative floor defended at write time)."
+    },
+    {
+      "type": "migration_reversible",
+      "brief": "The Alembic migration creating stock_records applies and reverses cleanly on the branch, and additive changes preserve pre-existing rows (R1)."
+    }
+  ]
+}

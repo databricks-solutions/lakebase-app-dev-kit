@@ -1,0 +1,13 @@
+{
+  "ordinal": 94,
+  "step": 0,
+  "label": "feature-complete",
+  "kind": "feature-complete",
+  "action": {
+    "kind": "feature-complete"
+  },
+  "produced": [
+    ".sftdd/workflow-state.json"
+  ],
+  "deleted": []
+}

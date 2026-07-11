@@ -1,0 +1,71 @@
+{
+  "feature_id": "F6-split-tracking-code",
+  "story_id": "S2-detail-view-split-fields",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T11",
+      "description": "the SKU detail JSON boundary (app/routes) returns batch_number and serial_number as two separate fields for a stock row with both populated, sourced via stock-service -> stock-repository against the branch DB",
+      "ac_id": "AC1-batch-and-serial-shown-as-distinct-fields",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-detail-view-split-fields.feature"
+    },
+    {
+      "id": "T12",
+      "description": "the SKU detail screen renders the returned batch_number and serial_number values as two separately labelled fields in place of the retired combined-code region",
+      "ac_id": "AC1-batch-and-serial-shown-as-distinct-fields",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T13",
+      "description": "the SKU detail JSON boundary's response for a stock row contains no inventory_code key, confirming the boundary no longer exposes the retired combined code",
+      "ac_id": "AC2-combined-code-no-longer-shown",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-detail-view-split-fields.feature"
+    },
+    {
+      "id": "T14",
+      "description": "the SKU detail screen renders no combined-code element anywhere on the page, only the distinct batch and serial fields",
+      "ac_id": "AC2-combined-code-no-longer-shown",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T15",
+      "description": "the SKU detail JSON boundary for a stock row with NULL batch_number returns JSON null for batch while serial_number passes through unaffected",
+      "ac_id": "AC3-null-batch-shows-none",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-detail-view-split-fields.feature"
+    },
+    {
+      "id": "T16",
+      "description": "the SKU detail screen's batch field shows an explicit 'none' state when the batch value is JSON null, leaving the serial field unaffected",
+      "ac_id": "AC3-null-batch-shows-none",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    },
+    {
+      "id": "T17",
+      "description": "the SKU detail JSON boundary for a stock row with NULL serial_number returns JSON null for serial while batch_number passes through unaffected",
+      "ac_id": "AC4-null-serial-shows-none",
+      "status": "green",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S2-detail-view-split-fields.feature"
+    },
+    {
+      "id": "T18",
+      "description": "the SKU detail screen's serial field shows an explicit 'none' state when the serial value is JSON null, leaving the batch field unaffected",
+      "ac_id": "AC4-null-serial-shows-none",
+      "status": "green",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/SkuDetail.test.tsx"
+    }
+  ]
+}

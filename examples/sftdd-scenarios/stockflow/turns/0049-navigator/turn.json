@@ -1,0 +1,21 @@
+{
+  "ordinal": 49,
+  "step": 0,
+  "label": "navigator",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S3-sku-detail"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S3-sku-detail/AC1-detail-lists-all-locations/cycle-001.json",
+    "client/tests/pages/SkuDetail.test.tsx",
+    "tests/architecture/test_sku_detail_layering.py",
+    "tests/features/S3-sku-detail.feature",
+    "tests/step_defs/test_S3_sku_detail.py"
+  ],
+  "deleted": []
+}

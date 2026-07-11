@@ -1,0 +1,99 @@
+{
+  "feature_id": "F1-stock-visibility",
+  "story_id": "S1-record-stock",
+  "ordered_for": "design-momentum",
+  "items": [
+    {
+      "id": "T1",
+      "description": "the empty record-stock form renders its SKU, location, quantity, and inventory_code fields plus a file control, each with its data-testid seam (client component)",
+      "ac_id": "AC1-record-form-displayed",
+      "status": "pending",
+      "kind": "client",
+      "scenario_file": "client/tests/pages/RecordStock.test.tsx"
+    },
+    {
+      "id": "T4",
+      "description": "filing a stock record returns a JSON response body, not server-rendered HTML, from the api boundary (SPA/JSON boundary contract)",
+      "ac_id": "AC1-record-form-displayed",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T2",
+      "description": "the api boundary module for stock recording does not import the DB session; persistence is confined to the repository (layering contract)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T3",
+      "description": "the app and its Alembic env resolve the DB connection from the injected DATABASE_URL env var, with no hardcoded DSN or app-specific DB name (config-in-env)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T5",
+      "description": "filing a new (sku, location) with a quantity and inventory_code persists a stock record with those values and returns a save confirmation (real-branch integration)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T6",
+      "description": "inserting a stock_records row with a NULL sku, location, quantity, or inventory_code is rejected by the migration's NOT NULL constraints (real branch)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness",
+      "invariant_id": "PI2-required-fields-not-null"
+    },
+    {
+      "id": "T7",
+      "description": "inserting a stock_records row with a negative quantity is rejected by the migration's CHECK quantity >= 0 constraint (real branch)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness",
+      "invariant_id": "PI3-quantity-non-negative"
+    },
+    {
+      "id": "T8",
+      "description": "the stock_records migration applies, reverses on a single downgrade -1, and re-applies cleanly, preserving any pre-existing rows (real branch, isolated migration test)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness",
+      "invariant_id": "PI4-migration-reversible"
+    },
+    {
+      "id": "T12",
+      "description": "submitting an invalid filing (e.g. a negative quantity) returns a field-named inline error naming the offending field, not a bare 400 (real-branch integration)",
+      "ac_id": "AC2-file-new-stock-confirmed",
+      "status": "pending",
+      "kind": "fitness"
+    },
+    {
+      "id": "T9",
+      "description": "refiling an existing (sku, location) with a different quantity and inventory_code updates the existing row in place, leaving exactly one row for that pair (real-branch integration)",
+      "ac_id": "AC3-refile-updates-not-duplicates",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    },
+    {
+      "id": "T10",
+      "description": "inserting a second stock_records row with a (sku, location) pair that already exists raises an IntegrityError from the composite UNIQUE(sku, location) constraint (real branch)",
+      "ac_id": "AC3-refile-updates-not-duplicates",
+      "status": "pending",
+      "kind": "fitness",
+      "invariant_id": "PI1-sku-location-unique"
+    },
+    {
+      "id": "T11",
+      "description": "refiling the same (sku, location) a second time returns a 2xx save confirmation and the operator stays on the normal stock screen, with no error page shown for the collision (real-branch integration)",
+      "ac_id": "AC4-refile-no-error-page",
+      "status": "pending",
+      "kind": "behavior",
+      "scenario_file": "tests/features/S1-record-stock.feature"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "AC3-empty-state-shown",
+  "given": "a warehouse operator with no stock recorded at a location",
+  "when": "the home screen is opened for that location",
+  "then": "an explicit \"No stock at this location\" message is shown in place of the table, never a blank page",
+  "status": "passing",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 cover the populated table and its quantity alignment; this adds the distinct empty-state outcome shown when no records exist, which can fail (blank page) while the populated-table behavior stays green, and vice versa."
+  },
+  "layer": "E2E",
+  "architectural_notes": "E2E: the empty-result branch of the AC1 read path. The stock-repository returns zero rows for the location, the stock-service returns an empty collection (not an error), and the React SPA renders the explicit \"No stock at this location\" message in place of the table. Owner: app/services returns the empty listing distinctly from a populated one; the client owns the empty-state view. Cross-cutting: realizes the PO's clean-render preference (never a blank region / null crash) as NFR-F1-empty-state-clean-render. Verified against the real branch with no seeded rows for the location, asserting the message, not a blank page."
+}

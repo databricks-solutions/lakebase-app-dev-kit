@@ -1,0 +1,8 @@
+{
+  "id": "AC1-record-form-displayed",
+  "given": "a warehouse operator on the record-stock screen",
+  "when": "the record-stock form is opened",
+  "then": "the form is displayed with fields for the SKU, the physical location, the quantity, and the combined inventory_code, and a control to file the record",
+  "status": "draft",
+  "layer": "E2E"
+}

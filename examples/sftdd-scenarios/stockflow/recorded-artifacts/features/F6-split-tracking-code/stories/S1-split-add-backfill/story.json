@@ -1,4 +1,0 @@
-{
-  "id": "S1-split-add-backfill",
-  "title": "Add batch_number and serial_number columns and backfill from inventory_code"
-}

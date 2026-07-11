@@ -1,55 +1,24 @@
-"""Stock service -- business logic and validation."""
+"""Stock service , business rules for recording stock.
 
-from dataclasses import dataclass, field
-from typing import Optional
+Owns the create-or-update rule (a refile overwrites the existing row rather
+than duplicating it, NFR-F1-sku-location-uniqueness) and sets the immutable
+audit `actor` on every write (NFR-F1-durability-migrations). Never touches
+the ORM/session directly; delegates persistence to the repository.
+"""
 
-from app.models.stock import Stock
-from app.repositories.stock_repository import StockRepository
+from app.repositories.stock_repository import StockRecordDTO, upsert_stock_record
 
-
-@dataclass
-class ValidationError:
-    """Holds field-level validation messages."""
-
-    sku: Optional[str] = None
-    location: Optional[str] = None
-    qty: Optional[str] = None
-
-    @property
-    def has_errors(self) -> bool:
-        return any([self.sku, self.location, self.qty])
+# V1 has no authentication (architecture.md: AuthN/AuthZ out of bounds), so
+# every write is attributed to a single system actor.
+_SYSTEM_ACTOR = "system"
 
 
-class StockService:
-    def __init__(self, repository: StockRepository) -> None:
-        self._repo = repository
-
-    def validate(self, sku: str, location: str, qty_raw: str) -> ValidationError:
-        """Validate inbound receipt fields; return a ValidationError (may be empty)."""
-        err = ValidationError()
-        if not sku or not sku.strip():
-            err.sku = "SKU is required"
-        if not location or not location.strip():
-            err.location = "Location is required"
-        if not qty_raw or not qty_raw.strip():
-            err.qty = "Quantity is required"
-        else:
-            try:
-                qty = int(qty_raw)
-                if qty < 1:
-                    err.qty = "Quantity must be greater than zero"
-            except ValueError:
-                err.qty = "Quantity must be a whole number"
-        return err
-
-    def record(self, sku: str, location: str, qty_raw: str, tracking_code: str) -> Stock:
-        """Validate then upsert; raises ValueError if validation fails (callers should pre-validate)."""
-        err = self.validate(sku, location, qty_raw)
-        if err.has_errors:
-            raise ValueError("Validation failed")
-        return self._repo.upsert(
-            sku=sku.strip(),
-            location=location.strip(),
-            quantity=int(qty_raw),
-            tracking_code=tracking_code.strip() if tracking_code else "",
-        )
+def record_stock(sku: str, location: str, quantity: int, inventory_code: str) -> StockRecordDTO:
+    """Create-or-update the stock record for (sku, location)."""
+    return upsert_stock_record(
+        sku=sku,
+        location=location,
+        quantity=quantity,
+        inventory_code=inventory_code,
+        actor=_SYSTEM_ACTOR,
+    )

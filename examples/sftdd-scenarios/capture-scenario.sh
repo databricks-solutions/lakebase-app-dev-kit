@@ -113,6 +113,16 @@ done
 [[ ${#FEATURES[@]} -gt 0 ]] || { echo "capture-scenario: at least one --feature <id> is required" >&2; exit 2; }
 [[ -n "$PROJECT_DIR" || -n "$CREATE" ]] || { echo "capture-scenario: --project-dir <dir> OR --create is required" >&2; exit 2; }
 
+# Absolutize --inputs-from NOW, while the CWD is still the invocation dir: it is
+# consumed AFTER `cd "$PROJECT_DIR"` (intake staging in --create, the feature-request
+# reads in the drive loop), so a RELATIVE path would otherwise resolve against the
+# project dir and vanish (the "recorded source not found" refusal). Fail loud here
+# rather than deep in the human-proxy.
+if [[ -n "$INPUTS_FROM" ]]; then
+  INPUTS_FROM="$(cd "$INPUTS_FROM" 2>/dev/null && pwd -P)" \
+    || { echo "capture-scenario: --inputs-from directory not found: $INPUTS_FROM" >&2; exit 2; }
+fi
+
 SCEN="${SCEN_DIR_ROOT}/${SCENARIO}"
 
 # ── Single-source kit resolution (makes the stale-shim / split-brain impossible) ──

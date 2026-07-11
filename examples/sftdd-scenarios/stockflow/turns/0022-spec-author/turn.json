@@ -1,0 +1,19 @@
+{
+  "ordinal": 22,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S2-stock-by-location-home",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S2-stock-by-location-home"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/acs/AC1-stock-listing-displayed.json",
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/acs/AC2-quantity-right-aligned.json",
+    ".sftdd/features/F1-stock-visibility/stories/S2-stock-by-location-home/acs/AC3-empty-state-shown.json"
+  ],
+  "deleted": []
+}

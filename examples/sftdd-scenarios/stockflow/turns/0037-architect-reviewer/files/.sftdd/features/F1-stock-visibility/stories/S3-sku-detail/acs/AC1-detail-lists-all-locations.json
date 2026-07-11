@@ -1,0 +1,9 @@
+{
+  "id": "AC1-detail-lists-all-locations",
+  "given": "a warehouse operator, and a SKU that holds stock at more than one location",
+  "when": "the SKU detail view for that SKU is opened",
+  "then": "the view shows one entry for every location where that SKU holds stock, and only that SKU's records, each entry showing its location and quantity",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "E2E: the React SPA detail page (client/) calls the app/routes boundary, which returns JSON only; app/services owns the read logic (fetch this SKU's stock_records and group one entry per location), app/repositories is the sole ORM layer and issues the WHERE sku=:sku read against the paired branch, app/models holds the domain entity. The 'only that SKU's records' scoping is enforced in the repository query, not filtered in the boundary or client. No new cross-cutting concern beyond the R4 real-branch read path; the multi-location result set is verified against seeded branch rows."
+}

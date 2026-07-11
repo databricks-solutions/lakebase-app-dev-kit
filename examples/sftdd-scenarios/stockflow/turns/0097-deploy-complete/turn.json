@@ -1,0 +1,13 @@
+{
+  "ordinal": 97,
+  "step": 0,
+  "label": "deploy-complete",
+  "kind": "deploy-complete",
+  "action": {
+    "kind": "deploy-complete"
+  },
+  "produced": [
+    ".sftdd/workflow-state.json"
+  ],
+  "deleted": []
+}

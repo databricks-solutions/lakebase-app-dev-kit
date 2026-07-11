@@ -48,7 +48,7 @@ import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
-import { featureRequestMd, resolveSftddDir, sprintRequestedJson, sprintDir } from "./sftdd-paths.js";
+import { featureRequestMd, resolveSftddDir, sprintRequestedJson, sprintDir, featureProposalsMd, planningDir } from "./sftdd-paths.js";
 // The gate CONDITION (what makes a gate advanceable) is a state-machine property,
 // not a proxy decision; it lives in the guard and is enforced on the advance path.
 import { resolveArtifactInputs, featureDir } from "./gate-conformance-guard.js";
@@ -342,4 +342,60 @@ export function supplyRequests(args: SupplyRequestsArgs = {}): SupplyRequestsRes
     writeFileSync(file, JSON.stringify(merged, null, 2) + "\n");
   }
   return { supplied, skipped };
+}
+
+export interface SupplyProposalsResult {
+  written: boolean;
+  count: number;
+  reason?: string;
+}
+
+/** The one-line ask (first `# ` heading) + the first non-heading paragraph of a
+ *  recorded feature-request.md, so a projected proposal reads like the real one. */
+function summarizeRequest(from: string): { ask: string; rationale: string } {
+  let text = "";
+  try {
+    text = readFileSync(from, "utf8");
+  } catch {
+    return { ask: "", rationale: "" };
+  }
+  const lines = text.split("\n");
+  const heading = lines.find((l) => /^#\s+\S/.test(l.trim()));
+  const ask = heading ? heading.replace(/^#\s+/, "").trim() : "";
+  const para = lines.find((l) => l.trim() && !/^#/.test(l.trim()) && !/^[-*]\s/.test(l.trim()));
+  return { ask, rationale: para?.trim() ?? "" };
+}
+
+/**
+ * DETERMINISTIC propose (the capture/headless stand-in for the Spec Author's
+ * live proposal turn): project feature-proposals.md from the sprint's recorded
+ * feature-requests ($LAKEBASE_SFTDD_SPRINT_REQUESTS) instead of spawning an LLM
+ * that may write nothing then claim the file exists (the propose protocol-violation
+ * abort). One candidate section per recorded feature, with its one-line ask +
+ * rationale lifted from the request. Unset env / no pairs => not written (the live
+ * LLM propose still runs for interactive users). Output conforms as md-narrative.
+ */
+export function supplyProposals(
+  args: { sftddDir?: string; pairs?: Array<{ featureId: string; from: string }>; uiTrack?: boolean } = {},
+): SupplyProposalsResult {
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const pairs = args.pairs ?? recordedRequestPairs();
+  if (pairs.length === 0) return { written: false, count: 0, reason: "no recorded feature-requests (LAKEBASE_SFTDD_SPRINT_REQUESTS unset/empty)" };
+  const sections = pairs.map(({ featureId, from }) => {
+    const { ask, rationale } = summarizeRequest(from);
+    return (
+      `## ${featureId}\n\n` +
+      `**One-line ask:** ${ask || featureId}\n\n` +
+      (rationale ? `**Rationale:** ${rationale}\n\n` : "") +
+      `**E2E story:** ${args.uiTrack ? "Yes." : "As required."}\n`
+    );
+  });
+  const body =
+    `# Feature Proposals\n\n` +
+    `Candidate features for this sprint, projected deterministically from the recorded ` +
+    `feature-requests (the headless stand-in for the Spec Author's live proposal turn).\n\n` +
+    sections.join("\n");
+  mkdirSync(planningDir(sftddDir), { recursive: true });
+  writeFileSync(featureProposalsMd(sftddDir), body);
+  return { written: true, count: pairs.length };
 }

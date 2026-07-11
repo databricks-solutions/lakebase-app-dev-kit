@@ -1,0 +1,12 @@
+{
+  "id": "AC4-refile-no-error-page",
+  "given": "an existing stock record for a (sku, location) pair",
+  "when": "the operator files the same (sku, location) again",
+  "then": "the operator stays on a normal stock screen with no error page shown for the collision",
+  "status": "draft",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC3 asserts the data outcome (single updated record); this AC adds the distinct user-visible outcome that the collision is handled calmly without an error page."
+  },
+  "layer": "E2E"
+}

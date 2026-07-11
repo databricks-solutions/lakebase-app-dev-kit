@@ -75,6 +75,9 @@ source "$ENGINE"
 
 i=0
 for FID in "${FEATURES[@]}"; do
+  # A feature's drive cd's into the project; restore a stable, absolute cwd before
+  # the next feature so nothing downstream depends on where the last one left us.
+  cd "$SCEN_DIR_ROOT"
   SMOKE_NAME="replay-scenario:${SCENARIO}:${FID}"
   PAUSE_BEFORE="$TO"
   REPLAY_BUILD="${BUILD_REPLAY[$i]}"

@@ -1,6 +1,0 @@
-{
-  "tests": [
-    "tests/architecture/test_s1_split_fitness.py::test_t11_downgrade_reconstructs_inventory_code"
-  ],
-  "reason": "AC4-format-and-null-handling redefines the S3 down() reconstruction format to location-segment2-segment3 (e.g. 'LOC--S001'), making location the FIRST segment with COALESCE(batch_number,'')/COALESCE(serial_number,'') for the NULL segments (latest AC wins; software-design-principles hard rule 8). T11 is a migration-reversibility fitness test that asserts the PRIOR (S1) reconstruction contract, seeding tracking_code='A12' and expecting the S3 down() to rebuild inventory_code as 'A12-B7-S001' (tracking_code-first). That reconstruction format is exactly the behavior AC4 supersedes, so T11 now encodes abandoned behavior; carry it forward to expect the location-first reconstruction ('LOC-T11-B7-S001' for its seed) rather than the tracking_code-first value."
-}

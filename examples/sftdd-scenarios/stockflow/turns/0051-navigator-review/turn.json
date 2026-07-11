@@ -1,0 +1,20 @@
+{
+  "ordinal": 51,
+  "step": 0,
+  "label": "navigator-review",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "review",
+  "story": "S3-sku-detail",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S3-sku-detail",
+    "buildMode": "review"
+  },
+  "produced": [
+    ".sftdd/cycles/F1-stock-visibility/S3-sku-detail/review-verdict.json",
+    ".sftdd/cycles/F1-stock-visibility/S3-sku-detail/review.json"
+  ],
+  "deleted": []
+}

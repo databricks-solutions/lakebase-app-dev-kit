@@ -1,0 +1,10 @@
+{
+  "id": "S2-detail-view-split-fields",
+  "asA": "warehouse operator",
+  "iWantTo": "see batch and serial as distinct, separately labelled fields on the SKU detail view wherever the combined tracking code used to appear",
+  "soThat": "I can read a stock position's batch and serial each on its own, with a clear 'none' shown when a code had no batch or serial rather than a blank region or a crash",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "S1 delivers only the schema/data change and its migration integrity probe, proven by a schema diff and probe count on the paired branch; the SPA still does not render batch and serial as distinct fields in the browser. This story adds the client-side SKU detail view change that displays batch_number and serial_number as separate labelled fields with an explicit 'none' state, which S1's build does not produce."
+  }
+}

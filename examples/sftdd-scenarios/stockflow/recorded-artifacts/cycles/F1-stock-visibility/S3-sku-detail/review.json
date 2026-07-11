@@ -1,0 +1,5 @@
+{
+  "reviewed_at": "2026-07-11T21:36:16.609Z",
+  "refactor_requested": false,
+  "refactor_notes": "Layering respected: repository owns the sku WHERE-scoping query, service is a thin pass-through, boundary maps DTOs to response models with no session access. Client SkuDetailView is a pure presentational component using data-testid seams and design tokens (--text-base, --color-text, --space-4), no inline styles or ad-hoc values. NFR-F1-spa-json-boundary honored (API returns JSON, client renders it client-side). No concrete rubric-cited improvement warranted."
+}

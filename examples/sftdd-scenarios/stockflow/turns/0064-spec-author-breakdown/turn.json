@@ -1,0 +1,26 @@
+{
+  "ordinal": 64,
+  "step": 0,
+  "label": "spec-author-breakdown",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "mode": "breakdown",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "mode": "breakdown"
+  },
+  "produced": [
+    ".sftdd/features/F6-split-tracking-code/feature-spec.json",
+    ".sftdd/features/F6-split-tracking-code/feature-spec.md",
+    ".sftdd/features/F6-split-tracking-code/pipeline.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/story.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S1-split-schema-migration/story.md",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/story.json",
+    ".sftdd/features/F6-split-tracking-code/stories/S2-detail-view-split-fields/story.md",
+    ".sftdd/run-config.json",
+    ".sftdd/workflow-state.json",
+    ".tmp/schema-diff.md"
+  ],
+  "deleted": []
+}

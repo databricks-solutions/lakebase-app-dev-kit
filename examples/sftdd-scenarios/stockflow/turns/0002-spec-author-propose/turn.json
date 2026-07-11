@@ -1,0 +1,25 @@
+{
+  "ordinal": 2,
+  "step": 0,
+  "label": "spec-author-propose",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "mode": "propose",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "mode": "propose"
+  },
+  "produced": [
+    ".env.example",
+    ".sftdd/planning/feature-proposals.md",
+    ".sftdd/run-config.json",
+    "app/main.py",
+    "client/README.md",
+    "client/index.html",
+    "client/package.json",
+    "client/src/pages/HomePage.tsx",
+    "pyproject.toml"
+  ],
+  "deleted": []
+}

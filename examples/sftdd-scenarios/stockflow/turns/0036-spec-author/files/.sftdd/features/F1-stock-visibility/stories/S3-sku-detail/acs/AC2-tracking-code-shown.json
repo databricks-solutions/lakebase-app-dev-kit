@@ -1,0 +1,12 @@
+{
+  "id": "AC2-tracking-code-shown",
+  "given": "a warehouse operator viewing the SKU detail view for a SKU that holds stock",
+  "when": "one of that SKU's location entries is read",
+  "then": "the entry displays the combined inventory_code (tracking code) recorded for that (SKU, location) stock record",
+  "status": "draft",
+  "layer": "E2E",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts every location where the SKU is held appears; this adds the distinct outcome that each entry surfaces its combined inventory_code, which can fail (code omitted) while all locations still list correctly, and can pass while a location is missing."
+  }
+}

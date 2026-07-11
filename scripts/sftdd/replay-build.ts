@@ -97,7 +97,10 @@ export interface ReplayBuildTurnArgs {
  */
 export function replayBuildTurn(args: ReplayBuildTurnArgs): boolean {
   const { replayBuildDir, projectDir, sftddDir, featureId, story, turnIndex } = args;
-  const turns = listBuildTurns(replayBuildDir, featureId, story);
+  // Reflect turns are restored verdict-only by the driver (they produce no code);
+  // exclude them here so the Kth REAL build turn (RED/GREEN/review/refactor) maps to
+  // the Kth non-reflect recorded turn, even when the capture recorded reflect twice.
+  const turns = listBuildTurns(replayBuildDir, featureId, story).filter((n) => !/reflect/i.test(n));
   if (turnIndex < 1 || turnIndex > turns.length) return false; // uncovered -> live
   const turnDir = join(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
 

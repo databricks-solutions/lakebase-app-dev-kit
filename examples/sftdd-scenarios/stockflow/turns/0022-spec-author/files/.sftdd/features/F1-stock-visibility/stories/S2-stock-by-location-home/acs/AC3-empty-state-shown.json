@@ -1,0 +1,12 @@
+{
+  "id": "AC3-empty-state-shown",
+  "given": "a warehouse operator with no stock recorded at a location",
+  "when": "the home screen is opened for that location",
+  "then": "an explicit \"No stock at this location\" message is shown in place of the table, never a blank page",
+  "status": "draft",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 cover the populated table and its quantity alignment; this adds the distinct empty-state outcome shown when no records exist, which can fail (blank page) while the populated-table behavior stays green, and vice versa."
+  },
+  "layer": "E2E"
+}

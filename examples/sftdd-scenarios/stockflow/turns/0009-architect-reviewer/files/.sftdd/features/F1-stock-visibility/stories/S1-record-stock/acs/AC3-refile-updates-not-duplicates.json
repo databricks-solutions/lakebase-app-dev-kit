@@ -1,0 +1,13 @@
+{
+  "id": "AC3-refile-updates-not-duplicates",
+  "given": "an existing stock record for a (sku, location) pair",
+  "when": "the operator files the same (sku, location) again with a different quantity and inventory_code",
+  "then": "the existing record's quantity and inventory_code are updated in place and exactly one record still exists for that (sku, location), with no second record created",
+  "status": "draft",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC2 covers first-time recording of a new pair; this AC adds the distinct outcome that a repeat file of the same pair resolves to a single updated record rather than a duplicate."
+  },
+  "layer": "E2E",
+  "architectural_notes": "E2E: the write-time collision-resolution path. The service performs an upsert (get_by_sku_location -> update existing | insert), backed by the composite DB unique constraint PI1 on (sku, location) so R3 holds even under a race; the repository executes the write, the boundary carries no business logic. Realizes 'exactly one row survives, updated in place' , the data outcome of R3. Verified as a real-branch integration test: submit the same pair twice and assert a single stock_records row holds the newly filed quantity and inventory_code (no second row)."
+}

@@ -1,0 +1,20 @@
+{
+  "ordinal": 8,
+  "step": 0,
+  "label": "spec-author",
+  "kind": "invoke-role",
+  "role": "spec-author",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "spec-author",
+    "story": "S1-record-stock"
+  },
+  "produced": [
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC1-record-form-displayed.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC2-file-new-stock-confirmed.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC3-refile-updates-not-duplicates.json",
+    ".sftdd/features/F1-stock-visibility/stories/S1-record-stock/acs/AC4-refile-no-error-page.json"
+  ],
+  "deleted": []
+}

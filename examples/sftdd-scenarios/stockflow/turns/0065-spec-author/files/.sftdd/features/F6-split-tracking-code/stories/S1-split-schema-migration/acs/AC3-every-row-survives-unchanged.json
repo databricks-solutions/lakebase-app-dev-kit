@@ -1,0 +1,12 @@
+{
+  "id": "AC3-every-row-survives-unchanged",
+  "given": "the full set of existing stock rows before the split migration",
+  "when": "the split migration runs",
+  "then": "every original row still exists afterward with its canonical location and quantity unchanged, so no stock position is lost or corrupted",
+  "status": "draft",
+  "layer": "Infra",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 and AC2 assert what the new batch/serial columns hold; this AC adds the distinct preservation outcome that the pre-existing rows and their canonical fields are untouched, which can be broken (a dropped or altered row) while the parsing outcomes still hold on surviving rows."
+  }
+}

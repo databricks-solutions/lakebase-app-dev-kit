@@ -4,16 +4,18 @@
   "label": "navigator",
   "kind": "invoke-role",
   "role": "navigator",
-  "story": "S3-split-drop-old",
+  "story": "S2-detail-view-split-fields",
   "action": {
     "kind": "invoke-role",
     "role": "navigator",
-    "story": "S3-split-drop-old"
+    "story": "S2-detail-view-split-fields"
   },
   "produced": [
-    ".sftdd/cycles/F6-split-tracking-code/S3-split-drop-old/AC2-column-restored/cycle-001.json",
-    "tests/features/S3-split-drop-old.feature",
-    "tests/step_defs/test_s3_split_drop_old.py"
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/AC1-batch-and-serial-shown-as-distinct-fields/cycle-001.json",
+    ".sftdd/cycles/F6-split-tracking-code/S2-detail-view-split-fields/AC2-combined-code-no-longer-shown/superseded-tests.json",
+    "client/tests/pages/SkuDetail.test.tsx",
+    "tests/features/S2-detail-view-split-fields.feature",
+    "tests/step_defs/test_S2_detail_view_split_fields.py"
   ],
   "deleted": []
 }

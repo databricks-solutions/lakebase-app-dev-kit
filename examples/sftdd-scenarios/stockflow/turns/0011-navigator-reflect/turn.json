@@ -1,0 +1,17 @@
+{
+  "ordinal": 11,
+  "step": 0,
+  "label": "navigator-reflect",
+  "kind": "invoke-role",
+  "role": "navigator",
+  "mode": "reflect",
+  "story": "S1-record-stock",
+  "action": {
+    "kind": "invoke-role",
+    "role": "navigator",
+    "story": "S1-record-stock",
+    "buildMode": "reflect"
+  },
+  "produced": [],
+  "deleted": []
+}

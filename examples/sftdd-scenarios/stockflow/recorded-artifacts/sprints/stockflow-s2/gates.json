@@ -1,0 +1,24 @@
+{
+  "sprint": "stockflow-s2",
+  "schema_version": 1,
+  "gates": {
+    "plan": {
+      "status": "approved",
+      "approver": "human-proxy",
+      "approved_at": "2026-07-11T21:43:32.423Z",
+      "artifact_hashes": {
+        "feature-proposals.md": "777de54ac2caeed3cf5860d78e739f60fd1f627418b22ce929fd9a00f575e417"
+      },
+      "history": [
+        {
+          "action": "approved",
+          "at": "2026-07-11T21:43:32.423Z",
+          "approver": "human-proxy",
+          "artifact_hashes": {
+            "feature-proposals.md": "777de54ac2caeed3cf5860d78e739f60fd1f627418b22ce929fd9a00f575e417"
+          }
+        }
+      ]
+    }
+  }
+}

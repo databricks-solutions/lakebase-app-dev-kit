@@ -1,8 +1,0 @@
-{
-  "id": "AC1-detail-view-displays-sku-distribution",
-  "given": "A specific SKU has stock records at one or more locations",
-  "when": "User views that SKU's detail page",
-  "then": "The detail view displays all locations where that SKU has stock with their current quantities",
-  "status": "passing",
-  "architectural_notes": "E2E: a read path exercising the SKU detail route (boundary `app/routes/`) -> query service (`app/services/`) -> repository read (`app/repositories/`, the only ORM layer) -> stock model (`app/models/stock.py`), with UI render asserted against real branch state. Owner module: the SKU-detail route on the stock boundary. Cross-cutting: persistence/ORM access owned by the repository; no auth (out of bounds V1); read consistency must reflect committed records (NFR-F1-7)."
-}

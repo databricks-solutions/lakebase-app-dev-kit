@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "feature_id": "F1-stock-visibility",
+  "stories": {
+    "S1-record-stock": {
+      "status": "building",
+      "gate": {
+        "status": "approved",
+        "history": [
+          {
+            "action": "approved",
+            "at": "2026-07-11T20:21:32.996Z",
+            "approver": "human-proxy"
+          }
+        ],
+        "approver": "human-proxy",
+        "approved_at": "2026-07-11T20:21:32.996Z"
+      },
+      "experiment": {
+        "slug": "exp1",
+        "branch": "experiment-s1-record-stock-exp1",
+        "parent": "feature-f1-stock-visibility",
+        "n": 1,
+        "status": "active",
+        "cut_at": "2026-07-11T20:21:33.277Z"
+      }
+    },
+    "S2-stock-by-location-home": {
+      "status": "designing"
+    },
+    "S3-sku-detail": {
+      "status": "designing"
+    }
+  },
+  "build_queue": [],
+  "build_active": "S1-record-stock"
+}
