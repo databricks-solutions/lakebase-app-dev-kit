@@ -27,6 +27,7 @@ import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson,
 import { designGuideConformance } from "./response-formatter.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
 import { readSupersededTests, readGreenFailure } from "./supersession.js";
+import { readDeployVerifyAssessMarker, readDeployVerifyScope } from "./deploy-verify-assess.js";
 import { readConventions } from "./architecture-conventions.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 
@@ -713,6 +714,33 @@ function roleTaskBody(
           ` regression, always write a diagnosis , never nothing.`
         );
       }
+      if (action.buildMode === "assess-deploy") {
+        // Story-level deploy-verify self-heal ASSESS: the full-feature deploy-verify
+        // FAILED, and the deterministic classifier already proved these tests PASS
+        // in ISOLATION , shared-state contamination (a prior test that does not own
+        // its DB state, typically an absolute whole-table aggregate), not broken
+        // software. Confirm the fragile set + prescribe HOW to scope each. The
+        // scope set the Driver refactors is read from what you write here.
+        const marker = readDeployVerifyAssessMarker(sftddDir, featureId, s);
+        const failing = marker?.failing_node_ids ?? [];
+        return (
+          `ASSESS a failed full-feature DEPLOY-VERIFY for story ${s}. The story's own tests are green, but the` +
+          ` full-feature verify against the running app FAILED on the tests below. A deterministic classifier` +
+          ` RE-RAN each in ISOLATION (a fresh clean DB) and they ALL PASSED alone , so this is shared-state` +
+          ` CONTAMINATION, not broken software: a test that does not OWN its DB state (typically a WHOLE-TABLE` +
+          ` AGGREGATE , a COUNT/SUM integrity probe , asserting an ABSOLUTE total that holds on the isolated` +
+          ` per-cycle branch but breaks once other stories' rows share the table).\n` +
+          `Failing tests:\n${failing.map((n) => `  ${n}`).join("\n")}\n\n` +
+          `For EACH test, prescribe HOW to make it own its state: scope BOTH the seed AND the assertion to the` +
+          ` test's own rows (filter by the test's SKUs / a marker column), or assert a DELTA, NEVER an absolute` +
+          ` whole-table total. Do NOT weaken the assertion's intent , keep the invariant, just scope it.\n` +
+          `Write your scope directives to ${root}/features/${featureId}/stories/${s}/deploy-verify-scope.json as` +
+          ` {"version":1,"story_id":"${s}","directives":[{"node_id":"<path::test>","directive":"<how to scope it>"}]}` +
+          ` , one entry per test you confirm is contamination-fragile. If (rarely) you judge the classifier wrong` +
+          ` and a failure is a GENUINE regression, OMIT it from directives (write no file, or an empty directives` +
+          ` array); the orchestration then raises it to a human instead of scoping. Write ONLY that file.`
+        );
+      }
       if (action.buildMode === "review") {
         // story granularity (default): REVIEW the WHOLE story's implementation in
         // one turn; verdict at the story root (no AC).
@@ -747,6 +775,26 @@ function roleTaskBody(
         );
       }
     case "driver":
+      if (action.buildMode === "refactor-deploy") {
+        // Story-level deploy-verify self-heal SCOPE: the Navigator confirmed a set
+        // of contamination-fragile tests (they fail the full-feature verify but
+        // pass in isolation) + prescribed how to scope each. Refactor EXACTLY those
+        // tests to own their DB state, per the directives , do NOT touch product
+        // code and do NOT weaken the invariant, just scope the seed + assertion to
+        // the test's own rows (or a delta). The re-deploy re-runs the full verify.
+        const scope = readDeployVerifyScope(sftddDir, featureId, s);
+        const directives = scope?.directives ?? [];
+        return (
+          `SCOPE the contamination-fragile tests the Navigator flagged for story ${s}. Each FAILED the` +
+          ` full-feature deploy-verify but PASSES in isolation , it asserts an ABSOLUTE whole-table aggregate` +
+          ` (or otherwise does not own its DB state), which breaks once other stories' rows share the table.` +
+          ` Refactor EACH per its directive so it OWNS its state: scope BOTH the seed AND the assertion to the` +
+          ` test's own rows (filter by the test's SKUs / a marker column), or assert a DELTA , NEVER an absolute` +
+          ` whole-table total. Keep the invariant; do NOT weaken it, and do NOT change product code.\n` +
+          directives.map((d) => `  ${d.node_id}\n    -> ${d.directive}`).join("\n") +
+          `\nEdit ONLY those test files. The orchestrator re-deploys + re-verifies after your turn.`
+        );
+      }
       if (action.buildMode === "repair") {
         // A green-failure assess can produce a MIXED verdict: some prior tests
         // flagged SUPERSEDED + a genuine regression diagnosed in the rest. The
@@ -900,7 +948,7 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
             undefined
           : "buildMode" in action && action.buildMode === "review"
             ? "review"
-            : "buildMode" in action && action.buildMode === "refactor"
+            : "buildMode" in action && (action.buildMode === "refactor" || action.buildMode === "refactor-deploy")
               ? "refactor"
               : action.role === "navigator"
                 ? "red"
@@ -979,6 +1027,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         // read from disk (superseded-tests.json), so the verdict is the role's.
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-green", "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.sftddDir] });
+      } else if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess-deploy") {
+        // After the Navigator's story-level deploy-verify ASSESS turn, finalize it:
+        // read its scope directives (deploy-verify-scope.json) and either record the
+        // contamination-fragile scope set on the marker (routes the Driver SCOPE
+        // turn) or , when it wrote none (its veto) , mark the one shot spent + write
+        // the terminal deploy-verify escalation (raise-to-hil). The verdict is the
+        // role's (read from disk); the finalize is deterministic.
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-deploy-verify", "--feature", f, "--story", action.story, "--tdd-dir", cfg.sftddDir] });
       } else if (!("mode" in action) && action.role === "navigator") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
@@ -996,7 +1052,15 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
               : [];
         cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.sftddDir, ...loopFlag] });
       }
-      if (!("mode" in action) && action.role === "driver") {
+      if (!("mode" in action) && action.role === "driver" && "buildMode" in action && action.buildMode === "refactor-deploy") {
+        // The Driver's story-level deploy-verify SCOPE turn edited ONLY the flagged
+        // tests (no open cycle, no product code, no test/green stamp). Finalize by
+        // marking the scope done so the marker is no longer refactor-pending; the
+        // transition then falls through to the one re-deploy + re-verify (which
+        // clears the marker on pass, or writes the terminal escalation on a repeat
+        // failure , the one-shot bound). Emitted INSTEAD of a green/refactor cycle.
+        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["refactor-deploy-verify", "--feature", f, "--story", action.story, "--tdd-dir", cfg.sftddDir] });
+      } else if (!("mode" in action) && action.role === "driver") {
         const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
         const isRepair = "buildMode" in action && action.buildMode === "repair";
         const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";

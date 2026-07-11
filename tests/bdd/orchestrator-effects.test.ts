@@ -58,6 +58,30 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
   });
 
+  it("navigator ASSESS-DEPLOY: prompts to scope contamination-fragile tests + finalizes via assess-deploy-verify", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "assess-deploy" }, cfg());
+    const task = (cmds[0] as { task: string }).task;
+    expect(task).toMatch(/DEPLOY-VERIFY/);
+    expect(task).toMatch(/deploy-verify-scope\.json/);
+    // The finalize is the deterministic assess-deploy-verify subcommand (NOT a
+    // begin/review cycle turn).
+    const cycle = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-sftdd-cycle") as { args: string[] };
+    expect(cycle.args[0]).toBe("assess-deploy-verify");
+    expect(cycle.args).toContain("S1");
+    expect(cmds.some((c) => (c as { args?: string[] }).args?.[0] === "begin")).toBe(false);
+  });
+
+  it("driver SCOPE-DEPLOY: refactors ONLY the flagged tests + finalizes via refactor-deploy-verify (no green/refactor cycle)", () => {
+    const cmds = commandsForAction({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor-deploy" }, cfg());
+    const task = (cmds[0] as { task: string }).task;
+    expect(task).toMatch(/SCOPE/);
+    expect(task).toMatch(/do NOT change product code/i);
+    const cycle = cmds.find((c) => (c as { bin?: string }).bin === "lakebase-sftdd-cycle") as { args: string[] };
+    expect(cycle.args[0]).toBe("refactor-deploy-verify");
+    // Crucially NOT a green/refactor cycle stamp (there is no open cycle).
+    expect(cmds.some((c) => ["green", "refactor"].includes((c as { args?: string[] }).args?.[0] ?? ""))).toBe(false);
+  });
+
   it("resume scoping: non-build roles warm across the feature; build roles warm PER STORY (P5)", () => {
     // spec-author / architect-reviewer / etc. resume across the whole feature
     // (keyed by role). The build roles (navigator/driver) resume per STORY , a

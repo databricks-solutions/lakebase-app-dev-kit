@@ -25,6 +25,10 @@ import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from ".
 import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
 import { storyDeployVerified } from "./deploy.js";
+import {
+  deployVerifyNeedsAssess,
+  deployVerifyRefactorPending as deployVerifyRefactorPendingMarker,
+} from "./deploy-verify-assess.js";
 import { readWorkflowState, SCM_STATES } from "../lakebase/scm-workflow-state.js";
 import { firstPendingEscalation } from "./escalation.js";
 import { specLevelSmell, priorReviseCount, isBuildRefactorRoutableSmell } from "./smells.js";
@@ -310,6 +314,19 @@ export function diskArtifactProbe(
 
     storyDeployVerified(story) {
       return storyDeployVerified(sftddDir, featureId, story);
+    },
+
+    deployVerifyAssessEligible(story) {
+      // A contamination-classified deploy-verify failure (marker written by the
+      // deploy step) not yet assessed + under the one-shot cap: routes the
+      // story-level Navigator ASSESS-DEPLOY turn.
+      return deployVerifyNeedsAssess(sftddDir, featureId, story);
+    },
+
+    deployVerifyRefactorPending(story) {
+      // The Navigator assessed + recorded a scope set the Driver has not yet
+      // refactored: routes the Driver SCOPE-DEPLOY turn.
+      return deployVerifyRefactorPendingMarker(sftddDir, featureId, story);
     },
 
     pendingEscalation(): DriveEscalation | null {

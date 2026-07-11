@@ -26,6 +26,10 @@ function fakeProbe(facts: Record<string, Partial<Record<keyof StoryArtifactProbe
     testsWritten: (s) => get(s, "testsWritten"),
     codeWritten: (s) => get(s, "codeWritten"),
     storyDeployVerified: (s) => get(s, "storyDeployVerified"),
+    // Deploy-verify self-heal: no contamination marker by default (routing tested
+    // in the nextTransition suite via explicit build-flag overrides).
+    deployVerifyAssessEligible: (s) => get(s, "deployVerifyAssessEligible" as keyof StoryArtifactProbe),
+    deployVerifyRefactorPending: (s) => get(s, "deployVerifyRefactorPending" as keyof StoryArtifactProbe),
     // Per-AC REVIEW/REFACTOR: not exercised by these derive tests (default: none pending).
     reviewPendingAc: () => null,
     refactorPendingAc: () => null,
@@ -189,6 +193,57 @@ describe("deriveDriveState + nextTransition: realistic on-disk situations", () =
     const probe = { ...fakeProbe({ S1: { testsWritten: true } }), repairRegressionFixAc: (s: string) => (s === "S1" ? "AC1" : null) };
     const state = deriveDriveState(p, probe, FEATURE);
     expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "repair", ac: "AC1" });
+  });
+
+  it("deploy-verify contamination (eligible marker) routes the Navigator ASSESS-DEPLOY turn before re-deploying", () => {
+    const p = pipeline(
+      {
+        S1: {
+          status: "awaiting-acceptance",
+          gate: { status: "approved", history: [] },
+          experiment: { slug: "e", branch: "exp/s1", parent: "feat", n: 1, status: "active" },
+        },
+      },
+      { build_active: "S1" },
+    );
+    // Built + deployed, but verify FAILED as contamination (deployVerified false,
+    // eligible marker present). The self-heal pre-empts the re-deploy: assess FIRST.
+    const probe = {
+      ...fakeProbe({ S1: { testsWritten: true, codeWritten: true, storyDeployVerified: false } }),
+      deployVerifyAssessEligible: (s: string) => s === "S1",
+    };
+    const state = deriveDriveState(p, probe, FEATURE);
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "navigator", story: "S1", buildMode: "assess-deploy" });
+  });
+
+  it("deploy-verify assessed with a scope set routes the Driver SCOPE-DEPLOY turn, then re-deploys", () => {
+    const p = pipeline(
+      {
+        S1: {
+          status: "awaiting-acceptance",
+          gate: { status: "approved", history: [] },
+          experiment: { slug: "e", branch: "exp/s1", parent: "feat", n: 1, status: "active" },
+        },
+      },
+      { build_active: "S1" },
+    );
+    // The Navigator assessed + chose a scope set; the Driver has not yet refactored.
+    const probe = {
+      ...fakeProbe({ S1: { testsWritten: true, codeWritten: true, storyDeployVerified: false } }),
+      deployVerifyRefactorPending: (s: string) => s === "S1",
+    };
+    const state = deriveDriveState(p, probe, FEATURE);
+    expect(nextTransition(state)).toEqual({ kind: "invoke-role", role: "driver", story: "S1", buildMode: "refactor-deploy" });
+
+    // With no self-heal pending (assess spent + scoped, or no marker), a still-
+    // unverified deploy falls through to the plain re-deploy (teeth), NOT a spin
+    // in the self-heal , the one-shot bound + terminal escalation close that.
+    const plain = deriveDriveState(
+      p,
+      fakeProbe({ S1: { testsWritten: true, codeWritten: true, storyDeployVerified: false } }),
+      FEATURE,
+    );
+    expect(nextTransition(plain)).toEqual({ kind: "await-acceptance", story: "S1" });
   });
 
   it("breakdownDone is derived from the pipeline having stories (post sync-breakdown)", () => {

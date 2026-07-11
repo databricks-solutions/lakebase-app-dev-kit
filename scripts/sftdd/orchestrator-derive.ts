@@ -71,6 +71,13 @@ export interface StoryArtifactProbe {
   /** The story's deploy verified (reachable + verify.passed on its experiment
    *  branch): the teeth on acceptance (features/<F>/stories/<S>/deploy-evidence.json). */
   storyDeployVerified(story: string): boolean;
+  /** A contamination-classified deploy-verify failure the Navigator has not yet
+   *  assessed (one-shot), or false (drives the story-level Navigator ASSESS-DEPLOY
+   *  turn: confirm the contamination-fragile tests + write scope directives). */
+  deployVerifyAssessEligible(story: string): boolean;
+  /** The Navigator assessed a deploy-verify failure with a non-empty scope set the
+   *  Driver has not yet refactored, or false (drives the Driver SCOPE-DEPLOY turn). */
+  deployVerifyRefactorPending(story: string): boolean;
   /** An unresolved blocking escalation (failed honest-GREEN run, blocking smell,
    *  deploy verify-fail), or null. When set the driver routes to raise-to-hil. */
   pendingEscalation(): DriveEscalation | null;
@@ -166,6 +173,8 @@ function storyView(
       repairRegressionAc: probe.repairRegressionFixAc(id),
       awaitingAcceptance: e.status === "awaiting-acceptance",
       deployVerified: probe.storyDeployVerified(id),
+      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
+      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
       accepted,
     },
   };

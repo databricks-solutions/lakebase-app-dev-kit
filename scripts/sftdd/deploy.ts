@@ -24,6 +24,8 @@ import {
   parseFailedNodeIds,
   classifyDeployVerifyFailure,
   writeDeployVerifyAssessMarker,
+  readDeployVerifyAssessMarker,
+  clearDeployVerifyAssessMarker,
 } from "./deploy-verify-assess.js";
 import { checkE2eRegexClean, summarizeE2eRegexViolations, E2E_REGEX_REMEDIATION } from "./e2e-regex-clean.js";
 import { emitAgentLogEvent, type AgentLogIoOpts } from "./agent-log.js";
@@ -651,9 +653,17 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
               )
             ).passed,
           );
+          // One-shot: suppress the escalation into the self-heal marker ONLY on the
+          // FIRST detection. If a marker is already ASSESSED (the Navigator scope
+          // turn ran and the Driver's re-deploy STILL fails), the one attempt is
+          // spent , do NOT re-suppress; fall through to the terminal escalation so
+          // the run halts to the HIL instead of spinning assess -> scope -> re-deploy.
           if (verdict === "contamination") {
-            writeDeployVerifyAssessMarker(sftddDir, args.featureId, args.storyId, failing);
-            contamination = true;
+            const prior = readDeployVerifyAssessMarker(sftddDir, args.featureId, args.storyId);
+            if (!prior?.assessed) {
+              writeDeployVerifyAssessMarker(sftddDir, args.featureId, args.storyId, failing);
+              contamination = true;
+            }
           }
         }
       }
@@ -667,6 +677,11 @@ export async function deployToTarget(args: DeployArgs): Promise<DeployResult> {
           ...(args.storyId ? { story_id: args.storyId } : {}),
         });
       }
+    } else if (args.storyId) {
+      // The deploy verified. If a deploy-verify-assess marker exists, the
+      // Navigator ASSESS + Driver SCOPE self-heal WORKED (the re-verify now
+      // passes), so clear it , the story proceeds to acceptance with a clean slate.
+      clearDeployVerifyAssessMarker(sftddDir, args.featureId, args.storyId);
     }
   }
 

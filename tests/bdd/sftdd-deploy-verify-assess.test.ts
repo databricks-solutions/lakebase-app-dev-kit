@@ -8,6 +8,8 @@ import {
   writeDeployVerifyAssessMarker,
   readDeployVerifyAssessMarker,
   markDeployVerifyAssessed,
+  markDeployVerifyRefactored,
+  deployVerifyRefactorPending,
   clearDeployVerifyAssessMarker,
   deployVerifyNeedsAssess,
 } from "../../scripts/sftdd/deploy-verify-assess";
@@ -99,6 +101,40 @@ describe("deploy-verify-assess marker lifecycle (one-shot bound)", () => {
     writeDeployVerifyAssessMarker(sftddDir, FEATURE, STORY, ["a.py::t"]);
     clearDeployVerifyAssessMarker(sftddDir, FEATURE, STORY);
     expect(readDeployVerifyAssessMarker(sftddDir, FEATURE, STORY)).toBeUndefined();
+    expect(deployVerifyNeedsAssess(sftddDir, FEATURE, STORY)).toBe(false);
+  });
+});
+
+describe("deploy-verify SCOPE routing (assess -> driver scope -> re-deploy)", () => {
+  const IDS = ["a.py::t1", "a.py::t2"];
+
+  it("assess with a scope set -> refactor-pending; refactor -> not pending", () => {
+    writeDeployVerifyAssessMarker(sftddDir, FEATURE, STORY, IDS);
+    // No scope set yet: assessed:false, so nothing to refactor.
+    expect(deployVerifyRefactorPending(sftddDir, FEATURE, STORY)).toBe(false);
+
+    // The Navigator confirmed the scope set: assessed + flagged_tests recorded.
+    markDeployVerifyAssessed(sftddDir, FEATURE, STORY, IDS);
+    const m = readDeployVerifyAssessMarker(sftddDir, FEATURE, STORY);
+    expect(m?.assessed).toBe(true);
+    expect(m?.flagged_tests).toEqual(IDS);
+    // Eligible for the Driver SCOPE turn, and no longer for a fresh assess.
+    expect(deployVerifyRefactorPending(sftddDir, FEATURE, STORY)).toBe(true);
+    expect(deployVerifyNeedsAssess(sftddDir, FEATURE, STORY)).toBe(false);
+
+    // The Driver scoped the tests: no longer refactor-pending (the one re-deploy runs).
+    markDeployVerifyRefactored(sftddDir, FEATURE, STORY);
+    expect(readDeployVerifyAssessMarker(sftddDir, FEATURE, STORY)?.refactored).toBe(true);
+    expect(deployVerifyRefactorPending(sftddDir, FEATURE, STORY)).toBe(false);
+  });
+
+  it("assess with NO scope set (Navigator veto) -> never refactor-pending (routes HIL)", () => {
+    writeDeployVerifyAssessMarker(sftddDir, FEATURE, STORY, IDS);
+    markDeployVerifyAssessed(sftddDir, FEATURE, STORY); // no flagged_tests
+    const m = readDeployVerifyAssessMarker(sftddDir, FEATURE, STORY);
+    expect(m?.assessed).toBe(true);
+    expect(m?.flagged_tests).toBeUndefined();
+    expect(deployVerifyRefactorPending(sftddDir, FEATURE, STORY)).toBe(false);
     expect(deployVerifyNeedsAssess(sftddDir, FEATURE, STORY)).toBe(false);
   });
 });

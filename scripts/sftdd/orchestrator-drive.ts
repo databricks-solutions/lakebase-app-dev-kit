@@ -210,6 +210,13 @@ export interface StoryBuild {
    *  branch). The teeth on acceptance: a story cannot be accepted/merged unless
    *  its deploy proved working software. */
   deployVerified: boolean;
+  /** Deploy-verify self-heal: the failure was classified as shared-state
+   *  contamination (fails full-suite, passes in isolation) + not yet assessed.
+   *  Drives one story-level Navigator ASSESS-DEPLOY turn before re-deploying. */
+  deployVerifyAssessEligible?: boolean;
+  /** Deploy-verify self-heal: the Navigator assessed + chose a scope set the
+   *  Driver has not yet refactored. Drives one Driver SCOPE-DEPLOY turn. */
+  deployVerifyRefactorPending?: boolean;
   /** The PO accepted: experiment merged into the feature branch, story done. */
   accepted: boolean;
 }
@@ -321,7 +328,13 @@ export type WorkflowAction =
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
   | { kind: "cut-experiment"; story: string }
-  | { kind: "invoke-role"; role: "navigator" | "driver"; story: string; buildMode?: "review" | "refactor" | "assess" | "repair"; ac?: string }
+  | {
+      kind: "invoke-role";
+      role: "navigator" | "driver";
+      story: string;
+      buildMode?: "review" | "refactor" | "assess" | "repair" | "assess-deploy" | "refactor-deploy";
+      ac?: string;
+    }
   | { kind: "await-acceptance"; story: string }
   | { kind: "accept"; story: string }
   | { kind: "complete"; story: string }
@@ -393,6 +406,19 @@ function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
   if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
   if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
   if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
+  // Deploy-verify self-heal: the deploy ran but verify FAILED as shared-state
+  // CONTAMINATION (fails the full feature suite, passes in isolation , a prior
+  // test that does not own its DB state, e.g. an absolute whole-table aggregate).
+  // The deploy step suppressed the terminal escalation into a one-shot marker
+  // instead. Route it BEFORE re-deploying so the same fragile test is not re-run
+  // blindly: one story-level Navigator ASSESS-DEPLOY turn (confirm the fragile
+  // set + write scope directives) -> one Driver SCOPE-DEPLOY turn (refactor those
+  // tests to own their state) -> the re-deploy below re-verifies. The one-shot
+  // bound lives in the marker + the deploy step: after the single assess+scope,
+  // a still-failing re-deploy is NOT re-suppressed, so it writes the terminal
+  // escalation and the escalation pre-empt halts to the HIL (no spin).
+  if (b.deployVerifyAssessEligible) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess-deploy" };
+  if (b.deployVerifyRefactorPending) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor-deploy" };
   // Teeth: a story cannot be accepted (merged) until its deploy verified
   // (reachable + verify.passed). Re-deploy until it does; a story that never
   // verifies surfaces as a stall, not a silent merge of broken software.

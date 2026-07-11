@@ -46,6 +46,45 @@ export interface DeployVerifyAssessMarker {
   /** Assess+scope attempts spent. One-shot: at 1, the marker stops being
    *  assess-eligible and a repeat deploy-verify failure takes the terminal HIL. */
   attempts: number;
+  /** The node-ids the Navigator's ASSESS turn confirmed as contamination-fragile
+   *  and chose to scope (its scope set). Set by the assess-finalize step from the
+   *  Navigator's scope directives. Present + non-empty routes the Driver SCOPE turn;
+   *  empty (the Navigator vetoed / found it genuine) routes the terminal HIL. */
+  flagged_tests?: string[];
+  /** True once the Driver's SCOPE turn refactored the flagged tests to own their
+   *  DB state. Set by the refactor-finalize step. Gates the one re-deploy. */
+  refactored?: boolean;
+}
+
+/** The Navigator's ASSESS-DEPLOY output: per contamination-fragile test, HOW to
+ *  scope it to own its DB state (seed + assert its own rows, or assert a delta,
+ *  never an absolute whole-table total). Read by the refactor-finalize step to
+ *  decide the scope set, and injected into the Driver's SCOPE turn as guidance. */
+export interface DeployVerifyScope {
+  version: 1;
+  story_id: string;
+  directives: { node_id: string; directive: string }[];
+}
+
+function scopePath(sftddDir: string, featureId: string, storyId: string): string | undefined {
+  const fdir = findFeatureDir(sftddDir, featureId);
+  if (!fdir) return undefined;
+  return path.join(fdir, "stories", storyId, "deploy-verify-scope.json");
+}
+
+/** Read the Navigator's scope directives (undefined when it wrote none , its veto). */
+export function readDeployVerifyScope(
+  sftddDir: string,
+  featureId: string,
+  storyId: string,
+): DeployVerifyScope | undefined {
+  const file = scopePath(sftddDir, featureId, storyId);
+  if (!file || !fs.existsSync(file)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8")) as DeployVerifyScope;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The marker lives at story scope, next to the story's deploy-evidence.json. */
@@ -96,8 +135,28 @@ export function writeDeployVerifyAssessMarker(
 
 /** Mark the failure assessed (the Navigator turn ran) and count the attempt, so
  *  the next probe finds it no longer assess-eligible until the re-verify clears
- *  or re-detects it. */
+ *  or re-detects it. `flaggedTests` (the Navigator's scope set) is recorded when
+ *  given: non-empty routes the Driver SCOPE turn; omitted/empty leaves the marker
+ *  with nothing to scope (the Navigator vetoed), so the finalize escalates. */
 export function markDeployVerifyAssessed(
+  sftddDir: string,
+  featureId: string,
+  storyId: string,
+  flaggedTests?: string[],
+): void {
+  const file = markerPath(sftddDir, featureId, storyId);
+  const m = readDeployVerifyAssessMarker(sftddDir, featureId, storyId);
+  if (!file || !m) return;
+  m.assessed = true;
+  m.attempts += 1;
+  if (flaggedTests && flaggedTests.length > 0) m.flagged_tests = flaggedTests;
+  fs.writeFileSync(file, JSON.stringify(m, null, 2) + "\n", "utf8");
+}
+
+/** Mark the Driver's SCOPE turn done (the flagged tests were refactored to own
+ *  their state). Gates the one re-deploy: a refactored marker is no longer
+ *  refactor-pending, so the transition falls through to re-deploy + re-verify. */
+export function markDeployVerifyRefactored(
   sftddDir: string,
   featureId: string,
   storyId: string,
@@ -105,9 +164,19 @@ export function markDeployVerifyAssessed(
   const file = markerPath(sftddDir, featureId, storyId);
   const m = readDeployVerifyAssessMarker(sftddDir, featureId, storyId);
   if (!file || !m) return;
-  m.assessed = true;
-  m.attempts += 1;
+  m.refactored = true;
   fs.writeFileSync(file, JSON.stringify(m, null, 2) + "\n", "utf8");
+}
+
+/** The assessed failure has a non-empty scope set the Driver has not yet
+ *  refactored: routes the one Driver SCOPE turn (buildMode refactor-deploy). */
+export function deployVerifyRefactorPending(
+  sftddDir: string,
+  featureId: string,
+  storyId: string,
+): boolean {
+  const m = readDeployVerifyAssessMarker(sftddDir, featureId, storyId);
+  return !!m && m.assessed === true && (m.flagged_tests?.length ?? 0) > 0 && m.refactored !== true;
 }
 
 /** Clear the marker (the re-verify passed , the scope worked). */

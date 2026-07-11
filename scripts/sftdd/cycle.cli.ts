@@ -37,6 +37,12 @@ import {
 } from "./supersession.js";
 import { writeEscalation } from "./escalation.js";
 import { recordReflectionGate } from "./reflection.js";
+import {
+  readDeployVerifyAssessMarker,
+  readDeployVerifyScope,
+  markDeployVerifyAssessed,
+  markDeployVerifyRefactored,
+} from "./deploy-verify-assess.js";
 
 interface Args {
   cmd?: string;
@@ -266,6 +272,51 @@ async function main(): Promise<number> {
         });
         process.stdout.write(`cycle: assessed ${a.story}/${ac} -> genuine regression, raised to HIL${regression ? " with diagnosis" : ""}\n`);
       }
+      return 0;
+    }
+    case "assess-deploy-verify": {
+      // Finalize the Navigator's story-level ASSESS-DEPLOY turn (deploy-verify
+      // self-heal). The failure was already classified as shared-state
+      // contamination (a marker exists). The Navigator's verdict is READ from
+      // disk (deploy-verify-scope.json), the role's output:
+      //   - directives present -> confirmed the contamination-fragile set: mark
+      //     assessed + record the scope set (routes the Driver SCOPE-DEPLOY turn);
+      //   - nothing written (the Navigator's veto: it judged the failure genuine
+      //     despite the classifier) -> mark assessed (spend the one shot) + write
+      //     the terminal deploy-verify escalation (raise-to-hil).
+      if (!a.story) return usage("assess-deploy-verify: --story is required.");
+      const marker = readDeployVerifyAssessMarker(sftddDir, a.feature, a.story);
+      if (!marker) {
+        process.stdout.write(`cycle: assess-deploy-verify , no marker for ${a.feature}/${a.story} (nothing to assess)\n`);
+        return 0;
+      }
+      const scope = readDeployVerifyScope(sftddDir, a.feature, a.story);
+      const scoped = scope?.directives?.map((d) => d.node_id).filter((n) => !!n) ?? [];
+      if (scoped.length > 0) {
+        markDeployVerifyAssessed(sftddDir, a.feature, a.story, scoped);
+        process.stdout.write(
+          `cycle: assessed deploy-verify ${a.story} -> ${scoped.length} contamination-fragile test(s) to scope; routing Driver SCOPE-DEPLOY\n`,
+        );
+      } else {
+        markDeployVerifyAssessed(sftddDir, a.feature, a.story);
+        writeEscalation(sftddDir, {
+          source: "deploy-verify",
+          reason: `deploy-verify failure for ${a.feature}/${a.story}: Navigator assessed it as genuine (no contamination-fragile tests to scope); raising to HIL`,
+          feature_id: a.feature,
+          story_id: a.story,
+        });
+        process.stdout.write(`cycle: assessed deploy-verify ${a.story} -> genuine (no scope set), raised to HIL\n`);
+      }
+      return 0;
+    }
+    case "refactor-deploy-verify": {
+      // Finalize the Driver's SCOPE-DEPLOY turn: mark the flagged tests refactored
+      // so the marker is no longer refactor-pending and the transition falls
+      // through to the one re-deploy + re-verify (which clears the marker on pass,
+      // or , if it still fails , writes the terminal escalation, the one-shot bound).
+      if (!a.story) return usage("refactor-deploy-verify: --story is required.");
+      markDeployVerifyRefactored(sftddDir, a.feature, a.story);
+      process.stdout.write(`cycle: deploy-verify scope refactor recorded for ${a.story}; re-deploying to re-verify\n`);
       return 0;
     }
     default:

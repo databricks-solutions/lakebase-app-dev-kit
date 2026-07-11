@@ -18,6 +18,10 @@ import {
 } from "../../scripts/sftdd/deploy";
 import { readEscalations } from "../../scripts/sftdd/escalation";
 import { readAgentLog } from "../../scripts/sftdd/agent-log";
+import {
+  readDeployVerifyAssessMarker,
+  markDeployVerifyAssessed,
+} from "../../scripts/sftdd/deploy-verify-assess";
 
 const TARGETS = [
   "targets:",
@@ -319,6 +323,75 @@ describe("ensureDeployedAndVerify: GREEN-verify failure diagnostic", () => {
     });
     expect(res.passed).toBe(true);
     expect(res.summary).toBe("GREEN verify passed against the running app");
+  });
+});
+
+describe("deployToTarget: deploy-verify self-heal (contamination classify + one-shot bound)", () => {
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+  // A verify that FAILS the full feature suite (reporting a FAILED node-id) but
+  // PASSES when re-run in isolation (the classifier appends the node-id): the
+  // shared-state contamination signature. projectDir has no project-instance file,
+  // so runVerifyMaybeEphemeral verifies IN PLACE (no ephemeral fork , hermetic).
+  const contaminated = (cmd: string) =>
+    cmd.includes("::") ? { passed: true } : { passed: false, output: "FAILED tests/x.py::t1\n" };
+
+  function baseArgs(sftddDir: string) {
+    return {
+      projectDir: dir,
+      targetName: "localv",
+      featureId: "F1",
+      storyId: "S1",
+      lakebaseBranch: "experiment-s1",
+      sftddDir,
+      startProcess: () => 1,
+      reachable: async () => true,
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    };
+  }
+
+  it("classifies contamination -> writes the one-shot marker + SUPPRESSES the escalation (self-heal, no HIL)", async () => {
+    const sftddDir = join(dir, ".tdd");
+    mkdirSync(join(sftddDir, "features", "F1", "stories", "S1"), { recursive: true });
+
+    await deployToTarget({ ...baseArgs(sftddDir), runVerify: contaminated });
+
+    // The fragile test is recorded for the Navigator assess turn ...
+    expect(readDeployVerifyAssessMarker(sftddDir, "F1", "S1")?.failing_node_ids).toEqual(["tests/x.py::t1"]);
+    // ... and the terminal deploy-verify escalation was NOT written (no premature HIL).
+    const escs = readEscalations(sftddDir).filter((e) => !e.resolved_at && e.source === "deploy-verify");
+    expect(escs).toHaveLength(0);
+  });
+
+  it("one-shot: after the assess turn is spent, a repeat contamination failure ESCALATES (spin closed)", async () => {
+    const sftddDir = join(dir, ".tdd");
+    mkdirSync(join(sftddDir, "features", "F1", "stories", "S1"), { recursive: true });
+
+    // First failed deploy -> marker (suppressed). Then the assess turn ran.
+    await deployToTarget({ ...baseArgs(sftddDir), runVerify: contaminated });
+    markDeployVerifyAssessed(sftddDir, "F1", "S1", ["tests/x.py::t1"]);
+
+    // The scope did not fix it: a SECOND deploy still fails as contamination. The
+    // one shot is spent, so it is NOT re-suppressed , it escalates to the HIL.
+    await deployToTarget({ ...baseArgs(sftddDir), runVerify: contaminated });
+    const escs = readEscalations(sftddDir).filter((e) => !e.resolved_at && e.source === "deploy-verify");
+    expect(escs.length).toBeGreaterThan(0);
+  });
+
+  it("clears the marker when the re-verify PASSES (the scope worked -> proceed to accept)", async () => {
+    const sftddDir = join(dir, ".tdd");
+    mkdirSync(join(sftddDir, "features", "F1", "stories", "S1"), { recursive: true });
+
+    await deployToTarget({ ...baseArgs(sftddDir), runVerify: contaminated });
+    expect(readDeployVerifyAssessMarker(sftddDir, "F1", "S1")).toBeDefined();
+
+    // The Driver scoped the tests; the re-deploy now verifies clean.
+    await deployToTarget({ ...baseArgs(sftddDir), runVerify: () => true });
+    expect(readDeployVerifyAssessMarker(sftddDir, "F1", "S1")).toBeUndefined();
   });
 });
 
