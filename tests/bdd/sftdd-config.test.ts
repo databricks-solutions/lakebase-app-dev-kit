@@ -209,16 +209,14 @@ describe("resolveSftddSettings: the file is the single source (env does NOT over
   });
 });
 
-describe("applyProjectOverrides: the drive's override flags write THROUGH to the file", () => {
-  it("persists gates / deployTarget / sizing into the config, then the resolver reads them", () => {
-    applyProjectOverrides(proj, { gates: "interactive", deployTarget: "cloud", sizing: false });
+describe("applyProjectOverrides: deployTarget / sizing write THROUGH; gates never does", () => {
+  it("persists deployTarget / sizing into the config, then the resolver reads them", () => {
+    applyProjectOverrides(proj, { deployTarget: "cloud", sizing: false });
     // the file is the single source: resolution reflects the written-through values.
     const s = resolveSftddSettings({ projectDir: proj });
-    expect(s.project.gates).toBe("interactive");
     expect(s.project.deployTarget).toBe("cloud");
     expect(s.plan.sizing).toBe(false);
-    // and it materialized the persisted single source on disk.
-    expect(loadSftddConfig(proj)?.project?.gates).toBe("interactive");
+    expect(loadSftddConfig(proj)?.project?.deployTarget).toBe("cloud");
   });
 
   it("is a no-op when no override is given (a plain run never mutates the file)", () => {
@@ -228,11 +226,29 @@ describe("applyProjectOverrides: the drive's override flags write THROUGH to the
 
   it("preserves unrelated fields when writing through onto an existing config", () => {
     writeConfig({ version: 1, roles: { navigator: { model: "opus" } }, project: { uiTrack: true } });
-    applyProjectOverrides(proj, { gates: "interactive" });
+    applyProjectOverrides(proj, { deployTarget: "cloud" });
     const loaded = loadSftddConfig(proj);
-    expect(loaded?.project?.gates).toBe("interactive"); // written through
+    expect(loaded?.project?.deployTarget).toBe("cloud"); // written through
     expect(loaded?.project?.uiTrack).toBe(true); // preserved
     expect(loaded?.roles?.navigator?.model).toBe("opus"); // preserved
+  });
+
+  it("NEVER writes gates: the HITL policy is run-scoped, so a flag can't flip persisted policy", () => {
+    // A project that declares interactive must stay interactive on disk no matter
+    // how a headless run is invoked (the --gates flag lives in run-config, not here).
+    writeConfig({ version: 1, roles: {}, project: { gates: "interactive" } });
+    // applyProjectOverrides has no `gates` channel at all; a deployTarget write
+    // must leave project.gates untouched.
+    applyProjectOverrides(proj, { deployTarget: "cloud" });
+    expect(loadSftddConfig(proj)?.project?.gates).toBe("interactive");
+  });
+});
+
+describe("gates: HITL-first default", () => {
+  it("defaults project.gates to interactive when unset (headless is opt-in)", () => {
+    writeConfig({ version: 1, roles: {} });
+    expect(resolveSftddSettings({ projectDir: proj }).project.gates).toBe("interactive");
+    expect(defaultSftddConfig().project?.gates).toBe("interactive");
   });
 });
 

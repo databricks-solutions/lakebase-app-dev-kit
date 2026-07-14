@@ -141,8 +141,11 @@ Flags:
                        driver blocks for a human [Y/n], then RESUMES the same run
                        on Y , it never leaves the state machine. n re-asks. Set
                        LAKEBASE_SFTDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
-  --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
-                       (stop AT each HITL gate so the human answers, then re-run)
+  --gates <mode>       interactive (default: stop AT each HITL gate so the human
+                       answers, then re-run) | proxy (headless: Human Proxy
+                       approves; requires LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI).
+                       Run-scoped: overrides project.gates for THIS run only,
+                       never rewrites sftdd-config.json.
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
                        planning goes propose -> author-requests, no estimate.
                        Sizing is ON by default. Aliases: --no-planning-poker,
@@ -586,7 +589,7 @@ function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
   const answerFile = sftddEnv("GATE_ANSWER_FILE")?.trim();
   const isYes = (a: string): boolean => a === "" || a === "y" || a === "yes";
   return (action) =>
-    new Promise((resolve) => {
+    new Promise<void>((resolve, reject) => {
       const label = describeAction(action);
       const prompt = `\n[drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
       if (auto) {
@@ -619,11 +622,18 @@ function makeConfirmContinue(): (action: WorkflowAction) => Promise<void> {
         };
         return ask();
       }
-      // No terminal + no control channel: never crash or hang , continue.
-      process.stderr.write(
-        `${prompt}\n[drive] no interactive terminal and no LAKEBASE_SFTDD_GATE_ANSWER_FILE , auto-continuing past ${label}.\n`,
+      // No auto-confirm, no control channel, no TTY: there is NO human in the
+      // loop, so STOP rather than silently proceed past the handoff (an
+      // agent-driven non-TTY run must not self-approve). A deliberate headless
+      // run sets LAKEBASE_SFTDD_AUTO_CONTINUE=1; a controller writes a gate-answer
+      // file; a human uses a terminal. None present = refuse.
+      reject(
+        new Error(
+          `[drive] PAUSED at the ${label} handoff with no human channel , refusing to continue. ` +
+            `Set LAKEBASE_SFTDD_AUTO_CONTINUE=1 (deliberate headless), provide ` +
+            `LAKEBASE_SFTDD_GATE_ANSWER_FILE, or run in an interactive terminal.`,
+        ),
       );
-      resolve();
     });
 }
 
@@ -748,17 +758,19 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   // The claim CLI lives in dist/scripts/lakebase/, a sibling-of-parent of this
   // file's dist dir, so it resolves regardless of PATH (the smoke runs via npx).
   const claimJs = path.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  // gates + sizing come from sftdd-config.json (the --gates / --no-sizing flags
-  // wrote through to it before resolution). The file is the single source.
+  // sizing comes from sftdd-config.json; the gate mode is RUN-SCOPED (--gates
+  // override else the project's declared policy), never read back from a
+  // flag-mutated file.
   const settings = resolveSftddSettings({ projectDir });
-  const interactive = settings.project.gates === "interactive";
+  const gates = effectiveGates(args, projectDir);
+  const interactive = gates === "interactive";
   const skipSizing = !settings.plan.sizing;
 
   const effects: SprintEffects = {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg,"plan");
+      snapshotRunConfig(cfg, "plan", gates);
       const planning: DriveEffects = {
         // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
         readState: async () => deriveSprintPlanningState(sftddDir, sprint, { skipSizing }),
@@ -805,7 +817,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       // resumed mid-flight feature is untouched.
       resetStaleTerminalPhase(cfg.sftddDir);
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg,"full");
+      snapshotRunConfig(cfg, "full", gates);
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(undefined, interactive),
       });
@@ -858,18 +870,35 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   }
 }
 
+/** The RUN-SCOPED gate mode: a `--gates` flag overrides for THIS run only; absent,
+ *  the project's declared policy in sftdd-config.json wins. The flag never rewrites
+ *  the file (that let one headless run flip an interactive project to proxy), so the
+ *  effective mode is resolved fresh here, not read back from a mutated file. */
+function effectiveGates(args: ParsedArgs, projectDir: string): "interactive" | "proxy" {
+  const flag = args.gates as "interactive" | "proxy" | undefined;
+  return flag ?? resolveSftddSettings({ projectDir }).project.gates;
+}
+
+/** True when the run has an explicit non-interactive signal (CI / auto-continue).
+ *  Headless proxy gating is only legitimate with one of these; otherwise a stray
+ *  LAKEBASE_SFTDD_HUMAN_PROXY leaking into a dev shell would silently bypass HITL. */
+function hasNonInteractiveSignal(): boolean {
+  return sftddEnv("AUTO_CONTINUE") === "1" || /^(1|true)$/i.test(process.env.CI ?? "");
+}
+
 /** P0.1: snapshot the resolved model + option matrix to .tdd/run-config.json (and
  *  the corpus root when recording) at the start of an ACTUAL run (not --dry-run),
  *  so a timing report is self-describing and two runs are A/B-comparable.
  *  Best-effort: writeRunConfig swallows its own IO errors. */
-function snapshotRunConfig(cfg: DriveEffectsConfig, bound: string): void {
+function snapshotRunConfig(cfg: DriveEffectsConfig, bound: string, gates: "interactive" | "proxy"): void {
   writeRunConfig({
     projectDir: cfg.projectDir,
     sftddDir: cfg.sftddDir,
     bound,
-    // gates from sftdd-config.json (the --gates flag wrote through to it), so the
-    // snapshot records what the drive actually used, never a stale flag default.
-    gates: resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates,
+    // Run-scoped effective gate mode (--gates override else project policy),
+    // recorded here so the snapshot is where the run-scoped choice lives , the
+    // flag never persists into sftdd-config.json.
+    gates,
     uiTrack: cfg.uiTrack,
     buildSessionScope: cfg.buildSessionScope,
     reviewEffort: cfg.reviewEffort,
@@ -903,11 +932,26 @@ async function main(): Promise<number> {
   // Write-through the drive's ad-hoc override flags into sftdd-config.json BEFORE
   // any settings resolution, so the file stays the single source of truth (the
   // flag is a WRITER, not a parallel reader; absent flags never mutate the file).
+  // NB: --gates is NOT here , it is run-scoped policy, resolved per run and never
+  // persisted (see effectiveGates / applyProjectOverrides).
   applyProjectOverrides(args.projectDir ?? process.cwd(), {
-    gates: args.gates as "interactive" | "proxy" | undefined,
     deployTarget: args.deployTarget,
     sizing: args.noSizing === true ? false : undefined,
   });
+
+  // HITL enforcement: headless proxy gating is only legitimate with an explicit
+  // non-interactive signal. Refuse `proxy` in an interactive/dev context so a
+  // stray LAKEBASE_SFTDD_HUMAN_PROXY (which the /plan|/sprint|... commands turn
+  // into `--gates proxy`) can't silently bypass the human. CI + the smokes set
+  // LAKEBASE_SFTDD_AUTO_CONTINUE=1 (or CI), so they pass.
+  if (effectiveGates(args, args.projectDir ?? process.cwd()) === "proxy" && !hasNonInteractiveSignal()) {
+    process.stderr.write(
+      `lakebase-sftdd-drive: gate mode 'proxy' (Human Proxy approves headlessly) requires an explicit\n` +
+        `non-interactive signal (LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI). Refusing to bypass HITL in an\n` +
+        `interactive/dev context. Unset LAKEBASE_SFTDD_HUMAN_PROXY, or pass --gates interactive.\n`,
+    );
+    return 2;
+  }
 
   // Tier-1: `--sprint <name>` with no `--feature` runs the whole-sprint orchestrator.
   if (args.sprint && !args.feature) {
@@ -962,9 +1006,9 @@ async function main(): Promise<number> {
   }
 
   cfg.runner = execRunner(cfg);
-  snapshotRunConfig(cfg,bound ?? "full");
-  // gates from sftdd-config.json (the --gates flag wrote through to it).
-  const interactive = resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates === "interactive";
+  const gates = effectiveGates(args, cfg.projectDir);
+  snapshotRunConfig(cfg, bound ?? "full", gates);
+  const interactive = gates === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,
