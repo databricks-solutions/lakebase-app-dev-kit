@@ -28,11 +28,11 @@ var getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${_
 var importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
 
 // scripts/lakebase/doctor.cli.ts
-var path12 = __toESM(require("path"), 1);
+var path13 = __toESM(require("path"), 1);
 
 // scripts/lakebase/doctor.ts
-var fs11 = __toESM(require("fs"), 1);
-var path11 = __toESM(require("path"), 1);
+var fs12 = __toESM(require("fs"), 1);
+var path12 = __toESM(require("path"), 1);
 
 // scripts/util/exec.ts
 var cp = __toESM(require("child_process"), 1);
@@ -56,6 +56,11 @@ function exec2(command, opts = {}) {
   });
 }
 
+// scripts/lakebase/databricks-cli.ts
+var import_node_child_process2 = require("child_process");
+var import_node_util = require("util");
+var import_node_path = require("path");
+
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
   const raw = process.env[name];
@@ -67,6 +72,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -95,35 +101,9 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
-// scripts/lakebase/databricks-host.ts
-async function resolveDatabricksHost(args) {
-  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const out = await exec2(
-    `databricks auth describe --profile "${escapeShellArg(args.profile)}" -o json`,
-    { timeout: timeoutMs }
-  );
-  return parseHostFromAuthDescribe(out);
-}
-function parseHostFromAuthDescribe(out) {
-  const start = out.indexOf("{");
-  if (start < 0) return void 0;
-  try {
-    const parsed = JSON.parse(out.slice(start));
-    const details = parsed.details;
-    if (!details || typeof details !== "object") return void 0;
-    const host = details.host;
-    if (typeof host !== "string") return void 0;
-    return host.replace(/\/+$/, "");
-  } catch {
-    return void 0;
-  }
-}
-function escapeShellArg(s) {
-  return s.replace(/"/g, '\\"');
-}
-
 // scripts/lakebase/databricks-profile.ts
 var fs = __toESM(require("fs"), 1);
+var import_node_child_process = require("child_process");
 function normalizeHost(host) {
   return host.trim().replace(/\/+$/, "").toLowerCase();
 }
@@ -158,6 +138,20 @@ async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) 
   }
   return selectProfileForHost(out, host);
 }
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = (0, import_node_child_process.execFileSync)("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
 async function ensureProfilePinned(args) {
   const { envPath } = args;
   if (!fs.existsSync(envPath)) return { reason: "no-env" };
@@ -179,9 +173,154 @@ async function ensureProfilePinned(args) {
   return { pinned: profile };
 }
 
-// scripts/lakebase/branch-utils.ts
-var import_node_child_process = require("child_process");
-var import_node_util = require("util");
+// scripts/lakebase/env-file.ts
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+function readEnvVar(envPath, key) {
+  if (!fs2.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs2.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process2.execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar((0, import_node_path.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+function runDatabricksSync(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    return (0, import_node_child_process2.execFileSync)("databricks", argv, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+
+// scripts/lakebase/databricks-host.ts
+async function resolveDatabricksHost(args) {
+  const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
+  const out = await runDatabricks(["auth", "describe", "-o", "json"], {
+    profile: args.profile,
+    timeout: timeoutMs
+  });
+  return parseHostFromAuthDescribe(out);
+}
+function parseHostFromAuthDescribe(out) {
+  const start = out.indexOf("{");
+  if (start < 0) return void 0;
+  try {
+    const parsed = JSON.parse(out.slice(start));
+    const details = parsed.details;
+    if (!details || typeof details !== "object") return void 0;
+    const host = details.host;
+    if (typeof host !== "string") return void 0;
+    return host.replace(/\/+$/, "");
+  } catch {
+    return void 0;
+  }
+}
 
 // scripts/lakebase/branch-id.ts
 var UID_PATTERN = /^br-[a-z0-9-]+$/;
@@ -206,9 +345,9 @@ function asBranchUid(s) {
   }
   return s;
 }
-function branchNameFromResourcePath(path13) {
-  if (!path13.includes("/branches/")) return null;
-  const leaf = path13.split("/branches/").pop();
+function branchNameFromResourcePath(path14) {
+  if (!path14.includes("/branches/")) return null;
+  const leaf = path14.split("/branches/").pop();
   if (!leaf) return null;
   try {
     return asBranchName(leaf);
@@ -218,7 +357,6 @@ function branchNameFromResourcePath(path13) {
 }
 
 // scripts/lakebase/branch-utils.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -299,40 +437,27 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/project-verify.ts
-var fs2 = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
+var fs3 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
 function verifyHooks(projectDir) {
-  const hooksDir = path.join(projectDir, ".git", "hooks");
+  const hooksDir = path2.join(projectDir, ".git", "hooks");
   return {
-    postCheckout: fs2.existsSync(path.join(hooksDir, "post-checkout")),
-    prepareCommitMsg: fs2.existsSync(path.join(hooksDir, "prepare-commit-msg")),
-    prePush: fs2.existsSync(path.join(hooksDir, "pre-push"))
+    postCheckout: fs3.existsSync(path2.join(hooksDir, "post-checkout")),
+    prepareCommitMsg: fs3.existsSync(path2.join(hooksDir, "prepare-commit-msg")),
+    prePush: fs3.existsSync(path2.join(hooksDir, "pre-push"))
   };
 }
 
 // scripts/lakebase/schema-migrate.ts
-var fs9 = __toESM(require("fs"), 1);
-var path9 = __toESM(require("path"), 1);
+var fs10 = __toESM(require("fs"), 1);
+var path10 = __toESM(require("path"), 1);
 
 // scripts/lakebase/get-connection.ts
-var import_node_child_process2 = require("child_process");
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
 
@@ -405,25 +530,12 @@ function buildPostgresUrl(parts) {
   return u.toString();
 }
 function dbcli2(args) {
-  try {
-    return (0, import_node_child_process2.execFileSync)("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/migration-layout.ts
-var fs3 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
+var fs4 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
 var MIGRATION_LANGUAGES = [
   "java",
   "kotlin",
@@ -432,13 +544,13 @@ var MIGRATION_LANGUAGES = [
   "unknown"
 ];
 function detectLanguageAt(dir) {
-  if (fs3.existsSync(path2.join(dir, "pom.xml"))) {
-    const kotlinDir = path2.join(dir, "src", "main", "kotlin");
-    if (fs3.existsSync(kotlinDir)) {
+  if (fs4.existsSync(path3.join(dir, "pom.xml"))) {
+    const kotlinDir = path3.join(dir, "src", "main", "kotlin");
+    if (fs4.existsSync(kotlinDir)) {
       return "kotlin";
     }
     try {
-      const pom = fs3.readFileSync(path2.join(dir, "pom.xml"), "utf-8");
+      const pom = fs4.readFileSync(path3.join(dir, "pom.xml"), "utf-8");
       if (pom.includes("kotlin-maven-plugin")) {
         return "kotlin";
       }
@@ -446,10 +558,10 @@ function detectLanguageAt(dir) {
     }
     return "java";
   }
-  if (fs3.existsSync(path2.join(dir, "pyproject.toml")) || fs3.existsSync(path2.join(dir, "requirements.txt")) || fs3.existsSync(path2.join(dir, "alembic.ini"))) {
+  if (fs4.existsSync(path3.join(dir, "pyproject.toml")) || fs4.existsSync(path3.join(dir, "requirements.txt")) || fs4.existsSync(path3.join(dir, "alembic.ini"))) {
     return "python";
   }
-  if (fs3.existsSync(path2.join(dir, "package.json"))) {
+  if (fs4.existsSync(path3.join(dir, "package.json"))) {
     return "nodejs";
   }
   return "unknown";
@@ -470,14 +582,14 @@ function resolveMigrationLanguage(projectDir, configuredMigrationPath, override)
   if (!rel) {
     return "unknown";
   }
-  const rootResolved = path2.resolve(projectDir);
-  let dir = path2.resolve(projectDir, rel);
-  while (dir === rootResolved || dir.startsWith(rootResolved + path2.sep)) {
+  const rootResolved = path3.resolve(projectDir);
+  let dir = path3.resolve(projectDir, rel);
+  while (dir === rootResolved || dir.startsWith(rootResolved + path3.sep)) {
     const lang = detectLanguageAt(dir);
     if (lang !== "unknown") {
       return lang;
     }
-    const parent = path2.dirname(dir);
+    const parent = path3.dirname(dir);
     if (parent === dir) {
       break;
     }
@@ -487,21 +599,21 @@ function resolveMigrationLanguage(projectDir, configuredMigrationPath, override)
 }
 
 // scripts/lakebase/adapters/alembic-adapter.ts
-var fs5 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
+var fs6 = __toESM(require("fs"), 1);
+var path5 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
 var import_node_child_process3 = require("child_process");
-var fs4 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
+var fs5 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
 function resolveAlembicBin(projectDir) {
   const candidates = [
-    path3.join(projectDir, ".venv", "bin", "alembic"),
-    path3.join(projectDir, "venv", "bin", "alembic")
+    path4.join(projectDir, ".venv", "bin", "alembic"),
+    path4.join(projectDir, "venv", "bin", "alembic")
   ];
   for (const candidate of candidates) {
     try {
-      if (fs4.existsSync(candidate)) return candidate;
+      if (fs5.existsSync(candidate)) return candidate;
     } catch {
     }
   }
@@ -510,9 +622,12 @@ function resolveAlembicBin(projectDir) {
 function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
     const bin = resolveAlembicBin(projectDir);
+    const env = { ...process.env };
+    env.PYTHONPATH = [projectDir, process.env.PYTHONPATH].filter(Boolean).join(path4.delimiter);
+    if (dsn) env.DATABASE_URL = dsn;
     const child = (0, import_node_child_process3.spawn)(bin, args, {
       cwd: projectDir,
-      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
+      env,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -556,10 +671,10 @@ async function createAlembicRevision(opts) {
   const m = stdout.match(/Generating\s+(\S+\.py)/);
   if (m) return m[1].trim();
   for (const rel of ["migrations/versions", "alembic/versions"]) {
-    const dir = path3.join(opts.projectDir, rel);
-    if (!fs4.existsSync(dir)) continue;
-    const hit = fs4.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
-    if (hit) return path3.join(dir, hit);
+    const dir = path4.join(opts.projectDir, rel);
+    if (!fs5.existsSync(dir)) continue;
+    const hit = fs5.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path4.join(dir, hit);
   }
   throw new SchemaMigrationError(
     `alembic revision succeeded but the created file could not be located.
@@ -666,15 +781,15 @@ async function buildDsn(args) {
 }
 function findVersionsDir(projectDir) {
   const candidates = [
-    path4.join(projectDir, "migrations", "versions"),
-    path4.join(projectDir, "alembic", "versions")
+    path5.join(projectDir, "migrations", "versions"),
+    path5.join(projectDir, "alembic", "versions")
   ];
-  return candidates.find((p) => fs5.existsSync(p));
+  return candidates.find((p) => fs6.existsSync(p));
 }
 function listAlembicFiles(projectDir) {
   const dir = findVersionsDir(projectDir);
   if (!dir) return [];
-  const files = fs5.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  const files = fs6.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
   return files.map((filename) => {
     const stem = filename.replace(/\.py$/, "");
     const sep2 = stem.indexOf("_");
@@ -699,9 +814,9 @@ var AlembicAdapter = {
    * here. Callers can still force-select via project.yaml#migration_tool.
    */
   detect(projectDir) {
-    if (fs5.existsSync(path4.join(projectDir, "alembic.ini"))) return true;
-    if (fs5.existsSync(path4.join(projectDir, "migrations", "env.py"))) return true;
-    if (fs5.existsSync(path4.join(projectDir, "alembic", "env.py"))) return true;
+    if (fs6.existsSync(path5.join(projectDir, "alembic.ini"))) return true;
+    if (fs6.existsSync(path5.join(projectDir, "migrations", "env.py"))) return true;
+    if (fs6.existsSync(path5.join(projectDir, "alembic", "env.py"))) return true;
     return false;
   },
   async apply(args) {
@@ -794,7 +909,7 @@ var AlembicAdapter = {
         autogenerate: !!args.autogenerate,
         dsn
       });
-      return { status: "ok", version: revId, filename: path4.basename(created), path: created };
+      return { status: "ok", version: revId, filename: path5.basename(created), path: created };
     } catch (err) {
       return {
         status: "error",
@@ -811,7 +926,7 @@ var AlembicAdapter = {
       if (heads.length <= 1) return { status: "noop", headsBefore: heads };
       if (args.dryRun) return { status: "ok", headsBefore: heads };
       const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
-      const mergeRevision = path4.basename(created).replace(/\.py$/, "").split("_")[0];
+      const mergeRevision = path5.basename(created).replace(/\.py$/, "").split("_")[0];
       return { status: "ok", headsBefore: heads, mergeRevision, path: created };
     } catch (err) {
       return {
@@ -825,12 +940,12 @@ var AlembicAdapter = {
 registerSchemaMigrationAdapter(AlembicAdapter);
 
 // scripts/lakebase/adapters/flyway-adapter.ts
-var fs6 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
+var fs7 = __toESM(require("fs"), 1);
+var path7 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
 var import_node_child_process4 = require("child_process");
-var path5 = __toESM(require("path"), 1);
+var path6 = __toESM(require("path"), 1);
 function dsnToFlywayEnv(dsn) {
   const u = new URL(dsn);
   const user = decodeURIComponent(u.username);
@@ -840,7 +955,7 @@ function dsnToFlywayEnv(dsn) {
   return { url, user, password };
 }
 function migrationsLocation(projectDir) {
-  return `filesystem:${path5.join(projectDir, "src", "main", "resources", "db", "migration")}`;
+  return `filesystem:${path6.join(projectDir, "src", "main", "resources", "db", "migration")}`;
 }
 function runFlyway(ctx, args) {
   const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
@@ -941,7 +1056,7 @@ async function statusFlyway(ctx) {
     if (state === "SUCCESS" || state === "BASELINE") {
       current = m.version;
     } else if (state === "PENDING") {
-      const filename = m.filepath ? path5.basename(m.filepath) : `V${m.version}__migration.sql`;
+      const filename = m.filepath ? path6.basename(m.filepath) : `V${m.version}__migration.sql`;
       pending.push({
         version: m.version,
         filename,
@@ -964,9 +1079,9 @@ async function buildDsn2(args) {
   return result.url;
 }
 function listFlywayFiles(projectDir) {
-  const dir = path6.join(projectDir, "src", "main", "resources", "db", "migration");
-  if (!fs6.existsSync(dir)) return [];
-  const files = fs6.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  const dir = path7.join(projectDir, "src", "main", "resources", "db", "migration");
+  if (!fs7.existsSync(dir)) return [];
+  const files = fs7.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
   return files.map((filename) => {
     const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
     const version = m[1];
@@ -989,7 +1104,7 @@ var FlywayAdapter = {
   id: "flyway",
   languages: ["java", "kotlin"],
   detect(projectDir) {
-    return fs6.existsSync(path6.join(projectDir, "pom.xml"));
+    return fs7.existsSync(path7.join(projectDir, "pom.xml"));
   },
   async apply(args) {
     const dsn = await buildDsn2(args);
@@ -1047,14 +1162,14 @@ var FlywayAdapter = {
   // optional-protocol shape makes this additive.
   async newMigration(args) {
     try {
-      const dir = path6.join(args.projectDir, "src", "main", "resources", "db", "migration");
-      fs6.mkdirSync(dir, { recursive: true });
+      const dir = path7.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs7.mkdirSync(dir, { recursive: true });
       const version = migrationTimestamp();
       const slug = migrationSlug2(args.slug);
       const filename = `V${version}__${slug}.sql`;
-      const full = path6.join(dir, filename);
-      if (fs6.existsSync(full)) throw new Error(`${filename} already exists`);
-      fs6.writeFileSync(
+      const full = path7.join(dir, filename);
+      if (fs7.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs7.writeFileSync(
         full,
         `-- V${version}: ${args.slug}
 -- Flyway migration (write your DDL/DML below).
@@ -1076,18 +1191,18 @@ var FlywayAdapter = {
 registerSchemaMigrationAdapter(FlywayAdapter);
 
 // scripts/lakebase/adapters/knex-adapter.ts
-var fs8 = __toESM(require("fs"), 1);
-var path8 = __toESM(require("path"), 1);
+var fs9 = __toESM(require("fs"), 1);
+var path9 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
 var import_node_child_process5 = require("child_process");
-var fs7 = __toESM(require("fs"), 1);
-var path7 = __toESM(require("path"), 1);
+var fs8 = __toESM(require("fs"), 1);
+var path8 = __toESM(require("path"), 1);
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function findKnexfile(projectDir) {
   for (const name of KNEXFILE_VARIANTS) {
-    const p = path7.join(projectDir, name);
-    if (fs7.existsSync(p)) return p;
+    const p = path8.join(projectDir, name);
+    if (fs8.existsSync(p)) return p;
   }
   return void 0;
 }
@@ -1239,9 +1354,9 @@ async function buildDsn3(args) {
 }
 var KNEXFILE_VARIANTS2 = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
 function listKnexFiles(projectDir) {
-  const dir = path8.join(projectDir, "migrations");
-  if (!fs8.existsSync(dir)) return [];
-  const files = fs8.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  const dir = path9.join(projectDir, "migrations");
+  if (!fs9.existsSync(dir)) return [];
+  const files = fs9.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
   return files.map((filename) => {
     const stem = filename.replace(/\.(js|ts)$/, "");
     const m = stem.match(/^(\d{14})_(.+)$/);
@@ -1261,7 +1376,7 @@ var KnexAdapter = {
    * project.yaml#migration_tool.
    */
   detect(projectDir) {
-    return KNEXFILE_VARIANTS2.some((name) => fs8.existsSync(path8.join(projectDir, name)));
+    return KNEXFILE_VARIANTS2.some((name) => fs9.existsSync(path9.join(projectDir, name)));
   },
   async apply(args) {
     const dsn = await buildDsn3(args);
@@ -1334,9 +1449,9 @@ var KnexAdapter = {
   async newMigration(args) {
     try {
       const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug2(args.slug) });
-      const stem = path8.basename(created).replace(/\.(js|ts)$/, "");
+      const stem = path9.basename(created).replace(/\.(js|ts)$/, "");
       const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
-      return { status: "ok", version, filename: path8.basename(created), path: created };
+      return { status: "ok", version, filename: path9.basename(created), path: created };
     } catch (err) {
       return {
         status: "error",
@@ -1377,12 +1492,12 @@ function migrationSlug2(description) {
 }
 
 // scripts/lakebase/workflow-drift.ts
-var fs10 = __toESM(require("fs"), 1);
-var path10 = __toESM(require("path"), 1);
+var fs11 = __toESM(require("fs"), 1);
+var path11 = __toESM(require("path"), 1);
 function findKitTemplatesDir(start) {
   let dir = start;
   for (let i = 0; i < 6; i++) {
-    const candidate = path10.join(
+    const candidate = path11.join(
       dir,
       "templates",
       "project",
@@ -1390,8 +1505,8 @@ function findKitTemplatesDir(start) {
       ".github",
       "workflows"
     );
-    if (fs10.existsSync(candidate)) return candidate;
-    const parent = path10.dirname(dir);
+    if (fs11.existsSync(candidate)) return candidate;
+    const parent = path11.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -1415,13 +1530,13 @@ function unifiedDiff(name, projectContent, templateContent) {
   return out.join("\n");
 }
 function detectWorkflowDrift(args) {
-  const projectWorkflowsDir = path10.join(
+  const projectWorkflowsDir = path11.join(
     args.projectDir,
     ".github",
     "workflows"
   );
-  const here = path10.dirname(new URL(importMetaUrl).pathname);
-  const kitWorkflowsDir = args.kitDir ? path10.join(
+  const here = path11.dirname(new URL(importMetaUrl).pathname);
+  const kitWorkflowsDir = args.kitDir ? path11.join(
     args.kitDir,
     "templates",
     "project",
@@ -1429,20 +1544,21 @@ function detectWorkflowDrift(args) {
     ".github",
     "workflows"
   ) : findKitTemplatesDir(here);
-  const templateFiles = fs10.existsSync(kitWorkflowsDir) ? fs10.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
-  const projectFiles = fs10.existsSync(projectWorkflowsDir) ? fs10.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const templateFiles = fs11.existsSync(kitWorkflowsDir) ? fs11.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const projectFiles = fs11.existsSync(projectWorkflowsDir) ? fs11.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const version = readKitVersion(kitWorkflowsDir);
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
     seen.add(name);
-    const projectPath2 = path10.join(projectWorkflowsDir, name);
-    const templatePath = path10.join(kitWorkflowsDir, name);
-    if (!fs10.existsSync(projectPath2)) {
+    const projectPath2 = path11.join(projectWorkflowsDir, name);
+    const templatePath = path11.join(kitWorkflowsDir, name);
+    if (!fs11.existsSync(projectPath2)) {
       files.push({ name, status: "missing" });
       continue;
     }
-    const projectContent = fs10.readFileSync(projectPath2, "utf8");
-    const templateContent = fs10.readFileSync(templatePath, "utf8");
+    const projectContent = fs11.readFileSync(projectPath2, "utf8");
+    const templateContent = applyPlaceholders(fs11.readFileSync(templatePath, "utf8"), version);
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -1470,13 +1586,29 @@ function detectWorkflowDrift(args) {
     files
   };
 }
+function readKitVersion(kitWorkflowsDir) {
+  let dir = kitWorkflowsDir;
+  for (let i = 0; i < 5; i++) {
+    dir = path11.dirname(dir);
+  }
+  try {
+    const raw = fs11.readFileSync(path11.join(dir, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw);
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+function applyPlaceholders(content, version) {
+  return content.replace(/\{\{LAKEBASE_KIT_VERSION\}\}/g, version);
+}
 
 // scripts/lakebase/doctor.ts
 function readEnvFile(projectDir) {
-  const envPath = path11.join(projectDir, ".env");
-  if (!fs11.existsSync(envPath)) return {};
+  const envPath = path12.join(projectDir, ".env");
+  if (!fs12.existsSync(envPath)) return {};
   const out = {};
-  for (const line of fs11.readFileSync(envPath, "utf8").split("\n")) {
+  for (const line of fs12.readFileSync(envPath, "utf8").split("\n")) {
     const m = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
     if (!m) continue;
     let val = m[2];
@@ -1489,7 +1621,7 @@ function readEnvFile(projectDir) {
 }
 async function checkDatabricksCli() {
   try {
-    const out = await exec2("databricks --version", { timeout: 5e3 });
+    const out = await runDatabricks(["--version"], { timeout: 5e3 });
     const trimmed = out.trim();
     const m = trimmed.match(/v?(\d+)\.(\d+)/);
     if (m) {
@@ -1522,8 +1654,8 @@ async function checkDatabricksCli() {
 }
 async function checkAuth(profile) {
   try {
-    const profileArg = profile ? ` --profile ${profile}` : "";
-    const out = await exec2(`databricks auth describe -o json${profileArg}`, {
+    const out = await runDatabricks(["auth", "describe", "-o", "json"], {
+      profile,
       timeout: 5e3
     });
     let host;
@@ -1550,8 +1682,8 @@ async function checkAuth(profile) {
 }
 async function checkIdentity(profile) {
   try {
-    const profileArg = profile ? ` --profile ${profile}` : "";
-    const out = await exec2(`databricks current-user me -o json${profileArg}`, {
+    const out = await runDatabricks(["current-user", "me", "-o", "json"], {
+      profile,
       timeout: 5e3
     });
     let user;
@@ -1585,7 +1717,7 @@ function checkEnv(projectDir) {
       name: "env-file",
       status: "warn",
       message: ".env not found",
-      detail: { projectDir, envPath: path11.join(projectDir, ".env") },
+      detail: { projectDir, envPath: path12.join(projectDir, ".env") },
       hint: "Run `lakebase-get-connection --output dsn --write-env` or `lakebase-branch sync-env`."
     };
   }
@@ -1922,7 +2054,7 @@ async function main() {
     return 0;
   }
   if (args.fix) {
-    const envPath = path12.join(args.projectDir ?? process.cwd(), ".env");
+    const envPath = path13.join(args.projectDir ?? process.cwd(), ".env");
     const res = await ensureProfilePinned({ envPath });
     if (!args.json) {
       if (res.pinned) {

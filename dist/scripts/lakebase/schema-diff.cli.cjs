@@ -1,51 +1,32 @@
 #!/usr/bin/env node
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
-// scripts/lakebase/schema-diff.ts
-var import_node_child_process4 = require("child_process");
-
-// scripts/lakebase/get-connection.ts
+// scripts/lakebase/databricks-cli.ts
 var import_node_child_process2 = require("child_process");
-var import_lakebase = require("@databricks/lakebase");
-var import_pg = require("pg");
-
-// scripts/lakebase/branch-utils.ts
-var import_node_child_process = require("child_process");
 var import_node_util = require("util");
-
-// scripts/lakebase/branch-id.ts
-var UID_PATTERN = /^br-[a-z0-9-]+$/;
-function looksLikeBranchUid(s) {
-  return UID_PATTERN.test(s);
-}
-function asBranchName(s) {
-  if (!s) throw new TypeError("BranchName cannot be empty");
-  if (looksLikeBranchUid(s)) {
-    throw new TypeError(
-      `'${s}' looks like a BranchUid (br-\u2026 pattern), not a BranchName. BranchName is the resource-path leaf (e.g. 'production', 'staging', 'feature-add-orders'); BranchUid is the system identifier returned by list-branches as the 'uid' field. The Lakebase API rejects a BranchUid in any path-shaped field. If you really mean a BranchUid, use asBranchUid() instead \u2013 but verify you're calling a function that takes one.`
-    );
-  }
-  return s;
-}
-function asBranchUid(s) {
-  if (!s) throw new TypeError("BranchUid cannot be empty");
-  if (!looksLikeBranchUid(s)) {
-    throw new TypeError(
-      `'${s}' is not a BranchUid (must match the br-\u2026 pattern). If you have a BranchName (resource-path leaf like 'production'), use asBranchName() instead.`
-    );
-  }
-  return s;
-}
-function branchNameFromResourcePath(path) {
-  if (!path.includes("/branches/")) return null;
-  const leaf = path.split("/branches/").pop();
-  if (!leaf) return null;
-  try {
-    return asBranchName(leaf);
-  } catch {
-    return null;
-  }
-}
+var import_node_path = require("path");
 
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
@@ -58,6 +39,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -86,8 +68,217 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
+// scripts/lakebase/databricks-profile.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_child_process = require("child_process");
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = (0, import_node_child_process.execFileSync)("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+
+// scripts/lakebase/env-file.ts
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+function readEnvVar(envPath, key) {
+  if (!fs2.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs2.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process2.execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar((0, import_node_path.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+function runDatabricksSync(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    return (0, import_node_child_process2.execFileSync)("databricks", argv, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+
+// scripts/lakebase/get-connection.ts
+var import_lakebase = require("@databricks/lakebase");
+var import_pg = require("pg");
+
+// scripts/lakebase/branch-id.ts
+var UID_PATTERN = /^br-[a-z0-9-]+$/;
+function looksLikeBranchUid(s) {
+  return UID_PATTERN.test(s);
+}
+function asBranchName(s) {
+  if (!s) throw new TypeError("BranchName cannot be empty");
+  if (looksLikeBranchUid(s)) {
+    throw new TypeError(
+      `'${s}' looks like a BranchUid (br-\u2026 pattern), not a BranchName. BranchName is the resource-path leaf (e.g. 'production', 'staging', 'feature-add-orders'); BranchUid is the system identifier returned by list-branches as the 'uid' field. The Lakebase API rejects a BranchUid in any path-shaped field. If you really mean a BranchUid, use asBranchUid() instead \u2013 but verify you're calling a function that takes one.`
+    );
+  }
+  return s;
+}
+function asBranchUid(s) {
+  if (!s) throw new TypeError("BranchUid cannot be empty");
+  if (!looksLikeBranchUid(s)) {
+    throw new TypeError(
+      `'${s}' is not a BranchUid (must match the br-\u2026 pattern). If you have a BranchName (resource-path leaf like 'production'), use asBranchName() instead.`
+    );
+  }
+  return s;
+}
+function branchNameFromResourcePath(path2) {
+  if (!path2.includes("/branches/")) return null;
+  const leaf = path2.split("/branches/").pop();
+  if (!leaf) return null;
+  try {
+    return asBranchName(leaf);
+  } catch {
+    return null;
+  }
+}
+
 // scripts/lakebase/branch-utils.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -168,20 +359,8 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/constants.ts
@@ -253,29 +432,11 @@ function buildPostgresUrl(parts) {
   return u.toString();
 }
 function dbcli2(args) {
-  try {
-    return (0, import_node_child_process2.execFileSync)("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/branch-schema.ts
 var import_pg2 = require("pg");
-
-// scripts/lakebase/branch-endpoint.ts
-var import_node_child_process3 = require("child_process");
-
-// scripts/lakebase/branch-schema.ts
 var SYSTEM_SCHEMA_FILTER = "c.table_schema NOT IN ('pg_catalog','information_schema') AND c.table_schema NOT LIKE 'pg_%'";
 function isAllSchemas(schema) {
   const s = (schema ?? "").trim().toLowerCase();
@@ -283,16 +444,16 @@ function isAllSchemas(schema) {
 }
 function buildSchemaQuery(schema) {
   const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
-  const join = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  const join3 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
   if (isAllSchemas(schema)) {
     return {
-      text: `SELECT ${cols} ` + join + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
+      text: `SELECT ${cols} ` + join3 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
       values: []
     };
   }
   const one = (schema ?? "").trim() || "public";
   return {
-    text: `SELECT ${cols} ` + join + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
+    text: `SELECT ${cols} ` + join3 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
     values: [one]
   };
 }
@@ -488,11 +649,7 @@ function findDefaultBranch(instance) {
   }
 }
 function dbcli3(args) {
-  return (0, import_node_child_process4.execFileSync)("databricks", args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: KIT_TIMEOUTS.cliDefault
-  });
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/schema-diff.cli.ts

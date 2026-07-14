@@ -64,9 +64,310 @@ function isCliEntry(importMetaUrl2) {
   return invokedResolved === moduleResolved;
 }
 
-// scripts/lakebase/branch-utils.ts
-var import_node_child_process = require("child_process");
+// scripts/lakebase/databricks-cli.ts
+var import_node_child_process2 = require("child_process");
 var import_node_util = require("util");
+var import_node_path = require("path");
+
+// scripts/lakebase/kit-config.ts
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function formatLakebaseTtl(ms) {
+  return `${Math.floor(ms / 1e3)}s`;
+}
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/databricks-profile.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_child_process = require("child_process");
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = (0, import_node_child_process.execFileSync)("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
+// scripts/lakebase/env-file.ts
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+function readEnvVar(envPath, key) {
+  if (!fs2.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs2.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+var CONNECTION_KEYS = [
+  "DATABASE_URL",
+  "DB_PASSWORD",
+  "DB_USERNAME",
+  "LAKEBASE_PROJECT_ID",
+  "LAKEBASE_BRANCH_ID",
+  "LAKEBASE_HOST",
+  "LAKEBASE_ENDPOINT"
+];
+function updateEnvConnection(args) {
+  const existing = fs2.existsSync(args.envPath) ? fs2.readFileSync(args.envPath, "utf-8") : "";
+  const preserved = existing.split("\n").filter((line) => {
+    const trimmed = line.trimStart();
+    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
+  }).join("\n").replace(/\n+$/, "");
+  const lines = [];
+  if (args.comment !== void 0) {
+    lines.push(args.comment);
+  }
+  lines.push(`LAKEBASE_PROJECT_ID=${args.projectId}`);
+  if (args.endpointHost !== void 0) {
+    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
+  }
+  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
+  lines.push(`LAKEBASE_ENDPOINT=${args.endpoint ?? "primary"}`);
+  lines.push(`DB_USERNAME=${args.username}`);
+  lines.push("");
+  const block = lines.join("\n");
+  const content = preserved ? `${preserved}
+${block}` : block;
+  fs2.mkdirSync(path.dirname(args.envPath), { recursive: true });
+  fs2.writeFileSync(args.envPath, content);
+}
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process2.execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar((0, import_node_path.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+function runDatabricksSync(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    return (0, import_node_child_process2.execFileSync)("databricks", argv, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
 
 // scripts/lakebase/branch-id.ts
 var UID_PATTERN = /^br-[a-z0-9-]+$/;
@@ -102,50 +403,7 @@ function branchNameFromResourcePath(path5) {
   }
 }
 
-// scripts/lakebase/kit-config.ts
-function intFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var KIT_TIMEOUTS = {
-  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
-  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
-  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
-  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
-  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
-  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
-  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
-  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
-  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
-  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
-  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
-  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
-  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
-  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
-  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
-  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
-  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
-  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
-};
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
-function urlFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return raw.replace(/\/+$/, "");
-}
-var KIT_REGISTRIES = {
-  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
-  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
-};
-
 // scripts/lakebase/branch-utils.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -309,30 +567,14 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/paired-branch.ts
 var fs3 = __toESM(require("fs"), 1);
 var path2 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
-
-// scripts/lakebase/branch-create.ts
 var import_node_child_process3 = require("child_process");
-var import_node_util3 = require("util");
 
 // scripts/util/delay.ts
 function delay(ms) {
@@ -386,22 +628,14 @@ async function pollUntilDefined(probe, opts) {
 }
 
 // scripts/util/sanitize-branch-name.ts
+var LAKEBASE_BRANCH_NAME_MAX = 63;
 function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
   while (name.length < 3) name += "-x";
   return name;
 }
 
 // scripts/lakebase/lakebase-project.ts
-var import_node_child_process2 = require("child_process");
-var import_node_util2 = require("util");
-var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process2.execFile);
-var LakebaseProjectError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "LakebaseProjectError";
-  }
-};
 function findHistoryRetentionDuration(parsed) {
   const raw = parsed.history_retention_duration ?? parsed.historyRetentionDuration;
   if (!raw || typeof raw !== "string") return void 0;
@@ -427,27 +661,11 @@ async function getProjectRetentionDuration(args) {
   }
   return findHistoryRetentionDuration(parsed);
 }
-async function dbcli2(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP2("databricks", args, {
-      env,
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseProjectError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli2(args, host, timeout = KIT_TIMEOUTS.cliDefault) {
+  return runDatabricks(args, { host, timeout });
 }
 
 // scripts/lakebase/branch-create.ts
-var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process3.execFile);
 async function createBranch(args) {
   const sanitized = sanitizeBranchName(args.branch);
   const lookup = { instance: args.instance, host: args.host };
@@ -495,13 +713,7 @@ async function createBranch(args) {
   }
   const existing = await getBranchByName(sanitized, lookup);
   if (existing) {
-    const existingLeaf = leafOf(existing.sourceBranchName);
-    const requestedLeaf = leafOf(sourceBranchPath);
-    if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
-      throw new LakebaseBranchError(
-        `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
-      );
-    }
+    assertSourceMatches(existing, sourceBranchPath, sanitized);
     return existing;
   }
   if (args.ttl && args.noExpiry === true) {
@@ -517,7 +729,14 @@ async function createBranch(args) {
   } else if (args.noExpiry ?? true) {
     specObj.no_expiry = true;
   }
-  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  try {
+    await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  } catch (err) {
+    if (err instanceof LakebaseBranchTtlTooLongError) throw err;
+    const landed = await getBranchByName(sanitized, lookup);
+    if (!landed) throw err;
+    assertSourceMatches(landed, sourceBranchPath, sanitized);
+  }
   return waitForBranchReady({
     instance: args.instance,
     host: args.host,
@@ -548,6 +767,15 @@ function leafOf(pathOrName) {
   const segments = pathOrName.split("/");
   return segments[segments.length - 1] || void 0;
 }
+function assertSourceMatches(existing, sourceBranchPath, sanitized) {
+  const existingLeaf = leafOf(existing.sourceBranchName);
+  const requestedLeaf = leafOf(sourceBranchPath);
+  if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
+    throw new LakebaseBranchError(
+      `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
+    );
+  }
+}
 async function createWithTtlRecovery(instance, sanitized, specObj, host) {
   const originalTtl = specObj.ttl;
   try {
@@ -557,7 +785,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     );
     return;
   } catch (err) {
-    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
+    if (!(err instanceof DatabricksCliError) || !originalTtl || !isTtlTooLongError(err.message)) {
       throw err;
     }
     let retention = getCachedProjectRetention(instance);
@@ -583,7 +811,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
         host
       );
     } catch (retryErr) {
-      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
+      if (retryErr instanceof DatabricksCliError && isTtlTooLongError(retryErr.message)) {
         throw new LakebaseBranchTtlTooLongError(
           clamped,
           `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`
@@ -593,37 +821,15 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     }
   }
 }
-async function dbcli3(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli3(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }
 
-// scripts/lakebase/branch-delete.ts
-var import_node_child_process4 = require("child_process");
-var import_node_util4 = require("util");
-var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process4.execFile);
-
-// scripts/lakebase/branch-endpoint.ts
-var import_node_child_process6 = require("child_process");
-
 // scripts/lakebase/get-connection.ts
-var import_node_child_process5 = require("child_process");
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
 
 // scripts/lakebase/constants.ts
-var POSTGRES_PORT = 5432;
 var DEFAULT_DATABASE = "databricks_postgres";
 var DEFAULT_ENDPOINT = "primary";
 
@@ -647,20 +853,7 @@ async function resolveCurrentUser() {
   return email;
 }
 function dbcli4(args) {
-  try {
-    return (0, import_node_child_process5.execFileSync)("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/branch-endpoint.ts
@@ -671,9 +864,7 @@ async function getEndpoint(args) {
   }
   let raw;
   try {
-    raw = (0, import_node_child_process6.execFileSync)("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+    raw = runDatabricksSync(["postgres", "list-endpoints", branchPath, "-o", "json"], {
       timeout: KIT_TIMEOUTS.cliDefault
     });
   } catch {
@@ -713,10 +904,9 @@ async function ensureEndpoint(args) {
     }
   };
   try {
-    (0, import_node_child_process6.execFileSync)(
-      "databricks",
+    runDatabricksSync(
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+      { timeout: KIT_TIMEOUTS.cliCreateEndpoint }
     );
   } catch (err) {
     const racy = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
@@ -735,39 +925,15 @@ async function ensureEndpoint(args) {
   );
 }
 
-// scripts/util/exec.ts
-var cp = __toESM(require("child_process"), 1);
-function shq(s) {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
-  });
-}
-
 // scripts/git/status.ts
 async function isDirty(args) {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
@@ -776,102 +942,10 @@ async function isDirty(args) {
   }
 }
 
-// scripts/lakebase/env-file.ts
-var fs = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
-var CONNECTION_KEYS = [
-  "DATABASE_URL",
-  "DB_USERNAME",
-  "DB_PASSWORD",
-  "LAKEBASE_BRANCH_ID",
-  "LAKEBASE_HOST"
-];
-function updateEnvConnection(args) {
-  const existing = fs.existsSync(args.envPath) ? fs.readFileSync(args.envPath, "utf-8") : "";
-  const preserved = existing.split("\n").filter((line) => {
-    const trimmed = line.trimStart();
-    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
-  }).join("\n").replace(/\n+$/, "");
-  const lines = [];
-  if (args.comment !== void 0) {
-    lines.push(args.comment);
-  }
-  if (args.endpointHost !== void 0) {
-    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
-  }
-  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
-  lines.push(`DATABASE_URL=${args.databaseUrl}`);
-  lines.push(`DB_USERNAME=${args.username}`);
-  lines.push(`DB_PASSWORD=${args.password}`);
-  lines.push("");
-  const block = lines.join("\n");
-  const content = preserved ? `${preserved}
-${block}` : block;
-  fs.mkdirSync(path.dirname(args.envPath), { recursive: true });
-  fs.writeFileSync(args.envPath, content);
-}
-
-// scripts/lakebase/databricks-profile.ts
-var fs2 = __toESM(require("fs"), 1);
-function normalizeHost(host) {
-  return host.trim().replace(/\/+$/, "").toLowerCase();
-}
-function selectProfileForHost(profilesJson, host) {
-  const target = normalizeHost(host);
-  if (!target) return void 0;
-  const start = profilesJson.indexOf("{");
-  if (start < 0) return void 0;
-  let parsed;
-  try {
-    parsed = JSON.parse(profilesJson.slice(start));
-  } catch {
-    return void 0;
-  }
-  const profiles = parsed.profiles;
-  if (!Array.isArray(profiles)) return void 0;
-  const names = profiles.filter((p) => {
-    if (!p || typeof p !== "object") return false;
-    const rec = p;
-    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
-  }).map((p) => p.name);
-  const distinct = Array.from(new Set(names));
-  return distinct.length === 1 ? distinct[0] : void 0;
-}
-async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
-  if (!normalizeHost(host)) return void 0;
-  let out;
-  try {
-    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
-  } catch {
-    return void 0;
-  }
-  return selectProfileForHost(out, host);
-}
-async function ensureProfilePinned(args) {
-  const { envPath } = args;
-  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
-  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
-  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
-  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
-    return { reason: "already-pinned" };
-  }
-  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
-  if (hostIdx < 0) return { reason: "no-host" };
-  const hostLine = lines[hostIdx];
-  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
-  if (!host) return { reason: "no-host" };
-  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
-  const profile = await resolve2(host);
-  if (!profile) return { reason: "no-match" };
-  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
-  fs2.writeFileSync(envPath, lines.join("\n"));
-  return { pinned: profile };
-}
-
 // scripts/lakebase/paired-branch.ts
 function gitHasLocalBranch(cwd, branch) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
+    (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd,
       stdio: "ignore",
       timeout: KIT_TIMEOUTS.gitDefault
@@ -883,7 +957,7 @@ function gitHasLocalBranch(cwd, branch) {
 }
 function gitCheckoutNewBranch(cwd, branch, startPoint) {
   const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
-  (0, import_node_child_process7.execFileSync)("git", argv, {
+  (0, import_node_child_process3.execFileSync)("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
@@ -891,7 +965,7 @@ function gitCheckoutNewBranch(cwd, branch, startPoint) {
 }
 function gitFetchBranch(cwd, remote, branch) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["fetch", remote, branch], {
+    (0, import_node_child_process3.execFileSync)("git", ["fetch", remote, branch], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitNetwork
@@ -901,7 +975,7 @@ function gitFetchBranch(cwd, remote, branch) {
 }
 function gitRefExists(cwd, ref) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--verify", "--quiet", ref], {
+    (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--verify", "--quiet", ref], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitDefault
@@ -920,25 +994,18 @@ function resolveFeatureStartPoint(cwd, parentBranch) {
 }
 async function assertCleanForFork(cwd, startPoint) {
   if (!startPoint) return;
-  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"], untracked: false })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
     );
   }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
-  (0, import_node_child_process7.execFileSync)("git", ["checkout", branch], {
+  (0, import_node_child_process3.execFileSync)("git", ["checkout", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
-}
-function buildDsn(host, database, user, password) {
-  const u = new URL(`postgresql://${host}:${POSTGRES_PORT}/${encodeURIComponent(database)}`);
-  u.username = encodeURIComponent(user);
-  u.password = encodeURIComponent(password);
-  u.searchParams.set("sslmode", "require");
-  return u.toString();
 }
 async function createPairedBranch(args) {
   const warnings = [];
@@ -995,15 +1062,13 @@ async function createPairedBranch(args) {
         branch: sanitized,
         timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
       });
-      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-      const dsn = buildDsn(ep.host, database, email, token);
+      const { email } = await mintCredential(endpointPath(args.instance, sanitized));
       const envPath = path2.join(args.cwd, ".env");
       updateEnvConnection({
         envPath,
+        projectId: args.instance,
         branchId: sanitized,
-        databaseUrl: dsn,
         username: email,
-        password: token,
         endpointHost: ep.host
       });
       await ensureProfilePinned({ envPath }).catch(() => void 0);

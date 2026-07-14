@@ -20,7 +20,7 @@
 // suspect for's silent 8-minute hang. Running JUST the
 // build keeps consumer installs deterministic + offline-safe.
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -68,14 +68,26 @@ if (isDevClone) {
   // NOT installed for non-dev installs, so `npm run build` (tsup) would
   // fail with `tsup: not found`. The kit ships pre-built dist/ on every
   // tagged release (force-added to git despite .gitignore), so consumers
-  // don't need to build. Verify dist/ is present and skip build.
-  const distMain = join(REPO_ROOT, "dist", "scripts", "index.js");
-  if (!existsSync(distMain)) {
-    log(`FAIL: consumer install missing pre-built dist/ at ${distMain}`);
-    log("This indicates a release-pipeline gap; the kit's tag should ship dist/.");
+  // don't need to build.
+  //
+  // Guard EVERY bin, not just the entrypoint. A single-file check
+  // (dist/scripts/index.js) passed even when an entire bin FAMILY was
+  // omitted from the shipped dist , the sftdd/tdd CLIs were gitignored and
+  // never force-added, so 48 of 75 bins were silently missing on every
+  // consumer install while the entrypoint looked fine. Fail loud + name the
+  // gap so a release with an incomplete dist cannot install quietly broken.
+  const pkg = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
+  const missing = Object.entries(pkg.bin ?? {})
+    .filter(([, rel]) => !existsSync(join(REPO_ROOT, rel)))
+    .map(([name, rel]) => `${name} -> ${rel}`);
+  if (missing.length > 0) {
+    log(`FAIL: consumer install is missing ${missing.length}/${Object.keys(pkg.bin).length} pre-built bin(s):`);
+    for (const m of missing) log(`  ${m}`);
+    log("This is a release-pipeline gap: the kit's tag must ship a COMPLETE dist/");
+    log("(rebuild + `git add -f` the dist bin targets). See tests/bdd/dist-bins-shipped.test.ts.");
     process.exit(1);
   }
-  log(`consumer install path: skipping build (dist/ already shipped at tag time)`);
+  log(`consumer install path: skipping build (all ${Object.keys(pkg.bin).length} bins present in shipped dist/)`);
 }
 
 log("done");

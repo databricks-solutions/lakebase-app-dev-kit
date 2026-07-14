@@ -418,10 +418,11 @@ async function getAheadBehind(args) {
 async function isDirty(args) {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
@@ -450,6 +451,63 @@ async function listMigrationsOnBranch(args) {
 // scripts/git/commits.ts
 var import_fs = require("fs");
 var import_path = require("path");
+var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".py",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".java",
+  ".kt",
+  ".kts",
+  ".go",
+  ".rb",
+  ".rs",
+  ".php",
+  ".cs",
+  ".scala",
+  ".sql",
+  ".html",
+  ".htm",
+  ".css",
+  ".scss",
+  ".less",
+  ".vue",
+  ".svelte",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".ini",
+  ".cfg",
+  ".conf",
+  ".xml",
+  ".md",
+  ".sh",
+  ".bash",
+  ".env",
+  ".gradle",
+  ".properties"
+]);
+var ROOT_PROJECT_FILES = /* @__PURE__ */ new Set([
+  "uv.lock",
+  "poetry.lock",
+  "Pipfile.lock",
+  "requirements.txt",
+  "requirements-dev.txt",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "npm-shrinkwrap.json",
+  "Cargo.lock",
+  "go.mod",
+  "go.sum",
+  "Gemfile",
+  "Gemfile.lock",
+  "composer.lock"
+]);
 async function commit(args) {
   if (!args.message.trim()) {
     throw new Error("Commit message is required");
@@ -472,9 +530,25 @@ async function commitAllIfChanged(args) {
     throw new Error("Commit message is required");
   }
   const exclude = args.exclude ?? [];
-  if (exclude.length > 0) {
-    const ex = exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-    await exec2(`git add -A -- . ${ex}`, { cwd: args.cwd });
+  const ex = exclude.length > 0 ? " " + exclude.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ") : "";
+  const allow = args.untrackedAllow ?? [];
+  if (allow.length > 0) {
+    await exec2(`git add -u -- .${ex}`, { cwd: args.cwd });
+    const excludeDirs = exclude.map((p) => p.replace(/\/+$/, ""));
+    const underDir = (f, d) => f === d || f.startsWith(`${d}/`);
+    const untracked = (await exec2("git ls-files --others --exclude-standard", { cwd: args.cwd })).split("\n").map((s) => s.trim()).filter(Boolean);
+    for (const f of untracked) {
+      if (excludeDirs.some((d) => underDir(f, d))) continue;
+      const slash = f.lastIndexOf("/");
+      const dot = f.lastIndexOf(".");
+      const ext = dot > slash ? f.slice(dot).toLowerCase() : "";
+      const base = f.slice(slash + 1);
+      if (allow.some((d) => underDir(f, d)) || SOURCE_EXTENSIONS.has(ext) || ROOT_PROJECT_FILES.has(base)) {
+        await exec2(`git add -- ${shq(f)}`, { cwd: args.cwd });
+      }
+    }
+  } else if (exclude.length > 0) {
+    await exec2(`git add -A -- .${ex}`, { cwd: args.cwd });
   } else {
     await exec2("git add -A", { cwd: args.cwd });
   }

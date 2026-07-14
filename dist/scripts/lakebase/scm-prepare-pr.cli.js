@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/lakebase/scm-prepare-pr.cli.ts
-import * as path2 from "path";
+import * as path3 from "path";
 
 // scripts/util/cli-entry.ts
 import { realpathSync } from "fs";
@@ -82,10 +82,11 @@ async function getAheadBehind(args) {
 async function isDirty(args) {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
@@ -196,13 +197,10 @@ function tryGhAuthToken() {
   }
 }
 
-// scripts/lakebase/branch-delete.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
+// scripts/lakebase/databricks-cli.ts
+import { execFile, execFileSync as execFileSync3 } from "child_process";
 import { promisify } from "util";
+import { join as join2 } from "path";
 
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
@@ -215,6 +213,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -243,11 +242,16 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
-// scripts/lakebase/branch-utils.ts
-var execFileP = promisify(execFile);
+// scripts/lakebase/databricks-profile.ts
+import * as fs from "fs";
+import { execFileSync as execFileSync2 } from "child_process";
 
-// scripts/lakebase/branch-delete.ts
-var execFileP2 = promisify2(execFile2);
+// scripts/lakebase/env-file.ts
+import * as fs2 from "fs";
+import * as path from "path";
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = promisify(execFile);
 
 // scripts/github/pr.ts
 var GitHubPullRequestError = class extends Error {
@@ -371,8 +375,8 @@ function parseCiStatus(rawChecks) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-import * as fs from "fs";
-import * as path from "path";
+import * as fs3 from "fs";
+import * as path2 from "path";
 var SCM_STATES = [
   "scaffold-complete",
   "feature-claimed",
@@ -386,12 +390,12 @@ var STATE_INDEX = SCM_STATES.reduce(
 );
 var STATE_FILE_REL = ".lakebase/workflow-state.json";
 function stateFilePath(projectDir) {
-  return path.join(projectDir, STATE_FILE_REL);
+  return path2.join(projectDir, STATE_FILE_REL);
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs.existsSync(p)) return null;
-  const raw = fs.readFileSync(p, "utf8");
+  if (!fs3.existsSync(p)) return null;
+  const raw = fs3.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -419,14 +423,14 @@ function writeWorkflowState(projectDir, state) {
     throw new Error(`Refusing to write invalid SCM state:
 ${summary}`);
   }
-  const dir = path.join(projectDir, ".lakebase");
-  fs.mkdirSync(dir, { recursive: true });
+  const dir = path2.join(projectDir, ".lakebase");
+  fs3.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs3.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs.renameSync(tmp, target);
+  fs3.renameSync(tmp, target);
 }
 function validateWorkflowState(value) {
   const errors = [];
@@ -847,7 +851,7 @@ async function runScmPreparePrCli(argv) {
 `);
     return 0;
   }
-  const projectDir = path2.resolve(args.projectDir ?? process.cwd());
+  const projectDir = path3.resolve(args.projectDir ?? process.cwd());
   try {
     const result = await preparePr({
       projectDir,

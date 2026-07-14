@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://databricks-solutions.github.io/lakebase-app-dev-kit/schemas/design-guide.schema.json",
+  "title": "DesignGuide",
+  "description": "Machine-checkable design tokens owned by the UX Designer (UI projects). The source of truth for what implementation tokens + component code must adhere to. Grounded in a real shipped guide (partner-asset-tracker client/src/styles/theme.css + STYLE_GUIDE.md). The narrative design-guide.md explains intent; this JSON is what adherence is checked against.",
+  "type": "object",
+  "required": ["typography", "colors", "spacing"],
+  "properties": {
+    "typography": {
+      "type": "object",
+      "required": ["font_family", "scale"],
+      "properties": {
+        "font_family": { "type": "string", "minLength": 1 },
+        "font_mono": {
+          "type": "string",
+          "description": "Secondary font family (mono / numeric / tabular), e.g. for a data-heavy stock table. Maps to --font-mono."
+        },
+        "scale": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named type-scale tokens, e.g. text-base -> 15px.",
+          "additionalProperties": { "type": "string" }
+        },
+        "line_heights": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named line-height tokens (values as strings), e.g. body -> \"1.5\". Maps to --line-height-<name>.",
+          "additionalProperties": { "type": "string" }
+        },
+        "font_weights": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named font-weight tokens (values as strings), e.g. medium -> \"500\". Maps to --font-weight-<name>.",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "colors": {
+      "type": "object",
+      "required": ["brand"],
+      "minProperties": 1,
+      "description": "Color groups (brand, semantic, surface, ...) each mapping named tokens to values.",
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": { "type": "string" }
+      }
+    },
+    "spacing": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Named spacing-scale tokens, e.g. space-4 -> 16px.",
+      "additionalProperties": { "type": "string" }
+    },
+    "radius": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "shadows": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "breakpoints": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "components": {
+      "type": "object",
+      "description": "Optional per-component standards (freeform per component)."
+    }
+  },
+  "additionalProperties": false
+}

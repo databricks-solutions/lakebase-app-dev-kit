@@ -1,4 +1,4 @@
-import { W as WorkflowRunSummary, d as PullRequestInfo, n as mergePairedPullRequest } from '../../pr-Cxj1u3K7.cjs';
+import { W as WorkflowRunSummary, e as PullRequestInfo, o as mergePairedPullRequest } from '../../pr-D3CteJaf.cjs';
 import { Pool } from 'pg';
 
 interface AdoptLakebaseProjectArgs {
@@ -16,7 +16,7 @@ interface AdoptLakebaseProjectArgs {
      * Default: false (brownfield onboarding is incremental; TDD adoption
      * is a separate, opt-in decision).
      */
-    enableTdd?: boolean;
+    enableSftdd?: boolean;
     /**
      * Whether to wire `[E2E]` Playwright support (delegates to
      * `enableE2eForProject`). Requires a `package.json` at projectDir.
@@ -925,6 +925,14 @@ declare function selectProfileForHost(profilesJson: string, host: string): strin
  * then leaves the .env's bare host untouched: status quo, never worse).
  */
 declare function resolveProfileForHost(host: string, timeoutMs?: number): Promise<string | undefined>;
+/**
+ * Synchronous twin of resolveProfileForHost, for the synchronous CLI-wrapper
+ * path (get-connection / schema-diff run the `databricks` CLI with execFileSync).
+ * Same source (`databricks auth profiles -o json`) + same pure selector
+ * (selectProfileForHost), so both paths resolve a host to a profile IDENTICALLY;
+ * only the shell-out is sync here. Returns undefined on CLI error / no unique match.
+ */
+declare function resolveProfileForHostSync(host: string, timeoutMs?: number): string | undefined;
 interface EnsureProfilePinnedArgs {
     /** Absolute path to the project's .env. */
     envPath: string;
@@ -1690,6 +1698,12 @@ declare function queryBranchSchema(args: QueryBranchSchemaArgs): Promise<TableSc
 /** Convenience: just the table names, no column inventory. */
 declare function queryBranchTables(args: QueryBranchSchemaArgs): Promise<string[]>;
 
+/**
+ * Read a single key's value from a .env file (the last assignment wins, matching
+ * how a shell `source .env` resolves duplicates). Trims surrounding quotes. Returns
+ * undefined when the file or key is absent. Pure read; never throws.
+ */
+declare function readEnvVar(envPath: string, key: string): string | undefined;
 interface WriteEnvFileArgs {
     projectDir: string;
     databricksHost: string;
@@ -1705,32 +1719,28 @@ declare function writeEnvFile(args: WriteEnvFileArgs): string;
 interface UpdateEnvConnectionArgs {
     /** Absolute path to the .env file. */
     envPath: string;
+    /** Lakebase instance / project id (projects/<id>/...); needed so the app can
+     *  rebuild the endpoint path and mint a token at runtime. */
+    projectId: string;
     /** Lakebase branch id this .env now points at (sanitized name). */
     branchId: string;
-    /** Full postgresql:// DSN, or "" when connection is pending. */
-    databaseUrl: string;
     /** Lakebase user (email). */
     username: string;
-    /** Short-lived OAuth token. */
-    password: string;
-    /** Optional Lakebase endpoint host. Spring's application-local.properties and
-     * the post-checkout.sh hook both write LAKEBASE_HOST=... so consumers like
-     * the JDBC URL builder can derive jdbc:postgresql://${host}:... independently
-     * of DATABASE_URL parsing. */
+    /** Lakebase endpoint host. */
     endpointHost?: string;
+    /** Endpoint name under the branch (default "primary"). */
+    endpoint?: string;
     /** Optional comment line prepended to the connection block. */
     comment?: string;
 }
 /**
- * Update the connection block (LAKEBASE_BRANCH_ID, DATABASE_URL, DB_USERNAME,
- * DB_PASSWORD) in an existing .env file, preserving every other line.
+ * Update the connection METADATA block in an existing .env, preserving every
+ * other line. No DB token is written: the app + migrations mint a short-lived
+ * Lakebase credential at runtime from this metadata. Any legacy DATABASE_URL /
+ * DB_PASSWORD line is stripped (not rewritten), so switching branches purges a
+ * stale baked-in token.
  *
- * Algorithm matches templates/project/common/scripts/post-checkout.sh:
- *   1. Read existing .env
- *   2. Drop any line starting with one of the four connection keys
- *   3. Append the fresh block (with optional leading comment)
- *
- * If the file doesn't exist, it's created with just the connection block –
+ * If the file doesn't exist it's created with just the metadata block , the
  * caller can subsequently writeEnvFile() to add the project-level keys.
  */
 declare function updateEnvConnection(args: UpdateEnvConnectionArgs): void;
@@ -1754,6 +1764,264 @@ declare function verifyProject(projectDir: string): {
     workflows: WorkflowVerification;
     warnings: string[];
 };
+
+type RunnerType = "self-hosted" | "github-hosted";
+type ScaffoldReportFn = (message: string, detail?: string) => void;
+interface ScaffoldOptions {
+    /** Override the templates/project root. Default: auto-detected. */
+    templatesDir?: string;
+}
+/** Deploy all scripts from common/scripts/. Files become executable. */
+declare function deployScripts(targetDir: string, opts?: ScaffoldOptions): Promise<string[]>;
+/**
+ * Deploy the first-class React SPA client (templates/project/client) into
+ * `<targetDir>/client`, substituting {{PROJECT_NAME}}. The dev/CI/hook plumbing
+ * (run-dev.sh Vite boot, pr.yml client build, post-checkout npm install) is
+ * already keyed on `client/package.json`, so this is the substrate they find.
+ * Returns the written paths relative to targetDir; a no-op ([]) when the client
+ * template is absent (older kit checkout).
+ */
+declare function deployClientProject(targetDir: string, projectName: string | undefined, opts?: ScaffoldOptions): string[];
+interface DeployClaudeCommandsResult {
+    /** Paths (relative to targetDir) that were written. */
+    written: string[];
+    /** Paths that already existed and were left untouched (force=false). */
+    skipped: string[];
+}
+interface DeployClaudeCommandsOptions extends ScaffoldOptions {
+    /** Overwrite existing .claude/commands/*.md. Default: false. */
+    force?: boolean;
+}
+/**
+ * Deploy `.claude/commands/{design,build}.md` from
+ * `common/.claude/commands/`. Substitutes `${KIT_VERSION_AT_SCAFFOLD}`
+ * with the kit version that ran the scaffold so the project file pins
+ * to a specific substrate revision (the future drift detector reads
+ * this back). Skips files that already exist in the project unless
+ * `force: true` so a re-run does not clobber a user's edits.
+ */
+declare function deployClaudeCommands(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
+/**
+ * Deploy the TDD-workflow role agent definitions into the project's
+ * `.claude/agents/` so Claude Code can discover + spawn them. The
+ * canonical source is the skill at `<kitRoot>/skills/lakebase-sftdd-workflows/agents/`;
+ * this copies each `<role>.md` verbatim (the bodies are the system prompts).
+ * Discoverability is required for the deterministic orchestrator (`lakebase-sftdd-drive`)
+ * to spawn the roles via `claude -p --agent <role>`. Skips files that
+ * already exist unless `force: true`.
+ */
+declare function deployClaudeAgents(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
+/**
+ * The kit skills a scaffolded project carries in its own `.claude/skills/` so the
+ * deployed agents + commands resolve every `@<skill>/...` cross-reference and a
+ * human can invoke the TDD / SCM / release interactions directly , without the
+ * kit having to be installed as a plugin. The set is the engineering canon plus
+ * the three workflow skills the agents/commands reference and their two Databricks
+ * parents (the `parent:` chain `lakebase-{scm,release}-workflows` -> `databricks-lakebase`):
+ *
+ * - `software-design-principles` , registered by the Navigator/Driver/Architect.
+ * - `lakebase-sftdd-workflows` , the `@lakebase-sftdd-workflows/...` target the commands
+ *   + agent docs reference (SKILL.md, references/, agents/).
+ * - `lakebase-scm-workflows` / `lakebase-release-workflows` , the human SCM + release
+ *   surface the Release Engineer composes on.
+ * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
+ *   compose on (`parent: databricks-lakebase`).
+ */
+declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-sftdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
+/**
+ * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
+ * so the scaffolded project is self-contained: the deployed agents + commands can
+ * resolve their `@<skill>/...` references and a human can drive the TDD / SCM /
+ * release workflows in-project. Without this the references are dead , the skills
+ * only exist in the kit, not the scaffolded project where the agents run. Copies
+ * each whole skill dir (SKILL.md + references/ + any agents/). Skips an existing
+ * copy unless `force: true`.
+ */
+declare function deployClaudeSkills(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
+/** Deploy GitHub Actions workflows from common/.github/workflows/. */
+declare function deployWorkflows(targetDir: string, opts?: ScaffoldOptions): Promise<string[]>;
+/**
+ * Install git hooks by copying template scripts into .git/hooks.
+ * Requires {@param targetDir}/.git to already exist (caller ran git init).
+ */
+declare function installHooks(targetDir: string): Promise<string>;
+interface DeployEnvExampleArgs extends ScaffoldOptions {
+    databricksHost?: string;
+    lakebaseProjectId?: string;
+}
+/** Deploy .env.example with optional value substitution. */
+declare function deployEnvExample(targetDir: string, args?: DeployEnvExampleArgs): Promise<void>;
+/** Deploy .env with the project's credentials already filled in. The
+ *  create-project flow has these credentials in hand (LAKEBASE_PROJECT_ID
+ *  is the project being scaffolded; DATABRICKS_HOST is the target workspace
+ *  the user picked), so populating .env immediately avoids the gated-hook
+ *  problem where the post-checkout hook bails on empty LAKEBASE_PROJECT_ID
+ *  and never refreshes .env on subsequent checkouts. .env is gitignored
+ *  (see .gitignore.base) - never enters git history. Secrets (JWT,
+ *  DB_PASSWORD, DATABASE_URL) are written by the hook on first checkout. */
+declare function deployEnv(targetDir: string, args?: DeployEnvExampleArgs): Promise<void>;
+/** Deploy deploy-targets.yaml with optional {{PROJECT_NAME}} substitution. */
+declare function deployDeployTargets(targetDir: string, projectName?: string, opts?: ScaffoldOptions): Promise<void>;
+/** Deploy .vscode/settings.json (disables built-in Git SCM). */
+declare function deployVscodeSettings(targetDir: string, opts?: ScaffoldOptions): Promise<void>;
+/** Deploy .gitignore: common/.gitignore.base + <language>/.gitignore.extra. */
+declare function deployGitignore(targetDir: string, language?: ProjectLanguage, opts?: ScaffoldOptions): Promise<void>;
+/**
+ * Patch the deployed workflows for the chosen runner type.
+ *
+ * Templates ship with `runs-on: self-hosted` + `actions/setup-java@v4`. This
+ * is a historical default: most workspaces today register a self-hosted
+ * runner alongside the project, so the templates match that path out of the
+ * box (no patch needed - it just falls through and works).
+ *
+ * For each non-default mode, swap the bits that need swapping:
+ *   - github-hosted: replace `runs-on: self-hosted` -> `runs-on: ubuntu-latest`
+ *     across all .github/workflows/*.yml. setup-java already targets the
+ *     online Maven on github-hosted runners, so nothing else changes.
+ *   - self-hosted: replace the actions/setup-java block with a local-JDK
+ *     detection step (the self-hosted runner pre-provisions JDK + a Maven
+ *     mirror, so we don't want the online setup-java step).
+ */
+declare function patchWorkflowsForRunnerType(targetDir: string, runnerType: RunnerType): Promise<void>;
+interface ScaffoldStaticAllArgs extends ScaffoldOptions {
+    targetDir: string;
+    databricksHost?: string;
+    lakebaseProjectId?: string;
+    language?: ProjectLanguage;
+    runnerType?: RunnerType;
+    report?: ScaffoldReportFn;
+    /**
+     * Skip `.claude/commands/{design,build}.md`. Default: false (commands
+     * are scaffolded). Set to true when the project already has its own
+     * commands or when scaffolding programmatically (CI bootstrap) for
+     * a consumer that does not use Claude Code.
+     */
+    skipCommands?: boolean;
+}
+interface ScaffoldAllArgs extends ScaffoldStaticAllArgs {
+    /** Optional Initializr client override for tests. */
+    initializrClient?: SpringInitializrClient;
+    /**
+     * Frontend to scaffold. "react" lays down the SPA client under `client/`;
+     * "none" (default) ships no client. create-project defaults this to "react"
+     * for a uiTrack project.
+     */
+    clientFramework?: ClientFramework;
+}
+interface ScaffoldStaticAllResult {
+    scripts: string[];
+    workflows: string[];
+    hooksInstalled: string;
+    /** `.claude/commands/*.md` files written this run. Empty when skipped. */
+    claudeCommands: string[];
+    /** `.claude/agents/*.md` role definitions written this run. Empty when skipped. */
+    claudeAgents: string[];
+    /** `.claude/skills/*` skill dirs written this run. Empty when skipped. */
+    claudeSkills: string[];
+    /** `client/*` files written when the React SPA client was scaffolded
+     *  (clientFramework="react"); empty/omitted otherwise. */
+    client?: string[];
+}
+/**
+ * Orchestrate the static (non-language-project) portion of scaffolding.
+ * Language-specific files (Spring Initializr for Java/Kotlin, static
+ * templates for Python/Node) ship in.
+ *
+ * Caller must have already created targetDir and run `git init` there
+ * (installHooks requires .git/).
+ */
+declare function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<ScaffoldStaticAllResult>;
+/**
+ * Full scaffold: static files (scaffoldStaticAll) + language-specific
+ * project (Spring Initializr for Java/Kotlin; static template copy for
+ * Python/Node). Mirror of ScaffoldService.scaffoldAll. Order matters –
+ * language project is deployed LAST so its src/ doesn't shadow scaffold
+ * scripts (which live at the project root, not under src/).
+ */
+declare function scaffoldAll(args: ScaffoldAllArgs): Promise<ScaffoldStaticAllResult>;
+
+type SpringJvmLanguage = "java" | "kotlin";
+interface InitializrMetadata {
+    bootVersion: string;
+    javaVersion: string;
+}
+interface GenerateMavenProjectOptions {
+    language: SpringJvmLanguage;
+    artifactId: string;
+    name?: string;
+    groupId?: string;
+    packageName?: string;
+    description?: string;
+}
+declare class InitializrNetworkError extends Error {
+    readonly cause?: unknown;
+    constructor(message: string, cause?: unknown);
+}
+declare class InitializrParseError extends Error {
+    constructor(message: string);
+}
+type FetchFn = typeof fetch;
+/** SNAPSHOT, RC, milestone, alpha/beta versions are not GA. */
+declare function isPrereleaseBootVersion(version: string): boolean;
+/** Pick the newest GA Spring Boot version from Initializr metadata. */
+declare function resolveLatestBootVersion(section: unknown): string;
+/** Java 8/11 and every fourth release from 17 (17, 21, 25, …) are LTS. */
+declare function isLtsJavaVersion(version: string): boolean;
+/** Pick the newest LTS Java version that Initializr supports for this Boot release. */
+declare function resolveLatestLtsJavaVersion(section: unknown): string;
+declare class SpringInitializrClient {
+    private metadataCache?;
+    private readonly baseUrl;
+    private readonly fetchFn;
+    constructor(baseUrl?: string, fetchFn?: FetchFn);
+    getMetadata(forceRefresh?: boolean): Promise<InitializrMetadata>;
+    generateMavenProject(opts: GenerateMavenProjectOptions): Promise<Buffer>;
+}
+
+interface DeploySpringStarterArgs {
+    targetDir: string;
+    language: SpringJvmLanguage;
+    projectName?: string;
+    /** Override templates dir (tests). */
+    templatesDir?: string;
+    /** Override Initializr client (tests). */
+    initializrClient?: SpringInitializrClient;
+    report?: ScaffoldReportFn;
+}
+/**
+ * Mirror of ScaffoldService.deploySpringFromInitializr.
+ *
+ *   1. If LAKEBASE_SCAFFOLD_FALLBACK=1, skip the network entirely and use
+ *      the bundled fallback (templates/.../fallback/).
+ *   2. Otherwise: fetch metadata + starter zip from start.spring.io,
+ *      extract, apply Spring overlay (templates/project/spring/), patch
+ *      pom.xml for Lakebase (flyway-pg dep + flyway/surefire plugins).
+ *   3. If anything fails BEFORE extraction succeeds, fall back to the
+ *      bundled template. If failure happens AFTER extraction, surface the
+ *      error (the user has partial state on disk that they may want to keep).
+ */
+declare function deploySpringStarter(args: DeploySpringStarterArgs): Promise<void>;
+
+type ProjectLanguage = "java" | "kotlin" | "python" | "nodejs";
+/**
+ * The frontend the project ships. "react" scaffolds the first-class SPA client
+ * under `client/` (templates/project/client); "none" leaves the boundary to
+ * render server-side (e.g. Jinja2) or be a pure JSON/CLI backend. A UI project
+ * (uiTrack) defaults to "react" so a single-page app is the path of least
+ * resistance rather than a build-from-scratch fight.
+ */
+type ClientFramework = "react" | "none";
+interface DeployLanguageProjectArgs {
+    targetDir: string;
+    language: ProjectLanguage;
+    projectName?: string;
+    /** Override templates dir (tests). */
+    templatesDir?: string;
+    /** Override Initializr client (tests). */
+    initializrClient?: SpringInitializrClient;
+    report?: ScaffoldReportFn;
+}
+declare function deployLanguageProject(args: DeployLanguageProjectArgs): Promise<void>;
 
 type AgentRole = "spec-author" | "ux-designer" | "architect-reviewer" | "test-strategist" | "orchestrator" | "navigator" | "driver" | "product-owner" | "release-engineer";
 
@@ -1795,8 +2063,25 @@ interface CreateProjectArgs {
      * branch exists.
      */
     tiers?: 1 | 2 | 3;
+    /**
+     * Whether the project has a user-facing UI. This is the SINGLE SOURCE for the
+     * UX track: it is persisted to sftdd-config.json (project.uiTrack), which the
+     * drive reads to run the UX Designer + design-guide/IA + design-adherence gate,
+     * AND it drives the e2e scaffolding below (a UI project always gets e2e). There
+     * is no separate env/flag door; this input is the one way in. Default: false.
+     */
+    uiTrack?: boolean;
+    /**
+     * Frontend the project ships. "react" scaffolds the first-class SPA client
+     * under `client/` (React + TS + Vite + Vitest + Playwright); "none" ships no
+     * client (server-rendered or pure JSON/CLI backend). When omitted, defaults
+     * to "react" for a uiTrack project and "none" otherwise, so a UI project gets
+     * a single-page app as the path of least resistance. Persisted to
+     * sftdd-config.json (project.clientFramework).
+     */
+    clientFramework?: ClientFramework;
     /** Lay down the .sftdd/ scaffold from templates/sftdd-bootstrap/ (default: true). */
-    enableTdd?: boolean;
+    enableSftdd?: boolean;
     /**
      * Wire Playwright into the project so `[E2E]`-tagged AC rows have a
      * runner: drops `playwright.config.ts` + `tests/e2e/smoke.spec.ts`,
@@ -2078,6 +2363,15 @@ interface EnableE2eForProjectArgs {
      *  When omitted, falls back to package.json (Node) / pyproject.toml (Python)
      *  detection so retrofits work without it. */
     language?: string;
+    /** The project scaffolds a React SPA under `client/`, whose own Playwright
+     *  suite (client/tests/e2e, client/playwright.config.ts) IS the end-to-end
+     *  lane. When true, this seam must NOT also scaffold the backend's
+     *  server-rendered e2e harness (the Node root playwright.config or the Python
+     *  `tests/e2e` live_server): two e2e harnesses booting the same backend port
+     *  collide in CI (reuseExistingServer=false → "port already used"), and the
+     *  client suite already covers the browser loop. Backend BDD (pytest-bdd) is
+     *  unaffected. */
+    clientOwnsE2e?: boolean;
 }
 interface EnableE2eForProjectResult {
     /** Paths (relative to projectDir) freshly written. */
@@ -2529,11 +2823,12 @@ interface ClaimFeatureBranchArgs {
      */
     parentBranchOverride?: string;
     /**
-     * When true, return a no-op success if the workflow is already in
-     * feature-claimed for THE SAME feature-id (matched by sanitized
-     * branch). Defaults to true; pass false to make repeat claims fail
-     * loud. Distinct from `bad-precondition` because nothing is wrong;
-     * the caller just re-ran the bin.
+     * When true, return a no-op success if the workflow is already in an
+     * in-flight claimed state (feature-claimed / pr-ready / ci-green) for THE
+     * SAME feature-id (matched by sanitized branch), so a re-claim resumes the
+     * feature where it stopped instead of failing. Defaults to true; pass false
+     * to make repeat claims fail loud. Distinct from `bad-precondition` because
+     * nothing is wrong; the caller (e.g. the sprint driver) just re-entered.
      */
     idempotent?: boolean;
     /** Optional clock injection for testability. Defaults to `new Date()`. */
@@ -2954,238 +3249,6 @@ interface RemoveRunnerArgs {
 }
 /** Stop, deregister from GitHub (best-effort), and delete the on-disk dir. */
 declare function removeRunner(args: RemoveRunnerArgs): Promise<void>;
-
-type RunnerType = "self-hosted" | "github-hosted";
-type ScaffoldReportFn = (message: string, detail?: string) => void;
-interface ScaffoldOptions {
-    /** Override the templates/project root. Default: auto-detected. */
-    templatesDir?: string;
-}
-/** Deploy all scripts from common/scripts/. Files become executable. */
-declare function deployScripts(targetDir: string, opts?: ScaffoldOptions): Promise<string[]>;
-interface DeployClaudeCommandsResult {
-    /** Paths (relative to targetDir) that were written. */
-    written: string[];
-    /** Paths that already existed and were left untouched (force=false). */
-    skipped: string[];
-}
-interface DeployClaudeCommandsOptions extends ScaffoldOptions {
-    /** Overwrite existing .claude/commands/*.md. Default: false. */
-    force?: boolean;
-}
-/**
- * Deploy `.claude/commands/{design,build}.md` from
- * `common/.claude/commands/`. Substitutes `${KIT_VERSION_AT_SCAFFOLD}`
- * with the kit version that ran the scaffold so the project file pins
- * to a specific substrate revision (the future drift detector reads
- * this back). Skips files that already exist in the project unless
- * `force: true` so a re-run does not clobber a user's edits.
- */
-declare function deployClaudeCommands(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
-/**
- * Deploy the TDD-workflow role agent definitions into the project's
- * `.claude/agents/` so Claude Code can discover + spawn them. The
- * canonical source is the skill at `<kitRoot>/skills/lakebase-sftdd-workflows/agents/`;
- * this copies each `<role>.md` verbatim (the bodies are the system prompts).
- * Discoverability is required for the deterministic orchestrator (`lakebase-sftdd-drive`)
- * to spawn the roles via `claude -p --agent <role>`. Skips files that
- * already exist unless `force: true`.
- */
-declare function deployClaudeAgents(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
-/**
- * The kit skills a scaffolded project carries in its own `.claude/skills/` so the
- * deployed agents + commands resolve every `@<skill>/...` cross-reference and a
- * human can invoke the TDD / SCM / release interactions directly , without the
- * kit having to be installed as a plugin. The set is the engineering canon plus
- * the three workflow skills the agents/commands reference and their two Databricks
- * parents (the `parent:` chain `lakebase-{scm,release}-workflows` -> `databricks-lakebase`):
- *
- * - `software-design-principles` , registered by the Navigator/Driver/Architect.
- * - `lakebase-sftdd-workflows` , the `@lakebase-sftdd-workflows/...` target the commands
- *   + agent docs reference (SKILL.md, references/, agents/).
- * - `lakebase-scm-workflows` / `lakebase-release-workflows` , the human SCM + release
- *   surface the Release Engineer composes on.
- * - `databricks-lakebase` / `databricks-core` , the parent CLI skills the above
- *   compose on (`parent: databricks-lakebase`).
- */
-declare const PROJECT_SKILLS: readonly ["software-design-principles", "architectural-design-principles", "ui-ux-design-principles", "lakebase-sftdd-workflows", "lakebase-scm-workflows", "lakebase-release-workflows", "databricks-lakebase", "databricks-core"];
-/**
- * Deploy the kit skills (see `PROJECT_SKILLS`) into the project's `.claude/skills/`
- * so the scaffolded project is self-contained: the deployed agents + commands can
- * resolve their `@<skill>/...` references and a human can drive the TDD / SCM /
- * release workflows in-project. Without this the references are dead , the skills
- * only exist in the kit, not the scaffolded project where the agents run. Copies
- * each whole skill dir (SKILL.md + references/ + any agents/). Skips an existing
- * copy unless `force: true`.
- */
-declare function deployClaudeSkills(targetDir: string, opts?: DeployClaudeCommandsOptions): Promise<DeployClaudeCommandsResult>;
-/** Deploy GitHub Actions workflows from common/.github/workflows/. */
-declare function deployWorkflows(targetDir: string, opts?: ScaffoldOptions): Promise<string[]>;
-/**
- * Install git hooks by copying template scripts into .git/hooks.
- * Requires {@param targetDir}/.git to already exist (caller ran git init).
- */
-declare function installHooks(targetDir: string): Promise<string>;
-interface DeployEnvExampleArgs extends ScaffoldOptions {
-    databricksHost?: string;
-    lakebaseProjectId?: string;
-}
-/** Deploy .env.example with optional value substitution. */
-declare function deployEnvExample(targetDir: string, args?: DeployEnvExampleArgs): Promise<void>;
-/** Deploy .env with the project's credentials already filled in. The
- *  create-project flow has these credentials in hand (LAKEBASE_PROJECT_ID
- *  is the project being scaffolded; DATABRICKS_HOST is the target workspace
- *  the user picked), so populating .env immediately avoids the gated-hook
- *  problem where the post-checkout hook bails on empty LAKEBASE_PROJECT_ID
- *  and never refreshes .env on subsequent checkouts. .env is gitignored
- *  (see .gitignore.base) - never enters git history. Secrets (JWT,
- *  DB_PASSWORD, DATABASE_URL) are written by the hook on first checkout. */
-declare function deployEnv(targetDir: string, args?: DeployEnvExampleArgs): Promise<void>;
-/** Deploy deploy-targets.yaml with optional {{PROJECT_NAME}} substitution. */
-declare function deployDeployTargets(targetDir: string, projectName?: string, opts?: ScaffoldOptions): Promise<void>;
-/** Deploy .vscode/settings.json (disables built-in Git SCM). */
-declare function deployVscodeSettings(targetDir: string, opts?: ScaffoldOptions): Promise<void>;
-/** Deploy .gitignore: common/.gitignore.base + <language>/.gitignore.extra. */
-declare function deployGitignore(targetDir: string, language?: ProjectLanguage, opts?: ScaffoldOptions): Promise<void>;
-/**
- * Patch the deployed workflows for the chosen runner type.
- *
- * Templates ship with `runs-on: self-hosted` + `actions/setup-java@v4`. This
- * is a historical default: most workspaces today register a self-hosted
- * runner alongside the project, so the templates match that path out of the
- * box (no patch needed - it just falls through and works).
- *
- * For each non-default mode, swap the bits that need swapping:
- *   - github-hosted: replace `runs-on: self-hosted` -> `runs-on: ubuntu-latest`
- *     across all .github/workflows/*.yml. setup-java already targets the
- *     online Maven on github-hosted runners, so nothing else changes.
- *   - self-hosted: replace the actions/setup-java block with a local-JDK
- *     detection step (the self-hosted runner pre-provisions JDK + a Maven
- *     mirror, so we don't want the online setup-java step).
- */
-declare function patchWorkflowsForRunnerType(targetDir: string, runnerType: RunnerType): Promise<void>;
-interface ScaffoldStaticAllArgs extends ScaffoldOptions {
-    targetDir: string;
-    databricksHost?: string;
-    lakebaseProjectId?: string;
-    language?: ProjectLanguage;
-    runnerType?: RunnerType;
-    report?: ScaffoldReportFn;
-    /**
-     * Skip `.claude/commands/{design,build}.md`. Default: false (commands
-     * are scaffolded). Set to true when the project already has its own
-     * commands or when scaffolding programmatically (CI bootstrap) for
-     * a consumer that does not use Claude Code.
-     */
-    skipCommands?: boolean;
-}
-interface ScaffoldAllArgs extends ScaffoldStaticAllArgs {
-    /** Optional Initializr client override for tests. */
-    initializrClient?: SpringInitializrClient;
-}
-interface ScaffoldStaticAllResult {
-    scripts: string[];
-    workflows: string[];
-    hooksInstalled: string;
-    /** `.claude/commands/*.md` files written this run. Empty when skipped. */
-    claudeCommands: string[];
-    /** `.claude/agents/*.md` role definitions written this run. Empty when skipped. */
-    claudeAgents: string[];
-    /** `.claude/skills/*` skill dirs written this run. Empty when skipped. */
-    claudeSkills: string[];
-}
-/**
- * Orchestrate the static (non-language-project) portion of scaffolding.
- * Language-specific files (Spring Initializr for Java/Kotlin, static
- * templates for Python/Node) ship in.
- *
- * Caller must have already created targetDir and run `git init` there
- * (installHooks requires .git/).
- */
-declare function scaffoldStaticAll(args: ScaffoldStaticAllArgs): Promise<ScaffoldStaticAllResult>;
-/**
- * Full scaffold: static files (scaffoldStaticAll) + language-specific
- * project (Spring Initializr for Java/Kotlin; static template copy for
- * Python/Node). Mirror of ScaffoldService.scaffoldAll. Order matters –
- * language project is deployed LAST so its src/ doesn't shadow scaffold
- * scripts (which live at the project root, not under src/).
- */
-declare function scaffoldAll(args: ScaffoldAllArgs): Promise<ScaffoldStaticAllResult>;
-
-type SpringJvmLanguage = "java" | "kotlin";
-interface InitializrMetadata {
-    bootVersion: string;
-    javaVersion: string;
-}
-interface GenerateMavenProjectOptions {
-    language: SpringJvmLanguage;
-    artifactId: string;
-    name?: string;
-    groupId?: string;
-    packageName?: string;
-    description?: string;
-}
-declare class InitializrNetworkError extends Error {
-    readonly cause?: unknown;
-    constructor(message: string, cause?: unknown);
-}
-declare class InitializrParseError extends Error {
-    constructor(message: string);
-}
-type FetchFn = typeof fetch;
-/** SNAPSHOT, RC, milestone, alpha/beta versions are not GA. */
-declare function isPrereleaseBootVersion(version: string): boolean;
-/** Pick the newest GA Spring Boot version from Initializr metadata. */
-declare function resolveLatestBootVersion(section: unknown): string;
-/** Java 8/11 and every fourth release from 17 (17, 21, 25, …) are LTS. */
-declare function isLtsJavaVersion(version: string): boolean;
-/** Pick the newest LTS Java version that Initializr supports for this Boot release. */
-declare function resolveLatestLtsJavaVersion(section: unknown): string;
-declare class SpringInitializrClient {
-    private metadataCache?;
-    private readonly baseUrl;
-    private readonly fetchFn;
-    constructor(baseUrl?: string, fetchFn?: FetchFn);
-    getMetadata(forceRefresh?: boolean): Promise<InitializrMetadata>;
-    generateMavenProject(opts: GenerateMavenProjectOptions): Promise<Buffer>;
-}
-
-interface DeploySpringStarterArgs {
-    targetDir: string;
-    language: SpringJvmLanguage;
-    projectName?: string;
-    /** Override templates dir (tests). */
-    templatesDir?: string;
-    /** Override Initializr client (tests). */
-    initializrClient?: SpringInitializrClient;
-    report?: ScaffoldReportFn;
-}
-/**
- * Mirror of ScaffoldService.deploySpringFromInitializr.
- *
- *   1. If LAKEBASE_SCAFFOLD_FALLBACK=1, skip the network entirely and use
- *      the bundled fallback (templates/.../fallback/).
- *   2. Otherwise: fetch metadata + starter zip from start.spring.io,
- *      extract, apply Spring overlay (templates/project/spring/), patch
- *      pom.xml for Lakebase (flyway-pg dep + flyway/surefire plugins).
- *   3. If anything fails BEFORE extraction succeeds, fall back to the
- *      bundled template. If failure happens AFTER extraction, surface the
- *      error (the user has partial state on disk that they may want to keep).
- */
-declare function deploySpringStarter(args: DeploySpringStarterArgs): Promise<void>;
-
-type ProjectLanguage = "java" | "kotlin" | "python" | "nodejs";
-interface DeployLanguageProjectArgs {
-    targetDir: string;
-    language: ProjectLanguage;
-    projectName?: string;
-    /** Override templates dir (tests). */
-    templatesDir?: string;
-    /** Override Initializr client (tests). */
-    initializrClient?: SpringInitializrClient;
-    report?: ScaffoldReportFn;
-}
-declare function deployLanguageProject(args: DeployLanguageProjectArgs): Promise<void>;
 
 interface SchemaColumn {
     name: string;
@@ -3812,4 +3875,4 @@ declare function applySchemaMigrations(args: ApplySchemaMigrationsArgs): Promise
 declare function rollbackSchemaMigration(args: RollbackSchemaMigrationArgs): Promise<RollbackSchemaMigrationResult>;
 declare function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Promise<SchemaMigrationStatusResult>;
 
-export { type AbandonFeatureArgs, type AbandonFeatureResult, type AddE2eToRunTestsScriptArgs, type AddE2eToRunTestsScriptResult, type AddInfraToPackageJsonArgs, type AddInfraToPackageJsonResult, type AddInfraToRunTestsScriptArgs, type AddInfraToRunTestsScriptResult, type AddPlaywrightToPackageJsonArgs, type AddPlaywrightToPackageJsonResult, type AddPythonE2eDepsArgs, type AddPythonE2eDepsResult, type AdoptLakebaseProjectArgs, type AdoptLakebaseProjectResult, type AdoptStateArgs, type AdoptStateResult, type AdoptTddArgs, type AdoptTddResult, type AppServicePrincipal, type AppliedSchemaMigration, type ApplySchemaMigrationsArgs, type ApplySchemaMigrationsResult, type BranchLookupOpts, type BranchMetadata, CONVENTION_TIER_DEFAULTS, type CatalogExistsArgs, type CheckoutMode, type CheckoutPairedArgs, type CheckoutPairedResult, type ClaimFeatureBranchArgs, type ClaimFeatureBranchResult, type ClaimedOrphan, type CommandDriftReport, type CommandFileEntry, type CommandFileStatus, type CommandFileUpdate, type CommandUpdateOutcome, type ConnectionArgs, type CreateBranchArgs, type CreateConventionBranchArgs, type CreateConventionPairedBranchArgs, type CreateLongRunningBranchArgs, type CreateLongRunningBranchResult, type CreatePairedBranchArgs, type CreatePairedBranchResult, type CutBackupArgs, type CutBackupResult, DEFAULT_PROTECTED_TIER_NAMES, type DatabricksProfile, type DeleteAppEndpointArgs, type DeleteAppEndpointResult, type DeleteBranchArgs, type DeletePairedBranchArgs, type DeletePairedBranchResult, type DeployClaudeCommandsOptions, type DeployClaudeCommandsResult, type DeployEnvExampleArgs, type DeployLanguageProjectArgs, type DeploySpringStarterArgs, type DeployTarget, type DeployTargetsConfig, type DetectCommandDriftArgs, type DetectScaffoldedDriftArgs, type DetectWorkflowDriftArgs, type DoctorArgs, type DoctorFinding, type DoctorReport, type DoctorSeverity, type DsnArgs, type DsnResult, type EnableE2eForProjectArgs, type EnableE2eForProjectResult, type EnableInfraForProjectArgs, type EnableInfraForProjectResult, type EndpointInfo, type EnsureAppEndpointArgs, type EnsureAppEndpointResult, type EnsureEndpointArgs, type EnsureLakebaseSecretAuthArgs, type EnsureLakebaseSecretAuthResult, type EnsureProfilePinnedArgs, type EnsureProfilePinnedResult, type EnsureSchemaAndVolumeArgs, type EnsureSchemaAndVolumeResult, FIXABLE_FINDING_IDS, type FixFindingArgs, type FixFindingResult, type FixableFindingId, type GateInvariant, type GateStatus, type GenerateAppYamlOptions, type GenerateMavenProjectOptions, type GetAppEndpointArgs, type GetAppEndpointResult, type GetAppServicePrincipalArgs, type GetCiAppEndpointArgs, type GetCiAppEndpointResult, type GetConnectionArgs, type GetCredentialArgs, type GetEndpointArgs, type GetSchemaDiffArgs, type GrantLakebasePermissionArgs, type GrantLakebasePermissionResult, type GrantUcCatalogPermissionArgs, type GrantUcCatalogPermissionResult, type HookVerification, type InfraCheckResult, type InfraSuiteResult, type InitWorkflowStateArgs, type InitializrMetadata, InitializrNetworkError, InitializrParseError, type InstallPlaywrightArgs, type InstallPlaywrightOptions, type InstallPlaywrightResult, LakebaseBranchError, type LakebaseBranchInfo, LakebaseBranchTtlTooLongError, type LakebasePermissionLevel, type LakebaseProjectArgs, LakebaseProjectError, type LakebaseProjectInfo, type LakebaseProjectMetadata, type ListSchemaMigrationsArgs, MIGRATION_DEFAULTS, type MergeArgs, type MergePairedArgs, type MergePairedResult, type MergeResult, type MigrationDefaults, type MigrationLanguage, type MigrationLayout, type ModifiedSchemaObject, NODE_E2E_TEMPLATE_FILES, type OrphanCandidate, PLAYWRIGHT_TEMPLATE_FILES, PLAYWRIGHT_TEST_VERSION_RANGE, PROJECT_SKILLS, PYTEST_BDD_VERSION_RANGE, PYTEST_PLAYWRIGHT_VERSION_RANGE, PYTHON_E2E_TEMPLATE_FILES, type PendingSchemaMigration, type PoolArgs, type PreflightResult, type PreparePrArgs, type PreparePrResult, type ProjectLanguage, type PropagateCredentialsArgs, type PropagateCredentialsResult, type QueryBranchSchemaArgs, type RecoverOrphansArgs, type RecoverOrphansResult, type ReleaseArgs, type ReleaseResult, type RemoveRunnerArgs, type ResolveDatabricksHostArgs, type ResolveMigrationLayoutArgs, type RollbackDeployArgs, type RollbackDeployResult, type RollbackOptions, type RollbackSchemaMigrationArgs, type RollbackSchemaMigrationResult, type RunInfraSuiteArgs, type RunPlaywrightInstallArgs, type RunPlaywrightInstallResult, type RunnerInfo, type RunnerReportFn, type RunnerType, SCM_STATES, STATE_FILE_REL, type ScaffoldAllArgs, type ScaffoldOptions, type ScaffoldReportFn, type ScaffoldStaticAllArgs, type ScaffoldStaticAllResult, type ScaffoldedDriftReport, type SchemaColumn, type SchemaDiffResult, SchemaMigrationError, type SchemaMigrationFile, type SchemaMigrationLanguage, type SchemaMigrationStatusArgs, type SchemaMigrationStatusResult, type SchemaMigrationToolName, type SchemaObject, type SchemaQueryRow, ScmAbandonError, ScmAdoptError, ScmClaimError, ScmDoctorFixError, ScmMergeError, ScmPreparePrError, ScmRecoverError, type ScmState, ScmWaitCiError, type ScmWorkflowState, type SetupRunnerArgs, SpringInitializrClient, type SpringJvmLanguage, type SyncEnvArgs, type SyncEnvResult, type TableSchema, type TierTopology, type TryCreateCatalogArgs, type TryCreateCatalogResult, type UcCatalogPermission, type UpdateCommandsArgs, type UpdateCommandsResult, type UpdateEnvConnectionArgs, type UpdateWorkflowsArgs, type UpdateWorkflowsResult, type UploadDirectoryArgs, type UploadDirectoryResult, type ValidateAppOptions, type ValidateAppResult, type ValidationError, type ValidationResult, type WaitCiArgs, type WaitCiResult, type WaitForBranchAuthReadyArgs, type WaitForBranchReadyArgs, type WorkflowDriftReport, type WorkflowFileStatus, type WorkflowFileUpdate, type WorkflowStatus, type WorkflowUpdateOutcome, type WorkflowVerification, type WriteEnvFileArgs, type WritePlaywrightTemplatesArgs, type WritePlaywrightTemplatesResult, _testMakeBrownfieldFixture, abandonFeatureBranch, addE2eToRunTestsScript, addInfraToPackageJson, addInfraToRunTestsScript, addPlaywrightToPackageJson, adoptLakebaseProject, adoptScmState, adoptTdd, applySchemaMigrations, assertAdoptionPreflight, assertCleanForFork, buildSchemaQuery, cacheProjectRetention, catalogExists, catalogExplorerUrl, checkDatabricksAuth, checkoutPaired, claimFeatureBranch, clearRetentionCache, compileMigrationPattern, createBranch, createFeaturePairedBranch, createLakebaseProject, createLongRunningBranch, createPairedBranch, createPerfPairedBranch, createProject, createTestPairedBranch, createUatPairedBranch, cutBackup, databricksAuthPrereqMessage, deleteAppEndpoint, deleteBranch, deleteLakebaseProject, deletePairedBranch, deployClaudeAgents, deployClaudeCommands, deployClaudeSkills, deployDeployTargets, deployEnv, deployEnvExample, deployGitignore, deployLanguageProject, deployScripts, deploySpringStarter, deployVscodeSettings, deployWorkflows, deriveCiAppName, describeGates, detectCommandDrift, detectLanguage, detectLanguageAt, detectScaffoldedDrift, detectWorkflowDrift, enableE2eForProject, enableInfraForProject, endpointPath, ensureAppEndpoint, ensureCachedArchive, ensureEndpoint, ensureLakebaseSecretAuth, ensureProfilePinned, ensurePythonBddDeps, ensurePythonE2eDeps, ensureSchemaAndVolume, extractPullNumber, featureBranchName, findDefaultBranchName, findHistoryRetentionDuration, fixFinding, formatJUnit, formatSchemaDiffAsMarkdown, generateAppYaml, getAppEndpoint, getAppServicePrincipal, getBranchByName, getCachedProjectRetention, getCiAppEndpoint, getConnection, getCredential, getDefaultBranch, getDefaultBranchId, getDefaultBranchName, getEndpoint, getProjectInfo, getProjectRetentionDuration, getRunnerInfo, getSchemaDiff, getTargetNames, grantLakebasePermission, grantUcCatalogPermission, inferTierTopology, initWorkflowState, installHooks, installPlaywright, isAllSchemas, isLongRunningTierBranch, isLtsJavaVersion, isPrereleaseBootVersion, isRunning, isTier, isTtlTooLongError, kitWarmWarning, listAppDeployments, listBranches, listSchemaMigrations, mergeFeature, mergePaired, minLakebaseTtl, mintCredential, normalizeHost, normalizeTierName, parseHostFromAuthDescribe, parseLakebaseTtl, parseTargetsYaml, patchWorkflowsForRunnerType, preparePr, projectPath, propagateCredentials, protectedTierNamesFromEnv, pushFailureHint, queryBranchSchema, queryBranchTables, readTargets, readWorkflowState, recoverOrphans, release, removeRunner, resolveBranchId, resolveBranchPath, resolveCurrentUser, resolveDatabricksHost, resolveEndpointHost, resolveFeatureStartPoint, resolveJavaHome, resolveLatestBootVersion, resolveLatestLtsJavaVersion, resolveMigrationLanguage, resolveMigrationLayout, resolveParentBranch, resolveProfileForHost, resolveProtectedTierNames, rollbackDeploy, rollbackSchemaMigration, runDoctor, runInfraSuite, runPlaywrightInstall, runnerDir, runnerName, sanitizeFeatureSlug, scaffoldAll, scaffoldStaticAll, schemaMigrationStatus, schemaObjectName, selectProfileForHost, setupRunner, stateFilePath, stopRunner, syncEnvToCurrentBranch, tierBranchNames, toolForLanguage, tryCreateCatalog, updateCommands, updateEnvConnection, updateWorkflows, uploadDirectory, validateApp, validateWorkflowState, verifyHooks, verifyProject, verifyWorkflows, waitForBranchAuthReady, waitForBranchReady, waitForCi, warmAndVerifyKit, withLakebaseRollback, workflowStateFileExists, writeEnvFile, writePlaywrightTemplates, writeTargets, writeWorkflowState };
+export { type AbandonFeatureArgs, type AbandonFeatureResult, type AddE2eToRunTestsScriptArgs, type AddE2eToRunTestsScriptResult, type AddInfraToPackageJsonArgs, type AddInfraToPackageJsonResult, type AddInfraToRunTestsScriptArgs, type AddInfraToRunTestsScriptResult, type AddPlaywrightToPackageJsonArgs, type AddPlaywrightToPackageJsonResult, type AddPythonE2eDepsArgs, type AddPythonE2eDepsResult, type AdoptLakebaseProjectArgs, type AdoptLakebaseProjectResult, type AdoptStateArgs, type AdoptStateResult, type AdoptTddArgs, type AdoptTddResult, type AppServicePrincipal, type AppliedSchemaMigration, type ApplySchemaMigrationsArgs, type ApplySchemaMigrationsResult, type BranchLookupOpts, type BranchMetadata, CONVENTION_TIER_DEFAULTS, type CatalogExistsArgs, type CheckoutMode, type CheckoutPairedArgs, type CheckoutPairedResult, type ClaimFeatureBranchArgs, type ClaimFeatureBranchResult, type ClaimedOrphan, type ClientFramework, type CommandDriftReport, type CommandFileEntry, type CommandFileStatus, type CommandFileUpdate, type CommandUpdateOutcome, type ConnectionArgs, type CreateBranchArgs, type CreateConventionBranchArgs, type CreateConventionPairedBranchArgs, type CreateLongRunningBranchArgs, type CreateLongRunningBranchResult, type CreatePairedBranchArgs, type CreatePairedBranchResult, type CutBackupArgs, type CutBackupResult, DEFAULT_PROTECTED_TIER_NAMES, type DatabricksProfile, type DeleteAppEndpointArgs, type DeleteAppEndpointResult, type DeleteBranchArgs, type DeletePairedBranchArgs, type DeletePairedBranchResult, type DeployClaudeCommandsOptions, type DeployClaudeCommandsResult, type DeployEnvExampleArgs, type DeployLanguageProjectArgs, type DeploySpringStarterArgs, type DeployTarget, type DeployTargetsConfig, type DetectCommandDriftArgs, type DetectScaffoldedDriftArgs, type DetectWorkflowDriftArgs, type DoctorArgs, type DoctorFinding, type DoctorReport, type DoctorSeverity, type DsnArgs, type DsnResult, type EnableE2eForProjectArgs, type EnableE2eForProjectResult, type EnableInfraForProjectArgs, type EnableInfraForProjectResult, type EndpointInfo, type EnsureAppEndpointArgs, type EnsureAppEndpointResult, type EnsureEndpointArgs, type EnsureLakebaseSecretAuthArgs, type EnsureLakebaseSecretAuthResult, type EnsureProfilePinnedArgs, type EnsureProfilePinnedResult, type EnsureSchemaAndVolumeArgs, type EnsureSchemaAndVolumeResult, FIXABLE_FINDING_IDS, type FixFindingArgs, type FixFindingResult, type FixableFindingId, type GateInvariant, type GateStatus, type GenerateAppYamlOptions, type GenerateMavenProjectOptions, type GetAppEndpointArgs, type GetAppEndpointResult, type GetAppServicePrincipalArgs, type GetCiAppEndpointArgs, type GetCiAppEndpointResult, type GetConnectionArgs, type GetCredentialArgs, type GetEndpointArgs, type GetSchemaDiffArgs, type GrantLakebasePermissionArgs, type GrantLakebasePermissionResult, type GrantUcCatalogPermissionArgs, type GrantUcCatalogPermissionResult, type HookVerification, type InfraCheckResult, type InfraSuiteResult, type InitWorkflowStateArgs, type InitializrMetadata, InitializrNetworkError, InitializrParseError, type InstallPlaywrightArgs, type InstallPlaywrightOptions, type InstallPlaywrightResult, LakebaseBranchError, type LakebaseBranchInfo, LakebaseBranchTtlTooLongError, type LakebasePermissionLevel, type LakebaseProjectArgs, LakebaseProjectError, type LakebaseProjectInfo, type LakebaseProjectMetadata, type ListSchemaMigrationsArgs, MIGRATION_DEFAULTS, type MergeArgs, type MergePairedArgs, type MergePairedResult, type MergeResult, type MigrationDefaults, type MigrationLanguage, type MigrationLayout, type ModifiedSchemaObject, NODE_E2E_TEMPLATE_FILES, type OrphanCandidate, PLAYWRIGHT_TEMPLATE_FILES, PLAYWRIGHT_TEST_VERSION_RANGE, PROJECT_SKILLS, PYTEST_BDD_VERSION_RANGE, PYTEST_PLAYWRIGHT_VERSION_RANGE, PYTHON_E2E_TEMPLATE_FILES, type PendingSchemaMigration, type PoolArgs, type PreflightResult, type PreparePrArgs, type PreparePrResult, type ProjectLanguage, type PropagateCredentialsArgs, type PropagateCredentialsResult, type QueryBranchSchemaArgs, type RecoverOrphansArgs, type RecoverOrphansResult, type ReleaseArgs, type ReleaseResult, type RemoveRunnerArgs, type ResolveDatabricksHostArgs, type ResolveMigrationLayoutArgs, type RollbackDeployArgs, type RollbackDeployResult, type RollbackOptions, type RollbackSchemaMigrationArgs, type RollbackSchemaMigrationResult, type RunInfraSuiteArgs, type RunPlaywrightInstallArgs, type RunPlaywrightInstallResult, type RunnerInfo, type RunnerReportFn, type RunnerType, SCM_STATES, STATE_FILE_REL, type ScaffoldAllArgs, type ScaffoldOptions, type ScaffoldReportFn, type ScaffoldStaticAllArgs, type ScaffoldStaticAllResult, type ScaffoldedDriftReport, type SchemaColumn, type SchemaDiffResult, SchemaMigrationError, type SchemaMigrationFile, type SchemaMigrationLanguage, type SchemaMigrationStatusArgs, type SchemaMigrationStatusResult, type SchemaMigrationToolName, type SchemaObject, type SchemaQueryRow, ScmAbandonError, ScmAdoptError, ScmClaimError, ScmDoctorFixError, ScmMergeError, ScmPreparePrError, ScmRecoverError, type ScmState, ScmWaitCiError, type ScmWorkflowState, type SetupRunnerArgs, SpringInitializrClient, type SpringJvmLanguage, type SyncEnvArgs, type SyncEnvResult, type TableSchema, type TierTopology, type TryCreateCatalogArgs, type TryCreateCatalogResult, type UcCatalogPermission, type UpdateCommandsArgs, type UpdateCommandsResult, type UpdateEnvConnectionArgs, type UpdateWorkflowsArgs, type UpdateWorkflowsResult, type UploadDirectoryArgs, type UploadDirectoryResult, type ValidateAppOptions, type ValidateAppResult, type ValidationError, type ValidationResult, type WaitCiArgs, type WaitCiResult, type WaitForBranchAuthReadyArgs, type WaitForBranchReadyArgs, type WorkflowDriftReport, type WorkflowFileStatus, type WorkflowFileUpdate, type WorkflowStatus, type WorkflowUpdateOutcome, type WorkflowVerification, type WriteEnvFileArgs, type WritePlaywrightTemplatesArgs, type WritePlaywrightTemplatesResult, _testMakeBrownfieldFixture, abandonFeatureBranch, addE2eToRunTestsScript, addInfraToPackageJson, addInfraToRunTestsScript, addPlaywrightToPackageJson, adoptLakebaseProject, adoptScmState, adoptTdd, applySchemaMigrations, assertAdoptionPreflight, assertCleanForFork, buildSchemaQuery, cacheProjectRetention, catalogExists, catalogExplorerUrl, checkDatabricksAuth, checkoutPaired, claimFeatureBranch, clearRetentionCache, compileMigrationPattern, createBranch, createFeaturePairedBranch, createLakebaseProject, createLongRunningBranch, createPairedBranch, createPerfPairedBranch, createProject, createTestPairedBranch, createUatPairedBranch, cutBackup, databricksAuthPrereqMessage, deleteAppEndpoint, deleteBranch, deleteLakebaseProject, deletePairedBranch, deployClaudeAgents, deployClaudeCommands, deployClaudeSkills, deployClientProject, deployDeployTargets, deployEnv, deployEnvExample, deployGitignore, deployLanguageProject, deployScripts, deploySpringStarter, deployVscodeSettings, deployWorkflows, deriveCiAppName, describeGates, detectCommandDrift, detectLanguage, detectLanguageAt, detectScaffoldedDrift, detectWorkflowDrift, enableE2eForProject, enableInfraForProject, endpointPath, ensureAppEndpoint, ensureCachedArchive, ensureEndpoint, ensureLakebaseSecretAuth, ensureProfilePinned, ensurePythonBddDeps, ensurePythonE2eDeps, ensureSchemaAndVolume, extractPullNumber, featureBranchName, findDefaultBranchName, findHistoryRetentionDuration, fixFinding, formatJUnit, formatSchemaDiffAsMarkdown, generateAppYaml, getAppEndpoint, getAppServicePrincipal, getBranchByName, getCachedProjectRetention, getCiAppEndpoint, getConnection, getCredential, getDefaultBranch, getDefaultBranchId, getDefaultBranchName, getEndpoint, getProjectInfo, getProjectRetentionDuration, getRunnerInfo, getSchemaDiff, getTargetNames, grantLakebasePermission, grantUcCatalogPermission, inferTierTopology, initWorkflowState, installHooks, installPlaywright, isAllSchemas, isLongRunningTierBranch, isLtsJavaVersion, isPrereleaseBootVersion, isRunning, isTier, isTtlTooLongError, kitWarmWarning, listAppDeployments, listBranches, listSchemaMigrations, mergeFeature, mergePaired, minLakebaseTtl, mintCredential, normalizeHost, normalizeTierName, parseHostFromAuthDescribe, parseLakebaseTtl, parseTargetsYaml, patchWorkflowsForRunnerType, preparePr, projectPath, propagateCredentials, protectedTierNamesFromEnv, pushFailureHint, queryBranchSchema, queryBranchTables, readEnvVar, readTargets, readWorkflowState, recoverOrphans, release, removeRunner, resolveBranchId, resolveBranchPath, resolveCurrentUser, resolveDatabricksHost, resolveEndpointHost, resolveFeatureStartPoint, resolveJavaHome, resolveLatestBootVersion, resolveLatestLtsJavaVersion, resolveMigrationLanguage, resolveMigrationLayout, resolveParentBranch, resolveProfileForHost, resolveProfileForHostSync, resolveProtectedTierNames, rollbackDeploy, rollbackSchemaMigration, runDoctor, runInfraSuite, runPlaywrightInstall, runnerDir, runnerName, sanitizeFeatureSlug, scaffoldAll, scaffoldStaticAll, schemaMigrationStatus, schemaObjectName, selectProfileForHost, setupRunner, stateFilePath, stopRunner, syncEnvToCurrentBranch, tierBranchNames, toolForLanguage, tryCreateCatalog, updateCommands, updateEnvConnection, updateWorkflows, uploadDirectory, validateApp, validateWorkflowState, verifyHooks, verifyProject, verifyWorkflows, waitForBranchAuthReady, waitForBranchReady, waitForCi, warmAndVerifyKit, withLakebaseRollback, workflowStateFileExists, writeEnvFile, writePlaywrightTemplates, writeTargets, writeWorkflowState };
