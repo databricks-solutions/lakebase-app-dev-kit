@@ -76,3 +76,83 @@ describe("scenario corpus: every test-list ac_id resolves to a shipped (tracked)
     });
   }
 });
+
+// Full replay-artifact completeness. The runtime hard-fail (drive.cli.ts
+// ReplayCorpusMissError) refuses to run an agent when a replay lane is told to
+// reproduce a turn the corpus lacks. This test is that same contract, moved
+// EARLIER: it fails hermetically in CI (naming the missing file) the moment a
+// shipped scenario is missing an artifact the driver would restore, so a drop
+// never survives to surface as a live-replay hard-fail. It keys off what the
+// corpus actually SHIPS (tracked story.json / feature dir), so it cannot
+// false-fail on an optional feature , if you ship a story, you must ship every
+// artifact its replay needs.
+describe("scenario corpus: every replay artifact the driver restores is tracked (no silent drop)", () => {
+  const roots = trackedScenarioRoots();
+
+  for (const root of roots) {
+    it(`${root}: design + reflect + build artifacts are all shipped`, () => {
+      const files = tracked(root);
+      const aroot = `${root}/recorded-artifacts`;
+      const broot = `${root}/recorded-build`;
+      const has = (p: string) => files.has(p);
+      const hasUnder = (prefix: string) => [...files].some((f) => f.startsWith(prefix));
+
+      // scenario.json drives feature-level replay knobs (uiTrack -> design-guide;
+      // buildReplay -> recorded-build turns). Absent knobs take the replay defaults.
+      let manifest: { uiTrack?: boolean; features?: Array<{ id?: string; buildReplay?: boolean }> } = {};
+      try {
+        manifest = JSON.parse(readFileSync(join(REPO_ROOT, root, "scenario.json"), "utf8"));
+      } catch {
+        /* keep defaults */
+      }
+      const buildReplayFor = (feature: string): boolean =>
+        manifest.features?.find((f) => f.id === feature)?.buildReplay !== false;
+
+      // Enumerate the SHIPPED stories from tracked story.json, grouped by feature.
+      const storyByFeature = new Map<string, Set<string>>();
+      for (const f of files) {
+        const m = f.match(new RegExp(`^${aroot}/features/([^/]+)/stories/([^/]+)/story\\.json$`));
+        if (!m) continue;
+        const [, feature, story] = m;
+        (storyByFeature.get(feature) ?? storyByFeature.set(feature, new Set()).get(feature)!).add(story);
+      }
+
+      const missing: string[] = [];
+      const need = (p: string) => {
+        if (!has(p)) missing.push(p);
+      };
+      const needAny = (prefix: string, label: string) => {
+        if (!hasUnder(prefix)) missing.push(`${label} (>=1 file under ${prefix})`);
+      };
+
+      // A uiTrack scenario replays the UX designer turn from design/design-guide.json.
+      if (manifest.uiTrack) need(`${aroot}/design/design-guide.json`);
+
+      for (const [feature, stories] of storyByFeature) {
+        // Feature-level design turns: Spec Author breakdown (feature-spec.json),
+        // Architect (architecture.json), Test Strategist (test-list.json).
+        need(`${aroot}/features/${feature}/feature-spec.json`);
+        need(`${aroot}/features/${feature}/architecture.json`);
+        need(`${aroot}/features/${feature}/test-list.json`);
+        for (const story of stories) {
+          const sdir = `${aroot}/features/${feature}/stories/${story}`;
+          // Per-story: the Spec Author acs (>=1) and the reflect gate verdict.
+          needAny(`${sdir}/acs/`, `${feature}/${story} acs`);
+          need(`${sdir}/reflect-verdict.json`);
+          // Build lane (unless buildReplay:false): the recorded per-turn code tree.
+          if (buildReplayFor(feature)) {
+            needAny(`${broot}/features/${feature}/stories/${story}/turns/`, `${feature}/${story} recorded-build turns`);
+          }
+        }
+      }
+
+      expect(storyByFeature.size, `no shipped stories found under ${aroot} (is the corpus tracked?)`).toBeGreaterThan(0);
+      expect(
+        missing,
+        `shipped scenario '${root}' is missing replay artifact(s) the driver restores. A live replay would ` +
+          `hard-fail (ReplayCorpusMissError) on these. Check .gitignore is not dropping them, then git add:\n` +
+          missing.map((m) => `  ${m}`).join("\n"),
+      ).toEqual([]);
+    });
+  }
+});
