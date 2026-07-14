@@ -78,7 +78,7 @@ describe("replayBuildTurn (per-turn build replay)", () => {
     expect(existsSync(join(proj, "app", "main.py"))).toBe(true);
   });
 
-  it("returns false past the last recorded turn (falls back to the live agent)", () => {
+  it("returns false past the last recorded turn (a corpus miss; the driver hard-fails, never runs a live agent)", () => {
     expect(replayBuildTurn({ replayBuildDir: corpus, projectDir: proj, sftddDir: tdd, featureId: F, story: S, turnIndex: 3 })).toBe(false);
   });
 

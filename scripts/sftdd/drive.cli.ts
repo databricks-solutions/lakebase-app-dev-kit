@@ -185,6 +185,20 @@ class ClaudeTurnError extends Error {
   }
 }
 
+/** A replay lane (LAKEBASE_SFTDD_REPLAY_DIR / _REPLAY_BUILD_DIR) was told to
+ *  reproduce a turn the corpus has no artifact for. A replay is a RECORDING: it
+ *  must never fall through to a live agent (that would let an agent "take over"
+ *  a run meant to be deterministic, and silently mask a broken/incomplete
+ *  corpus). So a miss is a hard, loud failure that names the missing artifact.
+ *  Almost always the corpus is missing a file (e.g. a `.gitignore` glob dropped
+ *  it) , put the artifact in the right place, do not run the model. */
+class ReplayCorpusMissError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReplayCorpusMissError";
+  }
+}
+
 function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | undefined> {
   return new Promise((resolve, reject) => {
     // Capture BOTH stdout (the stream-json events) and stderr (claude's own
@@ -299,7 +313,10 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // cycle-record CLIs that stamp RED/GREEN against the overlaid code), so
         // every Navigator<->Driver event is reproduced , only the artifact
         // delivery is mocked. The Kth Navigator/Driver turn maps to the Kth
-        // recorded turn dir. A turn the corpus lacks falls through to the real agent.
+        // recorded turn dir. A replay is a RECORDING: a corpus miss is a HARD
+        // FAILURE (ReplayCorpusMissError), never a fall-through to a live agent ,
+        // an agent taking over would defeat the deterministic reproduction and
+        // silently mask an incomplete corpus.
         const replayBuildDir = sftddEnv("REPLAY_BUILD_DIR");
         const story = cmd.replay?.story;
         if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
@@ -312,7 +329,20 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           // skips reflect turns, so RED maps to the first real recorded build turn).
           if (cmd.replay?.buildMode === "reflect") {
             const rd = sftddEnv("REPLAY_DIR");
-            if (rd) restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
+            // The verdict lives in the DESIGN corpus. When it is present (REPLAY_DIR
+            // set), it MUST restore; a miss is a corpus defect, not a reason to run
+            // the Navigator live. (When REPLAY_DIR is unset the design lane is not
+            // being replayed, so there is no recorded verdict to restore here.)
+            if (rd) {
+              const restored = restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
+              if (!restored) {
+                throw new ReplayCorpusMissError(
+                  `[drive] REPLAY CORPUS MISS: reflect verdict for ${story} is not in the corpus ` +
+                    `(expected features/${cfg.featureId}/stories/${story}/reflect-verdict.json under ${rd}). ` +
+                    `Replay will NOT run the Navigator live , put the recorded verdict in the corpus (check .gitignore is not dropping it).`,
+                );
+              }
+            }
             process.stderr.write(`[drive] replayed reflect (navigator ${story}) from corpus , verdict only (no code, not counted)\n`);
             return;
           }
@@ -332,16 +362,22 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
             );
             return;
           }
-          process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent\n`);
+          throw new ReplayCorpusMissError(
+            `[drive] REPLAY CORPUS MISS: build turn ${turnIndex} for ${story} (${cmd.role}) has no recorded turn dir under ` +
+              `${replayBuildDir} (features/${cfg.featureId}/stories/${story}/turns). The live orchestrator dispatched more ` +
+              `build turns than the corpus recorded, or the corpus is incomplete. Replay will NOT run the agent live , ` +
+              `re-record or fix the corpus so it covers every dispatched turn.`,
+          );
         }
-        // Fast-forward replay: when LAKEBASE_SFTDD_REPLAY_DIR is set, a design-lane
         // Fast-forward replay: when LAKEBASE_SFTDD_REPLAY_DIR is set, a design-lane
         // role's turn copies its recorded output from the corpus instead of
         // spawning the model. The orchestrator still VISITS the turn (logs +
         // transitions + runs its deterministic effects); only the LLM generation
         // is replaced. Navigator/Driver are never replayed (not design roles),
-        // so the real TDD begins at the Navigator handoff. A turn the corpus
-        // lacks (e.g. an un-recorded story) falls through to the real agent.
+        // so the real TDD begins at the Navigator handoff. A replay is a RECORDING:
+        // if the deterministic pipeline dispatched a replayable design turn, the
+        // corpus MUST have its artifact , a miss is a HARD FAILURE, never a
+        // fall-through to a live agent (the .gitignore corpus drop this guards).
         const replayDir = sftddEnv("REPLAY_DIR");
         if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
           const replayed = replayDesignTurn({
@@ -356,7 +392,12 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
             );
             return;
           }
-          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent\n`);
+          const where = `${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""}`;
+          throw new ReplayCorpusMissError(
+            `[drive] REPLAY CORPUS MISS: no recorded artifact for design turn '${where}' under ${replayDir} ` +
+              `(features/${cfg.featureId}/...). The deterministic pipeline dispatched this turn but the corpus lacks its ` +
+              `output. Replay will NOT run the agent live , put the recorded artifact in the corpus (check .gitignore is not dropping it).`,
+          );
         }
         // stream-json (requires --verbose with --print) lets us capture the turn's
         // token usage from the result event while teeing readable text to the console.
@@ -1094,6 +1135,13 @@ async function main(): Promise<number> {
       }
       process.stderr.write(`[drive] ${err.message}\n        recorded under ${path.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.\n`);
       return 3;
+    }
+    // A replay corpus miss: the recording is incomplete for a turn the pipeline
+    // dispatched. Not an escalation (no live workflow to resume) , it is a corpus/
+    // config defect. Fail loud with the missing-artifact guidance; no agent ran.
+    if (err instanceof ReplayCorpusMissError) {
+      process.stderr.write(`${err.message}\n`);
+      return 2;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
