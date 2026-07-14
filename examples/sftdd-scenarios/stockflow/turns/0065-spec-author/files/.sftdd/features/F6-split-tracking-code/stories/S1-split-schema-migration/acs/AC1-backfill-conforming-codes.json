@@ -1,0 +1,8 @@
+{
+  "id": "AC1-backfill-conforming-codes",
+  "given": "existing stock rows whose inventory_code parses by delimiter into a location, batch and serial segment (for example \"A12-B7-S001\")",
+  "when": "the split migration runs against those rows",
+  "then": "each such row gains batch_number equal to the batch segment and serial_number equal to the serial segment taken from the existing code",
+  "status": "draft",
+  "layer": "Infra"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "AC2-nonconforming-left-null",
+  "given": "existing stock rows whose inventory_code lacks a batch or serial segment (for example \"X-1\" or a bare \"c\")",
+  "when": "the split migration runs against those rows",
+  "then": "each such row has batch_number and serial_number left NULL rather than guessed or dropped",
+  "status": "draft",
+  "layer": "Infra",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts conforming codes produce populated batch/serial values; this AC adds the distinct outcome that codes without those segments are recorded as NULL, which can be broken (by guessing a value) without breaking AC1's parse of conforming codes."
+  }
+}

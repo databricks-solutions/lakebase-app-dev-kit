@@ -1,0 +1,13 @@
+{
+  "id": "AC2-file-new-stock-confirmed",
+  "given": "the record-stock form with a SKU and physical location that have no stock record yet",
+  "when": "the operator enters a quantity and a combined inventory_code and files the record",
+  "then": "the stock is recorded for that (sku, location) with the entered quantity and inventory_code, and a save confirmation is shown",
+  "status": "passing",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 only asserts the empty form is displayed; this AC adds the observable outcome that a submitted new record is persisted and confirmed."
+  },
+  "layer": "E2E",
+  "architectural_notes": "E2E: the full write path, SPA form -> JSON boundary (app/routes/) -> service (app/services/) -> repository (app/repositories/) -> stock_records on the paired branch, then a save confirmation echoed client-side. The service owns the create-or-update rule and sets the immutable created_at/actor (R1); the repository is the ONLY layer that touches the ORM/session; the boundary never imports the DB session. Realizes durable persistence of a new (sku, location) record with the entered quantity and inventory_code (PI2 NOT NULL, PI3 quantity >= 0). Verified as a real-branch integration test (R4), never mocked."
+}

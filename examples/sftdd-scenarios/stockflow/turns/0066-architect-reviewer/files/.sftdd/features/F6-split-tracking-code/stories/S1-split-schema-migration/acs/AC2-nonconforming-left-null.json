@@ -1,0 +1,13 @@
+{
+  "id": "AC2-nonconforming-left-null",
+  "given": "existing stock rows whose inventory_code lacks a batch or serial segment (for example \"X-1\" or a bare \"c\")",
+  "when": "the split migration runs against those rows",
+  "then": "each such row has batch_number and serial_number left NULL rather than guessed or dropped",
+  "status": "draft",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a schema-shape contract realized by declaring batch_number and serial_number as NULLABLE columns (deliberate absence of NOT NULL). Because the columns permit NULL, the Alembic backfill records nonconforming codes as NULL rather than rejecting the row or guessing a value; no CHECK or NOT NULL constraint is added on these two columns. Owner module: the split Alembic revision (column definitions + backfill). Verified by a real-branch test seeding short/nonconforming codes (X-1, bare c) and asserting both columns are left NULL on those rows.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 asserts conforming codes produce populated batch/serial values; this AC adds the distinct outcome that codes without those segments are recorded as NULL, which can be broken (by guessing a value) without breaking AC1's parse of conforming codes."
+  }
+}

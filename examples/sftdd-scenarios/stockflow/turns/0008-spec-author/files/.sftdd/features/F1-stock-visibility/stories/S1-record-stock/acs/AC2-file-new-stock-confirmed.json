@@ -1,0 +1,12 @@
+{
+  "id": "AC2-file-new-stock-confirmed",
+  "given": "the record-stock form with a SKU and physical location that have no stock record yet",
+  "when": "the operator enters a quantity and a combined inventory_code and files the record",
+  "then": "the stock is recorded for that (sku, location) with the entered quantity and inventory_code, and a save confirmation is shown",
+  "status": "draft",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC1 only asserts the empty form is displayed; this AC adds the observable outcome that a submitted new record is persisted and confirmed."
+  },
+  "layer": "E2E"
+}
