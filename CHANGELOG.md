@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.20] - 2026-07-15
+
+### Fixed
+
+- **`lakebase-sftdd-approve-gate` is now the one human door for the per-story spec
+  gate too (FEIP-8008).** At a per-story spec gate the drive printed a generic hint
+  (`lakebase-sftdd-approve-gate --feature <id> [--gate <name>]`), but that records
+  the FEATURE-level `gates.json` gate, not the PER-STORY gate the design lane blocks
+  on (managed by `pipeline.json`, approved by `lakebase-sftdd-pipeline approve-gate
+  --story`). Following it recorded the wrong gate, exited 0, and the drive never
+  advanced. `lakebase-sftdd-approve-gate` now accepts `--feature <id> --story <s>`
+  and routes the per-story gate through a shared helper (`approveStoryGateFromDisk`)
+  that `lakebase-sftdd-pipeline approve-gate` also uses, so both write identical
+  state. The drive's `GATE` message now prints the EXACT command per gate kind:
+  per-story spec → `--feature --story`, plan → `--sprint`, deploy/promote →
+  `--feature --gate <name>`, PO acceptance → `lakebase-sftdd-pipeline accept`.
+
+- **Scaffolded React client vitest collects its own `tests/` component-test layout
+  (FEIP-8009).** `templates/project/client/vite.config.ts` set `test.include` to
+  `["src/**/*.test.{ts,tsx}"]` only, yet the scaffold ships `client/tests/pages/`
+  (where the design lane routes client component tests) as the Vitest home. Any
+  client component test placed there was silently uncollected, so a client RED test
+  could not run and the build escalated with a blocking `scaffold-defect` ("no
+  runner for the layer"). `include` is now `["src/**/*.test.{ts,tsx}",
+  "tests/**/*.test.{ts,tsx}"]` with `exclude` = `[...configDefaults.exclude,
+  "tests/e2e/**"]`, so component tests under `tests/` are collected out of the box
+  while Playwright's `tests/e2e/` stays Playwright's.
+
+- **The Driver agent's own log lines are now visible in the default agent-log view
+  (FEIP-8010).** The Driver role doc told it to emit its narration at `--level
+  debug`, while the Navigator emits `reasoning` at `info` and the standard log view
+  (and the drive's own tail) read `--min-level info`, so the Driver's self-narration
+  was filtered out and the Driver appeared to log nothing. The Driver role doc now
+  emits `reasoning` at `info` once per GREEN/REFACTOR turn, at parity with the
+  Navigator.
+
 ## [0.3.0-beta.19] - 2026-07-15
 
 ### Fixed

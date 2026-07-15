@@ -10636,6 +10636,24 @@ function makeOnAction(opts) {
     }
   };
 }
+function approveHint(gate, ctx = {}) {
+  const you = "<you>";
+  const f = ctx.featureId ?? "<feature-id>";
+  switch (gate.kind) {
+    case "approve-plan-gate":
+      return `lakebase-sftdd-approve-gate --sprint ${ctx.sprint ?? "<sprint>"} --approver ${you}`;
+    case "approve-gate":
+      return `lakebase-sftdd-approve-gate --feature ${f} --story ${gate.story} --approver ${you}`;
+    case "approve-deploy-gate":
+      return `lakebase-sftdd-approve-gate --feature ${f} --gate deploy --approver ${you}`;
+    case "approve-promote-gate":
+      return `lakebase-sftdd-approve-gate --feature ${f} --gate promote --approver ${you}`;
+    case "accept":
+      return `lakebase-sftdd-pipeline accept --feature ${f} --story ${gate.story} --approver ${you}`;
+    default:
+      return `lakebase-sftdd-approve-gate --feature ${f} --approver ${you}`;
+  }
+}
 
 // scripts/sftdd/drive.cli.ts
 var MAX_PROMPT_TOO_LONG_RETRIES = 2;
@@ -11203,10 +11221,13 @@ function pendingInputOf(r) {
 function stepResultOf(r) {
   return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
 }
-function reportGate(gate) {
+function reportGate(gate, ctx = {}) {
   const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
-    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} Record your decision with lakebase-sftdd-approve-gate --approver <you> (--sprint <s> for the plan gate, else --feature <id> [--gate <name>]), then re-run to continue.
+    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace}
+        Record your decision with:
+          ${approveHint(gate, ctx)}
+        then re-run to continue.
 `
   );
 }
@@ -11281,7 +11302,7 @@ async function runSprintMode(args) {
     try {
       const planning = await effects.drivePlanning();
       if (planning.pendingGate) {
-        reportGate(planning.pendingGate);
+        reportGate(planning.pendingGate, { sprint });
         return 0;
       }
       if (planning.pendingInput) {
@@ -11314,7 +11335,7 @@ async function runSprintMode(args) {
     if (result.pendingGate) {
       if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
 `);
-      reportGate(result.pendingGate);
+      reportGate(result.pendingGate, { sprint, featureId: result.pendingFeature });
       return 0;
     }
     if (result.pendingInput) {
@@ -11456,7 +11477,7 @@ ${help()}`);
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
 `);
     } else if (pendingGate) {
-      reportGate(pendingGate);
+      reportGate(pendingGate, { featureId: cfg.featureId });
     } else if (pendingInput) {
       reportInput(pendingInput);
       return 2;

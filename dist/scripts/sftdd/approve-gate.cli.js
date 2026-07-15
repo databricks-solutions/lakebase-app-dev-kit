@@ -6721,8 +6721,10 @@ var featureProposalsMd = (tdd) => join2(planningDir(tdd), "feature-proposals.md"
 var featureDir = (tdd, featureId) => join2(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var architectureJson = (tdd, f) => join2(featureResolved(tdd, f), "architecture.json");
+var pipelineJson = (tdd, f) => join2(featureResolved(tdd, f), "pipeline.json");
 var featureNfrsMd = (tdd, f) => join2(featureResolved(tdd, f), "nfrs.md");
 var storiesDir = (tdd, f) => join2(featureResolved(tdd, f), "stories");
+var storyDir = (tdd, f, s) => join2(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
   const root = storiesDir(tdd, f);
   if (!fs.existsSync(root)) return void 0;
@@ -6731,6 +6733,8 @@ function findStoryDir(tdd, f, s) {
   const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
   return matches.length === 1 ? join2(root, matches[0]) : void 0;
 }
+var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var acsDir = (tdd, f, s) => join2(storyResolved(tdd, f, s), "acs");
 var sprintDir = (tdd, sprint) => join2(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join2(sprintDir(tdd, sprint), "gates.json");
 function findFeatureDir(tdd, featureId) {
@@ -7696,8 +7700,8 @@ import { join as join9 } from "path";
 init_esm_shims();
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync6, existsSync as existsSync7, mkdirSync as mkdirSync4, readdirSync as readdirSync4, statSync as statSync2 } from "fs";
 import { join as join8, dirname as dirname2 } from "path";
-function acIdsInStoryDir(storyDir) {
-  const dir = join8(storyDir, "acs");
+function acIdsInStoryDir(storyDir2) {
+  const dir = join8(storyDir2, "acs");
   if (!existsSync7(dir)) return [];
   const out = [];
   for (const f of readdirSync4(dir)) {
@@ -7712,8 +7716,8 @@ function acIdsInStoryDir(storyDir) {
   return out.sort();
 }
 function acsForStory(tddDir, featureId, storyId) {
-  const storyDir = findStoryDir(tddDir, featureId, storyId);
-  return storyDir ? acIdsInStoryDir(storyDir) : [];
+  const storyDir2 = findStoryDir(tddDir, featureId, storyId);
+  return storyDir2 ? acIdsInStoryDir(storyDir2) : [];
 }
 
 // scripts/sftdd/architecture-conventions.ts
@@ -7783,12 +7787,12 @@ function acsConformanceReason(fdir) {
   if (!existsSync9(stories)) return null;
   const problems = [];
   for (const s of readdirSync5(stories)) {
-    const acsDir = join9(stories, s, "acs");
-    if (!existsSync9(acsDir)) continue;
+    const acsDir2 = join9(stories, s, "acs");
+    if (!existsSync9(acsDir2)) continue;
     const acs = [];
-    for (const f of readdirSync5(acsDir)) {
+    for (const f of readdirSync5(acsDir2)) {
       if (!f.endsWith(".json")) continue;
-      const p = join9(acsDir, f);
+      const p = join9(acsDir2, f);
       let content;
       try {
         content = readFileSync10(p, "utf8");
@@ -8101,6 +8105,93 @@ function drainGatesAsHumanProxy(args) {
   return { approved, skipped, finalState: state };
 }
 
+// scripts/sftdd/story-pipeline.ts
+init_esm_shims();
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync7, readdirSync as readdirSync7, statSync as statSync4 } from "fs";
+import { dirname as dirname4, join as join11 } from "path";
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync11(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync12(p, "utf8"));
+}
+function writePipeline(sftddDir, pipeline) {
+  const p = pipelinePath(sftddDir, pipeline.feature_id);
+  mkdirSync7(dirname4(p), { recursive: true });
+  writeFileSync9(p, JSON.stringify(pipeline, null, 2) + "\n");
+}
+function setStoryStatus(pipeline, storyId, status) {
+  const existing = pipeline.stories[storyId];
+  pipeline.stories[storyId] = { ...existing, status };
+  return pipeline;
+}
+function enqueueReady(pipeline, storyId) {
+  setStoryStatus(pipeline, storyId, "ready");
+  if (!pipeline.build_queue.includes(storyId)) pipeline.build_queue.push(storyId);
+  return pipeline;
+}
+function storyHasAcceptanceCriteria(sftddDir, featureId, storyId) {
+  const acsDir2 = acsDir(sftddDir, featureId, storyId);
+  if (!existsSync11(acsDir2)) return false;
+  return readdirSync7(acsDir2).some((f) => f.endsWith(".json"));
+}
+function findBatchedDraftStories(sftddDir, featureId, pipeline, gatingStoryId) {
+  const storiesDir2 = storiesDir(sftddDir, featureId);
+  if (!existsSync11(storiesDir2)) return [];
+  const offenders = [];
+  for (const storyId of readdirSync7(storiesDir2)) {
+    if (storyId === gatingStoryId) continue;
+    if (!storyHasAcceptanceCriteria(sftddDir, featureId, storyId)) continue;
+    const status = pipeline.stories[storyId]?.status;
+    if (status === void 0 || status === "designing") offenders.push(storyId);
+  }
+  return offenders.sort();
+}
+function approveStoryGate(pipeline, storyId, opts) {
+  const story = pipeline.stories[storyId];
+  if (!story) throw new Error(`approveStoryGate: story ${storyId} is not in the pipeline`);
+  const gate = story.gate ?? { status: "open", history: [] };
+  gate.status = "approved";
+  gate.approver = opts.approver;
+  gate.approved_at = opts.at;
+  if (opts.spec_hash !== void 0) gate.spec_hash = opts.spec_hash;
+  gate.history.push({
+    action: "approved",
+    at: opts.at,
+    approver: opts.approver,
+    ...opts.spec_hash !== void 0 ? { spec_hash: opts.spec_hash } : {}
+  });
+  story.gate = gate;
+  enqueueReady(pipeline, storyId);
+  return pipeline;
+}
+function batchedDraftMessage(story, batched) {
+  return `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, but ${story} is the story being gated.
+The design lane drafts ONE story's acceptance criteria at a time (draft -> surface -> approve), then moves to the next story. Drafting every story's ACs in one pass defeats the streaming pipeline.
+Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author once per story, and retry.`;
+}
+function approveStoryGateFromDisk(sftddDir, feature, story, opts) {
+  const pipeline = readPipeline(sftddDir, feature);
+  const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
+  if (batched.length > 0) return { ok: false, batched };
+  try {
+    approveStoryGate(pipeline, story, {
+      approver: opts.approver,
+      at: opts.at ?? (/* @__PURE__ */ new Date()).toISOString(),
+      spec_hash: opts.specHash
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  writePipeline(sftddDir, pipeline);
+  return { ok: true, queue: pipeline.build_queue };
+}
+
 // scripts/sftdd/approve-gate.cli.ts
 function parse(argv) {
   const out = { projectDir: process.cwd(), json: false };
@@ -8108,6 +8199,7 @@ function parse(argv) {
     const a = argv[i];
     if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
     else if (a === "--sprint" && i + 1 < argv.length) out.sprint = argv[++i];
+    else if (a === "--story" && i + 1 < argv.length) out.story = argv[++i];
     else if (a === "--gate" && i + 1 < argv.length) out.gate = argv[++i];
     else if (a === "--approver" && i + 1 < argv.length) out.approver = argv[++i];
     else if (a === "--promote-ref" && i + 1 < argv.length) out.promoteRef = argv[++i];
@@ -8125,12 +8217,14 @@ approver's; this tool records ATTRIBUTION + the artifact hashes. Use the Human
 Proxy (lakebase-sftdd-human-proxy) instead ONLY for headless / smoke runs.
 
 Usage:
-  lakebase-sftdd-approve-gate --sprint <name> --approver <you>
+  lakebase-sftdd-approve-gate --sprint <name> --approver <you>              # plan gate
+  lakebase-sftdd-approve-gate --feature <id> --story <s> --approver <you>   # per-story spec gate
   lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <name>] [--promote-ref <str>]
                              [--project-dir <p>] [--tdd-dir <d>] [--json]
 
 --approver is REQUIRED (name the deciding human; there is no default identity).
-Exit 0 = approved (or already approved); 2 = usage error / nothing to approve.
+Exit 0 = approved (or already approved); 2 = usage error / nothing to approve;
+3 = per-story draft invariant violated.
 `;
 function runApproveGateCli(argv) {
   const p = parse(argv);
@@ -8152,7 +8246,40 @@ decision to a named human. (For headless/smoke runs use lakebase-sftdd-human-pro
 `);
     return 2;
   }
+  if (p.story && !p.feature) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: --story requires --feature <id> (a per-story spec gate is feature-scoped).
+`);
+    return 2;
+  }
+  if (p.story && p.sprint) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: --story is a per-story feature gate; not valid with --sprint (the plan gate has no story).
+`);
+    return 2;
+  }
   const sftddDir = p.tddDir ?? resolveSftddDir(p.projectDir);
+  if (p.story) {
+    const r = approveStoryGateFromDisk(sftddDir, p.feature, p.story, { approver: p.approver });
+    if (p.json) {
+      process.stdout.write(`${JSON.stringify(r)}
+`);
+      if (!r.ok) return r.batched ? 3 : 2;
+      return 0;
+    }
+    if (!r.ok) {
+      if (r.batched) {
+        process.stderr.write(batchedDraftMessage(p.story, r.batched) + "\n");
+        return 3;
+      }
+      process.stderr.write(`approve-gate: ${r.error}
+`);
+      return 2;
+    }
+    process.stdout.write(
+      `approve-gate: ${p.feature}/${p.story} , per-story spec gate approved by ${p.approver} (ready + queued: ${(r.queue ?? []).join(", ") || "none"})
+`
+    );
+    return 0;
+  }
   if (p.sprint) {
     const res = approveSprintPlanGate({ sprint: p.sprint, approver: p.approver, hitlApproved: true, sftddDir });
     if (p.json) process.stdout.write(`${JSON.stringify(res)}

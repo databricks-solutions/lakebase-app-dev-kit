@@ -178,6 +178,27 @@ function approveStoryGate(pipeline, storyId, opts) {
   enqueueReady(pipeline, storyId);
   return pipeline;
 }
+function batchedDraftMessage(story, batched) {
+  return `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, but ${story} is the story being gated.
+The design lane drafts ONE story's acceptance criteria at a time (draft -> surface -> approve), then moves to the next story. Drafting every story's ACs in one pass defeats the streaming pipeline.
+Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author once per story, and retry.`;
+}
+function approveStoryGateFromDisk(sftddDir, feature, story, opts) {
+  const pipeline = readPipeline(sftddDir, feature);
+  const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
+  if (batched.length > 0) return { ok: false, batched };
+  try {
+    approveStoryGate(pipeline, story, {
+      approver: opts.approver,
+      at: opts.at ?? (/* @__PURE__ */ new Date()).toISOString(),
+      spec_hash: opts.specHash
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  writePipeline(sftddDir, pipeline);
+  return { ok: true, queue: pipeline.build_queue };
+}
 function withdrawStoryGate(pipeline, storyId, opts) {
   const story = pipeline.stories[storyId];
   if (!story || !story.gate) {
@@ -321,12 +342,7 @@ Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|en
 function rejectBatchedDraft(sftddDir, feature, pipeline, story) {
   const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length === 0) return null;
-  process.stderr.write(
-    `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, but ${story} is the story being gated.
-The design lane drafts ONE story's acceptance criteria at a time (draft -> surface -> approve), then moves to the next story. Drafting every story's ACs in one pass defeats the streaming pipeline.
-Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author once per story, and retry.
-`
-  );
+  process.stderr.write(batchedDraftMessage(story, batched) + "\n");
   return 3;
 }
 function main() {
@@ -386,13 +402,22 @@ function main() {
     case "approve-gate": {
       if (!args.story) return usage("approve-gate needs --story");
       if (!args.approver) return usage("approve-gate needs --approver");
-      const batched = rejectBatchedDraft(sftddDir, feature, pipeline, args.story);
-      if (batched !== null) return batched;
-      const at = args.at ?? (/* @__PURE__ */ new Date()).toISOString();
-      approveStoryGate(pipeline, args.story, { approver: args.approver, at, spec_hash: args.specHash });
-      writePipeline(sftddDir, pipeline);
+      const r = approveStoryGateFromDisk(sftddDir, feature, args.story, {
+        approver: args.approver,
+        at: args.at,
+        specHash: args.specHash
+      });
+      if (!r.ok) {
+        if (r.batched) {
+          process.stderr.write(batchedDraftMessage(args.story, r.batched) + "\n");
+          return 3;
+        }
+        process.stderr.write(`approve-gate: ${r.error}
+`);
+        return 2;
+      }
       process.stdout.write(
-        `approved gate for ${args.story} (by ${args.approver}); ready + queued (queue: ${pipeline.build_queue.join(", ")})
+        `approved gate for ${args.story} (by ${args.approver}); ready + queued (queue: ${(r.queue ?? []).join(", ")})
 `
       );
       return 0;
