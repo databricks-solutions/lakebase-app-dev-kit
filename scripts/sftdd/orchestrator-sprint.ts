@@ -88,6 +88,12 @@ export function deriveSprintPlanningState(
  *  later claim hits `already-claimed-other` on the still-open feature). */
 export interface DriveStepResult {
   pendingGate?: WorkflowAction;
+  /** Paused awaiting HUMAN INPUT the machine cannot synthesize , the Product
+   *  Owner's feature-request(s) at `author-requests`. Distinct from `pendingGate`
+   *  (which is an APPROVAL of already-produced work): here NOTHING has been
+   *  produced yet, so the step did not finish and the sprint must stop. In proxy
+   *  mode the Human Proxy supplies the input, so this is never set. */
+  pendingInput?: WorkflowAction;
   /** A blocking problem was raised to the HIL (deploy-verify failed, blocking
    *  smell, protocol violation). The feature is NOT done; halt the sprint. */
   escalated?: boolean;
@@ -125,6 +131,9 @@ export interface RunSprintResult {
   features: string[];
   /** The HITL gate the run halted at (interactive mode), awaiting the human. */
   pendingGate?: WorkflowAction;
+  /** The run halted awaiting HUMAN INPUT (the PO's feature-request(s) at
+   *  `author-requests`) , nothing was produced yet, so the sprint did not run. */
+  pendingInput?: WorkflowAction;
   /** Set when the run halted because a step RAISED TO HIL (a blocking failure,
    *  not a clean interactive pause). The caller exits non-zero. */
   escalated?: boolean;
@@ -146,6 +155,10 @@ export async function runSprint(effects: SprintEffects): Promise<RunSprintResult
   const planning = await effects.drivePlanning();
   if (planning.escalated) return { features: [], escalated: true, escalation: planning.escalation };
   if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
+  // Paused for the PO to author feature-request(s): planning produced no backlog,
+  // so DO NOT fall through to readBacklog + the (empty) feature loop and report a
+  // complete sprint. Halt with pendingInput; the human authors the requests + re-runs.
+  if (planning.pendingInput) return { features: [], pendingInput: planning.pendingInput };
 
   // Planning authored the feature-requests on the LOCAL entry tier. Push them to
   // origin BEFORE any feature is claimed, because a feature branch forks from
@@ -169,6 +182,9 @@ export async function runSprint(effects: SprintEffects): Promise<RunSprintResult
     }
     if (driven.pendingGate) {
       return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+    }
+    if (driven.pendingInput) {
+      return { features, pendingInput: driven.pendingInput, pendingFeature: featureId };
     }
   }
   return { features };

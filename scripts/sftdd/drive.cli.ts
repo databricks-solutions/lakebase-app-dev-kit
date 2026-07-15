@@ -767,13 +767,22 @@ function pendingGateOf(r: RunDriverResult): WorkflowAction | undefined {
   return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : undefined;
 }
 
+/** The HUMAN-INPUT stop a bounded run halted at (interactive mode) , the PO's
+ *  `author-requests`, or undefined. gatedStopWhen halts here so the human supplies
+ *  the feature-request(s); it is NOT an approval gate, so pendingGateOf misses it.
+ *  Surfacing it separately is why interactive `--plan-only` no longer misreports a
+ *  PO pause (nothing produced) as "plan gate approved" (Finding 5). */
+function pendingInputOf(r: RunDriverResult): WorkflowAction | undefined {
+  return r.stoppedAtBound && r.stoppedAt && isHumanInputAction(r.stoppedAt) ? r.stoppedAt : undefined;
+}
+
 /** Map a driver result to the sprint's DriveStepResult. Carries BOTH halt kinds:
  *  a clean interactive pause (pendingGate) AND a raise-to-HIL (escalated), so the
  *  sprint orchestrator stops on either instead of counting an escalated feature
  *  "complete" and advancing (which then trips the next claim's already-claimed
  *  guard). Mirrors the single-feature drive's escalated/pendingGate handling. */
 function stepResultOf(r: RunDriverResult): DriveStepResult {
-  return { pendingGate: pendingGateOf(r), escalated: r.escalated, escalation: r.escalation };
+  return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
 }
 
 function reportGate(gate: WorkflowAction): void {
@@ -783,6 +792,17 @@ function reportGate(gate: WorkflowAction): void {
   process.stderr.write(
     `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} ` +
       `Approve + record the approver, then re-run to continue.\n`,
+  );
+}
+
+/** Report an interactive pause awaiting HUMAN INPUT (the PO's feature-request(s)
+ *  at author-requests). Unlike a gate (work done, awaiting approval), NOTHING has
+ *  been produced , so this must never read as "approved/complete". */
+function reportInput(action: WorkflowAction, sprint?: string): void {
+  const where = sprint ? ` for sprint ${sprint}` : "";
+  process.stderr.write(
+    `[drive] PAUSED , awaiting human input: the Product Owner must author feature-request(s)${where} ` +
+      `(${describeAction(action)}), then re-run. Nothing was approved or produced yet.\n`,
   );
 }
 
@@ -871,8 +891,20 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
   if (args.planOnly) {
     try {
       const planning = await effects.drivePlanning();
-      if (planning.pendingGate) reportGate(planning.pendingGate);
-      else process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)\n`);
+      // A HITL gate pause = work produced, awaiting approval (resumable, exit 0).
+      if (planning.pendingGate) {
+        reportGate(planning.pendingGate);
+        return 0;
+      }
+      // A human-input pause = the PO must author requests FIRST; nothing was
+      // produced and the plan gate was NOT reached. Report it honestly and exit
+      // non-zero (the postcondition , an approved plan , is not met), so a caller
+      // never advances on an empty backlog thinking the plan was approved.
+      if (planning.pendingInput) {
+        reportInput(planning.pendingInput, sprint);
+        return 2;
+      }
+      process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)\n`);
       return 0;
     } catch (err) {
       process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
@@ -901,9 +933,17 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     if (result.pendingGate) {
       if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}\n`);
       reportGate(result.pendingGate);
-    } else {
-      process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)\n`);
+      return 0;
     }
+    if (result.pendingInput) {
+      // Planning paused for the PO to author feature-request(s): the sprint did
+      // NOT run (empty backlog). Report + exit non-zero so nothing treats it as a
+      // completed sprint.
+      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}\n`);
+      reportInput(result.pendingInput, sprint);
+      return 2;
+    }
+    process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)\n`);
     return 0;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
@@ -1059,6 +1099,7 @@ async function main(): Promise<number> {
       confirmContinue,
     });
     const pendingGate = pendingGateOf(result);
+    const pendingInput = pendingInputOf(result);
     if (result.escalated) {
       // Surface + halt: a blocking problem was raised to the HIL. The escalation
       // is recorded under ${path.basename(cfg.sftddDir)}/escalations/; exit non-zero so the run fails loud
@@ -1074,6 +1115,11 @@ async function main(): Promise<number> {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
       reportGate(pendingGate);
+    } else if (pendingInput) {
+      // A human-input pause (the PO's author-requests) is NOT a completed bound:
+      // nothing was produced. Report honestly + exit non-zero (never "complete").
+      reportInput(pendingInput);
+      return 2;
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)\n`);
     } else {

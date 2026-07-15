@@ -205,6 +205,27 @@ describe("runSprint (pure over SprintEffects)", () => {
     expect(calls).toEqual(["plan"]);
   });
 
+  it("interactive: halts (pendingInput) when planning pauses for the PO's author-requests", async () => {
+    // Regression (Finding 5): the interactive stop after `estimate` is the PO's
+    // author-requests (a human-INPUT action, not an approval gate). Before the fix
+    // runSprint saw pendingGate undefined, fell through to readBacklog + the (empty)
+    // feature loop, and reported a COMPLETE sprint despite producing nothing. It
+    // must halt with pendingInput and touch neither push, backlog, nor features.
+    const calls: string[] = [];
+    const authorRequests = { kind: "invoke-role" as const, role: "product-owner" as const, mode: "author-requests" as const };
+    const result = await runSprint({
+      async drivePlanning() { calls.push("plan"); return { pendingInput: authorRequests }; },
+      async commitAndPushRequests() { calls.push("push-requests"); },
+      async readBacklog() { calls.push("backlog"); return ["F1-a"]; },
+      async claimFeature() { calls.push("claim"); },
+      async driveFeature() { calls.push("drive"); return {}; },
+    });
+    expect(result.pendingInput).toEqual(authorRequests);
+    expect(result.pendingGate).toBeUndefined();
+    expect(result.features).toEqual([]);
+    expect(calls).toEqual(["plan"]);
+  });
+
   it("halts (escalated) on the feature that RAISED TO HIL; never advances to the next", async () => {
     // Regression: a deploy-verify failure raises to HIL. driveFeature must report
     // escalated so the sprint STOPS on that feature. Before the fix it returned
