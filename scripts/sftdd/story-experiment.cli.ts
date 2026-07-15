@@ -20,27 +20,20 @@
 //
 // Exit: 0 ok; 2 bad args; 1 op failure.
 
-import { cutExperiment, deleteExperiment } from "./experiment";
+import { cutExperiment } from "./experiment";
 import { resolveSftddDir } from "./sftdd-paths.js";
-import {
-  mergeExperimentIntoFeature,
-  discardExperimentBranch,
-  type ExperimentBranchOps,
-} from "./experiment-lifecycle";
+import { discardExperimentBranch } from "./experiment-lifecycle";
+import { realExperimentOps, mergeAndAcceptStory } from "./experiment-merge.js";
 import {
   readPipeline,
   writePipeline,
   cutStoryExperiment,
-  acceptStory,
   discardStory,
   reviseStory,
 } from "./story-pipeline";
-import { mergePaired } from "../lakebase/paired-branch";
-import { commitExperimentCode, resetStoryBuildState } from "./cycle-record";
-import { applySchemaMigrations } from "../lakebase/schema-migrate";
+import { resetStoryBuildState } from "./cycle-record";
 import { parseExperimentArgs, validateExperimentArgs } from "./experiment-args";
 import { emitAgentLogEvent } from "./agent-log";
-import { join } from "path";
 
 /** Best-effort experiment-lifecycle event to the central log. The discard/revise
  *  verbs have no deterministic driver action (they are HIL acceptance decisions
@@ -64,31 +57,6 @@ function usage(msg: string): number {
   );
   return 2;
 }
-
-// Real substrate wiring. The order + fail-closed logic is in
-// experiment-lifecycle.ts; these are the side-effectful leaves.
-const realOps: ExperimentBranchOps = {
-  gitMerge: async ({ from, into, projectDir }) => {
-    // Accept must carry the experiment's FULL work onto the feature branch. A
-    // supersession/repair turn can edit code outside any green/refactor commit
-    // point (it runs reactively, not as a cycle), leaving an uncommitted change
-    // on the experiment branch. mergePaired then checks out `into` and git
-    // ABORTS on the dirty tree ("local changes would be overwritten"). So commit
-    // any pending experiment CODE first, using the build's own code-only policy
-    // (runtime .sftdd/.tdd/.lakebase state stays uncommitted so it does not
-    // diverge from the feature branch). No-op when the tree is already clean.
-    await commitExperimentCode(projectDir, `accept: commit pending experiment work for ${from}`);
-    // PAIRED merge via the substrate: checkout `into`, re-sync .env to its
-    // Lakebase branch, then git-merge `from`. No raw git in the orchestration.
-    await mergePaired({ cwd: projectDir, from, into });
-  },
-  runMigrations: async ({ instance, branch, projectDir }) => {
-    await applySchemaMigrations({ instance, branch, projectDir });
-  },
-  teardown: async ({ sftddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
-    await deleteExperiment({ instance, sftddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
-  },
-};
 
 async function main(): Promise<number> {
   const args = parseExperimentArgs(process.argv.slice(2));
@@ -129,29 +97,31 @@ async function main(): Promise<number> {
       return 0;
     }
     case "merge": {
-      await mergeExperimentIntoFeature(
+      // The full accept effect (merge + record), via the shared core so this
+      // explicit-args recovery door and `lakebase-sftdd-pipeline accept` (the
+      // resolved-args normal door) behave identically (FEIP-8013).
+      await mergeAndAcceptStory(
         {
           sftddDir,
+          projectDir,
           featureId: feature,
           storyId: story,
           experimentSlug: slug,
           featureBranch: args.featureBranch as string,
           experimentBranch: args.experimentBranch as string,
           instance,
-          projectDir,
+          approver: args.approver as string,
+          at,
         },
-        realOps,
+        realExperimentOps,
       );
-      const p = readPipeline(sftddDir, feature);
-      acceptStory(p, story, { approver: args.approver as string, at });
-      writePipeline(sftddDir, p);
       process.stdout.write(`merged ${slug} into ${args.featureBranch}; story ${story} accepted + done\n`);
       return 0;
     }
     case "discard": {
       await discardExperimentBranch(
         { sftddDir, projectDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
-        realOps,
+        realExperimentOps,
       );
       const p = readPipeline(sftddDir, feature);
       const approver = args.approver as string;

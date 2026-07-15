@@ -477,13 +477,23 @@ describe("commandsForAction: state transitions -> kit CLIs", () => {
     expect(task({ kind: "invoke-role", role: "driver", story: "S1" }, { uiTrack: true })).toMatch(/design guide/i);
   });
 
-  it("accept merges the experiment AND records the pipeline acceptance (two commands)", () => {
-    const cmds = commandsForAction({ kind: "accept", story: "S1" }, cfg());
-    expect(cmds).toHaveLength(2);
-    expect((cmds[0] as { bin: string; args: string[] }).bin).toBe("lakebase-sftdd-experiment");
-    expect((cmds[0] as { args: string[] }).args[0]).toBe("merge");
-    expect((cmds[1] as { bin: string; args: string[] }).bin).toBe("lakebase-sftdd-pipeline");
-    expect((cmds[1] as { args: string[] }).args[0]).toBe("accept");
+  it("accept is ONE command: pipeline accept, which performs the merge AND records acceptance (FEIP-8013)", () => {
+    // Was two commands (experiment merge + pipeline accept), which double-recorded
+    // acceptStory and let an interactive human run only the state half + strand the
+    // code. `pipeline accept` now does the git-merge itself (resolving slug/branches
+    // from the experiment record); the orchestrator supplies instance + project-dir.
+    const cmds = commandsForAction({ kind: "accept", story: "S1" }, cfg({ instance: "inst-x" }));
+    expect(cmds).toHaveLength(1);
+    const c = cmds[0] as { bin: string; args: string[] };
+    expect(c.bin).toBe("lakebase-sftdd-pipeline");
+    expect(c.args[0]).toBe("accept");
+    expect(c.args).toContain("--story");
+    expect(c.args).toContain("--approver");
+    expect(c.args).toContain("--instance");
+    expect(c.args).toContain("inst-x");
+    expect(c.args).toContain("--project-dir");
+    // No separate experiment-merge command any more.
+    expect(cmds.some((x) => (x as { bin?: string }).bin === "lakebase-sftdd-experiment")).toBe(false);
   });
 
   it("deploy is run by the orchestration (deterministic lakebase-sftdd-deploy --gate), not the LLM", () => {
@@ -565,8 +575,10 @@ describe("buildDriveEffects", () => {
     const { runner, calls } = recordingRunner();
     const eff = buildDriveEffects(cfg({ runner, sftddDir }));
     await eff.perform({ kind: "accept", story: "S1" });
-    expect(calls).toHaveLength(2);
-    expect((calls[0] as { args: string[] }).args[0]).toBe("merge");
+    // accept is now ONE command: pipeline accept (which performs the merge + records).
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as { bin: string }).bin).toBe("lakebase-sftdd-pipeline");
+    expect((calls[0] as { args: string[] }).args[0]).toBe("accept");
   });
 
   it("readState rebuilds a DriveState from pipeline.json + workflow-state", async () => {

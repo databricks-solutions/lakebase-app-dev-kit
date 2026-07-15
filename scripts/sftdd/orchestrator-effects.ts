@@ -1251,38 +1251,31 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
     }
 
     case "accept":
-      // Merge the experiment into the feature branch (git + migrations), then
-      // record the PO acceptance. collapseMigrationHeads runs at the later
-      // feature->tier merge, not per-story. The experiment branch + slug match
-      // what `cut` created (same experimentBranchName), and the feature branch is
-      // the merge target. All `merge`-required args are emitted (validated).
+      // PO acceptance: `pipeline accept` PERFORMS the experiment git-merge into the
+      // feature branch (+ migrations + teardown) AND records acceptance, one
+      // idempotent command that lands the code (FEIP-8013). It resolves the merge
+      // args (slug/branches) from the persisted experiment record; the orchestrator
+      // supplies the instance + project-dir. This was two commands (`experiment
+      // merge` + `pipeline accept`), which double-recorded acceptStory and, worse,
+      // let an interactive human run only the state half and strand the code.
+      // collapseMigrationHeads still runs at the later feature->tier merge.
       return [
         {
           kind: "cli",
-          bin: EXPERIMENT_BIN,
+          bin: PIPELINE_BIN,
           args: [
-            "merge",
-            "--feature",
-            f,
+            "accept",
             "--story",
             action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--experiment-branch",
-            experimentBranchName(action.story),
-            "--feature-branch",
-            cfg.featureBranch ?? "",
             "--approver",
             approver,
             "--instance",
             cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir,
+            ...tdd,
           ],
         },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] },
       ];
 
     case "complete":

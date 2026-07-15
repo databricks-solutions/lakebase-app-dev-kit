@@ -47,7 +47,6 @@ import {
   findBatchedDraftStories,
   cutStoryExperiment,
   awaitAcceptance,
-  acceptStory,
   discardStory,
   reviseStory,
   STORY_STATUSES,
@@ -56,6 +55,7 @@ import {
 } from "./story-pipeline";
 import { join } from "path";
 import { resolveSftddDir } from "./sftdd-paths.js";
+import { resolveAcceptMergeArgs, mergeAndAcceptStory, realExperimentOps } from "./experiment-merge.js";
 
 interface Args {
   cmd?: string;
@@ -73,6 +73,8 @@ interface Args {
   lakebaseUid?: string;
   n?: string;
   sftddDir?: string;
+  projectDir?: string;
+  instance?: string;
   json?: boolean;
 }
 
@@ -95,6 +97,8 @@ function parse(argv: string[]): Args {
     else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
     else if (a === "--n") out.n = argv[++i];
     else if (a === "--tdd-dir") out.sftddDir = argv[++i];
+    else if (a === "--project-dir") out.projectDir = argv[++i];
+    else if (a === "--instance") out.instance = argv[++i];
     else if (a === "--json") out.json = true;
   }
   return out;
@@ -136,7 +140,7 @@ function rejectBatchedDraft(
   return 3;
 }
 
-function main(): number {
+async function main(): Promise<number> {
   const args = parse(process.argv.slice(2));
   const sftddDir = args.sftddDir ?? resolveSftddDir();
   if (!args.cmd) return usage("missing subcommand");
@@ -275,9 +279,39 @@ function main(): number {
     case "accept": {
       if (!args.story) return usage("accept needs --story");
       if (!args.approver) return usage("accept needs --approver");
-      acceptStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString() });
-      writePipeline(sftddDir, pipeline);
-      process.stdout.write(`accepted ${args.story}; experiment merged, story done, lane freed\n`);
+      // FEIP-8013: accept PERFORMS the experiment git-merge (+ migrations +
+      // teardown), then records the acceptance. Before, this recorded state only
+      // and the merge lived in the drive's accept effect; interactive, the human
+      // ran only this and the merge never fired, stranding the story's code on the
+      // experiment branch. The merge args (slug/branches) come from the persisted
+      // experiment record; the instance from --instance else scm-state. Idempotent
+      // (skips the merge if already merged), so a re-run is safe.
+      const projectDir = args.projectDir ?? process.cwd();
+      const resolved = resolveAcceptMergeArgs(sftddDir, projectDir, feature, args.story, {
+        ...(args.instance ? { instance: args.instance } : {}),
+      });
+      if (!resolved.ok) {
+        process.stderr.write(`accept: ${resolved.error}\n`);
+        return 2;
+      }
+      await mergeAndAcceptStory(
+        {
+          sftddDir,
+          projectDir,
+          featureId: feature,
+          storyId: args.story,
+          experimentSlug: resolved.experimentSlug,
+          experimentBranch: resolved.experimentBranch,
+          featureBranch: resolved.featureBranch,
+          instance: resolved.instance,
+          approver: args.approver,
+          at: args.at,
+        },
+        realExperimentOps,
+      );
+      process.stdout.write(
+        `accepted ${args.story}: experiment ${resolved.experimentSlug} merged into ${resolved.featureBranch}; story done, lane freed\n`,
+      );
       return 0;
     }
     case "discard": {
@@ -303,4 +337,9 @@ function main(): number {
   }
 }
 
-process.exit(main());
+main()
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  });

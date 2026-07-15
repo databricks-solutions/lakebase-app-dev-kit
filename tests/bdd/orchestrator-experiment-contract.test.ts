@@ -48,19 +48,21 @@ describe("driver -> experiment CLI contract (the shipped path, not the module)",
     expect(validateExperimentArgs(parseExperimentArgs(args))).toBeNull();
   });
 
-  it("accept emits a `merge` command the experiment CLI accepts", () => {
-    const args = experimentArgs({ kind: "accept", story: "S1-create-bug-form" }, cfg());
-    expect(args[0]).toBe("merge");
-    expect(validateExperimentArgs(parseExperimentArgs(args))).toBeNull();
-  });
-
-  it("cut and merge agree on the experiment branch + slug (same story)", () => {
-    const cut = parseExperimentArgs(experimentArgs({ kind: "cut-experiment", story: "S1-create-bug-form" }, cfg()));
-    const merge = parseExperimentArgs(experimentArgs({ kind: "accept", story: "S1-create-bug-form" }, cfg()));
-    expect(cut.slug).toBe(merge.slug);
-    // The branch cut is the branch merged back.
-    expect(cut.branch).toBe(merge.experimentBranch);
-    expect(cut.parent).toBe(merge.featureBranch);
+  it("accept emits pipeline accept (which performs the merge), NOT an experiment CLI command (FEIP-8013)", () => {
+    // The driver no longer emits `experiment merge` for accept: `pipeline accept`
+    // performs the merge itself, resolving the experiment branch + slug from the
+    // record `cut` persisted (so cut and merge agree BY CONSTRUCTION, verified in
+    // sftdd-experiment-merge.test.ts). The explicit-args `experiment merge` CLI
+    // stays as the recovery door, just not emitted here.
+    const cmds = commandsForAction({ kind: "accept", story: "S1-create-bug-form" }, cfg());
+    expect(cmds.some((x) => (x as { bin?: string }).bin === EXPERIMENT_BIN)).toBe(false);
+    const accept = cmds.find(
+      (x): x is { kind: "cli"; bin: string; args: string[] } => x.kind === "cli" && x.bin === "lakebase-sftdd-pipeline",
+    );
+    expect(accept?.args[0]).toBe("accept");
+    // The instance + project-dir the merge needs are supplied by the orchestrator.
+    expect(accept?.args).toContain("--instance");
+    expect(accept?.args).toContain("--project-dir");
   });
 
   it("reproduces the live failure: without the resolved feature branch + instance the command is REJECTED", () => {
