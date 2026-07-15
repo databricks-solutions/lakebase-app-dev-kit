@@ -55,6 +55,7 @@ export default defineConfig({
     "scripts/sftdd/drive-log-report.cli": "scripts/sftdd/drive-log-report.cli.ts",
     "scripts/sftdd/contract-clean.cli": "scripts/sftdd/contract-clean.cli.ts",
     "scripts/sftdd/sync-backlog.cli": "scripts/sftdd/sync-backlog.cli.ts",
+    "scripts/sftdd/approve-gate.cli": "scripts/sftdd/approve-gate.cli.ts",
     "scripts/sftdd/project-canon-notes.cli": "scripts/sftdd/project-canon-notes.cli.ts",
     "scripts/sftdd/migration-app-clean.cli": "scripts/sftdd/migration-app-clean.cli.ts",
     "scripts/sftdd/imports-clean.cli": "scripts/sftdd/imports-clean.cli.ts",

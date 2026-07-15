@@ -12,6 +12,10 @@ var __esm = (fn, res) => function __init() {
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -28,6 +32,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/tsup/assets/cjs_shims.js
 var init_cjs_shims = __esm({
@@ -3008,7 +3013,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3035,7 +3040,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3254,8 +3259,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path7) {
-      let input = path7;
+    function removeDotSegments(path) {
+      let input = path;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3513,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path7, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
+        const [path, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path && path !== "/" ? path : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3665,59 +3670,59 @@ var require_fast_uri = __commonJS({
         normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
-        parse(serialize(uri, options), options);
+        parse2(serialize(uri, options), options);
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
-      const resolved = resolveComponent(parse(baseURI, schemelessOptions), parse(relativeURI, schemelessOptions), schemelessOptions, true);
+      const resolved = resolveComponent(parse2(baseURI, schemelessOptions), parse2(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative4, options, skipNormalization) {
+    function resolveComponent(base, relative, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
-        base = parse(serialize(base, options), options);
-        relative4 = parse(serialize(relative4, options), options);
+        base = parse2(serialize(base, options), options);
+        relative = parse2(serialize(relative, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative4.scheme) {
-        target.scheme = relative4.scheme;
-        target.userinfo = relative4.userinfo;
-        target.host = relative4.host;
-        target.port = relative4.port;
-        target.path = removeDotSegments(relative4.path || "");
-        target.query = relative4.query;
+      if (!options.tolerant && relative.scheme) {
+        target.scheme = relative.scheme;
+        target.userinfo = relative.userinfo;
+        target.host = relative.host;
+        target.port = relative.port;
+        target.path = removeDotSegments(relative.path || "");
+        target.query = relative.query;
       } else {
-        if (relative4.userinfo !== void 0 || relative4.host !== void 0 || relative4.port !== void 0) {
-          target.userinfo = relative4.userinfo;
-          target.host = relative4.host;
-          target.port = relative4.port;
-          target.path = removeDotSegments(relative4.path || "");
-          target.query = relative4.query;
+        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
+          target.userinfo = relative.userinfo;
+          target.host = relative.host;
+          target.port = relative.port;
+          target.path = removeDotSegments(relative.path || "");
+          target.query = relative.query;
         } else {
-          if (!relative4.path) {
+          if (!relative.path) {
             target.path = base.path;
-            if (relative4.query !== void 0) {
-              target.query = relative4.query;
+            if (relative.query !== void 0) {
+              target.query = relative.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative4.path[0] === "/") {
-              target.path = removeDotSegments(relative4.path);
+            if (relative.path[0] === "/") {
+              target.path = removeDotSegments(relative.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative4.path;
+                target.path = "/" + relative.path;
               } else if (!base.path) {
-                target.path = relative4.path;
+                target.path = relative.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative4.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative4.query;
+            target.query = relative.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3725,7 +3730,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative4.fragment;
+      target.fragment = relative.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -3902,7 +3907,7 @@ var require_fast_uri = __commonJS({
       }
       return { parsed, malformedAuthorityOrPort };
     }
-    function parse(uri, opts) {
+    function parse2(uri, opts) {
       return parseWithStatus(uri, opts).parsed;
     }
     function normalizeString(uri, opts) {
@@ -3927,11 +3932,11 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve,
       resolveComponent,
       equal,
       serialize,
-      parse
+      parse: parse2
     };
     module2.exports = fastUri;
     module2.exports.default = fastUri;
@@ -6641,14 +6646,61 @@ var require_ajv = __commonJS({
   }
 });
 
-// scripts/sftdd/drive.cli.ts
+// scripts/sftdd/approve-gate.cli.ts
+var approve_gate_cli_exports = {};
+__export(approve_gate_cli_exports, {
+  runApproveGateCli: () => runApproveGateCli
+});
+module.exports = __toCommonJS(approve_gate_cli_exports);
 init_cjs_shims();
-var import_node_child_process6 = require("child_process");
 
-// scripts/sftdd/sftdd-env.ts
+// scripts/sftdd/sprint-gates.ts
 init_cjs_shims();
-function sftddEnv(suffix, env = process.env) {
-  return env[`LAKEBASE_SFTDD_${suffix}`] ?? env[`LAKEBASE_TDD_${suffix}`];
+var import_node_fs = require("fs");
+
+// scripts/sftdd/gate-hash.ts
+init_cjs_shims();
+var import_crypto = require("crypto");
+function normalizeForHash(content) {
+  let normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  normalized = normalized.split("\n").map((line) => line.replace(/[ \t]+$/, "")).join("\n");
+  normalized = normalized.replace(/\n{3,}/g, "\n\n");
+  return normalized;
+}
+function hashArtifact(content) {
+  return (0, import_crypto.createHash)("sha256").update(normalizeForHash(content), "utf8").digest("hex");
+}
+
+// scripts/sftdd/artifact-conformance.ts
+init_cjs_shims();
+var import_path2 = require("path");
+
+// scripts/sftdd/schema-loader.ts
+init_cjs_shims();
+var import_fs = require("fs");
+var import_path = require("path");
+var import_ajv = __toESM(require_ajv(), 1);
+var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+ajv.addFormat("date-time", true);
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
 }
 
 // scripts/sftdd/sftdd-paths.ts
@@ -6667,27 +6719,15 @@ function resolveSftddDir(projectDir = process.cwd()) {
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
 var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
-var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
-var experimentsRootDir = (tdd) => (0, import_node_path.join)(tdd, "experiments");
-var escalationsDir = (tdd) => (0, import_node_path.join)(tdd, "escalations");
-var escalationFile = (tdd, id) => (0, import_node_path.join)(escalationsDir(tdd), `${id}.json`);
-var acReviewJson = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac, "review.json");
-var storyReviewJson = (tdd, f, s) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, "review.json");
-var workflowStateJson = (tdd) => (0, import_node_path.join)(tdd, "workflow-state.json");
-var designGuideJson = (tdd) => (0, import_node_path.join)(tdd, "design", "design-guide.json");
+var nfrsMd = (tdd) => (0, import_node_path.join)(tdd, "nfrs.md");
 var architectureDir = (tdd) => (0, import_node_path.join)(tdd, "architecture");
 var architectureConventionsJson = (tdd) => (0, import_node_path.join)(architectureDir(tdd), "conventions.json");
-var architectureCanonJson = (tdd) => (0, import_node_path.join)(architectureDir(tdd), "canon.json");
 var featureProposalsMd = (tdd) => (0, import_node_path.join)(planningDir(tdd), "feature-proposals.md");
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
-var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
-var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
 var architectureJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "architecture.json");
-var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
-var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
+var featureNfrsMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "nfrs.md");
 var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
-var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
   const root = storiesDir(tdd, f);
   if (!fs.existsSync(root)) return void 0;
@@ -6696,18 +6736,8 @@ function findStoryDir(tdd, f, s) {
   const matches = fs.readdirSync(root).filter((d) => d === s || d.startsWith(`${s}-`));
   return matches.length === 1 ? (0, import_node_path.join)(root, matches[0]) : void 0;
 }
-var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
-var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
-var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
-var acJson = (tdd, f, s, ac) => (0, import_node_path.join)(acsDir(tdd, f, s), `${ac}.json`);
-var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
-var reflectVerdictJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "reflect-verdict.json");
-var handbackFile = (tdd, f, role, story) => (0, import_node_path.join)(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
-var cycleDir = (tdd, f, s, ac) => (0, import_node_path.join)(cyclesRootDir(tdd), f, s, ac);
 var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
-var backlogJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "backlog.json");
-var sprintRequestedJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "requested.json");
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -6721,2548 +6751,8 @@ function requireFeatureDir(tdd, featureId) {
   if (!dir) throw new Error(`feature ${featureId} not found (or ambiguous) under ${featuresDir(tdd)}`);
   return dir;
 }
-function storyAcIds(tdd, f, s) {
-  const ids = /* @__PURE__ */ new Set();
-  const sj = storyJson(tdd, f, s);
-  if (fs.existsSync(sj)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
-      if (Array.isArray(data.acs)) {
-        for (const a of data.acs) {
-          const id = typeof a === "string" ? a : a?.id;
-          if (typeof id === "string" && id.length > 0) ids.add(id);
-        }
-      }
-    } catch {
-    }
-  }
-  const dir = acsDir(tdd, f, s);
-  if (fs.existsSync(dir)) {
-    try {
-      for (const file of fs.readdirSync(dir)) {
-        const m = /^(.+)\.json$/.exec(file);
-        if (!m) continue;
-        const base = m[1];
-        try {
-          const obj = JSON.parse(fs.readFileSync((0, import_node_path.join)(dir, file), "utf8"));
-          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
-        } catch {
-        }
-      }
-    } catch {
-    }
-  }
-  return [...ids];
-}
-function readAcLayer(tdd, f, acId) {
-  const stories = storiesDir(tdd, f);
-  if (!fs.existsSync(stories)) return void 0;
-  for (const s of fs.readdirSync(stories)) {
-    const file = acJson(tdd, f, s, acId);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
-      if (ac.layer === "API" || ac.layer === "E2E" || ac.layer === "Infra") return ac.layer;
-    } catch {
-    }
-  }
-  return void 0;
-}
-function readAcArchitecturalNotes(tdd, f, acId) {
-  const stories = storiesDir(tdd, f);
-  if (!fs.existsSync(stories)) return void 0;
-  for (const s of fs.readdirSync(stories)) {
-    const file = acJson(tdd, f, s, acId);
-    if (!fs.existsSync(file)) continue;
-    try {
-      const ac = JSON.parse(fs.readFileSync(file, "utf8"));
-      if (typeof ac.architectural_notes === "string" && ac.architectural_notes.trim().length > 0) {
-        return ac.architectural_notes;
-      }
-    } catch {
-    }
-  }
-  return void 0;
-}
-var hasFeatureRequest = (tdd, f) => fs.existsSync(featureRequestMd(tdd, f));
-var TSHIRT_SIZES = /* @__PURE__ */ new Set(["XS", "S", "M", "L", "XL"]);
-var isTshirtSize = (x) => typeof x === "string" && TSHIRT_SIZES.has(x);
-var planningEstimatesJson = (tdd) => (0, import_node_path.join)(planningDir(tdd), "estimates.json");
-function readEstimates(tdd) {
-  const file = planningEstimatesJson(tdd);
-  if (!fs.existsSync(file)) return [];
-  try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (!Array.isArray(data.estimates)) return [];
-    return data.estimates.flatMap((e) => {
-      const id = e?.feature_id;
-      const size = e?.size;
-      if (typeof id !== "string" || !id || !isTshirtSize(size)) return [];
-      const rationale = e?.rationale;
-      return [{ feature_id: id, size, ...typeof rationale === "string" ? { rationale } : {} }];
-    });
-  } catch {
-    return [];
-  }
-}
-var hasEstimates = (tdd) => readEstimates(tdd).length > 0;
-var backlogFeatureIds = (b) => b.features.map((f) => f.id);
-function readBacklog(tdd, sprint) {
-  const file = backlogJson(tdd, sprint);
-  if (!fs.existsSync(file)) return { sprint, features: [] };
-  try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    const features = Array.isArray(data.features) ? data.features.flatMap((x) => {
-      if (typeof x === "string" && x.length > 0) return [{ id: x }];
-      const id = x?.id;
-      if (typeof id !== "string" || !id) return [];
-      const size = x?.size;
-      return [{ id, ...isTshirtSize(size) ? { size } : {} }];
-    }) : [];
-    return { sprint, features };
-  } catch {
-    return { sprint, features: [] };
-  }
-}
-function writeBacklog(tdd, backlog) {
-  fs.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
-  fs.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
-}
-function readRequested(tdd, sprint) {
-  const file = sprintRequestedJson(tdd, sprint);
-  if (!fs.existsSync(file)) return void 0;
-  try {
-    const p = JSON.parse(fs.readFileSync(file, "utf8"));
-    return Array.isArray(p) ? p.filter((x) => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-function syncBacklog(tdd, sprint) {
-  const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
-  const root = featuresDir(tdd);
-  const requested = readRequested(tdd, sprint);
-  const scope = requested ? new Set(requested) : void 0;
-  const committed = fs.existsSync(root) ? fs.readdirSync(root).filter((d) => {
-    try {
-      if (!fs.statSync((0, import_node_path.join)(root, d)).isDirectory()) return false;
-      if (!fs.existsSync((0, import_node_path.join)(root, d, "feature-request.md"))) return false;
-      return scope ? scope.has(d) : true;
-    } catch {
-      return false;
-    }
-  }).sort() : [];
-  const features = committed.map((id) => {
-    const size = sizeOf.get(id);
-    return { id, ...size ? { size } : {} };
-  });
-  const backlog = { sprint, features };
-  writeBacklog(tdd, backlog);
-  return backlog;
-}
-
-// scripts/sftdd/migrate-artifact-dir.ts
-init_cjs_shims();
-var import_node_child_process = require("child_process");
-var fs2 = __toESM(require("fs"), 1);
-var import_node_path2 = require("path");
-function isGitRepo(projectDir) {
-  return fs2.existsSync((0, import_node_path2.join)(projectDir, ".git"));
-}
-function rewriteGitignore(projectDir) {
-  const gi = (0, import_node_path2.join)(projectDir, ".gitignore");
-  if (!fs2.existsSync(gi)) return;
-  const before = fs2.readFileSync(gi, "utf8");
-  const after = before.replace(
-    new RegExp(`(^|\\s)${LEGACY_ARTIFACT_ROOT.replace(".", "\\.")}/`, "gm"),
-    `$1${ARTIFACT_ROOT}/`
-  );
-  if (after !== before) fs2.writeFileSync(gi, after);
-}
-function migrateLegacyArtifactDir(projectDir = process.cwd()) {
-  const next = (0, import_node_path2.join)(projectDir, ARTIFACT_ROOT);
-  const legacy = (0, import_node_path2.join)(projectDir, LEGACY_ARTIFACT_ROOT);
-  if (fs2.existsSync(next)) return { migrated: false, root: next };
-  if (!fs2.existsSync(legacy)) return { migrated: false, root: next };
-  if (isGitRepo(projectDir)) {
-    try {
-      (0, import_node_child_process.execFileSync)("git", ["mv", LEGACY_ARTIFACT_ROOT, ARTIFACT_ROOT], {
-        cwd: projectDir,
-        stdio: "ignore"
-      });
-      rewriteGitignore(projectDir);
-      return { migrated: true, root: next, via: "git" };
-    } catch {
-    }
-  }
-  fs2.renameSync(legacy, next);
-  rewriteGitignore(projectDir);
-  return { migrated: true, root: next, via: "fs" };
-}
-
-// scripts/sftdd/drive.cli.ts
-var import_node_crypto3 = require("crypto");
-var fs14 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
-var readline = __toESM(require("readline"), 1);
-
-// scripts/sftdd/replay-artifacts.ts
-init_cjs_shims();
-var import_fs = require("fs");
-var import_path = require("path");
-var REPLAYABLE_DESIGN_ROLES = /* @__PURE__ */ new Set([
-  "spec-author",
-  "architect-reviewer",
-  "test-strategist",
-  "ux-designer",
-  "product-owner"
-]);
-function cp(src, dst) {
-  if (!(0, import_fs.existsSync)(src)) return false;
-  (0, import_fs.mkdirSync)((0, import_path.dirname)(dst), { recursive: true });
-  (0, import_fs.copyFileSync)(src, dst);
-  return true;
-}
-function cpDir(srcDir, dstDir) {
-  if (!(0, import_fs.existsSync)(srcDir)) return false;
-  let copied = false;
-  (0, import_fs.mkdirSync)(dstDir, { recursive: true });
-  for (const name of (0, import_fs.readdirSync)(srcDir)) {
-    const s = (0, import_path.join)(srcDir, name);
-    if (!(0, import_fs.statSync)(s).isFile()) continue;
-    (0, import_fs.copyFileSync)(s, (0, import_path.join)(dstDir, name));
-    copied = true;
-  }
-  return copied;
-}
-function replayDesignTurn(args) {
-  const { turn, replayDir, sftddDir, featureId } = args;
-  const cf = (0, import_path.join)(featuresDir(replayDir), featureId);
-  const tf = (0, import_path.join)(featuresDir(sftddDir), featureId);
-  switch (turn.role) {
-    case "spec-author": {
-      if (turn.mode === "propose") {
-        return cp((0, import_path.join)(replayDir, "planning", "feature-proposals.md"), (0, import_path.join)(sftddDir, "planning", "feature-proposals.md"));
-      }
-      if (turn.mode === "breakdown") {
-        let ok = cp((0, import_path.join)(cf, "feature-spec.json"), (0, import_path.join)(tf, "feature-spec.json"));
-        cp((0, import_path.join)(cf, "feature-spec.md"), (0, import_path.join)(tf, "feature-spec.md"));
-        const storiesSrc = (0, import_path.join)(cf, "stories");
-        if ((0, import_fs.existsSync)(storiesSrc)) {
-          for (const s of (0, import_fs.readdirSync)(storiesSrc)) {
-            cp((0, import_path.join)(storiesSrc, s, "story.json"), (0, import_path.join)(tf, "stories", s, "story.json"));
-            cp((0, import_path.join)(storiesSrc, s, "story.md"), (0, import_path.join)(tf, "stories", s, "story.md"));
-          }
-        }
-        return ok;
-      }
-      if (turn.story) {
-        return cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"));
-      }
-      return false;
-    }
-    case "architect-reviewer": {
-      let ok = cp((0, import_path.join)(cf, "architecture.json"), (0, import_path.join)(tf, "architecture.json"));
-      cp((0, import_path.join)(cf, "architecture.md"), (0, import_path.join)(tf, "architecture.md"));
-      if (turn.story) {
-        const acs = cpDir((0, import_path.join)(cf, "stories", turn.story, "acs"), (0, import_path.join)(tf, "stories", turn.story, "acs"));
-        ok = ok || acs;
-      }
-      return ok;
-    }
-    case "test-strategist": {
-      let ok = cp((0, import_path.join)(cf, "test-list.json"), (0, import_path.join)(tf, "test-list.json"));
-      cp((0, import_path.join)(cf, "test-list.md"), (0, import_path.join)(tf, "test-list.md"));
-      const story = turn.story;
-      if (story) {
-        cp((0, import_path.join)(cf, "stories", story, "test-list-per-ac.json"), (0, import_path.join)(tf, "stories", story, "test-list-per-ac.json"));
-      }
-      return ok;
-    }
-    case "ux-designer": {
-      let ok = cp((0, import_path.join)(replayDir, "design", "design-guide.json"), (0, import_path.join)(sftddDir, "design", "design-guide.json"));
-      cp((0, import_path.join)(replayDir, "design", "design-guide.md"), (0, import_path.join)(sftddDir, "design", "design-guide.md"));
-      cp((0, import_path.join)(replayDir, "design", "ia.md"), (0, import_path.join)(sftddDir, "design", "ia.md"));
-      return ok;
-    }
-    default:
-      return false;
-  }
-}
-function restoreReflectVerdict(args) {
-  const { replayDir, sftddDir, featureId, story } = args;
-  return cp(
-    (0, import_path.join)(featuresDir(replayDir), featureId, "stories", story, "reflect-verdict.json"),
-    (0, import_path.join)(featuresDir(sftddDir), featureId, "stories", story, "reflect-verdict.json")
-  );
-}
-
-// scripts/sftdd/replay-build.ts
-init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
-var SCAFFOLD_OWNED = /* @__PURE__ */ new Set([
-  ".git",
-  ".sftdd",
-  ".tdd",
-  ".lakebase",
-  "scripts",
-  ".claude",
-  ".github",
-  "node_modules"
-]);
-var JUNK_DIRS = /* @__PURE__ */ new Set([
-  ".venv",
-  "venv",
-  "__pycache__",
-  ".pytest_cache",
-  ".mypy_cache",
-  ".ruff_cache",
-  ".git",
-  "node_modules"
-]);
-var JUNK_FILES = /* @__PURE__ */ new Set([".env", ".DS_Store", "Makefile", "deploy-targets.yaml"]);
-function codeTreeFilter(root) {
-  return (src) => {
-    const rel = src.slice(root.length).replace(/^[/\\]+/, "");
-    if (rel === "") return true;
-    const segs = rel.split(/[/\\]/);
-    if (SCAFFOLD_OWNED.has(segs[0])) return false;
-    if (segs.some((s) => JUNK_DIRS.has(s))) return false;
-    const base = segs[segs.length - 1];
-    return !(JUNK_FILES.has(base) || base.endsWith(".pyc"));
-  };
-}
-function storyTurnsDir(replayBuildDir, featureId, story) {
-  return (0, import_path2.join)(featuresDir(replayBuildDir), featureId, "stories", story, "turns");
-}
-function listBuildTurns(replayBuildDir, featureId, story) {
-  const dir = storyTurnsDir(replayBuildDir, featureId, story);
-  if (!(0, import_fs2.existsSync)(dir)) return [];
-  return (0, import_fs2.readdirSync)(dir).filter((n) => !n.startsWith(".")).sort();
-}
-function replayBuildTurn(args) {
-  const { replayBuildDir, projectDir, sftddDir, featureId, story, turnIndex } = args;
-  const turns = listBuildTurns(replayBuildDir, featureId, story).filter((n) => !/reflect/i.test(n));
-  if (turnIndex < 1 || turnIndex > turns.length) return false;
-  const turnDir = (0, import_path2.join)(storyTurnsDir(replayBuildDir, featureId, story), turns[turnIndex - 1]);
-  const codeSrc = (0, import_path2.join)(turnDir, "code");
-  if (!(0, import_fs2.existsSync)(codeSrc)) return false;
-  (0, import_fs2.cpSync)(codeSrc, projectDir, { recursive: true, force: true, filter: codeTreeFilter(codeSrc) });
-  const cyclesSrc = (0, import_path2.join)(turnDir, "tdd", "cycles");
-  if ((0, import_fs2.existsSync)(cyclesSrc)) {
-    (0, import_fs2.cpSync)(cyclesSrc, cyclesRootDir(sftddDir), {
-      recursive: true,
-      force: true,
-      filter: (src) => (0, import_fs2.statSync)(src).isDirectory() || src.endsWith("review-verdict.json")
-    });
-  }
-  return true;
-}
-
-// scripts/sftdd/record-build.ts
-init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
-function turnSlug(turn, role, ac, mode) {
-  const n = String(turn).padStart(3, "0");
-  return [n, role, mode, ac].filter(Boolean).join("-");
-}
-function recordBuildTurn(args) {
-  const { recordBuildDir, projectDir, sftddDir, featureId, story, turn, role, ac, mode } = args;
-  const turnDir = (0, import_path3.join)(
-    featuresDir(recordBuildDir),
-    featureId,
-    "stories",
-    story,
-    "turns",
-    turnSlug(turn, role, ac, mode)
-  );
-  (0, import_fs3.mkdirSync)(turnDir, { recursive: true });
-  (0, import_fs3.cpSync)(projectDir, (0, import_path3.join)(turnDir, "code"), {
-    recursive: true,
-    force: true,
-    filter: codeTreeFilter(projectDir)
-  });
-  const cyclesSrc = cyclesRootDir(sftddDir);
-  if ((0, import_fs3.existsSync)(cyclesSrc)) (0, import_fs3.cpSync)(cyclesSrc, (0, import_path3.join)(turnDir, "tdd", "cycles"), { recursive: true, force: true });
-  const expSrc = experimentsRootDir(sftddDir);
-  if ((0, import_fs3.existsSync)(expSrc)) (0, import_fs3.cpSync)(expSrc, (0, import_path3.join)(turnDir, "tdd", "experiments"), { recursive: true, force: true });
-  return turnDir;
-}
-
-// scripts/sftdd/turn-recorder.ts
-init_cjs_shims();
-var import_node_crypto = require("crypto");
-var import_node_fs = require("fs");
-var import_node_path3 = require("path");
-var NON_ARTIFACT_TDD = /* @__PURE__ */ new Set(["agent-log.jsonl"]);
-function labelForAction(action) {
-  const a = action;
-  const kind = String(a.kind ?? "turn");
-  if (kind === "invoke-role") {
-    const role = String(a.role ?? "role");
-    const mode = a.buildMode ?? a.mode;
-    return mode ? `${role}-${mode}` : role;
-  }
-  if (kind === "approve-gate" || kind === "approve-plan-gate" || kind === "approve-promote-gate") {
-    if (kind === "approve-plan-gate") return "gate-plan";
-    if (kind === "approve-promote-gate") return "gate-promote";
-    return "gate-spec";
-  }
-  if (kind === "approve-deploy-gate") return "gate-deploy";
-  if (kind === "surface-gate") return "gate-surface";
-  return kind;
-}
-function sha1(abs) {
-  return (0, import_node_crypto.createHash)("sha1").update((0, import_node_fs.readFileSync)(abs)).digest("hex");
-}
-function walk(dir, keep) {
-  if (!(0, import_node_fs.existsSync)(dir)) return [];
-  const out = [];
-  for (const entry of (0, import_node_fs.readdirSync)(dir)) {
-    const abs = (0, import_node_path3.join)(dir, entry);
-    if (keep && !keep(abs)) continue;
-    let st;
-    try {
-      st = (0, import_node_fs.statSync)(abs);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) out.push(...walk(abs, keep));
-    else if (st.isFile()) out.push(abs);
-  }
-  return out;
-}
-function scan(projectDir, sftddDir) {
-  const map = /* @__PURE__ */ new Map();
-  for (const abs of walk(sftddDir)) {
-    const rel = (0, import_node_path3.relative)(projectDir, abs);
-    if (NON_ARTIFACT_TDD.has((0, import_node_path3.relative)(sftddDir, abs))) continue;
-    map.set(rel, { abs, rel, underTdd: true, sha: sha1(abs) });
-  }
-  const keep = codeTreeFilter(projectDir);
-  for (const abs of walk(projectDir, keep)) {
-    const rel = (0, import_node_path3.relative)(projectDir, abs);
-    if (map.has(rel)) continue;
-    map.set(rel, { abs, rel, underTdd: false, sha: sha1(abs) });
-  }
-  return map;
-}
-function writeRecorderState(recordDir, cur) {
-  const files = {};
-  for (const [rel, f] of cur) files[rel] = f.sha;
-  (0, import_node_fs.mkdirSync)(recordDir, { recursive: true });
-  (0, import_node_fs.writeFileSync)((0, import_node_path3.join)(recordDir, ".recorder-state.json"), JSON.stringify({ files }, null, 2) + "\n");
-}
-function seedRecorderBaseline(args) {
-  if ((0, import_node_fs.existsSync)((0, import_node_path3.join)(args.recordDir, ".recorder-state.json"))) return false;
-  writeRecorderState(args.recordDir, scan(args.projectDir, args.sftddDir));
-  return true;
-}
-function readState(recordDir) {
-  const f = (0, import_node_path3.join)(recordDir, ".recorder-state.json");
-  if (!(0, import_node_fs.existsSync)(f)) return { files: {} };
-  try {
-    return JSON.parse((0, import_node_fs.readFileSync)(f, "utf8"));
-  } catch {
-    return { files: {} };
-  }
-}
-function readIndex(recordDir) {
-  const f = (0, import_node_path3.join)(recordDir, "turns", "index.json");
-  if (!(0, import_node_fs.existsSync)(f)) return [];
-  try {
-    const data = JSON.parse((0, import_node_fs.readFileSync)(f, "utf8"));
-    return Array.isArray(data.turns) ? data.turns : [];
-  } catch {
-    return [];
-  }
-}
-function pad(n) {
-  return String(n).padStart(4, "0");
-}
-function recordTurn(args) {
-  const { recordDir, projectDir, sftddDir, action, step } = args;
-  const a = action;
-  const prior = readState(recordDir);
-  const cur = scan(projectDir, sftddDir);
-  const produced = [];
-  for (const [rel, f] of cur) {
-    if (prior.files[rel] !== f.sha) produced.push(rel);
-  }
-  const deleted = [];
-  for (const rel of Object.keys(prior.files)) {
-    if (!cur.has(rel)) deleted.push(rel);
-  }
-  produced.sort();
-  deleted.sort();
-  const ordinal = readIndex(recordDir).length;
-  const label = labelForAction(action);
-  const dirName = `${pad(ordinal)}-${label}`;
-  const turnDir = (0, import_node_path3.join)(recordDir, "turns", dirName);
-  (0, import_node_fs.mkdirSync)((0, import_node_path3.join)(turnDir, "files"), { recursive: true });
-  const artifactsDir = (0, import_node_path3.join)(recordDir, "recorded-artifacts");
-  for (const rel of produced) {
-    const f = cur.get(rel);
-    const dst = (0, import_node_path3.join)(turnDir, "files", rel);
-    (0, import_node_fs.mkdirSync)((0, import_node_path3.dirname)(dst), { recursive: true });
-    (0, import_node_fs.cpSync)(f.abs, dst);
-    if (f.underTdd) {
-      const mirror = (0, import_node_path3.join)(artifactsDir, (0, import_node_path3.relative)(sftddDir, f.abs));
-      (0, import_node_fs.mkdirSync)((0, import_node_path3.dirname)(mirror), { recursive: true });
-      (0, import_node_fs.cpSync)(f.abs, mirror);
-    }
-  }
-  for (const rel of deleted) {
-    const abs = (0, import_node_path3.join)(projectDir, rel);
-    if (abs.startsWith(sftddDir)) {
-      const mirror = (0, import_node_path3.join)(artifactsDir, (0, import_node_path3.relative)(sftddDir, abs));
-      if ((0, import_node_fs.existsSync)(mirror)) (0, import_node_fs.rmSync)(mirror, { force: true });
-    }
-  }
-  const manifest = {
-    ordinal,
-    step,
-    label,
-    kind: String(a.kind ?? "turn"),
-    role: a.role,
-    mode: a.buildMode ?? a.mode,
-    story: a.story,
-    ac: a.ac,
-    action,
-    produced,
-    deleted
-  };
-  (0, import_node_fs.writeFileSync)((0, import_node_path3.join)(turnDir, "turn.json"), JSON.stringify(manifest, null, 2) + "\n");
-  const index = readIndex(recordDir);
-  const entry = {
-    ordinal,
-    step,
-    label,
-    kind: manifest.kind,
-    role: manifest.role,
-    mode: manifest.mode,
-    story: manifest.story,
-    ac: manifest.ac,
-    dir: dirName,
-    producedCount: produced.length,
-    deletedCount: deleted.length
-  };
-  index.push(entry);
-  (0, import_node_fs.mkdirSync)((0, import_node_path3.join)(recordDir, "turns"), { recursive: true });
-  (0, import_node_fs.writeFileSync)((0, import_node_path3.join)(recordDir, "turns", "index.json"), JSON.stringify({ turns: index }, null, 2) + "\n");
-  writeRecorderState(recordDir, cur);
-  return { ordinal, dir: dirName, produced, deleted };
-}
-
-// scripts/sftdd/orchestrator-run.ts
-init_cjs_shims();
-
-// scripts/sftdd/orchestrator-drive.ts
-init_cjs_shims();
-function uxDesignerPending(s) {
-  return !!s.uiTrack && s.breakdownDone && !s.designGuideReady;
-}
-function nextDesignAction(state) {
-  if (!state.breakdownDone) {
-    return { kind: "invoke-role", role: "spec-author", mode: "breakdown" };
-  }
-  if (uxDesignerPending(state)) {
-    return { kind: "invoke-role", role: "ux-designer" };
-  }
-  for (const story of state.storyOrder) {
-    const v = state.stories[story];
-    if (v?.gateApproved) continue;
-    const design = v?.design ?? {
-      hasAcs: false,
-      architectAnnotated: false,
-      architectProjectable: false,
-      testListReady: false,
-      reflectionPassed: false,
-      reflectionVerdictWritten: false
-    };
-    if (!design.hasAcs) return { kind: "invoke-role", role: "spec-author", story };
-    if (!design.architectAnnotated) {
-      if (design.architectProjectable) return { kind: "project-architect-notes", story };
-      return { kind: "invoke-role", role: "architect-reviewer", story };
-    }
-    if (!design.testListReady) return { kind: "invoke-role", role: "test-strategist", story };
-    if (!design.reflectionPassed) return { kind: "invoke-role", role: "navigator", story, buildMode: "reflect" };
-    if (!v?.gateSurfaced) return { kind: "surface-gate", story };
-    return { kind: "approve-gate", story };
-  }
-  return { kind: "design-complete" };
-}
-function nextBuildAction(story, b) {
-  if (!b.experimentCut) return { kind: "cut-experiment", story };
-  if ((b.loop ?? "story") === "story") {
-    if (b.reviewStoryPending) return { kind: "invoke-role", role: "navigator", story, buildMode: "review" };
-    if (b.refactorStoryPending) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor" };
-  } else {
-    if (b.reviewAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "review", ac: b.reviewAc };
-    if (b.refactorAc) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor", ac: b.refactorAc };
-  }
-  if (b.assessGreenAc) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess", ac: b.assessGreenAc };
-  if (b.repairRegressionAc) return { kind: "invoke-role", role: "driver", story, buildMode: "repair", ac: b.repairRegressionAc };
-  if (!b.testsWritten) return { kind: "invoke-role", role: "navigator", story };
-  if (!b.codeWritten) return { kind: "invoke-role", role: "driver", story };
-  if (!b.awaitingAcceptance) return { kind: "await-acceptance", story };
-  if (b.deployVerifyAssessEligible) return { kind: "invoke-role", role: "navigator", story, buildMode: "assess-deploy" };
-  if (b.deployVerifyRefactorPending) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor-deploy" };
-  if (!b.deployVerified) return { kind: "await-acceptance", story };
-  if (!b.accepted) return { kind: "accept", story };
-  return { kind: "complete", story };
-}
-function nextTransition(state) {
-  if (state.escalation) {
-    const e = state.escalation;
-    if (e.routable) {
-      return {
-        kind: "revise-route",
-        story: e.routable.story,
-        role: e.routable.owning_role,
-        gate: e.routable.gate,
-        reason: e.reason,
-        source: e.source
-      };
-    }
-    return { kind: "raise-to-hil", reason: e.reason, source: e.source, ...e.story_id ? { story: e.story_id } : {} };
-  }
-  if (state.phase === "planning") {
-    const p = state.planning ?? { proposed: false, estimated: false, requestsAuthored: false };
-    if (!p.proposed) return { kind: "invoke-role", role: "spec-author", mode: "propose" };
-    if (!p.skipSizing && !p.estimated) return { kind: "invoke-role", role: "architect-reviewer", mode: "estimate" };
-    if (!p.requestsAuthored) return { kind: "invoke-role", role: "product-owner", mode: "author-requests" };
-    if (!p.gateApproved) return { kind: "approve-plan-gate" };
-    return { kind: "planning-complete" };
-  }
-  if (state.phase === "deploy") {
-    const d = state.deploy ?? { deployed: false, gateApproved: false };
-    if (!d.deployed) return { kind: "deploy" };
-    if (!d.gateApproved) return { kind: "approve-deploy-gate" };
-    return { kind: "deploy-complete" };
-  }
-  if (state.phase === "promote") {
-    const pr = state.promote ?? { prReady: false, ciGreen: false, prApproved: false, merged: false };
-    if (!pr.prReady) return { kind: "prepare-pr" };
-    if (!pr.ciGreen) return { kind: "wait-ci" };
-    if (!pr.prApproved) return { kind: "approve-promote-gate" };
-    if (!pr.merged) return { kind: "merge" };
-    return { kind: "done" };
-  }
-  if (state.phase === "done") return { kind: "done" };
-  if (uxDesignerPending(state)) {
-    return { kind: "invoke-role", role: "ux-designer" };
-  }
-  if (state.buildActive) {
-    return nextBuildAction(state.buildActive, state.stories[state.buildActive].build);
-  }
-  for (const story of state.storyOrder) {
-    const v = state.stories[story];
-    if (v?.gateApproved && !v.build.accepted) return { kind: "dispatch", story };
-  }
-  const design = nextDesignAction(toDesignView(state));
-  if (design.kind === "design-complete") return { kind: "feature-complete" };
-  return design;
-}
-function toDesignView(state) {
-  return {
-    breakdownDone: state.breakdownDone,
-    storyOrder: state.storyOrder,
-    uiTrack: state.uiTrack,
-    designGuideReady: state.designGuideReady,
-    stories: Object.fromEntries(
-      Object.entries(state.stories).map(([id, v]) => [
-        id,
-        { gateApproved: v.gateApproved, gateSurfaced: v.gateSurfaced, design: v.design }
-      ])
-    )
-  };
-}
-function nextDesignOnlyTransition(state) {
-  return nextDesignAction(toDesignView(state));
-}
-function pauseBeforeMilestone(m) {
-  switch (m) {
-    case "navigator":
-      return (a) => a.kind === "invoke-role" && a.role === "navigator" && a.buildMode === void 0;
-    case "release-engineer":
-      return (a) => a.kind === "await-acceptance" || a.kind === "deploy";
-  }
-}
-function actionLane(action) {
-  switch (action.kind) {
-    case "invoke-role": {
-      if ("mode" in action) {
-        return action.mode === "breakdown" ? "design" : "planning";
-      }
-      return action.role === "navigator" || action.role === "driver" ? "build" : "design";
-    }
-    case "approve-plan-gate":
-    case "planning-complete":
-      return "planning";
-    case "project-architect-notes":
-    case "surface-gate":
-    case "approve-gate":
-    case "design-complete":
-      return "design";
-    case "dispatch":
-    case "cut-experiment":
-    case "await-acceptance":
-    case "accept":
-    case "complete":
-      return "build";
-    case "feature-complete":
-      return "coarse";
-    case "deploy":
-    case "approve-deploy-gate":
-      return "deploy";
-    case "deploy-complete":
-    case "prepare-pr":
-    case "wait-ci":
-    case "approve-promote-gate":
-    case "merge":
-      return "promote";
-    case "raise-to-hil":
-      return "done";
-    case "revise-route":
-      return "design";
-    case "done":
-      return "done";
-  }
-}
-function isHitlGateAction(action) {
-  return action.kind === "approve-gate" || action.kind === "approve-plan-gate" || action.kind === "approve-deploy-gate" || action.kind === "approve-promote-gate" || action.kind === "accept";
-}
-function isHumanInputAction(action) {
-  return action.kind === "invoke-role" && "mode" in action && action.mode === "author-requests";
-}
-
-// scripts/sftdd/orchestrator-expect.ts
-init_cjs_shims();
-var ProtocolViolationError = class extends Error {
-  constructor(handoff, detail) {
-    super(
-      `PROTOCOL VIOLATION: expected ${handoff.responder}${handoff.story ? ` (story ${handoff.story}${handoff.ac ? `/${handoff.ac}` : ""})` : ""} to return ${handoff.expected}, but ${detail}. Aborting workflow.`
-    );
-    this.handoff = handoff;
-    this.detail = detail;
-    this.name = "ProtocolViolationError";
-  }
-  handoff;
-  detail;
-};
-var UnexpectedCallbackError = class extends Error {
-  constructor(from, scope, expected) {
-    const where = scope.story ? ` (story ${scope.story}${scope.ac ? `/${scope.ac}` : ""})` : "";
-    super(
-      `PROTOCOL VIOLATION: unexpected callback from ${from}${where} , no outstanding handoff awaits it (awaiting: ${expected.length ? expected.join(", ") : "nothing"}). Aborting workflow.`
-    );
-    this.from = from;
-    this.scope = scope;
-    this.expected = expected;
-    this.name = "UnexpectedCallbackError";
-  }
-  from;
-  scope;
-  expected;
-};
-function sig(action) {
-  return JSON.stringify(action);
-}
-function storyOf(action) {
-  return "story" in action ? action.story : void 0;
-}
-function expectationFor(action) {
-  if (action.kind !== "invoke-role") return null;
-  const responder = action.role;
-  const story = storyOf(action);
-  const signature = sig(action);
-  const base = { signature, responder, ...story ? { story } : {} };
-  const storyView2 = (s) => story ? s.stories[story] : void 0;
-  if (responder === "spec-author" && "mode" in action && action.mode === "breakdown") {
-    return {
-      ...base,
-      expected: "a feature breakdown (\u22651 story)",
-      satisfiedBy: (s) => s.breakdownDone === true,
-      remediation: "Write feature-spec.json with a NON-EMPTY `stories[]` array and create the story stub dirs under the artifact root's features/<feature>/stories/. The feature dir currently holds only feature-request.md; a prose list of stories in your reply is NOT the breakdown."
-    };
-  }
-  if (responder === "spec-author" && "mode" in action && action.mode === "propose") {
-    return { ...base, expected: "feature proposals", satisfiedBy: (s) => s.planning?.proposed === true };
-  }
-  if (responder === "ux-designer") {
-    return { ...base, expected: "a design guide", satisfiedBy: (s) => s.designGuideReady === true };
-  }
-  if (responder === "spec-author") {
-    return { ...base, expected: "drafted acceptance criteria (non-empty)", satisfiedBy: (s) => storyView2(s)?.design.hasAcs === true };
-  }
-  if (responder === "architect-reviewer" && "mode" in action && action.mode === "estimate") {
-    return { ...base, expected: "a t-shirt size estimate", satisfiedBy: (s) => s.planning?.estimated === true };
-  }
-  if (responder === "architect-reviewer") {
-    return {
-      ...base,
-      expected: "layer/NFR-annotated ACs",
-      satisfiedBy: (s) => storyView2(s)?.design.architectAnnotated === true,
-      remediation: "Write a non-empty `architectural_notes` field into EVERY one of this story's acs/<AC>.json files (your per-AC product; the gate checks each AC carries it), AND ensure the feature architecture.json exists. architectural_notes are per-AC: annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story."
-    };
-  }
-  if (responder === "test-strategist") {
-    return { ...base, expected: "a non-empty per-story test list mapped to the story's ACs", satisfiedBy: (s) => storyView2(s)?.design.testListReady === true };
-  }
-  const buildMode = "buildMode" in action ? action.buildMode : void 0;
-  if (responder === "navigator" && buildMode === "reflect") {
-    return {
-      ...base,
-      expected: "a reflect verdict (reflect-verdict.json, pass or fail)",
-      satisfiedBy: (s) => storyView2(s)?.design.reflectionVerdictWritten === true,
-      remediation: "Write your verdict to the story's reflect-verdict.json (schema: { version, passed, findings[] }). A failing verdict is valid and expected when you find a defect: set passed:false and list each finding with its owner. Narrating the verdict in your reply is NOT enough; the file must exist."
-    };
-  }
-  const ac = "ac" in action ? action.ac : void 0;
-  const withAc = { ...base, ...ac ? { ac } : {} };
-  if (responder === "navigator" && buildMode === "review") {
-    return { ...withAc, expected: `a REVIEW verdict for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.reviewAc !== ac };
-  }
-  if (responder === "driver" && buildMode === "refactor") {
-    return { ...withAc, expected: `a completed REFACTOR for ${ac}`, satisfiedBy: (s) => storyView2(s)?.build.refactorAc !== ac };
-  }
-  return null;
-}
-function handbackMessage(h, attempt) {
-  return [
-    `HANDBACK (attempt ${attempt}): your previous turn did not return ${h.expected}${h.story ? ` for story ${h.story}${h.ac ? `/${h.ac}` : ""}` : ""}.`,
-    `The expected artifact is absent / null / empty / nonconformant ON DISK (the orchestrator verified it).`,
-    `Do NOT claim it "already exists" or that "no further artifacts are needed": prose describing the artifact is NOT the artifact.`,
-    `Re-inspect the filesystem yourself, then WRITE the artifact this turn.`,
-    ...h.remediation ? [h.remediation] : [],
-    `This is a retry; the workflow aborts if it is still missing.`
-  ].join(" ");
-}
-var ExpectationLedger = class {
-  constructor(maxRetries = 1) {
-    this.maxRetries = maxRetries;
-  }
-  maxRetries;
-  outstanding = [];
-  /** Unmet-callback count per outstanding handoff signature. */
-  attempts = /* @__PURE__ */ new Map();
-  /** Record a new outstanding handoff (the call we are waiting on). */
-  push(h) {
-    this.outstanding.push(h);
-  }
-  /** Whether anything is outstanding. */
-  get pending() {
-    return this.outstanding.length > 0;
-  }
-  /** The head expectation (next expected callback), or undefined. */
-  head() {
-    return this.outstanding[0];
-  }
-  /** The responders currently awaited (for diagnostics / wrong-caller messages). */
-  awaiting() {
-    return this.outstanding.map((h) => h.responder);
-  }
-  /**
-   * INTAKE PROCESSOR , process a callback from a SPECIFIC responder against the
-   * outstanding expectations (the caller-identity half of the protocol; the part
-   * that becomes load-bearing once dispatch is concurrent / multi-threaded):
-   *   - find the first outstanding handoff whose responder === `from` (and, when
-   *     given, whose story/ac match the callback's scope). NO match => the caller
-   *     is wrong / unexpected => throw UnexpectedCallbackError (abort).
-   *   - matched + contract met -> remove it (the right caller delivered).
-   *   - matched + unmet, retry budget remains -> `retry` (hand back + re-dispatch).
-   *   - matched + unmet, no budget -> throw ProtocolViolationError (abort).
-   * Matching the responder (not blindly the head) lets concurrent stories' build
-   * callbacks arrive interleaved while still rejecting a callback from a role we
-   * are not awaiting at all.
-   */
-  processCallback(from, state, scope = {}) {
-    const idx = this.outstanding.findIndex(
-      (h2) => h2.responder === from && (scope.story === void 0 || h2.story === scope.story) && (scope.ac === void 0 || h2.ac === scope.ac)
-    );
-    if (idx === -1) {
-      throw new UnexpectedCallbackError(from, scope, this.awaiting());
-    }
-    const h = this.outstanding[idx];
-    if (h.satisfiedBy(state)) {
-      this.outstanding.splice(idx, 1);
-      this.attempts.delete(h.signature);
-      return { kind: "met", handoff: h };
-    }
-    const attempt = (this.attempts.get(h.signature) ?? 0) + 1;
-    this.attempts.set(h.signature, attempt);
-    if (attempt > this.maxRetries) {
-      throw new ProtocolViolationError(
-        h,
-        `it returned nothing across ${attempt} attempts (the expected artifact is absent / null / empty)`
-      );
-    }
-    return { kind: "retry", handoff: h, detail: handbackMessage(h, attempt), attempt };
-  }
-  /**
-   * Reconcile the realized state against the HEAD expectation , the deterministic
-   * (single-outstanding, in-order) specialization of processCallback. The
-   * single-threaded driver dispatches one role at a time, so the only possible
-   * responder IS the head's, and reconcile delegates with that identity:
-   *   - met   -> pop it.
-   *   - unmet, retry budget remains -> `retry` (hand-back + re-dispatch).
-   *   - unmet, no budget -> throw ProtocolViolationError.
-   * A no-op (`idle`) when nothing is outstanding.
-   */
-  reconcile(state) {
-    const head = this.outstanding[0];
-    if (!head) return { kind: "idle" };
-    return this.processCallback(head.responder, state, { ...head.story ? { story: head.story } : {}, ...head.ac ? { ac: head.ac } : {} });
-  }
-};
-
-// scripts/sftdd/orchestrator-run.ts
-var DriverStalledError = class extends Error {
-  constructor(action, iteration) {
-    super(
-      `driver stalled at iteration ${iteration}: action ${JSON.stringify(action)} repeated without advancing state. The effect for this action did not change what readState() returns.`
-    );
-    this.action = action;
-    this.iteration = iteration;
-    this.name = "DriverStalledError";
-  }
-  action;
-  iteration;
-};
-var MAX_ITERATIONS = 1e4;
-function driverBoundOptions(bound) {
-  switch (bound) {
-    case "plan":
-      return { stopWhen: (a) => a.kind === "planning-complete" };
-    case "design":
-      return { transition: nextDesignOnlyTransition, stopWhen: (a) => a.kind === "design-complete" };
-    case "build":
-      return { stopWhen: (a) => actionLane(a) !== "build" };
-    case "deploy":
-      return { stopWhen: (a) => actionLane(a) !== "deploy" && actionLane(a) !== "promote" };
-  }
-}
-async function runDriver(effects, options = {}) {
-  let previousSignature;
-  let pausedAlready = false;
-  const enforceExpectations = options.enforceExpectations !== false;
-  const expectations = new ExpectationLedger();
-  for (let i = 0; ; i++) {
-    if (options.maxSteps !== void 0 && i >= options.maxSteps) {
-      return { iterations: i, stoppedAtMax: true };
-    }
-    if (i >= MAX_ITERATIONS) {
-      throw new Error(`driver exceeded ${MAX_ITERATIONS} iterations without reaching "done".`);
-    }
-    const state = await effects.readState();
-    let retrying = false;
-    if (enforceExpectations) {
-      const rec = expectations.reconcile(state);
-      if (rec.kind === "retry") {
-        retrying = true;
-        effects.onHandback?.(rec.handoff, rec.detail);
-      }
-    }
-    const transition = options.transition ?? nextTransition;
-    const action = transition(state);
-    if (action.kind === "done") {
-      effects.onAction?.(action, i);
-      await effects.perform(action);
-      return { iterations: i + 1 };
-    }
-    if (action.kind === "raise-to-hil") {
-      effects.onAction?.(action, i);
-      await effects.perform(action);
-      return { iterations: i + 1, escalated: true, escalation: action };
-    }
-    if (options.stopWhen?.(action)) {
-      return { iterations: i, stoppedAtBound: true, stoppedAt: action };
-    }
-    if (!pausedAlready && options.pauseBefore?.(action) && options.confirmContinue) {
-      pausedAlready = true;
-      await options.confirmContinue(action);
-    }
-    const signature = JSON.stringify(action);
-    if (!retrying && signature === previousSignature) {
-      throw new DriverStalledError(action, i);
-    }
-    previousSignature = signature;
-    if (enforceExpectations && !retrying) {
-      const handoff = expectationFor(action);
-      if (handoff) expectations.push(handoff);
-    }
-    effects.onAction?.(action, i);
-    await effects.perform(action);
-  }
-}
-
-// scripts/sftdd/escalation.ts
-init_cjs_shims();
-var fs8 = __toESM(require("fs"), 1);
-
-// scripts/sftdd/smells.ts
-init_cjs_shims();
-var import_fs6 = require("fs");
-var import_path6 = require("path");
-
-// scripts/sftdd/run-cycle.ts
-init_cjs_shims();
-
-// scripts/lakebase/get-connection.ts
-init_cjs_shims();
-
-// scripts/lakebase/databricks-cli.ts
-init_cjs_shims();
-var import_node_child_process3 = require("child_process");
-var import_node_util = require("util");
-var import_node_path4 = require("path");
-
-// scripts/lakebase/kit-config.ts
-init_cjs_shims();
-function intFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var KIT_TIMEOUTS = {
-  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
-  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
-  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
-  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
-  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
-  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
-  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
-  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
-  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
-  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
-  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
-  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
-  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
-  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
-  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
-  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
-  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
-  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
-  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
-};
-function urlFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return raw.replace(/\/+$/, "");
-}
-var KIT_REGISTRIES = {
-  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
-  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
-};
-
-// scripts/lakebase/databricks-profile.ts
-init_cjs_shims();
-var fs3 = __toESM(require("fs"), 1);
-var import_node_child_process2 = require("child_process");
-
-// scripts/util/exec.ts
-init_cjs_shims();
-var cp2 = __toESM(require("child_process"), 1);
-
-// scripts/lakebase/env-file.ts
-init_cjs_shims();
-var fs4 = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
-
-// scripts/lakebase/databricks-cli.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process3.execFile);
-
-// scripts/lakebase/get-connection.ts
-var import_lakebase = require("@databricks/lakebase");
-var import_pg = require("pg");
-
-// scripts/lakebase/branch-utils.ts
-init_cjs_shims();
-
-// scripts/lakebase/branch-id.ts
-init_cjs_shims();
-
-// scripts/lakebase/constants.ts
-init_cjs_shims();
-
-// scripts/sftdd/experiment.ts
-init_cjs_shims();
-
-// scripts/lakebase/paired-branch.ts
-init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_node_child_process4 = require("child_process");
-
-// scripts/lakebase/branch-create.ts
-init_cjs_shims();
-
-// scripts/util/poll-until.ts
-init_cjs_shims();
-
-// scripts/util/delay.ts
-init_cjs_shims();
-
-// scripts/util/sanitize-branch-name.ts
-init_cjs_shims();
-var LAKEBASE_BRANCH_NAME_MAX = 63;
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
-  while (name.length < 3) name += "-x";
-  return name;
-}
-
-// scripts/lakebase/lakebase-project.ts
-init_cjs_shims();
-
-// scripts/lakebase/branch-delete.ts
-init_cjs_shims();
-
-// scripts/lakebase/branch-endpoint.ts
-init_cjs_shims();
-
-// scripts/git/status.ts
-init_cjs_shims();
-
-// scripts/sftdd/agent-log.ts
-init_cjs_shims();
-var import_fs5 = require("fs");
-var import_path5 = require("path");
-
-// scripts/sftdd/schema-loader.ts
-init_cjs_shims();
-var import_fs4 = require("fs");
-var import_path4 = require("path");
-var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path4.join)(__dirname, "schemas");
-var ajv = new import_ajv.default({ allErrors: true, strict: false });
-ajv.addFormat("date-time", true);
-var validatorCache = /* @__PURE__ */ new Map();
-function loadSchema(name) {
-  return JSON.parse((0, import_fs4.readFileSync)((0, import_path4.join)(SCHEMA_DIR, name), "utf8"));
-}
-function getValidator(name) {
-  const cached = validatorCache.get(name);
-  if (cached) return cached;
-  const validate = ajv.compile(loadSchema(name));
-  validatorCache.set(name, validate);
-  return validate;
-}
-function formatSchemaErrors(validate) {
-  const errors = validate.errors ?? [];
-  if (errors.length === 0) return ["schema validation failed"];
-  return errors.map((e) => {
-    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
-    return `${where}: ${e.message ?? "invalid"}`;
-  });
-}
-
-// scripts/sftdd/agent-log-events.ts
-init_cjs_shims();
-var EVENT_TEMPLATES = {
-  // Orchestration lifecycle (code-emitted)
-  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
-  "phase.start": { template: "{{role}} START {{phase}}" },
-  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
-  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
-  // Gates (code surfaces; HIL / Human Proxy decides)
-  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
-  "gate.approved": { template: "GATE {{gate}} APPROVED" },
-  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
-  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
-  // Intake & planning
-  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
-  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
-  // Artifacts & design (agent-emitted)
-  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
-  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
-  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
-  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
-  "cycle.red": { template: "RED {{batch}} test(s) in {{cycle_id}} [{{layer}}], lead {{test_id}} ({{ac}}): {{asserts}}" },
-  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
-  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
-  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
-  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
-  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
-  // Experiment lifecycle (code-emitted)
-  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
-  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
-  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
-  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
-  // Deploy / verify (code-emitted from the deploy CLI)
-  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
-  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
-  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
-  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
-  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
-  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
-  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
-  // UX adherence
-  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
-  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
-  // Per-turn model usage (code-emitted by the runner from the claude -p result).
-  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
-  // cache_* + cost_usd ride in metadata (not template slots, so not required).
-  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
-  // Generic (agent-emitted; debug / interim)
-  "reasoning": { template: "{{note}}" },
-  "progress": { template: "{{note}} , {{step}}" }
-};
-var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
-function isKnownEvent(name) {
-  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
-}
-var AgentLogEventError = class extends Error {
-};
-function renderEventMessage(event, slots = {}) {
-  if (!isKnownEvent(event)) {
-    throw new AgentLogEventError(
-      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
-    );
-  }
-  const tmpl = EVENT_TEMPLATES[event].template;
-  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
-    const v = slots[name];
-    if (v === void 0 || v === null || v === "") {
-      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
-    }
-    return String(v);
-  });
-}
-
-// scripts/sftdd/agent-log.ts
-function logFilePath(sftddDir) {
-  return (0, import_path5.join)(sftddDir, "agent-log.jsonl");
-}
-function buildAgentLogEvent(input, now) {
-  const slots = input.slots ?? {};
-  const renderCtx = {
-    role: input.role,
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots
-  };
-  const message = renderEventMessage(input.event, renderCtx);
-  const metadata = {
-    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
-    ...input.phase !== void 0 ? { phase: input.phase } : {},
-    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
-    ...slots,
-    ...input.metadata ?? {}
-  };
-  const event = {
-    timestamp: input.timestamp ?? now().toISOString(),
-    level: input.level,
-    role: input.role,
-    // model + effort sit right after role (the per-turn dispatch events carry them).
-    ...input.model ? { model: input.model } : {},
-    ...input.effort ? { effort: input.effort } : {},
-    event: input.event,
-    message,
-    ...Object.keys(metadata).length > 0 ? { metadata } : {}
-  };
-  const validate = getValidator("agent-log-event.schema.json");
-  if (!validate(event)) {
-    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
-  }
-  return event;
-}
-function emitAgentLogEvent(input, opts = {}) {
-  const sftddDir = opts.sftddDir ?? resolveSftddDir();
-  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
-  const event = buildAgentLogEvent(input, now);
-  (0, import_fs5.appendFileSync)(logFilePath(sftddDir), `${JSON.stringify(event)}
-`, "utf8");
-  return event;
-}
-
-// scripts/sftdd/run-cycle.ts
-function readAcLayer2(sftddDir, featureId, acId) {
-  return readAcLayer(sftddDir, featureId, acId);
-}
-function coveredTestIds(c) {
-  if (c.test_ids && c.test_ids.length > 0) return c.test_ids;
-  return c.test_id ? [c.test_id] : [];
-}
-
-// scripts/sftdd/smells.ts
-var SMELL_CATALOG = [
-  {
-    name: "test-list-drift",
-    description: "Test list grew by >25% since cycle start without HITL approval.",
-    proposed_remediation: "PO refinement on spec.",
-    // A drifted/non-orderable test list is a test-strategist decomposition
-    // defect: route the remediation back to Gate 3 on `revise`.
-    level: "spec",
-    owning_role: "test-strategist",
-    gate_to_rerun: "test_list"
-  },
-  {
-    name: "superseded-tests",
-    description: "A new AC intentionally supersedes behavior encoded in PRIOR tests (often from earlier features); the Navigator flagged them in a superseded-tests allowlist. NOT a contradiction to block (that is test-list-drift), the latest AC wins and the accumulated tests must follow it.",
-    proposed_remediation: "Driver permissively refactors ONLY the flagged tests (and the code) to the new AC, then the honest-GREEN verify re-runs. Bounded to one attempt; an unflagged regression escalates.",
-    level: "build"
-  },
-  {
-    name: "cycle-stall",
-    description: "N cycles in a row with no GREEN.",
-    proposed_remediation: "Re-examine test ordering or spec ambiguity."
-  },
-  {
-    name: "api-coherence-drift",
-    description: "Same concept named differently across two consecutive PASS reviews.",
-    proposed_remediation: "Rename refactor before next test."
-  },
-  {
-    name: "fragility-ratio",
-    description: "One behavior change failed >3 tests.",
-    proposed_remediation: "Refactor + flag tests-mirror-implementation anti-pattern."
-  },
-  {
-    name: "test-cost-spiral",
-    description: "Each subsequent test takes >2x the lines of the prior one.",
-    proposed_remediation: "Reconsider boundary; outer-loop tests probably needed."
-  },
-  {
-    name: "cross-experiment-divergence",
-    description: "Two parallel experiments are solving different problems.",
-    proposed_remediation: "Was an opinion gap hidden? Re-run design-spec gate."
-  },
-  {
-    name: "dead-requirement-signal",
-    description: "An AC has had no scenarios written in N cycles while others mature.",
-    proposed_remediation: "Deprecate or clarify via PO refinement."
-  },
-  {
-    name: "test-deletion-attempt",
-    description: "Driver or human attempts to remove or weaken an existing test.",
-    proposed_remediation: "Hard block. Tests are immutable until the test list itself is renegotiated."
-  },
-  {
-    name: "boundary-violation",
-    description: "Test references a private method or internal helper.",
-    proposed_remediation: "Refactor to public boundary or move to inner-loop list."
-  },
-  {
-    name: "import-time-build-coupling",
-    description: "The app entry module requires an optional build artifact (e.g. client/dist) at module load time, an unconditional StaticFiles mount / asset read at import scope. It greens where the artifact happens to exist and crashes at import everywhere it does not (backend-only test runs, CI before the client build, fresh clones). Caught deterministically by the `lakebase-sftdd-imports-clean` gate; the Navigator may also flag it in REVIEW.",
-    proposed_remediation: "Guard the coupling: mount the compiled client ONLY when its directory exists, and serve a clear 503 from the SPA route when index.html is absent, so the module imports without the artifact. See the dev/prod-parity rule in software-design-principles."
-  },
-  {
-    name: "scaffold-defect",
-    description: "A test cannot run because the project scaffold is missing a piece the kit owns (e.g. tests/e2e/conftest.py + the live_server fixture for an E2E AC, or an absent runner). The role flags it instead of fabricating the missing scaffold itself. Blocking: a fabricated fixture diverges from the shipped one + reintroduces the CI-parity bugs the kit template prevents.",
-    proposed_remediation: "Halt + surface to the HIL. Fix the scaffold (re-run the kit's wiring, e.g. --enable-e2e for the project's language), never hand-author the missing piece in the build."
-  },
-  {
-    name: "ac-overlap",
-    description: "Two acceptance criteria in a story are not independent: satisfying one's `then` inherently satisfies (or contradicts) another, so the dependent AC's test can never go RED without deleting shipped code. A spec/test-list decomposition defect. Blocking, and flagged at the design gate (Gate 3) so it halts BEFORE a build cycle is wasted, rather than surfacing mid-build as a cycle-stall.",
-    proposed_remediation: "Surface to the PO at the gate. Merge the overlapping ACs, differentiate their observable behavior, or (PO decision) accept the dependent AC as already-satisfied. Do not order both as separate cycles.",
-    // An AC overlap is a spec-author decomposition defect: route back to Gate 1.
-    level: "spec",
-    owning_role: "spec-author",
-    gate_to_rerun: "spec"
-  },
-  {
-    name: "reflect-spec-defect",
-    description: "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's SPEC before the build lane: an internal contradiction between ACs, a spec-vs-architecture layer conflict, or an untestable/vacuous AC (no observable outcome). Caught on the cheap design artifacts so it is fixed BEFORE any RED/GREEN/REVIEW cycle runs, the reflection gate is a speed play (a spec fix is far cheaper than re-running build cycles).",
-    proposed_remediation: "Route back to the Spec Author (Gate 1): resolve the contradiction, make the AC observable, or realign the AC with the architecture. Bounded to one automatic revise per story; if the critic still finds the defect after the re-spec, it escalates to the human.",
-    // A spec defect the critic surfaces is a spec-author fix: route back to Gate 1.
-    level: "spec",
-    owning_role: "spec-author",
-    gate_to_rerun: "spec"
-  },
-  {
-    name: "reflect-testlist-defect",
-    description: "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's TEST-LIST before the build lane: a test that contradicts its AC, an AC with no covering test (coverage gap), an NFR with no fitness test, or a test that asserts at a layer the architecture forbids. Caught on the cheap artifacts so it is fixed BEFORE the build lane.",
-    proposed_remediation: "Route back to the Test Strategist (Gate 3): align the test with its AC, add the missing coverage, or move the assertion to the correct layer. Bounded to one automatic revise per story; if the critic still finds the defect after the re-scope, it escalates to the human.",
-    // A test-list defect the critic surfaces is a test-strategist fix: route back to Gate 3.
-    level: "spec",
-    owning_role: "test-strategist",
-    gate_to_rerun: "test_list"
-  },
-  {
-    name: "shared-state-aggregate-assertion",
-    description: "A test asserts an ABSOLUTE aggregate over the WHOLE store (an integrity/consistency probe, a global COUNT/SUM , e.g. 'the probe reports exactly 0/2/1 nonconforming rows') without owning the table state it asserts. It passes in the per-cycle build verify (an ISOLATED ephemeral branch holding only its seeded rows) but the honest-GREEN full-feature deploy-verify FAILS it, because that runs the whole suite against the SHARED feature-branch DB where other stories' rows (same nullable columns) inflate the count. A real probe over a real deployed DB can never assert an exact global total anyway.",
-    proposed_remediation: "Route back to the Test Strategist (Gate 3): scope BOTH the seed AND the assertion to the test's own rows (filter the probe/count by the test's SKUs or a marker column, or assert a before-vs-after DELTA), never an absolute whole-table total. Bounded to one automatic revise per story; a second escape escalates to the human.",
-    // A contamination-fragile aggregate assertion is a test-strategist fix: route back to Gate 3.
-    level: "spec",
-    owning_role: "test-strategist",
-    gate_to_rerun: "test_list"
-  },
-  {
-    name: "architect-canon-gap",
-    description: "The deterministic architect-notes projection (FEIP-7902) found a story whose AC layers or architecture.json dimensions (a persistence-invariant type or an NFR category) the project canon does not yet cover. Projecting a blind architectural_note would guess at placement the canon cannot justify, so the story is routed to the Architect instead: re-annotate the story AND amend the canon so the next feature inherits the new rule. Spec-level + architect-owned; the projection is the default path and this is its reactive self-heal.",
-    proposed_remediation: "Route to the Architect Reviewer (Gate 2 architecture): annotate the uncovered ACs with real architectural_notes and declare the new dimension in architecture.json so reconcile amends the canon. Bounded to one automatic revise per story; a second escape hard-halts to the human.",
-    level: "spec",
-    owning_role: "architect-reviewer",
-    gate_to_rerun: "architecture"
-  },
-  {
-    name: "layering-violation",
-    description: "The boundary/routes layer touches persistence directly (calls the DB session: .query/.add/.commit/.delete on a route handler) or business logic lives in the boundary/templates, instead of delegating to a service + repository. A fat controller violates the layered-architecture contract the architect declared in architecture.json `layers`. Distinct from `boundary-violation` (which is a TEST reaching a private method). Caught deterministically by `lakebase-sftdd-layering-clean`; the Navigator may also flag it in REVIEW.",
-    proposed_remediation: "Extract a service (business logic) + a repository (the ONLY layer that touches the ORM/session); the route handler validates input + delegates. Defended by the layering fitness test (tests/architecture/test_layering.py)."
-  },
-  {
-    name: "ux-adherence",
-    description: "The rendered UI defines the design tokens on :root yet does not USE them at the element level: hardcoded hex colors / raw px where a var(--token) belongs, an ia.md data-testid seam that was never rendered, or an action surface (form/submit) with no feedback affordance (no silent failure / unacknowledged success). Token-level adherence (assertDesignAdherence) cannot see this; the element-level checks in design-adherence.ts do, and the UX Designer flags it in REVIEW. Distinct from `layering-violation` (engineering layering): this is the experience-lens gate.",
-    proposed_remediation: "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with its data-testid seams, and give every action a perceivable result. Refactor the UI to the design guide; do not weaken the guide to match the drift."
-  },
-  {
-    name: "ui-style-implementation-test",
-    description: "A test for a design-guide-governed styling property asserts the IMPLEMENTATION in the page SOURCE (an inline `style=` attr or raw CSS text, e.g. grepping the HTML for `text-align: right`) instead of the rendered SEAM (the element carries the design-guide class / data-testid) or the design-adherence gate. It greens only while the style stays inline, so the moment the design lane refactors that ad-hoc inline style into a token-driven theme.css class (as the design guide requires), the test breaks and the REFACTOR dead-locks with no valid SUPERSEDED-TESTS path (the test and the design guide cannot both be satisfied). A test-list decomposition defect the pre-build reflection critic flags (routes to the Test Strategist), so it is fixed before a build cycle wastes on it.",
-    proposed_remediation: "Test the SEAM, not the implementation: assert the quantity/styled cell carries its design-guide class or data-testid (the stable contract), and leave the visual property (alignment, tabular-nums, color) to the design-adherence gate / a rendered-output check. Never assert an inline `style=` string the design guide will move into a token-driven class.",
-    // A styling test asserting implementation is a test-strategist decomposition
-    // defect: route back to Gate 3 (test_list) on `revise`.
-    level: "spec",
-    owning_role: "test-strategist",
-    gate_to_rerun: "test_list"
-  },
-  {
-    name: "e2e-inline-regex-flag",
-    description: "An E2E Playwright matcher (to_contain_text/to_have_text/to_have_url/get_by_text) is built from a Python regex carrying INLINE FLAGS , re.compile(r\"(?i)summary\") and the like. Playwright forwards the pattern's `.pattern` string verbatim to the browser's JavaScript regex engine, which does NOT support inline-flag syntax `(?i)`/`(?s)`/`(?m)`, so the regex is invalid and the assertion can never match the running app. The test is structurally un-greenable: the honest-GREEN verify rejects it and the build raises to HIL. Caught deterministically + cheaply (no browser run) by the e2e-regex-clean static lint, which enriches the GREEN-verify failure with the exact file:line + fix.",
-    proposed_remediation: 'Pass the flag as a kwarg, not inline: re.compile("summary", re.IGNORECASE) emits the valid JS regex /summary/i. Or, for a plain case-insensitive substring, use the bare string form Playwright already matches loosely. See the E2E rule in the Navigator role.'
-  },
-  {
-    name: "e2e-row-perma-red",
-    description: "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
-    proposed_remediation: "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner."
-  },
-  {
-    name: "contract-incompleteness",
-    description: 'A migration DROPPED (or renamed) a column the running code still references , the ORM model field, a query/repository, a serializer/DTO, or a template/view , so the app emits SQL for a column the migrated database no longer has and crashes at runtime ("column X does not exist") even though the migration itself succeeded. The contract half of expand/contract (software-design-principles hard rule 9) was left incomplete: the schema shrank but the code did not follow in the SAME change. Caught DETERMINISTICALLY by the `lakebase-sftdd-contract-clean` gate (it parses the migration\'s net column drops and greps the code tree for residual references), which enriches the GREEN-verify failure with the exact file:line list , no model judgment needed to notice OR localize it.',
-    proposed_remediation: "Driver REPAIR: remove or replace EVERY residual reference (model field, queries, serializers/DTOs, templates/views) in the same change so the code matches the migrated schema. Never edit the migration or a test to hide it. The green-failure fixDirective carries the precise file:line list, so this self-heals without a Navigator assess."
-  },
-  {
-    name: "migration-app-coupling",
-    description: "A migration module imports application code at import scope (e.g. `from app.services... import parse_x`) to reuse app logic in a data migration. A migration is an IMMUTABLE historical artifact; the app is mutable. Coupling the two means a later rename/move/removal of that app symbol breaks replaying the migration from base (the historical revision can no longer import), and every alembic subcommand that builds the revision map (history/heads, not just upgrade) must load the module. It greens under `upgrade` (env.py puts the project root on sys.path) yet fails in CI's `alembic history`/`heads`. Caught DETERMINISTICALLY by the `lakebase-sftdd-migration-clean` gate (it scans the migration files for module-scope app imports), which runs proactively at GREEN even when the local verify passes, so it is fixed before the PR; the Navigator may also flag it in REVIEW.",
-    proposed_remediation: "Driver REPAIR: make the migration self-contained: inline a frozen copy of the needed logic in the migration file (or express the data change in raw SQL). Do not import from app.* at module scope, so the migration stays stable as the app evolves and loads under every alembic subcommand."
-  }
-];
-function specLevelSmell(name) {
-  const def = SMELL_CATALOG.find((s) => s.name === name);
-  if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
-  return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
-}
-var BUILD_REFACTOR_ROUTABLE = /* @__PURE__ */ new Set([
-  "layering-violation",
-  "ux-adherence",
-  "import-time-build-coupling",
-  // A new AC supersedes behavior encoded in PRIOR tests the Navigator flagged
-  // (superseded-tests allowlist). The Driver's refactor turn permissively
-  // refactors ONLY those flagged tests + the code, then the honest-GREEN verify
-  // re-runs. Bounded to one attempt by supersession.refactored; an unflagged
-  // regression never reaches here (it escalates), so the backstop stays intact.
-  "superseded-tests"
-]);
-function isBuildRefactorRoutableSmell(name) {
-  return BUILD_REFACTOR_ROUTABLE.has(name);
-}
-function hasOpenBuildRefactorRoutableSmell(sftddDir, story_id) {
-  return readSmellsLog(sftddDir).detected.some(
-    (d) => !d.resolution && isBuildRefactorRoutableSmell(d.smell) && (story_id === void 0 || d.story_id === void 0 || d.story_id === story_id)
-  );
-}
-function readSmellsLog(sftddDir) {
-  const file = (0, import_path6.join)(sftddDir, "smells.json");
-  if (!(0, import_fs6.existsSync)(file)) return { detected: [] };
-  return JSON.parse((0, import_fs6.readFileSync)(file, "utf8"));
-}
-function smellMatches(entry, smell, story_id) {
-  if (entry.smell !== smell) return false;
-  if (story_id === void 0) return true;
-  return entry.story_id === void 0 || entry.story_id === story_id;
-}
-function priorReviseCount(sftddDir, smell, story_id) {
-  return readSmellsLog(sftddDir).detected.filter(
-    (d) => d.resolution_kind === "revised" && smellMatches(d, smell, story_id)
-  ).length;
-}
-
-// scripts/sftdd/cycle-record.ts
-init_cjs_shims();
-var import_fs7 = require("fs");
-var import_path7 = require("path");
-
-// scripts/sftdd/test-list.ts
-init_cjs_shims();
-
-// scripts/sftdd/deploy.ts
-init_cjs_shims();
-var import_node_child_process5 = require("child_process");
-var import_node_crypto2 = require("crypto");
-var import_node_fs3 = require("fs");
-var import_node_path6 = require("path");
-
-// scripts/lakebase/deploy-targets.ts
-init_cjs_shims();
-
-// scripts/sftdd/deploy-verify-assess.ts
-init_cjs_shims();
-var fs6 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
-function scopePath(sftddDir, featureId, storyId) {
-  const fdir = findFeatureDir(sftddDir, featureId);
-  if (!fdir) return void 0;
-  return path3.join(fdir, "stories", storyId, "deploy-verify-scope.json");
-}
-function readDeployVerifyScope(sftddDir, featureId, storyId) {
-  const file = scopePath(sftddDir, featureId, storyId);
-  if (!file || !fs6.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs6.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function markerPath(sftddDir, featureId, storyId) {
-  const fdir = findFeatureDir(sftddDir, featureId);
-  if (!fdir) return void 0;
-  return path3.join(fdir, "stories", storyId, "deploy-verify-assess.json");
-}
-function readDeployVerifyAssessMarker(sftddDir, featureId, storyId) {
-  const file = markerPath(sftddDir, featureId, storyId);
-  if (!file || !fs6.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs6.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function deployVerifyRefactorPending(sftddDir, featureId, storyId) {
-  const m = readDeployVerifyAssessMarker(sftddDir, featureId, storyId);
-  return !!m && m.assessed === true && (m.flagged_tests?.length ?? 0) > 0 && m.refactored !== true;
-}
-function deployVerifyNeedsAssess(sftddDir, featureId, storyId) {
-  const m = readDeployVerifyAssessMarker(sftddDir, featureId, storyId);
-  return !!m && !m.assessed && m.attempts < 1;
-}
-
-// scripts/sftdd/e2e-regex-clean.ts
-init_cjs_shims();
-var import_node_fs2 = require("fs");
-var import_node_path5 = require("path");
-
-// scripts/sftdd/ephemeral-verify.ts
-init_cjs_shims();
-
-// scripts/sftdd/deploy.ts
-function deployEvidencePasses(e) {
-  return e !== void 0 && e.reachable === true && e.verify?.passed === true;
-}
-function readDeployEvidence(file) {
-  if (!(0, import_node_fs3.existsSync)(file)) return void 0;
-  try {
-    return JSON.parse((0, import_node_fs3.readFileSync)(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function storyDeployVerified(sftddDir, featureId, storyId) {
-  const fdir = findFeatureDir(sftddDir, featureId);
-  if (!fdir) return false;
-  return deployEvidencePasses(readDeployEvidence((0, import_node_path6.join)(fdir, "stories", storyId, "deploy-evidence.json")));
-}
-
-// scripts/sftdd/supersession.ts
-init_cjs_shims();
-var fs7 = __toESM(require("fs"), 1);
-var import_node_path7 = require("path");
-function supersededTestsJson(tdd, feature, story, ac) {
-  return (0, import_node_path7.join)(cycleDir(tdd, feature, story, ac), "superseded-tests.json");
-}
-function readSupersededTests(tdd, feature, story, ac) {
-  const file = supersededTestsJson(tdd, feature, story, ac);
-  if (!fs7.existsSync(file)) return void 0;
-  try {
-    const parsed = JSON.parse(fs7.readFileSync(file, "utf8"));
-    if (!Array.isArray(parsed.tests) || parsed.tests.length === 0) return void 0;
-    return parsed;
-  } catch {
-    return void 0;
-  }
-}
-function greenFailureJson(tdd, feature, story, ac) {
-  return (0, import_node_path7.join)(cycleDir(tdd, feature, story, ac), "green-failure.json");
-}
-function readGreenFailure(tdd, feature, story, ac) {
-  const file = greenFailureJson(tdd, feature, story, ac);
-  if (!fs7.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs7.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function needsGreenAssess(tdd, feature, story, ac) {
-  const gf = readGreenFailure(tdd, feature, story, ac);
-  return gf !== void 0 && gf.assessed !== true;
-}
-function hasPendingRegressionFix(tdd, feature, story, ac) {
-  const gf = readGreenFailure(tdd, feature, story, ac);
-  return gf !== void 0 && gf.assessed === true && typeof gf.fixDirective === "string" && gf.fixDirective.length > 0 && gf.repairAttempted !== true;
-}
-
-// scripts/sftdd/contract-clean.ts
-init_cjs_shims();
-var import_node_fs4 = require("fs");
-var import_node_path8 = require("path");
-
-// scripts/sftdd/migration-app-clean.ts
-init_cjs_shims();
-var import_node_fs5 = require("fs");
-var import_node_path9 = require("path");
-
-// scripts/git/commits.ts
-init_cjs_shims();
-
-// scripts/sftdd/cycle-record.ts
-function readStoryItems(sftddDir, featureId, story) {
-  const file = storyTestListJson(sftddDir, featureId, story);
-  if (!(0, import_fs7.existsSync)(file)) {
-    throw new Error(`per-story test-list not found for ${featureId}/${story} at ${file}`);
-  }
-  const data = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
-  return Array.isArray(data.items) ? data.items : [];
-}
-function storyCycles(sftddDir, featureId, story) {
-  const base = (0, import_path7.join)(cyclesRootDir(sftddDir), featureId, story);
-  if (!(0, import_fs7.existsSync)(base)) return [];
-  const out = [];
-  for (const acDir of (0, import_fs7.readdirSync)(base)) {
-    const dir = (0, import_path7.join)(base, acDir);
-    try {
-      if (!(0, import_fs7.statSync)(dir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    for (const f of (0, import_fs7.readdirSync)(dir)) {
-      if (!/^cycle-\d+\.json$/.test(f)) continue;
-      try {
-        out.push(JSON.parse((0, import_fs7.readFileSync)((0, import_path7.join)(dir, f), "utf8")));
-      } catch {
-      }
-    }
-  }
-  return out;
-}
-function storyTestProgress(sftddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(sftddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const cycles = storyCycles(sftddDir, featureId, story);
-  const cycledTestIds = new Set(cycles.flatMap((c) => coveredTestIds(c)));
-  const greenTestIds = new Set(cycles.filter((c) => c.green_at).flatMap((c) => coveredTestIds(c)));
-  const pending = items.filter((i) => !cycledTestIds.has(i.id));
-  const openRed = cycles.filter((c) => c.red_at && !c.green_at);
-  const allGreen = items.length > 0 && items.every((i) => greenTestIds.has(i.id));
-  return { total: items.length, pending, openRed, allGreen };
-}
-function pendingItemKind(sftddDir, featureId, story) {
-  return storyTestProgress(sftddDir, featureId, story).pending[0]?.kind;
-}
-var DEFAULT_BATCH_CAP = 3;
-function nextPendingBatch(sftddDir, featureId, story, cap = DEFAULT_BATCH_CAP) {
-  const effCap = cap > 0 ? cap : DEFAULT_BATCH_CAP;
-  const pending = storyTestProgress(sftddDir, featureId, story).pending;
-  if (pending.length === 0) return [];
-  const layerOf = (acId) => readAcLayer2(sftddDir, featureId, acId) ?? "_nolayer";
-  const headLayer = layerOf(pending[0].ac_id);
-  return pending.filter((it) => layerOf(it.ac_id) === headLayer).slice(0, effCap);
-}
-function readReview(sftddDir, featureId, story, acId) {
-  const f = acReviewJson(sftddDir, featureId, story, acId);
-  if (!(0, import_fs7.existsSync)(f)) return {};
-  try {
-    return JSON.parse((0, import_fs7.readFileSync)(f, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function acReviewStates(sftddDir, featureId, story) {
-  let items = [];
-  try {
-    items = readStoryItems(sftddDir, featureId, story);
-  } catch {
-    items = [];
-  }
-  const greenTestIds = new Set(
-    storyCycles(sftddDir, featureId, story).filter((c) => c.green_at).flatMap((c) => coveredTestIds(c))
-  );
-  const acOrder = [];
-  const acTests = /* @__PURE__ */ new Map();
-  for (const it of items) {
-    if (!acTests.has(it.ac_id)) {
-      acTests.set(it.ac_id, []);
-      acOrder.push(it.ac_id);
-    }
-    acTests.get(it.ac_id).push(it.id);
-  }
-  return acOrder.map((acId) => {
-    const tests = acTests.get(acId);
-    const r = readReview(sftddDir, featureId, story, acId);
-    return {
-      acId,
-      allTestsGreen: tests.length > 0 && tests.every((t) => greenTestIds.has(t)),
-      reviewed: Boolean(r.reviewed_at),
-      refactorRequested: Boolean(r.refactor_requested),
-      refactored: Boolean(r.refactored_at)
-    };
-  });
-}
-function firstReviewPendingAc(sftddDir, featureId, story) {
-  return acReviewStates(sftddDir, featureId, story).find((a) => a.allTestsGreen && !a.reviewed)?.acId ?? null;
-}
-function firstRefactorPendingAc(sftddDir, featureId, story) {
-  const states = acReviewStates(sftddDir, featureId, story);
-  const explicit = states.find((a) => a.reviewed && a.refactorRequested && !a.refactored);
-  if (explicit) return explicit.acId;
-  if (hasOpenBuildRefactorRoutableSmell(sftddDir, story)) {
-    return states.find((a) => a.reviewed && !a.refactored)?.acId ?? null;
-  }
-  return null;
-}
-function readStoryReview(sftddDir, featureId, story) {
-  const f = storyReviewJson(sftddDir, featureId, story);
-  if (!(0, import_fs7.existsSync)(f)) return {};
-  try {
-    return JSON.parse((0, import_fs7.readFileSync)(f, "utf8"));
-  } catch {
-    return {};
-  }
-}
-function storyAllTestsGreen(sftddDir, featureId, story) {
-  const p = storyTestProgress(sftddDir, featureId, story);
-  if (p.total === 0) {
-    const reds = storyCycles(sftddDir, featureId, story).filter((c) => Boolean(c.red_at));
-    return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
-  }
-  return p.allGreen;
-}
-function storyReviewState(sftddDir, featureId, story) {
-  const r = readStoryReview(sftddDir, featureId, story);
-  return {
-    allTestsGreen: storyAllTestsGreen(sftddDir, featureId, story),
-    reviewed: Boolean(r.reviewed_at),
-    refactorRequested: Boolean(r.refactor_requested),
-    refactored: Boolean(r.refactored_at)
-  };
-}
-function reviewPending(sftddDir, featureId, story) {
-  const s = storyReviewState(sftddDir, featureId, story);
-  return s.allTestsGreen && !s.reviewed;
-}
-function refactorPending(sftddDir, featureId, story) {
-  const s = storyReviewState(sftddDir, featureId, story);
-  if (!s.reviewed || s.refactored) return false;
-  if (s.refactorRequested) return true;
-  return hasOpenBuildRefactorRoutableSmell(sftddDir, story);
-}
-
-// scripts/sftdd/escalation.ts
-var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
-  "test-list-drift",
-  "cycle-stall",
-  "boundary-violation",
-  "test-deletion-attempt",
-  // A missing kit-owned scaffold piece (e.g. the E2E conftest/live_server) must
-  // halt to the HIL, not let the build fabricate it. The driver-wrote-its-own-
-  // conftest defect (2026-06-11 smoke) traced to this not being blocking.
-  "scaffold-defect",
-  // Non-independent ACs (one AC's `then` implied by another) make a faithful RED
-  // impossible. Flagged by the test-strategist at the design gate so it halts
-  // BEFORE a build cycle, not mid-build as a cycle-stall (the 2026-06-11 AC2/AC3
-  // overlap that stalled S1).
-  "ac-overlap",
-  // Pre-build reflection gate: the Navigator (reflect mode) found a spec or
-  // test-list defect BEFORE the build lane. Blocking + spec-level, so it routes
-  // to the owning author (bounded one revise) then HITL, via the revise-route
-  // machinery. Halts the build until the design defect is resolved.
-  "reflect-spec-defect",
-  "reflect-testlist-defect",
-  // The boundary/routes layer touching persistence directly (a fat controller),
-  // instead of delegating to a service + repository. A build-level structural
-  // defect; the Navigator flags it in REVIEW and the layering fitness test
-  // defends it. Build-level (not spec-level), so it hard-halts to the HIL rather
-  // than routing to a design author.
-  "layering-violation",
-  // The rendered UI does not USE the design tokens at the element level (hardcoded
-  // hex/px, a missing ia.md data-testid seam, or an action with no feedback), even
-  // though the :root tokens exist. The UX Designer flags it in REVIEW and the
-  // element-level design-adherence checks defend it. Build-level (a UI-quality
-  // defect to refactor), so it hard-halts to the HIL rather than routing to an author.
-  "ux-adherence",
-  // The architect-notes projection found a story the canon does not cover
-  // (FEIP-7902). Blocking + spec-level + architect-owned: it routes to the
-  // Architect (re-annotate + amend the canon) via revise-routing, bounded one
-  // revise then HITL. Halts the design lane until the gap is resolved.
-  "architect-canon-gap"
-]);
-function escalationId(parts) {
-  return [parts.source, parts.feature_id, parts.story_id, parts.ac_id].filter(Boolean).join("__").replace(/[^A-Za-z0-9_.-]/g, "-");
-}
-function writeEscalation(sftddDir, esc) {
-  const id = esc.id ?? escalationId(esc);
-  const file = escalationFile(sftddDir, id);
-  const existing = readEscalationFile(file);
-  if (existing && !existing.resolved_at) return existing;
-  const full = {
-    id,
-    source: esc.source,
-    reason: esc.reason,
-    ...esc.feature_id ? { feature_id: esc.feature_id } : {},
-    ...esc.story_id ? { story_id: esc.story_id } : {},
-    ...esc.ac_id ? { ac_id: esc.ac_id } : {},
-    raised_at: esc.raised_at ?? (/* @__PURE__ */ new Date()).toISOString()
-  };
-  fs8.mkdirSync(escalationsDir(sftddDir), { recursive: true });
-  fs8.writeFileSync(file, JSON.stringify(full, null, 2) + "\n", "utf8");
-  return full;
-}
-function readEscalationFile(file) {
-  if (!fs8.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs8.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function readEscalations(sftddDir) {
-  const dir = escalationsDir(sftddDir);
-  if (!fs8.existsSync(dir)) return [];
-  const out = [];
-  for (const f of fs8.readdirSync(dir)) {
-    if (!f.endsWith(".json")) continue;
-    const e = readEscalationFile(`${dir}/${f}`);
-    if (e) out.push(e);
-  }
-  return out;
-}
-function escalationsFromSmells(sftddDir, featureId) {
-  const log = readSmellsLog(sftddDir);
-  return log.detected.filter((d) => !d.resolution && BLOCKING_SMELLS.has(d.smell)).filter((d) => {
-    if (d.smell !== "cycle-stall" || !featureId || !d.story_id) {
-      return true;
-    }
-    return pendingItemKind(sftddDir, featureId, d.story_id) !== "fitness";
-  }).map((d) => ({
-    id: escalationId({ source: `smell:${d.smell}`, feature_id: featureId, story_id: d.story_id }),
-    source: `smell:${d.smell}`,
-    reason: `blocking smell "${d.smell}": ${d.detail}`,
-    ...featureId ? { feature_id: featureId } : {},
-    ...d.story_id ? { story_id: d.story_id } : {},
-    ...d.ac_id ? { ac_id: d.ac_id } : {},
-    raised_at: d.detected_at
-  }));
-}
-function firstPendingEscalation(sftddDir, featureId) {
-  const explicit = readEscalations(sftddDir).filter((e) => !e.resolved_at);
-  const scoped = featureId ? explicit.filter((e) => !e.feature_id || e.feature_id === featureId) : explicit;
-  if (scoped.length > 0) {
-    return [...scoped].sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0];
-  }
-  const fromSmells = escalationsFromSmells(sftddDir, featureId);
-  return fromSmells.length > 0 ? fromSmells.sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0] : null;
-}
-
-// scripts/sftdd/workflow-phase.ts
-init_cjs_shims();
-var fs9 = __toESM(require("fs"), 1);
-var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
-function writeWorkflowPhase(sftddDir, phase) {
-  const file = workflowStateJson(sftddDir);
-  let state = {};
-  if (fs9.existsSync(file)) {
-    try {
-      state = JSON.parse(fs9.readFileSync(file, "utf8"));
-    } catch {
-      state = {};
-    }
-  }
-  state.phase = phase;
-  fs9.mkdirSync(sftddDir, { recursive: true });
-  fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
-function resetStaleTerminalPhase(sftddDir) {
-  const file = workflowStateJson(sftddDir);
-  if (!fs9.existsSync(file)) return false;
-  let state;
-  try {
-    state = JSON.parse(fs9.readFileSync(file, "utf8"));
-  } catch {
-    return false;
-  }
-  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
-    delete state.phase;
-    fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-    return true;
-  }
-  return false;
-}
-
-// scripts/sftdd/orchestrator-effects.ts
-init_cjs_shims();
-var fs12 = __toESM(require("fs"), 1);
-var import_node_path10 = require("path");
-
-// scripts/sftdd/orchestrator-derive.ts
-init_cjs_shims();
-function isContractStory(storyId) {
-  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
-    storyId
-  );
-}
-function effectiveLoopForStory(runLoop, storyId) {
-  return isContractStory(storyId) ? "ac" : runLoop;
-}
-function storyView(id, e, probe, loop) {
-  const gateApproved = e.gate?.status === "approved";
-  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
-  return {
-    gateApproved,
-    // The gate record exists once the story has been surfaced for review;
-    // awaiting-gate is the pre-record surfaced state.
-    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
-    design: {
-      hasAcs: probe.hasAcs(id),
-      architectAnnotated: probe.architectAnnotated(id),
-      architectProjectable: probe.architectProjectable(id),
-      testListReady: probe.testListReady(id),
-      reflectionPassed: probe.reflectionPassed(id),
-      reflectionVerdictWritten: probe.reflectionVerdictWritten(id)
-    },
-    build: {
-      // An experiment that was discarded is no longer cut (a fresh one is cut
-      // on revise); merged/active both count as cut.
-      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
-      testsWritten: probe.testsWritten(id),
-      codeWritten: probe.codeWritten(id),
-      loop,
-      reviewAc: probe.reviewPendingAc(id),
-      refactorAc: probe.refactorPendingAc(id),
-      reviewStoryPending: probe.reviewPending(id),
-      refactorStoryPending: probe.refactorPending(id),
-      assessGreenAc: probe.assessGreenFailureAc(id),
-      repairRegressionAc: probe.repairRegressionFixAc(id),
-      awaitingAcceptance: e.status === "awaiting-acceptance",
-      deployVerified: probe.storyDeployVerified(id),
-      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
-      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
-      accepted
-    }
-  };
-}
-function deriveDriveState(pipeline, probe, ctx) {
-  const loop = ctx.loop ?? "story";
-  const stories = {};
-  for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
-  }
-  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
-  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
-  return {
-    phase: ctx.phase,
-    planning: ctx.planning,
-    deploy: ctx.deploy,
-    promote: ctx.promote,
-    breakdownDone,
-    storyOrder,
-    stories,
-    buildActive: pipeline.build_active,
-    escalation: probe.pendingEscalation()
-  };
-}
-function driverPhaseForTdd(tddPhase) {
-  switch (tddPhase) {
-    case "planning":
-      return "planning";
-    case "deploy":
-      return "deploy";
-    case "promote":
-      return "promote";
-    case "shipped":
-    case "done":
-      return "done";
-    default:
-      return "feature";
-  }
-}
-
-// scripts/sftdd/orchestrator-probe.ts
-init_cjs_shims();
-var fs11 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
-
-// scripts/sftdd/gates.ts
-init_cjs_shims();
-var import_fs8 = require("fs");
-var import_path8 = require("path");
-var GATES_SCHEMA_VERSION = 1;
-var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
-function defaultGatesState(featureId) {
-  return {
-    feature_id: featureId,
-    schema_version: GATES_SCHEMA_VERSION,
-    gates: {
-      spec: { status: "open", history: [] },
-      plan: { status: "open", history: [] },
-      test_list: { status: "open", history: [] },
-      promote: { status: "open", history: [] },
-      deploy: { status: "open", history: [] }
-    }
-  };
-}
-function readGates(featureId, opts = {}) {
-  const sftddDir = opts.sftddDir ?? resolveSftddDir();
-  const file = gatesFilePath(sftddDir, featureId);
-  if (!(0, import_fs8.existsSync)(file)) {
-    return defaultGatesState(featureId);
-  }
-  const raw = (0, import_fs8.readFileSync)(file, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
-  }
-  return validateGatesState(parsed, file);
-}
-function gatesFilePath(sftddDir, featureId) {
-  return (0, import_path8.join)(requireFeatureDir(sftddDir, featureId), "gates.json");
-}
-function validateGatesState(parsed, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file} is not an object`);
-  }
-  const obj = parsed;
-  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
-    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
-  }
-  if (typeof obj.schema_version !== "number") {
-    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
-  }
-  if (typeof obj.gates !== "object" || obj.gates === null) {
-    throw new Error(`gates.json at ${file}: missing or invalid gates`);
-  }
-  const gates = obj.gates;
-  const out = {
-    spec: validateGateRecord(gates.spec, "spec", file),
-    plan: validateGateRecord(gates.plan, "plan", file),
-    test_list: validateGateRecord(gates.test_list, "test_list", file),
-    promote: validateGateRecord(gates.promote, "promote", file),
-    // The deploy gate (working-software) was added after the original four.
-    // A gates.json written before it lacks the key, so backfill a default-open
-    // record rather than reject the file (forward-compatible read).
-    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
-  };
-  return {
-    feature_id: obj.feature_id,
-    schema_version: obj.schema_version,
-    gates: out
-  };
-}
-function validateGateRecord(parsed, gateName, file) {
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
-  }
-  const obj = parsed;
-  const status = obj.status;
-  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
-    throw new Error(
-      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
-    );
-  }
-  const history = obj.history;
-  if (history !== void 0 && !Array.isArray(history)) {
-    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
-  }
-  return {
-    status,
-    approver: typeof obj.approver === "string" ? obj.approver : void 0,
-    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
-    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
-    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
-    history: history ?? []
-  };
-}
-
-// scripts/lakebase/scm-workflow-state.ts
-init_cjs_shims();
-var fs10 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
-var SCM_STATES = [
-  "scaffold-complete",
-  "feature-claimed",
-  "pr-ready",
-  "ci-green",
-  "merged"
-];
-var STATE_INDEX = SCM_STATES.reduce(
-  (acc, s, i) => ({ ...acc, [s]: i }),
-  {}
-);
-var STATE_FILE_REL = ".lakebase/workflow-state.json";
-function stateFilePath(projectDir) {
-  return path4.join(projectDir, STATE_FILE_REL);
-}
-function readWorkflowState(projectDir) {
-  const p = stateFilePath(projectDir);
-  if (!fs10.existsSync(p)) return null;
-  const raw = fs10.readFileSync(p, "utf8");
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(
-      `Failed to parse ${STATE_FILE_REL}: ${e.message}`
-    );
-  }
-  const result = validateWorkflowState(parsed);
-  if (!result.ok) {
-    const summary = result.errors.map((e) => `  - ${e.path}: ${e.message}`).join("\n");
-    throw new Error(
-      `Invalid ${STATE_FILE_REL}:
-${summary}
-
-Fix the file or delete it to re-init.`
-    );
-  }
-  return result.value;
-}
-function validateWorkflowState(value) {
-  const errors = [];
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {
-      ok: false,
-      errors: [{ path: "$", message: "must be an object" }]
-    };
-  }
-  const v = value;
-  if (v.version !== 1) {
-    errors.push({ path: "version", message: `must be 1, got ${String(v.version)}` });
-  }
-  if (typeof v.state !== "string" || !SCM_STATES.includes(v.state)) {
-    errors.push({
-      path: "state",
-      message: `must be one of ${SCM_STATES.join(" | ")}`
-    });
-  }
-  if (v.tier_topology !== 1 && v.tier_topology !== 2 && v.tier_topology !== 3) {
-    errors.push({
-      path: "tier_topology",
-      message: "must be 1, 2, or 3"
-    });
-  }
-  if (typeof v.project_id !== "string" || v.project_id.length === 0) {
-    errors.push({
-      path: "project_id",
-      message: "must be a non-empty string"
-    });
-  }
-  const stringFields = [
-    "feature_id",
-    "branch",
-    "parent_branch",
-    "lakebase_branch_uid",
-    "claimed_at",
-    "pr_url",
-    "pushed_at",
-    "ci_run_url",
-    "ci_green_at",
-    "merged_at",
-    "migrate_run_url",
-    "migrate_completed_at",
-    "$schema"
-  ];
-  for (const key of stringFields) {
-    if (v[key] === void 0) continue;
-    if (typeof v[key] !== "string" || v[key].length === 0) {
-      errors.push({
-        path: key,
-        message: "must be a non-empty string when present"
-      });
-    }
-  }
-  const requiredForState = {
-    "scaffold-complete": [],
-    "feature-claimed": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at"
-    ],
-    "pr-ready": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at"
-    ],
-    "ci-green": [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at",
-      "ci_run_url",
-      "ci_green_at"
-    ],
-    merged: [
-      "feature_id",
-      "branch",
-      "parent_branch",
-      "lakebase_branch_uid",
-      "claimed_at",
-      "pr_url",
-      "pushed_at",
-      "ci_run_url",
-      "ci_green_at",
-      "merged_at"
-    ]
-  };
-  if (typeof v.state === "string" && SCM_STATES.includes(v.state)) {
-    for (const key of requiredForState[v.state]) {
-      if (v[key] === void 0) {
-        errors.push({
-          path: key,
-          message: `required when state is "${v.state}"`
-        });
-      }
-    }
-  }
-  const allowedKeys = /* @__PURE__ */ new Set([
-    "$schema",
-    "version",
-    "state",
-    "tier_topology",
-    "project_id",
-    "feature_id",
-    "branch",
-    "parent_branch",
-    "lakebase_branch_uid",
-    "claimed_at",
-    "pr_url",
-    "pushed_at",
-    "ci_run_url",
-    "ci_green_at",
-    "merged_at",
-    "migrate_run_url",
-    "migrate_completed_at"
-  ]);
-  for (const key of Object.keys(v)) {
-    if (!allowedKeys.has(key)) {
-      errors.push({ path: key, message: "unknown property" });
-    }
-  }
-  if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: v };
-}
-
-// scripts/sftdd/reflection.ts
-init_cjs_shims();
-var import_fs9 = require("fs");
-function readReflectVerdict(sftddDir, feature, story) {
-  const p = reflectVerdictJson(sftddDir, feature, story);
-  if (!(0, import_fs9.existsSync)(p)) return void 0;
-  try {
-    return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function reflectionPassed(sftddDir, feature, story) {
-  return readReflectVerdict(sftddDir, feature, story)?.passed === true;
-}
-function reflectionVerdictWritten(sftddDir, feature, story) {
-  return readReflectVerdict(sftddDir, feature, story) !== void 0;
-}
-
-// scripts/sftdd/architecture-canon.ts
-init_cjs_shims();
-var import_fs10 = require("fs");
-function uniq(xs) {
-  return [...new Set(xs.filter((x) => typeof x === "string" && x.length > 0))];
-}
-function readCanon(sftddDir) {
-  const f = architectureCanonJson(sftddDir);
-  if (!(0, import_fs10.existsSync)(f)) return void 0;
-  try {
-    return JSON.parse((0, import_fs10.readFileSync)(f, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function architectNovelty(canon, storyAcs, storyArchitectureJsonContent) {
-  const reasons = [];
-  const knownLayers = new Set(canon.ac_layers);
-  const unknownLayers = uniq(
-    storyAcs.map((a) => a.layer).filter((l) => typeof l === "string" && !knownLayers.has(l))
-  );
-  for (const l of unknownLayers) {
-    reasons.push(`AC layer "${l}" is not in the project canon (${canon.ac_layers.join(", ") || "none"})`);
-  }
-  if (storyArchitectureJsonContent) {
-    let doc;
-    try {
-      doc = JSON.parse(storyArchitectureJsonContent);
-    } catch {
-      doc = void 0;
-    }
-    if (doc) {
-      const knownInv = new Set(canon.invariant_patterns.map((p) => p.type));
-      for (const t of uniq((doc.persistence_invariants ?? []).map((p) => p.type ?? ""))) {
-        if (!knownInv.has(t)) reasons.push(`persistence-invariant type "${t}" is not a canon pattern`);
-      }
-      const knownCat = new Set(canon.nfr_posture.map((n) => n.category));
-      for (const c of uniq((doc.nfrs ?? []).map((n) => n.category ?? ""))) {
-        if (!knownCat.has(c)) reasons.push(`NFR category "${c}" is not in the canon posture`);
-      }
-    }
-  }
-  return { novel: reasons.length > 0, reasons };
-}
-
-// scripts/sftdd/orchestrator-probe.ts
-function storyCycles2(sftddDir, featureId, story) {
-  const base = path5.join(cyclesRootDir(sftddDir), featureId, story);
-  if (!fs11.existsSync(base)) return [];
-  const out = [];
-  for (const acDir of fs11.readdirSync(base)) {
-    const dir = path5.join(base, acDir);
-    let isDir = false;
-    try {
-      isDir = fs11.statSync(dir).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    if (!isDir) continue;
-    for (const f of fs11.readdirSync(dir)) {
-      if (!/^cycle-\d+\.json$/.test(f)) continue;
-      try {
-        out.push(JSON.parse(fs11.readFileSync(path5.join(dir, f), "utf8")));
-      } catch {
-      }
-    }
-  }
-  return out;
-}
-function readJson(file) {
-  if (!fs11.existsSync(file)) return void 0;
-  try {
-    return JSON.parse(fs11.readFileSync(file, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-function readDriveContext(sftddDir, featureId, projectDir) {
-  const ws = readJson(workflowStateJson(sftddDir));
-  const tddPhase = typeof ws?.phase === "string" ? ws.phase : "feature";
-  const spec = readJson(featureSpecJson(sftddDir, featureId));
-  const proposed = spec !== void 0;
-  const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs11.existsSync(featureRequestMd(sftddDir, featureId));
-  const deployed = fs11.existsSync(featureDeployEvidenceJson(sftddDir, featureId));
-  const gateApproved = readGateApproved(featureId, sftddDir, "deploy");
-  const proj = projectDir ?? path5.dirname(sftddDir);
-  let scmState;
-  try {
-    scmState = readWorkflowState(proj)?.state;
-  } catch {
-    scmState = void 0;
-  }
-  const atOrPast = (target) => {
-    if (!scmState) return false;
-    const i = SCM_STATES.indexOf(scmState);
-    const t = SCM_STATES.indexOf(target);
-    return i >= 0 && t >= 0 && i >= t;
-  };
-  const promote = {
-    prReady: atOrPast("pr-ready"),
-    ciGreen: atOrPast("ci-green"),
-    prApproved: readGateApproved(featureId, sftddDir, "promote"),
-    merged: scmState === "merged"
-  };
-  return {
-    phase: driverPhaseForTdd(tddPhase),
-    breakdownDone,
-    planning: { proposed, estimated: hasEstimates(sftddDir), requestsAuthored },
-    deploy: { deployed, gateApproved },
-    promote
-  };
-}
-function readGateApproved(featureId, sftddDir, gate) {
-  try {
-    return readGates(featureId, { sftddDir }).gates[gate].status === "approved";
-  } catch {
-    return false;
-  }
-}
-function diskArtifactProbe(sftddDir, featureId, buildActive) {
-  return {
-    hasAcs(story) {
-      return storyAcIds(sftddDir, featureId, story).length > 0;
-    },
-    architectAnnotated(story) {
-      const acs = storyAcIds(sftddDir, featureId, story);
-      if (acs.length === 0) return false;
-      const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(sftddDir, featureId, ac) !== void 0);
-      return everyAcNoted && fs11.existsSync(architectureJson(sftddDir, featureId));
-    },
-    architectProjectable(story) {
-      if (!fs11.existsSync(architectureJson(sftddDir, featureId))) return false;
-      const canon = readCanon(sftddDir);
-      if (!canon) return false;
-      if (canon.established_by === featureId) return false;
-      if (priorReviseCount(sftddDir, "architect-canon-gap", story) > 0) return false;
-      const acs = storyAcIds(sftddDir, featureId, story);
-      if (acs.length === 0) return false;
-      const layers = acs.map((ac) => readAcLayer2(sftddDir, featureId, ac));
-      if (layers.some((l) => !l)) return false;
-      return !architectNovelty(canon, layers.map((l) => ({ layer: l }))).novel;
-    },
-    testListReady(story) {
-      const file = storyTestListJson(sftddDir, featureId, story);
-      if (!fs11.existsSync(file)) return false;
-      try {
-        const data = JSON.parse(fs11.readFileSync(file, "utf8"));
-        return Array.isArray(data.items) && data.items.length > 0;
-      } catch {
-        return false;
-      }
-    },
-    reflectionPassed(story) {
-      return reflectionPassed(sftddDir, featureId, story);
-    },
-    reflectionVerdictWritten(story) {
-      return reflectionVerdictWritten(sftddDir, featureId, story);
-    },
-    // The build loop is TEST-LIST-DRIVEN: the Navigator/Driver hand off ONE test
-    // at a time (write RED -> make GREEN) until EVERY test-list item is green.
-    // `testsWritten` = "the Navigator has nothing to write right now" (a RED
-    // already awaits the Driver, OR all tests are green); `codeWritten` = "every
-    // test-list item has a GREEN cycle". With nextBuildAction's order
-    // (!testsWritten -> navigator; !codeWritten -> driver) this yields the
-    // interleaved per-test handoff: RED T1 -> GREEN T1 -> RED T2 -> ... Without
-    // it the loop advanced after a single test and stalled at await-acceptance
-    // with the rest of the list unbuilt (the live stall).
-    testsWritten(story) {
-      const p = storyTestProgress(sftddDir, featureId, story);
-      if (p.total === 0) {
-        return storyCycles2(sftddDir, featureId, story).some((c) => Boolean(c.red_at));
-      }
-      return p.openRed.length > 0 || p.allGreen;
-    },
-    codeWritten(story) {
-      const p = storyTestProgress(sftddDir, featureId, story);
-      if (p.total === 0) {
-        const reds = storyCycles2(sftddDir, featureId, story).filter((c) => Boolean(c.red_at));
-        return reds.length > 0 && reds.every((c) => Boolean(c.green_at));
-      }
-      return p.allGreen;
-    },
-    reviewPendingAc(story) {
-      return firstReviewPendingAc(sftddDir, featureId, story);
-    },
-    refactorPendingAc(story) {
-      return firstRefactorPendingAc(sftddDir, featureId, story);
-    },
-    reviewPending(story) {
-      return reviewPending(sftddDir, featureId, story);
-    },
-    refactorPending(story) {
-      return refactorPending(sftddDir, featureId, story);
-    },
-    assessGreenFailureAc(story) {
-      let acId;
-      try {
-        acId = storyTestProgress(sftddDir, featureId, story).openRed[0]?.ac_id;
-      } catch {
-        acId = void 0;
-      }
-      if (!acId) return null;
-      return needsGreenAssess(sftddDir, featureId, story, acId) ? acId : null;
-    },
-    repairRegressionFixAc(story) {
-      let acId;
-      try {
-        acId = storyTestProgress(sftddDir, featureId, story).openRed[0]?.ac_id;
-      } catch {
-        acId = void 0;
-      }
-      if (!acId) return null;
-      return hasPendingRegressionFix(sftddDir, featureId, story, acId) ? acId : null;
-    },
-    storyDeployVerified(story) {
-      return storyDeployVerified(sftddDir, featureId, story);
-    },
-    deployVerifyAssessEligible(story) {
-      return deployVerifyNeedsAssess(sftddDir, featureId, story);
-    },
-    deployVerifyRefactorPending(story) {
-      return deployVerifyRefactorPending(sftddDir, featureId, story);
-    },
-    pendingEscalation() {
-      const e = firstPendingEscalation(sftddDir, featureId);
-      if (!e) return null;
-      const base = {
-        id: e.id,
-        source: e.source,
-        reason: e.reason,
-        ...e.story_id ? { story_id: e.story_id } : {}
-      };
-      if (e.source.startsWith("smell:")) {
-        const name = e.source.slice("smell:".length);
-        const story = e.story_id ?? buildActive ?? void 0;
-        if (isBuildRefactorRoutableSmell(name) && story && firstRefactorPendingAc(sftddDir, featureId, story)) {
-          return null;
-        }
-        const spec = specLevelSmell(name);
-        if (spec && story && priorReviseCount(sftddDir, name, story) < 1) {
-          base.routable = { story, owning_role: spec.owning_role, gate: spec.gate_to_rerun };
-        }
-      }
-      return base;
-    }
-  };
-}
-
-// scripts/sftdd/story-pipeline.ts
-init_cjs_shims();
-var import_fs11 = require("fs");
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(sftddDir, featureId) {
-  return pipelineJson(sftddDir, featureId);
-}
-function readPipeline(sftddDir, featureId) {
-  const p = pipelinePath(sftddDir, featureId);
-  if (!(0, import_fs11.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs11.readFileSync)(p, "utf8"));
-}
-
-// scripts/sftdd/response-formatter.ts
-init_cjs_shims();
-var import_node_fs6 = require("fs");
 
 // scripts/sftdd/artifact-conformance.ts
-init_cjs_shims();
-var import_path9 = require("path");
 var ARTIFACT_FORMATS = {
   "feature-spec.json": { kind: "json-schema", schema: "feature.schema.json" },
   "story.json": { kind: "json-schema", schema: "story.schema.json" },
@@ -9437,683 +6927,265 @@ function checkTestListMd(content) {
   }
   return violations;
 }
-function canonicalArtifactName(path7) {
-  const base = (0, import_path9.basename)(path7);
-  if ((0, import_path9.basename)((0, import_path9.dirname)(path7)) === "acs" && base.endsWith(".json")) return "ac.json";
+var REQUIRED_NFR_ITEM_RE = /^\s*[-*]\s+\*{0,2}(R\d+)\*{0,2}\s*[:.)\-]?\s*(.*)$/;
+var PLAIN_LIST_ITEM_RE = /^\s*[-*]\s+(.*\S)\s*$/;
+function parseRequiredNfrs(nfrsMd2) {
+  const lines = nfrsMd2.split("\n");
+  const out = [];
+  let inRequired = false;
+  for (const line of lines) {
+    const h = HEADING_RE.exec(line);
+    if (h) {
+      inRequired = h[2].trim().toLowerCase().startsWith("required");
+      continue;
+    }
+    if (!inRequired) continue;
+    const withId = REQUIRED_NFR_ITEM_RE.exec(line);
+    if (withId) {
+      out.push({ id: withId[1], text: withId[2].trim() });
+      continue;
+    }
+    const plain = PLAIN_LIST_ITEM_RE.exec(line);
+    if (plain) out.push({ id: null, text: plain[1].trim() });
+  }
+  return out;
+}
+function checkNfrCoverage(nfrsMd2, architectureJson2) {
+  const required = parseRequiredNfrs(nfrsMd2);
+  if (required.length === 0) return { ok: true };
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${cause}`] };
+  }
+  const briefRefs = new Set(
+    (parsed.nfrs ?? []).map((n) => n.brief_ref).filter((r) => typeof r === "string" && r.length > 0)
+  );
+  const violations = [];
+  for (const item of required) {
+    if (item.id === null) {
+      const preview = item.text.length > 50 ? `${item.text.slice(0, 50)}...` : item.text;
+      violations.push(`nfrs.md Required item has no R<n> id (cannot be coverage-tracked): "${preview}"`);
+      continue;
+    }
+    if (!briefRefs.has(item.id)) {
+      violations.push(
+        `Required NFR ${item.id} from nfrs.md is not covered by any architecture.json nfr (no matching brief_ref)`
+      );
+    }
+  }
+  return finalize(violations);
+}
+var PERSISTENCE_EVIDENCE_RE = /\b(migrat\w*|schema|persist\w*|stored|store|tables?|database|repositor\w*|\bORM\b)\b/i;
+function checkServiceBackedDeclaration(architectureJson2, evidence) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed === true) return { ok: true };
+  const infraAc = (evidence.acLayers ?? []).some((l) => l === "Infra");
+  const persistNfr = (evidence.nfrsText ?? []).some((t) => PERSISTENCE_EVIDENCE_RE.test(t));
+  if (!infraAc && !persistNfr) return { ok: true };
+  const why = [
+    infraAc ? "an AC is tagged layer:Infra (a data-store contract)" : "",
+    persistNfr ? "an NFR references persistence (migration/schema/storage)" : ""
+  ].filter(Boolean).join(" and ");
+  return {
+    ok: false,
+    violations: [
+      `architecture.json is not service_backed but shows persistence evidence (${why}); set service_backed:true + declare boundary/service/repository layers (a data-persisting feature MUST be layered), or remove the misleading signal if the feature is genuinely trivial`
+    ]
+  };
+}
+function checkLayeringDeclared(architectureJson2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(architectureJson2);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  if (parsed.service_backed !== true) return { ok: true };
+  const roles = new Set(
+    (parsed.layers ?? []).map((l) => l.role).filter((r) => typeof r === "string")
+  );
+  const missing = ["boundary", "service", "repository"].filter((r) => !roles.has(r));
+  if (missing.length) {
+    return {
+      ok: false,
+      violations: [
+        `service_backed feature must declare layers [${missing.join(", ")}] in architecture.json (layered architecture: boundary -> service -> repository -> ORM; the boundary never touches the DB session)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkFitnessCoverage(testListJson, architectureJson2) {
+  let arch;
+  try {
+    arch = JSON.parse(architectureJson2);
+  } catch {
+    return { ok: true };
+  }
+  const declaresConstraint = arch.service_backed === true || Array.isArray(arch.layers) && arch.layers.length > 0;
+  if (!declaresConstraint) return { ok: true };
+  let tl;
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const hasFitness = (tl.items ?? []).some((i) => i.kind === "fitness");
+  if (!hasFitness) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed/layered but the test-list has no kind:"fitness" item (every architectural constraint needs a fitness test, e.g. the layering contract; see test-strategy.md)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkPersistenceCoverage(testListJson, architectureJson2) {
+  let arch;
+  try {
+    arch = JSON.parse(architectureJson2);
+  } catch {
+    return { ok: true };
+  }
+  if (arch.service_backed !== true) return { ok: true };
+  const invariants = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string" && i.id.length > 0);
+  if (invariants.length === 0) {
+    return {
+      ok: false,
+      violations: [
+        `architecture is service-backed but declares no persistence_invariants[] (name the DB-level guarantees the schema enforces , unique/FK/CHECK/NOT NULL/transactional/migration-reversible , so each gets a real-branch test; see architecture.schema.json + test-strategy.md)`
+      ]
+    };
+  }
+  let tl;
+  try {
+    tl = JSON.parse(testListJson);
+  } catch (err) {
+    return { ok: false, violations: [`test-list.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const covered = new Set((tl.items ?? []).map((i) => i.invariant_id).filter((x) => typeof x === "string" && x.length > 0));
+  const uncovered = invariants.map((i) => i.id).filter((id) => !covered.has(id));
+  if (uncovered.length > 0) {
+    return {
+      ok: false,
+      violations: [
+        `persistence_invariant(s) with no covering test-list item (invariant_id): ${uncovered.join(", ")} (each declared invariant needs >=1 test that verifies the migration realized it against the real branch , NOT a test of the ORM's generic round-trip; see test-strategy.md)`
+      ]
+    };
+  }
+  return { ok: true };
+}
+function checkStoryIndependence(stories) {
+  const parsed = [];
+  for (const s of stories) {
+    let obj;
+    try {
+      obj = JSON.parse(s.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : s.name;
+    const m = /^S(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: s.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every story after the first must record independence.distinct_from_prior + rationale; apply the story-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this story's behavior is a subset of an earlier story; fold it into that story or re-scope it to a distinct, independently-RED-able slice)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct behavior this story adds beyond the prior stories)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkAcIndependence(acs) {
+  const parsed = [];
+  for (const a of acs) {
+    let obj;
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkInvariantCoverageDistinct(perStory) {
+  const carriers = /* @__PURE__ */ new Map();
+  for (const s of perStory) {
+    const m = /^S(\d+)/.exec(s.story);
+    const num = m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+    for (const inv of new Set(s.invariantIds)) {
+      if (!inv) continue;
+      const arr = carriers.get(inv) ?? [];
+      arr.push({ story: s.story, num });
+      carriers.set(inv, arr);
+    }
+  }
+  const violations = [];
+  for (const [inv, stories] of carriers) {
+    if (stories.length < 2) continue;
+    const sorted = [...stories].sort((a, b) => a.num - b.num || a.story.localeCompare(b.story));
+    const owner = sorted[0].story;
+    for (const later of sorted.slice(1)) {
+      violations.push(
+        `${later.story} re-tests persistence invariant ${inv} already covered by ${owner}. A persistence invariant is realized once per feature and belongs to exactly one story's fitness tests; drop the duplicate fitness item(s) from ${later.story}. If ${later.story}'s migration adds a NEW invariant, cover that new invariant instead.`
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function canonicalArtifactName(path) {
+  const base = (0, import_path2.basename)(path);
+  if ((0, import_path2.basename)((0, import_path2.dirname)(path)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
-// scripts/sftdd/response-formatter.ts
-function designGuideConformance(sftddDir) {
-  const file = designGuideJson(sftddDir);
-  if (!(0, import_node_fs6.existsSync)(file)) {
-    return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
-  }
-  let content;
-  try {
-    content = (0, import_node_fs6.readFileSync)(file, "utf8");
-  } catch (e) {
-    return { ok: false, problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` };
-  }
-  const r = checkArtifactConformance(canonicalArtifactName(file), content);
-  return r.ok ? { ok: true } : { ok: false, problem: r.violations.join("; ") };
-}
-
-// scripts/sftdd/architecture-conventions.ts
-init_cjs_shims();
-var import_fs12 = require("fs");
-function readConventions(sftddDir) {
-  const f = architectureConventionsJson(sftddDir);
-  if (!(0, import_fs12.existsSync)(f)) return void 0;
-  try {
-    return JSON.parse((0, import_fs12.readFileSync)(f, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-
-// scripts/sftdd/orchestrator-effects.ts
-var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story, a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
-var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-function artifactRootRel(sftddDir) {
-  return (0, import_node_path10.basename)(sftddDir);
-}
-function uiTrackBuild(root) {
-  return ` UI track is ON: the UI must adhere to the project design guide at ${root}/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
-}
-var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
-function storyStubScope(sftddDir, featureId, storyId) {
-  try {
-    const stub = JSON.parse(fs12.readFileSync(storyJson(sftddDir, featureId, storyId), "utf8"));
-    const parts = [
-      stub.asA ? `As a ${stub.asA}` : "",
-      stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
-      stub.soThat ? `so that ${stub.soThat}` : ""
-    ].filter(Boolean);
-    return parts.length ? ` The story: ${parts.join(", ")}.` : "";
-  } catch {
-    return "";
-  }
-}
-function contextRubric(sftddDir, featureId, story, ac) {
-  const parts = [];
-  const layers = /* @__PURE__ */ new Set();
-  const acIds = ac ? [ac] : storyAcIds(sftddDir, featureId, story);
-  for (const id of acIds) {
-    const l = readAcLayer(sftddDir, featureId, id);
-    if (l) layers.add(l);
-  }
-  if (layers.size) parts.push(`layer${layers.size > 1 ? "s" : ""}=${[...layers].join(", ")}`);
-  try {
-    const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
-    const nfrs = (arch.nfrs ?? []).filter(
-      (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
-    );
-    if (nfrs.length) {
-      parts.push(`required NFRs, ${nfrs.map((n) => `${n.id}${n.brief ? ` (${n.brief})` : ""}`).join("; ")}`);
-    }
-  } catch {
-  }
-  if (layers.has("E2E")) {
-    try {
-      const dg = JSON.parse(fs12.readFileSync(designGuideJson(sftddDir), "utf8"));
-      const groups = Object.keys(dg.tokens ?? dg);
-      if (groups.length) parts.push(`design-token groups, ${groups.join(", ")}`);
-    } catch {
-    }
-  }
-  return parts.length ? ` RUBRIC (pre-extracted; judge against THIS) :: ${parts.join(" | ")}.` : "";
-}
-function rubricSourcesNote(rubric, featureId, root) {
-  if (!rubric) return "";
-  return ` The rubric above is pre-extracted from ${root}/features/${featureId}/architecture.md, ${root}/nfrs.md, and ${root}/design/design-guide.md, open those full files ONLY if you need more detail than it carries (do not re-read them by default).`;
-}
-function buildContextPack(sftddDir, featureId, story, ac, opts = {}) {
-  const root = artifactRootRel(sftddDir);
-  const rubric = contextRubric(sftddDir, featureId, story, ac);
-  const parts = [];
-  if (rubric) parts.push(rubric + rubricSourcesNote(rubric, featureId, root));
-  const conventions = readConventions(sftddDir);
-  if (conventions?.layers?.length) {
-    const layout = conventions.layers.map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`).join(" | ");
-    parts.push(` LAYOUT (place/judge code at THESE paths, do not scan for them) :: ${layout}.`);
-  }
-  if (!opts.skipTestLoop) {
-    parts.push(
-      ` TESTS :: this story's tests are under tests/step_defs/ (behavior, one file per story) and tests/architecture/ (fitness: layering, persistence invariants, migration reversibility). Read those named paths directly; do NOT find/grep/ls to locate them. Iterate against the single failing test while fixing; the honest-GREEN verify is the authoritative full run.`
-    );
-  }
-  return parts.join("");
-}
-function nextPendingTestDirective(sftddDir, featureId, story, loop, cap) {
-  if ((loop ?? "story") === "story") {
-    let batch = [];
-    try {
-      batch = nextPendingBatch(sftddDir, featureId, story, Number.MAX_SAFE_INTEGER);
-    } catch {
-      batch = [];
-    }
-    if (batch.length === 0) {
-      return `Write the failing tests (RED) for story ${story}: every test-list item for the story that has no cycle yet.`;
-    }
-    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
-    return `Write the failing tests (RED) for the WHOLE story ${story} in this one turn, EXACTLY these ${batch.length} item(s) across all its ACs, in order: ${list}. Write ALL of them now and ONLY these; do NOT add or drop items, the orchestration stamps ONE whole-story batch RED cycle for exactly these ids, and any mismatch is a defect.`;
-  }
-  if (loop === "hybrid-a") {
-    let batch = [];
-    try {
-      batch = nextPendingBatch(sftddDir, featureId, story, cap ?? DEFAULT_BATCH_CAP);
-    } catch {
-      batch = [];
-    }
-    if (batch.length === 0) {
-      return `Write the next failing tests (RED) for story ${story}: the next un-cycled layer-batch in the test list.`;
-    }
-    const list = batch.map((b) => `${b.id} [ac ${b.ac_id}]: "${b.description}"`).join("; ");
-    return `Write the failing tests (RED) for story ${story}'s next layer-batch, EXACTLY these ${batch.length} item(s), in order: ${list}. Write ALL of them this turn and ONLY these (they share one layer/runner); do NOT skip ahead to another layer, do NOT add or drop items, the orchestration stamps ONE batch RED cycle for exactly these ids, and any mismatch is a defect.`;
-  }
-  let next;
-  try {
-    next = storyTestProgress(sftddDir, featureId, story).pending[0];
-  } catch {
-    next = void 0;
-  }
-  if (!next) {
-    return `Write the next failing test (RED) for story ${story}: the next un-cycled item in the test list.`;
-  }
-  return `Write EXACTLY ONE failing test (RED) for story ${story}: the next test in order, ${next.id} [ac ${next.ac_id}]: "${next.description}". Write ONLY this test. Do NOT skip ahead, do NOT combine tests, do NOT pick a different item, the orchestration stamps the RED cycle for ${next.id}, and a mismatch between the test you write and ${next.id} is a defect.`;
-}
-function supersededTestsDirective(sftddDir, featureId, story) {
-  let acId;
-  try {
-    const prog = storyTestProgress(sftddDir, featureId, story);
-    acId = (prog.openRed[0] ?? prog.pending[0])?.ac_id;
-  } catch {
-    acId = void 0;
-  }
-  if (!acId) return "";
-  const sup = readSupersededTests(sftddDir, featureId, story, acId);
-  if (!sup) return "";
-  const list = sup.tests.map((t) => `  - ${t}`).join("\n");
-  return `
-
-SUPERSEDED TESTS: this AC (${acId}) supersedes behavior encoded in PRIOR tests the Navigator flagged (${sup.reason}). The latest AC wins. You MAY refactor ONLY these flagged tests to the new behavior (alongside the production code) so the honest-GREEN verify holds:
-${list}
-Do NOT touch any other test; an UNflagged failing test is a genuine regression that must stay red and escalate.`;
-}
-function regressionRepairDirective(sftddDir, featureId, story) {
-  let acId;
-  try {
-    acId = storyTestProgress(sftddDir, featureId, story).openRed[0]?.ac_id;
-  } catch {
-    acId = void 0;
-  }
-  if (!acId) return "";
-  const gf = readGreenFailure(sftddDir, featureId, story, acId);
-  if (!gf?.fixDirective) return "";
-  return `REPAIR a driver-fixable regression in AC ${acId} (story ${story}). The honest-GREEN verify against the running app FAILED and it was diagnosed (by the Navigator, or deterministically by a gate such as contract-clean) as a genuine regression in the code, NOT a superseded test:
-  DIAGNOSIS: ${gf.diagnosis ?? gf.summary}
-  FIX: ${gf.fixDirective}
-Apply that fix to the PRODUCTION code. Do NOT edit prior tests to force this regression green, fix the code. (EXCEPTION: if a SUPERSEDED TESTS directive follows below, the Navigator flagged those specific prior tests as encoding obsolete behavior, refactor ONLY those alongside this fix , often the regression is collateral from a superseded test erroring on a shared session, so both must land in this one turn.) Keep the AC's own tests green. This is your ONE repair attempt: if the verify still fails after it, the orchestration escalates to a human with the diagnosis.`;
-}
-function consumeHandback(action, featureId, sftddDir) {
-  const story = "story" in action ? action.story : void 0;
-  const file = handbackFile(sftddDir, featureId, action.role, story);
-  if (!fs12.existsSync(file)) return "";
-  let note = "";
-  try {
-    note = fs12.readFileSync(file, "utf8").trim();
-    fs12.rmSync(file, { force: true });
-  } catch {
-    return "";
-  }
-  return note ? `${note}
-
-` : "";
-}
-function roleTask(action, featureId, uiTrack, sftddDir, build) {
-  return consumeHandback(action, featureId, sftddDir) + roleTaskBody(action, featureId, uiTrack, sftddDir, build);
-}
-function architectConventionsDirective(sftddDir) {
-  const conventions = readConventions(sftddDir);
-  if (!conventions) {
-    return ` This is the first feature: the layered layout you declare in architecture.json (the role -> module paths) becomes the PROJECT-WIDE convention every later feature inherits, so choose the canonical layout deliberately.`;
-  }
-  const layout = conventions.layers.map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`).join(", ");
-  return ` REUSE the established project architecture conventions (set by ${conventions.established_by}): ${layout}. Declare the SAME role -> module paths in architecture.json, do NOT remap or rename an established layer; a divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
-}
-function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
-  const root = artifactRootRel(sftddDir);
-  if ("mode" in action) {
-    switch (action.mode) {
-      case "propose":
-        return `Propose the sprint's candidate features for planning. WRITE the proposal to ${root}/planning/feature-proposals.md , author it FRESH from ${root}/product-overview.md + ${root}/nfrs.md (do NOT assume one already exists), one candidate feature per section, so the Architect can size them and the Product Owner can commit the backlog.${uiTrack ? UI_TRACK_PROPOSE : ""}`;
-      case "estimate":
-        return `Estimate each proposed candidate feature with a t-shirt size (XS/S/M/L/XL) and write planning/estimates.json, so the Product Owner can commit a backlog that fits sprint capacity.`;
-      case "author-requests":
-        return `Provide the sprint's feature-requests.`;
-      case "breakdown":
-        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
-    }
-  }
-  if (action.role === "ux-designer") {
-    return `Translate the HIL design brief (${root}/design/design-brief.md) into the project design system: write design-guide.md (visual + interaction standards), design-guide.json (the machine-checkable tokens: typography, colors, spacing, radius, shadows, breakpoints), and ia.md (the information architecture: screens, navigation, flows). This is the project-level style guide the Navigator and Driver build the UI against; author it once from the brief + product-overview.md.`;
-  }
-  const s = action.story;
-  switch (action.role) {
-    case "spec-author":
-      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(sftddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files, the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
-    case "architect-reviewer": {
-      const arAcIds = storyAcIds(sftddDir, featureId, s);
-      const arAcScope = arAcIds.length ? ` Story ${s}'s ACs are: ${arAcIds.join(", ")}.` : "";
-      return `Annotate story ${s}'s acceptance criteria + nfrs.md coverage.${arAcScope} For EVERY one of this story's ACs, write a non-empty "architectural_notes" field into its acs/<AC>.json (the layer it lives in + how it realizes the design). This is your distinctive per-AC product; the design gate verifies every AC carries it and the spec-author's "layer" field does NOT count. architectural_notes are per-AC, so annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story. In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary, service, and repository layers (plus a "models" PACKAGE app/models/, one module per domain object, NOT a flat app/models.py, when it persists entities); set false ONLY for a trivial static/read-through endpoint. An Infra-layer AC or a migration/schema/storage NFR while service_backed is false hard-blocks the gate. When service_backed:true you MUST also declare architecture.json persistence_invariants[]: the DB-level guarantees the schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible, table, and a one-line brief), covering unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints, any transactional-atomicity boundary, and migration reversibility. The test-strategist must cover each with a real-branch test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(sftddDir)}`;
-    }
-    case "test-strategist": {
-      const acIds = storyAcIds(sftddDir, featureId, s);
-      const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
-      let dbScope = "";
-      try {
-        const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
-        if (arch.service_backed === true) {
-          const inv = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string");
-          const list = inv.length ? ` The declared persistence invariants are: ${inv.map((i) => `${i.id}${i.brief ? ` (${i.brief})` : ""}`).join("; ")}.` : "";
-          dbScope = ` This feature is service-backed. Cover EVERY architecture.json persistence_invariant with >=1 test that sets "invariant_id" to that invariant's id and exercises it DIRECTLY against the branch database (a real DB session, never a mock): verify the MIGRATION actually realized the guarantee (e.g. inserting a duplicate raises an IntegrityError, a NOT NULL/CHECK rejects a bad row, a down-then-up migration round-trips) and that the repository honors it. Do NOT write a test of the ORM's generic add/commit/query round-trip , that tests the library, not your schema.${list}`;
-        }
-      } catch {
-      }
-      return `Produce story ${s}'s ordered tests and APPEND them to the feature master test list ${root}/features/${featureId}/test-list.json, keep every item already there for the other stories and add this story's. Do NOT author any test-list-per-story.json (the orchestration generates the per-story + per-AC views from the master).${acScope}${dbScope}`;
-    }
-    case "navigator":
-      if (action.buildMode === "reflect") {
-        return `REFLECT on story ${s} BEFORE the build lane: independently critique its spec slice (${root}/features/${featureId}/stories/${s}/story.json + acs/*.json) and its test-list (${root}/features/${featureId}/stories/${s}/test-list-per-story.json) against the architecture (${root}/features/${featureId}/architecture.md/.json) + NFRs.` + contextRubric(sftddDir, featureId, s, "") + ` Look ONLY for design-time defects that would waste a build cycle: (1) ACs that contradict each other; (2) an AC with no covering test, or a test that contradicts its AC; (3) an NFR with no fitness test; (4) a test asserting at a layer the architecture forbids; (5) an AC whose declared layer conflicts with the architecture; (6) an untestable/vacuous AC (no observable outcome); (7) a UI-styling test that asserts inline HTML style or raw CSS in the page SOURCE (e.g. a text-align/color/font check inside a style= attr) for a property the design-guide + design-adherence gate govern, instead of the rendered SEAM (the element carries the design-guide class / data-testid): such a test hard-codes the very inline style the design lane then refactors into a token-driven class, so it blocks that refactor (the ui-style-implementation-test smell). Do NOT critique implementation, style, or scope, only buildability + internal consistency of THIS story's artifacts. Write your verdict to ${root}/features/${featureId}/stories/${s}/reflect-verdict.json as {"version":1,"passed":<bool>,"findings":[{"owner":"spec-author"|"test-strategist","detail":"<the defect>"}]}. passed:true with findings:[] when the spec + test-list are consistent + buildable (the common case, do NOT invent defects). Attribute each finding to spec-author (an AC/spec defect) or test-strategist (a test-list/coverage defect). Write ONLY that file; the orchestrator routes any fix deterministically.`;
-      }
-      if (action.buildMode === "assess") {
-        const gfAssess = action.ac ? readGreenFailure(sftddDir, featureId, s, action.ac) : void 0;
-        const contractAdvisory = gfAssess?.contractRefs ? `DETERMINISTIC contract-clean has ALREADY localized the production-code references to the migration-dropped column(s) below , you do NOT need to re-find them. Record EXACTLY these as a driver-fixable regression via assess-regression --fix (path (b)), AND SEPARATELY flag any prior tests that assert the dropped column as superseded (path (a)) , a column drop needs BOTH the code fix and the test refactor in the same repair turn:
-${gfAssess.contractRefs}
-
-` : "";
-        const supersededAdvisory = gfAssess?.supersededTestRefs ? `${gfAssess.supersededTestRefs}
-
-` : "";
-        return contractAdvisory + supersededAdvisory + `ASSESS a failed honest-GREEN verify for AC ${action.ac} in story ${s}. The Driver made the current test pass, but the full-suite verify against the running app FAILED, some OTHER test(s) now fail. Inspect EVERY failing test (the COMPLETE set, not a sample) and decide per test:
-(a) If the current AC INTENTIONALLY supersedes behavior those failing tests encode (the latest AC wins; e.g. a prior feature's test asserts an outcome this AC deliberately changes), FLAG them so the Driver may permissively refactor ONLY those. Scan COMPREHENSIVELY: when this AC drops, removes, or renames a column / field / table / endpoint, the superseded set is NOT only the tests that NAME it in a query/INSERT/assertion , it ALSO includes FITNESS / architecture / migration tests that assert a PROPERTY of the now-gone shape (migration reversibility like "after up() then down(), <col> is reconstructed", schema-shape checks like "<col> exists", invariants over the old column). Those are superseded too , a reversibility/fitness test for an obsoleted column encodes abandoned behavior. Miss one and the verify stays red and escalates, so list ALL of them in ONE flag-superseded call:
-   lakebase-sftdd-cycle flag-superseded --feature ${featureId} --story ${s} --ac ${action.ac} --reason "<new AC + what changed>" --test <path_or_nodeid> [--test ...] --tdd-dir ${sftddDir}
-(b) If instead the failure is a GENUINE REGRESSION (the AC does NOT intend to change that behavior; the Driver's code is wrong), record your ROOT-CAUSE diagnosis so it travels to the Driver / the human instead of being lost. When the Driver can fix it, ALSO give a concrete repair directive (this routes a bounded Driver repair turn):
-   lakebase-sftdd-cycle assess-regression --feature ${featureId} --story ${s} --ac ${action.ac} --diagnosis "<the WHY: which behavior broke + the root cause>" [--fix "<what the Driver should change>"] --tdd-dir ${sftddDir}
-   Include --fix ONLY when the fix is clear + within the Driver's reach (e.g. a wrong default, a missing filter, an off-by-one); OMIT --fix when it needs a human / a design or spec change (the orchestration then escalates carrying your diagnosis).
-Flag ONLY tests the new AC truly supersedes; never flag a test just to make a red go away. For a regression, always write a diagnosis , never nothing.`;
-      }
-      if (action.buildMode === "assess-deploy") {
-        const marker = readDeployVerifyAssessMarker(sftddDir, featureId, s);
-        const failing = marker?.failing_node_ids ?? [];
-        return `ASSESS a failed full-feature DEPLOY-VERIFY for story ${s}. The story's own tests are green, but the full-feature verify against the running app FAILED on the tests below. A deterministic classifier RE-RAN each in ISOLATION (a fresh clean DB) and they ALL PASSED alone , so this is shared-state CONTAMINATION, not broken software: a test that does not OWN its DB state (typically a WHOLE-TABLE AGGREGATE , a COUNT/SUM integrity probe , asserting an ABSOLUTE total that holds on the isolated per-cycle branch but breaks once other stories' rows share the table).
-Failing tests:
-${failing.map((n) => `  ${n}`).join("\n")}
-
-For EACH test, prescribe HOW to make it own its state: scope BOTH the seed AND the assertion to the test's own rows (filter by the test's SKUs / a marker column), or assert a DELTA, NEVER an absolute whole-table total. Do NOT weaken the assertion's intent , keep the invariant, just scope it.
-Write your scope directives to ${root}/features/${featureId}/stories/${s}/deploy-verify-scope.json as {"version":1,"story_id":"${s}","directives":[{"node_id":"<path::test>","directive":"<how to scope it>"}]} , one entry per test you confirm is contamination-fragile. If (rarely) you judge the classifier wrong and a failure is a GENUINE regression, OMIT it from directives (write no file, or an empty directives array); the orchestration then raises it to a human instead of scoping. Write ONLY that file.`;
-      }
-      if (action.buildMode === "review") {
-        if ((build?.loop ?? "story") === "story") {
-          return `REVIEW the implementation of story ${s} now that ALL its tests are green, the whole story in one pass. Judge the story's diff against the context pack: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence.` + buildContextPack(sftddDir, featureId, s, "", { skipTestLoop: true }) + ` Write ONE verdict for the whole story to ${root}/cycles/${featureId}/${s}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
-        }
-        return `REVIEW the implementation of AC ${action.ac} in story ${s} now that its tests are green. Judge the diff against the context pack: layer boundaries, naming, cross-cutting concerns, the required NFRs, and (for UI) design-token + IA adherence.` + buildContextPack(sftddDir, featureId, s, action.ac ?? "", { skipTestLoop: true }) + ` Write your verdict to ${root}/cycles/${featureId}/${s}/${action.ac}/review-verdict.json as {"refactor": <bool>, "notes": "<why>"}, refactor:true only if a concrete improvement is warranted; otherwise refactor:false. Do NOT change tests.`;
-      }
-      {
-        return `${nextPendingTestDirective(sftddDir, featureId, s, build?.loop, build?.cap)}${uiTrack ? uiTrackBuild(root) : ""}` + buildContextPack(sftddDir, featureId, s, action.ac ?? "", { skipTestLoop: true });
-      }
-    case "driver":
-      if (action.buildMode === "refactor-deploy") {
-        const scope = readDeployVerifyScope(sftddDir, featureId, s);
-        const directives = scope?.directives ?? [];
-        return `SCOPE the contamination-fragile tests the Navigator flagged for story ${s}. Each FAILED the full-feature deploy-verify but PASSES in isolation , it asserts an ABSOLUTE whole-table aggregate (or otherwise does not own its DB state), which breaks once other stories' rows share the table. Refactor EACH per its directive so it OWNS its state: scope BOTH the seed AND the assertion to the test's own rows (filter by the test's SKUs / a marker column), or assert a DELTA , NEVER an absolute whole-table total. Keep the invariant; do NOT weaken it, and do NOT change product code.
-` + directives.map((d) => `  ${d.node_id}
-    -> ${d.directive}`).join("\n") + `
-Edit ONLY those test files. The orchestrator re-deploys + re-verifies after your turn.`;
-      }
-      if (action.buildMode === "repair") {
-        return regressionRepairDirective(sftddDir, featureId, s) + supersededTestsDirective(sftddDir, featureId, s);
-      }
-      if (action.buildMode === "refactor") {
-        if ((build?.loop ?? "story") === "story") {
-          return `REFACTOR story ${s} per the Navigator's review (${root}/cycles/${featureId}/${s}/review.json -> refactor_notes), guided by the architecture (${root}/features/${featureId}/architecture.md), the NFRs (${root}/nfrs.md), + design guide (${root}/design/design-guide.md). If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering / design-adherence / import-coupling smell in ${root}/smells.json): run that gate to see the violation (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the duplicated/misplaced code into one shared helper in its correct layer. Keep ALL the story's tests green and do not change what the outer-boundary tests check, refactor only.` + buildContextPack(sftddDir, featureId, s, "");
-        }
-        return `REFACTOR AC ${action.ac} in story ${s} per the Navigator's review (${root}/cycles/${featureId}/${s}/${action.ac}/review.json -> refactor_notes), guided by the architecture (${root}/features/${featureId}/architecture.md), the NFRs (${root}/nfrs.md), + design guide (${root}/design/design-guide.md). If review.json has no refactor_notes, this refactor was queued by a BLOCKING build-quality gate (a layering / design-adherence / import-coupling smell in ${root}/smells.json): run that gate to see the violation (e.g. \`lakebase-sftdd-layering-clean --project-dir .\`) and fix exactly what it flags , typically extract the duplicated/misplaced code into one shared helper in its correct layer. Keep ALL tests green and do not change what the outer-boundary tests check, refactor only.` + buildContextPack(sftddDir, featureId, s, action.ac ?? "");
-      }
-      {
-        return ((build?.loop ?? "story") === "story" ? `Make ALL of story ${s}'s failing tests GREEN in one pass (simplest honest code); implement until every one of the story's tests passes, then run the story's tests once.` : build?.loop === "hybrid-a" ? `Make the failing tests for story ${s}'s current layer-batch ALL GREEN in one pass (simplest honest code); implement until every test in the open batch passes, then run that layer's runner once.` : `Make the failing test for story ${s} GREEN (simplest honest code).`) + (uiTrack ? uiTrackBuild(root) : "") + buildContextPack(sftddDir, featureId, s, action.ac ?? "") + supersededTestsDirective(sftddDir, featureId, s);
-      }
-    default:
-      return `Work story ${s}.`;
-  }
-}
-var PIPELINE_BIN = "lakebase-sftdd-pipeline";
-var EXPERIMENT_BIN = "lakebase-sftdd-experiment";
-var CYCLE_BIN = "lakebase-sftdd-cycle";
-var HUMAN_PROXY_BIN = "lakebase-sftdd-human-proxy";
-var LOG_BIN = "lakebase-sftdd-log";
-var TEST_LIST_BIN = "lakebase-sftdd-test-list";
-var DEPLOY_BIN = "lakebase-sftdd-deploy";
-var GATE_CONFORMANCE_BIN = "lakebase-sftdd-gate-conformance";
-var CANON_NOTES_BIN = "lakebase-sftdd-canon-notes";
-var SCM_PREPARE_PR_BIN = "lakebase-scm-prepare-pr";
-var SCM_WAIT_CI_BIN = "lakebase-scm-wait-ci";
-var SCM_MERGE_BIN = "lakebase-scm-merge";
-var EXPERIMENT_SLUG = "exp1";
-var experimentBranchName = (storyId) => sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
-function commandsForAction(action, cfg) {
-  const f = cfg.featureId;
-  const tdd = ["--feature", f, "--tdd-dir", cfg.sftddDir];
-  const approver = cfg.approver ?? "human-proxy";
-  const deployTarget = cfg.deployTarget ?? "local";
-  switch (action.kind) {
-    case "invoke-role": {
-      if ("mode" in action && action.role === "product-owner" && action.mode === "author-requests") {
-        return [
-          { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["supply-requests", "--tdd-dir", cfg.sftddDir, "--approver", approver, "--sprint", cfg.sprintName ?? "sprint"] },
-          { kind: "sync-backlog", sprint: cfg.sprintName ?? "sprint" }
-        ];
-      }
-      if (cfg.recordedRequests && "mode" in action && action.role === "spec-author" && action.mode === "propose") {
-        return [
-          {
-            kind: "cli",
-            bin: HUMAN_PROXY_BIN,
-            args: ["supply-proposals", "--tdd-dir", cfg.sftddDir, ...cfg.uiTrack ? ["--ui"] : []]
-          }
-        ];
-      }
-      const BUILD_ROLES = /* @__PURE__ */ new Set(["navigator", "driver"]);
-      const buildScope = cfg.buildSessionScope ?? "story";
-      let resumeKey;
-      if (BUILD_ROLES.has(action.role)) {
-        if (buildScope === "story" && "story" in action && action.story) {
-          resumeKey = `${action.role}:${action.story}`;
-        }
-      } else {
-        resumeKey = action.role;
-      }
-      const buildTurn = "buildMode" in action && action.buildMode === "reflect" ? (
-        // reflect is a DESIGN-lane critique, not a build turn: no per-turn
-        // effort/model override (it runs on the navigator's base model, the
-        // different-model critic), so it maps to no build turn.
-        void 0
-      ) : "buildMode" in action && action.buildMode === "review" ? "review" : "buildMode" in action && (action.buildMode === "refactor" || action.buildMode === "refactor-deploy") ? "refactor" : action.role === "navigator" ? "red" : action.role === "driver" ? "green" : void 0;
-      const isReviewTurn = action.role === "navigator" && buildTurn === "review";
-      const effort = cfg.effortForTurn ? cfg.effortForTurn(action.role, buildTurn) : isReviewTurn ? cfg.reviewEffort ?? "low" : "";
-      const fallbackModel = cfg.fallbackModelForRole?.(action.role);
-      const maxBudgetUsd = cfg.maxBudgetUsdForRole?.(action.role);
-      const storyLoop = "story" in action ? effectiveLoopForStory(cfg.loopGranularity ?? "story", action.story) : cfg.loopGranularity;
-      const claude = {
-        kind: "claude",
-        role: action.role,
-        model: cfg.modelForTurn ? cfg.modelForTurn(action.role, buildTurn) : cfg.modelForRole(action.role),
-        ...resumeKey !== void 0 ? { resumeKey } : {},
-        ...effort && effort !== "default" ? { effort } : {},
-        ...fallbackModel ? { fallbackModel } : {},
-        ...typeof maxBudgetUsd === "number" ? { maxBudgetUsd } : {},
-        task: roleTask(action, f, cfg.uiTrack ?? false, cfg.sftddDir, {
-          loop: storyLoop,
-          cap: cfg.batchCap
-        }) + AGENT_TERSE_SUFFIX,
-        replay: {
-          mode: "mode" in action ? action.mode : void 0,
-          // The build turn's mode (reflect / review / refactor / assess / repair),
-          // distinct from the design-lane `mode` above. The replay path needs it to
-          // recognise the reflect turn (whose recorded output is a .sftdd design
-          // artifact the code-only build restore filters out).
-          buildMode: "buildMode" in action ? action.buildMode : void 0,
-          story: "story" in action ? action.story : void 0
-        }
-      };
-      const cmds = [claude];
-      if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
-        cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
-      }
-      if (!("mode" in action) && action.role === "test-strategist") {
-        cmds.push({ kind: "cli", bin: TEST_LIST_BIN, args: [cfg.sftddDir, f, action.story] });
-      }
-      if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "reflect") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["reflect-gate", "--feature", f, "--story", action.story, "--tdd-dir", cfg.sftddDir] });
-      } else if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess") {
-        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-green", "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.sftddDir] });
-      } else if (!("mode" in action) && action.role === "navigator" && "buildMode" in action && action.buildMode === "assess-deploy") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["assess-deploy-verify", "--feature", f, "--story", action.story, "--tdd-dir", cfg.sftddDir] });
-      } else if (!("mode" in action) && action.role === "navigator") {
-        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
-        const verb = "buildMode" in action && action.buildMode === "review" ? "review" : "begin";
-        const loop = storyLoop ?? "story";
-        const loopFlag = loop === "story" ? ["--loop", "story"] : verb === "begin" && loop === "hybrid-a" ? ["--loop", "hybrid-a", ...cfg.batchCap ? ["--batch-cap", String(cfg.batchCap)] : []] : [];
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.sftddDir, ...loopFlag] });
-      }
-      if (!("mode" in action) && action.role === "driver" && "buildMode" in action && action.buildMode === "refactor-deploy") {
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: ["refactor-deploy-verify", "--feature", f, "--story", action.story, "--tdd-dir", cfg.sftddDir] });
-      } else if (!("mode" in action) && action.role === "driver") {
-        const acFlag = "ac" in action && action.ac ? ["--ac", action.ac] : [];
-        const isRepair = "buildMode" in action && action.buildMode === "repair";
-        const verb = "buildMode" in action && action.buildMode === "refactor" ? "refactor" : "green";
-        const repairFlag = isRepair ? ["--repair"] : [];
-        const loopFlag = verb === "refactor" && (storyLoop ?? "story") === "story" ? ["--loop", "story"] : [];
-        cmds.push({ kind: "cli", bin: CYCLE_BIN, args: [verb, "--feature", f, "--story", action.story, ...acFlag, "--tdd-dir", cfg.sftddDir, ...repairFlag, ...loopFlag] });
-      }
-      const isPlanningMode = "mode" in action && (action.mode === "propose" || action.mode === "estimate");
-      if (f && !isPlanningMode) cmds.push({ kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] });
-      return cmds;
-    }
-    case "project-architect-notes":
-      return [
-        { kind: "cli", bin: CANON_NOTES_BIN, args: ["--story", action.story, ...tdd] },
-        { kind: "cli", bin: LOG_BIN, args: ["--reconcile", ...tdd] }
-      ];
-    case "surface-gate":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["surface", "--story", action.story, ...tdd] }];
-    case "approve-gate":
-      return [
-        { kind: "cli", bin: PIPELINE_BIN, args: ["approve-gate", "--story", action.story, "--approver", approver, ...tdd] }
-      ];
-    case "dispatch":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["dispatch", ...tdd] }];
-    case "cut-experiment":
-      return [
-        {
-          kind: "cli",
-          bin: EXPERIMENT_BIN,
-          args: [
-            "cut",
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--branch",
-            experimentBranchName(action.story),
-            "--parent",
-            cfg.featureBranch ?? "",
-            "--instance",
-            cfg.instance ?? "",
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir
-          ]
-        }
-      ];
-    case "await-acceptance": {
-      return [
-        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
-        {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: [
-            "--target",
-            deployTarget,
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--lakebase-branch",
-            experimentBranchName(action.story),
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir,
-            "--gate"
-          ]
-        },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["await-acceptance", "--story", action.story, ...tdd] }
-      ];
-    }
-    case "accept":
-      return [
-        {
-          kind: "cli",
-          bin: EXPERIMENT_BIN,
-          args: [
-            "merge",
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--experiment-branch",
-            experimentBranchName(action.story),
-            "--feature-branch",
-            cfg.featureBranch ?? "",
-            "--approver",
-            approver,
-            "--instance",
-            cfg.instance ?? "",
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir
-          ]
-        },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] }
-      ];
-    case "complete":
-      return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
-    case "approve-plan-gate":
-      return [
-        {
-          kind: "cli",
-          bin: HUMAN_PROXY_BIN,
-          args: ["--sprint", cfg.sprintName ?? "sprint", "--gate", "plan", "--approver", approver, "--tdd-dir", cfg.sftddDir]
-        }
-      ];
-    case "planning-complete":
-      return [{ kind: "set-phase", phase: "discovery" }];
-    case "feature-complete":
-      return [
-        { kind: "cli", bin: GATE_CONFORMANCE_BIN, args: ["--feature", f, "--tdd-dir", cfg.sftddDir] },
-        { kind: "set-phase", phase: "deploy" }
-      ];
-    case "deploy":
-      return [
-        { kind: "cli", bin: DEPLOY_BIN, args: ["--target", deployTarget, "--project-dir", cfg.projectDir, "--stop"] },
-        {
-          kind: "cli",
-          bin: DEPLOY_BIN,
-          args: ["--target", deployTarget, "--feature", f, "--project-dir", cfg.projectDir, "--tdd-dir", cfg.sftddDir, "--gate"]
-        }
-      ];
-    case "approve-deploy-gate":
-      return [
-        { kind: "cli", bin: HUMAN_PROXY_BIN, args: ["--feature", f, "--gate", "deploy", "--approver", approver, "--tdd-dir", cfg.sftddDir] }
-      ];
-    case "deploy-complete":
-      return [{ kind: "set-phase", phase: "promote" }];
-    case "prepare-pr":
-      return [{ kind: "cli", bin: SCM_PREPARE_PR_BIN, args: ["--project-dir", cfg.projectDir] }];
-    case "wait-ci":
-      return [{ kind: "cli", bin: SCM_WAIT_CI_BIN, args: ["--project-dir", cfg.projectDir] }];
-    case "approve-promote-gate": {
-      const promoteRef = cfg.featureBranch ?? f;
-      return [
-        {
-          kind: "cli",
-          bin: HUMAN_PROXY_BIN,
-          args: ["--feature", f, "--gate", "promote", "--approver", approver, "--tdd-dir", cfg.sftddDir, "--promote-ref", promoteRef]
-        }
-      ];
-    }
-    case "merge":
-      return [
-        {
-          kind: "cli",
-          bin: SCM_MERGE_BIN,
-          args: [
-            "--project-dir",
-            cfg.projectDir,
-            "--wait-migrate",
-            "--migrate-timeout-nonfatal",
-            "--migrate-timeout-sec",
-            "600"
-          ]
-        }
-      ];
-    case "done":
-      return [
-        // Force the checkout: at `done` the feature has merged and its code is
-        // committed, but the per-run .tdd/.lakebase metadata (workflow-state.json,
-        // selection-log.md) is dirty + tracked, so a plain `git checkout` aborts
-        // ("local changes would be overwritten"). That churn is disposable here
-        // (the feature is shipped), and landing on the parent is the whole point,
-        // so -f discards it and switches. Mirrors the fork-guard ignoring the same
-        // metadata. (scm-merge attempts this switch too but non-fatally; this is
-        // the deterministic guarantee.)
-        ...cfg.parentBranch ? [{ kind: "cli", bin: "git", args: ["checkout", "-f", cfg.parentBranch] }] : [],
-        { kind: "set-phase", phase: "shipped" }
-      ];
-    case "revise-route": {
-      const smellName = action.source.startsWith("smell:") ? action.source.slice("smell:".length) : action.source;
-      return [
-        {
-          kind: "cli",
-          bin: HUMAN_PROXY_BIN,
-          args: [
-            "decide-escalation",
-            "--feature",
-            f,
-            "--story",
-            action.story,
-            "--smell",
-            smellName,
-            "--routed-to",
-            action.role,
-            "--gate",
-            action.gate,
-            "--reason",
-            action.reason,
-            "--approver",
-            approver,
-            "--project-dir",
-            cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir
-          ]
-        }
-      ];
-    }
-    case "raise-to-hil":
-      return [];
-    case "design-complete":
-      return [];
-  }
-}
-async function planNextAction(cfg, transition = nextTransition) {
-  const state = await buildDriveEffects(cfg).readState();
-  const action = transition(state);
-  return { action, commands: commandsForAction(action, cfg) };
-}
-function buildDriveEffects(cfg) {
-  return {
-    async readState() {
-      const pipeline = readPipeline(cfg.sftddDir, cfg.featureId);
-      const probe = diskArtifactProbe(cfg.sftddDir, cfg.featureId, pipeline.build_active);
-      const ctx = readDriveContext(cfg.sftddDir, cfg.featureId, cfg.projectDir);
-      const state = deriveDriveState(pipeline, probe, ctx);
-      state.uiTrack = cfg.uiTrack ?? false;
-      state.designGuideReady = designGuideConformance(cfg.sftddDir).ok;
-      return state;
-    },
-    async perform(action) {
-      for (const cmd of commandsForAction(action, cfg)) {
-        await cfg.runner.run(cmd);
-      }
-    },
-    onAction: cfg.onAction,
-    // Hand-back delivery: when a role's prior turn failed its expectation
-    // contract, write the violation detail where THAT role's next prompt will
-    // consume it (consumeHandback in roleTask), so the retry is informed.
-    onHandback(handoff, detail) {
-      const file = handbackFile(cfg.sftddDir, cfg.featureId, handoff.responder, handoff.story);
-      try {
-        fs12.mkdirSync((0, import_node_path10.dirname)(file), { recursive: true });
-        fs12.writeFileSync(file, `${detail}
-`, "utf8");
-      } catch {
-      }
-    }
-  };
-}
-
-// scripts/sftdd/orchestrator-sprint.ts
-init_cjs_shims();
-
-// scripts/sftdd/sprint-gates.ts
-init_cjs_shims();
-var import_node_fs7 = require("fs");
-
-// scripts/sftdd/gate-hash.ts
-init_cjs_shims();
-
 // scripts/sftdd/sprint-gates.ts
 var SPRINT_GATES_SCHEMA_VERSION = 1;
+var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
   return {
     sprint,
@@ -10127,10 +7199,10 @@ function sprintGatesFile(sftddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const file = sprintGatesFile(sftddDir, sprint);
-  if (!(0, import_node_fs7.existsSync)(file)) return defaultSprintGatesState(sprint);
+  if (!(0, import_node_fs.existsSync)(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse((0, import_node_fs7.readFileSync)(file, "utf8"));
+    parsed = JSON.parse((0, import_node_fs.readFileSync)(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -10142,1330 +7214,990 @@ function readSprintGates(sprint, opts = {}) {
     gates: { plan: { status: plan.status, approver: plan.approver, approved_at: plan.approved_at, artifact_hashes: plan.artifact_hashes, history: plan.history ?? [] } }
   };
 }
-
-// scripts/sftdd/orchestrator-sprint.ts
-var fs13 = __toESM(require("fs"), 1);
-function deriveSprintPlanningState(sftddDir, sprint, opts = {}) {
-  const proposed = fs13.existsSync(featureProposalsMd(sftddDir));
-  const estimated = hasEstimates(sftddDir);
-  const backlog = readBacklog(sftddDir, sprint).features;
-  const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(sftddDir, f.id));
-  let gateApproved = false;
+function writeSprintGates(state, opts = {}) {
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  (0, import_node_fs.mkdirSync)(sprintDir(sftddDir, state.sprint), { recursive: true });
+  const file = sprintGatesJson(sftddDir, state.sprint);
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  (0, import_node_fs.writeFileSync)(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
-    gateApproved = readSprintGates(sprint, { sftddDir }).gates.plan.status === "approved";
-  } catch {
-    gateApproved = false;
+    (0, import_node_fs.renameSync)(tmp, file);
+  } catch (err) {
+    try {
+      (0, import_node_fs.unlinkSync)(tmp);
+    } catch {
+    }
+    throw err;
   }
-  return {
-    phase: "planning",
-    planning: { proposed, estimated, requestsAuthored, gateApproved, skipSizing: opts.skipSizing ?? false },
-    breakdownDone: false,
-    storyOrder: [],
-    stories: {},
-    buildActive: null
-  };
 }
-async function runSprint(effects) {
-  const planning = await effects.drivePlanning();
-  if (planning.escalated) return { features: [], escalated: true, escalation: planning.escalation };
-  if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
-  if (planning.pendingInput) return { features: [], pendingInput: planning.pendingInput };
-  await effects.commitAndPushRequests?.();
-  const features = await effects.readBacklog();
-  for (let i = 0; i < features.length; i++) {
-    const featureId = features[i];
-    effects.onFeature?.(featureId, i);
-    await effects.claimFeature(featureId);
-    const driven = await effects.driveFeature(featureId);
-    if (driven.escalated) {
-      return { features, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
-    }
-    if (driven.pendingGate) {
-      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
-    }
-    if (driven.pendingInput) {
-      return { features, pendingInput: driven.pendingInput, pendingFeature: featureId };
-    }
+function approveSprintPlanGate(args) {
+  if (!args.hitlApproved) return { ok: false, reason: "hitlApproved must be true (the plan gate is HITL)" };
+  if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const file = featureProposalsMd(sftddDir);
+  if (!(0, import_node_fs.existsSync)(file)) {
+    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }
-  return { features };
+  const content = (0, import_node_fs.readFileSync)(file, "utf8");
+  const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
+  if (!conf.ok) {
+    return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };
+  }
+  const state = readSprintGates(args.sprint, { sftddDir });
+  if (state.gates.plan.status !== "open") {
+    return { ok: true, state, alreadyApproved: true };
+  }
+  const ts = (args.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
+  const hashes = { [PLAN_GATE_ARTIFACT]: hashArtifact(content) };
+  const updated = {
+    ...state,
+    gates: {
+      plan: {
+        status: "approved",
+        approver: args.approver,
+        approved_at: ts,
+        artifact_hashes: hashes,
+        history: [
+          ...state.gates.plan.history,
+          { action: "approved", at: ts, approver: args.approver, artifact_hashes: hashes }
+        ]
+      }
+    }
+  };
+  writeSprintGates(updated, { sftddDir });
+  return { ok: true, state: updated, alreadyApproved: false };
 }
 
-// scripts/sftdd/agent-models.ts
+// scripts/sftdd/human-proxy.ts
 init_cjs_shims();
-var import_fs13 = require("fs");
-var import_path10 = require("path");
-var RECOMMENDED_MODELS = {
-  "spec-author": "opus",
-  "architect-reviewer": "opus",
-  "test-strategist": "sonnet",
-  "ux-designer": "sonnet",
-  navigator: "sonnet",
-  driver: "sonnet",
-  "product-owner": "opus",
-  "release-engineer": "sonnet"
+var import_node_fs3 = require("fs");
+
+// scripts/sftdd/sftdd-env.ts
+init_cjs_shims();
+
+// scripts/sftdd/human-proxy.ts
+var import_node_path3 = require("path");
+
+// scripts/sftdd/approve-gate.ts
+init_cjs_shims();
+var import_fs4 = require("fs");
+var import_path5 = require("path");
+
+// scripts/sftdd/gates-lock.ts
+init_cjs_shims();
+var import_fs2 = require("fs");
+var import_path3 = require("path");
+var GatesLockBusyError = class extends Error {
+  constructor(featureId, heldByPid, retries) {
+    super(
+      `gates.json lock for ${featureId} is held by PID ${heldByPid ?? "unknown"} after ${retries} retries. If the holder has crashed, remove the lock file manually.`
+    );
+    this.featureId = featureId;
+    this.heldByPid = heldByPid;
+    this.retries = retries;
+    this.name = "GatesLockBusyError";
+  }
+  featureId;
+  heldByPid;
+  retries;
 };
-var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = (0, import_path10.join)(".lakebase", "agent-config.json");
-function readAgentConfig(projectDir) {
-  const p = (0, import_path10.join)(projectDir, AGENT_CONFIG_REL);
-  if (!(0, import_fs13.existsSync)(p)) return void 0;
-  return JSON.parse((0, import_fs13.readFileSync)(p, "utf8"));
-}
-function resolveModelForRole(role, projectDir) {
-  const spawnable = role;
-  const entry = readAgentConfig(projectDir)?.roles?.[spawnable];
-  return entry?.override ?? entry?.recommended ?? RECOMMENDED_MODELS[spawnable] ?? "inherit";
-}
-
-// scripts/sftdd/sftdd-config.ts
-init_cjs_shims();
-var import_fs14 = require("fs");
-var import_path11 = require("path");
-var SFTDD_CONFIG_REL = (0, import_path11.join)(".lakebase", "sftdd-config.json");
-var LEGACY_TDD_CONFIG_REL = (0, import_path11.join)(".lakebase", "tdd-config.json");
-var TDD_CONFIG_REL = SFTDD_CONFIG_REL;
-function loadSftddConfig(projectDir) {
-  for (const rel of [SFTDD_CONFIG_REL, LEGACY_TDD_CONFIG_REL]) {
-    const f = (0, import_path11.join)(projectDir, rel);
-    if (!(0, import_fs14.existsSync)(f)) continue;
+function withGatesLock(featureId, fn, opts = {}) {
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const maxRetries = opts.maxRetries ?? 5;
+  const initialBackoffMs = opts.initialBackoffMs ?? 20;
+  const sleep = opts.sleep ?? defaultSleep;
+  const lockPath = gatesLockFilePath(sftddDir, featureId);
+  let acquired = false;
+  let attempts = 0;
+  while (!acquired && attempts <= maxRetries) {
     try {
-      return JSON.parse((0, import_fs14.readFileSync)(f, "utf8"));
-    } catch {
-      return void 0;
+      const fd = (0, import_fs2.openSync)(lockPath, "wx");
+      (0, import_fs2.writeFileSync)(fd, String(process.pid));
+      (0, import_fs2.closeSync)(fd);
+      acquired = true;
+    } catch (err) {
+      if (!isEexist(err)) throw err;
+      attempts += 1;
+      if (attempts > maxRetries) {
+        const heldByPid = readHeldByPid(lockPath);
+        throw new GatesLockBusyError(featureId, heldByPid, maxRetries);
+      }
+      sleep(initialBackoffMs * 2 ** (attempts - 1));
     }
   }
-  return void 0;
-}
-function defaultEffort(role, turn) {
-  if (role === "navigator" && turn === "review") return "low";
-  return "default";
-}
-function resolveSftddSettings(inputs) {
-  const file = loadSftddConfig(inputs.projectDir);
-  const legacy = readAgentConfig(inputs.projectDir);
-  const models = {};
-  const fallbackModels = {};
-  const budgets = {};
-  for (const role of ALL_AGENT_ROLES) {
-    const rc = file?.roles?.[role];
-    const legacyEntry = legacy?.roles?.[role];
-    const scalarModel = typeof rc?.model === "string" ? rc.model : void 0;
-    models[role] = scalarModel ?? legacyEntry?.override ?? legacyEntry?.recommended ?? RECOMMENDED_MODELS[role] ?? "inherit";
-    fallbackModels[role] = rc?.fallbackModel;
-    budgets[role] = typeof rc?.maxBudgetUsd === "number" ? rc.maxBudgetUsd : void 0;
+  try {
+    return fn();
+  } finally {
+    try {
+      (0, import_fs2.unlinkSync)(lockPath);
+    } catch {
+    }
   }
-  const modelFor = (role, turn) => {
-    const m = file?.roles?.[role]?.model;
-    if (m && typeof m !== "string" && turn && m[turn]) return m[turn];
-    return models[role] ?? "inherit";
-  };
-  const effortFor = (role, turn) => {
-    const rc = file?.roles?.[role];
-    const e = rc?.effort;
-    if (typeof e === "string") return e;
-    if (e && turn && e[turn]) return e[turn];
-    return defaultEffort(role, turn);
-  };
-  const build = {
-    loopGranularity: file?.build?.loopGranularity ?? "story",
-    batchCap: file?.build?.batchCap,
-    sessionScope: file?.build?.sessionScope ?? "story"
-  };
-  const project = {
-    uiTrack: file?.project?.uiTrack ?? false,
-    // HITL-first: the declared project policy defaults to interactive (a human
-    // approves each gate). Headless (proxy) is a deliberate opt-in, set in the
-    // file or as a RUN-SCOPED --gates override (never persisted by a flag).
-    gates: file?.project?.gates ?? "interactive",
-    deployTarget: file?.project?.deployTarget ?? "local",
-    clientFramework: file?.project?.clientFramework ?? "none"
-  };
-  const plan = { sizing: file?.plan?.sizing ?? true };
-  return { models, modelFor, fallbackModels, budgets, effortFor, build, plan, project };
 }
-function defaultSftddConfig() {
-  const roles = {};
-  for (const role of ALL_AGENT_ROLES) {
-    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : role === "driver" ? (
-      // Model tiering: RED (test authoring) + GREEN (implementation) keep the
-      // recommended model; only the mechanical REFACTOR turn drops to a fast
-      // model. GREEN was on haiku, but the recorded worst GREEN turn thrashed
-      // 93 tool round-trips (haiku's trial-and-error), so wall-clock, not token
-      // cost, dominated. Sonnet finishes GREEN in far fewer round-trips, faster
-      // even at a higher per-token price. Overridable per project by editing
-      // sftdd-config.json (a project can flatten to a scalar `model`).
-      { model: { red: RECOMMENDED_MODELS[role], green: RECOMMENDED_MODELS[role], refactor: "haiku" } }
-    ) : { model: RECOMMENDED_MODELS[role] };
+function isEexist(err) {
+  return typeof err === "object" && err !== null && err.code === "EEXIST";
+}
+function readHeldByPid(lockPath) {
+  try {
+    const text = (0, import_fs2.readFileSync)(lockPath, "utf8");
+    const n = Number(text.trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+function gatesLockFilePath(sftddDir, featureId) {
+  const dir = requireFeatureDir(sftddDir, featureId);
+  (0, import_fs2.mkdirSync)(dir, { recursive: true });
+  return (0, import_path3.join)(dir, ".gates.lock");
+}
+function defaultSleep(ms) {
+  const buf = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(buf, 0, 0, ms);
+}
+
+// scripts/sftdd/gates.ts
+init_cjs_shims();
+var import_fs3 = require("fs");
+var import_path4 = require("path");
+var GATES_SCHEMA_VERSION = 1;
+var GATE_NAMES = ["spec", "plan", "test_list", "promote", "deploy"];
+var GATE_STATUSES = ["open", "approved", "superseded", "withdrawn"];
+function defaultGatesState(featureId) {
+  return {
+    feature_id: featureId,
+    schema_version: GATES_SCHEMA_VERSION,
+    gates: {
+      spec: { status: "open", history: [] },
+      plan: { status: "open", history: [] },
+      test_list: { status: "open", history: [] },
+      promote: { status: "open", history: [] },
+      deploy: { status: "open", history: [] }
+    }
+  };
+}
+function readGates(featureId, opts = {}) {
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const file = gatesFilePath(sftddDir, featureId);
+  if (!(0, import_fs3.existsSync)(file)) {
+    return defaultGatesState(featureId);
+  }
+  const raw = (0, import_fs3.readFileSync)(file, "utf8");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(`gates.json at ${file} is not valid JSON: ${cause}`);
+  }
+  return validateGatesState(parsed, file);
+}
+function writeGates(state, opts = {}) {
+  if (state.feature_id.length === 0) {
+    throw new Error("writeGates: state.feature_id must not be empty");
+  }
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const file = gatesFilePath(sftddDir, state.feature_id);
+  const tempFile = `${file}.tmp.${process.pid}.${Date.now()}`;
+  const payload = JSON.stringify(state, null, 2) + "\n";
+  (0, import_fs3.writeFileSync)(tempFile, payload, "utf8");
+  try {
+    (0, import_fs3.renameSync)(tempFile, file);
+  } catch (err) {
+    try {
+      (0, import_fs3.unlinkSync)(tempFile);
+    } catch {
+    }
+    throw err;
+  }
+}
+function gatesFilePath(sftddDir, featureId) {
+  return (0, import_path4.join)(requireFeatureDir(sftddDir, featureId), "gates.json");
+}
+function validateGatesState(parsed, file) {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`gates.json at ${file} is not an object`);
+  }
+  const obj = parsed;
+  if (typeof obj.feature_id !== "string" || obj.feature_id.length === 0) {
+    throw new Error(`gates.json at ${file}: missing or invalid feature_id`);
+  }
+  if (typeof obj.schema_version !== "number") {
+    throw new Error(`gates.json at ${file}: missing or invalid schema_version`);
+  }
+  if (typeof obj.gates !== "object" || obj.gates === null) {
+    throw new Error(`gates.json at ${file}: missing or invalid gates`);
+  }
+  const gates = obj.gates;
+  const out = {
+    spec: validateGateRecord(gates.spec, "spec", file),
+    plan: validateGateRecord(gates.plan, "plan", file),
+    test_list: validateGateRecord(gates.test_list, "test_list", file),
+    promote: validateGateRecord(gates.promote, "promote", file),
+    // The deploy gate (working-software) was added after the original four.
+    // A gates.json written before it lacks the key, so backfill a default-open
+    // record rather than reject the file (forward-compatible read).
+    deploy: gates.deploy !== void 0 ? validateGateRecord(gates.deploy, "deploy", file) : { status: "open", history: [] }
+  };
+  return {
+    feature_id: obj.feature_id,
+    schema_version: obj.schema_version,
+    gates: out
+  };
+}
+function validateGateRecord(parsed, gateName, file) {
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error(`gates.json at ${file}: gate ${gateName} is not an object`);
+  }
+  const obj = parsed;
+  const status = obj.status;
+  if (typeof status !== "string" || !GATE_STATUSES.includes(status)) {
+    throw new Error(
+      `gates.json at ${file}: gate ${gateName} has invalid status (${String(status)}); expected one of ${GATE_STATUSES.join(", ")}`
+    );
+  }
+  const history = obj.history;
+  if (history !== void 0 && !Array.isArray(history)) {
+    throw new Error(`gates.json at ${file}: gate ${gateName} history must be an array`);
   }
   return {
-    version: 1,
-    roles,
-    build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
-    plan: { sizing: true },
-    project: { uiTrack: false, gates: "interactive", deployTarget: "local", clientFramework: "none" }
+    status,
+    approver: typeof obj.approver === "string" ? obj.approver : void 0,
+    approved_at: typeof obj.approved_at === "string" ? obj.approved_at : void 0,
+    artifact_hashes: obj.artifact_hashes && typeof obj.artifact_hashes === "object" ? obj.artifact_hashes : void 0,
+    withdrawal_reason: typeof obj.withdrawal_reason === "string" ? obj.withdrawal_reason : void 0,
+    history: history ?? []
   };
-}
-function writeSftddConfig(projectDir, config, opts) {
-  const f = (0, import_path11.join)(projectDir, TDD_CONFIG_REL);
-  if ((0, import_fs14.existsSync)(f) && !opts?.force) return false;
-  (0, import_fs14.mkdirSync)((0, import_path11.dirname)(f), { recursive: true });
-  (0, import_fs14.writeFileSync)(f, JSON.stringify(config, null, 2) + "\n");
-  return true;
-}
-function applyProjectOverrides(projectDir, over) {
-  if (over.deployTarget === void 0 && over.sizing === void 0) return;
-  const cfg = loadSftddConfig(projectDir) ?? defaultSftddConfig();
-  cfg.project = cfg.project ?? {};
-  if (over.deployTarget !== void 0) cfg.project.deployTarget = over.deployTarget;
-  cfg.plan = cfg.plan ?? {};
-  if (over.sizing !== void 0) cfg.plan.sizing = over.sizing;
-  writeSftddConfig(projectDir, cfg, { force: true });
 }
 
-// scripts/sftdd/claude-usage.ts
+// scripts/sftdd/approve-gate.ts
+var GateAlreadyClosedError = class extends Error {
+  constructor(gate, currentStatus) {
+    super(
+      `gate ${gate} is not open (current status: ${currentStatus}); withdraw or supersede before re-approving`
+    );
+    this.gate = gate;
+    this.currentStatus = currentStatus;
+    this.name = "GateAlreadyClosedError";
+  }
+  gate;
+  currentStatus;
+};
+function approveGate(args) {
+  if (!args.hitlApproved) {
+    throw new Error("approveGate requires hitlApproved: true (HITL Gate)");
+  }
+  if (args.approver.length === 0) {
+    throw new Error("approveGate: approver must not be empty");
+  }
+  const artifactNames = Object.keys(args.artifactInputs);
+  if (artifactNames.length === 0) {
+    throw new Error(
+      `approveGate: gate ${args.gate} must capture at least one artifact (got empty artifactInputs)`
+    );
+  }
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const now = args.now ?? (() => /* @__PURE__ */ new Date());
+  const writeLog = args.writeSelectionLog ?? true;
+  return withGatesLock(
+    args.featureId,
+    () => {
+      const state = readGates(args.featureId, { sftddDir });
+      const record = state.gates[args.gate];
+      if (record.status !== "open") {
+        throw new GateAlreadyClosedError(args.gate, record.status);
+      }
+      const capturedHashes = {};
+      for (const name of artifactNames) {
+        capturedHashes[name] = hashArtifact(args.artifactInputs[name]);
+      }
+      const ts = now().toISOString();
+      const updatedState = {
+        ...state,
+        gates: {
+          ...state.gates,
+          [args.gate]: {
+            status: "approved",
+            approver: args.approver,
+            approved_at: ts,
+            artifact_hashes: capturedHashes,
+            history: [
+              ...record.history,
+              {
+                action: "approved",
+                at: ts,
+                approver: args.approver,
+                artifact_hashes: capturedHashes
+              }
+            ]
+          }
+        }
+      };
+      writeGates(updatedState, { sftddDir });
+      if (writeLog) {
+        appendSelectionLog(sftddDir, {
+          ts,
+          gate: args.gate,
+          featureId: args.featureId,
+          approver: args.approver,
+          capturedHashes
+        });
+      }
+      return { state: updatedState, capturedHashes };
+    },
+    { sftddDir }
+  );
+}
+function appendSelectionLog(sftddDir, entry) {
+  const logPath = (0, import_path5.join)(sftddDir, "selection-log.md");
+  const hashList = Object.entries(entry.capturedHashes).map(([name, hash]) => `  - \`${name}\`: \`sha256:${hash}\``).join("\n");
+  const lines = [
+    "",
+    `## ${entry.ts} \u2013 Approve ${entry.gate} for ${entry.featureId}`,
+    `- **Approved by:** ${entry.approver}`,
+    `- **Artifact hashes:**`,
+    hashList,
+    ""
+  ];
+  const text = lines.join("\n");
+  if ((0, import_fs4.existsSync)(logPath)) {
+    (0, import_fs4.writeFileSync)(logPath, (0, import_fs4.readFileSync)(logPath, "utf8") + text);
+  } else {
+    (0, import_fs4.writeFileSync)(logPath, text);
+  }
+}
+
+// scripts/sftdd/agent-log.ts
 init_cjs_shims();
-function numOr(v, fallback) {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+var import_fs5 = require("fs");
+var import_path6 = require("path");
+
+// scripts/sftdd/agent-log-events.ts
+init_cjs_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{batch}} test(s) in {{cycle_id}} [{{layer}}], lead {{test_id}} ({{ac}}): {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Per-turn model usage (code-emitted by the runner from the claude -p result).
+  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
+  // cache_* + cost_usd ride in metadata (not template slots, so not required).
+  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
 }
-function usageFromResultEvent(ev) {
-  if (!ev || ev.type !== "result" || !ev.usage) return void 0;
-  const u = ev.usage;
-  const usage = {
-    inputTokens: numOr(u.input_tokens, 0),
-    outputTokens: numOr(u.output_tokens, 0)
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
+// scripts/sftdd/agent-log.ts
+function logFilePath(sftddDir) {
+  return (0, import_path6.join)(sftddDir, "agent-log.jsonl");
+}
+function buildAgentLogEvent(input, now) {
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
   };
-  if (typeof u.cache_read_input_tokens === "number") usage.cacheReadTokens = u.cache_read_input_tokens;
-  if (typeof u.cache_creation_input_tokens === "number") usage.cacheCreationTokens = u.cache_creation_input_tokens;
-  if (typeof ev.total_cost_usd === "number") usage.costUsd = ev.total_cost_usd;
-  return usage;
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    // model + effort sit right after role (the per-turn dispatch events carry them).
+    ...input.model ? { model: input.model } : {},
+    ...input.effort ? { effort: input.effort } : {},
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  return event;
 }
-function parseTurnUsage(streamJson) {
-  const lines = Array.isArray(streamJson) ? streamJson : streamJson.split("\n");
-  let last;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed[0] !== "{") continue;
-    let ev;
+function emitAgentLogEvent(input, opts = {}) {
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const event = buildAgentLogEvent(input, now);
+  (0, import_fs5.appendFileSync)(logFilePath(sftddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_cjs_shims();
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+
+// scripts/sftdd/test-list.ts
+init_cjs_shims();
+var import_fs6 = require("fs");
+var import_path7 = require("path");
+function acIdsInStoryDir(storyDir) {
+  const dir = (0, import_path7.join)(storyDir, "acs");
+  if (!(0, import_fs6.existsSync)(dir)) return [];
+  const out = [];
+  for (const f of (0, import_fs6.readdirSync)(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const base = f.slice(0, -".json".length);
     try {
-      ev = JSON.parse(trimmed);
+      const obj = JSON.parse((0, import_fs6.readFileSync)((0, import_path7.join)(dir, f), "utf8"));
+      if (obj && typeof obj.id === "string" && obj.id === base) out.push(base);
     } catch {
-      continue;
-    }
-    const u = usageFromResultEvent(ev);
-    if (u) last = u;
-  }
-  return last;
-}
-function assistantTextFromLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed[0] !== "{") return "";
-  let ev;
-  try {
-    ev = JSON.parse(trimmed);
-  } catch {
-    return "";
-  }
-  if (ev.type !== "assistant" || !ev.message || !Array.isArray(ev.message.content)) return "";
-  const parts = [];
-  for (const block of ev.message.content) {
-    if (block?.type === "text" && typeof block.text === "string") parts.push(block.text);
-  }
-  return parts.join("");
-}
-function assistantEventSummary(line) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed[0] !== "{") return { text: "", tools: [] };
-  let ev;
-  try {
-    ev = JSON.parse(trimmed);
-  } catch {
-    return { text: "", tools: [] };
-  }
-  if (ev.type !== "assistant" || !ev.message || !Array.isArray(ev.message.content)) return { text: "", tools: [] };
-  const textParts = [];
-  const tools = [];
-  for (const block of ev.message.content) {
-    if (block?.type === "text" && typeof block.text === "string") {
-      textParts.push(block.text);
-    } else if (block?.type === "tool_use" && typeof block.name === "string") {
-      const inp = block.input ?? {};
-      const target = typeof inp.file_path === "string" && inp.file_path || typeof inp.path === "string" && inp.path || typeof inp.command === "string" && inp.command || typeof inp.pattern === "string" && inp.pattern || "";
-      const clipped = typeof target === "string" && target.length > 80 ? `${target.slice(0, 80)}...` : target;
-      tools.push(clipped ? `${block.name} ${clipped}` : block.name);
     }
   }
-  return { text: textParts.join("").trim(), tools };
+  return out.sort();
+}
+function acsForStory(tddDir, featureId, storyId) {
+  const storyDir = findStoryDir(tddDir, featureId, storyId);
+  return storyDir ? acIdsInStoryDir(storyDir) : [];
 }
 
-// scripts/sftdd/context-budget.ts
+// scripts/sftdd/architecture-conventions.ts
 init_cjs_shims();
-var CONTEXT_FREE_FRACTION_REQUIRED = 0.4;
-function requiredFreeFraction(env = process.env) {
-  const raw = env.LAKEBASE_SFTDD_CONTEXT_FREE_FRACTION ?? env.SFTDD_CONTEXT_FREE_FRACTION;
-  if (raw === void 0) return CONTEXT_FREE_FRACTION_REQUIRED;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 && n < 1 ? n : CONTEXT_FREE_FRACTION_REQUIRED;
+var import_fs7 = require("fs");
+function normModule(m) {
+  return m.replace(/\/+$/, "");
 }
-var DEFAULT_HEAVY_ROLES = [];
-function heavyRoles(env = process.env) {
-  const raw = env.LAKEBASE_SFTDD_HEAVY_ROLES ?? env.SFTDD_HEAVY_ROLES;
-  if (raw === void 0) return new Set(DEFAULT_HEAVY_ROLES);
-  return new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
-}
-function startsFreshEachTurn(role, env = process.env) {
-  return heavyRoles(env).has(role.toLowerCase());
-}
-function contextWindowFor(model) {
-  return /(^|[^0-9])1m([^0-9]|$)|\[1m\]/i.test(model) ? 1e6 : 2e5;
-}
-function turnContextTokens(u) {
-  return (u.inputTokens || 0) + (u.cacheReadTokens || 0) + (u.cacheCreationTokens || 0) + (u.outputTokens || 0);
-}
-function resumeFitsBudget(priorContextTokens, model, env = process.env) {
-  const window = contextWindowFor(model);
-  return priorContextTokens <= window * (1 - requiredFreeFraction(env));
-}
-var PROMPT_TOO_LONG_RE = /prompt is too long|prompt too long|exceeds? the (?:maximum )?context|context (?:window|length) (?:exceeded|too long)/i;
-function isPromptTooLongSignal(line) {
-  return PROMPT_TOO_LONG_RE.test(line);
-}
-
-// scripts/sftdd/run-config.ts
-init_cjs_shims();
-var import_fs15 = require("fs");
-var import_path12 = require("path");
-var RUN_CONFIG_REL = (0, import_path12.join)(ARTIFACT_ROOT, "run-config.json");
-function readKitRef(projectDir) {
-  const f = (0, import_path12.join)(projectDir, ".lakebase", "kit-ref");
-  if (!(0, import_fs15.existsSync)(f)) return void 0;
+function readConventions(sftddDir) {
+  const f = architectureConventionsJson(sftddDir);
+  if (!(0, import_fs7.existsSync)(f)) return void 0;
   try {
-    const v = (0, import_fs15.readFileSync)(f, "utf8").trim();
-    return v.length > 0 ? v : void 0;
+    return JSON.parse((0, import_fs7.readFileSync)(f, "utf8"));
   } catch {
     return void 0;
   }
 }
-function buildRunConfig(inputs) {
-  const env = inputs.env ?? process.env;
-  const models = {};
-  for (const role of ALL_AGENT_ROLES) models[role] = inputs.modelForRole(role);
-  const cfg = {
-    version: 1,
-    started_at: inputs.startedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
-    bound: inputs.bound ?? "full",
-    gates: inputs.gates ?? "proxy",
-    ui_track: Boolean(inputs.uiTrack),
-    build_session_scope: inputs.buildSessionScope ?? "story",
-    review_effort: inputs.reviewEffort ?? "",
-    // loop + batchCap come from the RESOLVED settings (the caller passes the file
-    // values); never re-read from env here, or the snapshot would record a value
-    // the drive did not actually use (the resolver is now file-only).
-    loop_granularity: inputs.loopGranularity ?? "story",
-    deploy_target: inputs.deployTarget ?? "local",
-    models
-  };
-  if (inputs.batchCap !== void 0) cfg.batch_cap = inputs.batchCap;
-  const label = sftddEnv("RUN_LABEL", env);
-  if (label) cfg.run_label = label;
-  const kitRef = readKitRef(inputs.projectDir);
-  if (kitRef) cfg.kit_ref = kitRef;
-  return cfg;
-}
-function writeRunConfig(inputs) {
-  const cfg = buildRunConfig(inputs);
-  const body = JSON.stringify(cfg, null, 2) + "\n";
+function assertArchitectureConforms(conventions, architectureJsonContent) {
+  let doc;
   try {
-    (0, import_fs15.mkdirSync)(inputs.sftddDir, { recursive: true });
-    (0, import_fs15.writeFileSync)((0, import_path12.join)(inputs.sftddDir, "run-config.json"), body);
-    const recordDir = sftddEnv("RECORD_DIR", inputs.env ?? process.env)?.trim();
-    if (recordDir) {
-      (0, import_fs15.mkdirSync)(recordDir, { recursive: true });
-      (0, import_fs15.writeFileSync)((0, import_path12.join)(recordDir, "run-config.json"), body);
-    }
-  } catch {
+    doc = JSON.parse(architectureJsonContent);
+  } catch (err) {
+    return { ok: false, violations: [`architecture.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
   }
-  return cfg;
+  if (doc.service_backed !== true) return { ok: true };
+  const featureLayers = (doc.layers ?? []).filter(
+    (l) => typeof l.role === "string" && typeof l.module === "string"
+  );
+  if (featureLayers.length === 0) return { ok: true };
+  const violations = [];
+  for (const conv of conventions.layers) {
+    const match = featureLayers.find((l) => l.role === conv.role);
+    if (!match) {
+      violations.push(
+        `architecture.json does not realize the established ${conv.role} layer (project convention pins ${conv.role} -> ${conv.module}, set by ${conventions.established_by})`
+      );
+      continue;
+    }
+    if (normModule(match.module) !== conv.module) {
+      violations.push(
+        `architecture.json remaps the ${conv.role} layer to "${normModule(match.module)}" but the project convention pins ${conv.role} -> "${conv.module}" (set by ${conventions.established_by}); reuse the established module path, do not diverge`
+      );
+    }
+    if (conv.renders_via && match.renders_via && match.renders_via !== conv.renders_via) {
+      violations.push(
+        `architecture.json renders the ${conv.role} layer via "${match.renders_via}" but the project convention pins "${conv.renders_via}" (set by ${conventions.established_by})`
+      );
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
 }
 
-// scripts/sftdd/orchestrator-logging.ts
-init_cjs_shims();
-var BUILD_TURNS = /* @__PURE__ */ new Set(["red", "green", "review", "refactor"]);
-function turnSettings(ctx, role, phase) {
-  const turn = BUILD_TURNS.has(phase) ? phase : void 0;
-  const model = ctx.modelForRole?.(role);
-  const effort = ctx.effortForTurn?.(role, turn);
-  return {
-    ...model ? { model } : {},
-    ...effort && effort !== "default" ? { effort } : {}
-  };
+// scripts/sftdd/gate-conformance-guard.ts
+function featureDir2(sftddDir, featureId) {
+  return featureResolved(sftddDir, featureId);
 }
-function storyOf2(action) {
-  return "story" in action ? action.story : void 0;
-}
-function orchestratorLogEvents(action, ctx = {}) {
-  const feature_id = ctx.featureId;
-  const story = storyOf2(action);
-  const base = { role: "orchestrator", level: "info", feature_id };
-  const withStory = story ? { story } : {};
-  switch (action.kind) {
-    case "invoke-role": {
-      const role = action.role;
-      const mode = "mode" in action ? action.mode : void 0;
-      const buildMode = "buildMode" in action ? action.buildMode : void 0;
-      const ac = "ac" in action ? action.ac : void 0;
-      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
-      const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
-      return [
-        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
-        { role, level: "info", feature_id, ...turnSettings(ctx, role, phase), event: "phase.start", slots: { phase, ...detail } }
-      ];
-    }
-    case "surface-gate":
-      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
-    case "await-acceptance":
-      return [
-        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
-        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
-        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } }
-      ];
-    case "approve-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
-    case "approve-plan-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
-    case "approve-deploy-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
-    case "approve-promote-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "promote" } }];
-    case "deploy-complete":
-      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "promote" } }];
-    case "accept":
-      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
-    case "cut-experiment":
-      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
-    case "dispatch":
-      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
-    case "deploy":
-      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
-    case "complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
-    case "planning-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
-    case "design-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
-    case "feature-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
-    case "raise-to-hil":
-      return [
-        {
-          ...base,
-          level: "error",
-          event: "escalation.raised",
-          slots: { source: action.source, reason: action.reason, ...withStory }
-        }
-      ];
-    case "done":
-      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
-    default: {
-      const k = action.kind;
-      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
-    }
+function conformanceReason(inputs) {
+  const problems = [];
+  for (const [name, content] of Object.entries(inputs)) {
+    const result = checkArtifactConformance(name, content);
+    if (!result.ok) problems.push(...result.violations);
   }
+  return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
 }
-function describeAction(action, ctx = {}) {
-  const ev = orchestratorLogEvents(action, ctx)[0];
-  if (!ev) return action.kind;
-  const renderCtx = {
-    role: ev.role,
-    ...ev.feature_id !== void 0 ? { feature_id: ev.feature_id } : {},
-    ...ev.phase !== void 0 ? { phase: ev.phase } : {},
-    ...ev.slots ?? {}
-  };
-  try {
-    return renderEventMessage(ev.event, renderCtx);
-  } catch {
-    return ev.event;
-  }
-}
-function makeOnAction(opts) {
-  const { featureId, modelForRole, effortForTurn, ...io } = opts;
-  return (action) => {
-    for (const event of orchestratorLogEvents(action, { featureId, modelForRole, effortForTurn })) {
+function acsConformanceReason(fdir) {
+  const stories = (0, import_node_path2.join)(fdir, "stories");
+  if (!(0, import_node_fs2.existsSync)(stories)) return null;
+  const problems = [];
+  for (const s of (0, import_node_fs2.readdirSync)(stories)) {
+    const acsDir = (0, import_node_path2.join)(stories, s, "acs");
+    if (!(0, import_node_fs2.existsSync)(acsDir)) continue;
+    const acs = [];
+    for (const f of (0, import_node_fs2.readdirSync)(acsDir)) {
+      if (!f.endsWith(".json")) continue;
+      const p = (0, import_node_path2.join)(acsDir, f);
+      let content;
       try {
-        emitAgentLogEvent(event, io);
+        content = (0, import_node_fs2.readFileSync)(p, "utf8");
       } catch {
+        continue;
+      }
+      acs.push({ name: f.replace(/\.json$/, ""), content });
+      const r = checkArtifactConformance(canonicalArtifactName(p), content);
+      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
+    }
+    const indep = checkAcIndependence(acs);
+    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
+  }
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
+function storyIndependenceReason(fdir) {
+  const stories = (0, import_node_path2.join)(fdir, "stories");
+  if (!(0, import_node_fs2.existsSync)(stories)) return null;
+  const storyJsons = [];
+  for (const s of (0, import_node_fs2.readdirSync)(stories)) {
+    const p = (0, import_node_path2.join)(stories, s, "story.json");
+    if (!(0, import_node_fs2.existsSync)(p)) continue;
+    try {
+      storyJsons.push({ name: s, content: (0, import_node_fs2.readFileSync)(p, "utf8") });
+    } catch {
+      continue;
+    }
+  }
+  const r = checkStoryIndependence(storyJsons);
+  return r.ok ? null : `story independence failed: ${r.violations.join("; ")}`;
+}
+function architectureConventionsReason(sftddDir, featureId) {
+  const conventions = readConventions(sftddDir);
+  if (!conventions) return null;
+  const archFile = architectureJson(sftddDir, featureId);
+  if (!(0, import_node_fs2.existsSync)(archFile)) return null;
+  let content;
+  try {
+    content = (0, import_node_fs2.readFileSync)(archFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = assertArchitectureConforms(conventions, content);
+  return r.ok ? null : `architecture conventions failed: ${r.violations.join("; ")}`;
+}
+function readArchitecture(sftddDir, featureId) {
+  const f = architectureJson(sftddDir, featureId);
+  if (!(0, import_node_fs2.existsSync)(f)) return void 0;
+  try {
+    return (0, import_node_fs2.readFileSync)(f, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function layeringDeclaredReason(sftddDir, featureId) {
+  const arch = readArchitecture(sftddDir, featureId);
+  if (arch === void 0) return null;
+  const r = checkLayeringDeclared(arch);
+  return r.ok ? null : `layering declaration failed: ${r.violations.join("; ")}`;
+}
+function nfrCoverageReason(sftddDir, featureId) {
+  const arch = readArchitecture(sftddDir, featureId);
+  if (arch === void 0) return null;
+  const featureNfrs = featureNfrsMd(sftddDir, featureId);
+  const projectNfrs = nfrsMd(sftddDir);
+  const nfrsFile = (0, import_node_fs2.existsSync)(featureNfrs) ? featureNfrs : (0, import_node_fs2.existsSync)(projectNfrs) ? projectNfrs : void 0;
+  if (nfrsFile === void 0) return null;
+  let nfrsContent;
+  try {
+    nfrsContent = (0, import_node_fs2.readFileSync)(nfrsFile, "utf8");
+  } catch {
+    return null;
+  }
+  const r = checkNfrCoverage(nfrsContent, arch);
+  return r.ok ? null : `NFR coverage failed: ${r.violations.join("; ")}`;
+}
+function fitnessCoverageReason(sftddDir, featureId, testListJson) {
+  const arch = readArchitecture(sftddDir, featureId);
+  if (arch === void 0) return null;
+  const r = checkFitnessCoverage(testListJson, arch);
+  return r.ok ? null : `fitness coverage failed: ${r.violations.join("; ")}`;
+}
+function persistenceCoverageReason(sftddDir, featureId, testListJson) {
+  const arch = readArchitecture(sftddDir, featureId);
+  if (arch === void 0) return null;
+  const r = checkPersistenceCoverage(testListJson, arch);
+  return r.ok ? null : `persistence coverage failed: ${r.violations.join("; ")}`;
+}
+function invariantCoverageDistinctReason(sftddDir, featureId, testListJson) {
+  let master;
+  try {
+    master = JSON.parse(testListJson);
+  } catch {
+    return null;
+  }
+  const items = master.items ?? [];
+  const storiesDir2 = (0, import_node_path2.join)(featureDir2(sftddDir, featureId), "stories");
+  if (!(0, import_node_fs2.existsSync)(storiesDir2)) return null;
+  const perStory = (0, import_node_fs2.readdirSync)(storiesDir2).filter((s) => {
+    try {
+      return (0, import_node_fs2.statSync)((0, import_node_path2.join)(storiesDir2, s)).isDirectory();
+    } catch {
+      return false;
+    }
+  }).map((story) => {
+    const acIds = new Set(acsForStory(sftddDir, featureId, story));
+    const invariantIds = items.filter((it) => typeof it.invariant_id === "string" && it.invariant_id.length > 0 && typeof it.ac_id === "string" && acIds.has(it.ac_id)).map((it) => it.invariant_id);
+    return { story, invariantIds };
+  });
+  const r = checkInvariantCoverageDistinct(perStory);
+  return r.ok ? null : `invariant coverage not distinct across stories: ${r.violations.join("; ")}`;
+}
+function serviceBackedReason(sftddDir, featureId) {
+  const arch = readArchitecture(sftddDir, featureId);
+  if (arch === void 0) return null;
+  const acLayers = [];
+  const fdir = featureDir2(sftddDir, featureId);
+  const stories = (0, import_node_path2.join)(fdir, "stories");
+  if ((0, import_node_fs2.existsSync)(stories)) {
+    for (const s of (0, import_node_fs2.readdirSync)(stories)) {
+      const ad = (0, import_node_path2.join)(stories, s, "acs");
+      if (!(0, import_node_fs2.existsSync)(ad)) continue;
+      for (const f of (0, import_node_fs2.readdirSync)(ad)) {
+        if (!f.endsWith(".json")) continue;
+        try {
+          const layer = JSON.parse((0, import_node_fs2.readFileSync)((0, import_node_path2.join)(ad, f), "utf8")).layer;
+          if (typeof layer === "string") acLayers.push(layer);
+        } catch {
+        }
       }
     }
+  }
+  const nfrsText = [];
+  try {
+    const nfrs = JSON.parse(arch).nfrs ?? [];
+    for (const n of nfrs) nfrsText.push(n.brief ?? "", n.requirement ?? "", n.notes ?? "");
+  } catch {
+  }
+  const r = checkServiceBackedDeclaration(arch, { acLayers, nfrsText });
+  return r.ok ? null : `service_backed declaration failed: ${r.violations.join("; ")}`;
+}
+function resolveArtifactInputs(gate, fdir, promoteRef, sftddDir, featureId) {
+  const readIfPresent = (name) => {
+    const p = (0, import_node_path2.join)(fdir, name);
+    try {
+      return (0, import_node_fs2.existsSync)(p) ? (0, import_node_fs2.readFileSync)(p, "utf8") : void 0;
+    } catch {
+      return void 0;
+    }
   };
+  const withConformance = (inputs) => {
+    const reason = conformanceReason(inputs);
+    return reason === null ? { inputs } : { reason };
+  };
+  switch (gate) {
+    case "spec": {
+      const featureJson = readIfPresent("feature-spec.json");
+      if (featureJson === void 0) {
+        return { reason: "feature-spec.json not found (spec phase not complete)" };
+      }
+      const featureMd = readIfPresent("feature-spec.md");
+      if (featureMd === void 0) {
+        return { reason: "feature-spec.md not found (structured draft spec incomplete)" };
+      }
+      const inputs = {
+        "feature-spec.json": featureJson,
+        "feature-spec.md": featureMd
+      };
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      const acReason = acsConformanceReason(fdir);
+      if (acReason !== null) return { reason: acReason };
+      const indepReason = storyIndependenceReason(fdir);
+      if (indepReason !== null) return { reason: indepReason };
+      const conventionsReason = architectureConventionsReason(sftddDir, featureId);
+      if (conventionsReason !== null) return { reason: conventionsReason };
+      const serviceBacked = serviceBackedReason(sftddDir, featureId);
+      if (serviceBacked !== null) return { reason: serviceBacked };
+      const layeringReason = layeringDeclaredReason(sftddDir, featureId);
+      if (layeringReason !== null) return { reason: layeringReason };
+      const nfrReason = nfrCoverageReason(sftddDir, featureId);
+      return nfrReason === null ? conf : { reason: nfrReason };
+    }
+    case "plan": {
+      const planJson = readIfPresent("plan.json");
+      if (planJson === void 0) {
+        return { reason: "plan.json not found (plan phase not produced)" };
+      }
+      return withConformance({ "plan.json": planJson });
+    }
+    case "test_list": {
+      const tlJson = readIfPresent("test-list.json");
+      const tlMd = readIfPresent("test-list.md");
+      if (tlJson === void 0 && tlMd === void 0) {
+        return { reason: "test-list.json/md not found (test-strategist phase not complete)" };
+      }
+      const inputs = {};
+      if (tlJson !== void 0) inputs["test-list.json"] = tlJson;
+      if (tlMd !== void 0) inputs["test-list.md"] = tlMd;
+      const conf = withConformance(inputs);
+      if ("reason" in conf) return conf;
+      if (tlJson !== void 0) {
+        const fitnessReason = fitnessCoverageReason(sftddDir, featureId, tlJson);
+        if (fitnessReason !== null) return { reason: fitnessReason };
+        const persistenceReason = persistenceCoverageReason(sftddDir, featureId, tlJson);
+        if (persistenceReason !== null) return { reason: persistenceReason };
+        const distinctReason = invariantCoverageDistinctReason(sftddDir, featureId, tlJson);
+        if (distinctReason !== null) return { reason: distinctReason };
+      }
+      return conf;
+    }
+    case "promote": {
+      if (promoteRef === void 0 || promoteRef.length === 0) {
+        return { reason: "no promote_ref supplied (nothing to promote)" };
+      }
+      return withConformance({ promote_ref: promoteRef });
+    }
+    case "deploy": {
+      const evidence = readIfPresent("deploy-evidence.json");
+      if (evidence === void 0) {
+        return { reason: "deploy-evidence.json not found (feature not deployed + verified)" };
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(evidence);
+      } catch {
+        return { reason: "deploy-evidence.json is not valid JSON" };
+      }
+      if (parsed.reachable !== true) {
+        return { reason: "deploy-evidence records reachable=false (app not reachable on the target)" };
+      }
+      if (parsed.verify?.passed !== true) {
+        return { reason: "deploy-evidence records verify.passed=false (feature-verify did not pass against the running app)" };
+      }
+      return withConformance({ "deploy-evidence.json": evidence });
+    }
+  }
 }
 
-// scripts/sftdd/drive.cli.ts
-var MAX_PROMPT_TOO_LONG_RETRIES = 2;
-function parseArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i++) {
-    switch (argv[i]) {
-      case "--feature":
-        out.feature = argv[++i];
-        break;
-      case "--sprint":
-        out.sprint = argv[++i];
-        break;
-      case "--project-dir":
-        out.projectDir = argv[++i];
-        break;
-      case "--tdd-dir":
-        out.sftddDir = argv[++i];
-        break;
-      case "--instance":
-        out.instance = argv[++i];
-        break;
-      case "--deploy-target":
-        out.deployTarget = argv[++i];
-        break;
-      case "--approver":
-        out.approver = argv[++i];
-        break;
-      case "--dry-run":
-        out.dryRun = true;
-        break;
-      case "--max-steps":
-        out.maxSteps = Number(argv[++i]);
-        break;
-      case "--plan-only":
-        out.planOnly = true;
-        break;
-      case "--only":
-        out.only = argv[++i];
-        break;
-      case "--pause-before":
-        out.pauseBefore = argv[++i];
-        break;
-      case "--gates":
-        out.gates = argv[++i];
-        break;
-      // Sizing (the Architect's t-shirt-sizing / planning-poker step) is ON by
-      // default. --no-sizing opts OUT: planning goes propose -> author-requests
-      // with no estimate, for a backlog small enough not to need capacity sizing.
-      case "--no-sizing":
-      case "--no-planning-poker":
-      case "--no-t-shirt-sizing":
-        out.noSizing = true;
-        break;
-      case "--help":
-      case "-h":
-        out.help = true;
-        break;
-      default:
-        break;
+// scripts/sftdd/human-proxy.ts
+function logHitlDecision(sftddDir, featureId, approver, decision) {
+  try {
+    if (decision.kind === "approved") {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "info",
+          event: "gate.approved",
+          feature_id: featureId,
+          slots: { gate: decision.gate, artifacts: decision.artifacts, approver, validated: true }
+        },
+        { sftddDir }
+      );
+    } else {
+      emitAgentLogEvent(
+        {
+          role: "product-owner",
+          level: "warn",
+          event: "gate.rejected",
+          feature_id: featureId,
+          slots: { gate: decision.gate, reason: decision.reason, approver, validated: false }
+        },
+        { sftddDir }
+      );
     }
+  } catch {
+  }
+}
+var HUMAN_PROXY = "human-proxy";
+function drainGatesAsHumanProxy(args) {
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const approver = args.approver ?? HUMAN_PROXY;
+  const fdir = featureDir2(sftddDir, args.featureId);
+  let state = readGates(args.featureId, { sftddDir });
+  const approved = [];
+  const skipped = [];
+  const gates = args.onlyGate !== void 0 ? [args.onlyGate] : [...GATE_NAMES];
+  for (const gate of gates) {
+    const record = state.gates[gate];
+    if (record.status !== "open") {
+      skipped.push({ gate, reason: `status=${record.status}` });
+      continue;
+    }
+    const resolved = resolveArtifactInputs(gate, fdir, args.promoteRef, sftddDir, args.featureId);
+    if ("reason" in resolved) {
+      skipped.push({ gate, reason: resolved.reason });
+      logHitlDecision(sftddDir, args.featureId, approver, {
+        kind: "refused",
+        gate,
+        reason: resolved.reason
+      });
+      continue;
+    }
+    const result = approveGate({
+      featureId: args.featureId,
+      gate,
+      approver,
+      hitlApproved: true,
+      artifactInputs: resolved.inputs,
+      sftddDir
+    });
+    approved.push(gate);
+    state = result.state;
+    logHitlDecision(sftddDir, args.featureId, approver, {
+      kind: "approved",
+      gate,
+      artifacts: Object.keys(resolved.inputs)
+    });
+  }
+  return { approved, skipped, finalState: state };
+}
+
+// scripts/sftdd/approve-gate.cli.ts
+function parse(argv) {
+  const out = { projectDir: process.cwd(), json: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
+    else if (a === "--sprint" && i + 1 < argv.length) out.sprint = argv[++i];
+    else if (a === "--gate" && i + 1 < argv.length) out.gate = argv[++i];
+    else if (a === "--approver" && i + 1 < argv.length) out.approver = argv[++i];
+    else if (a === "--promote-ref" && i + 1 < argv.length) out.promoteRef = argv[++i];
+    else if (a === "--project-dir" && i + 1 < argv.length) out.projectDir = argv[++i];
+    else if (a === "--tdd-dir" && i + 1 < argv.length) out.tddDir = argv[++i];
+    else if (a === "--json") out.json = true;
+    else if (a === "-h" || a === "--help") out.help = true;
   }
   return out;
 }
-function help() {
-  return `lakebase-sftdd-drive (deterministic orchestrator driver)
+var HELP = `lakebase-sftdd-approve-gate , record a HUMAN's HITL gate approval
+
+Records a genuine approval into the workflow state. The DECISION must be the
+approver's; this tool records ATTRIBUTION + the artifact hashes. Use the Human
+Proxy (lakebase-sftdd-human-proxy) instead ONLY for headless / smoke runs.
 
 Usage:
-  lakebase-sftdd-drive --feature <id> [flags]
+  lakebase-sftdd-approve-gate --sprint <name> --approver <you>
+  lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <name>] [--promote-ref <str>]
+                             [--project-dir <p>] [--tdd-dir <d>] [--json]
 
-Flags:
-  --feature <id>       Feature to drive (required)
-  --project-dir <dir>  Project root (default: cwd)
-  --tdd-dir <dir>      artifact root (default: <project-dir>/.sftdd, honors a legacy .tdd)
-  --instance <id>      Lakebase instance id (threaded to experiment branch ops)
-  --deploy-target <t>  Deploy target for the deploy phase (default: local)
-  --approver <name>    Headless gate approver (default: human-proxy)
-  --dry-run            Print the single next action + its commands, then exit
-  --max-steps <n>      Stop after n actions (incremental/live testing + safety)
-  --plan-only          Tier-2: run the sprint planning sub-machine only (/plan)
-  --only <phase>       Tier-2 bound: design | build | deploy (one phase, then stop)
-  --pause-before <m>   PAUSE (not stop) just before a handoff: navigator (the
-                       build kickoff) | release-engineer (the deploy/verify). The
-                       driver blocks for a human [Y/n], then RESUMES the same run
-                       on Y , it never leaves the state machine. n re-asks. Set
-                       LAKEBASE_SFTDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
-  --gates <mode>       interactive (default: stop AT each HITL gate so the human
-                       answers, then re-run) | proxy (headless: Human Proxy
-                       approves; requires LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI).
-                       Run-scoped: overrides project.gates for THIS run only,
-                       never rewrites sftdd-config.json.
-  --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
-                       planning goes propose -> author-requests, no estimate.
-                       Sizing is ON by default. Aliases: --no-planning-poker,
-                       --no-t-shirt-sizing.
+--approver is REQUIRED (name the deciding human; there is no default identity).
+Exit 0 = approved (or already approved); 2 = usage error / nothing to approve.
 `;
-}
-function spawnCmd(bin, args, cwd) {
-  return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process6.spawn)(bin, args, { cwd, stdio: "inherit" });
-    child.on("error", (err) => reject(err));
-    child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
-  });
-}
-var ClaudeTurnError = class extends Error {
-  constructor(message, promptTooLong) {
-    super(message);
-    this.promptTooLong = promptTooLong;
-    this.name = "ClaudeTurnError";
-  }
-  promptTooLong;
-};
-var ReplayCorpusMissError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "ReplayCorpusMissError";
-  }
-};
-function spawnClaudeStreaming(args, cwd) {
-  return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process6.spawn)("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
-    const lines = [];
-    let sawTooLong = false;
-    const verboseAgent = !!sftddEnv("VERBOSE_AGENT");
-    let lastText = "";
-    const rl = readline.createInterface({ input: child.stdout });
-    rl.on("line", (line) => {
-      lines.push(line);
-      if (isPromptTooLongSignal(line)) sawTooLong = true;
-      if (verboseAgent) {
-        const text2 = assistantTextFromLine(line);
-        if (text2) process.stderr.write(text2);
-        return;
-      }
-      const { text, tools } = assistantEventSummary(line);
-      for (const t of tools) process.stderr.write(`  \xB7 ${t}
-`);
-      if (text) lastText = text;
-    });
-    const erl = readline.createInterface({ input: child.stderr });
-    erl.on("line", (line) => {
-      if (isPromptTooLongSignal(line)) sawTooLong = true;
-      process.stderr.write(`${line}
-`);
-    });
-    child.on("error", (err) => reject(err));
-    child.on("close", (code) => {
-      rl.close();
-      erl.close();
-      if (!verboseAgent && lastText) process.stderr.write(`${lastText}
-`);
-      if (code !== 0) return reject(new ClaudeTurnError(`claude exited ${code}`, sawTooLong));
-      resolve2(parseTurnUsage(lines));
-    });
-  });
-}
-var KIT_ROOT = path6.resolve(__dirname, "..", "..", "..");
-var kitBinMap = null;
-function resolveKitBinJs(bin) {
-  if (kitBinMap === null) {
-    try {
-      const pkg = JSON.parse(fs14.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
-      kitBinMap = pkg.bin ?? {};
-    } catch {
-      kitBinMap = {};
-    }
-  }
-  const rel = kitBinMap[bin];
-  return rel ? path6.join(KIT_ROOT, rel) : null;
-}
-function execRunner(cfg) {
-  const sessions = /* @__PURE__ */ new Map();
-  const sessionContext = /* @__PURE__ */ new Map();
-  const buildTurns = /* @__PURE__ */ new Map();
-  return {
-    async run(cmd) {
-      if (cmd.kind === "set-phase") {
-        writeWorkflowPhase(cfg.sftddDir, cmd.phase);
-        return;
-      }
-      if (cmd.kind === "sync-backlog") {
-        syncBacklog(cfg.sftddDir, cmd.sprint);
-        return;
-      }
-      if (cmd.kind === "claude") {
-        const replayBuildDir = sftddEnv("REPLAY_BUILD_DIR");
-        const story = cmd.replay?.story;
-        if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
-          if (cmd.replay?.buildMode === "reflect") {
-            const rd = sftddEnv("REPLAY_DIR");
-            if (rd) {
-              const restored = restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
-              if (!restored) {
-                throw new ReplayCorpusMissError(
-                  `[drive] REPLAY CORPUS MISS: reflect verdict for ${story} is not in the corpus (expected features/${cfg.featureId}/stories/${story}/reflect-verdict.json under ${rd}). Replay will NOT run the Navigator live , put the recorded verdict in the corpus (check .gitignore is not dropping it).`
-                );
-              }
-            }
-            process.stderr.write(`[drive] replayed reflect (navigator ${story}) from corpus , verdict only (no code, not counted)
-`);
-            return;
-          }
-          const turnIndex = (buildTurns.get(story) ?? 0) + 1;
-          buildTurns.set(story, turnIndex);
-          const replayed = replayBuildTurn({
-            replayBuildDir,
-            projectDir: cfg.projectDir,
-            sftddDir: cfg.sftddDir,
-            featureId: cfg.featureId,
-            story,
-            turnIndex
-          });
-          if (replayed) {
-            process.stderr.write(
-              `[drive] replayed build turn ${turnIndex} (${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""} ${story}) from corpus (no model spawn)
-`
-            );
-            return;
-          }
-          throw new ReplayCorpusMissError(
-            `[drive] REPLAY CORPUS MISS: build turn ${turnIndex} for ${story} (${cmd.role}) has no recorded turn dir under ${replayBuildDir} (features/${cfg.featureId}/stories/${story}/turns). The live orchestrator dispatched more build turns than the corpus recorded, or the corpus is incomplete. Replay will NOT run the agent live , re-record or fix the corpus so it covers every dispatched turn.`
-          );
-        }
-        const replayDir = sftddEnv("REPLAY_DIR");
-        if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
-          const replayed = replayDesignTurn({
-            turn: { role: cmd.role, mode: cmd.replay?.mode, story: cmd.replay?.story },
-            replayDir,
-            sftddDir: cfg.sftddDir,
-            featureId: cfg.featureId
-          });
-          if (replayed) {
-            process.stderr.write(
-              `[drive] replayed ${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""} from corpus (no model spawn)
-`
-            );
-            return;
-          }
-          const where = `${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""}`;
-          throw new ReplayCorpusMissError(
-            `[drive] REPLAY CORPUS MISS: no recorded artifact for design turn '${where}' under ${replayDir} (features/${cfg.featureId}/...). The deterministic pipeline dispatched this turn but the corpus lacks its output. Replay will NOT run the agent live , put the recorded artifact in the corpus (check .gitignore is not dropping it).`
-          );
-        }
-        const baseArgs = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
-        if (cmd.effort) baseArgs.push("--effort", cmd.effort);
-        if (cmd.fallbackModel) baseArgs.push("--fallback-model", cmd.fallbackModel);
-        if (typeof cmd.maxBudgetUsd === "number") baseArgs.push("--max-budget-usd", String(cmd.maxBudgetUsd));
-        const sessionArgsFor = (forceFresh) => {
-          if (!cmd.resumeKey) return [];
-          if (startsFreshEachTurn(cmd.role)) {
-            const id2 = (0, import_node_crypto3.randomUUID)();
-            sessions.set(cmd.resumeKey, id2);
-            sessionContext.delete(cmd.resumeKey);
-            return ["--session-id", id2];
-          }
-          const existing = sessions.get(cmd.resumeKey);
-          const priorCtx = sessionContext.get(cmd.resumeKey) ?? 0;
-          const wouldFit = !forceFresh && resumeFitsBudget(priorCtx, cmd.model);
-          if (existing && wouldFit) return ["--resume", existing];
-          if (existing && !forceFresh && !wouldFit) {
-            process.stderr.write(
-              `[drive] context guard: fresh ${cmd.role} session (warm ~${priorCtx.toLocaleString()} tok < ${Math.round(CONTEXT_FREE_FRACTION_REQUIRED * 100)}% of ${cmd.model} window free)
-`
-            );
-          }
-          const id = (0, import_node_crypto3.randomUUID)();
-          sessions.set(cmd.resumeKey, id);
-          sessionContext.delete(cmd.resumeKey);
-          return ["--session-id", id];
-        };
-        let usage;
-        const turnStart = Date.now();
-        for (let attempt = 0; ; attempt++) {
-          const args = [...baseArgs, ...sessionArgsFor(attempt > 0)];
-          try {
-            usage = await spawnClaudeStreaming(args, cfg.projectDir);
-            break;
-          } catch (e) {
-            if (e instanceof ClaudeTurnError && e.promptTooLong && attempt < MAX_PROMPT_TOO_LONG_RETRIES) {
-              process.stderr.write(
-                `[drive] context guard (mid-turn): ${cmd.role} overflowed ${cmd.model}; fresh-session retry ${attempt + 1}/${MAX_PROMPT_TOO_LONG_RETRIES}
-`
-              );
-              continue;
-            }
-            throw e;
-          }
-        }
-        const turnMs = Date.now() - turnStart;
-        if (usage) {
-          if (cmd.resumeKey) sessionContext.set(cmd.resumeKey, turnContextTokens(usage));
-          process.stderr.write(`[drive] ${cmd.role} turn ${(turnMs / 1e3).toFixed(1)}s (${cmd.model})
-`);
-          try {
-            emitAgentLogEvent(
-              {
-                role: cmd.role,
-                level: "info",
-                event: "turn.usage",
-                model: cmd.model,
-                ...cmd.effort ? { effort: cmd.effort } : {},
-                feature_id: cfg.featureId,
-                slots: {
-                  duration_ms: turnMs,
-                  input_tokens: usage.inputTokens,
-                  output_tokens: usage.outputTokens,
-                  ...usage.cacheReadTokens !== void 0 ? { cache_read_tokens: usage.cacheReadTokens } : {},
-                  ...usage.cacheCreationTokens !== void 0 ? { cache_creation_tokens: usage.cacheCreationTokens } : {},
-                  ...usage.costUsd !== void 0 ? { cost_usd: usage.costUsd } : {},
-                  ...cmd.replay?.story ? { story: cmd.replay.story } : {},
-                  ...cmd.replay?.mode ? { phase: cmd.replay.mode } : {}
-                }
-              },
-              { sftddDir: cfg.sftddDir }
-            );
-          } catch {
-          }
-        }
-        return;
-      }
-      const js = resolveKitBinJs(cmd.bin);
-      if (js) {
-        await spawnCmd("node", [js, ...cmd.args], cfg.projectDir);
-      } else {
-        await spawnCmd(cmd.bin, cmd.args, cfg.projectDir);
-      }
-    }
-  };
-}
-function buildCfg(args, featureId) {
-  const projectDir = args.projectDir ?? process.cwd();
-  const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
-  const scm = readWorkflowState(projectDir);
-  const settings = resolveSftddSettings({ projectDir });
-  return {
-    projectDir,
-    sftddDir,
-    featureId,
-    sprintName: args.sprint,
-    // Recorded feature-requests present (capture/replay) => the planning PROPOSE
-    // step is deterministic (project feature-proposals.md from them) instead of an
-    // LLM spawn. Unset (interactive) keeps the live Spec Author propose turn.
-    recordedRequests: !!sftddEnv("SPRINT_REQUESTS")?.trim(),
-    instance: args.instance ?? scm?.project_id,
-    featureBranch: scm?.branch,
-    parentBranch: scm?.parent_branch,
-    // Deploy target from the config (the --deploy-target flag wrote through to it).
-    deployTarget: settings.project.deployTarget,
-    approver: args.approver ?? "human-proxy",
-    // UI track: the config (project.uiTrack, the single source) decides whether the
-    // Spec Author frames user-facing capabilities as E2E (browser/screen) stories vs API-only.
-    uiTrack: settings.project.uiTrack,
-    // P5: Navigator/Driver session scope (story warm-resume vs cycle cold-spawn).
-    buildSessionScope: settings.build.sessionScope,
-    // P6 (back-compat): the navigator REVIEW turn's effort, still surfaced for
-    // run-config + any caller without effortForTurn. effortForTurn (below) is the
-    // primary, per-role/turn resolver and supersedes this.
-    reviewEffort: (() => {
-      const e = settings.effortFor("navigator", "review");
-      return e === "default" ? "" : e;
-    })(),
-    // P8b: build loop granularity + batch cap (config / env).
-    loopGranularity: settings.build.loopGranularity,
-    batchCap: settings.build.batchCap,
-    // Unified per-role/turn model-side resolvers ("" => omit --effort).
-    effortForTurn: (role, turn) => {
-      const e = settings.effortFor(role, turn);
-      return e === "default" ? "" : e;
-    },
-    fallbackModelForRole: (role) => settings.fallbackModels[role],
-    maxBudgetUsdForRole: (role) => settings.budgets[role],
-    modelForRole: (role) => settings.models[role] ?? resolveModelForRole(role, projectDir),
-    // Model tiering: per-turn model (driver GREEN/REFACTOR on a cheaper model than
-    // its RED). Falls through to the role's base model when no per-turn map applies.
-    modelForTurn: (role, turn) => settings.modelFor(role, turn),
-    runner: { async run() {
-    } },
-    onAction: composeOnAction(
-      // Narrate each routing decision in plain language (DRY: the same message
-      // the structured log uses). The machine-readable form is already written to
-      // the structured agent-log by makeOnAction below, so the raw action JSON is
-      // console noise on every line , append it only under LAKEBASE_SFTDD_TRACE.
-      (action, i) => {
-        const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(action)}` : "";
-        process.stderr.write(`[drive] ${String(i).padStart(3, "0")} ${describeAction(action, { featureId })}${trace}
-`);
-      },
-      // Code-emit the orchestrator's lifecycle (handoff / phase.start /
-      // gate.surfaced / experiment.* / phase.end) through the ONE common logger,
-      // so the structured trail is written every run with no LLM in the loop.
-      // The resolvers stamp each per-turn phase.start with the model + effort it
-      // ran with (right after `role`).
-      makeOnAction({
-        sftddDir,
-        featureId,
-        modelForRole: (role) => settings.models[role],
-        effortForTurn: (role, turn) => {
-          const e = settings.effortFor(role, turn);
-          return e === "default" ? "" : e;
-        }
-      })
-    )
-  };
-}
-function composeOnAction(...hooks) {
-  return (action, i) => {
-    for (const h of hooks) h(action, i);
-  };
-}
-function makeConfirmContinue() {
-  const auto = sftddEnv("AUTO_CONTINUE") === "1";
-  const answerFile = sftddEnv("GATE_ANSWER_FILE")?.trim();
-  const isYes = (a) => a === "" || a === "y" || a === "yes";
-  return (action) => new Promise((resolve2, reject) => {
-    const label = describeAction(action);
-    const prompt = `
-[drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
-    if (auto) {
-      process.stderr.write(`[drive] PAUSE gate (auto-continue): proceeding past ${label}
-`);
-      return resolve2();
-    }
-    if (answerFile) {
-      process.stderr.write(`${prompt}
-[drive] (awaiting answer in ${answerFile})
-`);
-      const poll = setInterval(() => {
-        let raw;
-        try {
-          raw = fs14.readFileSync(answerFile, "utf8");
-        } catch {
-          return;
-        }
-        const a = raw.trim().toLowerCase();
-        if (a === "") return;
-        try {
-          fs14.rmSync(answerFile, { force: true });
-        } catch {
-        }
-        if (a === "y" || a === "yes") {
-          clearInterval(poll);
-          process.stderr.write(`[drive] resuming.
-`);
-          resolve2();
-        } else process.stderr.write(`[drive] holding , write Y to ${answerFile} when ready.
-`);
-      }, 1e3);
-      return;
-    }
-    if (process.stdin.isTTY) {
-      const ask = () => {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stderr, terminal: false });
-        rl.question(prompt, (answer) => {
-          rl.close();
-          if (isYes(answer.trim().toLowerCase())) {
-            process.stderr.write(`[drive] resuming.
-`);
-            resolve2();
-          } else {
-            process.stderr.write(`[drive] holding , answer Y when ready.
-`);
-            ask();
-          }
-        });
-      };
-      return ask();
-    }
-    reject(
-      new Error(
-        `[drive] PAUSED at the ${label} handoff with no human channel , refusing to continue. Set LAKEBASE_SFTDD_AUTO_CONTINUE=1 (deliberate headless), provide LAKEBASE_SFTDD_GATE_ANSWER_FILE, or run in an interactive terminal.`
-      )
-    );
-  });
-}
-function withBuildRecording(inner, cfg) {
-  const recordBuildDir = sftddEnv("RECORD_BUILD_DIR")?.trim();
-  if (!recordBuildDir) return inner;
-  let turn = 0;
-  return {
-    readState: () => inner.readState(),
-    onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
-    async perform(action) {
-      await inner.perform(action);
-      if (action.kind === "invoke-role" && (action.role === "navigator" || action.role === "driver")) {
-        turn += 1;
-        const dir = recordBuildTurn({
-          recordBuildDir,
-          projectDir: cfg.projectDir,
-          sftddDir: cfg.sftddDir,
-          featureId: cfg.featureId,
-          story: action.story,
-          turn,
-          role: action.role,
-          ac: "ac" in action ? action.ac : void 0,
-          mode: action.buildMode
-        });
-        process.stderr.write(
-          `[record] turn ${turn}: ${action.role}${action.buildMode ? ` (${action.buildMode})` : ""}${"ac" in action && action.ac ? ` ${action.ac}` : ""} -> ${dir}
-`
-        );
-      }
-    }
-  };
-}
-function withTurnRecording(inner, cfg) {
-  const recordDir = sftddEnv("RECORD_DIR")?.trim();
-  if (!recordDir) return inner;
-  seedRecorderBaseline({ recordDir, projectDir: cfg.projectDir, sftddDir: cfg.sftddDir });
-  return {
-    readState: () => inner.readState(),
-    onAction: inner.onAction ? (a, i) => inner.onAction(a, i) : void 0,
-    onHandback: inner.onHandback ? (h, d) => inner.onHandback(h, d) : void 0,
-    async perform(action) {
-      await inner.perform(action);
-      if (action.kind === "done") return;
-      const rec = recordTurn({ recordDir, projectDir: cfg.projectDir, sftddDir: cfg.sftddDir, action, step: 0 });
-      process.stderr.write(
-        `[record] turn ${rec.ordinal} (${rec.dir}): ${rec.produced.length} produced${rec.deleted.length ? `, ${rec.deleted.length} deleted` : ""}
-`
-      );
-    }
-  };
-}
-function gatedStopWhen(base, interactive) {
-  if (!interactive) return base;
-  return (a) => (base?.(a) ?? false) || isHitlGateAction(a) || isHumanInputAction(a);
-}
-function pendingGateOf(r) {
-  return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : void 0;
-}
-function pendingInputOf(r) {
-  return r.stoppedAtBound && r.stoppedAt && isHumanInputAction(r.stoppedAt) ? r.stoppedAt : void 0;
-}
-function stepResultOf(r) {
-  return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
-}
-function reportGate(gate) {
-  const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
-  process.stderr.write(
-    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} Record your decision with lakebase-sftdd-approve-gate --approver <you> (--sprint <s> for the plan gate, else --feature <id> [--gate <name>]), then re-run to continue.
-`
-  );
-}
-function reportInput(action, sprint) {
-  const s = sprint ?? "<sprint>";
-  process.stderr.write(
-    `[drive] PAUSED , awaiting human input (${describeAction(action)}). Nothing was approved or produced yet.
-        The Product Owner must:
-          1. author the sprint's feature-request(s) at .sftdd/features/<id>/feature-request.md, then
-          2. commit the backlog: lakebase-sftdd-sync-backlog --sprint ${s} --features <id[,id...]>
-        then re-run the drive , it will advance to the (interactive) plan gate.
-`
-  );
-}
-async function runSprintMode(args) {
-  const sprint = args.sprint;
-  const projectDir = args.projectDir ?? process.cwd();
-  const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
-  const claimJs = path6.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
-  const settings = resolveSftddSettings({ projectDir });
-  const gates = effectiveGates(args, projectDir);
-  const interactive = gates === "interactive";
-  const skipSizing = !settings.plan.sizing;
-  const effects = {
-    async drivePlanning() {
-      const cfg = buildCfg(args, "");
-      cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, "plan", gates);
-      const planning = {
-        // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
-        readState: async () => deriveSprintPlanningState(sftddDir, sprint, { skipSizing }),
-        async perform(action) {
-          for (const cmd of commandsForAction(action, cfg)) await cfg.runner.run(cmd);
-        },
-        onAction: cfg.onAction
-      };
-      const base = driverBoundOptions("plan");
-      const r = await runDriver(withTurnRecording(planning, cfg), {
-        ...base,
-        stopWhen: gatedStopWhen(base.stopWhen, interactive)
-      });
-      return stepResultOf(r);
-    },
-    async readBacklog() {
-      return backlogFeatureIds(readBacklog(sftddDir, sprint));
-    },
-    async commitAndPushRequests() {
-      const root = path6.basename(sftddDir);
-      for (const id of backlogFeatureIds(readBacklog(sftddDir, sprint))) {
-        await spawnCmd("git", ["add", "--", `${root}/features/${id}/feature-request.md`], projectDir).catch(() => void 0);
-      }
-      await spawnCmd("git", ["commit", "-m", `plan: ${sprint} feature-requests`], projectDir).catch(() => void 0);
-      await spawnCmd("git", ["push", "origin", "HEAD"], projectDir);
-    },
-    async claimFeature(featureId) {
-      await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
-    },
-    async driveFeature(featureId) {
-      const cfg = buildCfg(args, featureId);
-      resetStaleTerminalPhase(cfg.sftddDir);
-      cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, "full", gates);
-      const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
-        stopWhen: gatedStopWhen(void 0, interactive)
-      });
-      return stepResultOf(r);
-    },
-    onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}
-`)
-  };
-  if (args.planOnly) {
-    try {
-      const planning = await effects.drivePlanning();
-      if (planning.pendingGate) {
-        reportGate(planning.pendingGate);
-        return 0;
-      }
-      if (planning.pendingInput) {
-        reportInput(planning.pendingInput, sprint);
-        return 2;
-      }
-      process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)
-`);
-      return 0;
-    } catch (err) {
-      process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-      return 1;
-    }
-  }
-  try {
-    const result = await runSprint(effects);
-    if (result.escalated) {
-      const e = result.escalation;
-      const on = result.pendingFeature ? ` on ${result.pendingFeature}` : "";
-      process.stderr.write(
-        `[sprint] RAISED TO HIL${on} , halting sprint ${sprint}.
-` + (e?.source ? `        source: ${e.source}
-` : "") + (e?.reason ? `        reason: ${e.reason}
-` : "") + `        recorded under ${path6.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.
-`
-      );
-      return 3;
-    }
-    if (result.pendingGate) {
-      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
-`);
-      reportGate(result.pendingGate);
-      return 0;
-    }
-    if (result.pendingInput) {
-      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
-`);
-      reportInput(result.pendingInput, sprint);
-      return 2;
-    }
-    process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)
+function runApproveGateCli(argv) {
+  const p = parse(argv);
+  if (p.help) {
+    process.stdout.write(`${HELP}
 `);
     return 0;
-  } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    return 1;
   }
-}
-function effectiveGates(args, projectDir) {
-  const flag = args.gates;
-  return flag ?? resolveSftddSettings({ projectDir }).project.gates;
-}
-function hasNonInteractiveSignal() {
-  return sftddEnv("AUTO_CONTINUE") === "1" || /^(1|true)$/i.test(process.env.CI ?? "");
-}
-function snapshotRunConfig(cfg, bound, gates) {
-  writeRunConfig({
-    projectDir: cfg.projectDir,
-    sftddDir: cfg.sftddDir,
-    bound,
-    // Run-scoped effective gate mode (--gates override else project policy),
-    // recorded here so the snapshot is where the run-scoped choice lives , the
-    // flag never persists into sftdd-config.json.
-    gates,
-    uiTrack: cfg.uiTrack,
-    buildSessionScope: cfg.buildSessionScope,
-    reviewEffort: cfg.reviewEffort,
-    deployTarget: cfg.deployTarget,
-    // loop + batchCap from the resolved settings (single source), so the snapshot
-    // records what the drive actually used, never a stale env value.
-    loopGranularity: cfg.loopGranularity,
-    batchCap: cfg.batchCap,
-    modelForRole: cfg.modelForRole ?? (() => "inherit")
-  });
-}
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.help) {
-    process.stdout.write(help());
-    return 0;
-  }
-  if (!args.sftddDir) {
-    const projectDir = args.projectDir ?? process.cwd();
-    const m = migrateLegacyArtifactDir(projectDir);
-    if (m.migrated) {
-      process.stderr.write(
-        `lakebase-sftdd-drive: migrated legacy ${LEGACY_ARTIFACT_ROOT}/ to ${ARTIFACT_ROOT}/ (via ${m.via}).
-`
-      );
-    }
-  }
-  applyProjectOverrides(args.projectDir ?? process.cwd(), {
-    deployTarget: args.deployTarget,
-    sizing: args.noSizing === true ? false : void 0
-  });
-  if (effectiveGates(args, args.projectDir ?? process.cwd()) === "proxy" && !hasNonInteractiveSignal()) {
+  if (!p.approver || !p.approver.trim()) {
     process.stderr.write(
-      `lakebase-sftdd-drive: gate mode 'proxy' (Human Proxy approves headlessly) requires an explicit
-non-interactive signal (LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI). Refusing to bypass HITL in an
-interactive/dev context. Unset LAKEBASE_SFTDD_HUMAN_PROXY, or pass --gates interactive.
+      `lakebase-sftdd-approve-gate: --approver <name> is REQUIRED , a gate approval attributes the
+decision to a named human. (For headless/smoke runs use lakebase-sftdd-human-proxy.)
 `
     );
     return 2;
   }
-  if (args.sprint && !args.feature) {
-    return runSprintMode(args);
-  }
-  if (!args.feature) {
-    process.stderr.write(`lakebase-sftdd-drive: --feature is required.
-
-${help()}`);
+  if (!p.sprint && !p.feature) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: one of --sprint <name> or --feature <id> is required.
+`);
     return 2;
   }
-  let bound;
-  if (args.planOnly) bound = "plan";
-  if (args.only) {
-    if (!["design", "build", "deploy"].includes(args.only)) {
-      process.stderr.write(`lakebase-sftdd-drive: --only must be design|build|deploy (got "${args.only}").
+  const sftddDir = p.tddDir ?? resolveSftddDir(p.projectDir);
+  if (p.sprint) {
+    const res = approveSprintPlanGate({ sprint: p.sprint, approver: p.approver, hitlApproved: true, sftddDir });
+    if (p.json) process.stdout.write(`${JSON.stringify(res)}
 `);
-      return 2;
-    }
-    bound = args.only;
-  }
-  const boundOpts = bound ? driverBoundOptions(bound) : {};
-  let pauseMilestone;
-  if (args.pauseBefore) {
-    if (!["navigator", "release-engineer"].includes(args.pauseBefore)) {
-      process.stderr.write(
-        `lakebase-sftdd-drive: --pause-before must be navigator|release-engineer (got "${args.pauseBefore}").
+    else if (res.ok) {
+      process.stdout.write(
+        `approve-gate: sprint plan gate for '${p.sprint}' ${res.alreadyApproved ? "already approved" : "approved"} by ${p.approver}
 `
       );
-      return 2;
-    }
-    pauseMilestone = args.pauseBefore;
-  }
-  const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : void 0;
-  const confirmContinue = pauseMilestone ? makeConfirmContinue() : void 0;
-  const cfg = buildCfg(args, args.feature);
-  resetStaleTerminalPhase(cfg.sftddDir);
-  if (args.dryRun) {
-    const plan = await planNextAction(cfg, boundOpts.transition);
-    process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
-    return 0;
-  }
-  cfg.runner = execRunner(cfg);
-  const gates = effectiveGates(args, cfg.projectDir);
-  snapshotRunConfig(cfg, bound ?? "full", gates);
-  const interactive = gates === "interactive";
-  try {
-    const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
-      maxSteps: args.maxSteps,
-      transition: boundOpts.transition,
-      stopWhen: gatedStopWhen(boundOpts.stopWhen, interactive),
-      pauseBefore,
-      confirmContinue
-    });
-    const pendingGate = pendingGateOf(result);
-    const pendingInput = pendingInputOf(result);
-    if (result.escalated) {
-      const e = result.escalation;
-      process.stderr.write(
-        `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.
-        source: ${e?.source}
-        reason: ${e?.reason}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.
-`
-      );
-      return 3;
-    } else if (result.stoppedAtMax) {
-      process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
-`);
-    } else if (pendingGate) {
-      reportGate(pendingGate);
-    } else if (pendingInput) {
-      reportInput(pendingInput);
-      return 2;
-    } else if (result.stoppedAtBound) {
-      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
-`);
     } else {
-      process.stderr.write(`[drive] done in ${result.iterations} actions
+      process.stderr.write(`approve-gate: could NOT approve the sprint plan gate (${res.reason}).
 `);
     }
-    return 0;
-  } catch (err) {
-    if (err instanceof ProtocolViolationError) {
-      const h = err.handoff;
-      try {
-        writeEscalation(cfg.sftddDir, {
-          source: `protocol:${h.responder}`,
-          reason: err.message,
-          feature_id: cfg.featureId,
-          ...h.story ? { story_id: h.story } : {}
-        });
-        emitAgentLogEvent(
-          {
-            role: "orchestrator",
-            level: "error",
-            event: "escalation.raised",
-            feature_id: cfg.featureId,
-            slots: { source: `protocol:${h.responder}`, reason: err.message, ...h.story ? { story: h.story } : {} }
-          },
-          { sftddDir: cfg.sftddDir }
-        );
-      } catch {
-      }
-      process.stderr.write(`[drive] ${err.message}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.
-`);
-      return 3;
-    }
-    if (err instanceof UnexpectedCallbackError) {
-      try {
-        writeEscalation(cfg.sftddDir, {
-          source: `protocol:unexpected-caller:${err.from}`,
-          reason: err.message,
-          feature_id: cfg.featureId,
-          ...err.scope.story ? { story_id: err.scope.story } : {}
-        });
-        emitAgentLogEvent(
-          {
-            role: "orchestrator",
-            level: "error",
-            event: "escalation.raised",
-            feature_id: cfg.featureId,
-            slots: { source: `protocol:unexpected-caller:${err.from}`, reason: err.message, ...err.scope.story ? { story: err.scope.story } : {} }
-          },
-          { sftddDir: cfg.sftddDir }
-        );
-      } catch {
-      }
-      process.stderr.write(`[drive] ${err.message}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
-`);
-      return 3;
-    }
-    if (err instanceof ReplayCorpusMissError) {
-      process.stderr.write(`${err.message}
-`);
-      return 2;
-    }
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    return 1;
+    return res.ok ? 0 : 2;
   }
+  const result = drainGatesAsHumanProxy({
+    featureId: p.feature,
+    sftddDir,
+    approver: p.approver,
+    ...p.gate ? { onlyGate: p.gate } : {},
+    ...p.promoteRef ? { promoteRef: p.promoteRef } : {}
+  });
+  if (p.json) {
+    process.stdout.write(`${JSON.stringify({ ok: true, ...result })}
+`);
+  } else {
+    process.stdout.write(
+      `approve-gate: ${p.feature} , approved ${result.approved.length} gate(s) by ${p.approver}${result.approved.length ? ": " + result.approved.join(", ") : ""}
+`
+    );
+    for (const s of result.skipped) process.stdout.write(`  skipped ${s.gate} (${s.reason})
+`);
+  }
+  return result.approved.length > 0 ? 0 : 2;
 }
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    process.stderr.write(`${err instanceof Error ? err.message : String(err)}
-`);
-    process.exit(1);
-  }
-);
-//# sourceMappingURL=drive.cli.cjs.map
+if (process.argv[1] && /approve-gate\.cli\.(c?js|ts)$/.test(process.argv[1])) {
+  process.exit(runApproveGateCli(process.argv.slice(2)));
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  runApproveGateCli
+});
+//# sourceMappingURL=approve-gate.cli.cjs.map

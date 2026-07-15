@@ -1,0 +1,133 @@
+#!/usr/bin/env node
+// lakebase-sftdd-approve-gate: the HUMAN-facing command to record a HITL gate
+// approval (FEIP-8005). This is the production counterpart to
+// lakebase-sftdd-human-proxy, which is explicitly a headless / automated-smoke
+// stand-in ("NOT for production use") and defaults the approver to "human-proxy".
+//
+// A gate approval writes "this named human approved this artifact" into gates.json
+// (or the sprint plan gate). That is a governance decision, so this CLI:
+//   - REQUIRES --approver <name> (no default): the deciding human must name
+//     themselves; there is no silent proxy identity.
+//   - records a GENUINE approval , the tool records ATTRIBUTION; the DECISION must
+//     be the approver's. Only run it when the named human has actually reviewed
+//     and approved.
+//
+// It reuses the SAME approval substrate as the Human Proxy (approveSprintPlanGate
+// for the sprint plan gate; drainGatesAsHumanProxy, which assembles each open
+// gate's artifact hashes and calls approveGate, for a feature's gates), so the
+// recorded approval is byte-for-byte what the workflow expects , only the
+// attribution and the required-human framing differ.
+//
+// Usage:
+//   lakebase-sftdd-approve-gate --sprint <name> --approver <you>            # sprint plan gate
+//   lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <g>] # a feature's gate(s)
+//                              [--promote-ref <str>] [--project-dir <p>] [--tdd-dir <d>] [--json]
+// Exit 0 = approval recorded (or already approved); 2 = usage error / nothing to approve.
+
+import { approveSprintPlanGate } from "./sprint-gates.js";
+import { drainGatesAsHumanProxy } from "./human-proxy.js";
+import { resolveSftddDir } from "./sftdd-paths.js";
+import type { GateName } from "./gates.js";
+
+interface Parsed {
+  feature?: string;
+  sprint?: string;
+  gate?: GateName;
+  approver?: string;
+  promoteRef?: string;
+  projectDir: string;
+  tddDir?: string;
+  json: boolean;
+  help?: boolean;
+}
+
+function parse(argv: string[]): Parsed {
+  const out: Parsed = { projectDir: process.cwd(), json: false };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
+    else if (a === "--sprint" && i + 1 < argv.length) out.sprint = argv[++i];
+    else if (a === "--gate" && i + 1 < argv.length) out.gate = argv[++i] as GateName;
+    else if (a === "--approver" && i + 1 < argv.length) out.approver = argv[++i];
+    else if (a === "--promote-ref" && i + 1 < argv.length) out.promoteRef = argv[++i];
+    else if (a === "--project-dir" && i + 1 < argv.length) out.projectDir = argv[++i];
+    else if (a === "--tdd-dir" && i + 1 < argv.length) out.tddDir = argv[++i];
+    else if (a === "--json") out.json = true;
+    else if (a === "-h" || a === "--help") out.help = true;
+  }
+  return out;
+}
+
+const HELP =
+  `lakebase-sftdd-approve-gate , record a HUMAN's HITL gate approval\n\n` +
+  `Records a genuine approval into the workflow state. The DECISION must be the\n` +
+  `approver's; this tool records ATTRIBUTION + the artifact hashes. Use the Human\n` +
+  `Proxy (lakebase-sftdd-human-proxy) instead ONLY for headless / smoke runs.\n\n` +
+  `Usage:\n` +
+  `  lakebase-sftdd-approve-gate --sprint <name> --approver <you>\n` +
+  `  lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <name>] [--promote-ref <str>]\n` +
+  `                             [--project-dir <p>] [--tdd-dir <d>] [--json]\n\n` +
+  `--approver is REQUIRED (name the deciding human; there is no default identity).\n` +
+  `Exit 0 = approved (or already approved); 2 = usage error / nothing to approve.\n`;
+
+/** Run the CLI. Returns the process exit code (no process.exit inside), so it is
+ *  unit-testable , mirroring runHumanProxyCli. */
+export function runApproveGateCli(argv: string[]): number {
+  const p = parse(argv);
+  if (p.help) {
+    process.stdout.write(`${HELP}\n`);
+    return 0;
+  }
+  if (!p.approver || !p.approver.trim()) {
+    process.stderr.write(
+      `lakebase-sftdd-approve-gate: --approver <name> is REQUIRED , a gate approval attributes the\n` +
+        `decision to a named human. (For headless/smoke runs use lakebase-sftdd-human-proxy.)\n`,
+    );
+    return 2;
+  }
+  if (!p.sprint && !p.feature) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: one of --sprint <name> or --feature <id> is required.\n`);
+    return 2;
+  }
+  const sftddDir = p.tddDir ?? resolveSftddDir(p.projectDir);
+
+  // Sprint plan gate.
+  if (p.sprint) {
+    const res = approveSprintPlanGate({ sprint: p.sprint, approver: p.approver, hitlApproved: true, sftddDir });
+    if (p.json) process.stdout.write(`${JSON.stringify(res)}\n`);
+    else if (res.ok) {
+      process.stdout.write(
+        `approve-gate: sprint plan gate for '${p.sprint}' ${res.alreadyApproved ? "already approved" : "approved"} by ${p.approver}\n`,
+      );
+    } else {
+      process.stderr.write(`approve-gate: could NOT approve the sprint plan gate (${res.reason}).\n`);
+    }
+    return res.ok ? 0 : 2;
+  }
+
+  // A feature's gate(s). Reuses the shared drain (assembles artifact hashes + calls
+  // approveGate); the required --approver above is what makes this a genuine human
+  // approval rather than the proxy default.
+  const result = drainGatesAsHumanProxy({
+    featureId: p.feature as string,
+    sftddDir,
+    approver: p.approver,
+    ...(p.gate ? { onlyGate: p.gate } : {}),
+    ...(p.promoteRef ? { promoteRef: p.promoteRef } : {}),
+  });
+  if (p.json) {
+    process.stdout.write(`${JSON.stringify({ ok: true, ...result })}\n`);
+  } else {
+    process.stdout.write(
+      `approve-gate: ${p.feature} , approved ${result.approved.length} gate(s) by ${p.approver}` +
+        `${result.approved.length ? ": " + result.approved.join(", ") : ""}\n`,
+    );
+    for (const s of result.skipped) process.stdout.write(`  skipped ${s.gate} (${s.reason})\n`);
+  }
+  return result.approved.length > 0 ? 0 : 2;
+}
+
+// Only run when invoked as a script (not when imported by a test).
+if (process.argv[1] && /approve-gate\.cli\.(c?js|ts)$/.test(process.argv[1])) {
+  process.exit(runApproveGateCli(process.argv.slice(2)));
+}

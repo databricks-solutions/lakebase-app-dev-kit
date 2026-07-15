@@ -791,7 +791,8 @@ function reportGate(gate: WorkflowAction): void {
   const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
     `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} ` +
-      `Approve + record the approver, then re-run to continue.\n`,
+      `Record your decision with lakebase-sftdd-approve-gate --approver <you> ` +
+      `(--sprint <s> for the plan gate, else --feature <id> [--gate <name>]), then re-run to continue.\n`,
   );
 }
 

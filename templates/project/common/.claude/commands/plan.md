@@ -109,10 +109,14 @@ Then it surfaces the **sprint plan gate** (the HITL checkpoint between planning
 and execution). `--plan-only` STOPS there, it does not enter design/build/deploy.
 
 **Gate.** Interactive: the driver stops at the plan gate + prints a `GATE` marker.
-Surface the proposed backlog to the human; on approval record it
-(`lakebase-sftdd-human-proxy --sprint <name> --gate plan --approver <human>`), then
-re-run to confirm planning complete. Headless (`--gates proxy`): the Human Proxy
-approves once `feature-proposals.md` exists + conforms. "Passing" on a re-plan =
+Surface the proposed backlog to the human; on approval the human records it with
+the production, human-facing approver command
+(`lakebase-sftdd-approve-gate --sprint <name> --approver <human>`), then re-run to
+confirm planning complete. (`lakebase-sftdd-approve-gate` requires an explicit
+`--approver` , the deciding human names themselves; it is the counterpart to the
+headless `lakebase-sftdd-human-proxy`, which is for smoke/CI only.) Headless
+(`--gates proxy`): the Human Proxy approves once `feature-proposals.md` exists +
+conforms. "Passing" on a re-plan =
 approving the standing backlog as-is. The driver emits the planning log as code.
 
 ## Next
