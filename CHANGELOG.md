@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.17] - 2026-07-15
+
+### Added
+
+- **`lakebase-sftdd-sync-backlog` , the human door to commit an interactive
+  sprint backlog (FEIP-8002).** Interactive sprint planning deadlocked at
+  `author-requests`: `backlog.json` (from which `requestsAuthored` is derived) is
+  written only by the `author-requests` effect (`supply-requests` + `sync-backlog`),
+  which the interactive driver stops BEFORE performing; `supply-requests` reads
+  sprint membership only from the proxy env channel; and there was no standalone
+  sync-backlog CLI. So a human-in-the-loop Product Owner could author
+  `feature-request.md` files but never commit a backlog or reach the plan gate.
+  The new `lakebase-sftdd-sync-backlog --sprint <s> [--features F1,F2]` declares
+  this sprint's membership to `sprints/<s>/requested.json` (the SAME one file the
+  Human Proxy writes, via new shared `readRequested`/`writeRequested` helpers , one
+  membership source, no contradictory door) and projects `backlog.json` from the
+  requested features that have a `feature-request.md`. The interactive loop is now:
+  driver pauses at `author-requests` -> PO authors requests + runs `sync-backlog` ->
+  re-run advances to the (interactive) plan gate. The `author-requests` PAUSE
+  message names the CLI; `/plan` documents the step. Headless (Human Proxy) is
+  unchanged , its `supply-requests` performs the same projection automatically.
+
 ## [0.3.0-beta.16] - 2026-07-15
 
 ### Fixed
