@@ -10167,6 +10167,7 @@ async function runSprint(effects) {
   const planning = await effects.drivePlanning();
   if (planning.escalated) return { features: [], escalated: true, escalation: planning.escalation };
   if (planning.pendingGate) return { features: [], pendingGate: planning.pendingGate };
+  if (planning.pendingInput) return { features: [], pendingInput: planning.pendingInput };
   await effects.commitAndPushRequests?.();
   const features = await effects.readBacklog();
   for (let i = 0; i < features.length; i++) {
@@ -10179,6 +10180,9 @@ async function runSprint(effects) {
     }
     if (driven.pendingGate) {
       return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+    }
+    if (driven.pendingInput) {
+      return { features, pendingInput: driven.pendingInput, pendingFeature: featureId };
     }
   }
   return { features };
@@ -11121,13 +11125,23 @@ function gatedStopWhen(base, interactive) {
 function pendingGateOf(r) {
   return r.stoppedAtBound && r.stoppedAt && isHitlGateAction(r.stoppedAt) ? r.stoppedAt : void 0;
 }
+function pendingInputOf(r) {
+  return r.stoppedAtBound && r.stoppedAt && isHumanInputAction(r.stoppedAt) ? r.stoppedAt : void 0;
+}
 function stepResultOf(r) {
-  return { pendingGate: pendingGateOf(r), escalated: r.escalated, escalation: r.escalation };
+  return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
 }
 function reportGate(gate) {
   const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
     `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} Approve + record the approver, then re-run to continue.
+`
+  );
+}
+function reportInput(action, sprint) {
+  const where = sprint ? ` for sprint ${sprint}` : "";
+  process.stderr.write(
+    `[drive] PAUSED , awaiting human input: the Product Owner must author feature-request(s)${where} (${describeAction(action)}), then re-run. Nothing was approved or produced yet.
 `
   );
 }
@@ -11190,8 +11204,15 @@ async function runSprintMode(args) {
   if (args.planOnly) {
     try {
       const planning = await effects.drivePlanning();
-      if (planning.pendingGate) reportGate(planning.pendingGate);
-      else process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)
+      if (planning.pendingGate) {
+        reportGate(planning.pendingGate);
+        return 0;
+      }
+      if (planning.pendingInput) {
+        reportInput(planning.pendingInput, sprint);
+        return 2;
+      }
+      process.stderr.write(`[plan] ${sprint} planning complete (plan gate approved)
 `);
       return 0;
     } catch (err) {
@@ -11218,10 +11239,16 @@ async function runSprintMode(args) {
       if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
 `);
       reportGate(result.pendingGate);
-    } else {
-      process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)
-`);
+      return 0;
     }
+    if (result.pendingInput) {
+      if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}
+`);
+      reportInput(result.pendingInput, sprint);
+      return 2;
+    }
+    process.stderr.write(`[sprint] ${sprint} complete: ${result.features.length} feature(s)
+`);
     return 0;
   } catch (err) {
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}
@@ -11338,6 +11365,7 @@ ${help()}`);
       confirmContinue
     });
     const pendingGate = pendingGateOf(result);
+    const pendingInput = pendingInputOf(result);
     if (result.escalated) {
       const e = result.escalation;
       process.stderr.write(
@@ -11353,6 +11381,9 @@ ${help()}`);
 `);
     } else if (pendingGate) {
       reportGate(pendingGate);
+    } else if (pendingInput) {
+      reportInput(pendingInput);
+      return 2;
     } else if (result.stoppedAtBound) {
       process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
 `);

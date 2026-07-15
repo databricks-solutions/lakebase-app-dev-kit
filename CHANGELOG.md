@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.16] - 2026-07-15
+
+### Fixed
+
+- **Interactive `--plan-only` no longer misreports a PO pause as an approved plan
+  (FEIP-8001).** In interactive mode (the default), `lakebase-sftdd-drive --sprint
+  <s> --plan-only` correctly stops after the Architect's estimate at the Product
+  Owner's `author-requests` (the human must write the feature-request(s)). But
+  that stop is a human-INPUT action, not an approval gate, and the completion
+  handlers only inspected the approval-gate stop , so the run printed
+  `planning complete (plan gate approved)` and exited 0 despite producing nothing
+  (no `backlog.json` / `gates.json` / `feature-request.md`, workflow-state still
+  at `discovery`). A caller would advance on an empty backlog. The human-input
+  stop is now carried distinctly (`pendingInput`): `runSprint` halts on it instead
+  of falling through to an empty backlog, and the CLI reports a clear
+  `PAUSED , the PO must author feature-request(s), then re-run. Nothing was
+  approved or produced` and exits NON-ZERO in the `--plan-only`, sprint, and
+  `--feature` bound paths (the postcondition , an approved plan , is not met). A
+  genuine approval gate still exits 0 (work produced, awaiting approval).
+
 ## [0.3.0-beta.15] - 2026-07-14
 
 Hardening from field feedback against beta.14, plus a consumer-facing packaging
