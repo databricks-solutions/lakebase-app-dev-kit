@@ -6729,6 +6729,7 @@ var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s
 var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
 var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
 var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var reflectVerdictJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "reflect-verdict.json");
 var handbackFile = (tdd, f, role, story) => join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 var sprintDir = (tdd, sprint) => join(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => join(sprintDir(tdd, sprint), "gates.json");
@@ -8213,7 +8214,7 @@ Candidate features for this sprint, projected deterministically from the recorde
 
 // scripts/sftdd/revise.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync16, writeFileSync as writeFileSync12, mkdirSync as mkdirSync8, readdirSync as readdirSync8, rmSync } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync17, writeFileSync as writeFileSync13, mkdirSync as mkdirSync9, readdirSync as readdirSync8, rmSync as rmSync2 } from "fs";
 import { join as join16, dirname as dirname6 } from "path";
 
 // scripts/sftdd/story-pipeline.ts
@@ -8423,41 +8424,55 @@ function markSmellResolved(sftddDir, smell, opts) {
   return true;
 }
 
+// scripts/sftdd/reflection.ts
+init_esm_shims();
+import { existsSync as existsSync15, readFileSync as readFileSync16, writeFileSync as writeFileSync12, mkdirSync as mkdirSync8, rmSync } from "fs";
+var SMELL_FOR_OWNER = {
+  "spec-author": "reflect-spec-defect",
+  "test-strategist": "reflect-testlist-defect"
+};
+function clearReflectVerdict(sftddDir, feature, story) {
+  const p = reflectVerdictJson(sftddDir, feature, story);
+  if (existsSync15(p)) rmSync(p, { force: true });
+}
+var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
+
 // scripts/sftdd/revise.ts
 var REVISE_APPROVER = "human-proxy";
 function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
+  clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
-  if (existsSync15(master)) {
+  if (existsSync16(master)) {
     try {
-      const data = JSON.parse(readFileSync16(master, "utf8"));
+      const data = JSON.parse(readFileSync17(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        writeFileSync12(master, JSON.stringify(data, null, 2) + "\n");
+        writeFileSync13(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if (existsSync15(perStory)) rmSync(perStory, { force: true });
+  if (existsSync16(perStory)) rmSync2(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
-    if (existsSync15(dir)) {
+    if (existsSync16(dir)) {
       for (const f of readdirSync8(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) rmSync(join16(dir, f), { force: true });
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync2(join16(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {
     const dir = acsDir(sftddDir, featureId, story);
-    if (existsSync15(dir)) {
+    if (existsSync16(dir)) {
       for (const f of readdirSync8(dir)) {
         if (!f.endsWith(".json")) continue;
         const p = join16(dir, f);
         try {
-          const ac = JSON.parse(readFileSync16(p, "utf8"));
+          const ac = JSON.parse(readFileSync17(p, "utf8"));
           if ("architectural_notes" in ac) {
             delete ac.architectural_notes;
-            writeFileSync12(p, JSON.stringify(ac, null, 2) + "\n");
+            writeFileSync13(p, JSON.stringify(ac, null, 2) + "\n");
           }
         } catch {
         }
@@ -8496,8 +8511,8 @@ function applyReviseSelfHeal(args) {
   staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
-    mkdirSync8(dirname6(hb), { recursive: true });
-    writeFileSync12(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+    mkdirSync9(dirname6(hb), { recursive: true });
+    writeFileSync13(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
   }
   const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
@@ -8510,7 +8525,7 @@ function applyReviseSelfHeal(args) {
 
 // scripts/sftdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync16, mkdirSync as mkdirSync9, readFileSync as readFileSync17, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync13 } from "fs";
+import { existsSync as existsSync17, mkdirSync as mkdirSync10, readFileSync as readFileSync18, renameSync as renameSync2, unlinkSync as unlinkSync3, writeFileSync as writeFileSync14 } from "fs";
 var SPRINT_GATES_SCHEMA_VERSION = 1;
 var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
@@ -8526,10 +8541,10 @@ function sprintGatesFile(sftddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const file = sprintGatesFile(sftddDir, sprint);
-  if (!existsSync16(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync17(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync17(file, "utf8"));
+    parsed = JSON.parse(readFileSync18(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -8543,10 +8558,10 @@ function readSprintGates(sprint, opts = {}) {
 }
 function writeSprintGates(state, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
-  mkdirSync9(sprintDir(sftddDir, state.sprint), { recursive: true });
+  mkdirSync10(sprintDir(sftddDir, state.sprint), { recursive: true });
   const file = sprintGatesJson(sftddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  writeFileSync13(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  writeFileSync14(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
     renameSync2(tmp, file);
   } catch (err) {
@@ -8562,10 +8577,10 @@ function approveSprintPlanGate(args) {
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const sftddDir = args.sftddDir ?? resolveSftddDir();
   const file = featureProposalsMd(sftddDir);
-  if (!existsSync16(file)) {
+  if (!existsSync17(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }
-  const content = readFileSync17(file, "utf8");
+  const content = readFileSync18(file, "utf8");
   const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
   if (!conf.ok) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };

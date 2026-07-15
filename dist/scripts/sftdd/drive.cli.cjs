@@ -6684,6 +6684,7 @@ var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
 var featureRequestMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-request.md");
 var architectureJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "architecture.json");
+var featureTestListJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "test-list.json");
 var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
 var featureDeployEvidenceJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "deploy-evidence.json");
 var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
@@ -8976,6 +8977,10 @@ function validateWorkflowState(value) {
 // scripts/sftdd/reflection.ts
 init_cjs_shims();
 var import_fs9 = require("fs");
+var SMELL_FOR_OWNER = {
+  "spec-author": "reflect-spec-defect",
+  "test-strategist": "reflect-testlist-defect"
+};
 function readReflectVerdict(sftddDir, feature, story) {
   const p = reflectVerdictJson(sftddDir, feature, story);
   if (!(0, import_fs9.existsSync)(p)) return void 0;
@@ -8991,6 +8996,7 @@ function reflectionPassed(sftddDir, feature, story) {
 function reflectionVerdictWritten(sftddDir, feature, story) {
   return readReflectVerdict(sftddDir, feature, story) !== void 0;
 }
+var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
 // scripts/sftdd/architecture-canon.ts
 init_cjs_shims();
@@ -9475,8 +9481,8 @@ function readConventions(sftddDir) {
 // scripts/sftdd/orchestrator-effects.ts
 var UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story, a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 var UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-function artifactRootRel(sftddDir) {
-  return (0, import_node_path10.basename)(sftddDir);
+function artifactRoot(sftddDir) {
+  return sftddDir;
 }
 function uiTrackBuild(root) {
   return ` UI track is ON: the UI must adhere to the project design guide at ${root}/design/design-guide.md (+ the design-guide.json tokens). Build to it.`;
@@ -9529,7 +9535,7 @@ function rubricSourcesNote(rubric, featureId, root) {
   return ` The rubric above is pre-extracted from ${root}/features/${featureId}/architecture.md, ${root}/nfrs.md, and ${root}/design/design-guide.md, open those full files ONLY if you need more detail than it carries (do not re-read them by default).`;
 }
 function buildContextPack(sftddDir, featureId, story, ac, opts = {}) {
-  const root = artifactRootRel(sftddDir);
+  const root = artifactRoot(sftddDir);
   const rubric = contextRubric(sftddDir, featureId, story, ac);
   const parts = [];
   if (rubric) parts.push(rubric + rubricSourcesNote(rubric, featureId, root));
@@ -9643,7 +9649,7 @@ function architectConventionsDirective(sftddDir) {
   return ` REUSE the established project architecture conventions (set by ${conventions.established_by}): ${layout}. Declare the SAME role -> module paths in architecture.json, do NOT remap or rename an established layer; a divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
 }
 function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
-  const root = artifactRootRel(sftddDir);
+  const root = artifactRoot(sftddDir);
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -9762,6 +9768,21 @@ var SCM_WAIT_CI_BIN = "lakebase-scm-wait-ci";
 var SCM_MERGE_BIN = "lakebase-scm-merge";
 var EXPERIMENT_SLUG = "exp1";
 var experimentBranchName = (storyId) => sanitizeBranchName(`experiment/${storyId}-${EXPERIMENT_SLUG}`);
+function designArtifactExpectation(action, sftddDir, featureId) {
+  if ("mode" in action) {
+    if (action.role === "spec-author" && action.mode === "propose") return { anyOf: [featureProposalsMd(sftddDir)], label: "planning/feature-proposals.md" };
+    if (action.role === "architect-reviewer" && action.mode === "estimate") return { anyOf: [planningEstimatesJson(sftddDir)], label: "planning/estimates.json" };
+    if (action.role === "spec-author" && action.mode === "breakdown") return { anyOf: [featureSpecJson(sftddDir, featureId)], label: "feature-spec.json" };
+    return null;
+  }
+  if (action.role === "ux-designer") return { anyOf: [designGuideJson(sftddDir)], label: "design/design-guide.json" };
+  const s = action.story;
+  if (!s) return null;
+  if (action.role === "spec-author") return { anyOf: [acsDir(sftddDir, featureId, s)], label: `stories/${s}/acs/*.json` };
+  if (action.role === "architect-reviewer") return { anyOf: [architectureJson(sftddDir, featureId)], label: "architecture.json" };
+  if (action.role === "test-strategist") return { anyOf: [featureTestListJson(sftddDir, featureId)], label: "test-list.json" };
+  return null;
+}
 function commandsForAction(action, cfg) {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.sftddDir];
@@ -9828,6 +9849,10 @@ function commandsForAction(action, cfg) {
         }
       };
       const cmds = [claude];
+      const expectArtifact = designArtifactExpectation(action, cfg.sftddDir, f);
+      if (expectArtifact) {
+        cmds.push({ kind: "verify-artifact", role: action.role, anyOf: expectArtifact.anyOf, label: expectArtifact.label });
+      }
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
@@ -10715,6 +10740,23 @@ var ReplayCorpusMissError = class extends Error {
     this.name = "ReplayCorpusMissError";
   }
 };
+var ArtifactOutOfRootError = class extends Error {
+  constructor(role, label, anyOf, sftddDir) {
+    super(
+      `role '${role}' produced no ${label} under ${path6.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
+        The subagent likely resolved the project root wrong and wrote outside it (check $HOME and other dirs for a stray copy). Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`
+    );
+    this.role = role;
+    this.label = label;
+    this.anyOf = anyOf;
+    this.sftddDir = sftddDir;
+    this.name = "ArtifactOutOfRootError";
+  }
+  role;
+  label;
+  anyOf;
+  sftddDir;
+};
 function spawnClaudeStreaming(args, cwd) {
   return new Promise((resolve2, reject) => {
     const child = (0, import_node_child_process6.spawn)("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
@@ -10914,6 +10956,20 @@ function execRunner(cfg) {
             );
           } catch {
           }
+        }
+        return;
+      }
+      if (cmd.kind === "verify-artifact") {
+        const present = cmd.anyOf.some((p) => {
+          try {
+            const st = fs14.statSync(p);
+            return st.isDirectory() ? fs14.readdirSync(p).length > 0 : true;
+          } catch {
+            return false;
+          }
+        });
+        if (!present) {
+          throw new ArtifactOutOfRootError(cmd.role, cmd.label, cmd.anyOf, cfg.sftddDir);
         }
         return;
       }
@@ -11454,6 +11510,11 @@ ${help()}`);
       process.stderr.write(`${err.message}
 `);
       return 2;
+    }
+    if (err instanceof ArtifactOutOfRootError) {
+      process.stderr.write(`[drive] ${err.message}
+`);
+      return 3;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);

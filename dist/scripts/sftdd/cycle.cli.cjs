@@ -8170,6 +8170,9 @@ function smellMatches(entry, smell, story_id) {
   if (story_id === void 0) return true;
   return entry.story_id === void 0 || entry.story_id === story_id;
 }
+function hasOpenSmell(sftddDir, smell, story_id) {
+  return readSmellsLog(sftddDir).detected.some((d) => !d.resolution && smellMatches(d, smell, story_id));
+}
 function markSmellResolved(sftddDir, smell, opts) {
   const file = (0, import_path7.join)(sftddDir, "smells.json");
   if (!(0, import_fs7.existsSync)(file)) return false;
@@ -8180,6 +8183,21 @@ function markSmellResolved(sftddDir, smell, opts) {
   entry.resolution_kind = opts.kind;
   (0, import_fs7.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
   return true;
+}
+function resolveOpenSmells(sftddDir, smell, opts) {
+  const file = (0, import_path7.join)(sftddDir, "smells.json");
+  if (!(0, import_fs7.existsSync)(file)) return 0;
+  const log = JSON.parse((0, import_fs7.readFileSync)(file, "utf8"));
+  let n = 0;
+  for (const d of log.detected) {
+    if (!d.resolution && smellMatches(d, smell, opts.story_id)) {
+      d.resolution = opts.note ?? opts.kind;
+      d.resolution_kind = opts.kind;
+      n++;
+    }
+  }
+  if (n) (0, import_fs7.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
+  return n;
 }
 
 // scripts/sftdd/escalation.ts
@@ -9388,9 +9406,17 @@ function readReflectVerdict(sftddDir, feature, story) {
     return void 0;
   }
 }
+var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 function recordReflectionGate(sftddDir, feature, story) {
   const verdict = readReflectVerdict(sftddDir, feature, story);
-  if (!verdict || verdict.passed) return [];
+  if (!verdict || verdict.passed) {
+    if (verdict?.passed) {
+      for (const smell of REFLECT_SMELLS) {
+        resolveOpenSmells(sftddDir, smell, { story_id: story, kind: "cleared", note: "reflect gate now passes" });
+      }
+    }
+    return [];
+  }
   const owners = new Set(verdict.findings.map((f) => f.owner));
   if (owners.size === 0) owners.add("spec-author");
   const hits = [...owners].map((owner) => {
@@ -9402,7 +9428,8 @@ function recordReflectionGate(sftddDir, feature, story) {
       story_id: story
     };
   });
-  writeSmellsLog(sftddDir, hits);
+  const fresh = hits.filter((h) => !hasOpenSmell(sftddDir, h.smell, story));
+  if (fresh.length) writeSmellsLog(sftddDir, fresh);
   return hits;
 }
 

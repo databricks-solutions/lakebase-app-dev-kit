@@ -6,6 +6,44 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.19] - 2026-07-15
+
+### Fixed
+
+- **A design subagent writing its artifact OUTSIDE the project root no longer
+  causes a cryptic, misattributed crash (FEIP-8006).** A role subagent (seen with
+  the Test Strategist) wrote its output to a hallucinated path outside
+  `<project>/.sftdd/`, and a downstream consuming effect then crashed reading the
+  absent file, blaming the wrong step. Two layers close it. (1) Root cause: role
+  prompts now name ABSOLUTE artifact paths under the resolved `sftddDir` (the
+  directive root was a bare basename, a relative path the Claude Code `Write` tool
+  cannot use, so the agent guessed the project root). (2) Guard: after each
+  design/planning role turn the orchestrator emits a `verify-artifact` check that
+  asserts the role's expected output landed under the project `sftddDir` BEFORE any
+  consuming effect runs; on a miss the driver throws `ArtifactOutOfRootError`, a
+  loud, attributed failure naming the role, the artifact, and where it looked, with
+  the hint that the agent likely resolved the root wrong. Build turns
+  (navigator/driver) and the human-input author-requests step are exempt.
+
+- **The pre-build reflection gate now CONVERGES instead of looping the Navigator to
+  the stall guard (FEIP-8007).** When the reflect gate correctly flagged a design
+  defect (e.g. a `reflect-testlist-defect`), the run could re-dispatch the Navigator
+  reflect turn repeatedly and exit with "driver stalled ... repeated without
+  advancing state", because the defect lived in the Test Strategist's artifact and
+  re-running the Navigator could never fix it. Two root-cause gaps are closed so the
+  existing revise-route machinery converges. (1) The revise self-heal now
+  INVALIDATES the stale `reflect-verdict.json` (`clearReflectVerdict`), so after the
+  owning author re-authors, the re-dispatched Navigator recomputes fresh against the
+  corrected artifact instead of reusing the pre-fix `passed:false` verdict. (2)
+  `recordReflectionGate` is now idempotent (records an owner's smell only when one is
+  not already open, via a shared `hasOpenSmell` guard) and self-clearing (a passing
+  verdict drains the open reflect smell(s) for the story via `resolveOpenSmells`,
+  with a new `cleared` resolution kind that does NOT spend the one-revise budget). Net
+  behavior: a flagged defect routes to the producing role for one informed retry, then
+  a fresh recompute passes (proceed) or the spent budget escalates to a clean HITL
+  pause. The Navigator is never re-dispatched against an unchanged artifact, and the
+  smell log never accumulates duplicate open entries.
+
 ## [0.3.0-beta.18] - 2026-07-15
 
 ### Added

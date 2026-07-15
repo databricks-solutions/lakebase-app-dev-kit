@@ -7417,6 +7417,14 @@ function readSmellsLog(sftddDir) {
   if (!existsSync11(file)) return { detected: [] };
   return JSON.parse(readFileSync11(file, "utf8"));
 }
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function hasOpenSmell(sftddDir, smell, story_id) {
+  return readSmellsLog(sftddDir).detected.some((d) => !d.resolution && smellMatches(d, smell, story_id));
+}
 
 // scripts/sftdd/cycle-record.ts
 init_esm_shims();
@@ -7509,10 +7517,7 @@ var BLOCKING_SMELLS = /* @__PURE__ */ new Set([
 ]);
 function recordBlockingSmellFlag(sftddDir, smell, detail, scope) {
   if (!BLOCKING_SMELLS.has(smell)) return false;
-  const open = readSmellsLog(sftddDir).detected.some(
-    (d) => d.smell === smell && !d.resolution && (scope?.story_id === void 0 || d.story_id === void 0 || d.story_id === scope.story_id)
-  );
-  if (open) return false;
+  if (hasOpenSmell(sftddDir, smell, scope?.story_id)) return false;
   writeSmellsLog(sftddDir, [
     {
       smell,

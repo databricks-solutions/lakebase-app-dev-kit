@@ -6737,6 +6737,7 @@ var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s
 var storyJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "story.json");
 var acsDir = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "acs");
 var storyTestListJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "test-list-per-story.json");
+var reflectVerdictJson = (tdd, f, s) => (0, import_node_path.join)(storyResolved(tdd, f, s), "reflect-verdict.json");
 var handbackFile = (tdd, f, role, story) => (0, import_node_path.join)(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 var sprintDir = (tdd, sprint) => (0, import_node_path.join)(sprintsDir(tdd), sprint);
 var sprintGatesJson = (tdd, sprint) => (0, import_node_path.join)(sprintDir(tdd, sprint), "gates.json");
@@ -8431,9 +8432,23 @@ function markSmellResolved(sftddDir, smell, opts) {
   return true;
 }
 
+// scripts/sftdd/reflection.ts
+init_cjs_shims();
+var import_fs10 = require("fs");
+var SMELL_FOR_OWNER = {
+  "spec-author": "reflect-spec-defect",
+  "test-strategist": "reflect-testlist-defect"
+};
+function clearReflectVerdict(sftddDir, feature, story) {
+  const p = reflectVerdictJson(sftddDir, feature, story);
+  if ((0, import_fs10.existsSync)(p)) (0, import_fs10.rmSync)(p, { force: true });
+}
+var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
+
 // scripts/sftdd/revise.ts
 var REVISE_APPROVER = "human-proxy";
 function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
+  clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
   if ((0, import_node_fs4.existsSync)(master)) {
