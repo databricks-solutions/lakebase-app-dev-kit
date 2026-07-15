@@ -197,11 +197,17 @@ replay_smoke() {
   # same run on Y , it does NOT bail out of the state machine. The pause is
   # INTERNAL to this one drive process, so recording + the turn timeline span
   # design and build continuously (as if there were no pause).
-  local GATES_FLAG=""
+  # This harness is headless BY CONSTRUCTION (it exports LAKEBASE_SFTDD_HUMAN_PROXY=1
+  # and its callers set LAKEBASE_SFTDD_AUTO_CONTINUE=1), so it ALWAYS runs the
+  # proxy gate policy: the Human Proxy approves each per-story spec gate without a
+  # human, in both the capture and replay directions. This is a deliberate,
+  # explicit opt-in , the project's declared gate policy is now interactive
+  # (HITL-first), and a run-scoped --gates never rewrites it. Before that flip this
+  # relied on proxy being the global default; declaring it here is the correct,
+  # self-describing behavior for an automated run.
+  local GATES_FLAG="--gates proxy"
   if [[ "${REPLAY_DESIGN:-1}" == "1" ]]; then
     export LAKEBASE_SFTDD_REPLAY_DIR="${CORPUS_DIR}"
-  else
-    GATES_FLAG="--gates proxy"
   fi
   if [[ "$REPLAY_BUILD" == "1" ]]; then
     [[ -d "$BUILD_CORPUS_DIR" ]] || { err "build corpus missing: $BUILD_CORPUS_DIR"; return 2; }

@@ -6,7 +6,9 @@
 // the Architect on architectural_notes + architecture.json + the canon, NOT on
 // `layer`, so the Spec Author must not strip it (a cleanly-mapping story gets its
 // notes PROJECTED with no Architect turn to restore a stripped layer). A story the
-// corpus lacks returns false (-> real agent).
+// corpus lacks returns false: the caller (drive.cli.ts) treats a replay corpus miss
+// as a HARD FAILURE (ReplayCorpusMissError) , a replay is a recording and must never
+// fall through to a live agent.
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "fs";
@@ -79,7 +81,7 @@ describe("replayDesignTurn: each stage's output is replayed per-turn", () => {
     expect(existsSync(join(tdd, "design", "design-guide.json"))).toBe(true);
   });
 
-  it("a story the corpus does not cover returns false (driver falls back to the real agent)", () => {
+  it("a story the corpus does not cover returns false (a corpus miss; the driver hard-fails, never runs a live agent)", () => {
     expect(replayDesignTurn({ turn: { role: "spec-author", story: "S2-not-recorded" }, replayDir: corpus, sftddDir: tdd, featureId: F })).toBe(false);
   });
 });
@@ -96,7 +98,7 @@ describe("restoreReflectVerdict: the reflect turn's .sftdd verdict (filtered by 
     expect(JSON.parse(readFileSync(dst, "utf8")).passed).toBe(true);
   });
 
-  it("returns false when the corpus has no verdict (no-op, caller runs the real reflect)", () => {
+  it("returns false when the corpus has no verdict (a corpus miss; the driver hard-fails, never runs the reflect live)", () => {
     expect(restoreReflectVerdict({ replayDir: corpus, sftddDir: tdd, featureId: F, story: S })).toBe(false);
   });
 });

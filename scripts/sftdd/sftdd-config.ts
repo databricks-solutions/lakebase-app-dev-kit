@@ -164,7 +164,10 @@ export function resolveSftddSettings(inputs: ResolveInputs): ResolvedSettings {
 
   const project = {
     uiTrack: file?.project?.uiTrack ?? false,
-    gates: (file?.project?.gates ?? "proxy") as "interactive" | "proxy",
+    // HITL-first: the declared project policy defaults to interactive (a human
+    // approves each gate). Headless (proxy) is a deliberate opt-in, set in the
+    // file or as a RUN-SCOPED --gates override (never persisted by a flag).
+    gates: (file?.project?.gates ?? "interactive") as "interactive" | "proxy",
     deployTarget: file?.project?.deployTarget ?? "local",
     clientFramework: (file?.project?.clientFramework ?? "none") as "react" | "none",
   };
@@ -198,7 +201,7 @@ export function defaultSftddConfig(): SftddConfigFile {
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { uiTrack: false, gates: "proxy", deployTarget: "local", clientFramework: "none" },
+    project: { uiTrack: false, gates: "interactive", deployTarget: "local", clientFramework: "none" },
   };
 }
 
@@ -212,21 +215,26 @@ export function writeSftddConfig(projectDir: string, config: SftddConfigFile, op
 }
 
 /**
- * Write-through for the drive's ad-hoc override flags (`--gates`,
- * `--deploy-target`, `--no-sizing`). These are WRITERS, not parallel readers: a
- * flag persists its value into sftdd-config.json so the file stays the single
- * source of truth (resolveSftddSettings then reads it like any other setting).
+ * Write-through for the drive's ad-hoc override flags (`--deploy-target`,
+ * `--no-sizing`). These are WRITERS, not parallel readers: a flag persists its
+ * value into sftdd-config.json so the file stays the single source of truth.
  * No-op when no override is given, so a plain run never mutates the file. Loads
  * the existing config (or the default when none) so unrelated fields are kept.
+ *
+ * `--gates` is intentionally NOT here: it is the HITL POLICY, and a run-scoped
+ * flag must never rewrite the project's declared policy (that let one headless
+ * `--gates proxy` invocation permanently flip an interactive project to proxy).
+ * The drive resolves the effective gate mode as `--gates ?? project.gates` per
+ * run and records it run-scoped in run-config.json; sftdd-config.json stays
+ * authoritative and is only changed by editing the file.
  */
 export function applyProjectOverrides(
   projectDir: string,
-  over: { gates?: "interactive" | "proxy"; deployTarget?: string; sizing?: boolean },
+  over: { deployTarget?: string; sizing?: boolean },
 ): void {
-  if (over.gates === undefined && over.deployTarget === undefined && over.sizing === undefined) return;
+  if (over.deployTarget === undefined && over.sizing === undefined) return;
   const cfg = loadSftddConfig(projectDir) ?? defaultSftddConfig();
   cfg.project = cfg.project ?? {};
-  if (over.gates !== undefined) cfg.project.gates = over.gates;
   if (over.deployTarget !== undefined) cfg.project.deployTarget = over.deployTarget;
   cfg.plan = cfg.plan ?? {};
   if (over.sizing !== undefined) cfg.plan.sizing = over.sizing;

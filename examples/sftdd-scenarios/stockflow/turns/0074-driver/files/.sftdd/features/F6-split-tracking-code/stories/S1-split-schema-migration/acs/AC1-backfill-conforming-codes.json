@@ -1,0 +1,9 @@
+{
+  "id": "AC1-backfill-conforming-codes",
+  "given": "existing stock rows whose inventory_code parses by delimiter into a location, batch and serial segment (for example \"A12-B7-S001\")",
+  "when": "the split migration runs against those rows",
+  "then": "each such row gains batch_number equal to the batch segment and serial_number equal to the serial segment taken from the existing code",
+  "status": "passing",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a data-store contract on the shape and contents of stock_records after the Alembic revision runs against the paired branch. The delimiter parse (split inventory_code on '-', segment 2 -> batch_number, segment 3 -> serial_number) is one-off migration logic that lives in the Alembic revision under migrations/versions/, NOT in app/services or app/models, so the running domain never carries backfill code. Owner module: the split Alembic revision; the app/models/ stock model is updated to expose the two new columns. Verified by a real-branch integration test that seeds conforming rows and asserts the backfilled values."
+}

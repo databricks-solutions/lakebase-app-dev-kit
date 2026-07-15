@@ -1,5 +1,12 @@
-# From databricks-solutions org init
-*conf*.json
+# Runtime per-run config snapshot (rebuilt every drive; never a tracked artifact).
+# NB: this replaces an org-init `*conf*.json` glob that was catastrophically
+# over-broad , it silently dropped every corpus/data json with "conf" in its name
+# (AC files like *-confirmed.json, *-nonconforming-*.json, and client tsconfig.json
+# in recorded code trees), so shipped scenario corpora were missing ACs. Anchor to
+# the actual runtime file by exact basename instead.
+run-config.json
+# Turn-recorder runtime state (per-capture; not a shipped corpus artifact).
+.recorder-state.json
 .DS_Store
 __pycache__
 .idea/

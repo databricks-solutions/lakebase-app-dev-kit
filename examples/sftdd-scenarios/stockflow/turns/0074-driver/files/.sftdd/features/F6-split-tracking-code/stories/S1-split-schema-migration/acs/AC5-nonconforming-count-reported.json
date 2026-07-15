@@ -1,0 +1,13 @@
+{
+  "id": "AC5-nonconforming-count-reported",
+  "given": "a set of existing stock rows of which some inventory_codes do not parse as location-batch-serial",
+  "when": "the integrity probe is run for review before the change is accepted",
+  "then": "it surfaces the count of rows whose codes did not parse into batch and serial",
+  "status": "passing",
+  "layer": "Infra",
+  "architectural_notes": "Infra: a read-only integrity-probe contract on the branch, run for review before the change is accepted. This is a cross-cutting observability/reporting concern, NOT domain logic: a diagnostic query that counts rows whose inventory_code does not parse into location-batch-serial, surfaced to the reviewer. Owner module: an integrity-probe query shipped alongside the split Alembic revision (migration tooling), reading stock_records only. Verified by a real-branch test seeding a known mix of conforming/nonconforming codes and asserting the reported count matches the nonconforming subset.",
+  "independence": {
+    "distinct_from_prior": true,
+    "rationale": "AC2 asserts nonconforming rows are stored as NULL; this AC adds the distinct reporting outcome that their number is surfaced for review, which can be broken (no count reported, or a wrong count) while the NULL storage outcome still holds."
+  }
+}
