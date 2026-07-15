@@ -687,8 +687,10 @@ export interface SmellsLog {
       resolution?: string;
       /** How a resolved smell was resolved: `revised` = the PO sent
        *  it back to the owning author and the loop resumed; `accepted` = the PO
-       *  accepted it as-is. Drives the one-revise-per-(smell,story) bound. */
-      resolution_kind?: "revised" | "accepted";
+       *  accepted it as-is; `cleared` = the underlying condition is gone (e.g. a
+       *  re-run reflect gate now PASSES), an automatic self-resolve that is NOT a
+       *  human decision. Only `revised` drives the one-revise-per-(smell,story) bound. */
+      resolution_kind?: "revised" | "accepted" | "cleared";
     }
   >;
 }
@@ -723,6 +725,15 @@ function smellMatches(
   return entry.story_id === undefined || entry.story_id === story_id;
 }
 
+/** True iff an OPEN (unresolved) entry for this (smell, story) is already
+ *  recorded. The idempotency guard shared by every smell writer, so a condition
+ *  re-detected across iterations does not pile up duplicate open entries (a
+ *  reflect gate that keeps failing, a re-flagged blocking smell). A legacy entry
+ *  with no story matches any story (a pre-scope flag is not re-raised). */
+export function hasOpenSmell(sftddDir: string, smell: string, story_id?: string): boolean {
+  return readSmellsLog(sftddDir).detected.some((d) => !d.resolution && smellMatches(d, smell, story_id));
+}
+
 /**
  * Mark the first OPEN matching smell resolved. `kind` records how:
  * `revised` (sent back to the owning author + resumed) or `accepted` (as-is).
@@ -731,7 +742,7 @@ function smellMatches(
 export function markSmellResolved(
   sftddDir: string,
   smell: string,
-  opts: { story_id?: string; kind: "revised" | "accepted"; note?: string },
+  opts: { story_id?: string; kind: "revised" | "accepted" | "cleared"; note?: string },
 ): boolean {
   const file = join(sftddDir, "smells.json");
   if (!existsSync(file)) return false;
@@ -742,6 +753,34 @@ export function markSmellResolved(
   entry.resolution_kind = opts.kind;
   writeFileSync(file, JSON.stringify(log, null, 2) + "\n");
   return true;
+}
+
+/**
+ * Resolve ALL open entries for a (smell, story) in a single pass, returning how
+ * many were cleared. Unlike markSmellResolved (first-match, for the one-revise
+ * budget), this drains every duplicate, so a self-resolving condition (e.g. a
+ * re-run reflect gate that now PASSES) clears the accumulated entries at once
+ * instead of leaving stale open smells that block the gate. `cleared` does not
+ * count toward the revise budget (priorReviseCount only counts `revised`).
+ */
+export function resolveOpenSmells(
+  sftddDir: string,
+  smell: string,
+  opts: { story_id?: string; kind: "revised" | "accepted" | "cleared"; note?: string },
+): number {
+  const file = join(sftddDir, "smells.json");
+  if (!existsSync(file)) return 0;
+  const log: SmellsLog = JSON.parse(readFileSync(file, "utf8"));
+  let n = 0;
+  for (const d of log.detected) {
+    if (!d.resolution && smellMatches(d, smell, opts.story_id)) {
+      d.resolution = opts.note ?? opts.kind;
+      d.resolution_kind = opts.kind;
+      n++;
+    }
+  }
+  if (n) writeFileSync(file, JSON.stringify(log, null, 2) + "\n");
+  return n;
 }
 
 /** How many times this (smell, story) has already been revised: the

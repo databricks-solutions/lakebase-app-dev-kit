@@ -199,6 +199,30 @@ class ReplayCorpusMissError extends Error {
   }
 }
 
+/** FEIP-8006: a role turn completed but its expected artifact never landed under
+ *  the project's `.sftdd/`. The subagent almost always resolved the project root
+ *  wrong and wrote outside it (e.g. `$HOME/<somewhere>`), so a downstream
+ *  consuming effect would otherwise crash reading the absent file, with a cryptic,
+ *  MISATTRIBUTED error that blames the wrong step. We fail loud + attributed at the
+ *  producing role instead, naming the role, the artifact, and where we looked. */
+class ArtifactOutOfRootError extends Error {
+  constructor(
+    readonly role: string,
+    readonly label: string,
+    readonly anyOf: string[],
+    readonly sftddDir: string,
+  ) {
+    super(
+      `role '${role}' produced no ${label} under ${path.basename(sftddDir)}/ ` +
+        `(expected one of: ${anyOf.join(", ")}).\n` +
+        `        The subagent likely resolved the project root wrong and wrote outside it ` +
+        `(check $HOME and other dirs for a stray copy). Nothing downstream can consume the ` +
+        `absent artifact. Re-run to re-dispatch the role.`,
+    );
+    this.name = "ArtifactOutOfRootError";
+  }
+}
+
 function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | undefined> {
   return new Promise((resolve, reject) => {
     // Capture BOTH stdout (the stream-json events) and stderr (claude's own
@@ -506,6 +530,25 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
           } catch {
             /* usage logging is observability, never load-bearing */
           }
+        }
+        return;
+      }
+      if (cmd.kind === "verify-artifact") {
+        // FEIP-8006 out-of-root guard: the role's expected artifact must exist
+        // UNDER the project's sftddDir (a file, or a non-empty dir for per-story
+        // ACs). A subagent that resolved the project root wrong wrote it elsewhere;
+        // fail loud + attributed HERE, before a downstream effect consumes the
+        // absent artifact and crashes with a cryptic, misattributed error.
+        const present = cmd.anyOf.some((p) => {
+          try {
+            const st = fs.statSync(p);
+            return st.isDirectory() ? fs.readdirSync(p).length > 0 : true;
+          } catch {
+            return false;
+          }
+        });
+        if (!present) {
+          throw new ArtifactOutOfRootError(cmd.role, cmd.label, cmd.anyOf, cfg.sftddDir);
         }
         return;
       }
@@ -1192,6 +1235,14 @@ async function main(): Promise<number> {
     if (err instanceof ReplayCorpusMissError) {
       process.stderr.write(`${err.message}\n`);
       return 2;
+    }
+    // A role produced no artifact under the project root (out-of-root write): a
+    // producing-role defect, not a resumable workflow escalation. Fail loud with
+    // the attributed guidance so the crash names the real culprit, not a cryptic
+    // downstream consumer.
+    if (err instanceof ArtifactOutOfRootError) {
+      process.stderr.write(`[drive] ${err.message}\n`);
+      return 3;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;

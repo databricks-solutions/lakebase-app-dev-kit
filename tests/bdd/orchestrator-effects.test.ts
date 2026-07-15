@@ -220,21 +220,25 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect(author.some((c) => (c as { kind?: string }).kind === "claude")).toBe(false);
   });
 
-  it("spec-author breakdown also seeds the pipeline (claude + sync-breakdown)", () => {
+  it("spec-author breakdown also seeds the pipeline (claude + verify-artifact + sync-breakdown)", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
-    // [claude, sync-breakdown, reconcile].
-    expect(cmds).toHaveLength(3);
+    // [claude, verify-artifact (FEIP-8006 out-of-root guard), sync-breakdown, reconcile].
+    expect(cmds).toHaveLength(4);
     expect(cmds[0]).toMatchObject({ kind: "claude", role: "spec-author" });
-    expect(cmds[1]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
-    expect((cmds[1] as { args: string[] }).args[0]).toBe("sync-breakdown");
-    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-log" });
-    expect((cmds[2] as { args: string[] }).args).toContain("--reconcile");
+    expect(cmds[1]).toMatchObject({ kind: "verify-artifact", role: "spec-author" });
+    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
+    expect((cmds[2] as { args: string[] }).args[0]).toBe("sync-breakdown");
+    expect(cmds[3]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-log" });
+    expect((cmds[3] as { args: string[] }).args).toContain("--reconcile");
   });
 
   it("sprint-scoped planning roles (propose/author-requests) do NOT reconcile", () => {
-    // No feature artifacts to reconcile at planning time.
+    // No feature artifacts to reconcile at planning time. propose is [claude,
+    // verify-artifact (FEIP-8006 guard)] , neither is a reconcile (log) step.
     const propose = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg());
-    expect(propose).toHaveLength(1);
+    expect(propose).toHaveLength(2);
+    expect(propose[0]).toMatchObject({ kind: "claude", role: "spec-author" });
+    expect(propose[1]).toMatchObject({ kind: "verify-artifact", role: "spec-author" });
     expect(propose.some((c) => (c as { bin?: string }).bin === "lakebase-sftdd-log")).toBe(false);
   });
 });
@@ -1016,5 +1020,71 @@ describe("role tasks name paths under the resolved artifact root (not a hardcode
     const task = (cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string }).task;
     expect(task).toContain(".tdd/design/design-brief.md");
     expect(task).not.toContain(".sftdd/");
+  });
+});
+
+// FEIP-8006: after a design/planning role's turn, the orchestrator emits a
+// verify-artifact command asserting the role's expected output actually landed
+// UNDER the project's sftddDir. A subagent that resolved the project root wrong
+// wrote it elsewhere (the Test Strategist wrote test-list.json to ~/dev/lakebase-demo,
+// then a downstream consumer crashed with a cryptic, misattributed error). The
+// guard fires BEFORE any consuming effect so the failure is loud + attributed to
+// the producing role. anyOf paths are ABSOLUTE (Write needs absolute paths).
+describe("commandsForAction: FEIP-8006 out-of-root artifact guard (verify-artifact)", () => {
+  const verify = (cmds: ReturnType<typeof commandsForAction>) =>
+    cmds.find((c) => (c as { kind: string }).kind === "verify-artifact") as
+      | { kind: "verify-artifact"; role: string; anyOf: string[]; label: string }
+      | undefined;
+
+  it("test-strategist: emits a verify-artifact for the feature test-list under the ABSOLUTE sftddDir", () => {
+    // The exact role/artifact of the reported bug (agent wrote test-list.json out of root).
+    const v = verify(commandsForAction({ kind: "invoke-role", role: "test-strategist", story: "S1" }, cfg()));
+    expect(v).toBeTruthy();
+    expect(v!.role).toBe("test-strategist");
+    expect(v!.label).toContain("test-list.json");
+    // ABSOLUTE, rooted at the configured sftddDir (not a bare basename).
+    expect(v!.anyOf.every((p) => p.startsWith("/p/.tdd/"))).toBe(true);
+    expect(v!.anyOf.some((p) => p.includes("F1"))).toBe(true);
+  });
+
+  it("each design/planning role gets a verify-artifact naming its expected output", () => {
+    const cases: Array<[Parameters<typeof commandsForAction>[0], string]> = [
+      [{ kind: "invoke-role", role: "spec-author", mode: "propose" }, "feature-proposals.md"],
+      [{ kind: "invoke-role", role: "architect-reviewer", mode: "estimate" }, "estimates.json"],
+      [{ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, "feature-spec.json"],
+      [{ kind: "invoke-role", role: "ux-designer" }, "design-guide.json"],
+      [{ kind: "invoke-role", role: "spec-author", story: "S1" }, "acs"],
+      [{ kind: "invoke-role", role: "architect-reviewer", story: "S1" }, "architecture.json"],
+      [{ kind: "invoke-role", role: "test-strategist", story: "S1" }, "test-list.json"],
+    ];
+    for (const [action, label] of cases) {
+      const v = verify(commandsForAction(action, cfg()));
+      expect(v, `no verify-artifact for ${JSON.stringify(action)}`).toBeTruthy();
+      expect(v!.label).toContain(label);
+      expect(v!.anyOf.length).toBeGreaterThan(0);
+      expect(v!.anyOf.every((p) => p.startsWith("/p/.tdd/"))).toBe(true);
+    }
+  });
+
+  it("the guard runs BEFORE the consuming effect (breakdown: verify-artifact precedes sync-breakdown)", () => {
+    // sync-breakdown reads feature-spec.json; if it ran first on an absent file the
+    // crash would misattribute to the pipeline, not the Spec Author. Order matters.
+    const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
+    const iVerify = cmds.findIndex((c) => (c as { kind: string }).kind === "verify-artifact");
+    const iSync = cmds.findIndex((c) => (c as { bin?: string }).bin === "lakebase-sftdd-pipeline");
+    expect(iVerify).toBeGreaterThanOrEqual(0);
+    expect(iSync).toBeGreaterThan(iVerify);
+  });
+
+  it("build turns (navigator/driver) emit NO verify-artifact (the cycle ledger covers them)", () => {
+    for (const role of ["navigator", "driver"] as const) {
+      expect(verify(commandsForAction({ kind: "invoke-role", role, story: "S1" }, cfg()))).toBeUndefined();
+    }
+  });
+
+  it("author-requests (human input, no LLM artifact) emits NO verify-artifact", () => {
+    expect(
+      verify(commandsForAction({ kind: "invoke-role", role: "product-owner", mode: "author-requests" }, cfg())),
+    ).toBeUndefined();
   });
 });

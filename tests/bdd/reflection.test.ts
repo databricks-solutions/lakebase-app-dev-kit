@@ -13,7 +13,9 @@ import {
   writeReflectVerdict,
   readReflectVerdict,
   reflectionPassed,
+  reflectionVerdictWritten,
   recordReflectionGate,
+  clearReflectVerdict,
 } from "../../scripts/sftdd/reflection.js";
 
 let tdd: string;
@@ -23,7 +25,9 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(tdd, { recursive: true, force: true }));
 
-const smellsLog = (): { detected: Array<{ smell: string; story_id?: string; detail: string }> } => {
+const smellsLog = (): {
+  detected: Array<{ smell: string; story_id?: string; detail: string; resolution?: string; resolution_kind?: string }>;
+} => {
   const p = join(tdd, "smells.json");
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : { detected: [] };
 };
@@ -117,5 +121,79 @@ describe("recordReflectionGate: failed verdict -> routed spec-level smell(s)", (
     expect(rows[0].story_id).toBe("S2");
     // S1 still reads as passed, unaffected by S2.
     expect(reflectionPassed(tdd, F, "S1")).toBe(true);
+  });
+});
+
+// Finding 9: the reflect gate must be idempotent + self-clearing, and a revise
+// must invalidate the stale verdict, so a flagged defect converges (route to the
+// owning author -> re-author -> recompute fresh -> pass) instead of looping the
+// Navigator against a stale verdict until the generic stall guard bails, and so
+// the smell log does not accumulate duplicate open entries.
+describe("recordReflectionGate: idempotent + self-clearing (Finding 9)", () => {
+  const S = "S1";
+  const failVerdict = () =>
+    writeReflectVerdict(tdd, F, S, {
+      version: 1,
+      passed: false,
+      findings: [{ owner: "test-strategist", detail: "T1/AC1 routed to the wrong suite" }],
+    });
+  const openRows = () => smellsLog().detected.filter((d) => !d.resolution);
+
+  it("re-running against the SAME failing verdict does NOT pile up duplicate open smells", () => {
+    failVerdict();
+    const first = recordReflectionGate(tdd, F, S);
+    const second = recordReflectionGate(tdd, F, S);
+    const third = recordReflectionGate(tdd, F, S);
+    // The defect is still reported each pass (for logging), but only ONE open
+    // smell exists , the accumulation the field hit (2+ identical entries) is gone.
+    expect(first.map((h) => h.smell)).toEqual(["reflect-testlist-defect"]);
+    expect(second.map((h) => h.smell)).toEqual(["reflect-testlist-defect"]);
+    expect(third.map((h) => h.smell)).toEqual(["reflect-testlist-defect"]);
+    expect(openRows()).toHaveLength(1);
+  });
+
+  it("a now-PASSING verdict CLEARS the open reflect smell(s) from an earlier failed pass", () => {
+    failVerdict();
+    recordReflectionGate(tdd, F, S);
+    expect(openRows()).toHaveLength(1);
+    // The Navigator re-evaluated the corrected test-list and it now passes.
+    writeReflectVerdict(tdd, F, S, { version: 1, passed: true, findings: [] });
+    expect(recordReflectionGate(tdd, F, S)).toEqual([]);
+    // No open reflect smell lingers to block the gate; the entry is resolved.
+    expect(openRows()).toHaveLength(0);
+    const resolved = smellsLog().detected as Array<{ resolution?: string; resolution_kind?: string }>;
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].resolution_kind).toBe("cleared");
+  });
+
+  it("clearing on pass does not spend the revise budget (resolution_kind is 'cleared', not 'revised')", async () => {
+    const { priorReviseCount } = await import("../../scripts/sftdd/smells.js");
+    failVerdict();
+    recordReflectionGate(tdd, F, S);
+    writeReflectVerdict(tdd, F, S, { version: 1, passed: true, findings: [] });
+    recordReflectionGate(tdd, F, S);
+    expect(priorReviseCount(tdd, "reflect-testlist-defect", S)).toBe(0);
+  });
+});
+
+describe("clearReflectVerdict: invalidate the stale verdict on re-dispatch (Finding 9)", () => {
+  it("deletes the verdict so a re-dispatched reflect turn recomputes fresh (no stale reuse)", () => {
+    writeReflectVerdict(tdd, F, "S1", {
+      version: 1,
+      passed: false,
+      findings: [{ owner: "test-strategist", detail: "stale finding" }],
+    });
+    expect(reflectionVerdictWritten(tdd, F, "S1")).toBe(true);
+    clearReflectVerdict(tdd, F, "S1");
+    // Both the "written" and "passed" probes now read false: the design lane
+    // re-dispatches the Navigator, which recomputes against the corrected
+    // artifacts instead of reusing the old passed:false verdict.
+    expect(reflectionVerdictWritten(tdd, F, "S1")).toBe(false);
+    expect(reflectionPassed(tdd, F, "S1")).toBe(false);
+    expect(readReflectVerdict(tdd, F, "S1")).toBeUndefined();
+  });
+
+  it("is idempotent (no-op when no verdict exists)", () => {
+    expect(() => clearReflectVerdict(tdd, F, "S9")).not.toThrow();
   });
 });

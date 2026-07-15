@@ -17,13 +17,16 @@
 // code, plus deterministic per-action logging via the loop's onAction hook.
 
 import * as fs from "node:fs";
-import { dirname, basename } from "node:path";
+import { dirname } from "node:path";
 import { nextTransition, type WorkflowAction } from "./orchestrator-drive.js";
 import type { DriveEffects } from "./orchestrator-run.js";
 import { deriveDriveState, effectiveLoopForStory } from "./orchestrator-derive.js";
 import { diskArtifactProbe, readDriveContext } from "./orchestrator-probe.js";
 import { readPipeline } from "./story-pipeline.js";
-import { storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer } from "./sftdd-paths.js";
+import {
+  storyJson, designGuideJson, handbackFile, storyAcIds, architectureJson, readAcLayer,
+  featureProposalsMd, featureSpecJson, featureTestListJson, acsDir, planningEstimatesJson,
+} from "./sftdd-paths.js";
 import { designGuideConformance } from "./response-formatter.js";
 import { storyTestProgress, nextPendingBatch, DEFAULT_BATCH_CAP } from "./cycle-record.js";
 import { readSupersededTests, readGreenFailure } from "./supersession.js";
@@ -49,7 +52,15 @@ export type DriveCommand =
   // commits its requests, project backlog.json from the on-disk feature-request
   // set + the Architect's estimates. Handled in-process by the runner (no CLI),
   // mirroring set-phase. See syncBacklog in sftdd-paths.
-  | { kind: "sync-backlog"; sprint: string };
+  | { kind: "sync-backlog"; sprint: string }
+  // Post-turn artifact guard (FEIP-8006): after a design/planning role's claude
+  // turn, assert the role actually wrote its expected artifact UNDER the project's
+  // resolved sftddDir (at least one of `anyOf` exists, a file or a non-empty dir),
+  // BEFORE any deterministic effect consumes it. A subagent that resolved the
+  // project root wrong (cwd / $HOME / a hallucinated path) writes outside the
+  // project; without this the miss surfaces later as a cryptic, misattributed
+  // downstream crash ("story not found"). The runner fails loud + attributed here.
+  | { kind: "verify-artifact"; role: string; anyOf: string[]; label: string };
 
 export interface CommandRunner {
   run(cmd: DriveCommand): Promise<void>;
@@ -131,14 +142,18 @@ export interface DriveEffectsConfig {
  *  (the design lane's `layer: "E2E"` work), not just API surface. */
 const UI_TRACK_PROPOSE = ` UI track is ON: this product has a user-facing UI (a design-brief.md is part of intake), so every user-facing capability must be deliverable end to end as an E2E story, a real browser/screen interaction a user performs, not merely an API. Frame each candidate as a user-facing increment and note which need an E2E (UI) story.`;
 const UI_TRACK_BREAKDOWN = ` UI track is ON: decompose into stories that include the E2E (UI) story for each user-facing capability (a screen the user interacts with), not API-only stories.`;
-/** The artifact-root basename (`.sftdd`, or a legacy `.tdd`) as agents see it,
- *  relative to the project dir they run in. Every prompt string that names an
- *  on-disk artifact path MUST build it from this, never a hardcoded `.tdd/`, so
- *  the path the agent is told to read/write matches the dir the driver resolved
- *  (`--tdd-dir`). sftddDir is always the absolute resolved root, so its basename
- *  is the correct relative reference. */
-function artifactRootRel(sftddDir: string): string {
-  return basename(sftddDir);
+/** The artifact root a directive hands a role agent: the ABSOLUTE resolved
+ *  sftddDir (FEIP-8006). It was previously the bare basename (`.sftdd`), a
+ *  RELATIVE reference , but Claude Code's Write tool requires an ABSOLUTE path, so
+ *  a relative directive forced each subagent to resolve the project root itself,
+ *  and they resolved it inconsistently (cwd, $HOME, even a hallucinated
+ *  `~/dev/lakebase-demo`), scattering artifacts outside the project. Handing the
+ *  absolute root removes the guess: there is exactly one path, used verbatim.
+ *  Directives are generated fresh per run and are NOT recorded into the shipped
+ *  corpus (replay copies artifacts, never the directive), so an absolute,
+ *  machine-specific path here has no portability cost. */
+function artifactRoot(sftddDir: string): string {
+  return sftddDir;
 }
 
 /** UI-track build directive naming the design guide under the resolved root. */
@@ -277,7 +292,7 @@ function buildContextPack(
   ac: string,
   opts: { skipTestLoop?: boolean } = {},
 ): string {
-  const root = artifactRootRel(sftddDir);
+  const root = artifactRoot(sftddDir);
   const rubric = contextRubric(sftddDir, featureId, story, ac);
   const parts: string[] = [];
   if (rubric) parts.push(rubric + rubricSourcesNote(rubric, featureId, root));
@@ -515,7 +530,7 @@ function roleTaskBody(
   // The artifact-root basename (.sftdd, or a legacy .tdd) every prompt path
   // below is built from, so what the agent is told to read/write matches the
   // dir the driver resolved. Never hardcode ".tdd/" in a prompt string.
-  const root = artifactRootRel(sftddDir);
+  const root = artifactRoot(sftddDir);
   if ("mode" in action) {
     switch (action.mode) {
       case "propose":
@@ -906,6 +921,34 @@ const experimentBranchName = (storyId: string): string =>
  * State transitions that no CLI owns (the coarse planning/feature/deploy phase)
  * are "set-phase" commands the runner applies to workflow-state.json.
  */
+/**
+ * The artifact a design/planning role MUST have written under the resolved
+ * sftddDir after its turn (FEIP-8006), for the post-turn out-of-root guard.
+ * `anyOf` are ABSOLUTE paths; the guard passes if any exists (a file, or a
+ * non-empty directory for the per-story ACs). Returns null for build roles
+ * (navigator/driver, verified by the ledger's per-cycle contracts) and the
+ * human-input author-requests step (no LLM artifact to verify here).
+ */
+function designArtifactExpectation(
+  action: Extract<WorkflowAction, { kind: "invoke-role" }>,
+  sftddDir: string,
+  featureId: string,
+): { anyOf: string[]; label: string } | null {
+  if ("mode" in action) {
+    if (action.role === "spec-author" && action.mode === "propose") return { anyOf: [featureProposalsMd(sftddDir)], label: "planning/feature-proposals.md" };
+    if (action.role === "architect-reviewer" && action.mode === "estimate") return { anyOf: [planningEstimatesJson(sftddDir)], label: "planning/estimates.json" };
+    if (action.role === "spec-author" && action.mode === "breakdown") return { anyOf: [featureSpecJson(sftddDir, featureId)], label: "feature-spec.json" };
+    return null; // author-requests = human input, no role artifact
+  }
+  if (action.role === "ux-designer") return { anyOf: [designGuideJson(sftddDir)], label: "design/design-guide.json" };
+  const s = action.story;
+  if (!s) return null;
+  if (action.role === "spec-author") return { anyOf: [acsDir(sftddDir, featureId, s)], label: `stories/${s}/acs/*.json` };
+  if (action.role === "architect-reviewer") return { anyOf: [architectureJson(sftddDir, featureId)], label: "architecture.json" };
+  if (action.role === "test-strategist") return { anyOf: [featureTestListJson(sftddDir, featureId)], label: "test-list.json" };
+  return null; // navigator/driver build turns: not a design artifact
+}
+
 export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfig): DriveCommand[] {
   const f = cfg.featureId;
   const tdd = ["--feature", f, "--tdd-dir", cfg.sftddDir];
@@ -1023,6 +1066,15 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
         },
       };
       const cmds: DriveCommand[] = [claude];
+      // Post-turn out-of-root guard (FEIP-8006): assert the role wrote its
+      // artifact under the project's sftddDir BEFORE any effect below consumes it,
+      // so a stray write (agent resolved the project root wrong) fails loud +
+      // attributed here instead of as a cryptic downstream crash. Harmless in
+      // replay: replayDesignTurn already copied the artifact, so the guard passes.
+      const expectArtifact = designArtifactExpectation(action, cfg.sftddDir, f);
+      if (expectArtifact) {
+        cmds.push({ kind: "verify-artifact", role: action.role, anyOf: expectArtifact.anyOf, label: expectArtifact.label });
+      }
       // After the Spec Author breaks the feature down, seed the pipeline from
       // the stories/ dirs it produced so the streaming lanes have stories to
       // advance (breakdown writes files, not pipeline.json).

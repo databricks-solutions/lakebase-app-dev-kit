@@ -27,6 +27,7 @@ import { nextTransition, actionLane, type DriveState } from "../../scripts/sftdd
 import { commandsForAction, type DriveEffectsConfig } from "../../scripts/sftdd/orchestrator-effects";
 import { diskArtifactProbe } from "../../scripts/sftdd/orchestrator-probe";
 import { applyReviseSelfHeal } from "../../scripts/sftdd/revise";
+import { writeReflectVerdict, reflectionVerdictWritten } from "../../scripts/sftdd/reflection";
 import { writePipeline, readPipeline, type StoryPipeline } from "../../scripts/sftdd/story-pipeline";
 import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
 
@@ -257,6 +258,24 @@ describe("applyReviseSelfHeal (the revise self-heal transition)", () => {
     expect(existsSync(acJson(tdd, FEATURE, STORY, "AC1-x"))).toBe(true); // ACs preserved
     const hb = handbackFile(tdd, FEATURE, "test-strategist", STORY);
     expect(readFileSync(hb, "utf8")).toMatch(/T1 already green/);
+  });
+
+  it("invalidates the stale reflect verdict so the re-dispatched Navigator recomputes fresh (Finding 9)", () => {
+    // A prior reflect turn judged the PRE-fix test-list and failed it.
+    writeReflectVerdict(tdd, FEATURE, STORY, {
+      version: 1,
+      passed: false,
+      findings: [{ owner: "test-strategist", detail: "T1 routed to the wrong suite" }],
+    });
+    expect(reflectionVerdictWritten(tdd, FEATURE, STORY)).toBe(true);
+    applyReviseSelfHeal({
+      featureId: FEATURE, story: STORY, smell: "reflect-testlist-defect",
+      routedTo: "test-strategist", gate: "test_list", reason: "T1 routed to the wrong suite", sftddDir: tdd,
+    });
+    // The stale verdict is gone: the design lane re-dispatches the Navigator, which
+    // re-evaluates the corrected test-list instead of reusing passed:false (the loop
+    // that ran the Navigator to the stall guard).
+    expect(reflectionVerdictWritten(tdd, FEATURE, STORY)).toBe(false);
   });
 });
 

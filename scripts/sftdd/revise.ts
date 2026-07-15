@@ -30,6 +30,7 @@ import {
 } from "./sftdd-paths.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
 import { markSmellResolved, composeReviseBrief } from "./smells.js";
+import { clearReflectVerdict } from "./reflection.js";
 
 /** Default author identity recorded on a headless self-heal. A real interactive
  *  decision passes the human's identity through `approver`. */
@@ -49,6 +50,13 @@ export function staleStoryArtifactsForRevise(
   story: string,
   gate: "spec" | "test_list" | "architecture",
 ): void {
+  // Invalidate the (now stale) reflect verdict: it judged the PRE-fix spec +
+  // test-list, so it MUST be recomputed against the corrected artifacts. Applies
+  // to every gate (a spec/architecture/test_list revise all change what the
+  // reflection critiqued). Without this the stale passed:false verdict persists,
+  // the re-dispatched Navigator reuses it instead of re-evaluating, and the
+  // reflect gate never converges (it loops the Navigator to the stall guard).
+  clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
   if (existsSync(master)) {

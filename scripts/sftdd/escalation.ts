@@ -12,7 +12,7 @@
 
 import * as fs from "node:fs";
 import { escalationsDir, escalationFile } from "./sftdd-paths.js";
-import { readSmellsLog, writeSmellsLog, type SmellName } from "./smells.js";
+import { readSmellsLog, writeSmellsLog, hasOpenSmell, type SmellName } from "./smells.js";
 import { pendingItemKind } from "./cycle-record.js";
 
 /** A blocking problem raised to the HIL. Identity is `id` (derived from source +
@@ -172,15 +172,8 @@ export function recordBlockingSmellFlag(
 ): boolean {
   if (!BLOCKING_SMELLS.has(smell as SmellName)) return false;
   // Idempotent per (smell, story): a still-open flag of the same smell on the
-  // same story is a dup. A legacy entry with no story matches any story so a
-  // pre-scope flag is not re-raised.
-  const open = readSmellsLog(sftddDir).detected.some(
-    (d) =>
-      d.smell === smell &&
-      !d.resolution &&
-      (scope?.story_id === undefined || d.story_id === undefined || d.story_id === scope.story_id),
-  );
-  if (open) return false;
+  // same story is a dup (the shared hasOpenSmell guard).
+  if (hasOpenSmell(sftddDir, smell, scope?.story_id)) return false;
   writeSmellsLog(sftddDir, [
     {
       smell: smell as SmellName,
