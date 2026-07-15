@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.18] - 2026-07-15
+
+### Added
+
+- **`lakebase-sftdd-approve-gate` , a human-facing gate-approval CLI (FEIP-8005).**
+  The interactive plan gate (and per-feature HITL gates) await a human's approval,
+  but the only CLI that RECORDED an approval was `lakebase-sftdd-human-proxy`,
+  which is explicitly labeled "NOT for production use" and defaults the approver
+  to "human-proxy". A real Product Owner approving a real gate had to reach for a
+  not-for-production tool. The new `lakebase-sftdd-approve-gate` is the production
+  counterpart: it REQUIRES an explicit `--approver` (no silent default identity,
+  the deciding human names themselves) and reuses the SAME approval substrate
+  (`approveSprintPlanGate` for the sprint plan gate; `drainGatesAsHumanProxy`,
+  which assembles each open gate's artifact hashes and calls `approveGate`, for a
+  feature's gates), so the recorded approval is byte-for-byte what the workflow
+  expects. Usage: `lakebase-sftdd-approve-gate --sprint <s> --approver <you>` (plan
+  gate) or `--feature <id> --approver <you> [--gate <name>]` (a feature's gates).
+  The tool records ATTRIBUTION; the decision must be the approver's. The `/plan`
+  doc and the driver's `GATE` message now point humans at it; the Human Proxy
+  remains the headless / smoke path.
+
 ## [0.3.0-beta.17] - 2026-07-15
 
 ### Added
