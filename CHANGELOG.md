@@ -52,12 +52,18 @@ zero agent-takeovers) on top of the hermetic suite.
   masking an incomplete corpus. All three fall-throughs (design turn, build turn,
   reflect verdict) now throw `ReplayCorpusMissError`, failing loud (exit 2) and
   naming the missing artifact. No agent is ever spawned in a replay lane.
-- **`.gitignore` silently dropped scenario corpus data.** An org-init
-  `*conf*.json` glob matched corpus files whose names contain "conf"
-  (`*-confirmed.json`, `*-nonconforming-*.json`, client `tsconfig.json`), so
-  shipped scenarios referenced ac files a consumer never received. The ignore is
-  now anchored to the actual runtime file (`run-config.json`) by exact basename,
-  and the dropped data is restored.
+- **`.gitignore` silently dropped shipped files.** An org-init `*conf*.json`
+  glob matched any tracked file whose name contains "conf", so several shipped
+  artifacts were never committed and a consumer never received them: scenario ac
+  data (`*-confirmed.json`, `*-nonconforming-*.json`), a dropped corpus ac
+  (`AC3-confirmation-shown.json`), and, most impactfully, the React client
+  template's **`tsconfig.json`** (its `build`/`typecheck` scripts are
+  `tsc --noEmit && vite build`, so a scaffolded client could not typecheck or
+  build without it). The ignore is now anchored to the actual runtime file
+  (`run-config.json`) by exact basename, and every dropped shipped file is
+  restored. Non-shipped local scenario recordings (`stockflow-live/`,
+  `stockflow-s3-selfheal-verify/`, no tracked `scenario.json`) that the removal
+  un-hid are kept out via exact directory paths (never a glob).
 - **Replay/capture smoke harness gate policy.** The harness is headless by
   construction (it exports `LAKEBASE_SFTDD_HUMAN_PROXY=1`), but it only passed
   `--gates proxy` on the capture path, relying on the old global `proxy` default

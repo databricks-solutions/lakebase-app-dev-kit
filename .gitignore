@@ -30,3 +30,12 @@ coverage/
 skills/databricks-core/
 skills/databricks-lakebase/
 tests/agent-capability/timings.jsonl
+
+# Local, non-shipped scenario recordings (no tracked scenario.json manifest, so
+# not part of the replay corpus). These are on-disk scratch from prior captures;
+# once the over-broad `*conf*.json` glob was removed they became visible to git,
+# and we keep them out of any accidental `git add -A`. Anchored to the EXACT
+# directory paths (NOT a glob) so the shipped `stockflow/` corpus is untouched and
+# this can never over-match. To promote one to a shipped scenario, git add -f it.
+examples/sftdd-scenarios/stockflow-live/
+examples/sftdd-scenarios/stockflow-s3-selfheal-verify/

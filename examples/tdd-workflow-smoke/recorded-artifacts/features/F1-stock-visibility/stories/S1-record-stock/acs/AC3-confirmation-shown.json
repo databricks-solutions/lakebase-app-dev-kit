@@ -1,0 +1,9 @@
+{
+  "id": "AC3-confirmation-shown",
+  "given": "Form submission succeeds and record is saved",
+  "when": "The server returns a successful save response",
+  "then": "User sees a confirmation message indicating the stock record was successfully saved",
+  "status": "draft",
+  "layer": "E2E",
+  "architectural_notes": "Asserts the post-save UI feedback view, so the outermost boundary is the browser; E2E. Owner module: client confirmation view rendered from the app/routes/stock.py boundary response. Cross-cutting: the no-silent-failure feedback contract (design brief) lives at the boundary/UI; no domain logic. Verified through the same real-branch flow as AC2."
+}
