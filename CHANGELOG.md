@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.21] - 2026-07-15
+
+### Fixed
+
+- **The acceptance gate now LANDS the accepted story's code, not just its state
+  (FEIP-8013).** The drive's `accept` was two commands (`lakebase-sftdd-experiment
+  merge` + `lakebase-sftdd-pipeline accept`); the git-merge lived only in the
+  experiment CLI and `pipeline accept` recorded state. Interactive, the gate stops
+  before the accept effect, so a human running the hinted `pipeline accept` recorded
+  `done` but never merged, and the accepted story's code stayed on the experiment
+  branch (the next story then forked from a feature branch missing it). Now
+  `lakebase-sftdd-pipeline accept` PERFORMS the experiment git-merge (+ migrations +
+  teardown) and records acceptance, one idempotent command that lands the code. A
+  shared core (`experiment-merge.ts`: `mergeAndAcceptStory` + `resolveAcceptMergeArgs`
+  + `realExperimentOps`) is routed through by both `pipeline accept` (merge args
+  resolved from the persisted experiment record + instance from scm-state) and the
+  `lakebase-sftdd-experiment merge` recovery door (explicit args), so cut and merge
+  agree by construction. The drive's `accept` effect collapses to a single
+  `pipeline accept`. Idempotent: a re-run (already merged) skips the merge and just
+  ensures the acceptance state.
+
 ## [0.3.0-beta.20] - 2026-07-15
 
 ### Fixed

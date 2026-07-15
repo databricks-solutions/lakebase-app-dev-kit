@@ -3259,8 +3259,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path12) {
-      let input = path12;
+    function removeDotSegments(path13) {
+      let input = path13;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3513,8 +3513,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path12, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path12 && path12 !== "/" ? path12 : void 0;
+        const [path13, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path13 && path13 !== "/" ? path13 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -7058,9 +7058,9 @@ function asBranchUid(s) {
   }
   return s;
 }
-function branchNameFromResourcePath(path12) {
-  if (!path12.includes("/branches/")) return null;
-  const leaf = path12.split("/branches/").pop();
+function branchNameFromResourcePath(path13) {
+  if (!path13.includes("/branches/")) return null;
+  const leaf = path13.split("/branches/").pop();
   if (!leaf) return null;
   try {
     return asBranchName(leaf);
@@ -8146,6 +8146,9 @@ async function discardExperimentBranch(args, ops) {
     instance: args.instance
   });
 }
+
+// scripts/sftdd/experiment-merge.ts
+init_esm_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
@@ -9565,6 +9568,59 @@ function migrationSlug2(description) {
   return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
 }
 
+// scripts/lakebase/scm-workflow-state.ts
+init_esm_shims();
+import * as fs14 from "fs";
+import * as path12 from "path";
+var SCM_STATES = [
+  "scaffold-complete",
+  "feature-claimed",
+  "pr-ready",
+  "ci-green",
+  "merged"
+];
+var STATE_INDEX = SCM_STATES.reduce(
+  (acc, s, i) => ({ ...acc, [s]: i }),
+  {}
+);
+
+// scripts/sftdd/experiment-merge.ts
+var realExperimentOps = {
+  gitMerge: async ({ from, into, projectDir }) => {
+    await commitExperimentCode(projectDir, `accept: commit pending experiment work for ${from}`);
+    await mergePaired({ cwd: projectDir, from, into });
+  },
+  runMigrations: async ({ instance, branch, projectDir }) => {
+    await applySchemaMigrations({ instance, branch, projectDir });
+  },
+  teardown: async ({ sftddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
+    await deleteExperiment({ instance, sftddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
+  }
+};
+async function mergeAndAcceptStory(args, ops = realExperimentOps) {
+  const at = args.at ?? (/* @__PURE__ */ new Date()).toISOString();
+  const before = readPipeline(args.sftddDir, args.featureId);
+  const alreadyMerged = before.stories[args.storyId]?.experiment?.status === "merged";
+  if (!alreadyMerged) {
+    await mergeExperimentIntoFeature(
+      {
+        sftddDir: args.sftddDir,
+        featureId: args.featureId,
+        storyId: args.storyId,
+        experimentSlug: args.experimentSlug,
+        featureBranch: args.featureBranch,
+        experimentBranch: args.experimentBranch,
+        instance: args.instance,
+        projectDir: args.projectDir
+      },
+      ops
+    );
+  }
+  const p = readPipeline(args.sftddDir, args.featureId);
+  acceptStory(p, args.storyId, { approver: args.approver, at });
+  writePipeline(args.sftddDir, p);
+}
+
 // scripts/sftdd/experiment-args.ts
 init_esm_shims();
 function parseExperimentArgs(argv) {
@@ -9628,18 +9684,6 @@ Usage: lakebase-sftdd-experiment <cut|merge|discard> --feature <F> --story <S> -
   );
   return 2;
 }
-var realOps = {
-  gitMerge: async ({ from, into, projectDir }) => {
-    await commitExperimentCode(projectDir, `accept: commit pending experiment work for ${from}`);
-    await mergePaired({ cwd: projectDir, from, into });
-  },
-  runMigrations: async ({ instance, branch, projectDir }) => {
-    await applySchemaMigrations({ instance, branch, projectDir });
-  },
-  teardown: async ({ sftddDir, projectDir, featureId, storyId, experimentSlug, instance }) => {
-    await deleteExperiment({ instance, sftddDir, projectDir, featureId, storyId, experimentSlug, deleteBranchToo: true });
-  }
-};
 async function main() {
   const args = parseExperimentArgs(process.argv.slice(2));
   const sftddDir = args.sftddDir ?? resolveSftddDir();
@@ -9677,22 +9721,21 @@ async function main() {
       return 0;
     }
     case "merge": {
-      await mergeExperimentIntoFeature(
+      await mergeAndAcceptStory(
         {
           sftddDir,
+          projectDir,
           featureId: feature,
           storyId: story,
           experimentSlug: slug,
           featureBranch: args.featureBranch,
           experimentBranch: args.experimentBranch,
           instance,
-          projectDir
+          approver: args.approver,
+          at
         },
-        realOps
+        realExperimentOps
       );
-      const p = readPipeline(sftddDir, feature);
-      acceptStory(p, story, { approver: args.approver, at });
-      writePipeline(sftddDir, p);
       process.stdout.write(`merged ${slug} into ${args.featureBranch}; story ${story} accepted + done
 `);
       return 0;
@@ -9700,7 +9743,7 @@ async function main() {
     case "discard": {
       await discardExperimentBranch(
         { sftddDir, projectDir, featureId: feature, storyId: story, experimentSlug: slug, instance },
-        realOps
+        realExperimentOps
       );
       const p = readPipeline(sftddDir, feature);
       const approver = args.approver;

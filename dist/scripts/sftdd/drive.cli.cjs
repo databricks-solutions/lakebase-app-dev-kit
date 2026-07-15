@@ -9955,30 +9955,20 @@ function commandsForAction(action, cfg) {
       return [
         {
           kind: "cli",
-          bin: EXPERIMENT_BIN,
+          bin: PIPELINE_BIN,
           args: [
-            "merge",
-            "--feature",
-            f,
+            "accept",
             "--story",
             action.story,
-            "--slug",
-            EXPERIMENT_SLUG,
-            "--experiment-branch",
-            experimentBranchName(action.story),
-            "--feature-branch",
-            cfg.featureBranch ?? "",
             "--approver",
             approver,
             "--instance",
             cfg.instance ?? "",
             "--project-dir",
             cfg.projectDir,
-            "--tdd-dir",
-            cfg.sftddDir
+            ...tdd
           ]
-        },
-        { kind: "cli", bin: PIPELINE_BIN, args: ["accept", "--story", action.story, "--approver", approver, ...tdd] }
+        }
       ];
     case "complete":
       return [{ kind: "cli", bin: PIPELINE_BIN, args: ["complete", ...tdd] }];
