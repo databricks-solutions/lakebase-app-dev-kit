@@ -41,7 +41,8 @@ import {
   completeActive,
   syncBreakdownToPipeline,
   surfaceForGate,
-  approveStoryGate,
+  approveStoryGateFromDisk,
+  batchedDraftMessage,
   withdrawStoryGate,
   findBatchedDraftStories,
   cutStoryExperiment,
@@ -131,15 +132,7 @@ function rejectBatchedDraft(
 ): number | null {
   const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length === 0) return null;
-  process.stderr.write(
-    `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, ` +
-      `but ${story} is the story being gated.\n` +
-      `The design lane drafts ONE story's acceptance criteria at a time ` +
-      `(draft -> surface -> approve), then moves to the next story. Drafting every ` +
-      `story's ACs in one pass defeats the streaming pipeline.\n` +
-      `Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author ` +
-      `once per story, and retry.\n`,
-  );
+  process.stderr.write(batchedDraftMessage(story, batched) + "\n");
   return 3;
 }
 
@@ -201,13 +194,23 @@ function main(): number {
     case "approve-gate": {
       if (!args.story) return usage("approve-gate needs --story");
       if (!args.approver) return usage("approve-gate needs --approver");
-      const batched = rejectBatchedDraft(sftddDir, feature, pipeline, args.story);
-      if (batched !== null) return batched;
-      const at = args.at ?? new Date().toISOString();
-      approveStoryGate(pipeline, args.story, { approver: args.approver, at, spec_hash: args.specHash });
-      writePipeline(sftddDir, pipeline);
+      // The per-story gate is approved through the ONE shared helper (FEIP-8008),
+      // the same path the human-facing lakebase-sftdd-approve-gate --story uses.
+      const r = approveStoryGateFromDisk(sftddDir, feature, args.story, {
+        approver: args.approver,
+        at: args.at,
+        specHash: args.specHash,
+      });
+      if (!r.ok) {
+        if (r.batched) {
+          process.stderr.write(batchedDraftMessage(args.story, r.batched) + "\n");
+          return 3;
+        }
+        process.stderr.write(`approve-gate: ${r.error}\n`);
+        return 2;
+      }
       process.stdout.write(
-        `approved gate for ${args.story} (by ${args.approver}); ready + queued (queue: ${pipeline.build_queue.join(", ")})\n`,
+        `approved gate for ${args.story} (by ${args.approver}); ready + queued (queue: ${(r.queue ?? []).join(", ")})\n`,
       );
       return 0;
     }

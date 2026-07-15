@@ -1,5 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 // The SPA talks to the JSON API over relative /api (and /health) paths so the
@@ -23,11 +24,17 @@ export default defineConfig({
   },
   test: {
     // Component + hook tests run against the real DOM (jsdom), never a mock
-    // renderer; e2e specs under tests/e2e/ are Playwright's, not Vitest's.
+    // renderer. Collect component tests from BOTH src/** (co-located) and
+    // tests/** (the tests/pages/ layout this scaffold ships and the design lane
+    // routes client component tests to) , EXCEPT tests/e2e/, which is Playwright's,
+    // not Vitest's. (A prior include of only src/** silently dropped every
+    // tests/pages/*.test.tsx, so a client RED test there could never be collected
+    // and the build escalated with "no runner for the layer".)
     environment: "jsdom",
     globals: true,
     setupFiles: "./tests/setup.ts",
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}"],
+    exclude: [...configDefaults.exclude, "tests/e2e/**"],
     css: false,
   },
 });

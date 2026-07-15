@@ -83,9 +83,9 @@ The orchestration invokes you in REFACTOR mode after the Navigator's REVIEW aske
 
 ## Logging
 
-Via `./scripts/lk lakebase-sftdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role driver --feature <id> --cycle <cycle-id>`:
+Via `./scripts/lk lakebase-sftdd-log` (see [agent-logging.md](../references/agent-logging.md)), `--role driver --feature <id> --cycle <cycle-id>`. Log at least once per turn so your work is visible in the trail (the Navigator does the same); the default log view is `--min-level info`, so a `debug` line would be hidden , emit `reasoning` at **info**, not debug:
 - Do NOT emit `cycle.green` / `cycle.refactored` (the orchestration code-stamps the `cycle.*` family after you confirm GREEN / finish the REFACTOR).
-- `--level debug --event reasoning` for why you made the change.
+- `--level info --event reasoning` for what you changed and why (once per GREEN / REFACTOR turn, so the Driver shows up in the info-level trail alongside the Navigator).
 - `--level warn --event smell.flagged` for cycle-stall / test-cost-spiral / fragility-ratio; `--level error --event runner.missing` when no runner is wired for the cycle's layer.
 
 ## Rules

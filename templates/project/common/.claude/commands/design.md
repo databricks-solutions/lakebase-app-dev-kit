@@ -94,9 +94,13 @@ The driver:
   building. The roles are `@lakebase-sftdd-workflows/agents/{spec-author,ux-designer,architect-reviewer,test-strategist}`.
 
 **Gates.** Interactive: at each per-story spec gate the driver stops and prints a
-`GATE` marker with the pending action. Surface that story's spec to the human; on
-their approval record it (`lakebase-sftdd-pipeline approve-gate --story <s>
---approver <human>`), then re-run the command to resume past it. Headless
+`GATE` marker with the pending action and the EXACT command to clear it. Surface
+that story's spec to the human; on their approval record it with the human-facing
+approver, naming the story (`lakebase-sftdd-approve-gate --feature <id> --story <s>
+--approver <human>`), then re-run the command to resume past it. (That is the one
+human door; it routes to the same per-story pipeline gate the headless Human Proxy
+approves. `--feature <id> --gate <name>` is for a feature-level gate, NOT a
+per-story spec stop.) Headless
 (`--gates proxy`, `LAKEBASE_SFTDD_HUMAN_PROXY=1`): the Human Proxy validates each
 gate's artifacts EXIST + carry their EXPECTED ELEMENTS and approves only then. A
 gate is never skipped; a missing/non-conformant artifact hard-blocks either way.

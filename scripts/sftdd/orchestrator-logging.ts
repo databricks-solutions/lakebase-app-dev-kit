@@ -201,3 +201,38 @@ export function makeOnAction(
     }
   };
 }
+
+/**
+ * The EXACT human approval command for a given HITL gate stop (FEIP-8008). Each
+ * gate is recorded by a DIFFERENT substrate, so a single generic hint sent the
+ * human to the wrong door, e.g. the feature-level `gates.json` spec gate for a
+ * PER-STORY spec stop, which recorded the wrong gate and never advanced. Name the
+ * door that actually clears THIS stop:
+ *   - plan gate      -> lakebase-sftdd-approve-gate --sprint
+ *   - per-story spec -> lakebase-sftdd-approve-gate --feature --story
+ *   - deploy/promote -> lakebase-sftdd-approve-gate --feature --gate <name>
+ *   - PO acceptance  -> lakebase-sftdd-pipeline accept --feature --story
+ * Pure (no I/O); lives here beside describeAction so the drive's GATE message and
+ * any test share ONE mapping.
+ */
+export function approveHint(
+  gate: WorkflowAction,
+  ctx: { featureId?: string; sprint?: string } = {},
+): string {
+  const you = "<you>";
+  const f = ctx.featureId ?? "<feature-id>";
+  switch (gate.kind) {
+    case "approve-plan-gate":
+      return `lakebase-sftdd-approve-gate --sprint ${ctx.sprint ?? "<sprint>"} --approver ${you}`;
+    case "approve-gate": // the per-story spec gate (pipeline.json), NOT feature gates.json
+      return `lakebase-sftdd-approve-gate --feature ${f} --story ${gate.story} --approver ${you}`;
+    case "approve-deploy-gate":
+      return `lakebase-sftdd-approve-gate --feature ${f} --gate deploy --approver ${you}`;
+    case "approve-promote-gate":
+      return `lakebase-sftdd-approve-gate --feature ${f} --gate promote --approver ${you}`;
+    case "accept": // per-story PO acceptance (experiment merge), a pipeline action
+      return `lakebase-sftdd-pipeline accept --feature ${f} --story ${gate.story} --approver ${you}`;
+    default:
+      return `lakebase-sftdd-approve-gate --feature ${f} --approver ${you}`;
+  }
+}

@@ -14,24 +14,35 @@
 //
 // It reuses the SAME approval substrate as the Human Proxy (approveSprintPlanGate
 // for the sprint plan gate; drainGatesAsHumanProxy, which assembles each open
-// gate's artifact hashes and calls approveGate, for a feature's gates), so the
-// recorded approval is byte-for-byte what the workflow expects , only the
+// gate's artifact hashes and calls approveGate, for a feature's gates; and
+// approveStoryGateFromDisk for the per-story spec gate managed by the pipeline),
+// so the recorded approval is byte-for-byte what the workflow expects , only the
 // attribution and the required-human framing differ.
 //
+// This is the ONE human-facing gate door: --sprint approves the plan gate,
+// --feature --story approves a per-story spec gate (the pipeline gate the design
+// lane blocks on), and --feature [--gate] approves a feature's gates.json gate(s)
+// (FEIP-8008: the design drive used to hint the feature-level door for a
+// per-story stop, which recorded the wrong gate and never advanced).
+//
 // Usage:
-//   lakebase-sftdd-approve-gate --sprint <name> --approver <you>            # sprint plan gate
-//   lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <g>] # a feature's gate(s)
+//   lakebase-sftdd-approve-gate --sprint <name> --approver <you>              # sprint plan gate
+//   lakebase-sftdd-approve-gate --feature <id> --story <s> --approver <you>   # a per-story spec gate
+//   lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <g>]  # a feature's gate(s)
 //                              [--promote-ref <str>] [--project-dir <p>] [--tdd-dir <d>] [--json]
-// Exit 0 = approval recorded (or already approved); 2 = usage error / nothing to approve.
+// Exit 0 = approval recorded (or already approved); 2 = usage error / nothing to
+// approve; 3 = per-story draft invariant violated.
 
 import { approveSprintPlanGate } from "./sprint-gates.js";
 import { drainGatesAsHumanProxy } from "./human-proxy.js";
+import { approveStoryGateFromDisk, batchedDraftMessage } from "./story-pipeline.js";
 import { resolveSftddDir } from "./sftdd-paths.js";
 import type { GateName } from "./gates.js";
 
 interface Parsed {
   feature?: string;
   sprint?: string;
+  story?: string;
   gate?: GateName;
   approver?: string;
   promoteRef?: string;
@@ -47,6 +58,7 @@ function parse(argv: string[]): Parsed {
     const a = argv[i];
     if (a === "--feature" && i + 1 < argv.length) out.feature = argv[++i];
     else if (a === "--sprint" && i + 1 < argv.length) out.sprint = argv[++i];
+    else if (a === "--story" && i + 1 < argv.length) out.story = argv[++i];
     else if (a === "--gate" && i + 1 < argv.length) out.gate = argv[++i] as GateName;
     else if (a === "--approver" && i + 1 < argv.length) out.approver = argv[++i];
     else if (a === "--promote-ref" && i + 1 < argv.length) out.promoteRef = argv[++i];
@@ -64,11 +76,13 @@ const HELP =
   `approver's; this tool records ATTRIBUTION + the artifact hashes. Use the Human\n` +
   `Proxy (lakebase-sftdd-human-proxy) instead ONLY for headless / smoke runs.\n\n` +
   `Usage:\n` +
-  `  lakebase-sftdd-approve-gate --sprint <name> --approver <you>\n` +
+  `  lakebase-sftdd-approve-gate --sprint <name> --approver <you>              # plan gate\n` +
+  `  lakebase-sftdd-approve-gate --feature <id> --story <s> --approver <you>   # per-story spec gate\n` +
   `  lakebase-sftdd-approve-gate --feature <id> --approver <you> [--gate <name>] [--promote-ref <str>]\n` +
   `                             [--project-dir <p>] [--tdd-dir <d>] [--json]\n\n` +
   `--approver is REQUIRED (name the deciding human; there is no default identity).\n` +
-  `Exit 0 = approved (or already approved); 2 = usage error / nothing to approve.\n`;
+  `Exit 0 = approved (or already approved); 2 = usage error / nothing to approve;\n` +
+  `3 = per-story draft invariant violated.\n`;
 
 /** Run the CLI. Returns the process exit code (no process.exit inside), so it is
  *  unit-testable , mirroring runHumanProxyCli. */
@@ -89,7 +103,40 @@ export function runApproveGateCli(argv: string[]): number {
     process.stderr.write(`lakebase-sftdd-approve-gate: one of --sprint <name> or --feature <id> is required.\n`);
     return 2;
   }
+  if (p.story && !p.feature) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: --story requires --feature <id> (a per-story spec gate is feature-scoped).\n`);
+    return 2;
+  }
+  if (p.story && p.sprint) {
+    process.stderr.write(`lakebase-sftdd-approve-gate: --story is a per-story feature gate; not valid with --sprint (the plan gate has no story).\n`);
+    return 2;
+  }
   const sftddDir = p.tddDir ?? resolveSftddDir(p.projectDir);
+
+  // Per-story spec gate (the pipeline gate the design lane blocks on). Routes
+  // through the SAME shared helper as `lakebase-sftdd-pipeline approve-gate`
+  // (FEIP-8008), so the human door and the headless proxy write identical state.
+  if (p.story) {
+    const r = approveStoryGateFromDisk(sftddDir, p.feature as string, p.story, { approver: p.approver });
+    if (p.json) {
+      process.stdout.write(`${JSON.stringify(r)}\n`);
+      if (!r.ok) return r.batched ? 3 : 2;
+      return 0;
+    }
+    if (!r.ok) {
+      if (r.batched) {
+        process.stderr.write(batchedDraftMessage(p.story, r.batched) + "\n");
+        return 3;
+      }
+      process.stderr.write(`approve-gate: ${r.error}\n`);
+      return 2;
+    }
+    process.stdout.write(
+      `approve-gate: ${p.feature}/${p.story} , per-story spec gate approved by ${p.approver}` +
+        ` (ready + queued: ${(r.queue ?? []).join(", ") || "none"})\n`,
+    );
+    return 0;
+  }
 
   // Sprint plan gate.
   if (p.sprint) {

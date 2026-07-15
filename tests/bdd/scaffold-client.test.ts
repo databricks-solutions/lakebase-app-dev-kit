@@ -108,6 +108,21 @@ describe("deployClientProject", () => {
     expect(vite).toContain("/api");
   });
 
+  it("vitest collects client component tests from tests/** (its own layout), not just src/**, and excludes Playwright e2e (FEIP-8009)", () => {
+    // The scaffold ships client/tests/pages/ as the component-test home, and the
+    // design lane routes client component tests there. vitest MUST collect
+    // tests/**; a src/**-only include silently dropped every tests/pages/*.test.tsx,
+    // so a client RED test placed there could never be collected and the build
+    // escalated with a blocking scaffold-defect ("no runner for the layer").
+    // tests/e2e/ stays Playwright's, excluded from vitest.
+    const target = mkTarget();
+    deployClientProject(target, "demoapp", { templatesDir: TEMPLATES });
+    const vite = read(target, "client/vite.config.ts");
+    expect(vite).toContain('"tests/**/*.test.{ts,tsx}"'); // the shipped tests/pages layout is collected
+    expect(vite).toContain('"src/**/*.test.{ts,tsx}"'); // co-located tests still collected
+    expect(vite).toMatch(/exclude:[\s\S]*tests\/e2e/); // Playwright e2e excluded from vitest
+  });
+
   it("Playwright config takes its ports from env with defaults, so CI can hand it FREE ports", () => {
     // Resiliency: in CI (reuseExistingServer:false) a stale server on the default
     // port would make webServer hard-fail. The config reads E2E_BACKEND_PORT /

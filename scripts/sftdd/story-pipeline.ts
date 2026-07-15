@@ -332,6 +332,64 @@ export function approveStoryGate(
   return pipeline;
 }
 
+/** The per-story-draft-invariant guidance, shared by every per-story spec-gate
+ *  entry point (the `lakebase-sftdd-pipeline` surface/approve-gate subcommands
+ *  AND the human-facing `lakebase-sftdd-approve-gate --story`), so all of them
+ *  report a batched draft identically. */
+export function batchedDraftMessage(story: string, batched: string[]): string {
+  return (
+    `per-story draft invariant violated: ACs already exist for ${batched.join(", ")}, ` +
+    `but ${story} is the story being gated.\n` +
+    `The design lane drafts ONE story's acceptance criteria at a time ` +
+    `(draft -> surface -> approve), then moves to the next story. Drafting every ` +
+    `story's ACs in one pass defeats the streaming pipeline.\n` +
+    `Remove the out-of-turn ACs (keep only ${story}'s), invoke the Spec Author ` +
+    `once per story, and retry.`
+  );
+}
+
+/** The outcome of approving a per-story spec gate from disk. */
+export interface ApproveStoryGateOutcome {
+  ok: boolean;
+  /** Out-of-turn stories whose ACs violate the per-story-draft invariant (ok=false). */
+  batched?: string[];
+  /** A non-invariant failure, e.g. the story is not in the pipeline (ok=false). */
+  error?: string;
+  /** The resulting build queue after a successful approval (ok=true). */
+  queue?: string[];
+}
+
+/**
+ * Approve a story's per-story spec gate end-to-end from disk: enforce the
+ * per-story-draft invariant, record the approval, and persist. This is the ONE
+ * place a CLI approves the per-story gate, shared by `lakebase-sftdd-pipeline
+ * approve-gate` and the human-facing `lakebase-sftdd-approve-gate --story`, so
+ * both doors write byte-identical state (FEIP-8008). Returns a structured
+ * outcome (never throws for a known-story miss) so each caller formats its own
+ * message + exit code.
+ */
+export function approveStoryGateFromDisk(
+  sftddDir: string,
+  feature: string,
+  story: string,
+  opts: { approver: string; at?: string; specHash?: string },
+): ApproveStoryGateOutcome {
+  const pipeline = readPipeline(sftddDir, feature);
+  const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
+  if (batched.length > 0) return { ok: false, batched };
+  try {
+    approveStoryGate(pipeline, story, {
+      approver: opts.approver,
+      at: opts.at ?? new Date().toISOString(),
+      spec_hash: opts.specHash,
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  writePipeline(sftddDir, pipeline);
+  return { ok: true, queue: pipeline.build_queue };
+}
+
 /**
  * Withdraw a story's previously-surfaced/approved gate (e.g. the HIL rescinds
  * after a problem is found). Pulls the story back out of the build flow: removed

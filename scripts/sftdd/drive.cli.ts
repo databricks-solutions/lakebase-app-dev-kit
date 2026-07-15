@@ -62,7 +62,7 @@ import { parseTurnUsage, assistantTextFromLine, assistantEventSummary, type Turn
 import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal, startsFreshEachTurn } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
-import { makeOnAction, describeAction } from "./orchestrator-logging.js";
+import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 // How many times a single role turn that overflows the model window mid-turn
@@ -828,14 +828,15 @@ function stepResultOf(r: RunDriverResult): DriveStepResult {
   return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
 }
 
-function reportGate(gate: WorkflowAction): void {
+function reportGate(gate: WorkflowAction, ctx: { featureId?: string; sprint?: string } = {}): void {
   // Reuse the shared action narration (DRY) instead of dumping raw JSON; the
   // full action is available under LAKEBASE_SFTDD_TRACE for debugging.
   const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
   process.stderr.write(
-    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace} ` +
-      `Record your decision with lakebase-sftdd-approve-gate --approver <you> ` +
-      `(--sprint <s> for the plan gate, else --feature <id> [--gate <name>]), then re-run to continue.\n`,
+    `[drive] GATE awaiting human approval: ${describeAction(gate)}.${trace}\n` +
+      `        Record your decision with:\n` +
+      `          ${approveHint(gate, ctx)}\n` +
+      `        then re-run to continue.\n`,
   );
 }
 
@@ -940,7 +941,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       const planning = await effects.drivePlanning();
       // A HITL gate pause = work produced, awaiting approval (resumable, exit 0).
       if (planning.pendingGate) {
-        reportGate(planning.pendingGate);
+        reportGate(planning.pendingGate, { sprint });
         return 0;
       }
       // A human-input pause = the PO must author requests FIRST; nothing was
@@ -979,7 +980,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
     }
     if (result.pendingGate) {
       if (result.pendingFeature) process.stderr.write(`[sprint] paused on ${result.pendingFeature}\n`);
-      reportGate(result.pendingGate);
+      reportGate(result.pendingGate, { sprint, featureId: result.pendingFeature });
       return 0;
     }
     if (result.pendingInput) {
@@ -1161,7 +1162,7 @@ async function main(): Promise<number> {
     } else if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
-      reportGate(pendingGate);
+      reportGate(pendingGate, { featureId: cfg.featureId });
     } else if (pendingInput) {
       // A human-input pause (the PO's author-requests) is NOT a completed bound:
       // nothing was produced. Report honestly + exit non-zero (never "complete").
