@@ -226,6 +226,14 @@ interface IsDirtyArgs extends CwdOnlyArgs {
      * (the original behavior).
      */
     ignore?: string[];
+    /**
+     * Count untracked files as dirty. Default true (porcelain reports them). Set
+     * false to consider ONLY changes to tracked files: an untracked file rides
+     * onto a `git checkout -b` but is never committed by an allow-list commit, so
+     * a fork guard can safely tolerate stray untracked junk while still refusing
+     * on uncommitted edits to tracked source.
+     */
+    untracked?: boolean;
 }
 /**
  * True iff the working tree has staged or unstaged changes (including
@@ -316,6 +324,17 @@ interface CommitAllArgs extends CommitArgs {
      * is skipped (git errors on an unmatched pathspec).
      */
     include?: string[];
+    /**
+     * Allow-list the UNTRACKED files that get staged: stage every TRACKED change
+     * (anywhere, minus `exclude`) so no edit to committed config/source is ever
+     * dropped, but stage NEW untracked files ONLY when they sit under one of these
+     * repo-relative prefixes (the project's source/test/migration roots). Stray
+     * untracked files elsewhere , e.g. agent junk written to the repo root by a
+     * mis-quoted shell command , are then never committed onto the experiment
+     * branch. When omitted, the legacy `git add -A` (minus `exclude`) behavior is
+     * used (stage everything, tracked and untracked).
+     */
+    untrackedAllow?: string[];
 }
 /**
  * `git add -A` (optionally excluding path prefixes, then force-staging explicit

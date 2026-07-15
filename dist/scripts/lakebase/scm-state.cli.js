@@ -262,6 +262,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -298,52 +299,36 @@ import * as fs4 from "fs";
 import * as path3 from "path";
 import { execFileSync as execFileSync3 } from "child_process";
 
-// scripts/lakebase/branch-create.ts
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
-
-// scripts/util/sanitize-branch-name.ts
-function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
-  while (name.length < 3) name += "-x";
-  return name;
-}
-
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
+// scripts/lakebase/databricks-cli.ts
+import { execFile, execFileSync as execFileSync2 } from "child_process";
 import { promisify } from "util";
-var execFileP = promisify(execFile);
+import { join as join3 } from "path";
 
-// scripts/lakebase/lakebase-project.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-var execFileP2 = promisify2(execFile2);
-
-// scripts/lakebase/branch-create.ts
-var execFileP3 = promisify3(execFile3);
-
-// scripts/lakebase/branch-delete.ts
-import { execFile as execFile4 } from "child_process";
-import { promisify as promisify4 } from "util";
-var execFileP4 = promisify4(execFile4);
-
-// scripts/lakebase/branch-endpoint.ts
-import { execFileSync as execFileSync2 } from "child_process";
-
-// scripts/lakebase/get-connection.ts
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
 import { execFileSync } from "child_process";
-import { createLakebasePool } from "@databricks/lakebase";
-import { Client } from "pg";
 
 // scripts/util/exec.ts
 import * as cp from "child_process";
 
 // scripts/lakebase/env-file.ts
-import * as fs2 from "fs";
+import * as fs3 from "fs";
 import * as path2 from "path";
 
-// scripts/lakebase/databricks-profile.ts
-import * as fs3 from "fs";
+// scripts/lakebase/databricks-cli.ts
+var execFileP = promisify(execFile);
+
+// scripts/util/sanitize-branch-name.ts
+var LAKEBASE_BRANCH_NAME_MAX = 63;
+function sanitizeBranchName(gitBranch) {
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
+  while (name.length < 3) name += "-x";
+  return name;
+}
+
+// scripts/lakebase/get-connection.ts
+import { createLakebasePool } from "@databricks/lakebase";
+import { Client } from "pg";
 
 // scripts/lakebase/convention-branches.ts
 var CONVENTION_TIER_DEFAULTS = {

@@ -42,6 +42,12 @@ interface WorkflowRunSummary {
     conclusion: string;
     branch: string;
     event: string;
+    /** The commit SHA the run executed against (GitHub's `head_sha`). For a
+     * `push` run this is the new tip the push created, so it equals the merge
+     * commit SHA that `pulls.merge` returned. Matching a downstream migrate run
+     * by this SHA is clock-independent, unlike a `createdAt >= mergedAt` window,
+     * which false-negatives when the local merge bookkeeping lags GitHub's clock. */
+    headSha?: string;
     /** ISO 8601 timestamp from GitHub. Useful for filtering out runs older than
      * a session start time or detecting stuck/orphaned runs whose updated_at
      * lags. May be `undefined` if the API omitted it. */
@@ -79,8 +85,19 @@ interface MergePullRequestArgs {
     /** Default: true. Delete the remote head branch after merge. */
     deleteRemoteBranch?: boolean;
 }
+/** The outcome of merging a PR. */
+interface MergePullRequestResult {
+    /** GitHub's merge confirmation message. */
+    message: string;
+    /** The SHA of the commit the merge created on the base branch (squash/merge/
+     *  rebase all report the new base tip here). This is the `head_sha` the
+     *  downstream `push` workflow run will carry, so callers can match that run
+     *  by SHA instead of by a merge-timestamp window. `undefined` if the API
+     *  omitted it. */
+    sha?: string;
+}
 /** Merge a PR. Optionally deletes the remote head branch. */
-declare function mergePullRequest(args: MergePullRequestArgs): Promise<string>;
+declare function mergePullRequest(args: MergePullRequestArgs): Promise<MergePullRequestResult>;
 /** Recent workflow runs for a repo. */
 declare function listWorkflowRuns(ownerRepo: string, limit?: number): Promise<WorkflowRunSummary[]>;
 interface FastForwardBranchArgs {
@@ -128,6 +145,9 @@ interface MergePairedPullRequestResult {
     headBranch: string;
     /** True iff the matching feature Lakebase branch was deleted. */
     lakebaseBranchDeleted: boolean;
+    /** The SHA the merge created on the base branch (see MergePullRequestResult.sha).
+     *  Downstream migrate-run matching keys on this. `undefined` if the API omitted it. */
+    mergeCommitSha?: string;
     warnings: string[];
 }
 /**
@@ -146,4 +166,4 @@ interface MergePairedPullRequestResult {
  */
 declare function mergePairedPullRequest(args: MergePairedPullRequestArgs): Promise<MergePairedPullRequestResult>;
 
-export { type CreatePullRequestArgs as C, type FastForwardBranchArgs as F, GitHubPullRequestError as G, type MergePairedPullRequestArgs as M, type PullRequestCheck as P, type WorkflowRunSummary as W, type MergePairedPullRequestResult as a, type MergePullRequestArgs as b, type PullRequestFile as c, type PullRequestInfo as d, type PullRequestReview as e, createPullRequest as f, fastForwardBranch as g, getPullRequest as h, getPullRequestComments as i, getPullRequestFiles as j, getPullRequestReviews as k, listIssueComments as l, listWorkflowRuns as m, mergePairedPullRequest as n, mergePullRequest as o };
+export { type CreatePullRequestArgs as C, type FastForwardBranchArgs as F, GitHubPullRequestError as G, type MergePairedPullRequestArgs as M, type PullRequestCheck as P, type WorkflowRunSummary as W, type MergePairedPullRequestResult as a, type MergePullRequestArgs as b, type MergePullRequestResult as c, type PullRequestFile as d, type PullRequestInfo as e, type PullRequestReview as f, createPullRequest as g, fastForwardBranch as h, getPullRequest as i, getPullRequestComments as j, getPullRequestFiles as k, getPullRequestReviews as l, listIssueComments as m, listWorkflowRuns as n, mergePairedPullRequest as o, mergePullRequest as p };

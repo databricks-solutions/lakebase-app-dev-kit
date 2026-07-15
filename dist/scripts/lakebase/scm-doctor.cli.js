@@ -33,7 +33,7 @@ import * as fs from "fs";
 import { join } from "path";
 var ARTIFACT_ROOT = ".sftdd";
 var LEGACY_ARTIFACT_ROOT = ".tdd";
-function resolveTddDir(projectDir = process.cwd()) {
+function resolveSftddDir(projectDir = process.cwd()) {
   const next = join(projectDir, ARTIFACT_ROOT);
   if (fs.existsSync(next)) return next;
   const legacy = join(projectDir, LEGACY_ARTIFACT_ROOT);
@@ -56,9 +56,310 @@ function findFeatureDir(tdd, featureId) {
 // scripts/lakebase/scm-doctor.ts
 import * as path11 from "path";
 
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
+// scripts/lakebase/databricks-cli.ts
+import { execFile, execFileSync as execFileSync2 } from "child_process";
 import { promisify } from "util";
+import { join as join3 } from "path";
+
+// scripts/lakebase/kit-config.ts
+function intFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+var DAY_MS = 24 * 60 * 60 * 1e3;
+var KIT_TIMEOUTS = {
+  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
+  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
+  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
+  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
+  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
+  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
+  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
+  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
+  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
+  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
+  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
+  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
+  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
+  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
+  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
+  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
+  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
+  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
+};
+function formatLakebaseTtl(ms) {
+  return `${Math.floor(ms / 1e3)}s`;
+}
+function urlFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  return raw.replace(/\/+$/, "");
+}
+var KIT_REGISTRIES = {
+  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
+  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
+};
+
+// scripts/lakebase/databricks-profile.ts
+import * as fs2 from "fs";
+import { execFileSync } from "child_process";
+
+// scripts/util/exec.ts
+import * as cp from "child_process";
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = execFileSync("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve2(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs2.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
+// scripts/lakebase/env-file.ts
+import * as fs3 from "fs";
+import * as path from "path";
+function readEnvVar(envPath, key) {
+  if (!fs3.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs3.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+var CONNECTION_KEYS = [
+  "DATABASE_URL",
+  "DB_PASSWORD",
+  "DB_USERNAME",
+  "LAKEBASE_PROJECT_ID",
+  "LAKEBASE_BRANCH_ID",
+  "LAKEBASE_HOST",
+  "LAKEBASE_ENDPOINT"
+];
+function updateEnvConnection(args) {
+  const existing = fs3.existsSync(args.envPath) ? fs3.readFileSync(args.envPath, "utf-8") : "";
+  const preserved = existing.split("\n").filter((line) => {
+    const trimmed = line.trimStart();
+    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
+  }).join("\n").replace(/\n+$/, "");
+  const lines = [];
+  if (args.comment !== void 0) {
+    lines.push(args.comment);
+  }
+  lines.push(`LAKEBASE_PROJECT_ID=${args.projectId}`);
+  if (args.endpointHost !== void 0) {
+    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
+  }
+  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
+  lines.push(`LAKEBASE_ENDPOINT=${args.endpoint ?? "primary"}`);
+  lines.push(`DB_USERNAME=${args.username}`);
+  lines.push("");
+  const block = lines.join("\n");
+  const content = preserved ? `${preserved}
+${block}` : block;
+  fs3.mkdirSync(path.dirname(args.envPath), { recursive: true });
+  fs3.writeFileSync(args.envPath, content);
+}
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = promisify(execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar(join3(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+function runDatabricksSync(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    return execFileSync2("databricks", argv, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
 
 // scripts/lakebase/branch-id.ts
 var UID_PATTERN = /^br-[a-z0-9-]+$/;
@@ -94,50 +395,7 @@ function branchNameFromResourcePath(path13) {
   }
 }
 
-// scripts/lakebase/kit-config.ts
-function intFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return parsed;
-}
-var DAY_MS = 24 * 60 * 60 * 1e3;
-var KIT_TIMEOUTS = {
-  cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
-  cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
-  cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
-  readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
-  readyPoll: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_POLL_MS", 5e3),
-  pgConnect: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_CONNECT_MS", 1e4),
-  pgStatement: intFromEnv("LAKEBASE_KIT_TIMEOUT_PG_STATEMENT_MS", 15e3),
-  gitDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_DEFAULT_MS", 5e3),
-  gitCheckout: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_CHECKOUT_MS", 1e4),
-  gitNetwork: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_NETWORK_MS", 15e3),
-  gitPush: intFromEnv("LAKEBASE_KIT_TIMEOUT_GIT_PUSH_MS", 3e4),
-  cliLong: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_LONG_MS", 6e4),
-  cmdShort: intFromEnv("LAKEBASE_KIT_TIMEOUT_CMD_SHORT_MS", 5e3),
-  initializrCacheTtl: intFromEnv("LAKEBASE_KIT_INITIALIZR_CACHE_TTL_MS", 10 * 60 * 1e3),
-  featureBranchTtlMs: intFromEnv("LAKEBASE_KIT_FEATURE_BRANCH_TTL_MS", 30 * DAY_MS),
-  testBranchTtlMs: intFromEnv("LAKEBASE_KIT_TEST_BRANCH_TTL_MS", 14 * DAY_MS),
-  uatBranchTtlMs: intFromEnv("LAKEBASE_KIT_UAT_BRANCH_TTL_MS", 14 * DAY_MS),
-  perfBranchTtlMs: intFromEnv("LAKEBASE_KIT_PERF_BRANCH_TTL_MS", 7 * DAY_MS)
-};
-function formatLakebaseTtl(ms) {
-  return `${Math.floor(ms / 1e3)}s`;
-}
-function urlFromEnv(name, fallback) {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-  return raw.replace(/\/+$/, "");
-}
-var KIT_REGISTRIES = {
-  mavenCentral: urlFromEnv("LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL", "https://repo1.maven.org/maven2"),
-  springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
-};
-
 // scripts/lakebase/branch-utils.ts
-var execFileP = promisify(execFile);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -301,45 +559,8 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
-}
-
-// scripts/util/exec.ts
-import * as cp from "child_process";
-function shq(s) {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
-  });
+function dbcli(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/git/inspect.ts
@@ -416,7 +637,7 @@ async function getOwnerRepo(cwd) {
 import { Octokit, RequestError } from "octokit";
 
 // scripts/github/auth.ts
-import { execFileSync } from "child_process";
+import { execFileSync as execFileSync3 } from "child_process";
 var GITHUB_SCOPES = ["repo", "workflow", "delete_repo"];
 async function resolveGitHubToken(scopes = GITHUB_SCOPES) {
   const fromEnv = process.env.GITHUB_TOKEN?.trim();
@@ -444,7 +665,7 @@ async function tryVsCodeSession(opts = {}) {
 }
 function tryGhAuthToken() {
   try {
-    const raw = execFileSync("gh", ["auth", "token"], {
+    const raw = execFileSync3("gh", ["auth", "token"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 5e3
@@ -473,8 +694,8 @@ async function getActionsEnabled(ownerRepo) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-import * as fs2 from "fs";
-import * as path from "path";
+import * as fs4 from "fs";
+import * as path2 from "path";
 var SCM_STATES = [
   "scaffold-complete",
   "feature-claimed",
@@ -488,12 +709,12 @@ var STATE_INDEX = SCM_STATES.reduce(
 );
 var STATE_FILE_REL = ".lakebase/workflow-state.json";
 function stateFilePath(projectDir) {
-  return path.join(projectDir, STATE_FILE_REL);
+  return path2.join(projectDir, STATE_FILE_REL);
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs2.existsSync(p)) return null;
-  const raw = fs2.readFileSync(p, "utf8");
+  if (!fs4.existsSync(p)) return null;
+  const raw = fs4.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -521,14 +742,14 @@ function writeWorkflowState(projectDir, state) {
     throw new Error(`Refusing to write invalid SCM state:
 ${summary}`);
   }
-  const dir = path.join(projectDir, ".lakebase");
-  fs2.mkdirSync(dir, { recursive: true });
+  const dir = path2.join(projectDir, ".lakebase");
+  fs4.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs2.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs4.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs2.renameSync(tmp, target);
+  fs4.renameSync(tmp, target);
 }
 function initWorkflowState(args) {
   return {
@@ -809,10 +1030,6 @@ import * as fs5 from "fs";
 import * as path3 from "path";
 import { execFileSync as execFileSync4 } from "child_process";
 
-// scripts/lakebase/branch-create.ts
-import { execFile as execFile3 } from "child_process";
-import { promisify as promisify3 } from "util";
-
 // scripts/util/delay.ts
 function delay(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
@@ -865,22 +1082,14 @@ async function pollUntilDefined(probe, opts) {
 }
 
 // scripts/util/sanitize-branch-name.ts
+var LAKEBASE_BRANCH_NAME_MAX = 63;
 function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
   while (name.length < 3) name += "-x";
   return name;
 }
 
 // scripts/lakebase/lakebase-project.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-var execFileP2 = promisify2(execFile2);
-var LakebaseProjectError = class extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "LakebaseProjectError";
-  }
-};
 function findHistoryRetentionDuration(parsed) {
   const raw = parsed.history_retention_duration ?? parsed.historyRetentionDuration;
   if (!raw || typeof raw !== "string") return void 0;
@@ -906,27 +1115,11 @@ async function getProjectRetentionDuration(args) {
   }
   return findHistoryRetentionDuration(parsed);
 }
-async function dbcli2(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP2("databricks", args, {
-      env,
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseProjectError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli2(args, host, timeout = KIT_TIMEOUTS.cliDefault) {
+  return runDatabricks(args, { host, timeout });
 }
 
 // scripts/lakebase/branch-create.ts
-var execFileP3 = promisify3(execFile3);
 async function createBranch(args) {
   const sanitized = sanitizeBranchName(args.branch);
   const lookup = { instance: args.instance, host: args.host };
@@ -974,13 +1167,7 @@ async function createBranch(args) {
   }
   const existing = await getBranchByName(sanitized, lookup);
   if (existing) {
-    const existingLeaf = leafOf(existing.sourceBranchName);
-    const requestedLeaf = leafOf(sourceBranchPath);
-    if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
-      throw new LakebaseBranchError(
-        `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
-      );
-    }
+    assertSourceMatches(existing, sourceBranchPath, sanitized);
     return existing;
   }
   if (args.ttl && args.noExpiry === true) {
@@ -996,7 +1183,14 @@ async function createBranch(args) {
   } else if (args.noExpiry ?? true) {
     specObj.no_expiry = true;
   }
-  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  try {
+    await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  } catch (err) {
+    if (err instanceof LakebaseBranchTtlTooLongError) throw err;
+    const landed = await getBranchByName(sanitized, lookup);
+    if (!landed) throw err;
+    assertSourceMatches(landed, sourceBranchPath, sanitized);
+  }
   return waitForBranchReady({
     instance: args.instance,
     host: args.host,
@@ -1027,6 +1221,15 @@ function leafOf(pathOrName) {
   const segments = pathOrName.split("/");
   return segments[segments.length - 1] || void 0;
 }
+function assertSourceMatches(existing, sourceBranchPath, sanitized) {
+  const existingLeaf = leafOf(existing.sourceBranchName);
+  const requestedLeaf = leafOf(sourceBranchPath);
+  if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
+    throw new LakebaseBranchError(
+      `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
+    );
+  }
+}
 async function createWithTtlRecovery(instance, sanitized, specObj, host) {
   const originalTtl = specObj.ttl;
   try {
@@ -1036,7 +1239,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     );
     return;
   } catch (err) {
-    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
+    if (!(err instanceof DatabricksCliError) || !originalTtl || !isTtlTooLongError(err.message)) {
       throw err;
     }
     let retention = getCachedProjectRetention(instance);
@@ -1062,7 +1265,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
         host
       );
     } catch (retryErr) {
-      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
+      if (retryErr instanceof DatabricksCliError && isTtlTooLongError(retryErr.message)) {
         throw new LakebaseBranchTtlTooLongError(
           clamped,
           `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`
@@ -1072,32 +1275,11 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     }
   }
 }
-async function dbcli3(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli3(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }
 
-// scripts/lakebase/branch-delete.ts
-import { execFile as execFile4 } from "child_process";
-import { promisify as promisify4 } from "util";
-var execFileP4 = promisify4(execFile4);
-
-// scripts/lakebase/branch-endpoint.ts
-import { execFileSync as execFileSync3 } from "child_process";
-
 // scripts/lakebase/get-connection.ts
-import { execFileSync as execFileSync2 } from "child_process";
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
@@ -1170,20 +1352,7 @@ function buildPostgresUrl(parts) {
   return u.toString();
 }
 function dbcli4(args) {
-  try {
-    return execFileSync2("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/branch-endpoint.ts
@@ -1194,9 +1363,7 @@ async function getEndpoint(args) {
   }
   let raw;
   try {
-    raw = execFileSync3("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+    raw = runDatabricksSync(["postgres", "list-endpoints", branchPath, "-o", "json"], {
       timeout: KIT_TIMEOUTS.cliDefault
     });
   } catch {
@@ -1236,10 +1403,9 @@ async function ensureEndpoint(args) {
     }
   };
   try {
-    execFileSync3(
-      "databricks",
+    runDatabricksSync(
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+      { timeout: KIT_TIMEOUTS.cliCreateEndpoint }
     );
   } catch (err) {
     const racy = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
@@ -1262,108 +1428,17 @@ async function ensureEndpoint(args) {
 async function isDirty(args) {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
   } catch {
     return false;
   }
-}
-
-// scripts/lakebase/env-file.ts
-import * as fs3 from "fs";
-import * as path2 from "path";
-var CONNECTION_KEYS = [
-  "DATABASE_URL",
-  "DB_USERNAME",
-  "DB_PASSWORD",
-  "LAKEBASE_BRANCH_ID",
-  "LAKEBASE_HOST"
-];
-function updateEnvConnection(args) {
-  const existing = fs3.existsSync(args.envPath) ? fs3.readFileSync(args.envPath, "utf-8") : "";
-  const preserved = existing.split("\n").filter((line) => {
-    const trimmed = line.trimStart();
-    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
-  }).join("\n").replace(/\n+$/, "");
-  const lines = [];
-  if (args.comment !== void 0) {
-    lines.push(args.comment);
-  }
-  if (args.endpointHost !== void 0) {
-    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
-  }
-  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
-  lines.push(`DATABASE_URL=${args.databaseUrl}`);
-  lines.push(`DB_USERNAME=${args.username}`);
-  lines.push(`DB_PASSWORD=${args.password}`);
-  lines.push("");
-  const block = lines.join("\n");
-  const content = preserved ? `${preserved}
-${block}` : block;
-  fs3.mkdirSync(path2.dirname(args.envPath), { recursive: true });
-  fs3.writeFileSync(args.envPath, content);
-}
-
-// scripts/lakebase/databricks-profile.ts
-import * as fs4 from "fs";
-function normalizeHost(host) {
-  return host.trim().replace(/\/+$/, "").toLowerCase();
-}
-function selectProfileForHost(profilesJson, host) {
-  const target = normalizeHost(host);
-  if (!target) return void 0;
-  const start = profilesJson.indexOf("{");
-  if (start < 0) return void 0;
-  let parsed;
-  try {
-    parsed = JSON.parse(profilesJson.slice(start));
-  } catch {
-    return void 0;
-  }
-  const profiles = parsed.profiles;
-  if (!Array.isArray(profiles)) return void 0;
-  const names = profiles.filter((p) => {
-    if (!p || typeof p !== "object") return false;
-    const rec = p;
-    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
-  }).map((p) => p.name);
-  const distinct = Array.from(new Set(names));
-  return distinct.length === 1 ? distinct[0] : void 0;
-}
-async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
-  if (!normalizeHost(host)) return void 0;
-  let out;
-  try {
-    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
-  } catch {
-    return void 0;
-  }
-  return selectProfileForHost(out, host);
-}
-async function ensureProfilePinned(args) {
-  const { envPath } = args;
-  if (!fs4.existsSync(envPath)) return { reason: "no-env" };
-  const lines = fs4.readFileSync(envPath, "utf-8").split("\n");
-  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
-  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
-    return { reason: "already-pinned" };
-  }
-  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
-  if (hostIdx < 0) return { reason: "no-host" };
-  const hostLine = lines[hostIdx];
-  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
-  if (!host) return { reason: "no-host" };
-  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
-  const profile = await resolve2(host);
-  if (!profile) return { reason: "no-match" };
-  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
-  fs4.writeFileSync(envPath, lines.join("\n"));
-  return { pinned: profile };
 }
 
 // scripts/lakebase/paired-branch.ts
@@ -1418,7 +1493,7 @@ function resolveFeatureStartPoint(cwd, parentBranch) {
 }
 async function assertCleanForFork(cwd, startPoint) {
   if (!startPoint) return;
-  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"], untracked: false })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
     );
@@ -1430,13 +1505,6 @@ function gitCheckoutExistingBranch(cwd, branch) {
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
-}
-function buildDsn(host, database, user, password) {
-  const u = new URL(`postgresql://${host}:${POSTGRES_PORT}/${encodeURIComponent(database)}`);
-  u.username = encodeURIComponent(user);
-  u.password = encodeURIComponent(password);
-  u.searchParams.set("sslmode", "require");
-  return u.toString();
 }
 async function createPairedBranch(args) {
   const warnings = [];
@@ -1493,15 +1561,13 @@ async function createPairedBranch(args) {
         branch: sanitized,
         timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
       });
-      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-      const dsn = buildDsn(ep.host, database, email, token);
+      const { email } = await mintCredential(endpointPath(args.instance, sanitized));
       const envPath = path3.join(args.cwd, ".env");
       updateEnvConnection({
         envPath,
+        projectId: args.instance,
         branchId: sanitized,
-        databaseUrl: dsn,
         username: email,
-        password: token,
         endpointHost: ep.host
       });
       await ensureProfilePinned({ envPath }).catch(() => void 0);
@@ -1727,33 +1793,33 @@ function parentForTopology(t, defaultLeaf) {
 
 // scripts/sftdd/stale-branches.ts
 import { existsSync as existsSync8, readdirSync as readdirSync4, statSync as statSync4 } from "fs";
-import { join as join6 } from "path";
+import { join as join7 } from "path";
 
 // scripts/sftdd/story-pipeline.ts
 import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
-function pipelinePath(tddDir, featureId) {
-  return pipelineJson(tddDir, featureId);
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
 }
-function readPipeline(tddDir, featureId) {
-  const p = pipelinePath(tddDir, featureId);
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
   if (!existsSync6(p)) return initPipeline(featureId);
   return JSON.parse(readFileSync6(p, "utf8"));
 }
 
 // scripts/sftdd/spike.ts
 import { existsSync as existsSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync3, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync6 } from "fs";
-import { join as join5 } from "path";
-function listSpikes(tddDir) {
-  const root = join5(tddDir, "spikes");
+import { join as join6 } from "path";
+function listSpikes(sftddDir) {
+  const root = join6(sftddDir, "spikes");
   if (!existsSync7(root)) return [];
   const out = [];
   for (const slug of readdirSync3(root)) {
-    const dir = join5(root, slug);
+    const dir = join6(root, slug);
     if (!statSync3(dir).isDirectory()) continue;
-    const branchFile = join5(dir, "branch.txt");
+    const branchFile = join6(dir, "branch.txt");
     if (!existsSync7(branchFile)) continue;
     out.push({
       spike_slug: slug,
@@ -1766,15 +1832,15 @@ function listSpikes(tddDir) {
 }
 
 // scripts/sftdd/stale-branches.ts
-function listPipelineFeatures(tddDir) {
-  const featuresDir2 = featuresDir(tddDir);
+function listPipelineFeatures(sftddDir) {
+  const featuresDir2 = featuresDir(sftddDir);
   if (!existsSync8(featuresDir2)) return [];
-  return readdirSync4(featuresDir2).filter((d) => statSync4(join6(featuresDir2, d)).isDirectory()).filter((d) => existsSync8(join6(featuresDir2, d, "pipeline.json"))).sort();
+  return readdirSync4(featuresDir2).filter((d) => statSync4(join7(featuresDir2, d)).isDirectory()).filter((d) => existsSync8(join7(featuresDir2, d, "pipeline.json"))).sort();
 }
-function findStaleBranches(tddDir) {
+function findStaleBranches(sftddDir) {
   const findings = [];
-  for (const featureId of listPipelineFeatures(tddDir)) {
-    const pipeline = readPipeline(tddDir, featureId);
+  for (const featureId of listPipelineFeatures(sftddDir)) {
+    const pipeline = readPipeline(sftddDir, featureId);
     for (const [storyId, story] of Object.entries(pipeline.stories)) {
       const exp = story.experiment;
       if (!exp) continue;
@@ -1791,7 +1857,7 @@ function findStaleBranches(tddDir) {
       }
     }
   }
-  for (const spike of listSpikes(tddDir)) {
+  for (const spike of listSpikes(sftddDir)) {
     findings.push({
       kind: "spike",
       slug: spike.spike_slug,
@@ -1830,9 +1896,12 @@ function resolveAlembicBin(projectDir) {
 function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve2, reject) => {
     const bin = resolveAlembicBin(projectDir);
+    const env = { ...process.env };
+    env.PYTHONPATH = [projectDir, process.env.PYTHONPATH].filter(Boolean).join(path4.delimiter);
+    if (dsn) env.DATABASE_URL = dsn;
     const child = spawn(bin, args, {
       cwd: projectDir,
-      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
+      env,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -1997,7 +2066,7 @@ var UnresolvedSchemaMigrationAdapterError = class extends Error {
 };
 
 // scripts/lakebase/adapters/alembic-adapter.ts
-async function buildDsn2(args) {
+async function buildDsn(args) {
   const result = await getConnection({
     output: "dsn",
     instance: args.instance,
@@ -2048,7 +2117,7 @@ var AlembicAdapter = {
     return false;
   },
   async apply(args) {
-    const dsn = await buildDsn2(args);
+    const dsn = await buildDsn(args);
     try {
       const legacy = await applyAlembic({ projectDir: args.projectDir, dsn });
       return {
@@ -2068,7 +2137,7 @@ var AlembicAdapter = {
     }
   },
   async rollback(args) {
-    const dsn = await buildDsn2(args);
+    const dsn = await buildDsn(args);
     try {
       const legacy = await rollbackAlembic({
         projectDir: args.projectDir,
@@ -2089,7 +2158,7 @@ var AlembicAdapter = {
     }
   },
   async status(args) {
-    const dsn = await buildDsn2(args);
+    const dsn = await buildDsn(args);
     try {
       const legacy = await statusAlembic({ projectDir: args.projectDir, dsn });
       return {
@@ -2124,7 +2193,7 @@ var AlembicAdapter = {
         throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
       }
       const revId = migrationTimestamp();
-      const dsn = args.autogenerate ? await buildDsn2({
+      const dsn = args.autogenerate ? await buildDsn({
         instance: args.instance,
         branch: args.branch,
         database: args.database,
@@ -2296,7 +2365,7 @@ async function statusFlyway(ctx) {
 }
 
 // scripts/lakebase/adapters/flyway-adapter.ts
-async function buildDsn3(args) {
+async function buildDsn2(args) {
   const result = await getConnection({
     output: "dsn",
     instance: args.instance,
@@ -2335,7 +2404,7 @@ var FlywayAdapter = {
     return fs8.existsSync(path7.join(projectDir, "pom.xml"));
   },
   async apply(args) {
-    const dsn = await buildDsn3(args);
+    const dsn = await buildDsn2(args);
     try {
       const legacy = await applyFlyway({ projectDir: args.projectDir, dsn });
       return {
@@ -2358,7 +2427,7 @@ var FlywayAdapter = {
   // support it. Callers MUST property-check (`adapter.rollback?` /
   // `if (adapter.rollback)`) before invoking.
   async status(args) {
-    const dsn = await buildDsn3(args);
+    const dsn = await buildDsn2(args);
     try {
       const legacy = await statusFlyway({ projectDir: args.projectDir, dsn });
       return {
@@ -2570,7 +2639,7 @@ async function statusKnex(ctx) {
 }
 
 // scripts/lakebase/adapters/knex-adapter.ts
-async function buildDsn4(args) {
+async function buildDsn3(args) {
   const result = await getConnection({
     output: "dsn",
     instance: args.instance,
@@ -2607,7 +2676,7 @@ var KnexAdapter = {
     return KNEXFILE_VARIANTS2.some((name) => fs10.existsSync(path9.join(projectDir, name)));
   },
   async apply(args) {
-    const dsn = await buildDsn4(args);
+    const dsn = await buildDsn3(args);
     try {
       const legacy = await applyKnex({ projectDir: args.projectDir, dsn });
       return {
@@ -2627,7 +2696,7 @@ var KnexAdapter = {
     }
   },
   async rollback(args) {
-    const dsn = await buildDsn4(args);
+    const dsn = await buildDsn3(args);
     try {
       const legacy = await rollbackKnex({
         projectDir: args.projectDir,
@@ -2648,7 +2717,7 @@ var KnexAdapter = {
     }
   },
   async status(args) {
-    const dsn = await buildDsn4(args);
+    const dsn = await buildDsn3(args);
     try {
       const legacy = await statusKnex({ projectDir: args.projectDir, dsn });
       return {
@@ -2765,7 +2834,7 @@ async function runDoctor(args) {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
-  for (const stale of findStaleBranches(resolveTddDir(projectDir))) {
+  for (const stale of findStaleBranches(resolveSftddDir(projectDir))) {
     const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
     findings.push({
       id: `stale-${stale.kind}`,
@@ -2967,14 +3036,15 @@ async function fixFinding(args) {
           );
         }
         const sanitized = sanitizeBranchName(branch);
+        const envFile = path11.join(args.projectDir, ".env");
         updateEnvConnection({
-          envPath: path11.join(args.projectDir, ".env"),
+          envPath: envFile,
+          projectId: readEnvVar(envFile, "LAKEBASE_PROJECT_ID") ?? "",
           branchId: sanitized,
-          databaseUrl: "",
-          username: "",
-          password: ""
+          username: readEnvVar(envFile, "DB_USERNAME") ?? "",
+          endpointHost: readEnvVar(envFile, "LAKEBASE_HOST")
         });
-        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (metadata only; the app mints its token at runtime)`;
         break;
       }
       case "head-branch-drift": {

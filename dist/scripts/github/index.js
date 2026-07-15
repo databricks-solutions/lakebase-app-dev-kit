@@ -336,47 +336,10 @@ async function listSecretNames(ownerRepo) {
 // scripts/github/pr.ts
 import { Octokit as Octokit4, RequestError as RequestError4 } from "octokit";
 
-// scripts/lakebase/branch-delete.ts
-import { execFile as execFile2 } from "child_process";
-import { promisify as promisify2 } from "util";
-
-// scripts/lakebase/branch-utils.ts
-import { execFile } from "child_process";
+// scripts/lakebase/databricks-cli.ts
+import { execFile, execFileSync as execFileSync3 } from "child_process";
 import { promisify } from "util";
-
-// scripts/lakebase/branch-id.ts
-var UID_PATTERN = /^br-[a-z0-9-]+$/;
-function looksLikeBranchUid(s) {
-  return UID_PATTERN.test(s);
-}
-function asBranchName(s) {
-  if (!s) throw new TypeError("BranchName cannot be empty");
-  if (looksLikeBranchUid(s)) {
-    throw new TypeError(
-      `'${s}' looks like a BranchUid (br-\u2026 pattern), not a BranchName. BranchName is the resource-path leaf (e.g. 'production', 'staging', 'feature-add-orders'); BranchUid is the system identifier returned by list-branches as the 'uid' field. The Lakebase API rejects a BranchUid in any path-shaped field. If you really mean a BranchUid, use asBranchUid() instead \u2013 but verify you're calling a function that takes one.`
-    );
-  }
-  return s;
-}
-function asBranchUid(s) {
-  if (!s) throw new TypeError("BranchUid cannot be empty");
-  if (!looksLikeBranchUid(s)) {
-    throw new TypeError(
-      `'${s}' is not a BranchUid (must match the br-\u2026 pattern). If you have a BranchName (resource-path leaf like 'production'), use asBranchName() instead.`
-    );
-  }
-  return s;
-}
-function branchNameFromResourcePath(path) {
-  if (!path.includes("/branches/")) return null;
-  const leaf = path.split("/branches/").pop();
-  if (!leaf) return null;
-  try {
-    return asBranchName(leaf);
-  } catch {
-    return null;
-  }
-}
+import { join as join2 } from "path";
 
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
@@ -389,6 +352,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -417,8 +381,200 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
-// scripts/lakebase/branch-utils.ts
+// scripts/lakebase/databricks-profile.ts
+import * as fs from "fs";
+import { execFileSync as execFileSync2 } from "child_process";
+
+// scripts/util/exec.ts
+import * as cp from "child_process";
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = execFileSync2("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+
+// scripts/lakebase/env-file.ts
+import * as fs2 from "fs";
+import * as path from "path";
+function readEnvVar(envPath, key) {
+  if (!fs2.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs2.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+
+// scripts/lakebase/databricks-cli.ts
 var execFileP = promisify(execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar(join2(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+
+// scripts/lakebase/branch-id.ts
+var UID_PATTERN = /^br-[a-z0-9-]+$/;
+function looksLikeBranchUid(s) {
+  return UID_PATTERN.test(s);
+}
+function asBranchName(s) {
+  if (!s) throw new TypeError("BranchName cannot be empty");
+  if (looksLikeBranchUid(s)) {
+    throw new TypeError(
+      `'${s}' looks like a BranchUid (br-\u2026 pattern), not a BranchName. BranchName is the resource-path leaf (e.g. 'production', 'staging', 'feature-add-orders'); BranchUid is the system identifier returned by list-branches as the 'uid' field. The Lakebase API rejects a BranchUid in any path-shaped field. If you really mean a BranchUid, use asBranchUid() instead \u2013 but verify you're calling a function that takes one.`
+    );
+  }
+  return s;
+}
+function asBranchUid(s) {
+  if (!s) throw new TypeError("BranchUid cannot be empty");
+  if (!looksLikeBranchUid(s)) {
+    throw new TypeError(
+      `'${s}' is not a BranchUid (must match the br-\u2026 pattern). If you have a BranchName (resource-path leaf like 'production'), use asBranchName() instead.`
+    );
+  }
+  return s;
+}
+function branchNameFromResourcePath(path2) {
+  if (!path2.includes("/branches/")) return null;
+  const leaf = path2.split("/branches/").pop();
+  if (!leaf) return null;
+  try {
+    return asBranchName(leaf);
+  } catch {
+    return null;
+  }
+}
+
+// scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -483,24 +639,11 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/branch-delete.ts
-var execFileP2 = promisify2(execFile2);
 async function deleteBranch(args) {
   const fullPath = await resolveBranchPath(args.branch, {
     instance: args.instance,
@@ -523,25 +666,14 @@ async function deleteBranch(args) {
   }
   await dbcli2(["postgres", "delete-branch", fullPath], args.host);
 }
-async function dbcli2(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP2("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli2(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/util/sanitize-branch-name.ts
+var LAKEBASE_BRANCH_NAME_MAX = 63;
 function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
   while (name.length < 3) name += "-x";
   return name;
 }
@@ -757,7 +889,10 @@ async function mergePullRequest(args) {
       } catch {
       }
     }
-    return data.message || `Merged PR #${args.pullNumber}`;
+    return {
+      message: data.message || `Merged PR #${args.pullNumber}`,
+      sha: data.sha || void 0
+    };
   } catch (err) {
     wrap4(err, "Failed to merge pull request");
   }
@@ -778,6 +913,7 @@ async function listWorkflowRuns(ownerRepo, limit = 5) {
       conclusion: r.conclusion || "",
       branch: r.head_branch || "",
       event: r.event || "",
+      headSha: r.head_sha || void 0,
       createdAt: r.created_at || void 0,
       updatedAt: r.updated_at || void 0
     }));
@@ -828,7 +964,7 @@ async function mergePairedPullRequest(args) {
       `Could not read PR head branch before merge: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  const message = await mergePullRequest({
+  const { message, sha: mergeCommitSha } = await mergePullRequest({
     ownerRepo: args.ownerRepo,
     pullNumber: args.pullNumber,
     method: args.method,
@@ -848,7 +984,7 @@ async function mergePairedPullRequest(args) {
   } else if (deleteLakebaseBranch && !headBranch) {
     warnings.push("Skipped Lakebase branch cleanup \u2013 could not resolve PR head branch name");
   }
-  return { message, headBranch, lakebaseBranchDeleted, warnings };
+  return { message, headBranch, lakebaseBranchDeleted, mergeCommitSha, warnings };
 }
 export {
   GITHUB_SCOPES,

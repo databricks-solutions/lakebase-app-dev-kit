@@ -27,6 +27,10 @@ interface CopyDirSubstitutedArgs {
 }
 declare function copyDirSubstituted(srcDir: string, destDir: string, args?: CopyDirSubstitutedArgs): void;
 
+/** Max Lakebase branch-name length (the Postgres identifier limit). A name over
+ *  this is truncated on create, so any name a caller also uses to LOOK UP the
+ *  branch must already be within it, or the read misses ("branch id not found"). */
+declare const LAKEBASE_BRANCH_NAME_MAX = 63;
 declare function sanitizeBranchName(gitBranch: string): string;
 
 interface SyncCiSecretsArgs {
@@ -157,4 +161,4 @@ declare function pollUntilDefined<T>(probe: (ctx: {
     elapsedMs: number;
 }) => Promise<T | undefined>, opts: Omit<PollUntilArgs<T>, "probe">): Promise<PollUntilResult<T>>;
 
-export { type CopyDirSubstitutedArgs, type OwnerRepo, PROXY_ENV_KEYS, type PollProbeDone, type PollProbePending, type PollProbeResult, type PollUntilArgs, type PollUntilDoneResult, type PollUntilResult, type PollUntilTimeoutResult, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, pollUntil, pollUntilDefined, proxyEnvSubset, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets, withProxyEnv };
+export { type CopyDirSubstitutedArgs, LAKEBASE_BRANCH_NAME_MAX, type OwnerRepo, PROXY_ENV_KEYS, type PollProbeDone, type PollProbePending, type PollProbeResult, type PollUntilArgs, type PollUntilDoneResult, type PollUntilResult, type PollUntilTimeoutResult, type SyncCiSecretsArgs, copyDirSubstituted, delay, extractZipToDir, formatOwnerRepo, isCliEntry, parseOwnerRepo, patchPomForLakebase, pollUntil, pollUntilDefined, proxyEnvSubset, sanitizeArtifactId, sanitizeBranchName, syncCiSecrets, withProxyEnv };

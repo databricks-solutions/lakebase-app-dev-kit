@@ -66,6 +66,17 @@ else
 
   remote_sha() { git ls-remote "$GH_URL" "$ref" 2>/dev/null | awk 'NR==1{print $1}'; }
 
+  # Completeness, not mere presence: the warm check used to accept any install
+  # with a dist/ dir, but a RELEASE artifact can ship a dist/ that is missing an
+  # entire bin family (the sftdd/ subtree was gitignored + never force-added, so
+  # 48 of 75 bins had no file). That reads as "warm" yet every lakebase-sftdd-*
+  # call dies with MODULE_NOT_FOUND. This verifies EVERY package.json bin target
+  # exists under the install, so a partial dist fails loud at warm time (and on
+  # --rewarm) instead of silently at first use. Returns 0 when complete.
+  kit_bins_complete() {
+    node -e 'const fs=require("fs"),p=require("path"),r=process.argv[1];let b={};try{b=(require(r+"/package.json").bin)||{}}catch(e){process.stderr.write("lk: cannot read kit package.json at "+r+"\n");process.exit(1)}const m=Object.values(b).filter(x=>!fs.existsSync(p.join(r,x)));if(m.length){process.stderr.write("lk: kit dist is INCOMPLETE , "+m.length+"/"+Object.keys(b).length+" bin(s) have no file (e.g. "+m.slice(0,3).join(", ")+"). Release-artifact gap: the shipped dist/ omits bins. A complete rebuilt dist is required.\n");process.exit(1)}' "$1"
+  }
+
   # Install `<committish>` fresh into the cache via a temp prefix + atomic rename
   # (so parallel role spawns never see a half-populated cache). Records the
   # resolved SHA so a later warm can detect a moved branch. Returns nonzero on
@@ -93,6 +104,7 @@ else
   if [ "$bin" = "--rewarm" ]; then
     sha="$(remote_sha)"
     install_kit "${sha:-$ref}" "$sha" || { echo "lk: --rewarm failed for '${ref}'" >&2; exit 1; }
+    kit_bins_complete "$kit_dir" || { echo "lk: --rewarm installed an INCOMPLETE dist for '${ref}' (cache: ${cache})" >&2; exit 1; }
     exit 0
   fi
 
@@ -101,7 +113,9 @@ else
   # moving branch , when the remote SHA has advanced past the cached one.
   if [ "$bin" = "--warm" ]; then
     need_install=0
-    [ -d "${kit_dir}/dist" ] || need_install=1
+    # Reinstall when dist/ is absent OR present-but-incomplete (a partial release
+    # artifact); the bin-completeness check is the real "is it usable" signal.
+    { [ -d "${kit_dir}/dist" ] && kit_bins_complete "$kit_dir" >/dev/null 2>&1; } || need_install=1
     if [ "$need_install" -eq 0 ] && [ "$is_sha" -eq 0 ]; then
       cached_sha=""; [ -f "${cache}/.kit-sha" ] && cached_sha="$(tr -d '[:space:]' < "${cache}/.kit-sha")"
       live_sha="$(remote_sha)"
@@ -112,6 +126,7 @@ else
       install_kit "${sha:-$ref}" "$sha" || true
     fi
     [ -d "${kit_dir}/dist" ] || { echo "lk: could not warm the kit for ref '${ref}' (cache: ${cache})" >&2; exit 1; }
+    kit_bins_complete "$kit_dir" || { echo "lk: kit for ref '${ref}' warmed but its dist is incomplete (cache: ${cache})" >&2; exit 1; }
     exit 0
   fi
 

@@ -97,6 +97,7 @@ __export(lakebase_exports, {
   deployClaudeAgents: () => deployClaudeAgents,
   deployClaudeCommands: () => deployClaudeCommands,
   deployClaudeSkills: () => deployClaudeSkills,
+  deployClientProject: () => deployClientProject,
   deployDeployTargets: () => deployDeployTargets,
   deployEnv: () => deployEnv,
   deployEnvExample: () => deployEnvExample,
@@ -182,6 +183,7 @@ __export(lakebase_exports, {
   pushFailureHint: () => pushFailureHint,
   queryBranchSchema: () => queryBranchSchema,
   queryBranchTables: () => queryBranchTables,
+  readEnvVar: () => readEnvVar,
   readTargets: () => readTargets,
   readWorkflowState: () => readWorkflowState,
   recoverOrphans: () => recoverOrphans,
@@ -200,6 +202,7 @@ __export(lakebase_exports, {
   resolveMigrationLayout: () => resolveMigrationLayout,
   resolveParentBranch: () => resolveParentBranch,
   resolveProfileForHost: () => resolveProfileForHost,
+  resolveProfileForHostSync: () => resolveProfileForHostSync,
   resolveProtectedTierNames: () => resolveProtectedTierNames,
   rollbackDeploy: () => rollbackDeploy,
   rollbackSchemaMigration: () => rollbackSchemaMigration,
@@ -255,7 +258,7 @@ var fs = __toESM(require("fs"), 1);
 var import_node_path = require("path");
 var ARTIFACT_ROOT = ".sftdd";
 var LEGACY_ARTIFACT_ROOT = ".tdd";
-function resolveTddDir(projectDir = process.cwd()) {
+function resolveSftddDir(projectDir = process.cwd()) {
   const next = (0, import_node_path.join)(projectDir, ARTIFACT_ROOT);
   if (fs.existsSync(next)) return next;
   const legacy = (0, import_node_path.join)(projectDir, LEGACY_ARTIFACT_ROOT);
@@ -276,12 +279,8 @@ function findFeatureDir(tdd, featureId) {
 }
 
 // scripts/lakebase/adopt-lakebase-project.ts
-var fs12 = __toESM(require("fs"), 1);
-var path10 = __toESM(require("path"), 1);
-
-// scripts/lakebase/lakebase-project.ts
-var import_node_child_process = require("child_process");
-var import_node_util = require("util");
+var fs14 = __toESM(require("fs"), 1);
+var path11 = __toESM(require("path"), 1);
 
 // scripts/lakebase/branch-id.ts
 var UID_PATTERN = /^br-[a-z0-9-]+$/;
@@ -328,6 +327,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -359,8 +359,292 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
+// scripts/lakebase/databricks-cli.ts
+var import_node_child_process2 = require("child_process");
+var import_node_util = require("util");
+var import_node_path2 = require("path");
+
+// scripts/lakebase/databricks-profile.ts
+var fs2 = __toESM(require("fs"), 1);
+var import_node_child_process = require("child_process");
+
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+function shq(s) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+function exec2(command, opts = {}) {
+  return new Promise((resolve3, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve3(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/databricks-profile.ts
+function normalizeHost(host) {
+  return host.trim().replace(/\/+$/, "").toLowerCase();
+}
+function selectProfileForHost(profilesJson, host) {
+  const target = normalizeHost(host);
+  if (!target) return void 0;
+  const start = profilesJson.indexOf("{");
+  if (start < 0) return void 0;
+  let parsed;
+  try {
+    parsed = JSON.parse(profilesJson.slice(start));
+  } catch {
+    return void 0;
+  }
+  const profiles = parsed.profiles;
+  if (!Array.isArray(profiles)) return void 0;
+  const names = profiles.filter((p) => {
+    if (!p || typeof p !== "object") return false;
+    const rec = p;
+    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
+  }).map((p) => p.name);
+  const distinct = Array.from(new Set(names));
+  return distinct.length === 1 ? distinct[0] : void 0;
+}
+async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+function resolveProfileForHostSync(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
+  if (!normalizeHost(host)) return void 0;
+  let out;
+  try {
+    out = (0, import_node_child_process.execFileSync)("databricks", ["auth", "profiles", "-o", "json"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs
+    });
+  } catch {
+    return void 0;
+  }
+  return selectProfileForHost(out, host);
+}
+async function ensureProfilePinned(args) {
+  const { envPath } = args;
+  if (!fs2.existsSync(envPath)) return { reason: "no-env" };
+  const lines = fs2.readFileSync(envPath, "utf-8").split("\n");
+  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
+  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
+    return { reason: "already-pinned" };
+  }
+  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
+  if (hostIdx < 0) return { reason: "no-host" };
+  const hostLine = lines[hostIdx];
+  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
+  if (!host) return { reason: "no-host" };
+  const resolve3 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve3(host);
+  if (!profile) return { reason: "no-match" };
+  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
+  fs2.writeFileSync(envPath, lines.join("\n"));
+  return { pinned: profile };
+}
+
+// scripts/lakebase/env-file.ts
+var fs3 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+function readEnvVar(envPath, key) {
+  if (!fs3.existsSync(envPath)) return void 0;
+  let value;
+  for (const line of fs3.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith("#") || !trimmed.startsWith(`${key}=`)) continue;
+    value = trimmed.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return value && value.length > 0 ? value : void 0;
+}
+function writeEnvFile(args) {
+  const host = args.databricksHost.replace(/\/+$/, "");
+  const envContent = [
+    "# Lakebase project configuration",
+    "# Created by @databricks-solutions/lakebase-app-dev-kit",
+    "",
+    `DATABRICKS_HOST=${host}`,
+    `LAKEBASE_PROJECT_ID=${args.lakebaseProjectId}`,
+    "",
+    "# Connection METADATA (auto-populated on branch switch). No DB token is",
+    "# stored here: the app + migrations mint a short-lived Lakebase credential",
+    "# at runtime from this metadata (endpoint projects/<id>/branches/<branch>/",
+    "# endpoints/<endpoint>). Set DATABASE_URL explicitly to override (CI/Docker).",
+    "# LAKEBASE_BRANCH_ID=",
+    "# LAKEBASE_HOST=",
+    "# LAKEBASE_ENDPOINT=primary",
+    "# DB_USERNAME=",
+    ""
+  ].join("\n");
+  const envPath = path.join(args.projectDir, ".env");
+  fs3.writeFileSync(envPath, envContent);
+  return envPath;
+}
+var CONNECTION_KEYS = [
+  "DATABASE_URL",
+  "DB_PASSWORD",
+  "DB_USERNAME",
+  "LAKEBASE_PROJECT_ID",
+  "LAKEBASE_BRANCH_ID",
+  "LAKEBASE_HOST",
+  "LAKEBASE_ENDPOINT"
+];
+function updateEnvConnection(args) {
+  const existing = fs3.existsSync(args.envPath) ? fs3.readFileSync(args.envPath, "utf-8") : "";
+  const preserved = existing.split("\n").filter((line) => {
+    const trimmed = line.trimStart();
+    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
+  }).join("\n").replace(/\n+$/, "");
+  const lines = [];
+  if (args.comment !== void 0) {
+    lines.push(args.comment);
+  }
+  lines.push(`LAKEBASE_PROJECT_ID=${args.projectId}`);
+  if (args.endpointHost !== void 0) {
+    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
+  }
+  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
+  lines.push(`LAKEBASE_ENDPOINT=${args.endpoint ?? "primary"}`);
+  lines.push(`DB_USERNAME=${args.username}`);
+  lines.push("");
+  const block = lines.join("\n");
+  const content = preserved ? `${preserved}
+${block}` : block;
+  fs3.mkdirSync(path.dirname(args.envPath), { recursive: true });
+  fs3.writeFileSync(args.envPath, content);
+}
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process2.execFile);
+var DatabricksCliError = class extends Error {
+  constructor(message, profile, stderr) {
+    super(message);
+    this.profile = profile;
+    this.stderr = stderr;
+    this.name = "DatabricksCliError";
+  }
+  profile;
+  stderr;
+};
+var DatabricksAuthError = class extends DatabricksCliError {
+  constructor(profile, detail) {
+    const login = `databricks auth login${profile ? ` --profile ${profile}` : ""}`;
+    super(
+      `Databricks authentication failed${profile ? ` for profile "${profile}"` : ""}: the cached token is missing or expired. Re-authenticate, then re-run:
+  ${login}
+${detail}`,
+      profile,
+      detail
+    );
+    this.name = "DatabricksAuthError";
+  }
+};
+var profileByHost = /* @__PURE__ */ new Map();
+var profileByEnvFile = /* @__PURE__ */ new Map();
+function isAuthFailure(text) {
+  return /refresh token is invalid|auth login|could not be retrieved because|not authenticated|no valid.*(credential|token)|invalid.*(access token|credential)|\b401\b|unauthorized/i.test(
+    text
+  );
+}
+function resolveProfile(opts) {
+  const base = opts.env ?? process.env;
+  if (opts.profile) return opts.profile;
+  const envProfile = base.DATABRICKS_CONFIG_PROFILE?.trim();
+  if (envProfile) return envProfile;
+  const cwd = opts.cwd ?? process.cwd();
+  let fromEnvFile;
+  if (profileByEnvFile.has(cwd)) {
+    fromEnvFile = profileByEnvFile.get(cwd);
+  } else {
+    fromEnvFile = readEnvVar((0, import_node_path2.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    profileByEnvFile.set(cwd, fromEnvFile);
+  }
+  if (fromEnvFile) return fromEnvFile;
+  const host = opts.host?.trim();
+  if (!host) return void 0;
+  if (profileByHost.has(host)) return profileByHost.get(host);
+  const resolved = resolveProfileForHostSync(host, opts.timeout);
+  profileByHost.set(host, resolved);
+  return resolved;
+}
+function buildInvocation(args, opts) {
+  const base = opts.env ?? process.env;
+  const trimmedHost = opts.host?.replace(/\/+$/, "");
+  const env = trimmedHost ? { ...base, DATABRICKS_HOST: trimmedHost } : base;
+  const profile = resolveProfile(opts);
+  const argv = profile && !args.includes("--profile") ? [...args, "--profile", profile] : args;
+  return { argv, env, profile };
+}
+function classifyDatabricksError(err, argv, profile) {
+  const e = err;
+  const asText = (v) => typeof v === "string" ? v : Buffer.isBuffer(v) ? v.toString("utf8") : "";
+  const stderr = asText(e.stderr).trim();
+  const stdout = asText(e.stdout).trim();
+  const haystack = `${e.message ?? ""}
+${stderr}
+${stdout}`;
+  if (isAuthFailure(haystack)) {
+    return new DatabricksAuthError(profile, stderr || stdout || (e.message ?? ""));
+  }
+  const killed = e.killed === true;
+  const signal = e.signal ?? void 0;
+  const detail = stderr ? `
+stderr: ${stderr}` : stdout ? `
+stdout: ${stdout}` : killed || signal ? `
+(no output; the CLI was killed${signal ? ` by ${signal}` : ""}, likely a TIMEOUT; raise the budget via the matching LAKEBASE_KIT_TIMEOUT_* env var)` : e.code !== void 0 ? `
+(no stderr/stdout; exit ${e.code})` : "";
+  return new DatabricksCliError(
+    `databricks ${argv.join(" ")} failed: ${e.message}${detail}`,
+    profile,
+    stderr || stdout
+  );
+}
+async function runDatabricks(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    const { stdout } = await execFileP("databricks", argv, {
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+    return stdout.toString();
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+function runDatabricksSync(args, opts = {}) {
+  const { argv, env, profile } = buildInvocation(args, opts);
+  try {
+    return (0, import_node_child_process2.execFileSync)("databricks", argv, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+      timeout: opts.timeout ?? KIT_TIMEOUTS.cliDefault
+    });
+  } catch (err) {
+    throw classifyDatabricksError(err, argv, profile);
+  }
+}
+
 // scripts/lakebase/lakebase-project.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process.execFile);
 var LakebaseProjectError = class extends Error {
   constructor(message) {
     super(message);
@@ -368,7 +652,7 @@ var LakebaseProjectError = class extends Error {
   }
 };
 async function createLakebaseProject(args) {
-  const raw = await dbcli(["postgres", "create-project", args.projectId, "-o", "json"], args.host);
+  const raw = await dbcli(["postgres", "create-project", args.projectId, "-o", "json"], args.host, KIT_TIMEOUTS.cliCreateProject);
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -456,62 +740,47 @@ async function getProjectRetentionDuration(args) {
   }
   return findHistoryRetentionDuration(parsed);
 }
-async function dbcli(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP("databricks", args, {
-      env,
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseProjectError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli(args, host, timeout = KIT_TIMEOUTS.cliDefault) {
+  return runDatabricks(args, { host, timeout });
 }
 
 // scripts/lakebase/scaffold.ts
-var cp = __toESM(require("child_process"), 1);
-var fs7 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
+var cp2 = __toESM(require("child_process"), 1);
+var fs9 = __toESM(require("fs"), 1);
+var path6 = __toESM(require("path"), 1);
 var import_node_url3 = require("url");
 
 // scripts/lakebase/scaffold-language.ts
-var fs6 = __toESM(require("fs"), 1);
-var path4 = __toESM(require("path"), 1);
+var fs8 = __toESM(require("fs"), 1);
+var path5 = __toESM(require("path"), 1);
 var import_node_url2 = require("url");
 
 // scripts/util/copy-dir-substituted.ts
-var fs2 = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
+var fs4 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
 var SKIP_ENTRIES = /* @__PURE__ */ new Set([".gitignore.extra", "fallback"]);
 function copyDirSubstituted(srcDir, destDir, args = {}) {
   const skip = args.skipEntries ?? SKIP_ENTRIES;
-  fs2.mkdirSync(destDir, { recursive: true });
-  for (const file of fs2.readdirSync(srcDir)) {
+  fs4.mkdirSync(destDir, { recursive: true });
+  for (const file of fs4.readdirSync(srcDir)) {
     if (skip.has(file)) continue;
-    const srcPath = path.join(srcDir, file);
-    const destPath = path.join(destDir, file);
-    if (fs2.statSync(srcPath).isDirectory()) {
+    const srcPath = path2.join(srcDir, file);
+    const destPath = path2.join(destDir, file);
+    if (fs4.statSync(srcPath).isDirectory()) {
       copyDirSubstituted(srcPath, destPath, { projectName: args.projectName, skipEntries: /* @__PURE__ */ new Set() });
     } else {
-      let content = fs2.readFileSync(srcPath, "utf-8");
+      let content = fs4.readFileSync(srcPath, "utf-8");
       if (args.projectName) {
         content = content.replace(/\{\{PROJECT_NAME\}\}/g, args.projectName);
       }
-      fs2.writeFileSync(destPath, content);
+      fs4.writeFileSync(destPath, content);
     }
   }
 }
 
 // scripts/lakebase/spring-initializr.ts
-var fs5 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
+var fs7 = __toESM(require("fs"), 1);
+var path4 = __toESM(require("path"), 1);
 var import_node_url = require("url");
 
 // scripts/util/maven-coords.ts
@@ -527,34 +796,34 @@ function sanitizeArtifactId(name) {
 }
 
 // scripts/util/zip-extract.ts
-var fs3 = __toESM(require("fs"), 1);
-var path2 = __toESM(require("path"), 1);
+var fs5 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
 var import_adm_zip = __toESM(require("adm-zip"), 1);
 function extractZipToDir(zipBuffer, targetDir) {
-  fs3.mkdirSync(targetDir, { recursive: true });
+  fs5.mkdirSync(targetDir, { recursive: true });
   const zip = new import_adm_zip.default(zipBuffer);
-  const tempDir = path2.join(targetDir, `.initializr-extract-${Date.now()}`);
+  const tempDir = path3.join(targetDir, `.initializr-extract-${Date.now()}`);
   zip.extractAllTo(tempDir, true);
-  const entries = fs3.readdirSync(tempDir).filter((e) => e !== "__MACOSX");
-  const sourceDir = entries.length === 1 && fs3.statSync(path2.join(tempDir, entries[0])).isDirectory() ? path2.join(tempDir, entries[0]) : tempDir;
+  const entries = fs5.readdirSync(tempDir).filter((e) => e !== "__MACOSX");
+  const sourceDir = entries.length === 1 && fs5.statSync(path3.join(tempDir, entries[0])).isDirectory() ? path3.join(tempDir, entries[0]) : tempDir;
   copyDirRecursive(sourceDir, targetDir);
-  fs3.rmSync(tempDir, { recursive: true, force: true });
+  fs5.rmSync(tempDir, { recursive: true, force: true });
 }
 function copyDirRecursive(src, dest) {
-  fs3.mkdirSync(dest, { recursive: true });
-  for (const entry of fs3.readdirSync(src)) {
-    const srcPath = path2.join(src, entry);
-    const destPath = path2.join(dest, entry);
-    if (fs3.statSync(srcPath).isDirectory()) {
+  fs5.mkdirSync(dest, { recursive: true });
+  for (const entry of fs5.readdirSync(src)) {
+    const srcPath = path3.join(src, entry);
+    const destPath = path3.join(dest, entry);
+    if (fs5.statSync(srcPath).isDirectory()) {
       copyDirRecursive(srcPath, destPath);
     } else {
-      fs3.copyFileSync(srcPath, destPath);
+      fs5.copyFileSync(srcPath, destPath);
     }
   }
 }
 
 // scripts/util/pom-patch.ts
-var fs4 = __toESM(require("fs"), 1);
+var fs6 = __toESM(require("fs"), 1);
 var FLYWAY_PG_DEPENDENCY = `
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -580,10 +849,10 @@ var LAKEBASE_PLUGINS = `
                 </configuration>
             </plugin>`;
 function patchPomForLakebase(pomPath) {
-  if (!fs4.existsSync(pomPath)) {
+  if (!fs6.existsSync(pomPath)) {
     throw new Error(`pom.xml not found at ${pomPath}`);
   }
-  let pom = fs4.readFileSync(pomPath, "utf-8");
+  let pom = fs6.readFileSync(pomPath, "utf-8");
   if (!pom.includes("flyway-database-postgresql")) {
     pom = pom.replace("</dependencies>", `${FLYWAY_PG_DEPENDENCY}
     </dependencies>`);
@@ -612,7 +881,7 @@ function patchPomForLakebase(pomPath) {
         </plugins>`
     );
   }
-  fs4.writeFileSync(pomPath, pom);
+  fs6.writeFileSync(pomPath, pom);
 }
 
 // scripts/lakebase/spring-initializr.ts
@@ -766,15 +1035,15 @@ function parseMetadata(body) {
 var cachedTemplatesDir;
 function findTemplatesDir() {
   if (cachedTemplatesDir) return cachedTemplatesDir;
-  const here = path3.dirname((0, import_node_url.fileURLToPath)(importMetaUrl));
+  const here = path4.dirname((0, import_node_url.fileURLToPath)(importMetaUrl));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path3.join(dir, "templates", "project");
-    if (fs5.existsSync(path3.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path4.join(dir, "templates", "project");
+    if (fs7.existsSync(path4.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir = candidate;
       return cachedTemplatesDir;
     }
-    const parent = path3.dirname(dir);
+    const parent = path4.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -809,12 +1078,12 @@ async function deploySpringStarter(args) {
     });
     extractZipToDir(zip, args.targetDir);
     initializrExtracted = true;
-    const pomPath = path3.join(args.targetDir, "pom.xml");
-    if (!fs5.existsSync(pomPath)) {
+    const pomPath = path4.join(args.targetDir, "pom.xml");
+    if (!fs7.existsSync(pomPath)) {
       throw new Error("Spring Initializr did not produce a Maven project (missing pom.xml)");
     }
-    const mvnw = path3.join(args.targetDir, "mvnw");
-    if (fs5.existsSync(mvnw)) fs5.chmodSync(mvnw, 493);
+    const mvnw = path4.join(args.targetDir, "mvnw");
+    if (fs7.existsSync(mvnw)) fs7.chmodSync(mvnw, 493);
     deploySpringOverlays(args.targetDir, templatesDir);
     patchPomForLakebase(pomPath);
   } catch (err) {
@@ -831,26 +1100,26 @@ async function deploySpringStarter(args) {
   }
 }
 function deploySpringFallback(targetDir, language, projectName, templatesDir) {
-  const fallbackDir = path3.join(templatesDir, language, "fallback");
-  if (!fs5.existsSync(fallbackDir)) {
+  const fallbackDir = path4.join(templatesDir, language, "fallback");
+  if (!fs7.existsSync(fallbackDir)) {
     throw new Error(`No fallback template found for language: ${language}`);
   }
   copyDirSubstituted(fallbackDir, targetDir, { projectName });
-  const mvnw = path3.join(targetDir, "mvnw");
-  if (fs5.existsSync(mvnw)) fs5.chmodSync(mvnw, 493);
+  const mvnw = path4.join(targetDir, "mvnw");
+  if (fs7.existsSync(mvnw)) fs7.chmodSync(mvnw, 493);
 }
 function deploySpringOverlays(targetDir, templatesDir) {
-  const overlayDir = path3.join(templatesDir, "spring");
-  if (!fs5.existsSync(overlayDir)) {
+  const overlayDir = path4.join(templatesDir, "spring");
+  if (!fs7.existsSync(overlayDir)) {
     throw new Error(`Spring overlay template not found at ${overlayDir}`);
   }
   copyDirSubstituted(overlayDir, targetDir);
 }
 function clearScaffoldArtifacts(targetDir) {
-  if (!fs5.existsSync(targetDir)) return;
-  for (const entry of fs5.readdirSync(targetDir)) {
+  if (!fs7.existsSync(targetDir)) return;
+  for (const entry of fs7.readdirSync(targetDir)) {
     if (entry === ".git") continue;
-    fs5.rmSync(path3.join(targetDir, entry), { recursive: true, force: true });
+    fs7.rmSync(path4.join(targetDir, entry), { recursive: true, force: true });
   }
 }
 
@@ -858,15 +1127,15 @@ function clearScaffoldArtifacts(targetDir) {
 var cachedTemplatesDir2;
 function findTemplatesDir2() {
   if (cachedTemplatesDir2) return cachedTemplatesDir2;
-  const here = path4.dirname((0, import_node_url2.fileURLToPath)(importMetaUrl));
+  const here = path5.dirname((0, import_node_url2.fileURLToPath)(importMetaUrl));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path4.join(dir, "templates", "project");
-    if (fs6.existsSync(path4.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path5.join(dir, "templates", "project");
+    if (fs8.existsSync(path5.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir2 = candidate;
       return cachedTemplatesDir2;
     }
-    const parent = path4.dirname(dir);
+    const parent = path5.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -885,8 +1154,8 @@ async function deployLanguageProject(args) {
     return;
   }
   const templatesDir = args.templatesDir ?? findTemplatesDir2();
-  const langSrc = path4.join(templatesDir, args.language);
-  if (!fs6.existsSync(langSrc)) {
+  const langSrc = path5.join(templatesDir, args.language);
+  if (!fs8.existsSync(langSrc)) {
     throw new Error(`No template found for language: ${args.language}`);
   }
   copyDirSubstituted(langSrc, args.targetDir, { projectName: args.projectName });
@@ -896,15 +1165,15 @@ async function deployLanguageProject(args) {
 var cachedTemplatesDir3;
 function findTemplatesDir3() {
   if (cachedTemplatesDir3) return cachedTemplatesDir3;
-  const here = path5.dirname((0, import_node_url3.fileURLToPath)(importMetaUrl));
+  const here = path6.dirname((0, import_node_url3.fileURLToPath)(importMetaUrl));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path5.join(dir, "templates", "project");
-    if (fs7.existsSync(path5.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path6.join(dir, "templates", "project");
+    if (fs9.existsSync(path6.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir3 = candidate;
       return cachedTemplatesDir3;
     }
-    const parent = path5.dirname(dir);
+    const parent = path6.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -916,27 +1185,40 @@ function templatesRoot(opts) {
   return opts?.templatesDir ?? findTemplatesDir3();
 }
 function commonDir(opts) {
-  return path5.join(templatesRoot(opts), "common");
+  return path6.join(templatesRoot(opts), "common");
 }
 function langDir(language, opts) {
-  return path5.join(templatesRoot(opts), language);
+  return path6.join(templatesRoot(opts), language);
+}
+function clientTemplateDir(opts) {
+  return path6.join(templatesRoot(opts), "client");
+}
+function listFilesRelative(dir, relPrefix = "") {
+  const out = [];
+  for (const entry of fs9.readdirSync(dir)) {
+    const p = path6.join(dir, entry);
+    const rel = relPrefix ? path6.join(relPrefix, entry) : entry;
+    if (fs9.statSync(p).isDirectory()) out.push(...listFilesRelative(p, rel));
+    else out.push(rel);
+  }
+  return out;
 }
 function copyDir(srcDir, destDir, makeExecutable, relPrefix = "") {
-  if (!fs7.existsSync(srcDir)) {
+  if (!fs9.existsSync(srcDir)) {
     throw new Error(`Source directory not found: ${srcDir}`);
   }
-  fs7.mkdirSync(destDir, { recursive: true });
+  fs9.mkdirSync(destDir, { recursive: true });
   const out = [];
-  for (const entry of fs7.readdirSync(srcDir)) {
-    const srcPath = path5.join(srcDir, entry);
-    const destPath = path5.join(destDir, entry);
-    const relPath = relPrefix ? path5.join(relPrefix, entry) : entry;
-    if (fs7.statSync(srcPath).isDirectory()) {
+  for (const entry of fs9.readdirSync(srcDir)) {
+    const srcPath = path6.join(srcDir, entry);
+    const destPath = path6.join(destDir, entry);
+    const relPath = relPrefix ? path6.join(relPrefix, entry) : entry;
+    if (fs9.statSync(srcPath).isDirectory()) {
       out.push(...copyDir(srcPath, destPath, makeExecutable, relPath));
     } else {
-      fs7.copyFileSync(srcPath, destPath);
+      fs9.copyFileSync(srcPath, destPath);
       if (makeExecutable) {
-        fs7.chmodSync(destPath, 493);
+        fs9.chmodSync(destPath, 493);
       }
       out.push(relPath);
     }
@@ -944,52 +1226,59 @@ function copyDir(srcDir, destDir, makeExecutable, relPrefix = "") {
   return out;
 }
 async function deployScripts(targetDir, opts) {
-  return copyDir(path5.join(commonDir(opts), "scripts"), path5.join(targetDir, "scripts"), true);
+  return copyDir(path6.join(commonDir(opts), "scripts"), path6.join(targetDir, "scripts"), true);
+}
+function deployClientProject(targetDir, projectName, opts) {
+  const src = clientTemplateDir(opts);
+  if (!fs9.existsSync(src)) return [];
+  const destDir = path6.join(targetDir, "client");
+  copyDirSubstituted(src, destDir, { projectName });
+  return listFilesRelative(destDir).map((r) => path6.join("client", r));
 }
 async function deployClaudeCommands(targetDir, opts) {
-  const src = path5.join(commonDir(opts), ".claude", "commands");
-  if (!fs7.existsSync(src)) {
+  const src = path6.join(commonDir(opts), ".claude", "commands");
+  if (!fs9.existsSync(src)) {
     return { written: [], skipped: [] };
   }
-  const destDir = path5.join(targetDir, ".claude", "commands");
-  fs7.mkdirSync(destDir, { recursive: true });
+  const destDir = path6.join(targetDir, ".claude", "commands");
+  fs9.mkdirSync(destDir, { recursive: true });
   const version = kitVersion(opts);
   const written = [];
   const skipped = [];
-  for (const entry of fs7.readdirSync(src)) {
+  for (const entry of fs9.readdirSync(src)) {
     if (!entry.endsWith(".md")) continue;
-    const relDest = path5.join(".claude", "commands", entry);
-    const destPath = path5.join(targetDir, relDest);
-    if (fs7.existsSync(destPath) && !opts?.force) {
+    const relDest = path6.join(".claude", "commands", entry);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs9.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    const before = fs7.readFileSync(path5.join(src, entry), "utf-8");
+    const before = fs9.readFileSync(path6.join(src, entry), "utf-8");
     const after = before.replace(/\$\{KIT_VERSION_AT_SCAFFOLD\}/g, version);
-    fs7.writeFileSync(destPath, after);
+    fs9.writeFileSync(destPath, after);
     written.push(relDest);
   }
   return { written, skipped };
 }
 async function deployClaudeAgents(targetDir, opts) {
-  const kitRoot = path5.dirname(path5.dirname(templatesRoot(opts)));
-  const src = path5.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
-  if (!fs7.existsSync(src)) {
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+  const src = path6.join(kitRoot, "skills", "lakebase-sftdd-workflows", "agents");
+  if (!fs9.existsSync(src)) {
     return { written: [], skipped: [] };
   }
-  const destDir = path5.join(targetDir, ".claude", "agents");
-  fs7.mkdirSync(destDir, { recursive: true });
+  const destDir = path6.join(targetDir, ".claude", "agents");
+  fs9.mkdirSync(destDir, { recursive: true });
   const written = [];
   const skipped = [];
-  for (const entry of fs7.readdirSync(src)) {
+  for (const entry of fs9.readdirSync(src)) {
     if (!entry.endsWith(".md")) continue;
-    const relDest = path5.join(".claude", "agents", entry);
-    const destPath = path5.join(targetDir, relDest);
-    if (fs7.existsSync(destPath) && !opts?.force) {
+    const relDest = path6.join(".claude", "agents", entry);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs9.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    fs7.copyFileSync(path5.join(src, entry), destPath);
+    fs9.copyFileSync(path6.join(src, entry), destPath);
     written.push(relDest);
   }
   return { written, skipped };
@@ -1005,40 +1294,40 @@ var PROJECT_SKILLS = [
   "databricks-core"
 ];
 async function deployClaudeSkills(targetDir, opts) {
-  const kitRoot = path5.dirname(path5.dirname(templatesRoot(opts)));
+  const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
   const written = [];
   const skipped = [];
   for (const skill of PROJECT_SKILLS) {
-    const src = path5.join(kitRoot, "skills", skill);
-    if (!fs7.existsSync(src)) continue;
-    const relDest = path5.join(".claude", "skills", skill);
-    const destPath = path5.join(targetDir, relDest);
-    if (fs7.existsSync(destPath) && !opts?.force) {
+    const src = path6.join(kitRoot, "skills", skill);
+    if (!fs9.existsSync(src)) continue;
+    const relDest = path6.join(".claude", "skills", skill);
+    const destPath = path6.join(targetDir, relDest);
+    if (fs9.existsSync(destPath) && !opts?.force) {
       skipped.push(relDest);
       continue;
     }
-    fs7.mkdirSync(path5.dirname(destPath), { recursive: true });
-    fs7.cpSync(src, destPath, { recursive: true });
+    fs9.mkdirSync(path6.dirname(destPath), { recursive: true });
+    fs9.cpSync(src, destPath, { recursive: true });
     written.push(relDest);
   }
   return { written, skipped };
 }
 async function deployWorkflows(targetDir, opts) {
   const written = copyDir(
-    path5.join(commonDir(opts), ".github", "workflows"),
-    path5.join(targetDir, ".github", "workflows"),
+    path6.join(commonDir(opts), ".github", "workflows"),
+    path6.join(targetDir, ".github", "workflows"),
     false
   );
   substituteWorkflowPlaceholders(
-    path5.join(targetDir, ".github", "workflows"),
+    path6.join(targetDir, ".github", "workflows"),
     opts
   );
   return written;
 }
 function kitVersion(opts) {
   try {
-    const kitRoot = path5.dirname(path5.dirname(templatesRoot(opts)));
-    const raw = fs7.readFileSync(path5.join(kitRoot, "package.json"), "utf-8");
+    const kitRoot = path6.dirname(path6.dirname(templatesRoot(opts)));
+    const raw = fs9.readFileSync(path6.join(kitRoot, "package.json"), "utf-8");
     const pkg = JSON.parse(raw);
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -1046,24 +1335,24 @@ function kitVersion(opts) {
   }
 }
 function substituteWorkflowPlaceholders(workflowDir, opts) {
-  if (!fs7.existsSync(workflowDir)) return;
+  if (!fs9.existsSync(workflowDir)) return;
   const version = kitVersion(opts);
-  for (const entry of fs7.readdirSync(workflowDir)) {
+  for (const entry of fs9.readdirSync(workflowDir)) {
     if (!entry.endsWith(".yml") && !entry.endsWith(".yaml")) continue;
-    const filePath = path5.join(workflowDir, entry);
-    const before = fs7.readFileSync(filePath, "utf-8");
+    const filePath = path6.join(workflowDir, entry);
+    const before = fs9.readFileSync(filePath, "utf-8");
     const after = before.replace(/\{\{LAKEBASE_KIT_VERSION\}\}/g, version);
-    if (after !== before) fs7.writeFileSync(filePath, after);
+    if (after !== before) fs9.writeFileSync(filePath, after);
   }
 }
 async function installHooks(targetDir) {
-  const scriptsDir = path5.join(targetDir, "scripts");
-  const gitHooksDir = path5.join(targetDir, ".git", "hooks");
-  if (!fs7.existsSync(path5.join(targetDir, ".git"))) {
+  const scriptsDir = path6.join(targetDir, "scripts");
+  const gitHooksDir = path6.join(targetDir, ".git", "hooks");
+  if (!fs9.existsSync(path6.join(targetDir, ".git"))) {
     throw new Error(`Not a git repo root: ${targetDir}`);
   }
-  fs7.mkdirSync(gitHooksDir, { recursive: true });
-  cp.execSync("git config --local core.hooksPath .git/hooks", {
+  fs9.mkdirSync(gitHooksDir, { recursive: true });
+  cp2.execSync("git config --local core.hooksPath .git/hooks", {
     cwd: targetDir,
     stdio: "pipe"
   });
@@ -1075,18 +1364,18 @@ async function installHooks(targetDir) {
   ];
   const installed = [];
   for (const [srcName, hookName] of hookPairs) {
-    const src = path5.join(scriptsDir, srcName);
-    if (!fs7.existsSync(src)) continue;
-    const dest = path5.join(gitHooksDir, hookName);
-    fs7.copyFileSync(src, dest);
-    fs7.chmodSync(dest, 493);
+    const src = path6.join(scriptsDir, srcName);
+    if (!fs9.existsSync(src)) continue;
+    const dest = path6.join(gitHooksDir, hookName);
+    fs9.copyFileSync(src, dest);
+    fs9.chmodSync(dest, 493);
     installed.push(hookName);
   }
   return `Installed hooks: ${installed.join(", ") || "none"}`;
 }
 function renderEnvFromTemplate(args) {
-  const src = path5.join(commonDir(args), ".env.example");
-  let content = fs7.readFileSync(src, "utf-8");
+  const src = path6.join(commonDir(args), ".env.example");
+  let content = fs9.readFileSync(src, "utf-8");
   if (args.databricksHost) {
     content = content.replace(/DATABRICKS_HOST=.*/, `DATABRICKS_HOST=${args.databricksHost}`);
   }
@@ -1096,42 +1385,42 @@ function renderEnvFromTemplate(args) {
   return content;
 }
 async function deployEnvExample(targetDir, args = {}) {
-  fs7.writeFileSync(path5.join(targetDir, ".env.example"), renderEnvFromTemplate(args));
+  fs9.writeFileSync(path6.join(targetDir, ".env.example"), renderEnvFromTemplate(args));
 }
 async function deployEnv(targetDir, args = {}) {
-  fs7.writeFileSync(path5.join(targetDir, ".env"), renderEnvFromTemplate(args));
+  fs9.writeFileSync(path6.join(targetDir, ".env"), renderEnvFromTemplate(args));
 }
 async function deployDeployTargets(targetDir, projectName, opts) {
-  const src = path5.join(commonDir(opts), "deploy-targets.yaml");
-  const dest = path5.join(targetDir, "deploy-targets.yaml");
-  if (!fs7.existsSync(src)) return;
-  let content = fs7.readFileSync(src, "utf-8");
+  const src = path6.join(commonDir(opts), "deploy-targets.yaml");
+  const dest = path6.join(targetDir, "deploy-targets.yaml");
+  if (!fs9.existsSync(src)) return;
+  let content = fs9.readFileSync(src, "utf-8");
   if (projectName) {
     content = content.replace(/\{\{PROJECT_NAME\}\}/g, projectName);
   }
-  fs7.writeFileSync(dest, content);
+  fs9.writeFileSync(dest, content);
 }
 async function deployVscodeSettings(targetDir, opts) {
-  const src = path5.join(commonDir(opts), ".vscode", "settings.json");
-  const destDir = path5.join(targetDir, ".vscode");
-  fs7.mkdirSync(destDir, { recursive: true });
-  fs7.copyFileSync(src, path5.join(destDir, "settings.json"));
+  const src = path6.join(commonDir(opts), ".vscode", "settings.json");
+  const destDir = path6.join(targetDir, ".vscode");
+  fs9.mkdirSync(destDir, { recursive: true });
+  fs9.copyFileSync(src, path6.join(destDir, "settings.json"));
 }
 async function deployGitignore(targetDir, language = "java", opts) {
-  const base = fs7.readFileSync(path5.join(commonDir(opts), ".gitignore.base"), "utf-8");
-  const extraPath = path5.join(langDir(language, opts), ".gitignore.extra");
-  const extra = fs7.existsSync(extraPath) ? fs7.readFileSync(extraPath, "utf-8") : "";
-  fs7.writeFileSync(path5.join(targetDir, ".gitignore"), base + "\n" + extra);
+  const base = fs9.readFileSync(path6.join(commonDir(opts), ".gitignore.base"), "utf-8");
+  const extraPath = path6.join(langDir(language, opts), ".gitignore.extra");
+  const extra = fs9.existsSync(extraPath) ? fs9.readFileSync(extraPath, "utf-8") : "";
+  fs9.writeFileSync(path6.join(targetDir, ".gitignore"), base + "\n" + extra);
 }
 async function patchWorkflowsForRunnerType(targetDir, runnerType) {
-  const workflowDir = path5.join(targetDir, ".github", "workflows");
+  const workflowDir = path6.join(targetDir, ".github", "workflows");
   if (runnerType === "github-hosted") {
-    for (const file of fs7.existsSync(workflowDir) ? fs7.readdirSync(workflowDir) : []) {
+    for (const file of fs9.existsSync(workflowDir) ? fs9.readdirSync(workflowDir) : []) {
       if (!file.endsWith(".yml") && !file.endsWith(".yaml")) continue;
-      const filePath = path5.join(workflowDir, file);
-      let content = fs7.readFileSync(filePath, "utf-8");
+      const filePath = path6.join(workflowDir, file);
+      let content = fs9.readFileSync(filePath, "utf-8");
       content = content.replace(/runs-on: self-hosted/g, "runs-on: ubuntu-latest");
-      fs7.writeFileSync(filePath, content);
+      fs9.writeFileSync(filePath, content);
     }
     return;
   }
@@ -1165,14 +1454,14 @@ async function patchWorkflowsForRunnerType(targetDir, runnerType) {
     ""
   ].join("\n");
   for (const file of ["pr.yml", "merge.yml"]) {
-    const filePath = path5.join(workflowDir, file);
-    if (!fs7.existsSync(filePath)) continue;
-    let content = fs7.readFileSync(filePath, "utf-8");
+    const filePath = path6.join(workflowDir, file);
+    if (!fs9.existsSync(filePath)) continue;
+    let content = fs9.readFileSync(filePath, "utf-8");
     content = content.replace(
       /- name: Set up JDK\n(?:\s+[\w-]+:.*\n)*\s+uses: actions\/setup-java@v4\n\s+with:\n(?:\s+#[^\n]*\n)*(?:\s+[\w-]+:.*\n)+/g,
       localJdkStep
     );
-    fs7.writeFileSync(filePath, content);
+    fs9.writeFileSync(filePath, content);
   }
 }
 async function scaffoldStaticAll(args) {
@@ -1239,25 +1528,32 @@ async function scaffoldAll(args) {
     report
   });
   await deployGitignore(args.targetDir, language, { templatesDir: args.templatesDir });
+  if (args.clientFramework === "react") {
+    report("Deploying React SPA client (client/)");
+    const client = deployClientProject(args.targetDir, projectName, {
+      templatesDir: args.templatesDir
+    });
+    if (client.length > 0) staticResult.client = client;
+  }
   return staticResult;
 }
 
 // scripts/lakebase/adopt-sftdd.ts
-var fs8 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
+var fs10 = __toESM(require("fs"), 1);
+var path7 = __toESM(require("path"), 1);
 var import_node_url4 = require("url");
 function adoptTdd(args) {
-  if (!fs8.existsSync(args.projectDir)) {
+  if (!fs10.existsSync(args.projectDir)) {
     throw new Error(`Project directory does not exist: ${args.projectDir}`);
   }
-  if (!fs8.existsSync(path6.join(args.projectDir, ".git"))) {
+  if (!fs10.existsSync(path7.join(args.projectDir, ".git"))) {
     throw new Error(
       `Not a git repo root: ${args.projectDir}. Run \`git init\` first, or pass a path that already has \`.git/\`.`
     );
   }
-  const dest = path6.join(args.projectDir, ARTIFACT_ROOT);
+  const dest = path7.join(args.projectDir, ARTIFACT_ROOT);
   const update = args.update === true || args.force === true;
-  if (fs8.existsSync(dest) && !update) {
+  if (fs10.existsSync(dest) && !update) {
     throw new Error(
       `${ARTIFACT_ROOT}/ already exists at ${dest}. Re-run with --update to refresh missing files (drift is reported, not overwritten) or --update --force to overwrite drifted ones.`
     );
@@ -1269,25 +1565,25 @@ function adoptTdd(args) {
   const drifted = [];
   const updated = [];
   for (const rel of entries) {
-    const fromPath = path6.join(src, rel);
-    const toPath = path6.join(dest, rel);
-    if (!fs8.existsSync(toPath)) {
+    const fromPath = path7.join(src, rel);
+    const toPath = path7.join(dest, rel);
+    if (!fs10.existsSync(toPath)) {
       if (!args.dryRun) {
-        fs8.mkdirSync(path6.dirname(toPath), { recursive: true });
-        fs8.copyFileSync(fromPath, toPath);
+        fs10.mkdirSync(path7.dirname(toPath), { recursive: true });
+        fs10.copyFileSync(fromPath, toPath);
       }
       added.push(rel);
       continue;
     }
-    const before = fs8.readFileSync(fromPath);
-    const after = fs8.readFileSync(toPath);
+    const before = fs10.readFileSync(fromPath);
+    const after = fs10.readFileSync(toPath);
     if (before.equals(after)) {
       inSync.push(rel);
       continue;
     }
     if (args.force) {
       if (!args.dryRun) {
-        fs8.copyFileSync(fromPath, toPath);
+        fs10.copyFileSync(fromPath, toPath);
       }
       updated.push(rel);
     } else {
@@ -1303,18 +1599,18 @@ function adoptTdd(args) {
   };
 }
 function walkTemplateTree(root) {
-  if (!fs8.existsSync(root)) {
+  if (!fs10.existsSync(root)) {
     throw new Error(`sftdd-bootstrap template tree missing: ${root}`);
   }
   const out = [];
   const stack = [""];
   while (stack.length) {
     const rel = stack.pop();
-    const abs = path6.join(root, rel);
-    for (const entry of fs8.readdirSync(abs)) {
-      const childRel = rel ? path6.join(rel, entry) : entry;
-      const childAbs = path6.join(abs, entry);
-      const stat = fs8.statSync(childAbs);
+    const abs = path7.join(root, rel);
+    for (const entry of fs10.readdirSync(abs)) {
+      const childRel = rel ? path7.join(rel, entry) : entry;
+      const childAbs = path7.join(abs, entry);
+      const stat = fs10.statSync(childAbs);
       if (stat.isDirectory()) {
         stack.push(childRel);
       } else {
@@ -1327,70 +1623,43 @@ function walkTemplateTree(root) {
 var cachedBootstrapDir;
 function findBootstrapDir() {
   if (cachedBootstrapDir) return cachedBootstrapDir;
-  const here = path6.dirname((0, import_node_url4.fileURLToPath)(importMetaUrl));
+  const here = path7.dirname((0, import_node_url4.fileURLToPath)(importMetaUrl));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path6.join(dir, "templates", "sftdd-bootstrap", ARTIFACT_ROOT);
-    if (fs8.existsSync(candidate)) {
+    const candidate = path7.join(dir, "templates", "sftdd-bootstrap", ARTIFACT_ROOT);
+    if (fs10.existsSync(candidate)) {
       cachedBootstrapDir = candidate;
       return cachedBootstrapDir;
     }
-    const parent = path6.dirname(dir);
+    const parent = path7.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
   throw new Error(
-    `Could not locate templates/sftdd-bootstrap/.tdd relative to ${here}. Pass explicit { bootstrapDir } to override.`
+    `Could not locate templates/sftdd-bootstrap/.sftdd relative to ${here}. Pass explicit { bootstrapDir } to override.`
   );
 }
 
 // scripts/lakebase/enable-e2e.ts
-var fs10 = __toESM(require("fs"), 1);
+var fs12 = __toESM(require("fs"), 1);
+var path9 = __toESM(require("path"), 1);
+
+// scripts/lakebase/install-playwright.ts
+var fs11 = __toESM(require("fs"), 1);
 var path8 = __toESM(require("path"), 1);
-
-// scripts/lakebase/install-playwright.ts
-var fs9 = __toESM(require("fs"), 1);
-var path7 = __toESM(require("path"), 1);
 var import_node_url5 = require("url");
-
-// scripts/util/exec.ts
-var cp2 = __toESM(require("child_process"), 1);
-function shq(s) {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
-function exec2(command, opts = {}) {
-  return new Promise((resolve3, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp2.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve3(String(stdout).trim());
-    });
-  });
-}
-
-// scripts/lakebase/install-playwright.ts
 var cachedTemplatesDir4;
 function findTemplatesDir4() {
   if (cachedTemplatesDir4) return cachedTemplatesDir4;
-  const here = path7.dirname((0, import_node_url5.fileURLToPath)(importMetaUrl));
+  const here = path8.dirname((0, import_node_url5.fileURLToPath)(importMetaUrl));
   let dir = here;
   for (let i = 0; i < 6; i++) {
-    const candidate = path7.join(dir, "templates", "project");
-    if (fs9.existsSync(path7.join(candidate, "common", ".gitignore.base"))) {
+    const candidate = path8.join(dir, "templates", "project");
+    if (fs11.existsSync(path8.join(candidate, "common", ".gitignore.base"))) {
       cachedTemplatesDir4 = candidate;
       return cachedTemplatesDir4;
     }
-    const parent = path7.dirname(dir);
+    const parent = path8.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -1399,14 +1668,14 @@ function findTemplatesDir4() {
   );
 }
 function commonDir2(opts) {
-  return path7.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
+  return path8.join(opts?.templatesDir ?? findTemplatesDir4(), "common");
 }
 var NODE_E2E_TEMPLATE_FILES = [
   "playwright.config.ts",
-  path7.join("tests", "e2e", "smoke.spec.ts")
+  path8.join("tests", "e2e", "smoke.spec.ts")
 ];
 var PYTHON_E2E_TEMPLATE_FILES = [
-  path7.join("tests", "e2e", "conftest.py")
+  path8.join("tests", "e2e", "conftest.py")
 ];
 var PLAYWRIGHT_TEMPLATE_FILES = [
   ...NODE_E2E_TEMPLATE_FILES,
@@ -1417,17 +1686,17 @@ function writePlaywrightTemplates(args) {
   const written = [];
   const skipped = [];
   for (const rel of args.files ?? PLAYWRIGHT_TEMPLATE_FILES) {
-    const from = path7.join(src, rel);
-    if (!fs9.existsSync(from)) {
+    const from = path8.join(src, rel);
+    if (!fs11.existsSync(from)) {
       throw new Error(`Kit template missing: ${from}`);
     }
-    const to = path7.join(args.projectDir, rel);
-    if (fs9.existsSync(to) && !args.force) {
+    const to = path8.join(args.projectDir, rel);
+    if (fs11.existsSync(to) && !args.force) {
       skipped.push(rel);
       continue;
     }
-    fs9.mkdirSync(path7.dirname(to), { recursive: true });
-    fs9.copyFileSync(from, to);
+    fs11.mkdirSync(path8.dirname(to), { recursive: true });
+    fs11.copyFileSync(from, to);
     written.push(rel);
   }
   return { written, skipped };
@@ -1462,12 +1731,12 @@ var PLAYWRIGHT_TEST_VERSION_RANGE = "^1.49.0";
 var PYTEST_PLAYWRIGHT_VERSION_RANGE = ">=0.5.0";
 var PYTEST_BDD_VERSION_RANGE = ">=7.0.0";
 function addPlaywrightToPackageJson(args) {
-  const pkgPath = path8.join(args.projectDir, "package.json");
-  if (!fs10.existsSync(pkgPath)) {
+  const pkgPath = path9.join(args.projectDir, "package.json");
+  if (!fs12.existsSync(pkgPath)) {
     return { patched: false, scriptAdded: false, depAdded: false };
   }
   const range = args.versionRange ?? PLAYWRIGHT_TEST_VERSION_RANGE;
-  const raw = fs10.readFileSync(pkgPath, "utf8");
+  const raw = fs12.readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(raw);
   const scripts = pkg.scripts ?? {};
   const devDependencies = pkg.devDependencies ?? {};
@@ -1485,16 +1754,16 @@ function addPlaywrightToPackageJson(args) {
   pkg.devDependencies = devDependencies;
   if (scriptAdded || depAdded) {
     const trailingNewline = raw.endsWith("\n") ? "\n" : "";
-    fs10.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailingNewline, "utf8");
+    fs12.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailingNewline, "utf8");
   }
   return { patched: true, scriptAdded, depAdded };
 }
 function addPythonDevDep(projectDir, pkg, range) {
-  const pyPath = path8.join(projectDir, "pyproject.toml");
-  if (!fs10.existsSync(pyPath)) {
+  const pyPath = path9.join(projectDir, "pyproject.toml");
+  if (!fs12.existsSync(pyPath)) {
     return { patched: false, depAdded: false };
   }
-  const original = fs10.readFileSync(pyPath, "utf8");
+  const original = fs12.readFileSync(pyPath, "utf8");
   if (new RegExp(`["']${pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`).test(original)) {
     return { patched: true, depAdded: false };
   }
@@ -1506,7 +1775,7 @@ function addPythonDevDep(projectDir, pkg, range) {
       return `${open}${body}${sep3}
 ${depLine}${close}`;
     });
-    fs10.writeFileSync(pyPath, patched, "utf8");
+    fs12.writeFileSync(pyPath, patched, "utf8");
     return { patched: true, depAdded: true };
   }
   const trimmed = original.replace(/\n+$/, "\n");
@@ -1516,7 +1785,7 @@ dev = [
 ${depLine}
 ]
 `;
-  fs10.writeFileSync(pyPath, trimmed + block, "utf8");
+  fs12.writeFileSync(pyPath, trimmed + block, "utf8");
   return { patched: true, depAdded: true };
 }
 function ensurePythonE2eDeps(args) {
@@ -1527,11 +1796,11 @@ function ensurePythonBddDeps(args) {
 }
 var RUN_TESTS_E2E_MARKER = "# run Playwright E2E suite when configured";
 function addE2eToRunTestsScript(args) {
-  const scriptPath = path8.join(args.projectDir, "scripts", "run-tests.sh");
-  if (!fs10.existsSync(scriptPath)) {
+  const scriptPath = path9.join(args.projectDir, "scripts", "run-tests.sh");
+  if (!fs12.existsSync(scriptPath)) {
     return { patched: false, inserted: false };
   }
-  const original = fs10.readFileSync(scriptPath, "utf8");
+  const original = fs12.readFileSync(scriptPath, "utf8");
   if (original.includes(RUN_TESTS_E2E_MARKER)) {
     return { patched: true, inserted: false };
   }
@@ -1553,20 +1822,43 @@ function addE2eToRunTestsScript(args) {
     '  echo "Running Python E2E tests (pytest tests/e2e)..."',
     // pytest-playwright provides the `page` fixture but needs its browser
     // binaries; install chromium first (idempotent, cached after the first
-    // run), then run the suite. && so a failed browser install fails loudly
+    // run). Kept under `set -e` so a failed browser install still fails loudly
     // instead of letting pytest error with a bare "Executable doesn't exist".
-    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium && uv run --extra dev pytest tests/e2e)',
+    '  (cd "$REPO_ROOT" && uv run --extra dev playwright install chromium)',
+    // Run the suite with the exit code captured. pytest returns 5 when it
+    // collects zero tests; an early story legitimately ships no E2E specs yet
+    // (only the scaffolded conftest), so an empty tests/e2e must NOT fail the
+    // run, exactly as the marker-split base run treats exit 5. Any other
+    // non-zero is a real E2E failure and propagates.
+    "  set +e",
+    '  (cd "$REPO_ROOT" && uv run --extra dev pytest tests/e2e)',
+    "  e2e_rc=$?",
+    "  set -e",
+    '  if [ "$e2e_rc" -ne 0 ] && [ "$e2e_rc" -ne 5 ]; then exit "$e2e_rc"; fi',
     "fi",
     ""
   ].join("\n");
-  fs10.writeFileSync(scriptPath, trimmed + block, "utf8");
+  fs12.writeFileSync(scriptPath, trimmed + block, "utf8");
   return { patched: true, inserted: true };
 }
 function enableE2eForProject(args) {
-  const rootPkg = path8.join(args.projectDir, "package.json");
-  const isNode = args.language === "nodejs" || args.language === "node" || fs10.existsSync(rootPkg);
+  if (args.clientOwnsE2e) {
+    const isPython = args.language === "python" || fs12.existsSync(path9.join(args.projectDir, "pyproject.toml"));
+    if (isPython) ensurePythonBddDeps({ projectDir: args.projectDir });
+    return {
+      templatesWritten: [],
+      templatesSkipped: [
+        .../* @__PURE__ */ new Set([...PLAYWRIGHT_TEMPLATE_FILES, ...PYTHON_E2E_TEMPLATE_FILES])
+      ],
+      packageJson: { patched: false, scriptAdded: false, depAdded: false },
+      pyproject: { patched: false, depAdded: false },
+      runTestsScript: { patched: false, inserted: false }
+    };
+  }
+  const rootPkg = path9.join(args.projectDir, "package.json");
+  const isNode = args.language === "nodejs" || args.language === "node" || fs12.existsSync(rootPkg);
   if (!isNode) {
-    const isPython = args.language === "python" || fs10.existsSync(path8.join(args.projectDir, "pyproject.toml"));
+    const isPython = args.language === "python" || fs12.existsSync(path9.join(args.projectDir, "pyproject.toml"));
     const templates2 = isPython ? writePlaywrightTemplates({
       projectDir: args.projectDir,
       force: args.force,
@@ -1608,16 +1900,16 @@ function enableE2eForProject(args) {
 }
 
 // scripts/lakebase/enable-infra.ts
-var fs11 = __toESM(require("fs"), 1);
-var path9 = __toESM(require("path"), 1);
+var fs13 = __toESM(require("fs"), 1);
+var path10 = __toESM(require("path"), 1);
 var RUN_TESTS_INFRA_MARKER = "# Run Lakebase [Infra]-tag suite when wired";
 function addInfraToPackageJson(args) {
-  const pkgPath = path9.join(args.projectDir, "package.json");
-  if (!fs11.existsSync(pkgPath)) {
+  const pkgPath = path10.join(args.projectDir, "package.json");
+  if (!fs13.existsSync(pkgPath)) {
     return { patched: false, scriptAdded: false };
   }
   const scriptValue = args.scriptValue ?? "npx --yes lakebase-infra-runner";
-  const raw = fs11.readFileSync(pkgPath, "utf8");
+  const raw = fs13.readFileSync(pkgPath, "utf8");
   const pkg = JSON.parse(raw);
   const scripts = pkg.scripts ?? {};
   let scriptAdded = false;
@@ -1628,16 +1920,16 @@ function addInfraToPackageJson(args) {
   pkg.scripts = scripts;
   if (scriptAdded) {
     const trailing = raw.endsWith("\n") ? "\n" : "";
-    fs11.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailing, "utf8");
+    fs13.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + trailing, "utf8");
   }
   return { patched: true, scriptAdded };
 }
 function addInfraToRunTestsScript(args) {
-  const scriptPath = path9.join(args.projectDir, "scripts", "run-tests.sh");
-  if (!fs11.existsSync(scriptPath)) {
+  const scriptPath = path10.join(args.projectDir, "scripts", "run-tests.sh");
+  if (!fs13.existsSync(scriptPath)) {
     return { patched: false, inserted: false };
   }
-  const original = fs11.readFileSync(scriptPath, "utf8");
+  const original = fs13.readFileSync(scriptPath, "utf8");
   if (original.includes(RUN_TESTS_INFRA_MARKER)) {
     return { patched: true, inserted: false };
   }
@@ -1653,7 +1945,7 @@ function addInfraToRunTestsScript(args) {
     "fi",
     ""
   ].join("\n");
-  fs11.writeFileSync(scriptPath, trimmed + block, "utf8");
+  fs13.writeFileSync(scriptPath, trimmed + block, "utf8");
   return { patched: true, inserted: true };
 }
 function enableInfraForProject(args) {
@@ -1671,10 +1963,10 @@ async function adoptLakebaseProject(args) {
   const filesWritten = [];
   const dryRun = args.dryRun === true;
   const preserveExistingEnv = args.preserveExistingEnv !== false;
-  if (!fs12.existsSync(args.projectDir)) {
+  if (!fs14.existsSync(args.projectDir)) {
     throw new Error(`adoptLakebaseProject: project directory does not exist: ${args.projectDir}`);
   }
-  if (!fs12.existsSync(path10.join(args.projectDir, ".git"))) {
+  if (!fs14.existsSync(path11.join(args.projectDir, ".git"))) {
     throw new Error(
       `adoptLakebaseProject: ${args.projectDir} is not a git repo. Run \`git init\` first, or pass an existing repo path.`
     );
@@ -1703,14 +1995,14 @@ async function adoptLakebaseProject(args) {
     }
     filesWritten.push(".env", ".env.example");
   }
-  if (args.enableTdd) {
+  if (args.enableSftdd) {
     if (!dryRun) {
       const result = adoptTdd({ projectDir: args.projectDir });
       for (const rel of result.added) {
-        filesWritten.push(path10.join(ARTIFACT_ROOT, rel));
+        filesWritten.push(path11.join(ARTIFACT_ROOT, rel));
       }
     } else {
-      warnings.push("dryRun: skipped enableTdd. Re-run without --dry-run to drop the .tdd/ scaffold.");
+      warnings.push("dryRun: skipped enableSftdd. Re-run without --dry-run to drop the .sftdd/ scaffold.");
     }
   }
   if (args.enableE2e) {
@@ -1739,9 +2031,9 @@ async function adoptLakebaseProject(args) {
   };
 }
 function assertEnvCompatibility(projectDir, expectedProjectId) {
-  const envPath = path10.join(projectDir, ".env");
-  if (!fs12.existsSync(envPath)) return;
-  const content = fs12.readFileSync(envPath, "utf8");
+  const envPath = path11.join(projectDir, ".env");
+  if (!fs14.existsSync(envPath)) return;
+  const content = fs14.readFileSync(envPath, "utf8");
   const match = content.match(/^LAKEBASE_PROJECT_ID\s*=\s*(.+?)\s*$/m);
   if (!match) return;
   const existing = match[1].trim().replace(/^['"]|['"]$/g, "");
@@ -1752,10 +2044,10 @@ function assertEnvCompatibility(projectDir, expectedProjectId) {
   }
 }
 function assertAdoptionPreflight(args) {
-  if (!fs12.existsSync(args.projectDir)) {
+  if (!fs14.existsSync(args.projectDir)) {
     throw new Error(`assertAdoptionPreflight: project directory does not exist: ${args.projectDir}`);
   }
-  if (!fs12.existsSync(path10.join(args.projectDir, ".git"))) {
+  if (!fs14.existsSync(path11.join(args.projectDir, ".git"))) {
     throw new Error(
       `assertAdoptionPreflight: ${args.projectDir} is not a git repo.`
     );
@@ -1765,19 +2057,15 @@ function assertAdoptionPreflight(args) {
   }
 }
 function _testMakeBrownfieldFixture(opts) {
-  fs12.mkdirSync(opts.dir, { recursive: true });
+  fs14.mkdirSync(opts.dir, { recursive: true });
   cp3.execSync("git init --quiet", { cwd: opts.dir, stdio: "pipe" });
   if (opts.packageJson) {
-    fs12.writeFileSync(
-      path10.join(opts.dir, "package.json"),
+    fs14.writeFileSync(
+      path11.join(opts.dir, "package.json"),
       JSON.stringify(opts.packageJson, null, 2) + "\n"
     );
   }
 }
-
-// scripts/lakebase/branch-create.ts
-var import_node_child_process3 = require("child_process");
-var import_node_util3 = require("util");
 
 // scripts/util/delay.ts
 function delay(ms) {
@@ -1831,16 +2119,14 @@ async function pollUntilDefined(probe, opts) {
 }
 
 // scripts/util/sanitize-branch-name.ts
+var LAKEBASE_BRANCH_NAME_MAX = 63;
 function sanitizeBranchName(gitBranch) {
-  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, 63);
+  let name = gitBranch.replace(/\//g, "-").toLowerCase().replace(/[^a-z0-9-]/g, "-").substring(0, LAKEBASE_BRANCH_NAME_MAX);
   while (name.length < 3) name += "-x";
   return name;
 }
 
 // scripts/lakebase/branch-utils.ts
-var import_node_child_process2 = require("child_process");
-var import_node_util2 = require("util");
-var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process2.execFile);
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -2022,24 +2308,11 @@ function parseBranch(raw) {
     isProtected: r.status?.is_protected
   };
 }
-async function dbcli2(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP2("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli2(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/branch-create.ts
-var execFileP3 = (0, import_node_util3.promisify)(import_node_child_process3.execFile);
 async function createBranch(args) {
   const sanitized = sanitizeBranchName(args.branch);
   const lookup = { instance: args.instance, host: args.host };
@@ -2087,13 +2360,7 @@ async function createBranch(args) {
   }
   const existing = await getBranchByName(sanitized, lookup);
   if (existing) {
-    const existingLeaf = leafOf(existing.sourceBranchName);
-    const requestedLeaf = leafOf(sourceBranchPath);
-    if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
-      throw new LakebaseBranchError(
-        `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
-      );
-    }
+    assertSourceMatches(existing, sourceBranchPath, sanitized);
     return existing;
   }
   if (args.ttl && args.noExpiry === true) {
@@ -2109,7 +2376,14 @@ async function createBranch(args) {
   } else if (args.noExpiry ?? true) {
     specObj.no_expiry = true;
   }
-  await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  try {
+    await createWithTtlRecovery(args.instance, sanitized, specObj, args.host);
+  } catch (err) {
+    if (err instanceof LakebaseBranchTtlTooLongError) throw err;
+    const landed = await getBranchByName(sanitized, lookup);
+    if (!landed) throw err;
+    assertSourceMatches(landed, sourceBranchPath, sanitized);
+  }
   return waitForBranchReady({
     instance: args.instance,
     host: args.host,
@@ -2140,6 +2414,15 @@ function leafOf(pathOrName) {
   const segments = pathOrName.split("/");
   return segments[segments.length - 1] || void 0;
 }
+function assertSourceMatches(existing, sourceBranchPath, sanitized) {
+  const existingLeaf = leafOf(existing.sourceBranchName);
+  const requestedLeaf = leafOf(sourceBranchPath);
+  if (existingLeaf && requestedLeaf && existingLeaf !== requestedLeaf) {
+    throw new LakebaseBranchError(
+      `Branch "${sanitized}" already exists, but was forked from "${existingLeaf}", not the requested "${requestedLeaf}". Delete the existing branch first, or pick a different target name.`
+    );
+  }
+}
 async function createWithTtlRecovery(instance, sanitized, specObj, host) {
   const originalTtl = specObj.ttl;
   try {
@@ -2149,7 +2432,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     );
     return;
   } catch (err) {
-    if (!(err instanceof LakebaseBranchError) || !originalTtl || !isTtlTooLongError(err.message)) {
+    if (!(err instanceof DatabricksCliError) || !originalTtl || !isTtlTooLongError(err.message)) {
       throw err;
     }
     let retention = getCachedProjectRetention(instance);
@@ -2175,7 +2458,7 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
         host
       );
     } catch (retryErr) {
-      if (retryErr instanceof LakebaseBranchError && isTtlTooLongError(retryErr.message)) {
+      if (retryErr instanceof DatabricksCliError && isTtlTooLongError(retryErr.message)) {
         throw new LakebaseBranchTtlTooLongError(
           clamped,
           `Workspace rejected retention-clamped TTL '${clamped}' (original '${originalTtl}'): ${retryErr.message}`
@@ -2185,26 +2468,11 @@ async function createWithTtlRecovery(instance, sanitized, specObj, host) {
     }
   }
 }
-async function dbcli3(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP3("databricks", args, { env, timeout: KIT_TIMEOUTS.cliCreateBranch });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli3(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }
 
 // scripts/lakebase/branch-delete.ts
-var import_node_child_process4 = require("child_process");
-var import_node_util4 = require("util");
-var execFileP4 = (0, import_node_util4.promisify)(import_node_child_process4.execFile);
 async function deleteBranch(args) {
   const fullPath = await resolveBranchPath(args.branch, {
     instance: args.instance,
@@ -2227,32 +2495,16 @@ async function deleteBranch(args) {
   }
   await dbcli4(["postgres", "delete-branch", fullPath], args.host);
 }
-async function dbcli4(args, host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  try {
-    const { stdout } = await execFileP4("databricks", args, { env, timeout: KIT_TIMEOUTS.cliDefault });
-    return stdout.toString();
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new LakebaseBranchError(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+function dbcli4(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/paired-branch.ts
 var fs15 = __toESM(require("fs"), 1);
 var path12 = __toESM(require("path"), 1);
-var import_node_child_process7 = require("child_process");
-
-// scripts/lakebase/branch-endpoint.ts
-var import_node_child_process6 = require("child_process");
+var import_node_child_process3 = require("child_process");
 
 // scripts/lakebase/get-connection.ts
-var import_node_child_process5 = require("child_process");
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
 
@@ -2325,20 +2577,7 @@ function buildPostgresUrl(parts) {
   return u.toString();
 }
 function dbcli5(args) {
-  try {
-    return (0, import_node_child_process5.execFileSync)("databricks", args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: KIT_TIMEOUTS.cliDefault
-    });
-  } catch (err) {
-    const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    throw new Error(
-      `databricks ${args.join(" ")} failed: ${e.message}${stderr ? `
-stderr: ${stderr.trim()}` : ""}`
-    );
-  }
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 async function waitForBranchAuthReady(args) {
   const timeoutMs = args.timeoutMs ?? 6e4;
@@ -2398,9 +2637,7 @@ async function getEndpoint(args) {
   }
   let raw;
   try {
-    raw = (0, import_node_child_process6.execFileSync)("databricks", ["postgres", "list-endpoints", branchPath, "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+    raw = runDatabricksSync(["postgres", "list-endpoints", branchPath, "-o", "json"], {
       timeout: KIT_TIMEOUTS.cliDefault
     });
   } catch {
@@ -2440,10 +2677,9 @@ async function ensureEndpoint(args) {
     }
   };
   try {
-    (0, import_node_child_process6.execFileSync)(
-      "databricks",
+    runDatabricksSync(
       ["postgres", "create-endpoint", branchPath, endpointName, "--json", JSON.stringify(spec)],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.cliCreateEndpoint }
+      { timeout: KIT_TIMEOUTS.cliCreateEndpoint }
     );
   } catch (err) {
     const racy = await getEndpoint({ instance: args.instance, branch: branchId, endpointName });
@@ -2491,10 +2727,11 @@ async function getAheadBehind(args) {
 async function isDirty(args) {
   try {
     const ignore = args.ignore ?? [];
-    let command = "git status --porcelain";
+    const untrackedFlag = args.untracked === false ? " --untracked-files=no" : "";
+    let command = `git status --porcelain${untrackedFlag}`;
     if (ignore.length > 0) {
       const excludes = ignore.map((p) => shq(`:(exclude)${p.replace(/\/+$/, "")}`)).join(" ");
-      command = `git status --porcelain -- . ${excludes}`;
+      command = `git status --porcelain${untrackedFlag} -- . ${excludes}`;
     }
     const out = await exec2(command, { cwd: args.cwd });
     return out.trim().length > 0;
@@ -2503,120 +2740,9 @@ async function isDirty(args) {
   }
 }
 
-// scripts/lakebase/env-file.ts
-var fs13 = __toESM(require("fs"), 1);
-var path11 = __toESM(require("path"), 1);
-function writeEnvFile(args) {
-  const host = args.databricksHost.replace(/\/+$/, "");
-  const envContent = [
-    "# Lakebase project configuration",
-    "# Created by @databricks-solutions/lakebase-app-dev-kit",
-    "",
-    `DATABRICKS_HOST=${host}`,
-    `LAKEBASE_PROJECT_ID=${args.lakebaseProjectId}`,
-    "",
-    "# Connection (auto-populated on branch switch)",
-    "# DATABASE_URL=",
-    "# DB_USERNAME=",
-    "# DB_PASSWORD=",
-    ""
-  ].join("\n");
-  const envPath = path11.join(args.projectDir, ".env");
-  fs13.writeFileSync(envPath, envContent);
-  return envPath;
-}
-var CONNECTION_KEYS = [
-  "DATABASE_URL",
-  "DB_USERNAME",
-  "DB_PASSWORD",
-  "LAKEBASE_BRANCH_ID",
-  "LAKEBASE_HOST"
-];
-function updateEnvConnection(args) {
-  const existing = fs13.existsSync(args.envPath) ? fs13.readFileSync(args.envPath, "utf-8") : "";
-  const preserved = existing.split("\n").filter((line) => {
-    const trimmed = line.trimStart();
-    return !CONNECTION_KEYS.some((k) => trimmed.startsWith(`${k}=`));
-  }).join("\n").replace(/\n+$/, "");
-  const lines = [];
-  if (args.comment !== void 0) {
-    lines.push(args.comment);
-  }
-  if (args.endpointHost !== void 0) {
-    lines.push(`LAKEBASE_HOST=${args.endpointHost}`);
-  }
-  lines.push(`LAKEBASE_BRANCH_ID=${args.branchId}`);
-  lines.push(`DATABASE_URL=${args.databaseUrl}`);
-  lines.push(`DB_USERNAME=${args.username}`);
-  lines.push(`DB_PASSWORD=${args.password}`);
-  lines.push("");
-  const block = lines.join("\n");
-  const content = preserved ? `${preserved}
-${block}` : block;
-  fs13.mkdirSync(path11.dirname(args.envPath), { recursive: true });
-  fs13.writeFileSync(args.envPath, content);
-}
-
-// scripts/lakebase/databricks-profile.ts
-var fs14 = __toESM(require("fs"), 1);
-function normalizeHost(host) {
-  return host.trim().replace(/\/+$/, "").toLowerCase();
-}
-function selectProfileForHost(profilesJson, host) {
-  const target = normalizeHost(host);
-  if (!target) return void 0;
-  const start = profilesJson.indexOf("{");
-  if (start < 0) return void 0;
-  let parsed;
-  try {
-    parsed = JSON.parse(profilesJson.slice(start));
-  } catch {
-    return void 0;
-  }
-  const profiles = parsed.profiles;
-  if (!Array.isArray(profiles)) return void 0;
-  const names = profiles.filter((p) => {
-    if (!p || typeof p !== "object") return false;
-    const rec = p;
-    return typeof rec.name === "string" && typeof rec.host === "string" && rec.valid === true && normalizeHost(rec.host) === target;
-  }).map((p) => p.name);
-  const distinct = Array.from(new Set(names));
-  return distinct.length === 1 ? distinct[0] : void 0;
-}
-async function resolveProfileForHost(host, timeoutMs = KIT_TIMEOUTS.cliDefault) {
-  if (!normalizeHost(host)) return void 0;
-  let out;
-  try {
-    out = await exec2("databricks auth profiles -o json", { timeout: timeoutMs });
-  } catch {
-    return void 0;
-  }
-  return selectProfileForHost(out, host);
-}
-async function ensureProfilePinned(args) {
-  const { envPath } = args;
-  if (!fs14.existsSync(envPath)) return { reason: "no-env" };
-  const lines = fs14.readFileSync(envPath, "utf-8").split("\n");
-  const startsWithKey = (line, key) => line.trimStart().startsWith(`${key}=`);
-  if (lines.some((l) => startsWithKey(l, "DATABRICKS_CONFIG_PROFILE"))) {
-    return { reason: "already-pinned" };
-  }
-  const hostIdx = lines.findIndex((l) => startsWithKey(l, "DATABRICKS_HOST"));
-  if (hostIdx < 0) return { reason: "no-host" };
-  const hostLine = lines[hostIdx];
-  const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
-  if (!host) return { reason: "no-host" };
-  const resolve3 = args.resolve ?? ((h) => resolveProfileForHost(h));
-  const profile = await resolve3(host);
-  if (!profile) return { reason: "no-match" };
-  lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
-  fs14.writeFileSync(envPath, lines.join("\n"));
-  return { pinned: profile };
-}
-
 // scripts/lakebase/paired-branch.ts
 function gitCurrentBranch(cwd) {
-  return (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+  return (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -2625,7 +2751,7 @@ function gitCurrentBranch(cwd) {
 }
 function gitHasLocalBranch(cwd, branch) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
+    (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd,
       stdio: "ignore",
       timeout: KIT_TIMEOUTS.gitDefault
@@ -2637,7 +2763,7 @@ function gitHasLocalBranch(cwd, branch) {
 }
 function gitCheckoutNewBranch(cwd, branch, startPoint) {
   const argv = startPoint ? ["checkout", "-b", branch, startPoint] : ["checkout", "-b", branch];
-  (0, import_node_child_process7.execFileSync)("git", argv, {
+  (0, import_node_child_process3.execFileSync)("git", argv, {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
@@ -2645,7 +2771,7 @@ function gitCheckoutNewBranch(cwd, branch, startPoint) {
 }
 function gitFetchBranch(cwd, remote, branch) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["fetch", remote, branch], {
+    (0, import_node_child_process3.execFileSync)("git", ["fetch", remote, branch], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitNetwork
@@ -2655,7 +2781,7 @@ function gitFetchBranch(cwd, remote, branch) {
 }
 function gitRefExists(cwd, ref) {
   try {
-    (0, import_node_child_process7.execFileSync)("git", ["rev-parse", "--verify", "--quiet", ref], {
+    (0, import_node_child_process3.execFileSync)("git", ["rev-parse", "--verify", "--quiet", ref], {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: KIT_TIMEOUTS.gitDefault
@@ -2674,28 +2800,28 @@ function resolveFeatureStartPoint(cwd, parentBranch) {
 }
 async function assertCleanForFork(cwd, startPoint) {
   if (!startPoint) return;
-  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"] })) {
+  if (await isDirty({ cwd, ignore: [".sftdd/", ".tdd/", ".lakebase/", ".claude/agent-memory/"], untracked: false })) {
     throw new Error(
       `Working tree has uncommitted changes; refusing to fork from ${startPoint} (they would be carried onto the new branch). Commit or stash first.`
     );
   }
 }
 function gitCheckoutExistingBranch(cwd, branch) {
-  (0, import_node_child_process7.execFileSync)("git", ["checkout", branch], {
+  (0, import_node_child_process3.execFileSync)("git", ["checkout", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
   });
 }
 function gitMergeBranch(cwd, branch) {
-  (0, import_node_child_process7.execFileSync)("git", ["merge", "--no-edit", branch], {
+  (0, import_node_child_process3.execFileSync)("git", ["merge", "--no-edit", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitDefault
   });
 }
 function gitDeleteLocalBranch(cwd, branch, force = true) {
-  (0, import_node_child_process7.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
+  (0, import_node_child_process3.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitDefault
@@ -2703,7 +2829,7 @@ function gitDeleteLocalBranch(cwd, branch, force = true) {
 }
 function gitHasRemoteBranch(cwd, remote, branch) {
   try {
-    const out = (0, import_node_child_process7.execFileSync)(
+    const out = (0, import_node_child_process3.execFileSync)(
       "git",
       ["ls-remote", "--exit-code", "--heads", remote, branch],
       { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
@@ -2714,13 +2840,13 @@ function gitHasRemoteBranch(cwd, remote, branch) {
   }
 }
 function gitDeleteRemoteBranch(cwd, remote, branch) {
-  (0, import_node_child_process7.execFileSync)("git", ["push", remote, "--delete", branch], {
+  (0, import_node_child_process3.execFileSync)("git", ["push", remote, "--delete", branch], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitPush
   });
 }
-function readEnvVar(envPath, key) {
+function readEnvVar2(envPath, key) {
   if (!fs15.existsSync(envPath)) return void 0;
   const content = fs15.readFileSync(envPath, "utf-8");
   const match = content.match(new RegExp(`^${key}=(.*)$`, "m"));
@@ -2789,15 +2915,13 @@ async function createPairedBranch(args) {
         branch: sanitized,
         timeoutMs: args.readyTimeoutMs ?? KIT_TIMEOUTS.readyWait
       });
-      const { token, email } = await mintCredential(endpointPath(args.instance, sanitized));
-      const dsn = buildDsn(ep.host, database, email, token);
+      const { email } = await mintCredential(endpointPath(args.instance, sanitized));
       const envPath = path12.join(args.cwd, ".env");
       updateEnvConnection({
         envPath,
+        projectId: args.instance,
         branchId: sanitized,
-        databaseUrl: dsn,
         username: email,
-        password: token,
         endpointHost: ep.host
       });
       await ensureProfilePinned({ envPath }).catch(() => void 0);
@@ -2868,7 +2992,7 @@ async function deletePairedBranch(args) {
 }
 async function syncEnvToCurrentBranch(args) {
   const envPath = path12.join(args.cwd, ".env");
-  const instance = args.instance ?? readEnvVar(envPath, "LAKEBASE_PROJECT_ID");
+  const instance = args.instance ?? readEnvVar2(envPath, "LAKEBASE_PROJECT_ID");
   if (!instance) {
     throw new Error(
       `Could not resolve Lakebase instance id (set LAKEBASE_PROJECT_ID in .env or pass --instance)`
@@ -2901,10 +3025,9 @@ async function syncEnvToCurrentBranch(args) {
   const dsn = buildDsn(ep.host, database, email, token);
   updateEnvConnection({
     envPath,
+    projectId: instance,
     branchId: sanitized,
-    databaseUrl: dsn,
     username: email,
-    password: token,
     endpointHost: ep.host
   });
   await ensureProfilePinned({ envPath }).catch(() => void 0);
@@ -2913,7 +3036,7 @@ async function syncEnvToCurrentBranch(args) {
 async function checkoutPaired(args) {
   const warnings = [];
   const envPath = path12.join(args.cwd, ".env");
-  const instance = args.instance ?? readEnvVar(envPath, "LAKEBASE_PROJECT_ID");
+  const instance = args.instance ?? readEnvVar2(envPath, "LAKEBASE_PROJECT_ID");
   if (!instance) {
     throw new Error(
       `Could not resolve Lakebase instance (set LAKEBASE_PROJECT_ID in .env or pass --instance)`
@@ -2927,7 +3050,7 @@ async function checkoutPaired(args) {
   }
   const branchId = sanitizeBranchName(rawBranch);
   const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
-  const previousBranch = args.previousBranch ?? readEnvVar(envPath, "LAKEBASE_BRANCH_ID") ?? "";
+  const previousBranch = args.previousBranch ?? readEnvVar2(envPath, "LAKEBASE_BRANCH_ID") ?? "";
   const trunkAlias = args.trunkAlias?.trim();
   let mode = "feature";
   let lakebaseBranch = branchId;
@@ -2994,10 +3117,9 @@ async function checkoutPaired(args) {
   const dsn = buildDsn(ep.host, database, email, token);
   updateEnvConnection({
     envPath,
+    projectId: instance,
     branchId: lakebaseBranch,
-    databaseUrl: dsn,
     username: email,
-    password: token,
     endpointHost: ep.host
   });
   await ensureProfilePinned({ envPath }).catch(() => void 0);
@@ -3120,10 +3242,10 @@ async function cutBackup(args) {
 // scripts/lakebase/databricks-host.ts
 async function resolveDatabricksHost(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const out = await exec2(
-    `databricks auth describe --profile "${escapeShellArg(args.profile)}" -o json`,
-    { timeout: timeoutMs }
-  );
+  const out = await runDatabricks(["auth", "describe", "-o", "json"], {
+    profile: args.profile,
+    timeout: timeoutMs
+  });
   return parseHostFromAuthDescribe(out);
 }
 function parseHostFromAuthDescribe(out) {
@@ -3140,16 +3262,13 @@ function parseHostFromAuthDescribe(out) {
     return void 0;
   }
 }
-function escapeShellArg(s) {
-  return s.replace(/"/g, '\\"');
-}
 
 // scripts/lakebase/deploy-app-endpoint.ts
-var import_node_child_process8 = require("child_process");
+var import_node_child_process4 = require("child_process");
 
 // scripts/lakebase/deploy-workspace-upload.ts
 var import_node_fs = require("fs");
-var import_node_path2 = require("path");
+var import_node_path3 = require("path");
 var DEFAULT_SKIP_DIRS = [
   "node_modules",
   ".git",
@@ -3167,26 +3286,22 @@ async function uploadDirectory(args) {
   const createdDirs = /* @__PURE__ */ new Set();
   const errors = [];
   let filesUploaded = 0;
-  const escape = (s) => s.replace(/"/g, '\\"');
   const ensureRemoteDir = async (remoteDir) => {
     if (createdDirs.has(remoteDir)) return;
-    await exec2(
-      `databricks workspace mkdirs "${escape(remoteDir)}" --profile "${escape(args.profile)}"`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["workspace", "mkdirs", remoteDir], { profile: args.profile, timeout: timeoutMs });
     createdDirs.add(remoteDir);
   };
   await ensureRemoteDir(args.workspacePath);
   const uploadFile = async (localFile, relPath) => {
-    const remotePath = `${args.workspacePath}/${relPath.split(import_node_path2.sep).join("/")}`;
+    const remotePath = `${args.workspacePath}/${relPath.split(import_node_path3.sep).join("/")}`;
     const remoteDir = remotePath.substring(0, remotePath.lastIndexOf("/"));
     if (remoteDir !== args.workspacePath) {
       await ensureRemoteDir(remoteDir);
     }
     try {
-      await exec2(
-        `databricks workspace import "${escape(remotePath)}" --file "${escape(localFile)}" --format AUTO --overwrite --profile "${escape(args.profile)}"`,
-        { timeout: timeoutMs }
+      await runDatabricks(
+        ["workspace", "import", remotePath, "--file", localFile, "--format", "AUTO", "--overwrite"],
+        { profile: args.profile, timeout: timeoutMs }
       );
       filesUploaded++;
     } catch (err) {
@@ -3195,8 +3310,8 @@ async function uploadDirectory(args) {
   };
   const walk = async (dirAbs, dirRel) => {
     for (const entry of (0, import_node_fs.readdirSync)(dirAbs)) {
-      const childAbs = (0, import_node_path2.join)(dirAbs, entry);
-      const childRel = dirRel ? `${dirRel}${import_node_path2.sep}${entry}` : entry;
+      const childAbs = (0, import_node_path3.join)(dirAbs, entry);
+      const childRel = dirRel ? `${dirRel}${import_node_path3.sep}${entry}` : entry;
       const stat = (0, import_node_fs.statSync)(childAbs);
       if (stat.isDirectory()) {
         if (skipSet.has(entry)) continue;
@@ -3219,10 +3334,10 @@ async function uploadDirectory(args) {
 async function getAppEndpoint(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   try {
-    const stdout = await exec2(
-      `databricks apps get "${escapeShellArg2(args.appName)}" --profile "${escapeShellArg2(args.profile)}" -o json`,
-      { timeout: timeoutMs }
-    );
+    const stdout = await runDatabricks(["apps", "get", args.appName, "-o", "json"], {
+      profile: args.profile,
+      timeout: timeoutMs
+    });
     const info = JSON.parse(stdout);
     return {
       exists: true,
@@ -3244,9 +3359,9 @@ async function deleteAppEndpoint(args) {
   let workspaceDeleted = false;
   let found = false;
   try {
-    await exec2(
-      `databricks apps delete "${escapeShellArg2(args.appName)}" --profile "${escapeShellArg2(args.profile)}"`,
-      { timeout: timeoutMs }
+    await runDatabricks(
+      ["apps", "delete", args.appName],
+      { profile: args.profile, timeout: timeoutMs }
     );
     appDeleted = true;
     found = true;
@@ -3260,9 +3375,12 @@ async function deleteAppEndpoint(args) {
   }
   if (args.workspacePath) {
     try {
-      await exec2(
-        `databricks workspace delete "${escapeShellArg2(args.workspacePath)}" --recursive --profile "${escapeShellArg2(args.profile)}"`,
-        { timeout: timeoutMs }
+      await runDatabricks(
+        ["workspace", "delete", args.workspacePath, "--recursive"],
+        {
+          profile: args.profile,
+          timeout: timeoutMs
+        }
       );
       workspaceDeleted = true;
     } catch (err) {
@@ -3281,10 +3399,10 @@ async function ensureAppEndpoint(args) {
   const lookup = await getAppEndpoint({ appName: args.appName, profile: args.profile });
   let created = false;
   if (!lookup.exists) {
-    await exec2(
-      `databricks apps create "${escapeShellArg2(args.appName)}" --description "${escapeShellArg2(description)}" --profile "${escapeShellArg2(args.profile)}"`,
-      { timeout: createTimeoutMs }
-    );
+    await runDatabricks(["apps", "create", args.appName, "--description", description], {
+      profile: args.profile,
+      timeout: createTimeoutMs
+    });
     created = true;
   }
   const upload = await uploadDirectory({
@@ -3317,12 +3435,11 @@ async function ensureAppEndpoint(args) {
 async function getCiAppEndpoint(args) {
   const appName = args.appName ?? deriveCiAppName(args.instance, args.branch);
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const profileFlag = args.profile ? ` --profile "${escapeShellArg2(args.profile)}"` : "";
   try {
-    const stdout = await exec2(
-      `databricks apps get "${escapeShellArg2(appName)}"${profileFlag} -o json`,
-      { timeout: timeoutMs }
-    );
+    const stdout = await runDatabricks(["apps", "get", appName, "-o", "json"], {
+      profile: args.profile,
+      timeout: timeoutMs
+    });
     const info = JSON.parse(stdout);
     return {
       appName,
@@ -3343,7 +3460,7 @@ function deriveCiAppName(instance, branch) {
 }
 function runDeploy(args) {
   return new Promise((resolve3, reject) => {
-    const child = (0, import_node_child_process8.spawn)(
+    const child = (0, import_node_child_process4.spawn)(
       "databricks",
       [
         "apps",
@@ -3385,9 +3502,6 @@ function runDeploy(args) {
       });
     }, args.timeoutMs);
   });
-}
-function escapeShellArg2(s) {
-  return s.replace(/"/g, '\\"');
 }
 
 // scripts/lakebase/deploy-app-yaml.ts
@@ -3498,9 +3612,9 @@ async function grantLakebasePermission(args) {
       }
     ]
   });
-  await exec2(
-    `databricks api patch "/api/2.0/permissions/database-projects/${escapeShellArg3(args.projectName)}" --profile "${escapeShellArg3(args.profile)}" --json '${escapeSingleQuoted(payload)}'`,
-    { timeout: timeoutMs }
+  await runDatabricks(
+    ["api", "patch", `/api/2.0/permissions/database-projects/${args.projectName}`, "--json", payload],
+    { profile: args.profile, timeout: timeoutMs }
   );
   return { granted: true };
 }
@@ -3525,21 +3639,15 @@ async function propagateCredentials(args) {
     lakebaseGranted: true
   };
 }
-function escapeShellArg3(s) {
-  return s.replace(/"/g, '\\"');
-}
-function escapeSingleQuoted(s) {
-  return s.replace(/'/g, `'\\''`);
-}
 
 // scripts/lakebase/deploy-rollback.ts
-var import_node_child_process9 = require("child_process");
+var import_node_child_process5 = require("child_process");
 async function listAppDeployments(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
-  const stdout = await exec2(
-    `databricks apps list-deployments "${escapeShellArg4(args.appName)}" --profile "${escapeShellArg4(args.profile)}" -o json`,
-    { timeout: timeoutMs }
-  );
+  const stdout = await runDatabricks(["apps", "list-deployments", args.appName, "-o", "json"], {
+    profile: args.profile,
+    timeout: timeoutMs
+  });
   const parsed = JSON.parse(stdout);
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === "object") {
@@ -3599,7 +3707,7 @@ function stateOf(d) {
 }
 function runRollbackDeploy(args) {
   return new Promise((resolve3, reject) => {
-    const child = (0, import_node_child_process9.spawn)(
+    const child = (0, import_node_child_process5.spawn)(
       "databricks",
       [
         "apps",
@@ -3641,9 +3749,6 @@ function runRollbackDeploy(args) {
       });
     }, args.timeoutMs);
   });
-}
-function escapeShellArg4(s) {
-  return s.replace(/"/g, '\\"');
 }
 
 // scripts/lakebase/deploy-targets.ts
@@ -3715,11 +3820,11 @@ function getTargetNames(workspaceRoot) {
 }
 
 // scripts/lakebase/deploy-validate.ts
-var import_node_child_process10 = require("child_process");
+var import_node_child_process6 = require("child_process");
 function validateApp(opts) {
   const timeoutMs = opts.timeoutMs ?? KIT_TIMEOUTS.cliLong;
   return new Promise((resolve3, reject) => {
-    const child = (0, import_node_child_process10.spawn)(
+    const child = (0, import_node_child_process6.spawn)(
       "databricks",
       ["apps", "validate", "--profile", opts.profile],
       { cwd: opts.workspaceRoot }
@@ -3789,7 +3894,7 @@ async function createLongRunningBranch(args) {
 var import_octokit = require("octokit");
 
 // scripts/github/auth.ts
-var import_node_child_process11 = require("child_process");
+var import_node_child_process7 = require("child_process");
 var GITHUB_SCOPES = ["repo", "workflow", "delete_repo"];
 async function resolveGitHubToken(scopes = GITHUB_SCOPES) {
   const fromEnv = process.env.GITHUB_TOKEN?.trim();
@@ -3817,7 +3922,7 @@ async function tryVsCodeSession(opts = {}) {
 }
 function tryGhAuthToken() {
   try {
-    const raw = (0, import_node_child_process11.execFileSync)("gh", ["auth", "token"], {
+    const raw = (0, import_node_child_process7.execFileSync)("gh", ["auth", "token"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 5e3
@@ -3995,7 +4100,10 @@ async function mergePullRequest(args) {
       } catch {
       }
     }
-    return data.message || `Merged PR #${args.pullNumber}`;
+    return {
+      message: data.message || `Merged PR #${args.pullNumber}`,
+      sha: data.sha || void 0
+    };
   } catch (err) {
     wrap(err, "Failed to merge pull request");
   }
@@ -4016,6 +4124,7 @@ async function listWorkflowRuns(ownerRepo, limit = 5) {
       conclusion: r.conclusion || "",
       branch: r.head_branch || "",
       event: r.event || "",
+      headSha: r.head_sha || void 0,
       createdAt: r.created_at || void 0,
       updatedAt: r.updated_at || void 0
     }));
@@ -4066,7 +4175,7 @@ async function mergePairedPullRequest(args) {
       `Could not read PR head branch before merge: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  const message = await mergePullRequest({
+  const { message, sha: mergeCommitSha } = await mergePullRequest({
     ownerRepo: args.ownerRepo,
     pullNumber: args.pullNumber,
     method: args.method,
@@ -4086,7 +4195,7 @@ async function mergePairedPullRequest(args) {
   } else if (deleteLakebaseBranch && !headBranch) {
     warnings.push("Skipped Lakebase branch cleanup \u2013 could not resolve PR head branch name");
   }
-  return { message, headBranch, lakebaseBranchDeleted, warnings };
+  return { message, headBranch, lakebaseBranchDeleted, mergeCommitSha, warnings };
 }
 
 // scripts/lakebase/release.ts
@@ -4203,16 +4312,16 @@ function isAllSchemas(schema) {
 }
 function buildSchemaQuery(schema) {
   const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
-  const join37 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  const join38 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
   if (isAllSchemas(schema)) {
     return {
-      text: `SELECT ${cols} ` + join37 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
+      text: `SELECT ${cols} ` + join38 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
       values: []
     };
   }
   const one = (schema ?? "").trim() || "public";
   return {
-    text: `SELECT ${cols} ` + join37 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
+    text: `SELECT ${cols} ` + join38 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
     values: [one]
   };
 }
@@ -4445,28 +4554,19 @@ async function commitAndPush(args) {
 }
 
 // scripts/lakebase/create-preflight.ts
-var import_node_child_process12 = require("child_process");
-var import_node_util5 = require("util");
+var import_node_child_process8 = require("child_process");
 var fs17 = __toESM(require("fs"), 1);
 var path14 = __toESM(require("path"), 1);
-var execFileP5 = (0, import_node_util5.promisify)(import_node_child_process12.execFile);
 function lastLines(s, n = 3) {
   return (s ?? "").trim().split("\n").filter(Boolean).slice(-n).join("; ");
 }
 async function checkDatabricksAuth(host) {
-  const trimmedHost = host?.replace(/\/+$/, "");
-  const env = trimmedHost ? { ...process.env, DATABRICKS_HOST: trimmedHost } : process.env;
-  const profileArg = process.env.DATABRICKS_CONFIG_PROFILE ? ["--profile", process.env.DATABRICKS_CONFIG_PROFILE] : [];
   try {
-    await execFileP5("databricks", ["current-user", "me", "-o", "json", ...profileArg], {
-      env,
-      timeout: 8e3
-    });
+    await runDatabricks(["current-user", "me", "-o", "json"], { host, timeout: 8e3 });
     return { ok: true };
   } catch (err) {
     const e = err;
-    const stderr = typeof e.stderr === "string" ? e.stderr : Buffer.isBuffer(e.stderr) ? e.stderr.toString("utf8") : "";
-    return { ok: false, reason: lastLines(stderr, 2) || e.message || "databricks current-user me failed" };
+    return { ok: false, reason: lastLines(e.stderr, 2) || e.message || "databricks current-user me failed" };
   }
 }
 function databricksAuthPrereqMessage(host, reason) {
@@ -4479,11 +4579,11 @@ function warmAndVerifyKit(projectDir, timeoutMs = 18e4) {
   if (!fs17.existsSync(lk)) {
     return { ok: false, reason: "scripts/lk shim missing from the scaffold" };
   }
-  const warm = (0, import_node_child_process12.spawnSync)("bash", [lk, "--warm"], { cwd: projectDir, encoding: "utf-8", timeout: timeoutMs });
+  const warm = (0, import_node_child_process8.spawnSync)("bash", [lk, "--warm"], { cwd: projectDir, encoding: "utf-8", timeout: timeoutMs });
   if (warm.status !== 0) {
     return { ok: false, reason: lastLines(warm.stderr) || `lk --warm exited ${warm.status ?? "(killed)"}` };
   }
-  const verify = (0, import_node_child_process12.spawnSync)("bash", [lk, "lakebase-schema-diff", "--help"], {
+  const verify = (0, import_node_child_process8.spawnSync)("bash", [lk, "lakebase-schema-diff", "--help"], {
     cwd: projectDir,
     encoding: "utf-8",
     timeout: 3e4,
@@ -4977,9 +5077,9 @@ async function syncCiSecrets(args) {
     LAKEBASE_PROJECT_ID: args.lakebaseProjectId
   };
   try {
-    const tokenRaw = await exec2(
-      `databricks tokens create --comment "${comment}" --lifetime-seconds ${lifetime} -o json`,
-      { cwd: args.projectDir, timeout: 3e4, env: { DATABRICKS_HOST: args.databricksHost } }
+    const tokenRaw = await runDatabricks(
+      ["tokens", "create", "--comment", comment, "--lifetime-seconds", String(lifetime), "-o", "json"],
+      { host: args.databricksHost, cwd: args.projectDir, timeout: 3e4 }
     );
     const parsed = JSON.parse(tokenRaw);
     const token = parsed.token_value || parsed.token || "";
@@ -5265,7 +5365,7 @@ function orderForOutput(state) {
   return out;
 }
 
-// scripts/sftdd/tdd-config.ts
+// scripts/sftdd/sftdd-config.ts
 var import_fs2 = require("fs");
 var import_path3 = require("path");
 
@@ -5284,24 +5384,33 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path2.join)(".lakebase", "agent-config.json");
 
-// scripts/sftdd/tdd-config.ts
+// scripts/sftdd/sftdd-config.ts
 var SFTDD_CONFIG_REL = (0, import_path3.join)(".lakebase", "sftdd-config.json");
 var LEGACY_TDD_CONFIG_REL = (0, import_path3.join)(".lakebase", "tdd-config.json");
 var TDD_CONFIG_REL = SFTDD_CONFIG_REL;
-function defaultTddConfig() {
+function defaultSftddConfig() {
   const roles = {};
   for (const role of ALL_AGENT_ROLES) {
-    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : { model: RECOMMENDED_MODELS[role] };
+    roles[role] = role === "navigator" ? { model: RECOMMENDED_MODELS[role], effort: { review: "low" } } : role === "driver" ? (
+      // Model tiering: RED (test authoring) + GREEN (implementation) keep the
+      // recommended model; only the mechanical REFACTOR turn drops to a fast
+      // model. GREEN was on haiku, but the recorded worst GREEN turn thrashed
+      // 93 tool round-trips (haiku's trial-and-error), so wall-clock, not token
+      // cost, dominated. Sonnet finishes GREEN in far fewer round-trips, faster
+      // even at a higher per-token price. Overridable per project by editing
+      // sftdd-config.json (a project can flatten to a scalar `model`).
+      { model: { red: RECOMMENDED_MODELS[role], green: RECOMMENDED_MODELS[role], refactor: "haiku" } }
+    ) : { model: RECOMMENDED_MODELS[role] };
   }
   return {
     version: 1,
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { gates: "proxy", deployTarget: "local" }
+    project: { uiTrack: false, gates: "proxy", deployTarget: "local", clientFramework: "none" }
   };
 }
-function writeTddConfig(projectDir, config, opts) {
+function writeSftddConfig(projectDir, config, opts) {
   const f = (0, import_path3.join)(projectDir, TDD_CONFIG_REL);
   if ((0, import_fs2.existsSync)(f) && !opts?.force) return false;
   (0, import_fs2.mkdirSync)((0, import_path3.dirname)(f), { recursive: true });
@@ -5319,8 +5428,15 @@ async function createProject(input, progress) {
   const useGithub = input.createGithubRepo !== false;
   const language = input.language ?? "java";
   const runnerType = input.runnerType ?? "self-hosted";
-  const enableTdd = input.enableTdd !== false;
-  const enableE2e = input.enableE2e !== void 0 ? input.enableE2e : language === "nodejs";
+  const enableSftdd = input.enableSftdd !== false;
+  const uiTrack = input.uiTrack === true;
+  const enableE2e = uiTrack || (input.enableE2e !== void 0 ? input.enableE2e : language === "nodejs");
+  const clientFramework = input.clientFramework ?? (uiTrack ? "react" : "none");
+  if (uiTrack && !enableE2e) {
+    throw new Error(
+      "create-project: uiTrack requires the e2e harness; a UI project cannot be scaffolded without it."
+    );
+  }
   const enableInfra = input.enableInfra !== void 0 ? input.enableInfra : language === "nodejs";
   const skipCommands = input.skipCommands === true;
   const tiers = input.tiers;
@@ -5405,15 +5521,20 @@ Last probe error:
         language,
         runnerType,
         skipCommands,
+        clientFramework,
         report: (m, d) => report(m, d)
       });
-      if (enableTdd) {
-        report("Scaffolding .tdd/ workflow directory...");
+      if (enableSftdd) {
+        report("Scaffolding .sftdd/ workflow directory...");
         layDownTddScaffold(projectDir);
       }
       if (enableE2e) {
         report("Wiring Playwright E2E support...");
-        const e2e = enableE2eForProject({ projectDir, language });
+        const e2e = enableE2eForProject({
+          projectDir,
+          language,
+          clientOwnsE2e: clientFramework !== "none"
+        });
         if (e2e.templatesWritten.length > 0) {
           report(`  wrote ${e2e.templatesWritten.length} Playwright template(s)`);
         }
@@ -5486,22 +5607,26 @@ Last probe error:
           `SCM workflow-state seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. Run lakebase-scm-state to inspect.`
         );
       }
-      if (enableTdd) {
+      if (enableSftdd) {
         try {
-          const tddConfig = defaultTddConfig();
+          const sftddConfig = defaultSftddConfig();
           for (const [role, model] of Object.entries(input.agentModels ?? {})) {
-            if (model && tddConfig.roles?.[role]) {
-              tddConfig.roles[role].model = model;
+            if (model && sftddConfig.roles?.[role]) {
+              sftddConfig.roles[role].model = model;
             }
           }
-          writeTddConfig(projectDir, tddConfig);
+          if (sftddConfig.project) {
+            sftddConfig.project.uiTrack = uiTrack;
+            sftddConfig.project.clientFramework = clientFramework;
+          }
+          writeSftddConfig(projectDir, sftddConfig);
         } catch (err) {
           warnings.push(
-            `TDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
+            `SFTDD config seed failed (advisory): ${err instanceof Error ? err.message : String(err)}. The role defaults still apply.`
           );
         }
       }
-      if (enableTdd) {
+      if (enableSftdd) {
         const kitRef = process.env.LAKEBASE_KIT_REF?.trim();
         if (kitRef) {
           try {
@@ -5579,7 +5704,7 @@ Last probe error:
         report(`Warning: ${w}`);
       }
       report("Project created successfully!");
-      if (enableTdd) {
+      if (enableSftdd) {
         report(`Next: cd ${projectDir} && ./scripts/sftdd.sh plan`);
       }
       report(`Review the running app: cd ${projectDir} && ./scripts/run-dev.sh`);
@@ -5615,7 +5740,6 @@ var fs28 = __toESM(require("fs"), 1);
 var path26 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-diff.ts
-var import_node_child_process13 = require("child_process");
 var IGNORED_TABLES = /* @__PURE__ */ new Set(["flyway_schema_history"]);
 async function getSchemaDiff(args) {
   const timestamp = (/* @__PURE__ */ new Date()).toISOString();
@@ -5803,11 +5927,7 @@ function findDefaultBranch(instance) {
   }
 }
 function dbcli6(args) {
-  return (0, import_node_child_process13.execFileSync)("databricks", args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: KIT_TIMEOUTS.cliDefault
-  });
+  return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
 // scripts/lakebase/schema-migrate.ts
@@ -5913,7 +6033,7 @@ var fs23 = __toESM(require("fs"), 1);
 var path20 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/alembic.ts
-var import_node_child_process14 = require("child_process");
+var import_node_child_process9 = require("child_process");
 var fs22 = __toESM(require("fs"), 1);
 var path19 = __toESM(require("path"), 1);
 function resolveAlembicBin(projectDir) {
@@ -5932,9 +6052,12 @@ function resolveAlembicBin(projectDir) {
 function spawnAlembic(projectDir, args, dsn) {
   return new Promise((resolve3, reject) => {
     const bin = resolveAlembicBin(projectDir);
-    const child = (0, import_node_child_process14.spawn)(bin, args, {
+    const env = { ...process.env };
+    env.PYTHONPATH = [projectDir, process.env.PYTHONPATH].filter(Boolean).join(path19.delimiter);
+    if (dsn) env.DATABASE_URL = dsn;
+    const child = (0, import_node_child_process9.spawn)(bin, args, {
       cwd: projectDir,
-      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
+      env,
       stdio: ["ignore", "pipe", "pipe"]
     });
     let stdout = "";
@@ -6274,7 +6397,7 @@ var fs24 = __toESM(require("fs"), 1);
 var path22 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/flyway.ts
-var import_node_child_process15 = require("child_process");
+var import_node_child_process10 = require("child_process");
 var path21 = __toESM(require("path"), 1);
 function dsnToFlywayEnv(dsn) {
   const u = new URL(dsn);
@@ -6290,7 +6413,7 @@ function migrationsLocation(projectDir) {
 function runFlyway(ctx, args) {
   const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
   return new Promise((resolve3, reject) => {
-    const child = (0, import_node_child_process15.spawn)(
+    const child = (0, import_node_child_process10.spawn)(
       "flyway",
       ["-outputType=json", `-locations=${migrationsLocation(ctx.projectDir)}`, ...args],
       {
@@ -6525,7 +6648,7 @@ var fs26 = __toESM(require("fs"), 1);
 var path24 = __toESM(require("path"), 1);
 
 // scripts/lakebase/schema-migrate-runners/knex.ts
-var import_node_child_process16 = require("child_process");
+var import_node_child_process11 = require("child_process");
 var fs25 = __toESM(require("fs"), 1);
 var path23 = __toESM(require("path"), 1);
 var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
@@ -6547,7 +6670,7 @@ function spawnKnex(projectDir, args, dsn) {
       );
       return;
     }
-    const child = (0, import_node_child_process16.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
+    const child = (0, import_node_child_process11.spawn)("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
       cwd: projectDir,
       env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
       stdio: ["ignore", "pipe", "pipe"]
@@ -7077,6 +7200,11 @@ var STATES_ALLOWING_CLAIM = [
   "scaffold-complete",
   "merged"
 ];
+var IN_FLIGHT_CLAIMED_STATES = [
+  "feature-claimed",
+  "pr-ready",
+  "ci-green"
+];
 async function resolveParentBranch(tierTopology, instance) {
   switch (tierTopology) {
     case 1: {
@@ -7123,7 +7251,7 @@ async function claimFeatureBranch(args) {
   const slug = sanitizeFeatureSlug(args.featureId);
   const branch = featureBranchName(slug);
   const idempotent = args.idempotent !== false;
-  if (current.state === "feature-claimed") {
+  if (IN_FLIGHT_CLAIMED_STATES.includes(current.state)) {
     if (idempotent && current.branch === branch) {
       return {
         state: current,
@@ -7132,7 +7260,7 @@ async function claimFeatureBranch(args) {
       };
     }
     throw new ScmClaimError(
-      `Cannot claim ${branch}: workflow is already at feature-claimed for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
+      `Cannot claim ${branch}: workflow is already at "${current.state}" for "${current.feature_id ?? current.branch}". Finish it, or abandon it with lakebase-scm-abandon-feature.`,
       "already-claimed-other"
     );
   }
@@ -7670,6 +7798,12 @@ function defaultMigratePredicate(run, mergedAt) {
   if (run.event && run.event !== "push") return false;
   return created >= mergedAt.getTime() - 5e3;
 }
+function shaMigratePredicate(mergeCommitSha) {
+  return (run) => {
+    if (run.event && run.event !== "push") return false;
+    return !!run.headSha && run.headSha === mergeCommitSha;
+  };
+}
 async function mergeFeature(args) {
   const current = readWorkflowState(args.projectDir);
   if (!current) {
@@ -7788,7 +7922,7 @@ async function mergeFeature(args) {
     const timeoutMs = args.migrateTimeoutMs ?? DEFAULT_MIGRATE_TIMEOUT_MS;
     const pollMs = args.migratePollMs ?? DEFAULT_MIGRATE_POLL_MS;
     const fetchRuns = args.fetchRuns ?? listWorkflowRuns;
-    const predicate = args.migrateRunPredicate ?? defaultMigratePredicate;
+    const predicate = args.migrateRunPredicate ?? (paired.mergeCommitSha ? shaMigratePredicate(paired.mergeCommitSha) : defaultMigratePredicate);
     const elapsedSinceMerge = nowFn().getTime() - mergedAt.getTime();
     const remainingTimeoutMs = Math.max(0, timeoutMs - elapsedSinceMerge);
     let polls = 0;
@@ -8084,11 +8218,11 @@ var import_fs3 = require("fs");
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
-function pipelinePath(tddDir, featureId) {
-  return pipelineJson(tddDir, featureId);
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
 }
-function readPipeline(tddDir, featureId) {
-  const p = pipelinePath(tddDir, featureId);
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
   if (!(0, import_fs3.existsSync)(p)) return initPipeline(featureId);
   return JSON.parse((0, import_fs3.readFileSync)(p, "utf8"));
 }
@@ -8096,8 +8230,8 @@ function readPipeline(tddDir, featureId) {
 // scripts/sftdd/spike.ts
 var import_fs4 = require("fs");
 var import_path4 = require("path");
-function listSpikes(tddDir) {
-  const root = (0, import_path4.join)(tddDir, "spikes");
+function listSpikes(sftddDir) {
+  const root = (0, import_path4.join)(sftddDir, "spikes");
   if (!(0, import_fs4.existsSync)(root)) return [];
   const out = [];
   for (const slug of (0, import_fs4.readdirSync)(root)) {
@@ -8116,15 +8250,15 @@ function listSpikes(tddDir) {
 }
 
 // scripts/sftdd/stale-branches.ts
-function listPipelineFeatures(tddDir) {
-  const featuresDir2 = featuresDir(tddDir);
+function listPipelineFeatures(sftddDir) {
+  const featuresDir2 = featuresDir(sftddDir);
   if (!(0, import_fs5.existsSync)(featuresDir2)) return [];
   return (0, import_fs5.readdirSync)(featuresDir2).filter((d) => (0, import_fs5.statSync)((0, import_path5.join)(featuresDir2, d)).isDirectory()).filter((d) => (0, import_fs5.existsSync)((0, import_path5.join)(featuresDir2, d, "pipeline.json"))).sort();
 }
-function findStaleBranches(tddDir) {
+function findStaleBranches(sftddDir) {
   const findings = [];
-  for (const featureId of listPipelineFeatures(tddDir)) {
-    const pipeline = readPipeline(tddDir, featureId);
+  for (const featureId of listPipelineFeatures(sftddDir)) {
+    const pipeline = readPipeline(sftddDir, featureId);
     for (const [storyId, story] of Object.entries(pipeline.stories)) {
       const exp = story.experiment;
       if (!exp) continue;
@@ -8141,7 +8275,7 @@ function findStaleBranches(tddDir) {
       }
     }
   }
-  for (const spike of listSpikes(tddDir)) {
+  for (const spike of listSpikes(sftddDir)) {
     findings.push({
       kind: "spike",
       slug: spike.spike_slug,
@@ -8180,7 +8314,7 @@ async function runDoctor(args) {
   const instance = args.instance ?? env.get("LAKEBASE_PROJECT_ID");
   const state = readWorkflowState(projectDir);
   const workflowStatePresent = state !== null;
-  for (const stale of findStaleBranches(resolveTddDir(projectDir))) {
+  for (const stale of findStaleBranches(resolveSftddDir(projectDir))) {
     const where = stale.feature_id ? ` ${stale.feature_id}/${stale.story_id}` : "";
     findings.push({
       id: `stale-${stale.kind}`,
@@ -8382,14 +8516,15 @@ async function fixFinding(args) {
           );
         }
         const sanitized = sanitizeBranchName(branch);
+        const envFile = path28.join(args.projectDir, ".env");
         updateEnvConnection({
-          envPath: path28.join(args.projectDir, ".env"),
+          envPath: envFile,
+          projectId: readEnvVar(envFile, "LAKEBASE_PROJECT_ID") ?? "",
           branchId: sanitized,
-          databaseUrl: "",
-          username: "",
-          password: ""
+          username: readEnvVar(envFile, "DB_USERNAME") ?? "",
+          endpointHost: readEnvVar(envFile, "LAKEBASE_HOST")
         });
-        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (credentials left empty; next post-checkout or manual mint refreshes them)`;
+        action = `rewrote .env LAKEBASE_BRANCH_ID=${sanitized} (metadata only; the app mints its token at runtime)`;
         break;
       }
       case "head-branch-drift": {
@@ -8485,18 +8620,15 @@ async function ensureLakebaseSecretAuth(args) {
   const { profile, scopeName, keyName, servicePrincipalClientId } = args;
   let scopeCreated = false;
   try {
-    await exec2(
-      `databricks secrets create-scope "${escapeShellArg5(scopeName)}" --profile "${escapeShellArg5(profile)}"`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["secrets", "create-scope", scopeName], { profile, timeout: timeoutMs });
     scopeCreated = true;
   } catch (err) {
     const msg = err.message;
     if (!isAlreadyExistsError(msg)) throw err;
   }
-  const tokenJson = await exec2(
-    `databricks tokens create --comment "${escapeShellArg5(tokenComment)}" --lifetime-seconds ${tokenLifetimeSeconds} -o json --profile "${escapeShellArg5(profile)}"`,
-    { timeout: timeoutMs }
+  const tokenJson = await runDatabricks(
+    ["tokens", "create", "--comment", tokenComment, "--lifetime-seconds", String(tokenLifetimeSeconds), "-o", "json"],
+    { profile, timeout: timeoutMs }
   );
   const tokenStart = tokenJson.indexOf("{");
   if (tokenStart < 0) {
@@ -8507,17 +8639,17 @@ async function ensureLakebaseSecretAuth(args) {
   if (typeof pat !== "string" || !pat) {
     throw new Error("databricks tokens create returned no token_value");
   }
-  await exec2(
-    `databricks secrets put-secret "${escapeShellArg5(scopeName)}" "${escapeShellArg5(keyName)}" --string-value "${escapeShellArg5(pat)}" --profile "${escapeShellArg5(profile)}"`,
-    { timeout: timeoutMs }
-  );
+  await runDatabricks(["secrets", "put-secret", scopeName, keyName, "--string-value", pat], {
+    profile,
+    timeout: timeoutMs
+  });
   let aclGranted = false;
   if (servicePrincipalClientId) {
     try {
-      await exec2(
-        `databricks secrets put-acl "${escapeShellArg5(scopeName)}" "${escapeShellArg5(servicePrincipalClientId)}" READ --profile "${escapeShellArg5(profile)}"`,
-        { timeout: timeoutMs }
-      );
+      await runDatabricks(["secrets", "put-acl", scopeName, servicePrincipalClientId, "READ"], {
+        profile,
+        timeout: timeoutMs
+      });
       aclGranted = true;
     } catch {
     }
@@ -8532,9 +8664,6 @@ async function ensureLakebaseSecretAuth(args) {
 }
 function isAlreadyExistsError(msg) {
   return /already exists|SCOPE_ALREADY_EXISTS|RESOURCE_ALREADY_EXISTS/i.test(msg);
-}
-function escapeShellArg5(s) {
-  return s.replace(/"/g, '\\"');
 }
 
 // scripts/lakebase/update-commands.ts
@@ -8677,6 +8806,7 @@ function detectWorkflowDrift(args) {
   ) : findKitTemplatesDir(here);
   const templateFiles = fs32.existsSync(kitWorkflowsDir) ? fs32.readdirSync(kitWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
   const projectFiles = fs32.existsSync(projectWorkflowsDir) ? fs32.readdirSync(projectWorkflowsDir).filter((f) => f.endsWith(".yml")) : [];
+  const version = readKitVersion2(kitWorkflowsDir);
   const seen = /* @__PURE__ */ new Set();
   const files = [];
   for (const name of templateFiles) {
@@ -8688,7 +8818,7 @@ function detectWorkflowDrift(args) {
       continue;
     }
     const projectContent = fs32.readFileSync(projectPath2, "utf8");
-    const templateContent = fs32.readFileSync(templatePath, "utf8");
+    const templateContent = applyPlaceholders(fs32.readFileSync(templatePath, "utf8"), version);
     if (projectContent === templateContent) {
       files.push({ name, status: "unchanged" });
     } else {
@@ -8908,10 +9038,10 @@ var DEFAULT_CREATE_COMMENT = "Created by lakebase-app-dev-kit";
 async function catalogExists(args) {
   const timeoutMs = args.timeoutMs ?? KIT_TIMEOUTS.cliDefault;
   try {
-    await exec2(
-      `databricks api get /api/2.1/unity-catalog/catalogs/${escapeShellArg6(args.catalog)} --profile "${escapeShellArg6(args.profile)}"`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["api", "get", `/api/2.1/unity-catalog/catalogs/${args.catalog}`], {
+      profile: args.profile,
+      timeout: timeoutMs
+    });
     return true;
   } catch (err) {
     if (isUcMissingError(err.message)) return false;
@@ -8923,10 +9053,10 @@ async function tryCreateCatalog(args) {
   const comment = args.comment ?? DEFAULT_CREATE_COMMENT;
   const payload = JSON.stringify({ name: args.catalog, comment });
   try {
-    await exec2(
-      `databricks api post /api/2.1/unity-catalog/catalogs --profile "${escapeShellArg6(args.profile)}" --json '${escapeSingleQuoted2(payload)}'`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["api", "post", "/api/2.1/unity-catalog/catalogs", "--json", payload], {
+      profile: args.profile,
+      timeout: timeoutMs
+    });
     return { created: true };
   } catch (err) {
     return { created: false, error: err.message };
@@ -8941,10 +9071,10 @@ async function ensureSchemaAndVolume(args) {
   let exists = await ucResourceExists(`/api/2.1/unity-catalog/schemas/${catalog}.${schema}`, profile, timeoutMs);
   if (!exists) {
     const payload = JSON.stringify({ name: schema, catalog_name: catalog, comment });
-    await exec2(
-      `databricks api post /api/2.1/unity-catalog/schemas --profile "${escapeShellArg6(profile)}" --json '${escapeSingleQuoted2(payload)}'`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["api", "post", "/api/2.1/unity-catalog/schemas", "--json", payload], {
+      profile,
+      timeout: timeoutMs
+    });
     schemaCreated = true;
   }
   let volumeCreated = false;
@@ -8961,10 +9091,10 @@ async function ensureSchemaAndVolume(args) {
       volume_type: volumeType,
       comment
     });
-    await exec2(
-      `databricks api post /api/2.1/unity-catalog/volumes --profile "${escapeShellArg6(profile)}" --json '${escapeSingleQuoted2(payload)}'`,
-      { timeout: timeoutMs }
-    );
+    await runDatabricks(["api", "post", "/api/2.1/unity-catalog/volumes", "--json", payload], {
+      profile,
+      timeout: timeoutMs
+    });
     volumeCreated = true;
   }
   return { schemaCreated, volumeCreated };
@@ -8986,9 +9116,9 @@ async function grantUcCatalogPermission(args) {
       }
     ]
   });
-  await exec2(
-    `databricks api patch /api/2.1/unity-catalog/permissions/catalog/${escapeShellArg6(args.catalog)} --profile "${escapeShellArg6(args.profile)}" --json '${escapeSingleQuoted2(payload)}'`,
-    { timeout: timeoutMs }
+  await runDatabricks(
+    ["api", "patch", `/api/2.1/unity-catalog/permissions/catalog/${args.catalog}`, "--json", payload],
+    { profile: args.profile, timeout: timeoutMs }
   );
   return { granted: true };
 }
@@ -8997,7 +9127,7 @@ function catalogExplorerUrl(workspaceHost) {
 }
 async function ucResourceExists(apiPath, profile, timeoutMs) {
   try {
-    await exec2(`databricks api get ${apiPath} --profile "${escapeShellArg6(profile)}"`, { timeout: timeoutMs });
+    await runDatabricks(["api", "get", apiPath], { profile, timeout: timeoutMs });
     return true;
   } catch (err) {
     if (isUcMissingError(err.message)) return false;
@@ -9006,12 +9136,6 @@ async function ucResourceExists(apiPath, profile, timeoutMs) {
 }
 function isUcMissingError(msg) {
   return /RESOURCE_DOES_NOT_EXIST|does not exist|status:? 404\b|NOT_FOUND/i.test(msg);
-}
-function escapeShellArg6(s) {
-  return s.replace(/"/g, '\\"');
-}
-function escapeSingleQuoted2(s) {
-  return s.replace(/'/g, `'\\''`);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -9082,6 +9206,7 @@ function escapeSingleQuoted2(s) {
   deployClaudeAgents,
   deployClaudeCommands,
   deployClaudeSkills,
+  deployClientProject,
   deployDeployTargets,
   deployEnv,
   deployEnvExample,
@@ -9167,6 +9292,7 @@ function escapeSingleQuoted2(s) {
   pushFailureHint,
   queryBranchSchema,
   queryBranchTables,
+  readEnvVar,
   readTargets,
   readWorkflowState,
   recoverOrphans,
@@ -9185,6 +9311,7 @@ function escapeSingleQuoted2(s) {
   resolveMigrationLayout,
   resolveParentBranch,
   resolveProfileForHost,
+  resolveProfileForHostSync,
   resolveProtectedTierNames,
   rollbackDeploy,
   rollbackSchemaMigration,

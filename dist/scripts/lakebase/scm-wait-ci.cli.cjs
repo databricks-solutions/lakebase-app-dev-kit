@@ -40,7 +40,7 @@ var getImportMetaUrl = () => typeof document === "undefined" ? new URL(`file:${_
 var importMetaUrl = /* @__PURE__ */ getImportMetaUrl();
 
 // scripts/lakebase/scm-wait-ci.cli.ts
-var path2 = __toESM(require("path"), 1);
+var path3 = __toESM(require("path"), 1);
 
 // scripts/util/cli-entry.ts
 var import_node_fs = require("fs");
@@ -129,13 +129,10 @@ function formatOwnerRepo(owner, repo) {
   return `${owner}/${repo}`;
 }
 
-// scripts/lakebase/branch-delete.ts
+// scripts/lakebase/databricks-cli.ts
 var import_node_child_process3 = require("child_process");
-var import_node_util2 = require("util");
-
-// scripts/lakebase/branch-utils.ts
-var import_node_child_process2 = require("child_process");
 var import_node_util = require("util");
+var import_node_path = require("path");
 
 // scripts/lakebase/kit-config.ts
 function intFromEnv(name, fallback) {
@@ -148,6 +145,7 @@ function intFromEnv(name, fallback) {
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var KIT_TIMEOUTS = {
   cliDefault: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_DEFAULT_MS", 3e4),
+  cliCreateProject: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_PROJECT_MS", 18e4),
   cliCreateBranch: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_BRANCH_MS", 6e4),
   cliCreateEndpoint: intFromEnv("LAKEBASE_KIT_TIMEOUT_CLI_CREATE_ENDPOINT_MS", 6e4),
   readyWait: intFromEnv("LAKEBASE_KIT_TIMEOUT_READY_WAIT_MS", 12e4),
@@ -176,11 +174,38 @@ var KIT_REGISTRIES = {
   springInitializr: urlFromEnv("LAKEBASE_KIT_REGISTRY_SPRING_INITIALIZR", "https://start.spring.io")
 };
 
-// scripts/lakebase/branch-utils.ts
-var execFileP = (0, import_node_util.promisify)(import_node_child_process2.execFile);
+// scripts/lakebase/databricks-profile.ts
+var fs = __toESM(require("fs"), 1);
+var import_node_child_process2 = require("child_process");
 
-// scripts/lakebase/branch-delete.ts
-var execFileP2 = (0, import_node_util2.promisify)(import_node_child_process3.execFile);
+// scripts/util/exec.ts
+var cp = __toESM(require("child_process"), 1);
+function exec2(command, opts = {}) {
+  return new Promise((resolve2, reject) => {
+    const options = {
+      cwd: opts.cwd,
+      timeout: opts.timeout ?? 6e4
+    };
+    if (opts.env) {
+      options.env = { ...process.env, ...opts.env };
+    }
+    cp.exec(command, options, (err, stdout, stderr) => {
+      if (err) {
+        const msg = String(stderr || err.message);
+        reject(new Error(`${command}: ${msg}`));
+        return;
+      }
+      resolve2(String(stdout).trim());
+    });
+  });
+}
+
+// scripts/lakebase/env-file.ts
+var fs2 = __toESM(require("fs"), 1);
+var path = __toESM(require("path"), 1);
+
+// scripts/lakebase/databricks-cli.ts
+var execFileP = (0, import_node_util.promisify)(import_node_child_process3.execFile);
 
 // scripts/github/pr.ts
 async function octokit() {
@@ -264,28 +289,6 @@ function parseCiStatus(rawChecks) {
   return "pending";
 }
 
-// scripts/util/exec.ts
-var cp = __toESM(require("child_process"), 1);
-function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
-    const options = {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? 6e4
-    };
-    if (opts.env) {
-      options.env = { ...process.env, ...opts.env };
-    }
-    cp.exec(command, options, (err, stdout, stderr) => {
-      if (err) {
-        const msg = String(stderr || err.message);
-        reject(new Error(`${command}: ${msg}`));
-        return;
-      }
-      resolve2(String(stdout).trim());
-    });
-  });
-}
-
 // scripts/git/remote.ts
 async function getGitHubUrl(cwd) {
   try {
@@ -365,8 +368,8 @@ async function pollUntil(args) {
 }
 
 // scripts/lakebase/scm-workflow-state.ts
-var fs = __toESM(require("fs"), 1);
-var path = __toESM(require("path"), 1);
+var fs3 = __toESM(require("fs"), 1);
+var path2 = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
   "feature-claimed",
@@ -380,12 +383,12 @@ var STATE_INDEX = SCM_STATES.reduce(
 );
 var STATE_FILE_REL = ".lakebase/workflow-state.json";
 function stateFilePath(projectDir) {
-  return path.join(projectDir, STATE_FILE_REL);
+  return path2.join(projectDir, STATE_FILE_REL);
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs.existsSync(p)) return null;
-  const raw = fs.readFileSync(p, "utf8");
+  if (!fs3.existsSync(p)) return null;
+  const raw = fs3.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -413,14 +416,14 @@ function writeWorkflowState(projectDir, state) {
     throw new Error(`Refusing to write invalid SCM state:
 ${summary}`);
   }
-  const dir = path.join(projectDir, ".lakebase");
-  fs.mkdirSync(dir, { recursive: true });
+  const dir = path2.join(projectDir, ".lakebase");
+  fs3.mkdirSync(dir, { recursive: true });
   const target = stateFilePath(projectDir);
   const tmp = `${target}.tmp`;
   const ordered = orderForOutput(result.value);
-  fs.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
+  fs3.writeFileSync(tmp, `${JSON.stringify(ordered, null, 2)}
 `, "utf8");
-  fs.renameSync(tmp, target);
+  fs3.renameSync(tmp, target);
 }
 function validateWorkflowState(value) {
   const errors = [];
@@ -770,7 +773,7 @@ async function runScmWaitCiCli(argv) {
 `);
     return 0;
   }
-  const projectDir = path2.resolve(args.projectDir ?? process.cwd());
+  const projectDir = path3.resolve(args.projectDir ?? process.cwd());
   try {
     const result = await waitForCi({
       projectDir,

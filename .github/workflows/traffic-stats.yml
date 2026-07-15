@@ -1,0 +1,66 @@
+name: Traffic stats
+
+# Collects GitHub traffic (clones + views) daily and appends the per-day
+# breakdown to CSVs under traffic/. GitHub only serves a trailing 14-day
+# window, so this job preserves history by upserting each day's row.
+#
+# Requires a repo secret named TRAFFIC_PAT: a token with read access to
+# repository traffic (classic PAT with "repo" scope, or a fine-grained PAT
+# with "Administration: read"). The default GITHUB_TOKEN cannot read the
+# traffic API (returns 403).
+
+on:
+  schedule:
+    - cron: "17 5 * * *" # daily at 05:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: traffic-stats
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect traffic into per-day CSVs
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p traffic
+
+          # Merge the trailing-14-day daily breakdown into an existing CSV,
+          # keeping one row per date. New values win (today's partial-day
+          # count keeps updating until the day closes).
+          upsert () {
+            endpoint="$1"; file="$2"; key="$3"
+            [ -f "$file" ] || echo "date,count,uniques" > "$file"
+            gh api "repos/$REPO/traffic/$endpoint" \
+              --jq ".${key}[] | \"\(.timestamp[0:10]),\(.count),\(.uniques)\"" > /tmp/new.csv
+            { tail -n +2 "$file"; cat /tmp/new.csv; } \
+              | awk -F, 'NF==3 {rows[$1]=$0} END {for (d in rows) print rows[d]}' \
+              | sort > /tmp/merged.csv
+            { echo "date,count,uniques"; cat /tmp/merged.csv; } > "$file"
+          }
+
+          upsert clones traffic/clones.csv clones
+          upsert views  traffic/views.csv  views
+
+      - name: Commit any changes
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add traffic/clones.csv traffic/views.csv
+          if git diff --cached --quiet; then
+            echo "No traffic changes to commit."
+          else
+            git commit -m "chore(traffic): record daily clones and views"
+            git push
+          fi
