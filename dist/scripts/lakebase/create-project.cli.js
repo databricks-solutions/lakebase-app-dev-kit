@@ -2757,7 +2757,7 @@ function defaultSftddConfig() {
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { uiTrack: false, gates: "proxy", deployTarget: "local", clientFramework: "none" }
+    project: { uiTrack: false, gates: "interactive", deployTarget: "local", clientFramework: "none" }
   };
 }
 function writeSftddConfig(projectDir, config, opts) {

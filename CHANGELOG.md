@@ -6,6 +6,65 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.15] - 2026-07-14
+
+Hardening from field feedback against beta.14, plus a consumer-facing packaging
+fix. The through-line: a replay is a RECORDING. It now fails loud on a missing
+corpus artifact instead of silently spawning a live agent, the shipped scenario
+corpus is guarded complete, and the declared gate policy is human-in-the-loop by
+default. Validated by a full live stockflow F1+F6 replay (design through promote,
+zero agent-takeovers) on top of the hermetic suite.
+
+### Added
+
+- **Replay-corpus completeness guard.** The scenario-corpus integrity test was
+  broadened from "every test-list `ac_id` resolves to a tracked ac file" to the
+  FULL set of artifacts the driver restores on replay: per-feature
+  `feature-spec.json` / `architecture.json` / `test-list.json`, per-story
+  `story.json` / `reflect-verdict.json` / at least one ac, the uiTrack
+  `design-guide.json`, and the per-story `recorded-build` turns. It keys off what
+  the corpus SHIPS (tracked `story.json` / feature dir), so it cannot false-fail
+  on an optional feature. A dropped artifact now fails hermetically in CI naming
+  the exact file, long before it could surface as a live-replay hard-fail.
+
+### Changed
+
+- **HITL-first gate policy (field feedback).** The declared project gate policy
+  (`project.gates`) now defaults to `interactive` (a human approves each gate).
+  `proxy` (headless, Human Proxy approves) is a deliberate opt-in. A run-scoped
+  `--gates` flag no longer persists into `sftdd-config.json` (a single headless
+  `--gates proxy` invocation could permanently flip an interactive project); the
+  drive resolves the effective mode per run as `--gates ?? project.gates` and
+  records it run-scoped only. `proxy` with no non-interactive signal
+  (`AUTO_CONTINUE` / CI) now refuses rather than silently auto-continuing.
+
+### Fixed
+
+- **Consumer installs missing every `scripts/sftdd` bin (FEIP-7989, GH #168).**
+  The shipped `dist` was incomplete, so a `github:...#tag` consumer install
+  received a partial CLI set. The release now ships a complete `dist` and guards
+  it: `prepare.mjs` verifies every bin is present on a consumer install, the
+  scaffolded `scripts/lk` warm-check refuses an incomplete kit, and a
+  `dist-bins-shipped` test asserts parity.
+- **Replay fell through to a live agent on a corpus miss.** When a replay lane
+  was told to reproduce a turn the corpus lacked, the driver printed a note and
+  SPAWNED THE REAL AGENT, letting an agent "take over" a deterministic run and
+  masking an incomplete corpus. All three fall-throughs (design turn, build turn,
+  reflect verdict) now throw `ReplayCorpusMissError`, failing loud (exit 2) and
+  naming the missing artifact. No agent is ever spawned in a replay lane.
+- **`.gitignore` silently dropped scenario corpus data.** An org-init
+  `*conf*.json` glob matched corpus files whose names contain "conf"
+  (`*-confirmed.json`, `*-nonconforming-*.json`, client `tsconfig.json`), so
+  shipped scenarios referenced ac files a consumer never received. The ignore is
+  now anchored to the actual runtime file (`run-config.json`) by exact basename,
+  and the dropped data is restored.
+- **Replay/capture smoke harness gate policy.** The harness is headless by
+  construction (it exports `LAKEBASE_SFTDD_HUMAN_PROXY=1`), but it only passed
+  `--gates proxy` on the capture path, relying on the old global `proxy` default
+  for replay. With the HITL-first flip that default is gone, so a pure replay
+  blocked at the first per-story spec gate. The harness now declares
+  `--gates proxy` in both directions.
+
 ## [0.3.0-beta.14] - 2026-07-11
 
 A deploy-verify failure caused by a shared-state-fragile prior test can now

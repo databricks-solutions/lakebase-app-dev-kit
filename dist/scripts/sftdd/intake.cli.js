@@ -6988,7 +6988,10 @@ function resolveSftddSettings(inputs) {
   };
   const project = {
     uiTrack: file?.project?.uiTrack ?? false,
-    gates: file?.project?.gates ?? "proxy",
+    // HITL-first: the declared project policy defaults to interactive (a human
+    // approves each gate). Headless (proxy) is a deliberate opt-in, set in the
+    // file or as a RUN-SCOPED --gates override (never persisted by a flag).
+    gates: file?.project?.gates ?? "interactive",
     deployTarget: file?.project?.deployTarget ?? "local",
     clientFramework: file?.project?.clientFramework ?? "none"
   };

@@ -10281,7 +10281,10 @@ function resolveSftddSettings(inputs) {
   };
   const project = {
     uiTrack: file?.project?.uiTrack ?? false,
-    gates: file?.project?.gates ?? "proxy",
+    // HITL-first: the declared project policy defaults to interactive (a human
+    // approves each gate). Headless (proxy) is a deliberate opt-in, set in the
+    // file or as a RUN-SCOPED --gates override (never persisted by a flag).
+    gates: file?.project?.gates ?? "interactive",
     deployTarget: file?.project?.deployTarget ?? "local",
     clientFramework: file?.project?.clientFramework ?? "none"
   };
@@ -10307,7 +10310,7 @@ function defaultSftddConfig() {
     roles,
     build: { loopGranularity: "story", batchCap: 3, sessionScope: "story" },
     plan: { sizing: true },
-    project: { uiTrack: false, gates: "proxy", deployTarget: "local", clientFramework: "none" }
+    project: { uiTrack: false, gates: "interactive", deployTarget: "local", clientFramework: "none" }
   };
 }
 function writeSftddConfig(projectDir, config, opts) {
@@ -10318,10 +10321,9 @@ function writeSftddConfig(projectDir, config, opts) {
   return true;
 }
 function applyProjectOverrides(projectDir, over) {
-  if (over.gates === void 0 && over.deployTarget === void 0 && over.sizing === void 0) return;
+  if (over.deployTarget === void 0 && over.sizing === void 0) return;
   const cfg = loadSftddConfig(projectDir) ?? defaultSftddConfig();
   cfg.project = cfg.project ?? {};
-  if (over.gates !== void 0) cfg.project.gates = over.gates;
   if (over.deployTarget !== void 0) cfg.project.deployTarget = over.deployTarget;
   cfg.plan = cfg.plan ?? {};
   if (over.sizing !== void 0) cfg.plan.sizing = over.sizing;
@@ -10689,8 +10691,11 @@ Flags:
                        driver blocks for a human [Y/n], then RESUMES the same run
                        on Y , it never leaves the state machine. n re-asks. Set
                        LAKEBASE_SFTDD_AUTO_CONTINUE=1 to auto-confirm (non-interactive).
-  --gates <mode>       proxy (default, headless: Human Proxy approves) | interactive
-                       (stop AT each HITL gate so the human answers, then re-run)
+  --gates <mode>       interactive (default: stop AT each HITL gate so the human
+                       answers, then re-run) | proxy (headless: Human Proxy
+                       approves; requires LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI).
+                       Run-scoped: overrides project.gates for THIS run only,
+                       never rewrites sftdd-config.json.
   --no-sizing          Skip the Architect's t-shirt-sizing (planning-poker) step:
                        planning goes propose -> author-requests, no estimate.
                        Sizing is ON by default. Aliases: --no-planning-poker,
@@ -10711,6 +10716,12 @@ var ClaudeTurnError = class extends Error {
     this.name = "ClaudeTurnError";
   }
   promptTooLong;
+};
+var ReplayCorpusMissError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ReplayCorpusMissError";
+  }
 };
 function spawnClaudeStreaming(args, cwd) {
   return new Promise((resolve2, reject) => {
@@ -10784,7 +10795,14 @@ function execRunner(cfg) {
         if (replayBuildDir && story && (cmd.role === "navigator" || cmd.role === "driver")) {
           if (cmd.replay?.buildMode === "reflect") {
             const rd = sftddEnv("REPLAY_DIR");
-            if (rd) restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
+            if (rd) {
+              const restored = restoreReflectVerdict({ replayDir: rd, sftddDir: cfg.sftddDir, featureId: cfg.featureId, story });
+              if (!restored) {
+                throw new ReplayCorpusMissError(
+                  `[drive] REPLAY CORPUS MISS: reflect verdict for ${story} is not in the corpus (expected features/${cfg.featureId}/stories/${story}/reflect-verdict.json under ${rd}). Replay will NOT run the Navigator live , put the recorded verdict in the corpus (check .gitignore is not dropping it).`
+                );
+              }
+            }
             process.stderr.write(`[drive] replayed reflect (navigator ${story}) from corpus , verdict only (no code, not counted)
 `);
             return;
@@ -10806,8 +10824,9 @@ function execRunner(cfg) {
             );
             return;
           }
-          process.stderr.write(`[drive] build replay miss for ${cmd.role} turn ${turnIndex} (${story}); running the real agent
-`);
+          throw new ReplayCorpusMissError(
+            `[drive] REPLAY CORPUS MISS: build turn ${turnIndex} for ${story} (${cmd.role}) has no recorded turn dir under ${replayBuildDir} (features/${cfg.featureId}/stories/${story}/turns). The live orchestrator dispatched more build turns than the corpus recorded, or the corpus is incomplete. Replay will NOT run the agent live , re-record or fix the corpus so it covers every dispatched turn.`
+          );
         }
         const replayDir = sftddEnv("REPLAY_DIR");
         if (replayDir && REPLAYABLE_DESIGN_ROLES.has(cmd.role)) {
@@ -10824,8 +10843,10 @@ function execRunner(cfg) {
             );
             return;
           }
-          process.stderr.write(`[drive] replay miss for ${cmd.role} (no corpus artifact); running the real agent
-`);
+          const where = `${cmd.role}${cmd.replay?.mode ? `/${cmd.replay.mode}` : ""}${cmd.replay?.story ? ` ${cmd.replay.story}` : ""}`;
+          throw new ReplayCorpusMissError(
+            `[drive] REPLAY CORPUS MISS: no recorded artifact for design turn '${where}' under ${replayDir} (features/${cfg.featureId}/...). The deterministic pipeline dispatched this turn but the corpus lacks its output. Replay will NOT run the agent live , put the recorded artifact in the corpus (check .gitignore is not dropping it).`
+          );
         }
         const baseArgs = ["-p", cmd.task, "--agent", cmd.role, "--model", cmd.model, "--strict-mcp-config", "--output-format", "stream-json", "--verbose"];
         if (cmd.effort) baseArgs.push("--effort", cmd.effort);
@@ -10997,7 +11018,7 @@ function makeConfirmContinue() {
   const auto = sftddEnv("AUTO_CONTINUE") === "1";
   const answerFile = sftddEnv("GATE_ANSWER_FILE")?.trim();
   const isYes = (a) => a === "" || a === "y" || a === "yes";
-  return (action) => new Promise((resolve2) => {
+  return (action) => new Promise((resolve2, reject) => {
     const label = describeAction(action);
     const prompt = `
 [drive] PAUSED , continue past the ${label} handoff? [Y/n] `;
@@ -11051,12 +11072,11 @@ function makeConfirmContinue() {
       };
       return ask();
     }
-    process.stderr.write(
-      `${prompt}
-[drive] no interactive terminal and no LAKEBASE_SFTDD_GATE_ANSWER_FILE , auto-continuing past ${label}.
-`
+    reject(
+      new Error(
+        `[drive] PAUSED at the ${label} handoff with no human channel , refusing to continue. Set LAKEBASE_SFTDD_AUTO_CONTINUE=1 (deliberate headless), provide LAKEBASE_SFTDD_GATE_ANSWER_FILE, or run in an interactive terminal.`
+      )
     );
-    resolve2();
   });
 }
 function withBuildRecording(inner, cfg) {
@@ -11131,13 +11151,14 @@ async function runSprintMode(args) {
   const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
   const claimJs = path7.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
   const settings = resolveSftddSettings({ projectDir });
-  const interactive = settings.project.gates === "interactive";
+  const gates = effectiveGates(args, projectDir);
+  const interactive = gates === "interactive";
   const skipSizing = !settings.plan.sizing;
   const effects = {
     async drivePlanning() {
       const cfg = buildCfg(args, "");
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, "plan");
+      snapshotRunConfig(cfg, "plan", gates);
       const planning = {
         // Sizing is ON by default; --no-sizing (or config plan.sizing:false) opts out.
         readState: async () => deriveSprintPlanningState(sftddDir, sprint, { skipSizing }),
@@ -11171,7 +11192,7 @@ async function runSprintMode(args) {
       const cfg = buildCfg(args, featureId);
       resetStaleTerminalPhase(cfg.sftddDir);
       cfg.runner = execRunner(cfg);
-      snapshotRunConfig(cfg, "full");
+      snapshotRunConfig(cfg, "full", gates);
       const r = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
         stopWhen: gatedStopWhen(void 0, interactive)
       });
@@ -11222,14 +11243,22 @@ async function runSprintMode(args) {
     return 1;
   }
 }
-function snapshotRunConfig(cfg, bound) {
+function effectiveGates(args, projectDir) {
+  const flag = args.gates;
+  return flag ?? resolveSftddSettings({ projectDir }).project.gates;
+}
+function hasNonInteractiveSignal() {
+  return sftddEnv("AUTO_CONTINUE") === "1" || /^(1|true)$/i.test(process.env.CI ?? "");
+}
+function snapshotRunConfig(cfg, bound, gates) {
   writeRunConfig({
     projectDir: cfg.projectDir,
     sftddDir: cfg.sftddDir,
     bound,
-    // gates from sftdd-config.json (the --gates flag wrote through to it), so the
-    // snapshot records what the drive actually used, never a stale flag default.
-    gates: resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates,
+    // Run-scoped effective gate mode (--gates override else project policy),
+    // recorded here so the snapshot is where the run-scoped choice lives , the
+    // flag never persists into sftdd-config.json.
+    gates,
     uiTrack: cfg.uiTrack,
     buildSessionScope: cfg.buildSessionScope,
     reviewEffort: cfg.reviewEffort,
@@ -11258,10 +11287,18 @@ async function main() {
     }
   }
   applyProjectOverrides(args.projectDir ?? process.cwd(), {
-    gates: args.gates,
     deployTarget: args.deployTarget,
     sizing: args.noSizing === true ? false : void 0
   });
+  if (effectiveGates(args, args.projectDir ?? process.cwd()) === "proxy" && !hasNonInteractiveSignal()) {
+    process.stderr.write(
+      `lakebase-sftdd-drive: gate mode 'proxy' (Human Proxy approves headlessly) requires an explicit
+non-interactive signal (LAKEBASE_SFTDD_AUTO_CONTINUE=1 or CI). Refusing to bypass HITL in an
+interactive/dev context. Unset LAKEBASE_SFTDD_HUMAN_PROXY, or pass --gates interactive.
+`
+    );
+    return 2;
+  }
   if (args.sprint && !args.feature) {
     return runSprintMode(args);
   }
@@ -11303,8 +11340,9 @@ ${help()}`);
     return 0;
   }
   cfg.runner = execRunner(cfg);
-  snapshotRunConfig(cfg, bound ?? "full");
-  const interactive = resolveSftddSettings({ projectDir: cfg.projectDir }).project.gates === "interactive";
+  const gates = effectiveGates(args, cfg.projectDir);
+  snapshotRunConfig(cfg, bound ?? "full", gates);
+  const interactive = gates === "interactive";
   try {
     const result = await runDriver(withTurnRecording(withBuildRecording(buildDriveEffects(cfg), cfg), cfg), {
       maxSteps: args.maxSteps,
@@ -11388,6 +11426,11 @@ ${help()}`);
         recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
 `);
       return 3;
+    }
+    if (err instanceof ReplayCorpusMissError) {
+      process.stderr.write(`${err.message}
+`);
+      return 2;
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);
