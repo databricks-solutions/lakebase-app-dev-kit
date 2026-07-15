@@ -85,6 +85,26 @@ The driver routes planning to the role agents, at their resolved per-role models
 - **product-owner** prioritizes + authors the sprint's `feature-request.md` files
   (headless: the Human Proxy supplies them from the recorded backlog, above).
 
+**Interactive: commit the backlog after authoring (author-requests is a
+human-input pause, not an auto-step).** In interactive mode the driver PAUSES at
+`author-requests`: the backlog is only ever written by the author-requests effect,
+which the interactive driver stops BEFORE performing, so authoring the request
+files alone does not advance planning. After you (the PO) author the sprint's
+`feature-request.md` files, commit the backlog explicitly, then re-run:
+
+```bash
+./scripts/lk \
+  lakebase-sftdd-sync-backlog --sprint "<sprint-name>" --features F1,F2 --project-dir "$PWD"
+```
+
+`--features` declares this sprint's membership (recorded to
+`.sftdd/sprints/<name>/requested.json`, the same one file the Human Proxy writes);
+`sync-backlog` then projects `.sftdd/sprints/<name>/backlog.json` from the
+requested features that have a `feature-request.md`. Re-running the drive now sees
+`requestsAuthored` and advances to the plan gate. (Headless, the Human Proxy's
+supply-requests performs this same projection automatically, so this step is
+interactive-only.)
+
 Then it surfaces the **sprint plan gate** (the HITL checkpoint between planning
 and execution). `--plan-only` STOPS there, it does not enter design/build/deploy.
 

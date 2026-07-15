@@ -6833,19 +6833,21 @@ function writeBacklog(tdd, backlog) {
   fs.mkdirSync(sprintDir(tdd, backlog.sprint), { recursive: true });
   fs.writeFileSync(backlogJson(tdd, backlog.sprint), JSON.stringify(backlog, null, 2) + "\n", "utf8");
 }
+function readRequested(tdd, sprint) {
+  const file = sprintRequestedJson(tdd, sprint);
+  if (!fs.existsSync(file)) return void 0;
+  try {
+    const p = JSON.parse(fs.readFileSync(file, "utf8"));
+    return Array.isArray(p) ? p.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
 function syncBacklog(tdd, sprint) {
   const sizeOf = new Map(readEstimates(tdd).map((e) => [e.feature_id, e.size]));
   const root = featuresDir(tdd);
-  let scope;
-  const reqFile = sprintRequestedJson(tdd, sprint);
-  if (fs.existsSync(reqFile)) {
-    try {
-      const ids = JSON.parse(fs.readFileSync(reqFile, "utf8"));
-      if (Array.isArray(ids)) scope = new Set(ids.filter((x) => typeof x === "string"));
-    } catch {
-      scope = void 0;
-    }
-  }
+  const requested = readRequested(tdd, sprint);
+  const scope = requested ? new Set(requested) : void 0;
   const committed = fs.existsSync(root) ? fs.readdirSync(root).filter((d) => {
     try {
       if (!fs.statSync(join(root, d)).isDirectory()) return false;
@@ -11153,9 +11155,13 @@ function reportGate(gate) {
   );
 }
 function reportInput(action, sprint) {
-  const where = sprint ? ` for sprint ${sprint}` : "";
+  const s = sprint ?? "<sprint>";
   process.stderr.write(
-    `[drive] PAUSED , awaiting human input: the Product Owner must author feature-request(s)${where} (${describeAction(action)}), then re-run. Nothing was approved or produced yet.
+    `[drive] PAUSED , awaiting human input (${describeAction(action)}). Nothing was approved or produced yet.
+        The Product Owner must:
+          1. author the sprint's feature-request(s) at .sftdd/features/<id>/feature-request.md, then
+          2. commit the backlog: lakebase-sftdd-sync-backlog --sprint ${s} --features <id[,id...]>
+        then re-run the drive , it will advance to the (interactive) plan gate.
 `
   );
 }

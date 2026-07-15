@@ -407,6 +407,37 @@ export function writeBacklog(tdd: string, backlog: SprintBacklog): void {
 }
 
 /**
+ * The sprint's REQUESTED feature ids (`sprints/<s>/requested.json`) , the single
+ * membership declaration that scopes syncBacklog. `undefined` means the file is
+ * absent (unscoped: every committed request is in scope, single-sprint/legacy);
+ * `[]` means present-but-empty (nothing in scope). Both the Human Proxy (headless,
+ * from $LAKEBASE_SFTDD_SPRINT_REQUESTS) and a human-in-the-loop PO (via
+ * lakebase-sftdd-sync-backlog) declare membership through THIS one file.
+ */
+export function readRequested(tdd: string, sprint: string): string[] | undefined {
+  const file = sprintRequestedJson(tdd, sprint);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    const p = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+    return Array.isArray(p) ? p.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Declare/extend the sprint's requested feature ids. MERGES with any existing set
+ *  (a resume must never shrink membership), dedups + sorts, writes, and returns the
+ *  merged list. The one writer for requested.json (Human Proxy + the sync-backlog
+ *  CLI both go through here). */
+export function writeRequested(tdd: string, sprint: string, ids: string[]): string[] {
+  const existing = readRequested(tdd, sprint) ?? [];
+  const merged = [...new Set([...existing, ...ids])].sort();
+  fs.mkdirSync(sprintDir(tdd, sprint), { recursive: true });
+  fs.writeFileSync(sprintRequestedJson(tdd, sprint), JSON.stringify(merged, null, 2) + "\n", "utf8");
+  return merged;
+}
+
+/**
  * Project the committed backlog from disk: every feature that has a
  * feature-request.md (the PO's commitment), in directory order, enriched with
  * the Architect's t-shirt size from estimates.json. This is the deterministic
@@ -420,16 +451,8 @@ export function syncBacklog(tdd: string, sprint: string): SprintBacklog {
   // later sprint's backlog excludes an earlier sprint's already-built features
   // whose feature-request.md still sits on disk. Absent => single-sprint/legacy:
   // every committed request is in scope (unchanged behavior).
-  let scope: Set<string> | undefined;
-  const reqFile = sprintRequestedJson(tdd, sprint);
-  if (fs.existsSync(reqFile)) {
-    try {
-      const ids = JSON.parse(fs.readFileSync(reqFile, "utf8")) as unknown;
-      if (Array.isArray(ids)) scope = new Set(ids.filter((x): x is string => typeof x === "string"));
-    } catch {
-      scope = undefined;
-    }
-  }
+  const requested = readRequested(tdd, sprint);
+  const scope: Set<string> | undefined = requested ? new Set(requested) : undefined;
   const committed = fs.existsSync(root)
     ? fs
         .readdirSync(root)

@@ -6779,6 +6779,23 @@ function storyAcIds(tdd, f, s) {
   }
   return [...ids];
 }
+function readRequested(tdd, sprint) {
+  const file = sprintRequestedJson(tdd, sprint);
+  if (!fs.existsSync(file)) return void 0;
+  try {
+    const p = JSON.parse(fs.readFileSync(file, "utf8"));
+    return Array.isArray(p) ? p.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function writeRequested(tdd, sprint, ids) {
+  const existing = readRequested(tdd, sprint) ?? [];
+  const merged = [.../* @__PURE__ */ new Set([...existing, ...ids])].sort();
+  fs.mkdirSync(sprintDir(tdd, sprint), { recursive: true });
+  fs.writeFileSync(sprintRequestedJson(tdd, sprint), JSON.stringify(merged, null, 2) + "\n", "utf8");
+  return merged;
+}
 
 // scripts/sftdd/approve-gate.ts
 import { join as join4 } from "path";
@@ -8152,19 +8169,7 @@ function supplyRequests(args = {}) {
     else skipped.push({ featureId, reason: res.reason ?? "unknown" });
   }
   if (args.sprint && supplied.length > 0) {
-    const file = sprintRequestedJson(sftddDir, args.sprint);
-    let existing = [];
-    if (existsSync9(file)) {
-      try {
-        const p = JSON.parse(readFileSync10(file, "utf8"));
-        if (Array.isArray(p)) existing = p.filter((x) => typeof x === "string");
-      } catch {
-        existing = [];
-      }
-    }
-    const merged = [.../* @__PURE__ */ new Set([...existing, ...supplied])].sort();
-    mkdirSync5(sprintDir(sftddDir, args.sprint), { recursive: true });
-    writeFileSync7(file, JSON.stringify(merged, null, 2) + "\n");
+    writeRequested(sftddDir, args.sprint, supplied);
   }
   return { supplied, skipped };
 }

@@ -799,10 +799,13 @@ function reportGate(gate: WorkflowAction): void {
  *  at author-requests). Unlike a gate (work done, awaiting approval), NOTHING has
  *  been produced , so this must never read as "approved/complete". */
 function reportInput(action: WorkflowAction, sprint?: string): void {
-  const where = sprint ? ` for sprint ${sprint}` : "";
+  const s = sprint ?? "<sprint>";
   process.stderr.write(
-    `[drive] PAUSED , awaiting human input: the Product Owner must author feature-request(s)${where} ` +
-      `(${describeAction(action)}), then re-run. Nothing was approved or produced yet.\n`,
+    `[drive] PAUSED , awaiting human input (${describeAction(action)}). Nothing was approved or produced yet.\n` +
+      `        The Product Owner must:\n` +
+      `          1. author the sprint's feature-request(s) at .sftdd/features/<id>/feature-request.md, then\n` +
+      `          2. commit the backlog: lakebase-sftdd-sync-backlog --sprint ${s} --features <id[,id...]>\n` +
+      `        then re-run the drive , it will advance to the (interactive) plan gate.\n`,
   );
 }
 

@@ -48,7 +48,7 @@ import { approveGate } from "./approve-gate.js";
 import { readGates, GATE_NAMES, type GateName, type GatesState } from "./gates.js";
 import { checkArtifactConformance, canonicalArtifactName } from "./artifact-conformance.js";
 import { emitAgentLogEvent } from "./agent-log.js";
-import { featureRequestMd, resolveSftddDir, sprintRequestedJson, sprintDir, featureProposalsMd, planningDir } from "./sftdd-paths.js";
+import { featureRequestMd, resolveSftddDir, writeRequested, featureProposalsMd, planningDir } from "./sftdd-paths.js";
 // The gate CONDITION (what makes a gate advanceable) is a state-machine property,
 // not a proxy decision; it lives in the guard and is enforced on the advance path.
 import { resolveArtifactInputs, featureDir } from "./gate-conformance-guard.js";
@@ -323,23 +323,11 @@ export function supplyRequests(args: SupplyRequestsArgs = {}): SupplyRequestsRes
     else skipped.push({ featureId, reason: res.reason ?? "unknown" });
   }
   // Record this sprint's requested feature ids so syncBacklog scopes the backlog
-  // to them. Merge with any already-recorded ids (a resume that re-supplies must
-  // not shrink the set). Only when a sprint is named (single-sprint/legacy leaves
-  // it unscoped for back-compat).
+  // to them, through the shared writeRequested (merges, so a resume that
+  // re-supplies never shrinks the set). Only when a sprint is named
+  // (single-sprint/legacy leaves it unscoped for back-compat).
   if (args.sprint && supplied.length > 0) {
-    const file = sprintRequestedJson(sftddDir, args.sprint);
-    let existing: string[] = [];
-    if (existsSync(file)) {
-      try {
-        const p = JSON.parse(readFileSync(file, "utf8")) as unknown;
-        if (Array.isArray(p)) existing = p.filter((x): x is string => typeof x === "string");
-      } catch {
-        existing = [];
-      }
-    }
-    const merged = [...new Set([...existing, ...supplied])].sort();
-    mkdirSync(sprintDir(sftddDir, args.sprint), { recursive: true });
-    writeFileSync(file, JSON.stringify(merged, null, 2) + "\n");
+    writeRequested(sftddDir, args.sprint, supplied);
   }
   return { supplied, skipped };
 }

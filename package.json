@@ -128,6 +128,7 @@
     "lakebase-sftdd-response-formatter": "./dist/scripts/sftdd/response-formatter.cli.js",
     "lakebase-sftdd-scenario-conditions": "./dist/scripts/sftdd/scenario-conditions.cli.js",
     "lakebase-sftdd-spike": "./dist/scripts/sftdd/spike.cli.js",
+    "lakebase-sftdd-sync-backlog": "./dist/scripts/sftdd/sync-backlog.cli.js",
     "lakebase-sftdd-test-list": "./dist/scripts/sftdd/test-list.cli.js",
     "lakebase-sftdd-timing": "./dist/scripts/sftdd/timing-report.cli.js",
     "lakebase-tdd-agent-model": "./dist/scripts/sftdd/agent-models.cli.js",
@@ -150,6 +151,7 @@
     "lakebase-tdd-response-formatter": "./dist/scripts/sftdd/response-formatter.cli.js",
     "lakebase-tdd-scenario-conditions": "./dist/scripts/sftdd/scenario-conditions.cli.js",
     "lakebase-tdd-spike": "./dist/scripts/sftdd/spike.cli.js",
+    "lakebase-tdd-sync-backlog": "./dist/scripts/sftdd/sync-backlog.cli.js",
     "lakebase-tdd-test-list": "./dist/scripts/sftdd/test-list.cli.js",
     "lakebase-tdd-timing": "./dist/scripts/sftdd/timing-report.cli.js",
     "lakebase-update-commands": "./dist/scripts/lakebase/update-commands.cli.js"
