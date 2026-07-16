@@ -5,6 +5,16 @@ flow: plan the backlog (to the plan gate), then for each feature claim its branc
 and drive it `design` -> `build` -> `deploy` to done. Control returns to the human
 only at the gates, the human answers them live; headless, the Human Proxy does.
 
+## Operating contract (drive, do not narrate)
+
+Follow `@lakebase-sftdd-workflows/references/orchestrator-contract.md`: drive to
+completion via `lakebase-sftdd-next` (enact its `primary_action`, then continue),
+and stop for the human ONLY at a HITL gate or a blocker. At a stop, present the
+decision (the `next` option titles + their `hil_prompt`s), not the CLIs you ran;
+report outcomes ("S2 accepted", "F1 shipped to staging"), not per-command
+play-by-play; show working software at the acceptance + deploy gates. Verbose
+step narration is opt-in (`LAKEBASE_SFTDD_VERBOSE=1`), off by default.
+
 This is the autonomous path. The Tier-2 commands (`/plan`, `/design`, `/build`,
 `/deploy`) are for running ONE phase at a time when you want hands-on control;
 `/sprint` chains them. `/spike` is throwaway exploration outside the loop.

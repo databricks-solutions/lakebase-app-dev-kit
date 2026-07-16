@@ -2,6 +2,10 @@
 
 Drives a feature from idea to spec to architect review to test list. This wraps the canonical lakebase-sftdd-workflows design phases as a single one-shot you can invoke from Claude Code in a Lakebase-paired project.
 
+## Operating contract (drive, do not narrate)
+
+Follow `@lakebase-sftdd-workflows/references/orchestrator-contract.md`: drive to completion via `lakebase-sftdd-next` (enact its `primary_action`, then continue), and stop for the human ONLY at a HITL gate or a blocker. Present the decision (the `next` option titles + their `hil_prompt`s), not the CLIs you ran; report outcomes, not per-command play-by-play. Verbose step narration is opt-in (`LAKEBASE_SFTDD_VERBOSE=1`), off by default.
+
 ## Usage
 
 ```

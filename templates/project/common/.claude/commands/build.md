@@ -2,6 +2,10 @@
 
 Drives a designed feature through TDD cycles to ready-for-review by delegating to the deterministic orchestrator driver. It is the second phase of the per-feature loop: `/design` -> `/build` -> `/deploy`, which a sprint of features runs after `/plan` authored their requests. When the stories are built + accepted, run `/deploy <feature-id>` to ship the increment to a target and verify it is working software (the per-sprint review).
 
+## Operating contract (drive, do not narrate)
+
+Follow `@lakebase-sftdd-workflows/references/orchestrator-contract.md`: drive to completion via `lakebase-sftdd-next` (enact its `primary_action`, then continue), and stop for the human ONLY at a HITL gate (per-story acceptance) or a blocker. Present the decision (the `next` option titles + their `hil_prompt`s), not the CLIs you ran; report outcomes ("S2 accepted"), not per-command play-by-play; show working software at the acceptance gate. Verbose step narration is opt-in (`LAKEBASE_SFTDD_VERBOSE=1`), off by default.
+
 ## Usage
 
 ```

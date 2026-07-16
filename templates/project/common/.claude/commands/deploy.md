@@ -2,6 +2,10 @@
 
 Drives a built feature to a deployment target and verifies it is running and reachable, the per-sprint "working software" checkpoint the Product Owner reviews. This is the third phase of the per-feature loop: `/design` -> `/build` -> `/deploy` (the sprint's features run this loop after `/plan` authored their requests), the same path for real and headless runs.
 
+## Operating contract (drive, do not narrate)
+
+Follow `@lakebase-sftdd-workflows/references/orchestrator-contract.md`: drive to completion via `lakebase-sftdd-next` (enact its `primary_action`, then continue), and stop for the human ONLY at a HITL gate (the deploy gate, then promote) or a blocker. Present the decision (the `next` option titles + their `hil_prompt`s), not the CLIs you ran; report outcomes ("F1 shipped to staging"), not per-command play-by-play; show the working software (the reachable endpoint) at the deploy gate, not an internal state dump. Verbose step narration is opt-in (`LAKEBASE_SFTDD_VERBOSE=1`), off by default.
+
 ## Usage
 
 ```

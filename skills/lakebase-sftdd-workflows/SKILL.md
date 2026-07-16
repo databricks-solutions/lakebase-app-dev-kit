@@ -116,6 +116,8 @@ The **orchestrator** is the deterministic driver (`lakebase-sftdd-drive`), **not
 ## References
 
 - [`references/spec-format.md`](references/spec-format.md) – full `.sftdd/` directory layout + markdown ↔ JSON contract.
+- [`references/orchestrator-contract.md`](references/orchestrator-contract.md) – how the agent DRIVING `/sprint` `/design` `/build` `/deploy` must behave: drive to completion via `lakebase-sftdd-next`, surface only HITL gates + blockers, report outcomes (not process), verbose/eval narration opt-in. The orchestrator's counterpart to `agent-operating-rules.md`; the command templates load it.
+- [`references/next-schema.md`](references/next-schema.md) – the `lakebase-sftdd-next` / `.sftdd/next.json` "what next" surface the orchestrator contract drives on.
 - [`references/agent-logging.md`](references/agent-logging.md) – structured agent log format + per-role emit points. Every role emits what it is doing via `lakebase-sftdd-log` (debug = reasoning, info = outputs) to the centralized `.sftdd/agent-log.jsonl`.
 - `scripts/sftdd/schemas/` – JSON Schemas validated by `spec-sync.ts`.
 - [`../software-design-principles/SKILL.md`](../software-design-principles/SKILL.md) – engineering canon (SOLID, DRY, clean code, layered architecture, cross-cutting concerns, NFRs). Required reading for Architect Reviewer and Navigator.
