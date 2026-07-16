@@ -7342,12 +7342,30 @@ async function claimFeatureBranch(args) {
     );
   }
   const parentBranch = args.parentBranchOverride ?? await resolveParentBranch(current.tier_topology, instance);
-  const paired = await createFeaturePairedBranch({
+  let paired = await createFeaturePairedBranch({
     instance,
     branch,
     parentBranch,
     cwd: args.projectDir
   });
+  if (args.checkBranchDbAheadOfCode) {
+    const orphanRev = await args.checkBranchDbAheadOfCode({
+      instance,
+      branch: paired.gitBranch,
+      projectDir: args.projectDir
+    });
+    if (orphanRev) {
+      if (args.resetStaleBranch) {
+        await args.resetStaleBranch({ instance, branch: paired.gitBranch, projectDir: args.projectDir });
+        paired = await createFeaturePairedBranch({ instance, branch, parentBranch, cwd: args.projectDir });
+      } else {
+        throw new ScmClaimError(
+          `Cannot claim ${branch}: the paired Lakebase branch DB is AHEAD of code , applied revision '${orphanRev}' has no local migration file. This is a reused branch polluted by an earlier aborted build (its migration was git-reset away but the DB was not). Reset it with 'lakebase-scm-claim-feature-branch ${args.featureId} --reset-stale-branch' (drops the polluted branch + re-forks clean from the tier), or if the feature is already claimed run 'lakebase-scm-doctor --fix db-ahead-of-code'.`,
+          "db-ahead-of-code"
+        );
+      }
+    }
+  }
   const now = (args.now ?? (() => /* @__PURE__ */ new Date()))();
   const next = {
     ...current,
@@ -8599,7 +8617,8 @@ var FIXABLE_FINDING_IDS = [
   "head-branch-drift",
   "tier-topology-mismatch",
   "orphan-current-branch",
-  "multiple-migration-heads"
+  "multiple-migration-heads",
+  "db-ahead-of-code"
 ];
 async function fixFinding(args) {
   if (!FIXABLE_FINDING_IDS.includes(args.findingId)) {
@@ -8703,6 +8722,11 @@ async function fixFinding(args) {
           );
         }
         action = `collapsed ${r.headsBefore.length} heads into merge revision ${r.mergeRevision} (commit it)`;
+        break;
+      }
+      case "db-ahead-of-code": {
+        const r = await abandonFeatureBranch({ projectDir: args.projectDir, instance: args.instance, force: true });
+        action = `abandoned the feature (deleted the polluted paired branch${r.lakebaseDeleted ? "" : " , Lakebase delete reported not-deleted"}) and reset state to '${r.state.state}'; re-claim to re-fork a clean branch from the tier`;
         break;
       }
     }

@@ -2835,8 +2835,8 @@ interface GateStatus {
 declare function describeGates(state: ScmWorkflowState): GateStatus[];
 
 declare class ScmClaimError extends Error {
-    readonly code: "no-state-file" | "bad-precondition" | "missing-instance" | "invalid-feature-id" | "already-claimed-other";
-    constructor(message: string, code: "no-state-file" | "bad-precondition" | "missing-instance" | "invalid-feature-id" | "already-claimed-other");
+    readonly code: "no-state-file" | "bad-precondition" | "missing-instance" | "invalid-feature-id" | "already-claimed-other" | "db-ahead-of-code";
+    constructor(message: string, code: "no-state-file" | "bad-precondition" | "missing-instance" | "invalid-feature-id" | "already-claimed-other" | "db-ahead-of-code");
 }
 interface ClaimFeatureBranchArgs {
     /** Project root (must contain .lakebase/workflow-state.json + .git/). */
@@ -2870,6 +2870,33 @@ interface ClaimFeatureBranchArgs {
     idempotent?: boolean;
     /** Optional clock injection for testability. Defaults to `new Date()`. */
     now?: () => Date;
+    /**
+     * FEIP-8039: injected probe run against the freshly cut/REUSED paired branch.
+     * Returns the orphan applied revision when the branch DB is AHEAD of code (an
+     * aborted build migrated it and a git reset removed the migration file, and a
+     * non-expiring feature branch is reused as-is on re-claim), or null when the DB
+     * matches code. When it reports ahead-of-code, the claim REFUSES rather than
+     * silently adopting the polluted branch (unless `resetStaleBranch` is provided).
+     * The CLI wires the live probe (branchRevisionOrphan); unit tests inject a stub.
+     * Omitted = the guard is skipped.
+     */
+    checkBranchDbAheadOfCode?: (args: {
+        instance: string;
+        branch: string;
+        projectDir: string;
+    }) => Promise<string | null>;
+    /**
+     * FEIP-8039: opt-in recover for an ahead-of-code reused branch (the
+     * `--reset-stale-branch` flag). When provided AND the probe reports ahead, the
+     * claim deletes the polluted branch via this seam then re-cuts a clean branch
+     * from the tier and proceeds, instead of refusing. Destructive, so it is
+     * explicit (never the default). The CLI wires it to deletePairedBranch.
+     */
+    resetStaleBranch?: (args: {
+        instance: string;
+        branch: string;
+        projectDir: string;
+    }) => Promise<void>;
 }
 interface ClaimFeatureBranchResult {
     /** The new workflow-state record after the claim. */
@@ -3266,7 +3293,7 @@ declare class ScmDoctorFixError extends Error {
     constructor(message: string, code: "finding-not-present" | "unsupported-finding" | "fix-failed");
 }
 /** Findings the doctor can auto-fix. Others require manual intervention. */
-declare const FIXABLE_FINDING_IDS: readonly ["env-branch-drift", "head-branch-drift", "tier-topology-mismatch", "orphan-current-branch", "multiple-migration-heads"];
+declare const FIXABLE_FINDING_IDS: readonly ["env-branch-drift", "head-branch-drift", "tier-topology-mismatch", "orphan-current-branch", "multiple-migration-heads", "db-ahead-of-code"];
 type FixableFindingId = (typeof FIXABLE_FINDING_IDS)[number];
 interface FixFindingArgs {
     projectDir: string;

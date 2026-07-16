@@ -1318,6 +1318,33 @@ function dbcli3(args, host) {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }
 
+// scripts/lakebase/branch-delete.ts
+async function deleteBranch(args) {
+  const fullPath = await resolveBranchPath(args.branch, {
+    instance: args.instance,
+    host: args.host
+  });
+  if (!fullPath) {
+    throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
+  }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
+  await dbcli4(["postgres", "delete-branch", fullPath], args.host);
+}
+function dbcli4(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
+}
+
 // scripts/lakebase/get-connection.ts
 var import_lakebase = require("@databricks/lakebase");
 var import_pg = require("pg");
@@ -1354,7 +1381,7 @@ async function getConnection(args) {
 async function resolveEndpointHost(instance, branch) {
   const branchId = await resolveBranchId({ instance, branch });
   const branchPath = `projects/${instance}/branches/${branchId}`;
-  const raw = dbcli4(["postgres", "list-endpoints", branchPath, "-o", "json"]);
+  const raw = dbcli5(["postgres", "list-endpoints", branchPath, "-o", "json"]);
   const endpoints = JSON.parse(raw);
   if (!Array.isArray(endpoints) || endpoints.length === 0) {
     throw new Error(`No endpoints found for branch ${branchPath}`);
@@ -1366,7 +1393,7 @@ async function resolveEndpointHost(instance, branch) {
   return host;
 }
 async function mintCredential(endpointPath2) {
-  const raw = dbcli4(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
+  const raw = dbcli5(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
   const token = JSON.parse(raw)?.token ?? "";
   if (!token) {
     throw new Error(`generate-database-credential returned no token for ${endpointPath2}`);
@@ -1375,7 +1402,7 @@ async function mintCredential(endpointPath2) {
   return { token, email };
 }
 async function resolveCurrentUser() {
-  const raw = dbcli4(["current-user", "me", "-o", "json"]);
+  const raw = dbcli5(["current-user", "me", "-o", "json"]);
   const parsed = JSON.parse(raw);
   const email = parsed.userName ?? parsed.emails?.[0]?.value;
   if (!email) {
@@ -1390,7 +1417,7 @@ function buildPostgresUrl(parts) {
   u.searchParams.set("sslmode", "require");
   return u.toString();
 }
-function dbcli4(args) {
+function dbcli5(args) {
   return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
@@ -1481,6 +1508,14 @@ async function isDirty(args) {
 }
 
 // scripts/lakebase/paired-branch.ts
+function gitCurrentBranch(cwd) {
+  return (0, import_node_child_process4.execFileSync)("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  }).trim();
+}
 function gitHasLocalBranch(cwd, branch) {
   try {
     (0, import_node_child_process4.execFileSync)("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
@@ -1543,6 +1578,32 @@ function gitCheckoutExistingBranch(cwd, branch) {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
+  });
+}
+function gitDeleteLocalBranch(cwd, branch, force = true) {
+  (0, import_node_child_process4.execFileSync)("git", ["branch", force ? "-D" : "-d", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
+function gitHasRemoteBranch(cwd, remote, branch) {
+  try {
+    const out = (0, import_node_child_process4.execFileSync)(
+      "git",
+      ["ls-remote", "--exit-code", "--heads", remote, branch],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
+    );
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+function gitDeleteRemoteBranch(cwd, remote, branch) {
+  (0, import_node_child_process4.execFileSync)("git", ["push", remote, "--delete", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitPush
   });
 }
 async function createPairedBranch(args) {
@@ -1624,6 +1685,56 @@ async function createPairedBranch(args) {
     envSynced,
     warnings
   };
+}
+async function deletePairedBranch(args) {
+  const warnings = [];
+  const sanitized = sanitizeBranchName(args.branch);
+  const deleteGitLocal = args.deleteGitLocal !== false;
+  const deleteGitRemote = args.deleteGitRemote !== false;
+  const gitRemote = args.gitRemote ?? "origin";
+  let lakebaseDeleted = false;
+  try {
+    await deleteBranch({ instance: args.instance, branch: sanitized });
+    lakebaseDeleted = true;
+  } catch (err) {
+    warnings.push(
+      `Lakebase delete failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  let gitLocalDeleted = false;
+  if (deleteGitLocal) {
+    try {
+      const current = gitCurrentBranch(args.cwd);
+      if (current === sanitized) {
+        warnings.push(`Skipped local git delete: branch "${sanitized}" is currently checked out`);
+      } else if (!gitHasLocalBranch(args.cwd, sanitized)) {
+        gitLocalDeleted = true;
+      } else {
+        gitDeleteLocalBranch(args.cwd, sanitized, true);
+        gitLocalDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Local git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  let gitRemoteDeleted = false;
+  if (deleteGitRemote) {
+    try {
+      if (gitHasRemoteBranch(args.cwd, gitRemote, sanitized)) {
+        gitDeleteRemoteBranch(args.cwd, gitRemote, sanitized);
+        gitRemoteDeleted = true;
+      } else {
+        gitRemoteDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Remote git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  return { lakebaseDeleted, gitLocalDeleted, gitRemoteDeleted, warnings };
 }
 
 // scripts/lakebase/convention-branches.ts
@@ -1828,6 +1939,83 @@ function parentForTopology(t, defaultLeaf) {
   if (t === 3) return "dev";
   if (t === 2) return "staging";
   return defaultLeaf || "main";
+}
+
+// scripts/lakebase/scm-abandon-feature.ts
+var ScmAbandonError = class extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+    this.name = "ScmAbandonError";
+  }
+  code;
+};
+async function abandonFeatureBranch(args) {
+  const current = readWorkflowState(args.projectDir);
+  if (!current) {
+    throw new ScmAbandonError(
+      `No SCM workflow state found at ${args.projectDir}/.lakebase/workflow-state.json.`,
+      "no-state-file"
+    );
+  }
+  if (current.state !== "feature-claimed") {
+    throw new ScmAbandonError(
+      `abandon refuses state "${current.state}". Only feature-claimed is abandonable; later states must complete or be reverted via gh.`,
+      "bad-precondition"
+    );
+  }
+  if (!current.feature_id || !current.branch || !current.parent_branch || !current.lakebase_branch_uid) {
+    throw new ScmAbandonError(
+      "feature-claimed row is missing required invariants. Cannot abandon safely; consider re-adopting state first.",
+      "missing-claim-fields"
+    );
+  }
+  if (!args.force) {
+    const dirty = await isDirty({ cwd: args.projectDir });
+    if (dirty) {
+      throw new ScmAbandonError(
+        "Working tree has uncommitted changes; refusing to abandon (the branch delete would lose them). Commit / stash / discard first, or pass --force.",
+        "dirty-working-tree"
+      );
+    }
+  }
+  const instance = args.instance ?? current.project_id;
+  const switchTo = args.switchTo ?? current.parent_branch;
+  const warnings = [];
+  const headBranch = await getCurrentBranch({ cwd: args.projectDir });
+  if (headBranch === current.branch) {
+    try {
+      await exec2(`git checkout ${JSON.stringify(switchTo)}`, {
+        cwd: args.projectDir,
+        timeout: 1e4
+      });
+    } catch (err) {
+      warnings.push(
+        `git checkout ${switchTo} failed: ${err instanceof Error ? err.message : String(err)}. Local branch delete may be skipped.`
+      );
+    }
+  }
+  const del = await deletePairedBranch({
+    instance,
+    branch: current.branch,
+    cwd: args.projectDir
+  });
+  warnings.push(...del.warnings);
+  const reset = {
+    $schema: current.$schema,
+    version: 1,
+    state: "scaffold-complete",
+    tier_topology: current.tier_topology,
+    project_id: current.project_id
+  };
+  writeWorkflowState(args.projectDir, reset);
+  return {
+    state: reset,
+    lakebaseDeleted: del.lakebaseDeleted,
+    gitLocalDeleted: del.gitLocalDeleted,
+    gitRemoteDeleted: del.gitRemoteDeleted,
+    warnings
+  };
 }
 
 // scripts/sftdd/stale-branches.ts
@@ -3233,7 +3421,8 @@ var FIXABLE_FINDING_IDS = [
   "head-branch-drift",
   "tier-topology-mismatch",
   "orphan-current-branch",
-  "multiple-migration-heads"
+  "multiple-migration-heads",
+  "db-ahead-of-code"
 ];
 async function fixFinding(args) {
   if (!FIXABLE_FINDING_IDS.includes(args.findingId)) {
@@ -3337,6 +3526,11 @@ async function fixFinding(args) {
           );
         }
         action = `collapsed ${r.headsBefore.length} heads into merge revision ${r.mergeRevision} (commit it)`;
+        break;
+      }
+      case "db-ahead-of-code": {
+        const r = await abandonFeatureBranch({ projectDir: args.projectDir, instance: args.instance, force: true });
+        action = `abandoned the feature (deleted the polluted paired branch${r.lakebaseDeleted ? "" : " , Lakebase delete reported not-deleted"}) and reset state to '${r.state.state}'; re-claim to re-fork a clean branch from the tier`;
         break;
       }
     }

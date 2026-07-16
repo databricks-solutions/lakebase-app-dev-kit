@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/lakebase/scm-claim-feature.cli.ts
-import * as path5 from "path";
+import * as path13 from "path";
 
 // scripts/util/cli-entry.ts
 import { realpathSync } from "fs";
@@ -91,7 +91,7 @@ function shq(s) {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 function exec2(command, opts = {}) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const options = {
       cwd: opts.cwd,
       timeout: opts.timeout ?? 6e4
@@ -105,7 +105,7 @@ function exec2(command, opts = {}) {
         reject(new Error(`${command}: ${msg}`));
         return;
       }
-      resolve2(String(stdout).trim());
+      resolve3(String(stdout).trim());
     });
   });
 }
@@ -172,8 +172,8 @@ async function ensureProfilePinned(args) {
   const hostLine = lines[hostIdx];
   const host = hostLine.slice(hostLine.indexOf("=") + 1).trim();
   if (!host) return { reason: "no-host" };
-  const resolve2 = args.resolve ?? ((h) => resolveProfileForHost(h));
-  const profile = await resolve2(host);
+  const resolve3 = args.resolve ?? ((h) => resolveProfileForHost(h));
+  const profile = await resolve3(host);
   if (!profile) return { reason: "no-match" };
   lines.splice(hostIdx + 1, 0, `DATABRICKS_CONFIG_PROFILE=${profile}`);
   fs.writeFileSync(envPath, lines.join("\n"));
@@ -340,7 +340,7 @@ function runDatabricksSync(args, opts = {}) {
 
 // scripts/util/delay.ts
 function delay(ms) {
-  return new Promise((resolve2) => setTimeout(resolve2, ms));
+  return new Promise((resolve3) => setTimeout(resolve3, ms));
 }
 
 // scripts/util/poll-until.ts
@@ -420,9 +420,9 @@ function asBranchUid(s) {
   }
   return s;
 }
-function branchNameFromResourcePath(path6) {
-  if (!path6.includes("/branches/")) return null;
-  const leaf = path6.split("/branches/").pop();
+function branchNameFromResourcePath(path14) {
+  if (!path14.includes("/branches/")) return null;
+  const leaf = path14.split("/branches/").pop();
   if (!leaf) return null;
   try {
     return asBranchName(leaf);
@@ -777,17 +777,82 @@ function dbcli3(args, host) {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliCreateBranch });
 }
 
+// scripts/lakebase/branch-delete.ts
+async function deleteBranch(args) {
+  const fullPath = await resolveBranchPath(args.branch, {
+    instance: args.instance,
+    host: args.host
+  });
+  if (!fullPath) {
+    throw new LakebaseBranchError(`Branch "${args.branch}" not found in instance "${args.instance}"`);
+  }
+  if (!args.allowDefault) {
+    const info = await getBranchByName(args.branch, {
+      instance: args.instance,
+      host: args.host
+    });
+    if (info?.isDefault) {
+      const leaf = info.name.split("/branches/").pop() ?? info.uid;
+      throw new LakebaseBranchError(
+        `Refusing to delete the project's default Lakebase branch "${leaf}". This branch is the trunk every other branch was forked from. Pass allowDefault=true (or --allow-default on the CLI) only when you intend to tear down the entire project.`
+      );
+    }
+  }
+  await dbcli4(["postgres", "delete-branch", fullPath], args.host);
+}
+function dbcli4(args, host) {
+  return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
+}
+
 // scripts/lakebase/get-connection.ts
 import { createLakebasePool } from "@databricks/lakebase";
 import { Client } from "pg";
 
 // scripts/lakebase/constants.ts
+var POSTGRES_PORT = 5432;
 var DEFAULT_DATABASE = "databricks_postgres";
 var DEFAULT_ENDPOINT = "primary";
 
 // scripts/lakebase/get-connection.ts
+async function getConnection(args) {
+  const endpointName = args.endpointName ?? DEFAULT_ENDPOINT;
+  const database = args.database ?? process.env.PGDATABASE ?? DEFAULT_DATABASE;
+  const branchId = await resolveBranchId({ instance: args.instance, branch: args.branch });
+  const endpointPath2 = `projects/${args.instance}/branches/${branchId}/endpoints/${endpointName}`;
+  if (args.output === "dsn") {
+    const host2 = await resolveEndpointHost(args.instance, branchId);
+    const { token, email: email2 } = await mintCredential(endpointPath2);
+    const url = buildPostgresUrl({ host: host2, port: POSTGRES_PORT, database, user: email2, password: token });
+    return { url, host: host2, port: POSTGRES_PORT, database, user: email2, endpointPath: endpointPath2 };
+  }
+  const host = await resolveEndpointHost(args.instance, branchId);
+  const email = await resolveCurrentUser();
+  return createLakebasePool({
+    endpoint: endpointPath2,
+    host,
+    database,
+    user: email,
+    // workspaceClient is passed through verbatim. createLakebasePool falls
+    // back to environment / ServiceContext when omitted.
+    ...args.workspaceClient !== void 0 ? { workspaceClient: args.workspaceClient } : {}
+  });
+}
+async function resolveEndpointHost(instance, branch) {
+  const branchId = await resolveBranchId({ instance, branch });
+  const branchPath = `projects/${instance}/branches/${branchId}`;
+  const raw = dbcli5(["postgres", "list-endpoints", branchPath, "-o", "json"]);
+  const endpoints = JSON.parse(raw);
+  if (!Array.isArray(endpoints) || endpoints.length === 0) {
+    throw new Error(`No endpoints found for branch ${branchPath}`);
+  }
+  const host = endpoints[0]?.status?.hosts?.host;
+  if (!host) {
+    throw new Error(`Endpoint exists for ${branchPath} but has no host yet \u2013 wait for it to become ACTIVE`);
+  }
+  return host;
+}
 async function mintCredential(endpointPath2) {
-  const raw = dbcli4(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
+  const raw = dbcli5(["postgres", "generate-database-credential", endpointPath2, "-o", "json"]);
   const token = JSON.parse(raw)?.token ?? "";
   if (!token) {
     throw new Error(`generate-database-credential returned no token for ${endpointPath2}`);
@@ -796,7 +861,7 @@ async function mintCredential(endpointPath2) {
   return { token, email };
 }
 async function resolveCurrentUser() {
-  const raw = dbcli4(["current-user", "me", "-o", "json"]);
+  const raw = dbcli5(["current-user", "me", "-o", "json"]);
   const parsed = JSON.parse(raw);
   const email = parsed.userName ?? parsed.emails?.[0]?.value;
   if (!email) {
@@ -804,7 +869,14 @@ async function resolveCurrentUser() {
   }
   return email;
 }
-function dbcli4(args) {
+function buildPostgresUrl(parts) {
+  const u = new URL(`postgresql://${parts.host}:${parts.port}/${encodeURIComponent(parts.database)}`);
+  u.username = encodeURIComponent(parts.user);
+  u.password = encodeURIComponent(parts.password);
+  u.searchParams.set("sslmode", "require");
+  return u.toString();
+}
+function dbcli5(args) {
   return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
@@ -895,6 +967,14 @@ async function isDirty(args) {
 }
 
 // scripts/lakebase/paired-branch.ts
+function gitCurrentBranch(cwd) {
+  return execFileSync3("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  }).trim();
+}
 function gitHasLocalBranch(cwd, branch) {
   try {
     execFileSync3("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
@@ -957,6 +1037,32 @@ function gitCheckoutExistingBranch(cwd, branch) {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: KIT_TIMEOUTS.gitCheckout
+  });
+}
+function gitDeleteLocalBranch(cwd, branch, force = true) {
+  execFileSync3("git", ["branch", force ? "-D" : "-d", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitDefault
+  });
+}
+function gitHasRemoteBranch(cwd, remote, branch) {
+  try {
+    const out = execFileSync3(
+      "git",
+      ["ls-remote", "--exit-code", "--heads", remote, branch],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: KIT_TIMEOUTS.gitNetwork }
+    );
+    return out.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+function gitDeleteRemoteBranch(cwd, remote, branch) {
+  execFileSync3("git", ["push", remote, "--delete", branch], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: KIT_TIMEOUTS.gitPush
   });
 }
 async function createPairedBranch(args) {
@@ -1038,6 +1144,56 @@ async function createPairedBranch(args) {
     envSynced,
     warnings
   };
+}
+async function deletePairedBranch(args) {
+  const warnings = [];
+  const sanitized = sanitizeBranchName(args.branch);
+  const deleteGitLocal = args.deleteGitLocal !== false;
+  const deleteGitRemote = args.deleteGitRemote !== false;
+  const gitRemote = args.gitRemote ?? "origin";
+  let lakebaseDeleted = false;
+  try {
+    await deleteBranch({ instance: args.instance, branch: sanitized });
+    lakebaseDeleted = true;
+  } catch (err) {
+    warnings.push(
+      `Lakebase delete failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+  let gitLocalDeleted = false;
+  if (deleteGitLocal) {
+    try {
+      const current = gitCurrentBranch(args.cwd);
+      if (current === sanitized) {
+        warnings.push(`Skipped local git delete: branch "${sanitized}" is currently checked out`);
+      } else if (!gitHasLocalBranch(args.cwd, sanitized)) {
+        gitLocalDeleted = true;
+      } else {
+        gitDeleteLocalBranch(args.cwd, sanitized, true);
+        gitLocalDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Local git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  let gitRemoteDeleted = false;
+  if (deleteGitRemote) {
+    try {
+      if (gitHasRemoteBranch(args.cwd, gitRemote, sanitized)) {
+        gitDeleteRemoteBranch(args.cwd, gitRemote, sanitized);
+        gitRemoteDeleted = true;
+      } else {
+        gitRemoteDeleted = true;
+      }
+    } catch (err) {
+      warnings.push(
+        `Remote git delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+  return { lakebaseDeleted, gitLocalDeleted, gitRemoteDeleted, warnings };
 }
 
 // scripts/lakebase/convention-branches.ts
@@ -1372,12 +1528,30 @@ async function claimFeatureBranch(args) {
     );
   }
   const parentBranch = args.parentBranchOverride ?? await resolveParentBranch(current.tier_topology, instance);
-  const paired = await createFeaturePairedBranch({
+  let paired = await createFeaturePairedBranch({
     instance,
     branch,
     parentBranch,
     cwd: args.projectDir
   });
+  if (args.checkBranchDbAheadOfCode) {
+    const orphanRev = await args.checkBranchDbAheadOfCode({
+      instance,
+      branch: paired.gitBranch,
+      projectDir: args.projectDir
+    });
+    if (orphanRev) {
+      if (args.resetStaleBranch) {
+        await args.resetStaleBranch({ instance, branch: paired.gitBranch, projectDir: args.projectDir });
+        paired = await createFeaturePairedBranch({ instance, branch, parentBranch, cwd: args.projectDir });
+      } else {
+        throw new ScmClaimError(
+          `Cannot claim ${branch}: the paired Lakebase branch DB is AHEAD of code , applied revision '${orphanRev}' has no local migration file. This is a reused branch polluted by an earlier aborted build (its migration was git-reset away but the DB was not). Reset it with 'lakebase-scm-claim-feature-branch ${args.featureId} --reset-stale-branch' (drops the polluted branch + re-forks clean from the tier), or if the feature is already claimed run 'lakebase-scm-doctor --fix db-ahead-of-code'.`,
+          "db-ahead-of-code"
+        );
+      }
+    }
+  }
   const now = (args.now ?? (() => /* @__PURE__ */ new Date()))();
   const next = {
     ...current,
@@ -1424,6 +1598,1113 @@ function alreadyClaimedSentinel(state) {
   };
 }
 
+// scripts/lakebase/schema-migrate.ts
+import * as fs12 from "fs";
+import * as path12 from "path";
+
+// scripts/lakebase/migration-layout.ts
+import * as fs6 from "fs";
+import * as path5 from "path";
+var MIGRATION_LANGUAGES = [
+  "java",
+  "kotlin",
+  "python",
+  "nodejs",
+  "unknown"
+];
+function detectLanguageAt(dir) {
+  if (fs6.existsSync(path5.join(dir, "pom.xml"))) {
+    const kotlinDir = path5.join(dir, "src", "main", "kotlin");
+    if (fs6.existsSync(kotlinDir)) {
+      return "kotlin";
+    }
+    try {
+      const pom = fs6.readFileSync(path5.join(dir, "pom.xml"), "utf-8");
+      if (pom.includes("kotlin-maven-plugin")) {
+        return "kotlin";
+      }
+    } catch {
+    }
+    return "java";
+  }
+  if (fs6.existsSync(path5.join(dir, "pyproject.toml")) || fs6.existsSync(path5.join(dir, "requirements.txt")) || fs6.existsSync(path5.join(dir, "alembic.ini"))) {
+    return "python";
+  }
+  if (fs6.existsSync(path5.join(dir, "package.json"))) {
+    return "nodejs";
+  }
+  return "unknown";
+}
+function resolveMigrationLanguage(projectDir, configuredMigrationPath, override) {
+  const ov = (override ?? "").trim().toLowerCase();
+  if (ov && ov !== "auto" && MIGRATION_LANGUAGES.includes(ov)) {
+    return ov;
+  }
+  if (!projectDir) {
+    return "unknown";
+  }
+  const atRoot = detectLanguageAt(projectDir);
+  if (atRoot !== "unknown") {
+    return atRoot;
+  }
+  const rel = (configuredMigrationPath ?? "").trim();
+  if (!rel) {
+    return "unknown";
+  }
+  const rootResolved = path5.resolve(projectDir);
+  let dir = path5.resolve(projectDir, rel);
+  while (dir === rootResolved || dir.startsWith(rootResolved + path5.sep)) {
+    const lang = detectLanguageAt(dir);
+    if (lang !== "unknown") {
+      return lang;
+    }
+    const parent = path5.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return "unknown";
+}
+
+// scripts/lakebase/adapters/alembic-adapter.ts
+import * as fs8 from "fs";
+import * as path7 from "path";
+
+// scripts/lakebase/schema-migrate-runners/alembic.ts
+import { spawn } from "child_process";
+import * as fs7 from "fs";
+import * as path6 from "path";
+function resolveAlembicBin(projectDir) {
+  const candidates = [
+    path6.join(projectDir, ".venv", "bin", "alembic"),
+    path6.join(projectDir, "venv", "bin", "alembic")
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs7.existsSync(candidate)) return candidate;
+    } catch {
+    }
+  }
+  return "alembic";
+}
+function spawnAlembic(projectDir, args, dsn) {
+  return new Promise((resolve3, reject) => {
+    const bin = resolveAlembicBin(projectDir);
+    const env = { ...process.env };
+    env.PYTHONPATH = [projectDir, process.env.PYTHONPATH].filter(Boolean).join(path6.delimiter);
+    if (dsn) env.DATABASE_URL = dsn;
+    const child = spawn(bin, args, {
+      cwd: projectDir,
+      env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (err) => {
+      reject(
+        new SchemaMigrationError(
+          `Could not spawn alembic. Is it installed and on PATH? ${err.message}`,
+          err
+        )
+      );
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve3({ stdout, stderr });
+      } else {
+        reject(
+          new SchemaMigrationError(
+            `alembic ${args.join(" ")} exited with code ${code}.
+stdout: ${stdout}
+stderr: ${stderr}`
+          )
+        );
+      }
+    });
+  });
+}
+function runAlembic(ctx, args) {
+  return spawnAlembic(ctx.projectDir, args, ctx.dsn);
+}
+async function createAlembicRevision(opts) {
+  const args = ["revision", "--rev-id", opts.revId, "-m", opts.message];
+  if (opts.autogenerate) args.push("--autogenerate");
+  const { stdout } = await spawnAlembic(opts.projectDir, args, opts.dsn);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (m) return m[1].trim();
+  for (const rel of ["migrations/versions", "alembic/versions"]) {
+    const dir = path6.join(opts.projectDir, rel);
+    if (!fs7.existsSync(dir)) continue;
+    const hit = fs7.readdirSync(dir).find((f) => f.startsWith(`${opts.revId}_`) && f.endsWith(".py"));
+    if (hit) return path6.join(dir, hit);
+  }
+  throw new SchemaMigrationError(
+    `alembic revision succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
+}
+async function listAlembicHeads(projectDir) {
+  const { stdout } = await spawnAlembic(projectDir, ["heads"]);
+  const heads = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^([0-9a-f]+)\b/);
+    if (m) heads.push(m[1]);
+  }
+  return heads;
+}
+async function mergeAlembicHeads(projectDir, message) {
+  const { stdout } = await spawnAlembic(projectDir, ["merge", "-m", message, "heads"]);
+  const m = stdout.match(/Generating\s+(\S+\.py)/);
+  if (!m) {
+    throw new SchemaMigrationError(`alembic merge heads created no file.
+stdout: ${stdout}`);
+  }
+  return m[1].trim();
+}
+async function getCurrentRevision(ctx) {
+  const { stdout } = await runAlembic(ctx, ["current"]);
+  const m = stdout.match(/^([a-f0-9]+)\b/m);
+  return m ? m[1] : void 0;
+}
+async function getHeadRevision(ctx) {
+  const { stdout } = await runAlembic(ctx, ["heads"]);
+  const m = stdout.match(/^([a-f0-9]+)\b/m);
+  return m ? m[1] : void 0;
+}
+async function listHistory(ctx, range) {
+  const { stdout } = await runAlembic(ctx, ["history", "-r", range]);
+  const out = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^(?:<base>|[a-f0-9]+)\s*->\s*([a-f0-9]+)(?:\s*\(head\))?,\s*(.*)$/);
+    if (m) out.push({ version: m[1].trim(), description: m[2].trim() });
+  }
+  return out;
+}
+async function applyAlembic(ctx) {
+  const before = await getCurrentRevision(ctx);
+  await runAlembic(ctx, ["upgrade", "head"]);
+  const after = await getCurrentRevision(ctx);
+  if (!after || before === after) {
+    return { applied: [], alreadyAtLatest: true, tool: "alembic" };
+  }
+  const range = before ? `${before}:${after}` : `base:${after}`;
+  const inRange = await listHistory(ctx, range);
+  const applied = before ? inRange.filter((a) => a.version !== before) : inRange;
+  return { applied, alreadyAtLatest: false, tool: "alembic" };
+}
+async function rollbackAlembic(ctx) {
+  const before = await getCurrentRevision(ctx);
+  if (!before) {
+    await runAlembic(ctx, ["downgrade", ctx.target]);
+    return { rolledBack: [], tool: "alembic" };
+  }
+  await runAlembic(ctx, ["downgrade", ctx.target]);
+  const after = await getCurrentRevision(ctx);
+  const range = after ? `${after}:${before}` : `base:${before}`;
+  const inRange = await listHistory(ctx, range);
+  const rolledBack = after ? inRange.filter((a) => a.version !== after) : inRange;
+  return { rolledBack, tool: "alembic" };
+}
+async function statusAlembic(ctx) {
+  const current = await getCurrentRevision(ctx);
+  const head = await getHeadRevision(ctx);
+  const pending = [];
+  if (head && head !== current) {
+    const range = current ? `${current}:head` : `base:head`;
+    const inRange = await listHistory(ctx, range);
+    for (const rev of inRange) {
+      if (current && rev.version === current) continue;
+      pending.push({
+        version: rev.version,
+        filename: `${rev.version}_*.py`,
+        description: rev.description
+      });
+    }
+  }
+  return { current, pending, tool: "alembic" };
+}
+
+// scripts/lakebase/schema-migration-adapter.ts
+var REGISTRY = /* @__PURE__ */ new Map();
+function registerSchemaMigrationAdapter(adapter) {
+  REGISTRY.set(adapter.id, adapter);
+}
+function resolveSchemaMigrationAdapter(projectDir, override) {
+  if (override) {
+    const a = REGISTRY.get(override);
+    if (!a) {
+      throw new UnresolvedSchemaMigrationAdapterError(
+        `migration_tool=${override} is not a registered adapter. Registered: ${[...REGISTRY.keys()].join(", ") || "(none)"}`
+      );
+    }
+    return a;
+  }
+  for (const adapter of REGISTRY.values()) {
+    if (adapter.detect(projectDir)) return adapter;
+  }
+  throw new UnresolvedSchemaMigrationAdapterError(
+    `Cannot resolve migration tool for ${projectDir}. Set project.yaml#migration_tool to one of: ${[...REGISTRY.keys()].join(", ") || "(none)"}.`
+  );
+}
+var UnresolvedSchemaMigrationAdapterError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "UnresolvedSchemaMigrationAdapterError";
+  }
+};
+
+// scripts/lakebase/adapters/alembic-adapter.ts
+async function buildDsn(args) {
+  const result = await getConnection({
+    output: "dsn",
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  return result.url;
+}
+function findVersionsDir(projectDir) {
+  const candidates = [
+    path7.join(projectDir, "migrations", "versions"),
+    path7.join(projectDir, "alembic", "versions")
+  ];
+  return candidates.find((p) => fs8.existsSync(p));
+}
+function listAlembicFiles(projectDir) {
+  const dir = findVersionsDir(projectDir);
+  if (!dir) return [];
+  const files = fs8.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  return files.map((filename) => {
+    const stem = filename.replace(/\.py$/, "");
+    const sep2 = stem.indexOf("_");
+    const version = sep2 === -1 ? stem : stem.slice(0, sep2);
+    const description = sep2 === -1 ? "" : stem.slice(sep2 + 1).replace(/_/g, " ");
+    return {
+      version,
+      filename,
+      description,
+      type: "Python",
+      tool: "alembic"
+    };
+  }).sort((a, b) => a.filename.localeCompare(b.filename));
+}
+var AlembicAdapter = {
+  id: "alembic",
+  languages: ["python"],
+  /**
+   * Detect Alembic-specifically rather than Python-broadly. A project
+   * with pyproject.toml but no alembic.ini and no env.py is a Python
+   * project that hasn't (yet) adopted Alembic, and should NOT auto-route
+   * here. Callers can still force-select via project.yaml#migration_tool.
+   */
+  detect(projectDir) {
+    if (fs8.existsSync(path7.join(projectDir, "alembic.ini"))) return true;
+    if (fs8.existsSync(path7.join(projectDir, "migrations", "env.py"))) return true;
+    if (fs8.existsSync(path7.join(projectDir, "alembic", "env.py"))) return true;
+    return false;
+  },
+  async apply(args) {
+    const dsn = await buildDsn(args);
+    try {
+      const legacy = await applyAlembic({ projectDir: args.projectDir, dsn });
+      return {
+        applied_migrations: legacy.applied,
+        status: legacy.alreadyAtLatest ? "noop" : "ok",
+        tool_specific: {
+          alreadyAtLatest: legacy.alreadyAtLatest,
+          tool: legacy.tool
+        }
+      };
+    } catch (err) {
+      return {
+        applied_migrations: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async rollback(args) {
+    const dsn = await buildDsn(args);
+    try {
+      const legacy = await rollbackAlembic({
+        projectDir: args.projectDir,
+        dsn,
+        target: args.target
+      });
+      return {
+        rolled_back: legacy.rolledBack,
+        status: legacy.rolledBack.length === 0 ? "noop" : "ok",
+        tool_specific: { tool: legacy.tool }
+      };
+    } catch (err) {
+      return {
+        rolled_back: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async status(args) {
+    const dsn = await buildDsn(args);
+    try {
+      const legacy = await statusAlembic({ projectDir: args.projectDir, dsn });
+      return {
+        applied_version: legacy.current ?? null,
+        pending: legacy.pending,
+        // The legacy statusAlembic returns current + pending, not the
+        // full applied history. Surface what we have. Backfilling the
+        // applied list requires an extra `alembic history -r base:current`
+        // call; deferred to a follow-up so this slice stays a pure port.
+        applied: [],
+        status: "ok",
+        tool_specific: { tool: legacy.tool }
+      };
+    } catch (err) {
+      return {
+        applied_version: null,
+        pending: [],
+        applied: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async list(args) {
+    return { files: listAlembicFiles(args.projectDir) };
+  },
+  // baseline intentionally absent in slice 3. Alembic exposes `stamp`
+  // as the equivalent operation; deferred to a follow-up.
+  async newMigration(args) {
+    try {
+      if (args.autogenerate && (!args.instance || !args.branch)) {
+        throw new Error("autogenerate requires both instance and branch (to diff models vs the branch DB)");
+      }
+      const revId = migrationTimestamp();
+      const dsn = args.autogenerate ? await buildDsn({
+        instance: args.instance,
+        branch: args.branch,
+        database: args.database,
+        endpointName: args.endpointName
+      }) : void 0;
+      const created = await createAlembicRevision({
+        projectDir: args.projectDir,
+        revId,
+        message: args.slug,
+        autogenerate: !!args.autogenerate,
+        dsn
+      });
+      return { status: "ok", version: revId, filename: path7.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async collapseHeads(args) {
+    try {
+      const heads = await listAlembicHeads(args.projectDir);
+      if (heads.length <= 1) return { status: "noop", headsBefore: heads };
+      if (args.dryRun) return { status: "ok", headsBefore: heads };
+      const created = await mergeAlembicHeads(args.projectDir, args.message ?? "merge heads");
+      const mergeRevision = path7.basename(created).replace(/\.py$/, "").split("_")[0];
+      return { status: "ok", headsBefore: heads, mergeRevision, path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        headsBefore: [],
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
+};
+registerSchemaMigrationAdapter(AlembicAdapter);
+
+// scripts/lakebase/adapters/flyway-adapter.ts
+import * as fs9 from "fs";
+import * as path9 from "path";
+
+// scripts/lakebase/schema-migrate-runners/flyway.ts
+import { spawn as spawn2 } from "child_process";
+import * as path8 from "path";
+function dsnToFlywayEnv(dsn) {
+  const u = new URL(dsn);
+  const user = decodeURIComponent(u.username);
+  const password = decodeURIComponent(u.password);
+  const portPart = u.port ? `:${u.port}` : "";
+  const url = `jdbc:postgresql://${u.hostname}${portPart}${u.pathname}${u.search}`;
+  return { url, user, password };
+}
+function migrationsLocation(projectDir) {
+  return `filesystem:${path8.join(projectDir, "src", "main", "resources", "db", "migration")}`;
+}
+function runFlyway(ctx, args) {
+  const { url, user, password } = dsnToFlywayEnv(ctx.dsn);
+  return new Promise((resolve3, reject) => {
+    const child = spawn2(
+      "flyway",
+      ["-outputType=json", `-locations=${migrationsLocation(ctx.projectDir)}`, ...args],
+      {
+        cwd: ctx.projectDir,
+        env: {
+          ...process.env,
+          FLYWAY_URL: url,
+          FLYWAY_USER: user,
+          FLYWAY_PASSWORD: password
+        },
+        stdio: ["ignore", "pipe", "pipe"]
+      }
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (err) => {
+      reject(
+        new SchemaMigrationError(
+          `Could not spawn flyway. Is the Flyway Community CLI installed and on PATH? ${err.message}`,
+          err
+        )
+      );
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve3({ stdout, stderr });
+      } else {
+        reject(
+          new SchemaMigrationError(
+            `flyway ${args.join(" ")} exited with code ${code}.
+stdout: ${stdout}
+stderr: ${stderr}`
+          )
+        );
+      }
+    });
+  });
+}
+function parseFlywayJson(stdout) {
+  const start = stdout.indexOf("{");
+  if (start === -1) {
+    throw new SchemaMigrationError(`flyway JSON output missing: ${stdout.slice(0, 200)}`);
+  }
+  try {
+    return JSON.parse(stdout.slice(start));
+  } catch (err) {
+    throw new SchemaMigrationError(
+      `flyway JSON parse failed: ${err instanceof Error ? err.message : String(err)}.
+Body (first 400 chars): ${stdout.slice(start, start + 400)}`
+    );
+  }
+}
+async function applyFlyway(ctx) {
+  const { stdout } = await runFlyway(ctx, [
+    "-baselineOnMigrate=true",
+    "-baselineVersion=0",
+    "migrate"
+  ]);
+  const json = parseFlywayJson(stdout);
+  const entries = json.migrations ?? [];
+  const applied = [];
+  for (const m of entries) {
+    if (m.category === "INIT") continue;
+    if (m.state && m.state !== "SUCCESS") continue;
+    if (!m.version) continue;
+    applied.push({
+      version: m.version,
+      description: m.description ?? "",
+      ...typeof m.executionTime === "number" ? { executionTimeMs: m.executionTime } : {}
+    });
+  }
+  return {
+    applied,
+    alreadyAtLatest: applied.length === 0,
+    tool: "flyway"
+  };
+}
+async function statusFlyway(ctx) {
+  const { stdout } = await runFlyway(ctx, ["info"]);
+  const json = parseFlywayJson(stdout);
+  const entries = json.migrations ?? [];
+  let current;
+  const pending = [];
+  for (const m of entries) {
+    if (!m.version) continue;
+    const state = (m.state ?? "").toUpperCase();
+    if (state === "SUCCESS" || state === "BASELINE") {
+      current = m.version;
+    } else if (state === "PENDING") {
+      const filename = m.filepath ? path8.basename(m.filepath) : `V${m.version}__migration.sql`;
+      pending.push({
+        version: m.version,
+        filename,
+        description: m.description ?? ""
+      });
+    }
+  }
+  return { current, pending, tool: "flyway" };
+}
+
+// scripts/lakebase/adapters/flyway-adapter.ts
+async function buildDsn2(args) {
+  const result = await getConnection({
+    output: "dsn",
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  return result.url;
+}
+function listFlywayFiles(projectDir) {
+  const dir = path9.join(projectDir, "src", "main", "resources", "db", "migration");
+  if (!fs9.existsSync(dir)) return [];
+  const files = fs9.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  return files.map((filename) => {
+    const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
+    const version = m[1];
+    const description = m[2].replace(/_/g, " ");
+    return { version, filename, description, type: "SQL", tool: "flyway" };
+  }).sort((a, b) => versionCompare(a.version, b.version));
+}
+function versionCompare(a, b) {
+  const ax = a.split(".").map(Number);
+  const bx = b.split(".").map(Number);
+  const len = Math.max(ax.length, bx.length);
+  for (let i = 0; i < len; i++) {
+    const av = ax[i] ?? 0;
+    const bv = bx[i] ?? 0;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+var FlywayAdapter = {
+  id: "flyway",
+  languages: ["java", "kotlin"],
+  detect(projectDir) {
+    return fs9.existsSync(path9.join(projectDir, "pom.xml"));
+  },
+  async apply(args) {
+    const dsn = await buildDsn2(args);
+    try {
+      const legacy = await applyFlyway({ projectDir: args.projectDir, dsn });
+      return {
+        applied_migrations: legacy.applied,
+        status: legacy.alreadyAtLatest ? "noop" : "ok",
+        tool_specific: {
+          alreadyAtLatest: legacy.alreadyAtLatest,
+          tool: legacy.tool
+        }
+      };
+    } catch (err) {
+      return {
+        applied_migrations: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  // rollback intentionally absent: Flyway Community Edition does not
+  // support it. Callers MUST property-check (`adapter.rollback?` /
+  // `if (adapter.rollback)`) before invoking.
+  async status(args) {
+    const dsn = await buildDsn2(args);
+    try {
+      const legacy = await statusFlyway({ projectDir: args.projectDir, dsn });
+      return {
+        applied_version: legacy.current ?? null,
+        pending: legacy.pending,
+        // Legacy statusFlyway does not return the applied history; we
+        // surface only the currently-applied version + pending. Adapters
+        // that complete this (Alembic, future Knex) MAY populate.
+        applied: [],
+        status: "ok",
+        tool_specific: { tool: legacy.tool }
+      };
+    } catch (err) {
+      return {
+        applied_version: null,
+        pending: [],
+        applied: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async list(args) {
+    return { files: listFlywayFiles(args.projectDir) };
+  },
+  // baseline intentionally absent. Flyway DOES support baseline at the
+  // tool level, but exposing it cleanly requires plumbing flags into the
+  // existing runner. Deferred to a follow-up slice; the adapter's
+  // optional-protocol shape makes this additive.
+  async newMigration(args) {
+    try {
+      const dir = path9.join(args.projectDir, "src", "main", "resources", "db", "migration");
+      fs9.mkdirSync(dir, { recursive: true });
+      const version = migrationTimestamp();
+      const slug = migrationSlug2(args.slug);
+      const filename = `V${version}__${slug}.sql`;
+      const full = path9.join(dir, filename);
+      if (fs9.existsSync(full)) throw new Error(`${filename} already exists`);
+      fs9.writeFileSync(
+        full,
+        `-- V${version}: ${args.slug}
+-- Flyway migration (write your DDL/DML below).
+`,
+        "utf8"
+      );
+      return { status: "ok", version, filename, path: full };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
+};
+registerSchemaMigrationAdapter(FlywayAdapter);
+
+// scripts/lakebase/adapters/knex-adapter.ts
+import * as fs11 from "fs";
+import * as path11 from "path";
+
+// scripts/lakebase/schema-migrate-runners/knex.ts
+import { spawn as spawn3 } from "child_process";
+import * as fs10 from "fs";
+import * as path10 from "path";
+var KNEXFILE_VARIANTS = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
+function findKnexfile(projectDir) {
+  for (const name of KNEXFILE_VARIANTS) {
+    const p = path10.join(projectDir, name);
+    if (fs10.existsSync(p)) return p;
+  }
+  return void 0;
+}
+function spawnKnex(projectDir, args, dsn) {
+  return new Promise((resolve3, reject) => {
+    const knexfile = findKnexfile(projectDir);
+    if (!knexfile) {
+      reject(
+        new SchemaMigrationError(
+          `No knexfile found in ${projectDir}. Expected one of: ${KNEXFILE_VARIANTS.join(", ")}.`
+        )
+      );
+      return;
+    }
+    const child = spawn3("npx", ["--no-install", "knex", "--knexfile", knexfile, ...args], {
+      cwd: projectDir,
+      env: dsn ? { ...process.env, DATABASE_URL: dsn } : { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (err) => {
+      reject(
+        new SchemaMigrationError(
+          `Could not spawn knex via npx. Is Node installed and is 'knex' in the project's node_modules? ${err.message}`,
+          err
+        )
+      );
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve3({ stdout, stderr });
+      } else {
+        reject(
+          new SchemaMigrationError(
+            `knex ${args.join(" ")} exited with code ${code}.
+stdout: ${stdout}
+stderr: ${stderr}`
+          )
+        );
+      }
+    });
+  });
+}
+function runKnex(ctx, args) {
+  return spawnKnex(ctx.projectDir, args, ctx.dsn);
+}
+async function createKnexMigration(opts) {
+  const { stdout } = await spawnKnex(opts.projectDir, ["migrate:make", opts.slug]);
+  const m = stdout.match(/Created Migration:\s*(\S+)/);
+  if (m) return m[1].trim();
+  throw new SchemaMigrationError(
+    `knex migrate:make succeeded but the created file could not be located.
+stdout: ${stdout}`
+  );
+}
+function parseKnexStatus(stdout) {
+  const completed = [];
+  const pending = [];
+  let mode = null;
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (/^Found\s+\d+\s+Completed\s+Migration/i.test(line)) {
+      mode = "completed";
+      continue;
+    }
+    if (/^Found\s+\d+\s+Pending\s+Migration/i.test(line)) {
+      mode = "pending";
+      continue;
+    }
+    if (/^No\s+Pending\s+Migration\s+files\s+Found/i.test(line)) {
+      mode = null;
+      continue;
+    }
+    if (!line) continue;
+    if (!/\.(js|ts|mjs|cjs)$/.test(line)) continue;
+    if (mode === "completed") completed.push(line);
+    if (mode === "pending") pending.push(line);
+  }
+  return { completed, pending };
+}
+function parseKnexFilename(filename) {
+  const stem = filename.replace(/\.(js|ts|mjs|cjs)$/, "");
+  const m = stem.match(/^(\d{14})_(.+)$/);
+  const version = m ? m[1] : stem;
+  const description = m ? m[2].replace(/[_-]/g, " ") : stem;
+  return { version, description };
+}
+async function applyKnex(ctx) {
+  const beforeOut = await runKnex(ctx, ["migrate:status"]);
+  const before = parseKnexStatus(beforeOut.stdout);
+  await runKnex(ctx, ["migrate:latest"]);
+  const afterOut = await runKnex(ctx, ["migrate:status"]);
+  const after = parseKnexStatus(afterOut.stdout);
+  const newlyCompleted = after.completed.filter((f) => !before.completed.includes(f));
+  if (newlyCompleted.length === 0) {
+    return { applied: [], alreadyAtLatest: true, tool: "knex" };
+  }
+  const applied = newlyCompleted.map((filename) => {
+    const { version, description } = parseKnexFilename(filename);
+    return { version, description };
+  });
+  return { applied, alreadyAtLatest: false, tool: "knex" };
+}
+async function rollbackKnex(ctx) {
+  const beforeOut = await runKnex(ctx, ["migrate:status"]);
+  const before = parseKnexStatus(beforeOut.stdout);
+  const rollbackArgs = ["migrate:rollback"];
+  if (ctx.target === "all" || ctx.target === "0") {
+    rollbackArgs.push("--all");
+  }
+  await runKnex(ctx, rollbackArgs);
+  const afterOut = await runKnex(ctx, ["migrate:status"]);
+  const after = parseKnexStatus(afterOut.stdout);
+  const rolledBackFiles = before.completed.filter((f) => !after.completed.includes(f));
+  const rolledBack = rolledBackFiles.map((filename) => {
+    const { version, description } = parseKnexFilename(filename);
+    return { version, description };
+  });
+  return { rolledBack, tool: "knex" };
+}
+async function statusKnex(ctx) {
+  const { stdout } = await runKnex(ctx, ["migrate:status"]);
+  const { completed, pending } = parseKnexStatus(stdout);
+  const current = completed.length > 0 ? parseKnexFilename(completed[completed.length - 1]).version : void 0;
+  const pendingOut = pending.map((filename) => {
+    const { version, description } = parseKnexFilename(filename);
+    return { version, filename, description };
+  });
+  return { current, pending: pendingOut, tool: "knex" };
+}
+
+// scripts/lakebase/adapters/knex-adapter.ts
+async function buildDsn3(args) {
+  const result = await getConnection({
+    output: "dsn",
+    instance: args.instance,
+    branch: args.branch,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  return result.url;
+}
+var KNEXFILE_VARIANTS2 = ["knexfile.js", "knexfile.ts", "knexfile.mjs", "knexfile.cjs"];
+function listKnexFiles(projectDir) {
+  const dir = path11.join(projectDir, "migrations");
+  if (!fs11.existsSync(dir)) return [];
+  const files = fs11.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  return files.map((filename) => {
+    const stem = filename.replace(/\.(js|ts)$/, "");
+    const m = stem.match(/^(\d{14})_(.+)$/);
+    const version = m ? m[1] : stem;
+    const description = m ? m[2].replace(/[_-]/g, " ") : stem;
+    const type = filename.endsWith(".ts") ? "TypeScript" : "JavaScript";
+    return { version, filename, description, type, tool: "knex" };
+  }).sort((a, b) => a.version.localeCompare(b.version));
+}
+var KnexAdapter = {
+  id: "knex",
+  languages: ["nodejs"],
+  /**
+   * A knexfile at the project root is the canonical Knex marker. A bare
+   * package.json with no knexfile means "Node.js project, but not Knex"
+   * and should NOT auto-route here. Callers can still force-select via
+   * project.yaml#migration_tool.
+   */
+  detect(projectDir) {
+    return KNEXFILE_VARIANTS2.some((name) => fs11.existsSync(path11.join(projectDir, name)));
+  },
+  async apply(args) {
+    const dsn = await buildDsn3(args);
+    try {
+      const legacy = await applyKnex({ projectDir: args.projectDir, dsn });
+      return {
+        applied_migrations: legacy.applied,
+        status: legacy.alreadyAtLatest ? "noop" : "ok",
+        tool_specific: {
+          alreadyAtLatest: legacy.alreadyAtLatest,
+          tool: legacy.tool
+        }
+      };
+    } catch (err) {
+      return {
+        applied_migrations: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async rollback(args) {
+    const dsn = await buildDsn3(args);
+    try {
+      const legacy = await rollbackKnex({
+        projectDir: args.projectDir,
+        dsn,
+        target: args.target
+      });
+      return {
+        rolled_back: legacy.rolledBack,
+        status: legacy.rolledBack.length === 0 ? "noop" : "ok",
+        tool_specific: { tool: legacy.tool }
+      };
+    } catch (err) {
+      return {
+        rolled_back: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async status(args) {
+    const dsn = await buildDsn3(args);
+    try {
+      const legacy = await statusKnex({ projectDir: args.projectDir, dsn });
+      return {
+        applied_version: legacy.current ?? null,
+        pending: legacy.pending,
+        applied: [],
+        status: "ok",
+        tool_specific: { tool: legacy.tool }
+      };
+    } catch (err) {
+      return {
+        applied_version: null,
+        pending: [],
+        applied: [],
+        status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async list(args) {
+    return { files: listKnexFiles(args.projectDir) };
+  },
+  // baseline intentionally absent. Knex has no native baseline concept;
+  // omitting it advertises that correctly via the optional-capability
+  // protocol so callers won't attempt the operation.
+  async newMigration(args) {
+    try {
+      const created = await createKnexMigration({ projectDir: args.projectDir, slug: migrationSlug2(args.slug) });
+      const stem = path11.basename(created).replace(/\.(js|ts)$/, "");
+      const version = stem.match(/^(\d{14})_/)?.[1] ?? stem;
+      return { status: "ok", version, filename: path11.basename(created), path: created };
+    } catch (err) {
+      return {
+        status: "error",
+        version: "",
+        filename: "",
+        path: "",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
+};
+registerSchemaMigrationAdapter(KnexAdapter);
+
+// scripts/lakebase/schema-migrate.ts
+var SchemaMigrationError = class extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.cause = cause;
+    this.name = "SchemaMigrationError";
+  }
+  cause;
+};
+function detectLanguage(projectDir) {
+  const lang = resolveMigrationLanguage(projectDir);
+  if (lang === "unknown") {
+    throw new SchemaMigrationError(
+      `Could not detect project language in ${projectDir}. Expected one of: pom.xml (java/kotlin), pyproject.toml or alembic.ini (python), package.json (nodejs). Pass {language} explicitly to override.`
+    );
+  }
+  return lang;
+}
+function toolForLanguage(language) {
+  switch (language) {
+    case "java":
+    case "kotlin":
+      return "flyway";
+    case "python":
+      return "alembic";
+    case "nodejs":
+      return "knex";
+  }
+}
+function listSchemaMigrations(args = {}) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const language = args.language ?? detectLanguage(projectDir);
+  const tool = toolForLanguage(language);
+  switch (tool) {
+    case "flyway":
+      return listFlywayMigrations(projectDir);
+    case "alembic":
+      return listAlembicMigrations(projectDir);
+    case "knex":
+      return listKnexMigrations(projectDir);
+  }
+}
+function listFlywayMigrations(projectDir) {
+  const dir = path12.join(projectDir, "src", "main", "resources", "db", "migration");
+  if (!fs12.existsSync(dir)) return [];
+  const files = fs12.readdirSync(dir).filter((f) => /^V\d+(\.\d+)*__.+\.sql$/.test(f));
+  return files.map((filename) => {
+    const m = filename.match(/^V(\d+(?:\.\d+)*)__(.+)\.sql$/);
+    const version = m[1];
+    const description = m[2].replace(/_/g, " ");
+    return { version, filename, description, type: "SQL", tool: "flyway" };
+  }).sort((a, b) => versionCompare2(a.version, b.version));
+}
+function listAlembicMigrations(projectDir) {
+  const candidates = [
+    path12.join(projectDir, "migrations", "versions"),
+    path12.join(projectDir, "alembic", "versions")
+  ];
+  const dir = candidates.find((p) => fs12.existsSync(p));
+  if (!dir) return [];
+  const files = fs12.readdirSync(dir).filter((f) => f.endsWith(".py") && !f.startsWith("__"));
+  return files.map((filename) => {
+    const stem = filename.replace(/\.py$/, "");
+    const sep2 = stem.indexOf("_");
+    const version = sep2 === -1 ? stem : stem.slice(0, sep2);
+    const description = sep2 === -1 ? "" : stem.slice(sep2 + 1).replace(/_/g, " ");
+    return { version, filename, description, type: "Python", tool: "alembic" };
+  }).sort((a, b) => a.filename.localeCompare(b.filename));
+}
+function listKnexMigrations(projectDir) {
+  const dir = path12.join(projectDir, "migrations");
+  if (!fs12.existsSync(dir)) return [];
+  const files = fs12.readdirSync(dir).filter((f) => (f.endsWith(".js") || f.endsWith(".ts")) && !f.startsWith("."));
+  return files.map((filename) => {
+    const stem = filename.replace(/\.(js|ts)$/, "");
+    const m = stem.match(/^(\d{14})_(.+)$/);
+    const version = m ? m[1] : stem;
+    const description = m ? m[2].replace(/[_-]/g, " ") : stem;
+    const type = filename.endsWith(".ts") ? "TypeScript" : "JavaScript";
+    return { version, filename, description, type, tool: "knex" };
+  }).sort((a, b) => a.version.localeCompare(b.version));
+}
+function versionCompare2(a, b) {
+  const ax = a.split(".").map(Number);
+  const bx = b.split(".").map(Number);
+  const len = Math.max(ax.length, bx.length);
+  for (let i = 0; i < len; i++) {
+    const av = ax[i] ?? 0;
+    const bv = bx[i] ?? 0;
+    if (av !== bv) return av - bv;
+  }
+  return 0;
+}
+function adapterFor(projectDir, language) {
+  const override = language ? toolForLanguage(language) : void 0;
+  return resolveSchemaMigrationAdapter(projectDir, override);
+}
+function dbRevisionOrphaned(appliedRevision, localRevisionIds) {
+  const applied = (appliedRevision ?? "").trim();
+  if (!applied) return false;
+  return !localRevisionIds.includes(applied);
+}
+function parseAlembicMissingRevision(stderr) {
+  const m = /[Cc]an't locate revision identified by ['"]?([0-9a-f]+)['"]?/.exec(stderr);
+  return m ? m[1] : null;
+}
+async function schemaMigrationStatus(args) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  const r = await adapter.status({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "status failed");
+  }
+  return {
+    current: r.applied_version ?? void 0,
+    pending: r.pending,
+    tool: adapter.id
+  };
+}
+async function branchRevisionOrphan(args) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const localIds = listSchemaMigrations({ projectDir, language: args.language }).map((m) => m.version);
+  try {
+    const status = await schemaMigrationStatus({
+      instance: args.instance,
+      branch: args.branch,
+      projectDir,
+      language: args.language
+    });
+    return dbRevisionOrphaned(status.current, localIds) ? status.current ?? null : null;
+  } catch (e) {
+    return parseAlembicMissingRevision(e instanceof Error ? e.message : String(e));
+  }
+}
+function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
+}
+function migrationSlug2(description) {
+  return description.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "migration";
+}
+
 // scripts/lakebase/scm-claim-feature.cli.ts
 function parseArgs(argv) {
   const out = {};
@@ -1442,6 +2723,9 @@ function parseArgs(argv) {
         break;
       case "--no-idempotent":
         out.noIdempotent = true;
+        break;
+      case "--reset-stale-branch":
+        out.resetStaleBranch = true;
         break;
       case "--json":
         out.json = true;
@@ -1483,6 +2767,9 @@ Flags:
                         - tier 1: project default, tier 2: staging, tier 3: dev)
   --no-idempotent       Re-running with the same feature-id fails instead
                         of returning the existing claim as a no-op.
+  --reset-stale-branch  If the reused paired branch DB is AHEAD of code (a
+                        phantom migration from an aborted build), drop it and
+                        re-fork clean from the tier instead of refusing.
   --json                Machine-readable JSON output
   --pretty              Pretty-print JSON (only with --json)
   -h, --help            Show this help
@@ -1558,14 +2845,23 @@ ${HELP}
     );
     return 2;
   }
-  const projectDir = path5.resolve(args.projectDir ?? process.cwd());
+  const projectDir = path13.resolve(args.projectDir ?? process.cwd());
   try {
     const result = await claimFeatureBranch({
       projectDir,
       featureId: args.featureId,
       instance: args.instance,
       parentBranchOverride: args.parent,
-      idempotent: args.noIdempotent !== true
+      idempotent: args.noIdempotent !== true,
+      // FEIP-8039: refuse to adopt a reused paired branch whose DB is ahead of
+      // code (a phantom revision an aborted build left behind); --reset-stale-branch
+      // drops + re-forks it clean instead.
+      checkBranchDbAheadOfCode: (a) => branchRevisionOrphan(a),
+      ...args.resetStaleBranch ? {
+        resetStaleBranch: async (a) => {
+          await deletePairedBranch({ instance: a.instance, branch: a.branch, cwd: a.projectDir });
+        }
+      } : {}
     });
     const report = reportFromResult(result);
     if (args.json) {

@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.28] - 2026-07-16
+
+### Fixed
+
+- **A feature claim refuses (and can reset) a paired branch whose DB is ahead of code (FEIP-8039 recover).** Completes the beta.27 fix (which prevented a build from migrating a tier + added a `db-ahead-of-code` doctor check). Feature Lakebase branches are non-expiring, so a re-claim REUSES an existing branch as-is; if an earlier aborted build migrated it and a `git reset` removed the migration file, the reused branch carries a phantom alembic revision + orphan table and later fails "Can't locate revision". Now:
+  - `lakebase-scm-claim-feature-branch` runs a live DB-ahead-of-code probe on the cut/reused branch and **refuses** (`db-ahead-of-code`) rather than silently adopting a polluted branch; `--reset-stale-branch` drops it and re-forks clean from the tier instead.
+  - `lakebase-scm-doctor --fix db-ahead-of-code` resets an already-claimed stuck project (delegates to abandon: deletes the polluted branch + resets state to `scaffold-complete`), so a re-claim re-forks clean.
+  - New `branchRevisionOrphan` probe wraps the beta.27 detectors. The live probe + branch delete are validated by a smoke; the refuse/reset/fix decision logic is hermetically tested.
+
 ## [0.3.0-beta.27] - 2026-07-16
 
 ### Fixed
