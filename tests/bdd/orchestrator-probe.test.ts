@@ -203,7 +203,8 @@ describe("readDriveContext", () => {
   });
 
   it("reads deploy phase + approved deploy gate (evidence + strict gate read)", () => {
-    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    // The coarse phase is honored because it is STAMPED for THIS feature (FEIP-8022).
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy", phase_feature_id: FEATURE }));
     writeEvidence();
     writeFeatureFile("gates.json", gatesJson("approved"));
     const ctx = readDriveContext(sftddDir, FEATURE);
@@ -212,9 +213,30 @@ describe("readDriveContext", () => {
   });
 
   it("deployed=false when no deploy-evidence.json was written, even with an approved gate", () => {
-    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy", phase_feature_id: FEATURE }));
     writeFeatureFile("gates.json", gatesJson("approved"));
     const ctx = readDriveContext(sftddDir, FEATURE);
     expect(ctx.deploy).toEqual({ deployed: false, gateApproved: true });
+  });
+
+  // FEIP-8022: the coarse `phase` slot is per-PROJECT, so it must be honored only
+  // for the feature it was written for; otherwise a prior feature's phase leaks
+  // into the next (F2 inheriting F1's "deploy").
+  it("does NOT inherit a phase stamped for a DIFFERENT feature (no cross-feature leak)", () => {
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy", phase_feature_id: "F1-other" }));
+    const ctx = readDriveContext(sftddDir, FEATURE);
+    expect(ctx.phase).toBe("feature"); // re-derives from THIS feature, not F1's deploy
+  });
+
+  it("does NOT honor an UNSTAMPED non-feature phase (legacy / never-owned)", () => {
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "deploy" }));
+    const ctx = readDriveContext(sftddDir, FEATURE);
+    expect(ctx.phase).toBe("feature");
+  });
+
+  it("honors a phase stamped for THIS feature (resume an in-flight feature)", () => {
+    writeFileSync(join(sftddDir, "workflow-state.json"), JSON.stringify({ phase: "promote", phase_feature_id: FEATURE }));
+    const ctx = readDriveContext(sftddDir, FEATURE);
+    expect(ctx.phase).toBe("promote");
   });
 });

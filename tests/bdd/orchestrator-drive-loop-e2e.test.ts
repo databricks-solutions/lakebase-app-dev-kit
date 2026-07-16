@@ -51,8 +51,10 @@ function storyDir(feature: string, story: string): string {
 function writeJson(file: string, data: unknown): void {
   writeFileSync(file, JSON.stringify(data));
 }
-function setPhase(phase: string): void {
-  writeJson(join(sftddDir, "workflow-state.json"), { phase });
+function setPhase(feature: string, phase: string): void {
+  // Stamp the phase's owning feature, exactly as the production set-phase runner
+  // does (FEIP-8022): the coarse phase is honored only for its feature.
+  writeJson(join(sftddDir, "workflow-state.json"), { phase, phase_feature_id: feature });
 }
 function ac(story: string): string {
   return `${story}-AC1`;
@@ -63,7 +65,7 @@ function seedFeature(feature: string): void {
   mkdirSync(featureDir(feature), { recursive: true });
   writeFileSync(join(featureDir(feature), "feature-request.md"), "# request\n");
   writePipeline(sftddDir, { version: 1, feature_id: feature, stories: {}, build_queue: [], build_active: null });
-  setPhase("implementation"); // -> driver "feature" phase
+  setPhase(feature, "implementation"); // -> driver "feature" phase
 }
 
 /** Replay effects: perform(action) plays roles + drives real pipeline state. */
@@ -226,10 +228,10 @@ function replayEffects(feature: string, stories: string[]) {
           return;
         }
         case "planning-complete":
-          setPhase("discovery");
+          setPhase(feature, "discovery");
           return;
         case "feature-complete":
-          setPhase("deploy");
+          setPhase(feature, "deploy");
           return;
         case "deploy":
           // The Release Engineer's deploy produces deploy-evidence.json
@@ -260,7 +262,7 @@ function replayEffects(feature: string, stories: string[]) {
           });
           return;
         case "done":
-          setPhase("shipped");
+          setPhase(feature, "shipped");
           return;
         case "design-complete":
           return;

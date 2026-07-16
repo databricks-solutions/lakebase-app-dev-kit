@@ -163,6 +163,22 @@ describe("runSprint (pure over SprintEffects)", () => {
     expect(calls).toEqual(["plan", "claim:F1-a", "drive:F1-a", "claim:F2-b", "drive:F2-b"]);
   });
 
+  it("SKIPS an already-shipped feature (no re-claim, no re-drive) and drives the rest (FEIP-8022)", async () => {
+    const calls: string[] = [];
+    const result = await runSprint({
+      async drivePlanning() { calls.push("plan"); return {}; },
+      async readBacklog() { return ["F1-a", "F2-b"]; },
+      async isFeatureShipped(f) { return f === "F1-a"; }, // F1 already shipped
+      async claimFeature(f) { calls.push(`claim:${f}`); },
+      async driveFeature(f) { calls.push(`drive:${f}`); return {}; },
+      onSkip: (f) => calls.push(`skip:${f}`),
+    });
+    expect(result.features).toEqual(["F1-a", "F2-b"]);
+    expect(result.skipped).toEqual(["F1-a"]);
+    // F1 is NOT claimed or driven; F2 runs normally.
+    expect(calls).toEqual(["plan", "skip:F1-a", "claim:F2-b", "drive:F2-b"]);
+  });
+
   it("commits+pushes the authored requests AFTER planning and BEFORE any feature is claimed", async () => {
     // A feature forks from origin/<parent>, so the PO/proxy-authored requests must
     // be pushed to origin before the first claim or the fork inherits nothing.

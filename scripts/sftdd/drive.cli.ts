@@ -307,7 +307,10 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
   return {
     async run(cmd: DriveCommand) {
       if (cmd.kind === "set-phase") {
-        writeWorkflowPhase(cfg.sftddDir, cmd.phase);
+        // Stamp the phase's owning feature (FEIP-8022): the phase slot is
+        // per-project, so an un-owned phase leaks to the next feature. featureId
+        // is "" for sprint planning (no owner stamped).
+        writeWorkflowPhase(cfg.sftddDir, cmd.phase, cfg.featureId || undefined);
         return;
       }
       if (cmd.kind === "sync-backlog") {
@@ -898,6 +901,23 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       await spawnCmd("git", ["commit", "-m", `plan: ${sprint} feature-requests`], projectDir).catch(() => undefined);
       await spawnCmd("git", ["push", "origin", "HEAD"], projectDir);
     },
+    async isFeatureShipped(featureId) {
+      // Skip a backlog feature that is already shipped so the sprint does not
+      // re-claim + re-drive it (FEIP-8022). "Shipped" = the feature's OWN
+      // workflow (now feature-scoped, so no cross-feature phase leak) derives to
+      // `done`: every story built + accepted, deployed, and promoted/merged. This
+      // reliably skips a feature the sprint itself drove to done (resume) or one
+      // shipped in-band via the drive. A feature shipped fully out-of-band (its
+      // promotion merged outside the drive, so its recorded state never reached
+      // done) is NOT detected here , that divergence is the reconcile capability's
+      // job (FEIP-8018). Best-effort: any read/derive error => not shipped (drive it).
+      try {
+        const { action } = await planNextAction(buildCfg(args, featureId));
+        return action.kind === "done";
+      } catch {
+        return false;
+      }
+    },
     async claimFeature(featureId) {
       await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
     },
@@ -920,6 +940,7 @@ async function runSprintMode(args: ParsedArgs): Promise<number> {
       return stepResultOf(r);
     },
     onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}\n`),
+    onSkip: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f} , already shipped, skipping\n`),
   };
 
   // /plan: planning only (do not enter the per-feature loop).

@@ -24,6 +24,7 @@ import { needsGreenAssess, hasPendingRegressionFix } from "./supersession.js";
 import { driverPhaseForTdd, type StoryArtifactProbe, type DriveContext } from "./orchestrator-derive.js";
 import type { DriveEscalation } from "./orchestrator-drive.js";
 import { readGates } from "./gates.js";
+import { PHASE_OWNER_KEY } from "./workflow-phase.js";
 import { storyDeployVerified } from "./deploy.js";
 import {
   deployVerifyNeedsAssess,
@@ -96,7 +97,22 @@ function readJson(file: string): Record<string, unknown> | undefined {
  */
 export function readDriveContext(sftddDir: string, featureId: string, projectDir?: string): DriveContext {
   const ws = readJson(workflowStateJson(sftddDir));
-  const tddPhase = typeof ws?.phase === "string" ? (ws.phase as string) : "feature";
+  // The coarse `phase` slot is per-PROJECT, so trust it only when it was written
+  // FOR this feature (FEIP-8022): an un-owned or foreign-owned phase would leak a
+  // prior feature's phase into this one (F2 inheriting F1's "deploy"). When it is
+  // not this feature's, fall back to "feature" and let nextTransition re-derive
+  // the true phase from THIS feature's own artifacts (deploy-evidence, gates, SCM
+  // state, all computed below). Legacy files (no owner) are treated as un-owned.
+  const phaseOwner = typeof ws?.[PHASE_OWNER_KEY] === "string" ? (ws[PHASE_OWNER_KEY] as string) : undefined;
+  const rawPhase = typeof ws?.phase === "string" ? (ws.phase as string) : undefined;
+  // "planning" is sprint-scoped (written with no feature owner), so it is
+  // legitimately global and always honored. Every OTHER phase is a feature's
+  // lifecycle phase (discovery/design/implementation/review/deploy/promote/
+  // shipped/done); honor it only for the feature it was stamped for, else a prior
+  // feature's phase leaks into this one. Unstamped/foreign feature-lifecycle
+  // phases fall back to "feature" so nextTransition re-derives from this feature.
+  const honorPhase = rawPhase === "planning" || phaseOwner === featureId;
+  const tddPhase = honorPhase && rawPhase ? rawPhase : "feature";
 
   const spec = readJson(featureSpecJson(sftddDir, featureId));
   const proposed = spec !== undefined;

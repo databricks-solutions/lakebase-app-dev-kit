@@ -10,8 +10,16 @@ import { workflowStateJson } from "./sftdd-paths.js";
 /** Terminal phases a finished feature stamps into the per-project phase slot. */
 const TERMINAL_PHASES = new Set(["done", "shipped"]);
 
-/** Persist the driver's coarse phase, preserving any other fields on the file. */
-export function writeWorkflowPhase(sftddDir: string, phase: string): void {
+/** The feature the persisted coarse `phase` belongs to. The phase slot is
+ *  per-PROJECT, so without an owner a later feature's read inherits a prior
+ *  feature's phase (F2 reads F1's "deploy"). Stamping the owner lets the read
+ *  path honor the phase only for the feature it was written for (FEIP-8022). */
+export const PHASE_OWNER_KEY = "phase_feature_id";
+
+/** Persist the driver's coarse phase, preserving any other fields on the file.
+ *  When `featureId` is given (a feature-scoped drive), stamps the phase's owner
+ *  so a later feature does not inherit it. */
+export function writeWorkflowPhase(sftddDir: string, phase: string, featureId?: string): void {
   const file = workflowStateJson(sftddDir);
   let state: Record<string, unknown> = {};
   if (fs.existsSync(file)) {
@@ -22,8 +30,24 @@ export function writeWorkflowPhase(sftddDir: string, phase: string): void {
     }
   }
   state.phase = phase;
+  if (featureId) state[PHASE_OWNER_KEY] = featureId;
   fs.mkdirSync(sftddDir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+
+/** The feature the persisted coarse phase belongs to, or undefined when the file
+ *  is missing / unstamped (legacy). Used by the read path to decide whether to
+ *  trust the shared phase for a given feature. */
+export function readPhaseOwner(sftddDir: string): string | undefined {
+  const file = workflowStateJson(sftddDir);
+  if (!fs.existsSync(file)) return undefined;
+  try {
+    const state = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const owner = state[PHASE_OWNER_KEY];
+    return typeof owner === "string" ? owner : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

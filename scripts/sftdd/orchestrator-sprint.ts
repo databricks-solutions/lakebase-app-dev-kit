@@ -122,8 +122,15 @@ export interface SprintEffects {
   /** Drive one feature design -> build -> deploy. In interactive mode it halts
    *  at the next HITL gate (pendingGate set); proxy mode drives it to done. */
   driveFeature(featureId: string): Promise<DriveStepResult>;
+  /** Optional: a backlog feature already SHIPPED (its own workflow derives to
+   *  `done`) must be SKIPPED, not re-claimed + re-driven (FEIP-8022). Without
+   *  this the Tier-1 sprint re-enters a completed feature and re-surfaces its
+   *  deploy gate. Absent => never skip (drive every backlog feature). */
+  isFeatureShipped?(featureId: string): Promise<boolean>;
   /** Optional progress hook fired before each feature is claimed. */
   onFeature?(featureId: string, index: number): void;
+  /** Optional hook fired when a feature is SKIPPED as already shipped. */
+  onSkip?(featureId: string, index: number): void;
 }
 
 export interface RunSprintResult {
@@ -141,6 +148,8 @@ export interface RunSprintResult {
   escalation?: WorkflowAction & { kind: "raise-to-hil" };
   /** The feature whose gate/escalation the run halted at, if any. */
   pendingFeature?: string;
+  /** Backlog features SKIPPED as already shipped (FEIP-8022). */
+  skipped?: string[];
 }
 
 /**
@@ -168,8 +177,19 @@ export async function runSprint(effects: SprintEffects): Promise<RunSprintResult
   await effects.commitAndPushRequests?.();
 
   const features = await effects.readBacklog();
+  const skipped: string[] = [];
   for (let i = 0; i < features.length; i++) {
     const featureId = features[i];
+    // A feature already shipped (its own workflow derives to done) is SKIPPED,
+    // not re-claimed + re-driven (FEIP-8022): re-entering a completed feature
+    // re-surfaces its deploy gate + (before the phase-scoping fix) leaked its
+    // phase into the next feature. Checked BEFORE the claim so a done feature is
+    // never re-claimed.
+    if (await effects.isFeatureShipped?.(featureId)) {
+      skipped.push(featureId);
+      effects.onSkip?.(featureId, i);
+      continue;
+    }
     effects.onFeature?.(featureId, i);
     await effects.claimFeature(featureId);
     const driven = await effects.driveFeature(featureId);
@@ -178,14 +198,14 @@ export async function runSprint(effects: SprintEffects): Promise<RunSprintResult
     // `already-claimed-other`. Stop on the escalating feature (resumable after
     // the human resolves it), exactly like a pending gate.
     if (driven.escalated) {
-      return { features, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
+      return { features, skipped, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
     }
     if (driven.pendingGate) {
-      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+      return { features, skipped, pendingGate: driven.pendingGate, pendingFeature: featureId };
     }
     if (driven.pendingInput) {
-      return { features, pendingInput: driven.pendingInput, pendingFeature: featureId };
+      return { features, skipped, pendingInput: driven.pendingInput, pendingFeature: featureId };
     }
   }
-  return { features };
+  return { features, skipped };
 }
