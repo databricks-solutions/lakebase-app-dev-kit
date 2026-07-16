@@ -65,7 +65,7 @@ import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
 import { resolveKitBinJs, kitVersion } from "./kit-bin.js";
-import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
+import { isForeignFeatureClaim, readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 // How many times a single role turn that overflows the model window mid-turn
 // ("Prompt is too long") is retried on a FRESH session before the failure
@@ -1129,6 +1129,26 @@ async function main(): Promise<number> {
   const confirmContinue = pauseMilestone ? makeConfirmContinue() : undefined;
 
   const cfg = buildCfg(args, args.feature);
+
+  // FEIP-8023: refuse to drive a feature whose recorded SCM claim names a
+  // DIFFERENT feature. With a prior feature shipped out-of-band and
+  // .lakebase/workflow-state.json never reconciled, buildCfg would adopt the
+  // stale predecessor's branch as this feature's featureBranch, so the experiment
+  // would fork from (and the build commit onto) the wrong branch. Block loud , the
+  // human claims this feature (or reconciles the prior one) first.
+  {
+    const scm = readWorkflowState(cfg.projectDir);
+    if (isForeignFeatureClaim(scm, cfg.featureId)) {
+      process.stderr.write(
+        `lakebase-sftdd-drive: refusing to drive "${cfg.featureId}" , the SCM workflow state records a\n` +
+          `DIFFERENT feature "${scm?.feature_id}" (branch ${scm?.branch ?? "?"}). Driving now would fork the\n` +
+          `experiment from the wrong branch and commit build output onto it. Claim this feature first\n` +
+          `(lakebase-scm-claim-feature-branch ${cfg.featureId}), or reconcile the prior out-of-band feature,\n` +
+          `then re-run.\n`,
+      );
+      return 2;
+    }
+  }
 
   // A fresh --feature invocation must not inherit a PRIOR feature's terminal
   // TDD phase (the per-project .tdd/workflow-state.json carries "shipped"/"done"

@@ -13,6 +13,7 @@ import {
   SCM_STATES,
   describeGates,
   initWorkflowState,
+  isForeignFeatureClaim,
   readWorkflowState,
   stateFilePath,
   STATE_FILE_REL,
@@ -287,5 +288,34 @@ describe("describeGates", () => {
     expect(keys).toContain("lakebase_branch_uid");
     expect(keys).toContain("claimed_at");
     expect(claimed!.invariants.every((i) => i.present)).toBe(true);
+  });
+});
+
+describe("isForeignFeatureClaim (FEIP-8023)", () => {
+  const claim = (feature_id?: string): ScmWorkflowState =>
+    ({ version: 1, state: "merged", feature_id, branch: feature_id ? `feature-${feature_id}` : undefined } as ScmWorkflowState);
+
+  it("true when the recorded claim names a DIFFERENT feature than the one being driven", () => {
+    expect(isForeignFeatureClaim(claim("f1-stock-by-location"), "f2-adjust-stock")).toBe(true);
+  });
+
+  it("false when the recorded claim matches the feature being driven", () => {
+    expect(isForeignFeatureClaim(claim("f2-adjust-stock"), "f2-adjust-stock")).toBe(false);
+  });
+
+  it("false on a case/whitespace-only difference (canonical comparison)", () => {
+    expect(isForeignFeatureClaim(claim("F2-Adjust-Stock"), "  f2-adjust-stock ")).toBe(false);
+  });
+
+  it("false when there is no recorded claim (null state) , not a foreign claim", () => {
+    expect(isForeignFeatureClaim(null, "f2-adjust-stock")).toBe(false);
+  });
+
+  it("false when the claim has no feature_id recorded", () => {
+    expect(isForeignFeatureClaim(claim(undefined), "f2-adjust-stock")).toBe(false);
+  });
+
+  it("false when driving planning (empty featureId)", () => {
+    expect(isForeignFeatureClaim(claim("f1-stock-by-location"), "")).toBe(false);
   });
 });

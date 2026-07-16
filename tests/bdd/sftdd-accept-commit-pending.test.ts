@@ -57,9 +57,11 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     await writeMigration(dir, "def downgrade():\n    pass  # feature-version\n");
     await exec("git add -A && git commit -m feature-work", { cwd: dir });
 
-    // Back on the experiment line (main here): a repair turn edits the migration
-    // but never commits it, and runtime state churns (untracked .sftdd).
-    await exec("git checkout main", { cwd: dir });
+    // On the EXPERIMENT branch (cut from base): a repair turn edits the migration
+    // but never commits it, and runtime state churns (untracked .sftdd). The
+    // experiment line is a real experiment branch, never a protected tier , the
+    // build-commit guard (FEIP-8023) refuses a tier target.
+    await exec("git checkout -b experiment main", { cwd: dir });
     await writeMigration(
       dir,
       "def downgrade():\n    pass  # base\n    op.alter_column('stock','inventory_code',nullable=False)\n",
@@ -69,7 +71,7 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
 
     // Precondition: with the dirty CODE file, the accept checkout ABORTS.
     await expect(exec("git checkout feature", { cwd: dir })).rejects.toThrow();
-    await exec("git checkout main", { cwd: dir }).catch(() => undefined);
+    await exec("git checkout experiment", { cwd: dir }).catch(() => undefined);
 
     // The fix: commit pending experiment code.
     const committed = await commitExperimentCode(dir, "accept: commit pending experiment work");
@@ -95,6 +97,7 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     await configIdentity(dir);
     await writeMigration(dir, "def downgrade():\n    pass\n");
     await exec("git add -A && git commit -m base", { cwd: dir });
+    await exec("git checkout -b experiment", { cwd: dir }); // build commits land on the experiment branch (FEIP-8023)
 
     // New real source under app/, plus stray agent junk at the root.
     fs.mkdirSync(path.join(dir, "app", "services"), { recursive: true });
@@ -126,6 +129,7 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     await configIdentity(dir);
     await writeMigration(dir, "def downgrade():\n    pass\n");
     await exec("git add -A && git commit -m base", { cwd: dir });
+    await exec("git checkout -b experiment", { cwd: dir }); // build commits land on the experiment branch (FEIP-8023)
 
     fs.mkdirSync(path.join(dir, "app"), { recursive: true });
     fs.writeFileSync(path.join(dir, "app/main.py"), "app = 1\n", "utf8");
@@ -152,6 +156,7 @@ describe("commitExperimentCode (accept-merge clean-tree precondition)", () => {
     await configIdentity(dir);
     await writeMigration(dir, "def downgrade():\n    pass\n");
     await exec("git add -A && git commit -m base", { cwd: dir });
+    await exec("git checkout -b experiment", { cwd: dir }); // build commits land on the experiment branch (FEIP-8023)
 
     const committed = await commitExperimentCode(dir, "accept: nothing pending");
     expect(committed).toBe(false);

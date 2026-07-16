@@ -48,6 +48,7 @@ import { checkContractClean, supersededTestCandidates } from "./contract-clean.j
 import { checkMigrationAppClean } from "./migration-app-clean.js";
 import { emitAgentLogEvent, type AgentLogEventInput } from "./agent-log.js";
 import { commitAllIfChanged } from "../git/commits.js";
+import { assertCommitTargetNotProtected, ProtectedBranchCommitError } from "../lakebase/branch-utils.js";
 import {
   beginCycle,
   recordRunnerOutcome,
@@ -102,7 +103,15 @@ import type { AcLayer } from "./experiment.js";
  * Returns true when a commit was made. Throws on a genuine git failure (callers
  * that want best-effort wrap it in try/catch).
  */
+// FEIP-8023: build/experiment commits must never land on a protected tier , the
+// guard + error live in the tier-protection home (branch-utils). Re-exported so
+// the build lane's public surface still carries the error its commit path throws.
+export { ProtectedBranchCommitError };
+
 export async function commitExperimentCode(projectDir: string, message: string): Promise<boolean> {
+  // Never commit build output onto a shared tier (FEIP-8023). Checked before
+  // staging anything so a wrong-branch commit fails loud instead of polluting it.
+  await assertCommitTargetNotProtected(projectDir);
   return commitAllIfChanged({
     cwd: projectDir,
     message,
@@ -123,8 +132,12 @@ export async function commitExperimentCode(projectDir: string, message: string):
 async function commitCycleWork(sftddDir: string, message: string): Promise<void> {
   try {
     await commitExperimentCode(dirname(sftddDir), message);
-  } catch {
-    // swallow: the commit is bookkeeping for the SCM/promote phase; a
+  } catch (e) {
+    // A wrong-branch commit is NOT best-effort bookkeeping , it means the build
+    // is about to pollute a shared tier (FEIP-8023). Re-throw so the run fails
+    // loud rather than silently proceeding un-committed onto staging/main.
+    if (e instanceof ProtectedBranchCommitError) throw e;
+    // Otherwise swallow: the commit is bookkeeping for the SCM/promote phase; a
     // still-dirty tree is caught by prepare-pr's dirty-working-tree guard.
   }
 }

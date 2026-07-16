@@ -9,6 +9,7 @@ import {
   type BranchUid,
 } from "./branch-id.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
+import { getCurrentBranch } from "../git/inspect.js";
 
 
 export class LakebaseBranchError extends Error {
@@ -319,6 +320,40 @@ export function tierBranchNames(
   return branches
     .filter((b) => isLongRunningTierBranch(b) && protectedNames.has(normalizeTierName(b.nameLeaf as string)))
     .map((b) => b.nameLeaf as string);
+}
+
+/**
+ * FEIP-8023: a build/experiment commit was attempted onto a protected tier
+ * branch (the drive of a fresh feature, with a prior feature shipped out-of-band,
+ * never cut the feature branch and committed onto the checked-out `staging`).
+ * Thrown so the run fails LOUD instead of silently polluting a shared branch.
+ */
+export class ProtectedBranchCommitError extends Error {
+  constructor(public readonly branch: string) {
+    super(
+      `Refusing to commit build output onto protected tier branch "${branch}". ` +
+        `Experiment/build commits must land on an experiment or feature branch, never a shared tier ` +
+        `(main/master/staging/dev or a configured tier). This usually means the feature branch was ` +
+        `never cut (an un-reconciled prior feature left stale SCM state). Claim/reconcile the feature, then re-run.`,
+    );
+    this.name = "ProtectedBranchCommitError";
+  }
+}
+
+/**
+ * Throw {@link ProtectedBranchCommitError} when `projectDir`'s checked-out git
+ * branch is a protected tier (the env-aware set: main/master/staging/dev +
+ * LAKEBASE_TIER_NAMES + the configured trunk/staging/base names). A non-git cwd
+ * or detached HEAD ({@link getCurrentBranch} returns "") is a no-op , there is no
+ * shared branch to protect against there. Used by the build lane's commit path
+ * (cycle-record) as the safety net that turns silent tier pollution into a halt.
+ */
+export async function assertCommitTargetNotProtected(projectDir: string): Promise<void> {
+  const current = await getCurrentBranch({ cwd: projectDir });
+  if (!current) return;
+  if (protectedTierNamesFromEnv().has(normalizeTierName(current))) {
+    throw new ProtectedBranchCommitError(current);
+  }
 }
 
 /**

@@ -91,6 +91,33 @@ export function readWorkflowState(projectDir: string): ScmWorkflowState | null {
 }
 
 /**
+ * FEIP-8023: true when the recorded SCM claim names a DIFFERENT feature than the
+ * one being driven. Only a POSITIVE mismatch returns true (a claim IS recorded
+ * AND its feature_id, normalized, differs from `featureId`). A null/absent claim,
+ * a claim with no feature_id, or an empty `featureId` (planning) all return false:
+ * that non-mismatch space is covered by the branch-presence + protected-branch
+ * commit guards, and a legitimate pre-claim design turn must not be blocked.
+ *
+ * The reported failure: with a prior feature shipped out-of-band (and
+ * .lakebase/workflow-state.json never reconciled), driving the NEXT feature read
+ * the stale predecessor branch as the experiment parent and committed build
+ * output onto whatever branch was checked out. The driver uses this to refuse
+ * the drive loud (claim/reconcile first) instead of proceeding into corrupt state.
+ *
+ * Comparison is trim + case-insensitive so a claim written with the same feature
+ * id in a different case (see claim's canonical-case preservation) still matches.
+ */
+export function isForeignFeatureClaim(
+  scm: ScmWorkflowState | null,
+  featureId: string,
+): boolean {
+  const recorded = scm?.feature_id?.trim().toLowerCase() ?? "";
+  const driving = featureId.trim().toLowerCase();
+  if (!recorded || !driving) return false;
+  return recorded !== driving;
+}
+
+/**
  * Write the workflow-state file atomically (tmp + rename). Creates the
  * `.lakebase/` directory if missing. Validates before writing so a
  * caller cannot persist a state that would fail to read back.
