@@ -92,6 +92,40 @@ export async function mergeAndAcceptStory(
   writePipeline(args.sftddDir, p);
 }
 
+/** Build the `lakebase-sftdd-experiment merge` argv for a PO acceptance from the
+ *  resolved inputs. `pipeline accept` builds this and spawns the experiment CLI
+ *  (the single door that touches the merge substrate), rather than calling the
+ *  merge in-process (FEIP-8013 routing). */
+export function experimentMergeArgv(
+  featureId: string,
+  storyId: string,
+  resolved: { experimentSlug: string; experimentBranch: string; featureBranch: string; instance: string },
+  opts: { approver: string; projectDir: string; sftddDir: string; at?: string },
+): string[] {
+  return [
+    "merge",
+    "--feature",
+    featureId,
+    "--story",
+    storyId,
+    "--slug",
+    resolved.experimentSlug,
+    "--experiment-branch",
+    resolved.experimentBranch,
+    "--feature-branch",
+    resolved.featureBranch,
+    "--instance",
+    resolved.instance,
+    "--approver",
+    opts.approver,
+    "--project-dir",
+    opts.projectDir,
+    "--tdd-dir",
+    opts.sftddDir,
+    ...(opts.at ? ["--at", opts.at] : []),
+  ];
+}
+
 /** The resolved merge inputs for `pipeline accept`, or an attributed error. */
 export type ResolvedAcceptArgs =
   | { ok: true; experimentSlug: string; experimentBranch: string; featureBranch: string; instance: string }

@@ -63,6 +63,7 @@ import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, is
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
+import { resolveKitBinJs } from "./kit-bin.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 // How many times a single role turn that overflows the model window mid-turn
@@ -279,24 +280,9 @@ function spawnClaudeStreaming(args: string[], cwd: string): Promise<TurnUsage | 
 // `spawn <bin> ENOENT` the moment the feature drive emitted lakebase-sftdd-log).
 // External tools (claude) are not in the bin map, so they stay bare on PATH.
 //
-// This running file is <kitRoot>/dist/scripts/sftdd/drive.cli.js, so the kit root
-// (which holds package.json) is three directories up.
-const KIT_ROOT = path.resolve(__dirname, "..", "..", "..");
-let kitBinMap: Record<string, string> | null = null;
-function resolveKitBinJs(bin: string): string | null {
-  if (kitBinMap === null) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(KIT_ROOT, "package.json"), "utf8")) as {
-        bin?: Record<string, string>;
-      };
-      kitBinMap = pkg.bin ?? {};
-    } catch {
-      kitBinMap = {};
-    }
-  }
-  const rel = kitBinMap[bin];
-  return rel ? path.join(KIT_ROOT, rel) : null;
-}
+// resolveKitBinJs lives in ./kit-bin (shared with the CLIs that delegate to a
+// sibling bin, e.g. pipeline accept -> experiment merge), so the resolution has
+// one home.
 
 /** The live runner: claude -p for roles, the kit CLIs for state, a direct
  *  workflow-state write for the coarse phase. */

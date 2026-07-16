@@ -11,6 +11,7 @@ import { join } from "node:path";
 import {
   mergeAndAcceptStory,
   resolveAcceptMergeArgs,
+  experimentMergeArgv,
 } from "../../scripts/sftdd/experiment-merge";
 import type { ExperimentBranchOps } from "../../scripts/sftdd/experiment-lifecycle";
 import { readPipeline, writePipeline, type StoryPipeline } from "../../scripts/sftdd/story-pipeline";
@@ -115,5 +116,41 @@ describe("resolveAcceptMergeArgs", () => {
     const r = resolveAcceptMergeArgs(tdd, "/tmp/proj-without-scm-state", F, S);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/instance/i);
+  });
+});
+
+describe("experimentMergeArgv (the command pipeline accept delegates to)", () => {
+  it("builds a complete `lakebase-sftdd-experiment merge` argv from the resolved inputs", () => {
+    // pipeline accept does NOT merge in-process (FEIP-8013 routing): it builds this
+    // argv and spawns the experiment CLI, the single door for the merge substrate.
+    const argv = experimentMergeArgv(
+      F,
+      S,
+      { experimentSlug: "s1-exp", experimentBranch: "exp/F1/s1-exp", featureBranch: "feature-F1", instance: "lb-x" },
+      { approver: "kevin.hartman", projectDir: "/p", sftddDir: "/p/.sftdd", at: "2026-07-15T00:00:00.000Z" },
+    );
+    expect(argv[0]).toBe("merge");
+    // every arg the experiment merge CLI requires is present + paired with its value
+    const pair = (flag: string) => argv[argv.indexOf(flag) + 1];
+    expect(pair("--feature")).toBe(F);
+    expect(pair("--story")).toBe(S);
+    expect(pair("--slug")).toBe("s1-exp");
+    expect(pair("--experiment-branch")).toBe("exp/F1/s1-exp");
+    expect(pair("--feature-branch")).toBe("feature-F1");
+    expect(pair("--instance")).toBe("lb-x");
+    expect(pair("--approver")).toBe("kevin.hartman");
+    expect(pair("--project-dir")).toBe("/p");
+    expect(pair("--tdd-dir")).toBe("/p/.sftdd");
+    expect(pair("--at")).toBe("2026-07-15T00:00:00.000Z");
+  });
+
+  it("omits --at when not given", () => {
+    const argv = experimentMergeArgv(
+      F,
+      S,
+      { experimentSlug: "s", experimentBranch: "b", featureBranch: "fb", instance: "i" },
+      { approver: "a", projectDir: "/p", sftddDir: "/p/.sftdd" },
+    );
+    expect(argv).not.toContain("--at");
   });
 });

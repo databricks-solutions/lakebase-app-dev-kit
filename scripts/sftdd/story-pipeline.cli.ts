@@ -55,7 +55,8 @@ import {
 } from "./story-pipeline";
 import { join } from "path";
 import { resolveSftddDir } from "./sftdd-paths.js";
-import { resolveAcceptMergeArgs, mergeAndAcceptStory, realExperimentOps } from "./experiment-merge.js";
+import { resolveAcceptMergeArgs, experimentMergeArgv } from "./experiment-merge.js";
+import { runKitBinSync } from "./kit-bin.js";
 
 interface Args {
   cmd?: string;
@@ -279,13 +280,15 @@ async function main(): Promise<number> {
     case "accept": {
       if (!args.story) return usage("accept needs --story");
       if (!args.approver) return usage("accept needs --approver");
-      // FEIP-8013: accept PERFORMS the experiment git-merge (+ migrations +
-      // teardown), then records the acceptance. Before, this recorded state only
-      // and the merge lived in the drive's accept effect; interactive, the human
-      // ran only this and the merge never fired, stranding the story's code on the
-      // experiment branch. The merge args (slug/branches) come from the persisted
-      // experiment record; the instance from --instance else scm-state. Idempotent
-      // (skips the merge if already merged), so a re-run is safe.
+      // FEIP-8013: accept LANDS the story's code (git-merge + migrations +
+      // teardown) then records acceptance. Before, this recorded state only and the
+      // merge lived elsewhere; interactive, the human ran only this and the merge
+      // never fired, stranding the code on the experiment branch. This CLI does NOT
+      // touch the merge substrate itself: it RESOLVES the merge args (slug/branches
+      // from the persisted experiment record; instance from --instance else
+      // scm-state) and DELEGATES to `lakebase-sftdd-experiment merge`, the single
+      // door that owns the git/Lakebase merge (which records acceptStory + is
+      // idempotent). The human's `pipeline accept` therefore routes through that CLI.
       const projectDir = args.projectDir ?? process.cwd();
       const resolved = resolveAcceptMergeArgs(sftddDir, projectDir, feature, args.story, {
         ...(args.instance ? { instance: args.instance } : {}),
@@ -294,25 +297,13 @@ async function main(): Promise<number> {
         process.stderr.write(`accept: ${resolved.error}\n`);
         return 2;
       }
-      await mergeAndAcceptStory(
-        {
-          sftddDir,
-          projectDir,
-          featureId: feature,
-          storyId: args.story,
-          experimentSlug: resolved.experimentSlug,
-          experimentBranch: resolved.experimentBranch,
-          featureBranch: resolved.featureBranch,
-          instance: resolved.instance,
-          approver: args.approver,
-          at: args.at,
-        },
-        realExperimentOps,
-      );
-      process.stdout.write(
-        `accepted ${args.story}: experiment ${resolved.experimentSlug} merged into ${resolved.featureBranch}; story done, lane freed\n`,
-      );
-      return 0;
+      const argv = experimentMergeArgv(feature, args.story, resolved, {
+        approver: args.approver,
+        projectDir,
+        sftddDir,
+        ...(args.at ? { at: args.at } : {}),
+      });
+      return runKitBinSync("lakebase-sftdd-experiment", argv, projectDir);
     }
     case "discard": {
       if (!args.story) return usage("discard needs --story");

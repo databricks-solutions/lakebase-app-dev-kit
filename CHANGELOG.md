@@ -17,15 +17,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   before the accept effect, so a human running the hinted `pipeline accept` recorded
   `done` but never merged, and the accepted story's code stayed on the experiment
   branch (the next story then forked from a feature branch missing it). Now
-  `lakebase-sftdd-pipeline accept` PERFORMS the experiment git-merge (+ migrations +
-  teardown) and records acceptance, one idempotent command that lands the code. A
-  shared core (`experiment-merge.ts`: `mergeAndAcceptStory` + `resolveAcceptMergeArgs`
-  + `realExperimentOps`) is routed through by both `pipeline accept` (merge args
-  resolved from the persisted experiment record + instance from scm-state) and the
-  `lakebase-sftdd-experiment merge` recovery door (explicit args), so cut and merge
-  agree by construction. The drive's `accept` effect collapses to a single
-  `pipeline accept`. Idempotent: a re-run (already merged) skips the merge and just
-  ensures the acceptance state.
+  running `lakebase-sftdd-pipeline accept` LANDS the code: it RESOLVES the merge
+  args (experiment slug + branches from the persisted experiment record; instance
+  from `--instance` else scm-state) and DELEGATES to `lakebase-sftdd-experiment
+  merge`, the single CLI that owns the git-merge (+ migrations + teardown) and
+  records acceptance. `pipeline accept` itself never touches the merge substrate
+  in-process, it routes through that CLI (as does the drive's single `accept`
+  effect). The merge is idempotent: a re-run whose experiment is already merged
+  skips the merge and just ensures the acceptance state. Cut and merge agree by
+  construction (accept reads the branches `cut` persisted).
 
 ## [0.3.0-beta.20] - 2026-07-15
 

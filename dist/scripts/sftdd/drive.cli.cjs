@@ -3254,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path7) {
-      let input = path7;
+    function removeDotSegments(path8) {
+      let input = path8;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path7, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
+        const [path8, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path8 && path8 !== "/" ? path8 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6643,7 +6643,7 @@ var require_ajv = __commonJS({
 
 // scripts/sftdd/drive.cli.ts
 init_cjs_shims();
-var import_node_child_process6 = require("child_process");
+var import_node_child_process7 = require("child_process");
 
 // scripts/sftdd/sftdd-env.ts
 init_cjs_shims();
@@ -6903,8 +6903,8 @@ function migrateLegacyArtifactDir(projectDir = process.cwd()) {
 
 // scripts/sftdd/drive.cli.ts
 var import_node_crypto3 = require("crypto");
-var fs14 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
+var fs15 = __toESM(require("fs"), 1);
+var path7 = __toESM(require("path"), 1);
 var readline = __toESM(require("readline"), 1);
 
 // scripts/sftdd/replay-artifacts.ts
@@ -9443,9 +9443,9 @@ function checkTestListMd(content) {
   }
   return violations;
 }
-function canonicalArtifactName(path7) {
-  const base = (0, import_path9.basename)(path7);
-  if ((0, import_path9.basename)((0, import_path9.dirname)(path7)) === "acs" && base.endsWith(".json")) return "ac.json";
+function canonicalArtifactName(path8) {
+  const base = (0, import_path9.basename)(path8);
+  if ((0, import_path9.basename)((0, import_path9.dirname)(path8)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
@@ -10631,6 +10631,26 @@ function approveHint(gate, ctx = {}) {
   }
 }
 
+// scripts/sftdd/kit-bin.ts
+init_cjs_shims();
+var import_node_child_process6 = require("child_process");
+var fs14 = __toESM(require("fs"), 1);
+var path6 = __toESM(require("path"), 1);
+var KIT_ROOT = path6.resolve(__dirname, "..", "..", "..");
+var kitBinMap = null;
+function resolveKitBinJs(bin) {
+  if (kitBinMap === null) {
+    try {
+      const pkg = JSON.parse(fs14.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
+      kitBinMap = pkg.bin ?? {};
+    } catch {
+      kitBinMap = {};
+    }
+  }
+  const rel = kitBinMap[bin];
+  return rel ? path6.join(KIT_ROOT, rel) : null;
+}
+
 // scripts/sftdd/drive.cli.ts
 var MAX_PROMPT_TOO_LONG_RETRIES = 2;
 function parseArgs(argv) {
@@ -10729,7 +10749,7 @@ Flags:
 }
 function spawnCmd(bin, args, cwd) {
   return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process6.spawn)(bin, args, { cwd, stdio: "inherit" });
+    const child = (0, import_node_child_process7.spawn)(bin, args, { cwd, stdio: "inherit" });
     child.on("error", (err) => reject(err));
     child.on("close", (code) => code === 0 ? resolve2() : reject(new Error(`${bin} exited ${code}`)));
   });
@@ -10751,7 +10771,7 @@ var ReplayCorpusMissError = class extends Error {
 var ArtifactOutOfRootError = class extends Error {
   constructor(role, label, anyOf, sftddDir) {
     super(
-      `role '${role}' produced no ${label} under ${path6.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
+      `role '${role}' produced no ${label} under ${path7.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
         The subagent likely resolved the project root wrong and wrote outside it (check $HOME and other dirs for a stray copy). Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`
     );
     this.role = role;
@@ -10767,7 +10787,7 @@ var ArtifactOutOfRootError = class extends Error {
 };
 function spawnClaudeStreaming(args, cwd) {
   return new Promise((resolve2, reject) => {
-    const child = (0, import_node_child_process6.spawn)("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
+    const child = (0, import_node_child_process7.spawn)("claude", args, { cwd, stdio: ["inherit", "pipe", "pipe"] });
     const lines = [];
     let sawTooLong = false;
     const verboseAgent = !!sftddEnv("VERBOSE_AGENT");
@@ -10802,20 +10822,6 @@ function spawnClaudeStreaming(args, cwd) {
       resolve2(parseTurnUsage(lines));
     });
   });
-}
-var KIT_ROOT = path6.resolve(__dirname, "..", "..", "..");
-var kitBinMap = null;
-function resolveKitBinJs(bin) {
-  if (kitBinMap === null) {
-    try {
-      const pkg = JSON.parse(fs14.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
-      kitBinMap = pkg.bin ?? {};
-    } catch {
-      kitBinMap = {};
-    }
-  }
-  const rel = kitBinMap[bin];
-  return rel ? path6.join(KIT_ROOT, rel) : null;
 }
 function execRunner(cfg) {
   const sessions = /* @__PURE__ */ new Map();
@@ -10970,8 +10976,8 @@ function execRunner(cfg) {
       if (cmd.kind === "verify-artifact") {
         const present = cmd.anyOf.some((p) => {
           try {
-            const st = fs14.statSync(p);
-            return st.isDirectory() ? fs14.readdirSync(p).length > 0 : true;
+            const st = fs15.statSync(p);
+            return st.isDirectory() ? fs15.readdirSync(p).length > 0 : true;
           } catch {
             return false;
           }
@@ -11090,14 +11096,14 @@ function makeConfirmContinue() {
       const poll = setInterval(() => {
         let raw;
         try {
-          raw = fs14.readFileSync(answerFile, "utf8");
+          raw = fs15.readFileSync(answerFile, "utf8");
         } catch {
           return;
         }
         const a = raw.trim().toLowerCase();
         if (a === "") return;
         try {
-          fs14.rmSync(answerFile, { force: true });
+          fs15.rmSync(answerFile, { force: true });
         } catch {
         }
         if (a === "y" || a === "yes") {
@@ -11222,7 +11228,7 @@ async function runSprintMode(args) {
   const sprint = args.sprint;
   const projectDir = args.projectDir ?? process.cwd();
   const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
-  const claimJs = path6.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const claimJs = path7.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
   const settings = resolveSftddSettings({ projectDir });
   const gates = effectiveGates(args, projectDir);
   const interactive = gates === "interactive";
@@ -11251,7 +11257,7 @@ async function runSprintMode(args) {
       return backlogFeatureIds(readBacklog(sftddDir, sprint));
     },
     async commitAndPushRequests() {
-      const root = path6.basename(sftddDir);
+      const root = path7.basename(sftddDir);
       for (const id of backlogFeatureIds(readBacklog(sftddDir, sprint))) {
         await spawnCmd("git", ["add", "--", `${root}/features/${id}/feature-request.md`], projectDir).catch(() => void 0);
       }
@@ -11303,7 +11309,7 @@ async function runSprintMode(args) {
         `[sprint] RAISED TO HIL${on} , halting sprint ${sprint}.
 ` + (e?.source ? `        source: ${e.source}
 ` : "") + (e?.reason ? `        reason: ${e.reason}
-` : "") + `        recorded under ${path6.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.
+` : "") + `        recorded under ${path7.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.
 `
       );
       return 3;
@@ -11445,7 +11451,7 @@ ${help()}`);
         `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.
         source: ${e?.source}
         reason: ${e?.reason}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.
+        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.
 `
       );
       return 3;
@@ -11488,7 +11494,7 @@ ${help()}`);
       } catch {
       }
       process.stderr.write(`[drive] ${err.message}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.
+        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.
 `);
       return 3;
     }
@@ -11513,7 +11519,7 @@ ${help()}`);
       } catch {
       }
       process.stderr.write(`[drive] ${err.message}
-        recorded under ${path6.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
+        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
 `);
       return 3;
     }
