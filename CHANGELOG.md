@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.24] - 2026-07-15
+
+### Added
+
+- **An orchestrator operating contract so the driving agent drives to completed
+  software instead of narrating (FEIP-8021).** The kit governed the ROLE agents
+  (`agent-operating-rules.md`) but had no contract for the agent DRIVING
+  `/sprint` `/design` `/build` `/deploy`, whose default was to narrate every step
+  and ask the human at each one. `references/orchestrator-contract.md` (loaded by
+  the four command templates, the same way role prompts load
+  `agent-operating-rules.md`) makes the default: drive to completion via
+  `lakebase-sftdd-next`, stop for the human ONLY at a HITL gate or a blocker,
+  present the decision (option titles + `hil_prompt`) not the CLIs run, report
+  outcomes not process, show working software at the acceptance + deploy gates;
+  verbose/eval narration is explicit opt-in (`LAKEBASE_SFTDD_VERBOSE=1`), off by
+  default. Pairs with FEIP-8017.
+
+### Fixed
+
+- **The Tier-1 sprint drive no longer re-enters shipped features or leaks the
+  coarse feature phase across features (FEIP-8022).** Two coupled defects: (1)
+  the coarse `phase` in `.sftdd/workflow-state.json` is per-PROJECT and was
+  honored for any feature, so a prior feature's phase leaked into the next
+  (`lakebase-sftdd-next --feature F2` reported F2 at "deploy" with only a
+  feature-request). Now the phase is stamped with its owning feature and honored
+  only for that feature (planning is sprint-global + exempt); an un-owned/foreign
+  phase falls back to "feature" so the drive AND `lakebase-sftdd-next` re-derive
+  from the feature's own artifacts. (2) the sprint loop re-claimed + re-drove a
+  completed feature; it now SKIPS a backlog feature whose own workflow derives to
+  `done`. A feature shipped fully out-of-band (promotion merged outside the drive)
+  is recovered by the forthcoming reconcile (FEIP-8018).
+
 ## [0.3.0-beta.23] - 2026-07-15
 
 ### Fixed

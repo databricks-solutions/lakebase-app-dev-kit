@@ -8591,7 +8591,7 @@ function firstPendingEscalation(sftddDir, featureId) {
 
 // scripts/sftdd/next.ts
 init_esm_shims();
-import * as fs12 from "fs";
+import * as fs13 from "fs";
 import * as path7 from "path";
 
 // scripts/sftdd/orchestrator-logging.ts
@@ -8875,7 +8875,7 @@ function deriveFeaturePhase(stories) {
 
 // scripts/sftdd/orchestrator-effects.ts
 init_esm_shims();
-import * as fs11 from "fs";
+import * as fs12 from "fs";
 import { dirname as dirname9 } from "path";
 
 // scripts/sftdd/orchestrator-derive.ts
@@ -8963,12 +8963,49 @@ function driverPhaseForTdd(tddPhase) {
 
 // scripts/sftdd/orchestrator-probe.ts
 init_esm_shims();
-import * as fs10 from "fs";
+import * as fs11 from "fs";
 import * as path6 from "path";
+
+// scripts/sftdd/workflow-phase.ts
+init_esm_shims();
+import * as fs9 from "fs";
+var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
+var PHASE_OWNER_KEY = "phase_feature_id";
+function writeWorkflowPhase(sftddDir, phase, featureId) {
+  const file = workflowStateJson(sftddDir);
+  let state = {};
+  if (fs9.existsSync(file)) {
+    try {
+      state = JSON.parse(fs9.readFileSync(file, "utf8"));
+    } catch {
+      state = {};
+    }
+  }
+  state.phase = phase;
+  if (featureId) state[PHASE_OWNER_KEY] = featureId;
+  fs9.mkdirSync(sftddDir, { recursive: true });
+  fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+function resetStaleTerminalPhase(sftddDir) {
+  const file = workflowStateJson(sftddDir);
+  if (!fs9.existsSync(file)) return false;
+  let state;
+  try {
+    state = JSON.parse(fs9.readFileSync(file, "utf8"));
+  } catch {
+    return false;
+  }
+  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
+    delete state.phase;
+    fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+    return true;
+  }
+  return false;
+}
 
 // scripts/lakebase/scm-workflow-state.ts
 init_esm_shims();
-import * as fs9 from "fs";
+import * as fs10 from "fs";
 import * as path5 from "path";
 var SCM_STATES = [
   "scaffold-complete",
@@ -8987,8 +9024,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs9.existsSync(p)) return null;
-  const raw = fs9.readFileSync(p, "utf8");
+  if (!fs10.existsSync(p)) return null;
+  const raw = fs10.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -9145,16 +9182,16 @@ function validateWorkflowState(value) {
 
 // scripts/sftdd/reflection.ts
 init_esm_shims();
-import { existsSync as existsSync22, readFileSync as readFileSync21, writeFileSync as writeFileSync15, mkdirSync as mkdirSync13, rmSync as rmSync6 } from "fs";
+import { existsSync as existsSync23, readFileSync as readFileSync22, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, rmSync as rmSync6 } from "fs";
 var SMELL_FOR_OWNER = {
   "spec-author": "reflect-spec-defect",
   "test-strategist": "reflect-testlist-defect"
 };
 function readReflectVerdict(sftddDir, feature, story) {
   const p = reflectVerdictJson(sftddDir, feature, story);
-  if (!existsSync22(p)) return void 0;
+  if (!existsSync23(p)) return void 0;
   try {
-    return JSON.parse(readFileSync21(p, "utf8"));
+    return JSON.parse(readFileSync22(p, "utf8"));
   } catch {
     return void 0;
   }
@@ -9169,15 +9206,15 @@ var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
 // scripts/sftdd/architecture-canon.ts
 init_esm_shims();
-import { existsSync as existsSync23, readFileSync as readFileSync22, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, readdirSync as readdirSync13 } from "fs";
+import { existsSync as existsSync24, readFileSync as readFileSync23, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13 } from "fs";
 function uniq(xs) {
   return [...new Set(xs.filter((x) => typeof x === "string" && x.length > 0))];
 }
 function readCanon(sftddDir) {
   const f = architectureCanonJson(sftddDir);
-  if (!existsSync23(f)) return void 0;
+  if (!existsSync24(f)) return void 0;
   try {
-    return JSON.parse(readFileSync22(f, "utf8"));
+    return JSON.parse(readFileSync23(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9215,21 +9252,21 @@ function architectNovelty(canon, storyAcs, storyArchitectureJsonContent) {
 // scripts/sftdd/orchestrator-probe.ts
 function storyCycles2(sftddDir, featureId, story) {
   const base = path6.join(cyclesRootDir(sftddDir), featureId, story);
-  if (!fs10.existsSync(base)) return [];
+  if (!fs11.existsSync(base)) return [];
   const out = [];
-  for (const acDir of fs10.readdirSync(base)) {
+  for (const acDir of fs11.readdirSync(base)) {
     const dir = path6.join(base, acDir);
     let isDir = false;
     try {
-      isDir = fs10.statSync(dir).isDirectory();
+      isDir = fs11.statSync(dir).isDirectory();
     } catch {
       isDir = false;
     }
     if (!isDir) continue;
-    for (const f of fs10.readdirSync(dir)) {
+    for (const f of fs11.readdirSync(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(fs10.readFileSync(path6.join(dir, f), "utf8")));
+        out.push(JSON.parse(fs11.readFileSync(path6.join(dir, f), "utf8")));
       } catch {
       }
     }
@@ -9237,21 +9274,24 @@ function storyCycles2(sftddDir, featureId, story) {
   return out;
 }
 function readJson(file) {
-  if (!fs10.existsSync(file)) return void 0;
+  if (!fs11.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs10.readFileSync(file, "utf8"));
+    return JSON.parse(fs11.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
 }
 function readDriveContext(sftddDir, featureId, projectDir) {
   const ws = readJson(workflowStateJson(sftddDir));
-  const tddPhase = typeof ws?.phase === "string" ? ws.phase : "feature";
+  const phaseOwner = typeof ws?.[PHASE_OWNER_KEY] === "string" ? ws[PHASE_OWNER_KEY] : void 0;
+  const rawPhase = typeof ws?.phase === "string" ? ws.phase : void 0;
+  const honorPhase = rawPhase === "planning" || phaseOwner === featureId;
+  const tddPhase = honorPhase && rawPhase ? rawPhase : "feature";
   const spec = readJson(featureSpecJson(sftddDir, featureId));
   const proposed = spec !== void 0;
   const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs10.existsSync(featureRequestMd(sftddDir, featureId));
-  const deployed = fs10.existsSync(featureDeployEvidenceJson(sftddDir, featureId));
+  const requestsAuthored = fs11.existsSync(featureRequestMd(sftddDir, featureId));
+  const deployed = fs11.existsSync(featureDeployEvidenceJson(sftddDir, featureId));
   const gateApproved = readGateApproved(featureId, sftddDir, "deploy");
   const proj = projectDir ?? path6.dirname(sftddDir);
   let scmState;
@@ -9296,10 +9336,10 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
       const acs = storyAcIds(sftddDir, featureId, story);
       if (acs.length === 0) return false;
       const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(sftddDir, featureId, ac) !== void 0);
-      return everyAcNoted && fs10.existsSync(architectureJson(sftddDir, featureId));
+      return everyAcNoted && fs11.existsSync(architectureJson(sftddDir, featureId));
     },
     architectProjectable(story) {
-      if (!fs10.existsSync(architectureJson(sftddDir, featureId))) return false;
+      if (!fs11.existsSync(architectureJson(sftddDir, featureId))) return false;
       const canon = readCanon(sftddDir);
       if (!canon) return false;
       if (canon.established_by === featureId) return false;
@@ -9312,9 +9352,9 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
     },
     testListReady(story) {
       const file = storyTestListJson(sftddDir, featureId, story);
-      if (!fs10.existsSync(file)) return false;
+      if (!fs11.existsSync(file)) return false;
       try {
-        const data = JSON.parse(fs10.readFileSync(file, "utf8"));
+        const data = JSON.parse(fs11.readFileSync(file, "utf8"));
         return Array.isArray(data.items) && data.items.length > 0;
       } catch {
         return false;
@@ -9418,7 +9458,7 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
 
 // scripts/sftdd/response-formatter.ts
 init_esm_shims();
-import { existsSync as existsSync25, readFileSync as readFileSync24, readdirSync as readdirSync15 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync25, readdirSync as readdirSync15 } from "fs";
 
 // scripts/sftdd/artifact-conformance.ts
 init_esm_shims();
@@ -9606,12 +9646,12 @@ function canonicalArtifactName(path10) {
 // scripts/sftdd/response-formatter.ts
 function designGuideConformance(sftddDir) {
   const file = designGuideJson(sftddDir);
-  if (!existsSync25(file)) {
+  if (!existsSync26(file)) {
     return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
   }
   let content;
   try {
-    content = readFileSync24(file, "utf8");
+    content = readFileSync25(file, "utf8");
   } catch (e) {
     return { ok: false, problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -9621,12 +9661,12 @@ function designGuideConformance(sftddDir) {
 
 // scripts/sftdd/architecture-conventions.ts
 init_esm_shims();
-import { existsSync as existsSync26, readFileSync as readFileSync25, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15 } from "fs";
+import { existsSync as existsSync27, readFileSync as readFileSync26, writeFileSync as writeFileSync18, mkdirSync as mkdirSync16 } from "fs";
 function readConventions(sftddDir) {
   const f = architectureConventionsJson(sftddDir);
-  if (!existsSync26(f)) return void 0;
+  if (!existsSync27(f)) return void 0;
   try {
-    return JSON.parse(readFileSync25(f, "utf8"));
+    return JSON.parse(readFileSync26(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9644,7 +9684,7 @@ function uiTrackBuild(root) {
 var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
 function storyStubScope(sftddDir, featureId, storyId) {
   try {
-    const stub = JSON.parse(fs11.readFileSync(storyJson(sftddDir, featureId, storyId), "utf8"));
+    const stub = JSON.parse(fs12.readFileSync(storyJson(sftddDir, featureId, storyId), "utf8"));
     const parts = [
       stub.asA ? `As a ${stub.asA}` : "",
       stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
@@ -9665,7 +9705,7 @@ function contextRubric(sftddDir, featureId, story, ac) {
   }
   if (layers.size) parts.push(`layer${layers.size > 1 ? "s" : ""}=${[...layers].join(", ")}`);
   try {
-    const arch = JSON.parse(fs11.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
+    const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
     const nfrs = (arch.nfrs ?? []).filter(
       (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
     );
@@ -9676,7 +9716,7 @@ function contextRubric(sftddDir, featureId, story, ac) {
   }
   if (layers.has("E2E")) {
     try {
-      const dg = JSON.parse(fs11.readFileSync(designGuideJson(sftddDir), "utf8"));
+      const dg = JSON.parse(fs12.readFileSync(designGuideJson(sftddDir), "utf8"));
       const groups = Object.keys(dg.tokens ?? dg);
       if (groups.length) parts.push(`design-token groups, ${groups.join(", ")}`);
     } catch {
@@ -9779,11 +9819,11 @@ Apply that fix to the PRODUCTION code. Do NOT edit prior tests to force this reg
 function consumeHandback(action, featureId, sftddDir) {
   const story = "story" in action ? action.story : void 0;
   const file = handbackFile(sftddDir, featureId, action.role, story);
-  if (!fs11.existsSync(file)) return "";
+  if (!fs12.existsSync(file)) return "";
   let note = "";
   try {
-    note = fs11.readFileSync(file, "utf8").trim();
-    fs11.rmSync(file, { force: true });
+    note = fs12.readFileSync(file, "utf8").trim();
+    fs12.rmSync(file, { force: true });
   } catch {
     return "";
   }
@@ -9833,7 +9873,7 @@ function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
       const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
       let dbScope = "";
       try {
-        const arch = JSON.parse(fs11.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
+        const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
         if (arch.service_backed === true) {
           const inv = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string");
           const list = inv.length ? ` The declared persistence invariants are: ${inv.map((i) => `${i.id}${i.brief ? ` (${i.brief})` : ""}`).join("; ")}.` : "";
@@ -10265,8 +10305,8 @@ function buildDriveEffects(cfg) {
     onHandback(handoff, detail) {
       const file = handbackFile(cfg.sftddDir, cfg.featureId, handoff.responder, handoff.story);
       try {
-        fs11.mkdirSync(dirname9(file), { recursive: true });
-        fs11.writeFileSync(file, `${detail}
+        fs12.mkdirSync(dirname9(file), { recursive: true });
+        fs12.writeFileSync(file, `${detail}
 `, "utf8");
       } catch {
       }
@@ -10513,45 +10553,10 @@ function readFeatureNextSnapshot(sftddDir, featureId, projectDir, ctx = {}) {
 function emitNextJson(sftddDir, featureId, projectDir, ctx = {}) {
   try {
     const snap = readFeatureNextSnapshot(sftddDir, featureId, projectDir, ctx);
-    fs12.mkdirSync(sftddDir, { recursive: true });
-    fs12.writeFileSync(path7.join(sftddDir, "next.json"), JSON.stringify(snap, null, 2) + "\n", "utf8");
+    fs13.mkdirSync(sftddDir, { recursive: true });
+    fs13.writeFileSync(path7.join(sftddDir, "next.json"), JSON.stringify(snap, null, 2) + "\n", "utf8");
   } catch {
   }
-}
-
-// scripts/sftdd/workflow-phase.ts
-init_esm_shims();
-import * as fs13 from "fs";
-var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
-function writeWorkflowPhase(sftddDir, phase) {
-  const file = workflowStateJson(sftddDir);
-  let state = {};
-  if (fs13.existsSync(file)) {
-    try {
-      state = JSON.parse(fs13.readFileSync(file, "utf8"));
-    } catch {
-      state = {};
-    }
-  }
-  state.phase = phase;
-  fs13.mkdirSync(sftddDir, { recursive: true });
-  fs13.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
-function resetStaleTerminalPhase(sftddDir) {
-  const file = workflowStateJson(sftddDir);
-  if (!fs13.existsSync(file)) return false;
-  let state;
-  try {
-    state = JSON.parse(fs13.readFileSync(file, "utf8"));
-  } catch {
-    return false;
-  }
-  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
-    delete state.phase;
-    fs13.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-    return true;
-  }
-  return false;
 }
 
 // scripts/sftdd/orchestrator-sprint.ts
@@ -10624,22 +10629,28 @@ async function runSprint(effects) {
   if (planning.pendingInput) return { features: [], pendingInput: planning.pendingInput };
   await effects.commitAndPushRequests?.();
   const features = await effects.readBacklog();
+  const skipped = [];
   for (let i = 0; i < features.length; i++) {
     const featureId = features[i];
+    if (await effects.isFeatureShipped?.(featureId)) {
+      skipped.push(featureId);
+      effects.onSkip?.(featureId, i);
+      continue;
+    }
     effects.onFeature?.(featureId, i);
     await effects.claimFeature(featureId);
     const driven = await effects.driveFeature(featureId);
     if (driven.escalated) {
-      return { features, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
+      return { features, skipped, escalated: true, escalation: driven.escalation, pendingFeature: featureId };
     }
     if (driven.pendingGate) {
-      return { features, pendingGate: driven.pendingGate, pendingFeature: featureId };
+      return { features, skipped, pendingGate: driven.pendingGate, pendingFeature: featureId };
     }
     if (driven.pendingInput) {
-      return { features, pendingInput: driven.pendingInput, pendingFeature: featureId };
+      return { features, skipped, pendingInput: driven.pendingInput, pendingFeature: featureId };
     }
   }
-  return { features };
+  return { features, skipped };
 }
 
 // scripts/sftdd/agent-models.ts
@@ -11146,7 +11157,7 @@ function execRunner(cfg) {
   return {
     async run(cmd) {
       if (cmd.kind === "set-phase") {
-        writeWorkflowPhase(cfg.sftddDir, cmd.phase);
+        writeWorkflowPhase(cfg.sftddDir, cmd.phase, cfg.featureId || void 0);
         return;
       }
       if (cmd.kind === "sync-backlog") {
@@ -11580,6 +11591,14 @@ async function runSprintMode(args) {
       await spawnCmd("git", ["commit", "-m", `plan: ${sprint} feature-requests`], projectDir).catch(() => void 0);
       await spawnCmd("git", ["push", "origin", "HEAD"], projectDir);
     },
+    async isFeatureShipped(featureId) {
+      try {
+        const { action } = await planNextAction(buildCfg(args, featureId));
+        return action.kind === "done";
+      } catch {
+        return false;
+      }
+    },
     async claimFeature(featureId) {
       await spawnCmd("node", [claimJs, featureId, "--project-dir", projectDir, "--json"], projectDir);
     },
@@ -11594,6 +11613,8 @@ async function runSprintMode(args) {
       return stepResultOf(r);
     },
     onFeature: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f}
+`),
+    onSkip: (f, i) => process.stderr.write(`[sprint] feature ${i + 1}: ${f} , already shipped, skipping
 `)
   };
   if (args.planOnly) {
