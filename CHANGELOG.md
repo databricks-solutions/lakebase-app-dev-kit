@@ -6,6 +6,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.23] - 2026-07-15
+
+### Fixed
+
+- **The surfaced promote-gate approval command now includes the required
+  `--promote-ref` (FEIP-8019).** At the promote gate, both the drive's stop
+  message and `lakebase-sftdd-next` printed `lakebase-sftdd-approve-gate
+  --feature <F> --gate promote --approver <you>` with no `--promote-ref`. The
+  promote gate requires a non-empty `promote_ref`; running the surfaced command
+  returned "skipped promote (no promote_ref supplied)", a silent no-op, and the
+  drive re-surfaced the same gate. The drive's own internal approval already
+  supplied it (`cfg.featureBranch ?? feature`); only the human-facing command
+  omitted it. The single structured `gateEnactCommand` map now emits the promote
+  enact with `--promote-ref <feature-branch>` (read from the SCM workflow state),
+  and both `approveHint` (the drive hint) and `lakebase-sftdd-next` project from
+  it, so following the surfaced command records the approval.
+
+### Added
+
+- **`lakebase-scm-merge` interim mitigation for the short-lived-CI-token migrate
+  failure (FEIP-8020).** The promote merge's downstream (staging) migrate
+  authenticates with a `DATABRICKS_TOKEN` secret frozen at push time; it can
+  expire before the run, so git promotes (PR merged, code on staging) but the
+  parent Lakebase schema migration never applies, a partial promotion. Two
+  mitigations (the durable service-principal M2M credential fix is FEIP-8020's
+  deferred main scope): (1) a **migrate-auth precondition** run before the merge
+  (when waiting on the migrate) that verifies migrations can be applied and fails
+  fast (`migrate-auth`) rather than promoting git without the schema; (2) a
+  **local-migrate fallback** that, when the downstream migrate does not confirm
+  (a failed conclusion or a fatal timeout), applies the parent migrations locally
+  with a freshly-minted token so git and Lakebase schema stay in sync
+  (`migrate.appliedLocally`). Flags `--no-verify-migrate-auth` /
+  `--no-local-migrate-fallback` opt out.
+
+### Internal
+
+- The kit's tag now ships a current, complete `dist/` for these fixes (the
+  consumer install runs the committed dist; `prepare.mjs` skips the build for
+  non-dev installs), correcting a stale-dist gap in beta.22 where FEIP-8016 /
+  FEIP-8017's changed bundles had been reverted after the release build.
+
 ## [0.3.0-beta.22] - 2026-07-15
 
 ### Added

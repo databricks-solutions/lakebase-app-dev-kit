@@ -3018,8 +3018,8 @@ interface WaitCiResult {
 declare function waitForCi(args: WaitCiArgs): Promise<WaitCiResult>;
 
 declare class ScmMergeError extends Error {
-    readonly code: "no-state-file" | "bad-precondition" | "no-github-remote" | "no-pr-url" | "bad-pr-url" | "merge-failed" | "migrate-failed" | "migrate-timeout";
-    constructor(message: string, code: "no-state-file" | "bad-precondition" | "no-github-remote" | "no-pr-url" | "bad-pr-url" | "merge-failed" | "migrate-failed" | "migrate-timeout");
+    readonly code: "no-state-file" | "bad-precondition" | "no-github-remote" | "no-pr-url" | "bad-pr-url" | "merge-failed" | "migrate-failed" | "migrate-timeout" | "migrate-auth";
+    constructor(message: string, code: "no-state-file" | "bad-precondition" | "no-github-remote" | "no-pr-url" | "bad-pr-url" | "merge-failed" | "migrate-failed" | "migrate-timeout" | "migrate-auth");
 }
 interface MergeArgs {
     projectDir: string;
@@ -3070,6 +3070,36 @@ interface MergeArgs {
     sleep?: (ms: number) => Promise<void>;
     /** Clock injection for testability. */
     now?: () => Date;
+    /**
+     * Interim mitigation for the short-lived-CI-token failure (FEIP-8020): a
+     * migrate-AUTH precondition run BEFORE the merge. The downstream migrate
+     * applies the parent's migrations with a Databricks credential; when that
+     * credential is unusable the migrate fails and git promotes without the schema
+     * (a partial promotion). This probe verifies migrations CAN be applied (the
+     * local credential is usable, so the local-migrate fallback below is viable)
+     * before merging, so an unusable credential fails fast rather than merging into
+     * a divergence. Returns {ok:false, detail} to refuse the merge (migrate-auth).
+     * Only runs when waitMigrate is on. Injected in tests; the CLI wires it to a
+     * local `databricks current-user me` check.
+     */
+    verifyMigrateAuth?: () => Promise<{
+        ok: boolean;
+        detail?: string;
+    }>;
+    /**
+     * Interim mitigation for FEIP-8020: apply the parent-tier migrations LOCALLY
+     * (with a freshly-minted token) when the downstream migrate does NOT confirm
+     * (a FAILED conclusion, or a fatal timeout). On success the promote's schema
+     * step is satisfied locally, so git and Lakebase schema do not diverge; on
+     * failure the original migrate error is thrown with the fallback detail
+     * appended. Injected in tests; the CLI wires it to
+     * `lakebase-schema-migrate apply --instance <i> --branch <parent>` (HEAD is
+     * already on the parent branch after the merge).
+     */
+    localMigrateFallback?: () => Promise<{
+        ok: boolean;
+        detail?: string;
+    }>;
 }
 interface MergeResult {
     state: ScmWorkflowState;
@@ -3089,6 +3119,11 @@ interface MergeResult {
          *  asked for a non-fatal timeout (migrateTimeoutFatal=false). The merge has
          *  already landed; this records that migration confirmation was not observed. */
         timedOut?: boolean;
+        /** True iff the migrate-auth precondition ran and passed (FEIP-8020). */
+        authVerified?: boolean;
+        /** True iff the downstream migrate did not confirm and the local-migrate
+         *  fallback applied the parent migrations locally instead (FEIP-8020). */
+        appliedLocally?: boolean;
     };
     warnings: string[];
 }

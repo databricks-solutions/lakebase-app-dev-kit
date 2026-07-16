@@ -7766,6 +7766,18 @@ async function mergeFeature(args) {
     );
   }
   const instance = args.instance ?? current.project_id;
+  const wantMigrate = args.waitMigrate !== false;
+  let authVerified = false;
+  if (wantMigrate && args.verifyMigrateAuth) {
+    const probe = await args.verifyMigrateAuth();
+    if (!probe.ok) {
+      throw new ScmMergeError(
+        `Migrate-auth precondition failed: ${probe.detail ?? "the Databricks credential is not usable"}. Refusing to merge: the downstream migrate would promote git without applying the schema. Refresh your credential (databricks auth login), then re-run.`,
+        "migrate-auth"
+      );
+    }
+    authVerified = true;
+  }
   let paired;
   try {
     paired = await mergePairedPullRequest({
@@ -7878,6 +7890,23 @@ async function mergeFeature(args) {
         `Downstream migrate poll errored: ${err instanceof Error ? err.message : String(err)}. Treating as advisory.`
       );
     }
+    const applyLocalFallback = async (reason) => {
+      if (!args.localMigrateFallback) return false;
+      const r = await args.localMigrateFallback();
+      if (!r.ok) {
+        warnings.push(
+          `Local-migrate fallback FAILED after ${reason}: ${r.detail ?? "unknown error"}. git promoted but the parent schema is NOT applied (partial promotion); apply it manually.`
+        );
+        return false;
+      }
+      next = { ...next, migrate_completed_at: nowFn().toISOString() };
+      writeWorkflowState(args.projectDir, next);
+      migrate = { ...migrate ?? { waited: true, polls }, appliedLocally: true, authVerified };
+      warnings.push(
+        `Downstream migrate did not confirm (${reason}); applied the parent migrations LOCALLY instead. git and Lakebase schema are in sync${r.detail ? ` (${r.detail})` : ""}.`
+      );
+      return true;
+    };
     if (matched) {
       const runUrl = workflowRunUrl(ownerRepo, matched);
       const conclusion = (matched.conclusion ?? "").toLowerCase();
@@ -7885,7 +7914,8 @@ async function mergeFeature(args) {
         waited: true,
         runUrl,
         conclusion,
-        polls
+        polls,
+        authVerified
       };
       if (conclusion === "success") {
         next = {
@@ -7895,10 +7925,13 @@ async function mergeFeature(args) {
         };
         writeWorkflowState(args.projectDir, next);
       } else {
-        throw new ScmMergeError(
-          `Downstream migrate workflow finished with conclusion=${conclusion}. Run ${runUrl} for details.`,
-          "migrate-failed"
-        );
+        const applied = await applyLocalFallback(`the downstream migrate finished conclusion=${conclusion} (${runUrl})`);
+        if (!applied) {
+          throw new ScmMergeError(
+            `Downstream migrate workflow finished with conclusion=${conclusion}. Run ${runUrl} for details.`,
+            "migrate-failed"
+          );
+        }
       }
     } else {
       const budgetSec = Math.round(
@@ -7907,16 +7940,22 @@ async function mergeFeature(args) {
       const lastStatus = lastSeen?.status ?? "(no matching run)";
       const timeoutFatal = args.migrateTimeoutFatal !== false;
       if (timeoutFatal) {
-        migrate = { waited: true, polls };
-        throw new ScmMergeError(
-          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
-          "migrate-timeout"
+        migrate = { waited: true, polls, authVerified };
+        const applied = await applyLocalFallback(
+          `the downstream migrate did not complete within ${budgetSec}s (last seen: ${lastStatus})`
+        );
+        if (!applied) {
+          throw new ScmMergeError(
+            `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+            "migrate-timeout"
+          );
+        }
+      } else {
+        migrate = { waited: true, polls, timedOut: true, authVerified };
+        warnings.push(
+          `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s (last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`
         );
       }
-      migrate = { waited: true, polls, timedOut: true };
-      warnings.push(
-        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s (last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`
-      );
     }
   } else {
     migrate = { waited: false, polls: 0 };
