@@ -1,11 +1,13 @@
-// W8: the scaffolded pre-push hook must WARN (not block) when the Databricks
-// OAuth token cannot be refreshed. A stale/missing token only affects the
-// downstream CI secret sync; it must never stop the developer from pushing.
+// The scaffolded pre-push hook provisions the CI credential before every push
+// by delegating to create-token-and-sync-secrets.sh (FEIP-8020: mint a DURABLE
+// 90-day PAT, not the ~1h OAuth session token, so a CI rerun / downstream migrate
+// firing long after the push still authenticates). It must NEVER block the push:
+// a mint/sync failure only affects the downstream CI secret sync (W8), so offline
+// work, docs, or a fix to the auth itself must still push.
 //
-// This reproduces the eval symptom ("push blocked by stale DB auth") against
-// the real scaffolded hook installed at .git/hooks/pre-push, with a fake
-// `databricks` on PATH whose `auth token` yields nothing, and asserts the push
-// to a bare remote SUCCEEDS with the warning on stderr.
+// Both tests install the REAL scaffolded hook at .git/hooks/pre-push and provide
+// a FAKE scripts/create-token-and-sync-secrets.sh, so they exercise the hook's
+// delegation + non-blocking contract without needing jq / gh / databricks.
 
 import { describe, it, expect, afterEach } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -14,14 +16,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 const HOOK_SRC = path.resolve(
-  __dirname,
-  "..",
-  "..",
-  "templates",
-  "project",
-  "common",
-  "scripts",
-  "pre-push.sh",
+  __dirname, "..", "..", "templates", "project", "common", "scripts", "pre-push.sh",
 );
 
 const tmpDirs: string[] = [];
@@ -39,69 +34,71 @@ function mkTmp(): string {
 }
 
 function git(args: string[], cwd: string, env?: NodeJS.ProcessEnv): string {
-  return execFileSync("git", args, {
-    cwd,
-    encoding: "utf-8",
-    env: env ?? process.env,
-  });
+  return execFileSync("git", args, { cwd, encoding: "utf-8", env: env ?? process.env });
 }
 
-describe("W8: pre-push hook warns, does not block, on token-refresh failure", () => {
-  it("git push succeeds (exit 0) with a warning when the token can't refresh", () => {
-    const root = mkTmp();
-    const workdir = path.join(root, "work");
-    const remote = path.join(root, "remote.git");
-    const bin = path.join(root, "bin");
-    fs.mkdirSync(workdir);
-    fs.mkdirSync(bin);
+/** A working repo + bare remote with the real pre-push hook installed and a fake
+ *  scripts/create-token-and-sync-secrets.sh (body supplied per test). Returns the
+ *  workdir + remote paths. */
+function scaffold(syncScriptBody: string): { workdir: string; remote: string } {
+  const root = mkTmp();
+  const workdir = path.join(root, "work");
+  const remote = path.join(root, "remote.git");
+  fs.mkdirSync(workdir);
+  git(["init", "--bare", "-b", "main", remote], root);
+  git(["init", "-b", "main", workdir], root);
+  git(["config", "user.email", "test@example.com"], workdir);
+  git(["config", "user.name", "Test User"], workdir);
+  git(["remote", "add", "origin", remote], workdir);
 
-    // Bare remote + working repo on branch main.
-    git(["init", "--bare", "-b", "main", remote], root);
-    git(["init", "-b", "main", workdir], root);
-    git(["config", "user.email", "test@example.com"], workdir);
-    git(["config", "user.name", "Test User"], workdir);
-    git(["remote", "add", "origin", remote], workdir);
+  // Install the REAL hook + pin core.hooksPath so a host-global hooks dir can't
+  // shadow it.
+  const hooksDir = path.join(workdir, ".git", "hooks");
+  const hookDest = path.join(hooksDir, "pre-push");
+  fs.copyFileSync(HOOK_SRC, hookDest);
+  fs.chmodSync(hookDest, 0o755);
+  git(["config", "--local", "core.hooksPath", hooksDir], workdir);
 
-    // Install the REAL scaffolded hook, and pin core.hooksPath to this repo's
-    // hooks dir so a host-global core.hooksPath (e.g. a workstation's
-    // ~/.databricks/githooks secret scanner) can't shadow the hook under test.
-    const hooksDir = path.join(workdir, ".git", "hooks");
-    const hookDest = path.join(hooksDir, "pre-push");
-    fs.copyFileSync(HOOK_SRC, hookDest);
-    fs.chmodSync(hookDest, 0o755);
-    git(["config", "--local", "core.hooksPath", hooksDir], workdir);
+  // The fake credential-sync script the hook delegates to.
+  const scriptsDir = path.join(workdir, "scripts");
+  fs.mkdirSync(scriptsDir);
+  const syncScript = path.join(scriptsDir, "create-token-and-sync-secrets.sh");
+  fs.writeFileSync(syncScript, syncScriptBody);
+  fs.chmodSync(syncScript, 0o755);
 
-    // A fake `databricks` whose `auth token` produces no access token, so the
-    // hook's refresh fails and must fall through to the warn-not-block branch.
-    const fakeDatabricks = path.join(bin, "databricks");
-    fs.writeFileSync(fakeDatabricks, "#!/usr/bin/env bash\necho '{}'\nexit 0\n");
-    fs.chmodSync(fakeDatabricks, 0o755);
+  fs.writeFileSync(
+    path.join(workdir, ".env"),
+    "DATABRICKS_HOST=https://example.cloud.databricks.com\nLAKEBASE_PROJECT_ID=proj-x\n",
+  );
+  fs.writeFileSync(path.join(workdir, "README.md"), "# test\n");
+  git(["add", "-A"], workdir);
+  git(["commit", "-m", "initial"], workdir);
+  return { workdir, remote };
+}
 
-    // DATABRICKS_HOST set so the hook enters the refresh branch at all.
-    fs.writeFileSync(path.join(workdir, ".env"), "DATABRICKS_HOST=https://example.cloud.databricks.com\n");
-
-    // Commit something to push.
-    fs.writeFileSync(path.join(workdir, "README.md"), "# test\n");
-    git(["add", "README.md"], workdir);
-    git(["commit", "-m", "initial"], workdir);
-
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
-
-    const res = spawnSync("git", ["push", "origin", "main"], {
-      cwd: workdir,
-      encoding: "utf-8",
-      env,
-    });
-
-    // The push must succeed despite the failed token refresh.
+describe("pre-push hook: durable CI credential provisioning (FEIP-8020) + non-blocking (W8)", () => {
+  it("delegates the CI secret sync to create-token-and-sync-secrets.sh", () => {
+    const { workdir, remote } = scaffold(
+      // Fake sync: record that it ran (into a marker), then succeed.
+      `#!/usr/bin/env bash\necho "ran" > "$(git rev-parse --show-toplevel)/.sync-ran"\nexit 0\n`,
+    );
+    const res = spawnSync("git", ["push", "origin", "main"], { cwd: workdir, encoding: "utf-8" });
     expect(res.status).toBe(0);
+    // The hook invoked the durable-credential script.
+    expect(fs.existsSync(path.join(workdir, ".sync-ran"))).toBe(true);
+    expect(git(["log", "--oneline", "main"], remote)).toMatch(/initial/);
+  });
 
-    // The hook must have emitted the warning (not a blocking error) on stderr.
+  it("warns, does NOT block the push, when the credential sync fails", () => {
+    const { workdir, remote } = scaffold(
+      // Fake sync fails (e.g. PAT mint failed / no gh).
+      `#!/usr/bin/env bash\necho "mint failed" >&2\nexit 1\n`,
+    );
+    const res = spawnSync("git", ["push", "origin", "main"], { cwd: workdir, encoding: "utf-8" });
+    // Push still succeeds despite the failed sync.
+    expect(res.status).toBe(0);
     expect(res.stderr).toMatch(/WARNING/);
     expect(res.stderr).not.toMatch(/ERROR/);
-
-    // And the remote must actually have received the commit.
-    const remoteLog = git(["log", "--oneline", "main"], remote);
-    expect(remoteLog).toMatch(/initial/);
+    expect(git(["log", "--oneline", "main"], remote)).toMatch(/initial/);
   });
 });

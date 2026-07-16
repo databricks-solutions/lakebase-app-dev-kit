@@ -1,54 +1,40 @@
 #!/usr/bin/env bash
-# Pre-push hook: refresh OAuth token and sync to GitHub secrets before every push.
+# Pre-push hook: provision the CI credential + sync it to GitHub secrets before
+# every push, so a CI rerun / downstream migrate that fires long after the push
+# still authenticates.
 #
-# OAuth tokens are short-lived (~1h). This hook ensures CI always has a fresh token
-# by refreshing via `databricks auth token` and syncing to DATABRICKS_TOKEN in GitHub secrets.
+# Delegates to create-token-and-sync-secrets.sh, which prefers a DURABLE
+# (90-day) PAT over the ~1h OAuth session token (FEIP-8020) , the old inline
+# `databricks auth token` refresh baked a token into the CI secret that expired
+# (~1h) before reruns / the downstream migrate could use it , and falls back to
+# OAuth only where PATs are disabled, then syncs DATABRICKS_TOKEN + DATABRICKS_HOST
+# + LAKEBASE_PROJECT_ID to GitHub repo secrets.
+#
+# NEVER blocks the push: a mint/sync failure only affects the downstream CI
+# secret sync (offline work, docs, or a fix to the auth itself must still push).
 #
 # Install: ./scripts/install-hook.sh
 
 set -e
-# Resolve the repo root via git, not via BASH_SOURCE/.., so this works both
-# when invoked directly from scripts/ and when installed at .git/hooks/pre-push
-# by installHooks. The BASH_SOURCE/.. heuristic resolves to .git/ in the
-# installed case, which made set-repo-secrets.sh lookup fail silently.
+# Resolve the repo root via git, not via BASH_SOURCE/.., so this works both when
+# invoked directly from scripts/ and when installed at .git/hooks/pre-push.
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 HELPERS_DIR="$REPO_ROOT/scripts"
+SYNC="$HELPERS_DIR/create-token-and-sync-secrets.sh"
 
-if [ -f .env ]; then
-  set -a
-  # shellcheck source=/dev/null
-  source .env 2>/dev/null || true
-  set +a
-fi
-
-# Refresh OAuth token before syncing – this is the critical step.
-# CI workflows use DATABRICKS_TOKEN from GitHub secrets. If we don't refresh here,
-# CI gets a stale token and auth fails on merge cleanup, migrations, etc.
-if [ -n "${DATABRICKS_HOST:-}" ] && command -v databricks >/dev/null 2>&1; then
-  PROFILE_FLAG=""
-  [ -n "${DATABRICKS_CONFIG_PROFILE:-}" ] && PROFILE_FLAG="--profile ${DATABRICKS_CONFIG_PROFILE}"
-
-  FRESH_TOKEN="$(databricks auth token $PROFILE_FLAG -o json 2>/dev/null | jq -r '.access_token // empty' 2>/dev/null)" || true
-  if [ -n "$FRESH_TOKEN" ]; then
-    export DATABRICKS_TOKEN="$FRESH_TOKEN"
-    echo "Pre-push: OAuth token refreshed."
+# Delegate to the durable-credential provisioner. Wrapped in an `if` so a
+# non-zero exit (PAT disabled + no OAuth, no jq/gh, missing LAKEBASE_PROJECT_ID)
+# WARNS instead of aborting the push (set -e is suspended for an `if` condition).
+if [ -x "$SYNC" ]; then
+  if "$SYNC"; then
+    echo "Pre-push: CI credential minted + repository secrets synced."
   else
-    # Warn, do NOT block. A stale or missing Databricks token only affects the
-    # downstream CI secret sync; it must not stop the developer from pushing
-    # code (offline work, docs, a fix to the auth itself). If CI later fails on
-    # a stale token, run 'databricks auth login' and push again to re-sync.
-    echo "Pre-push: WARNING – could not refresh OAuth token; pushing anyway." >&2
-    echo "Pre-push: if CI fails on a stale token, run 'databricks auth login' and push again." >&2
+    echo "Pre-push: WARNING , could not mint/sync the CI credential; pushing anyway." >&2
+    echo "Pre-push: if CI fails on auth, run 'databricks auth login' then './scripts/create-token-and-sync-secrets.sh'." >&2
   fi
-fi
-
-# Sync secrets to GitHub (DATABRICKS_HOST, DATABRICKS_TOKEN, LAKEBASE_PROJECT_ID)
-if [ -n "${DATABRICKS_HOST:-}" ] && [ -n "${LAKEBASE_PROJECT_ID:-}" ] && [ -n "${DATABRICKS_TOKEN:-}" ]; then
-  if "$HELPERS_DIR/set-repo-secrets.sh" 2>/dev/null; then
-    echo "Pre-push: repository secrets synced."
-  fi
-  # If set-repo-secrets fails (e.g. no gh), push continues anyway
+else
+  echo "Pre-push: WARNING , scripts/create-token-and-sync-secrets.sh not found; skipping CI secret sync." >&2
 fi
 
 exit 0

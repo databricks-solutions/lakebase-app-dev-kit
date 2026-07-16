@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Sync repository secrets for CI/CD workflows.
 #
-# Auth: OAuth token refreshed by pre-push hook → synced as DATABRICKS_TOKEN.
+# Auth: a DURABLE (90-day) PAT minted by create-token-and-sync-secrets.sh (which
+# the pre-push hook runs) is synced here as DATABRICKS_TOKEN, so CI reruns / the
+# downstream migrate authenticate long after the push (FEIP-8020). Falls back to
+# a short-lived OAuth token only where the workspace disables PATs.
 # Required env vars: DATABRICKS_HOST, DATABRICKS_TOKEN, LAKEBASE_PROJECT_ID
 #
 # Usage: called automatically by pre-push hook. Can also run manually:
