@@ -105,6 +105,9 @@ export interface NextContext {
   sprint?: string;
   /** Approver to fill into gate enact commands (default `<you>` placeholder). */
   approver?: string;
+  /** The feature's canonical branch, the promote gate's required `--promote-ref`
+   *  (FEIP-8019). Falls back to the feature id when unknown. */
+  featureBranch?: string;
   /** Kit version string for authoritative_playbook_version. */
   version?: string;
   /** ISO timestamp for generated_at (injectable for deterministic tests). */
@@ -148,7 +151,12 @@ function storyOf(action: WorkflowAction): string | undefined {
 export function buildNextOptions(action: WorkflowAction, ctx: NextContext): NextOption[] {
   const f = ctx.featureId ?? "<feature-id>";
   const you = ctx.approver ?? "<you>";
-  const gateEnact = gateEnactCommand(action, { featureId: ctx.featureId, sprint: ctx.sprint, approver: ctx.approver });
+  const gateEnact = gateEnactCommand(action, {
+    featureId: ctx.featureId,
+    sprint: ctx.sprint,
+    approver: ctx.approver,
+    featureBranch: ctx.featureBranch,
+  });
 
   switch (action.kind) {
     case "accept": {

@@ -815,7 +815,7 @@ function stepResultOf(r: RunDriverResult): DriveStepResult {
   return { pendingGate: pendingGateOf(r), pendingInput: pendingInputOf(r), escalated: r.escalated, escalation: r.escalation };
 }
 
-function reportGate(gate: WorkflowAction, ctx: { featureId?: string; sprint?: string } = {}): void {
+function reportGate(gate: WorkflowAction, ctx: { featureId?: string; sprint?: string; featureBranch?: string } = {}): void {
   // Reuse the shared action narration (DRY) instead of dumping raw JSON; the
   // full action is available under LAKEBASE_SFTDD_TRACE for debugging.
   const trace = sftddEnv("TRACE") ? `  ${JSON.stringify(gate)}` : "";
@@ -1149,7 +1149,7 @@ async function main(): Promise<number> {
     } else if (result.stoppedAtMax) {
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)\n`);
     } else if (pendingGate) {
-      reportGate(pendingGate, { featureId: cfg.featureId });
+      reportGate(pendingGate, { featureId: cfg.featureId, featureBranch: cfg.featureBranch });
     } else if (pendingInput) {
       // A human-input pause (the PO's author-requests) is NOT a completed bound:
       // nothing was produced. Report honestly + exit non-zero (never "complete").
@@ -1253,7 +1253,11 @@ async function main(): Promise<number> {
     const recordingOrReplaying =
       !!sftddEnv("REPLAY_DIR") || !!sftddEnv("REPLAY_BUILD_DIR") || !!sftddEnv("RECORD_BUILD_DIR") || !!sftddEnv("RECORD_DIR");
     if (cfg.featureId && !recordingOrReplaying) {
-      emitNextJson(cfg.sftddDir, cfg.featureId, cfg.projectDir, { uiTrack: cfg.uiTrack, version: kitVersion() });
+      emitNextJson(cfg.sftddDir, cfg.featureId, cfg.projectDir, {
+        uiTrack: cfg.uiTrack,
+        version: kitVersion(),
+        ...(cfg.featureBranch ? { featureBranch: cfg.featureBranch } : {}),
+      });
     }
   }
 }

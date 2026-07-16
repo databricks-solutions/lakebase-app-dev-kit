@@ -214,6 +214,9 @@ export interface GateEnactContext {
   featureId?: string;
   sprint?: string;
   approver?: string;
+  /** The feature's canonical branch, the promote gate's REQUIRED `--promote-ref`
+   *  (what is being promoted). Falls back to the feature id when unknown. */
+  featureBranch?: string;
 }
 
 /**
@@ -244,7 +247,16 @@ export function gateEnactCommand(
     case "approve-deploy-gate":
       return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "deploy", "--approver", you] };
     case "approve-promote-gate":
-      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "promote", "--approver", you] };
+      // The promote gate REQUIRES a non-empty --promote-ref (what is being
+      // promoted); without it the approval SKIPS as a silent no-op and the drive
+      // re-surfaces the same gate (FEIP-8019). The value is the feature's
+      // canonical branch (what the merge releases into the parent tier), the same
+      // promote_ref the engine's own internal approval supplies (orchestrator-
+      // effects `approve-promote-gate`: cfg.featureBranch ?? feature).
+      return {
+        bin: "lakebase-sftdd-approve-gate",
+        args: ["--feature", f, "--gate", "promote", "--promote-ref", ctx.featureBranch ?? f, "--approver", you],
+      };
     case "accept": // per-story PO acceptance (experiment merge), a pipeline action
       return { bin: "lakebase-sftdd-pipeline", args: ["accept", "--feature", f, "--story", gate.story, "--approver", you] };
     default:
@@ -259,7 +271,7 @@ export function gateEnactCommand(
  */
 export function approveHint(
   gate: WorkflowAction,
-  ctx: { featureId?: string; sprint?: string } = {},
+  ctx: { featureId?: string; sprint?: string; featureBranch?: string } = {},
 ): string {
   const cmd = gateEnactCommand(gate, ctx);
   if (cmd) return `${cmd.bin} ${cmd.args.join(" ")}`;

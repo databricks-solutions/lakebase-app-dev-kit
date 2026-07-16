@@ -46,9 +46,15 @@ describe("gateEnactCommand: the ONE gate -> CLI mapping (DRY, subsumes Findings 
       bin: "lakebase-sftdd-approve-gate",
       args: ["--feature", "F1", "--gate", "deploy", "--approver", "you"],
     });
+    // promote REQUIRES --promote-ref (FEIP-8019): defaults to the feature id, or
+    // the feature branch when supplied.
     expect(gateEnactCommand({ kind: "approve-promote-gate" }, { featureId: "F1", approver: "you" })).toEqual({
       bin: "lakebase-sftdd-approve-gate",
-      args: ["--feature", "F1", "--gate", "promote", "--approver", "you"],
+      args: ["--feature", "F1", "--gate", "promote", "--promote-ref", "F1", "--approver", "you"],
+    });
+    expect(gateEnactCommand({ kind: "approve-promote-gate" }, { featureId: "F1", featureBranch: "feat/orders", approver: "you" })).toEqual({
+      bin: "lakebase-sftdd-approve-gate",
+      args: ["--feature", "F1", "--gate", "promote", "--promote-ref", "feat/orders", "--approver", "you"],
     });
     // acceptance routes through the pipeline accept (which owns the experiment merge)
     expect(gateEnactCommand({ kind: "accept", story: "S3" }, { featureId: "F1", approver: "you" })).toEqual({
@@ -106,6 +112,15 @@ describe("buildNextOptions: the decision menu per stop", () => {
       expect(opts[0].kind).toBe("gate");
       expect(opts[0].enact).toEqual(gateEnactCommand(action, CTX));
     }
+  });
+
+  it("the promote option carries the required --promote-ref (feature branch), not a no-op (FEIP-8019)", () => {
+    const opts = buildNextOptions({ kind: "approve-promote-gate" }, { ...CTX, featureBranch: "feat/orders" });
+    const promote = opts.find((o) => o.id === "promote.approve")!;
+    expect(promote.enact).toEqual({
+      bin: "lakebase-sftdd-approve-gate",
+      args: ["--feature", "F1-checkout", "--gate", "promote", "--promote-ref", "feat/orders", "--approver", "po@example.com"],
+    });
   });
 
   it("promote-phase merge/prepare-pr are flagged outward-facing", () => {

@@ -8,6 +8,7 @@
 import { resolveSftddDir } from "./sftdd-paths.js";
 import { resolveSftddSettings } from "./sftdd-config.js";
 import { readDriveStateFromDisk } from "./orchestrator-effects.js";
+import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 import { deriveSprintPlanningState } from "./orchestrator-sprint.js";
 import { summarizeStories } from "./feature-status.js";
 import { kitVersion } from "./kit-bin.js";
@@ -105,7 +106,13 @@ function main(): number {
         readDriveStateFromDisk(sftddDir, args.feature!, projectDir, {
           uiTrack: resolveSftddSettings({ projectDir }).project.uiTrack,
         }),
-        { ...ctx, stories: summarizeStories(sftddDir, args.feature!) },
+        {
+          ...ctx,
+          stories: summarizeStories(sftddDir, args.feature!),
+          // The promote gate's required --promote-ref is the feature's canonical
+          // branch, recorded in the SCM workflow state at claim (FEIP-8019).
+          ...(readWorkflowState(projectDir)?.branch ? { featureBranch: readWorkflowState(projectDir)!.branch } : {}),
+        },
       );
 
   if (args.json) process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");

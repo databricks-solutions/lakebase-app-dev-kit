@@ -63,7 +63,7 @@ interface NextBlocker {
 | Per-story spec gate (`approve-gate`) | `spec.approve` | `lakebase-sftdd-approve-gate --feature <F> --story <S> --approver <you>` |
 | Sprint plan gate (`approve-plan-gate`) | `plan.approve` | `lakebase-sftdd-approve-gate --sprint <S> --approver <you>` |
 | Deploy gate (`approve-deploy-gate`) | `deploy.approve` | `lakebase-sftdd-approve-gate --feature <F> --gate deploy --approver <you>` |
-| Promote gate (`approve-promote-gate`) | `promote.approve` (outward-facing) | `lakebase-sftdd-approve-gate --feature <F> --gate promote --approver <you>` |
+| Promote gate (`approve-promote-gate`) | `promote.approve` (outward-facing) | `lakebase-sftdd-approve-gate --feature <F> --gate promote --promote-ref <feature-branch> --approver <you>` (the `--promote-ref` is REQUIRED, else the approval is a silent no-op) |
 | Blocked (`raise-to-hil`) | `resume` (after resolving the blocker) | `lakebase-sftdd-drive --feature <F>` |
 | Feature complete | `resume` (deploy the feature) | `lakebase-sftdd-drive --feature <F>` |
 | Any other step | `resume` (carry out the next step) | `lakebase-sftdd-drive --feature <F>` |
