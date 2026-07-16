@@ -6651,7 +6651,7 @@ init_esm_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2, readdirSync as readdirSync2, statSync as statSync2, rmSync } from "fs";
 import { dirname, join as join2 } from "path";
 
 // scripts/sftdd/sftdd-paths.ts
@@ -6670,6 +6670,8 @@ function resolveSftddDir(projectDir = process.cwd()) {
 var featuresDir = (tdd) => join(tdd, "features");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureSpecJson = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.json");
+var featureSpecMd = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.md");
 var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
@@ -6744,6 +6746,25 @@ function syncBreakdownToPipeline(sftddDir, featureId) {
   }
   if (added.length > 0) writePipeline(sftddDir, pipeline);
   return { added, total: Object.keys(pipeline.stories) };
+}
+function resetIncompleteBreakdown(sftddDir, featureId) {
+  const specPath = featureSpecJson(sftddDir, featureId);
+  let complete = false;
+  try {
+    const spec = JSON.parse(readFileSync2(specPath, "utf8"));
+    complete = Array.isArray(spec.stories) && spec.stories.length > 0;
+  } catch {
+    complete = false;
+  }
+  if (complete) return { reset: false };
+  let reset = false;
+  for (const p of [storiesDir(sftddDir, featureId), specPath, featureSpecMd(sftddDir, featureId)]) {
+    if (existsSync2(p)) {
+      rmSync(p, { recursive: true, force: true });
+      reset = true;
+    }
+  }
+  return { reset };
 }
 function enqueueReady(pipeline, storyId) {
   setStoryStatus(pipeline, storyId, "ready");
@@ -7392,7 +7413,7 @@ init_esm_shims();
 init_esm_shims();
 import { execSync, spawn } from "child_process";
 import { randomBytes } from "crypto";
-import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync9, rmSync as rmSync2, writeFileSync as writeFileSync7 } from "fs";
+import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync9, rmSync as rmSync3, writeFileSync as writeFileSync7 } from "fs";
 import { dirname as dirname4, join as join9 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
@@ -8719,6 +8740,15 @@ async function main() {
 `);
       }
     }
+    return 0;
+  }
+  if (args.cmd === "reset-breakdown") {
+    const r = resetIncompleteBreakdown(sftddDir, feature);
+    process.stdout.write(
+      r.reset ? `reset-breakdown: cleared an incomplete breakdown for ${feature} (re-dispatch will regenerate)
+` : `reset-breakdown: breakdown for ${feature} is complete or absent; nothing to reset
+`
+    );
     return 0;
   }
   const pipeline = readPipeline(sftddDir, feature);

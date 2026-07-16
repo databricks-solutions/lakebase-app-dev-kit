@@ -9848,7 +9848,7 @@ function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
       case "author-requests":
         return `Provide the sprint's feature-requests.`;
       case "breakdown":
-        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
+        return `Break feature ${featureId} down into its stories. WRITE the breakdown to ${root}: first ${root}/features/${featureId}/feature-spec.json (id, name, status "draft", tdd_mode, and a NON-EMPTY stories[] array of the story ids), then a stub dir per story under ${root}/features/${featureId}/stories/<S>/ (story.md + story.json, id + one-line scope; NO acceptance criteria here). feature-spec.json is REQUIRED , a prose list of stories in your reply is NOT the breakdown, and do NOT claim it "already exists".${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
     }
   }
   if (action.role === "ux-designer") {
@@ -10043,6 +10043,7 @@ function commandsForAction(action, cfg) {
         cmds.push({ kind: "verify-artifact", role: action.role, anyOf: expectArtifact.anyOf, label: expectArtifact.label });
       }
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
+        cmds.unshift({ kind: "cli", bin: PIPELINE_BIN, args: ["reset-breakdown", ...tdd] });
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
       if (!("mode" in action) && action.role === "test-strategist") {

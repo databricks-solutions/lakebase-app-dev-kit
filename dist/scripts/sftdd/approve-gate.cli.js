@@ -8107,7 +8107,7 @@ function drainGatesAsHumanProxy(args) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync7, readdirSync as readdirSync7, statSync as statSync4 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync12, writeFileSync as writeFileSync9, mkdirSync as mkdirSync7, readdirSync as readdirSync7, statSync as statSync4, rmSync } from "fs";
 import { dirname as dirname4, join as join11 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };

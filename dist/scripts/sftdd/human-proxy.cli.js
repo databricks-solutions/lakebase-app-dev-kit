@@ -8214,12 +8214,12 @@ Candidate features for this sprint, projected deterministically from the recorde
 
 // scripts/sftdd/revise.ts
 init_esm_shims();
-import { existsSync as existsSync16, readFileSync as readFileSync17, writeFileSync as writeFileSync13, mkdirSync as mkdirSync9, readdirSync as readdirSync8, rmSync as rmSync2 } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync17, writeFileSync as writeFileSync13, mkdirSync as mkdirSync9, readdirSync as readdirSync8, rmSync as rmSync3 } from "fs";
 import { join as join16, dirname as dirname6 } from "path";
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6, readdirSync as readdirSync7, statSync as statSync4 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync11, writeFileSync as writeFileSync8, mkdirSync as mkdirSync6, readdirSync as readdirSync7, statSync as statSync4, rmSync } from "fs";
 import { dirname as dirname4, join as join11 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -8429,14 +8429,14 @@ function markSmellResolved(sftddDir, smell, opts) {
 
 // scripts/sftdd/reflection.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync16, writeFileSync as writeFileSync12, mkdirSync as mkdirSync8, rmSync } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync16, writeFileSync as writeFileSync12, mkdirSync as mkdirSync8, rmSync as rmSync2 } from "fs";
 var SMELL_FOR_OWNER = {
   "spec-author": "reflect-spec-defect",
   "test-strategist": "reflect-testlist-defect"
 };
 function clearReflectVerdict(sftddDir, feature, story) {
   const p = reflectVerdictJson(sftddDir, feature, story);
-  if (existsSync15(p)) rmSync(p, { force: true });
+  if (existsSync15(p)) rmSync2(p, { force: true });
 }
 var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
@@ -8457,12 +8457,12 @@ function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if (existsSync16(perStory)) rmSync2(perStory, { force: true });
+  if (existsSync16(perStory)) rmSync3(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
     if (existsSync16(dir)) {
       for (const f of readdirSync8(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) rmSync2(join16(dir, f), { force: true });
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync3(join16(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {

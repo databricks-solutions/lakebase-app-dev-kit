@@ -7057,7 +7057,7 @@ function validateGateRecord(parsed, gateName, file) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync9, mkdirSync as mkdirSync6, readdirSync as readdirSync5, statSync as statSync4 } from "fs";
+import { existsSync as existsSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync9, mkdirSync as mkdirSync6, readdirSync as readdirSync5, statSync as statSync4, rmSync } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

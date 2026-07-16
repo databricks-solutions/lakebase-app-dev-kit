@@ -6665,6 +6665,8 @@ function resolveSftddDir(projectDir = process.cwd()) {
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
+var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
+var featureSpecMd = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.md");
 var pipelineJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "pipeline.json");
 var storiesDir = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => (0, import_node_path.join)(storiesDir(tdd, f), s);
@@ -6739,6 +6741,25 @@ function syncBreakdownToPipeline(sftddDir, featureId) {
   }
   if (added.length > 0) writePipeline(sftddDir, pipeline);
   return { added, total: Object.keys(pipeline.stories) };
+}
+function resetIncompleteBreakdown(sftddDir, featureId) {
+  const specPath = featureSpecJson(sftddDir, featureId);
+  let complete = false;
+  try {
+    const spec = JSON.parse((0, import_fs.readFileSync)(specPath, "utf8"));
+    complete = Array.isArray(spec.stories) && spec.stories.length > 0;
+  } catch {
+    complete = false;
+  }
+  if (complete) return { reset: false };
+  let reset = false;
+  for (const p of [storiesDir(sftddDir, featureId), specPath, featureSpecMd(sftddDir, featureId)]) {
+    if ((0, import_fs.existsSync)(p)) {
+      (0, import_fs.rmSync)(p, { recursive: true, force: true });
+      reset = true;
+    }
+  }
+  return { reset };
 }
 function enqueueReady(pipeline, storyId) {
   setStoryStatus(pipeline, storyId, "ready");
@@ -8714,6 +8735,15 @@ async function main() {
 `);
       }
     }
+    return 0;
+  }
+  if (args.cmd === "reset-breakdown") {
+    const r = resetIncompleteBreakdown(sftddDir, feature);
+    process.stdout.write(
+      r.reset ? `reset-breakdown: cleared an incomplete breakdown for ${feature} (re-dispatch will regenerate)
+` : `reset-breakdown: breakdown for ${feature} is complete or absent; nothing to reset
+`
+    );
     return 0;
   }
   const pipeline = readPipeline(sftddDir, feature);

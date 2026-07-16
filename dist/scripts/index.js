@@ -8232,7 +8232,7 @@ import { existsSync as existsSync31, readdirSync as readdirSync15, statSync as s
 import { join as join34 } from "path";
 
 // scripts/sftdd/story-pipeline.ts
-import { existsSync as existsSync29, readFileSync as readFileSync17, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7 } from "fs";
+import { existsSync as existsSync29, readFileSync as readFileSync17, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13, statSync as statSync7, rmSync as rmSync4 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

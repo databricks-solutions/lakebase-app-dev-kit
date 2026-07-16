@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.26] - 2026-07-16
+
+### Fixed
+
+- **The /design breakdown no longer deadlocks when the spec-author writes the
+  story stubs but not feature-spec.json (FEIP-8024).** The driver gates the
+  breakdown on `feature-spec.json` (a non-empty `stories[]`), but the spec-author
+  prompt said the breakdown deliverable was ONLY the story stubs, and the
+  breakdown directive named neither `feature-spec.json` nor the absolute artifact
+  root. So the agent wrote just the stubs, the drive failed
+  "produced no feature-spec.json", and on re-run the agent saw its stubs already
+  present, reported the breakdown done, wrote nothing, and failed the identical
+  guard forever (the printed "re-run" remedy looped). Three-part fix:
+  - **Aligned the breakdown contract.** The breakdown directive now requires
+    writing `feature-spec.json` (id/name/status/tdd_mode + a non-empty `stories[]`)
+    plus the story stubs, and interpolates the ABSOLUTE artifact root (mirroring
+    the propose directive). Naming the root also ends the malformed project-root
+    guess the subagent made in breakdown mode.
+  - **A deterministic deadlock-breaker.** Before every breakdown turn the driver
+    resets an INCOMPLETE breakdown (story stubs present but `feature-spec.json`
+    absent or empty-stories), so a re-dispatch always regenerates from a clean
+    slate regardless of the agent's idempotency behavior. A no-op on a complete
+    breakdown or a clean slate. New `lakebase-sftdd-pipeline reset-breakdown`.
+  - **Spec-author prompt.** The breakdown deliverable is now `feature-spec.json`
+    (the feature index) + the stubs, with idempotency keyed on `feature-spec.json`.
+
 ## [0.3.0-beta.25] - 2026-07-16
 
 ### Fixed

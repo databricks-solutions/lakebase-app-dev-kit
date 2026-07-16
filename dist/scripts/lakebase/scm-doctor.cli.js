@@ -1796,7 +1796,7 @@ import { existsSync as existsSync8, readdirSync as readdirSync4, statSync as sta
 import { join as join7 } from "path";
 
 // scripts/sftdd/story-pipeline.ts
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync2, statSync as statSync2 } from "fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync2, statSync as statSync2, rmSync } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

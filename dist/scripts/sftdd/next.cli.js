@@ -8447,7 +8447,7 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync21, readFileSync as readFileSync23, writeFileSync as writeFileSync17, mkdirSync as mkdirSync14, readdirSync as readdirSync11, statSync as statSync7 } from "fs";
+import { existsSync as existsSync21, readFileSync as readFileSync23, writeFileSync as writeFileSync17, mkdirSync as mkdirSync14, readdirSync as readdirSync11, statSync as statSync7, rmSync as rmSync6 } from "fs";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

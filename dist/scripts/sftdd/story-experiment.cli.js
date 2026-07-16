@@ -8184,7 +8184,7 @@ init_esm_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync3, statSync as statSync3, rmSync } from "fs";
 import { dirname as dirname2, join as join6 } from "path";
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
@@ -8290,7 +8290,7 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/sftdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync16, readdirSync as readdirSync9, statSync as statSync7, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync15, readFileSync as readFileSync16, readdirSync as readdirSync9, statSync as statSync7, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9, rmSync as rmSync5 } from "fs";
 
 // scripts/sftdd/sftdd-env.ts
 init_esm_shims();
@@ -8305,7 +8305,7 @@ init_esm_shims();
 init_esm_shims();
 import { execSync, spawn } from "child_process";
 import { randomBytes } from "crypto";
-import { existsSync as existsSync10, mkdirSync as mkdirSync7, readFileSync as readFileSync12, rmSync as rmSync2, writeFileSync as writeFileSync8 } from "fs";
+import { existsSync as existsSync10, mkdirSync as mkdirSync7, readFileSync as readFileSync12, rmSync as rmSync3, writeFileSync as writeFileSync8 } from "fs";
 import { dirname as dirname4, join as join11 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
@@ -8624,7 +8624,7 @@ function resetStoryBuildState(sftddDir, featureId, story) {
   const cyclesDir = join16(cyclesRootDir(sftddDir), featureId, story);
   let cyclesCleared = false;
   if (existsSync15(cyclesDir)) {
-    rmSync4(cyclesDir, { recursive: true, force: true });
+    rmSync5(cyclesDir, { recursive: true, force: true });
     cyclesCleared = true;
   }
   let testItemsReset = 0;
