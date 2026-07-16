@@ -7071,6 +7071,21 @@ function branchNameFromResourcePath(path13) {
 
 // scripts/lakebase/branch-utils.ts
 init_esm_shims();
+
+// scripts/git/inspect.ts
+init_esm_shims();
+async function getCurrentBranch(args) {
+  try {
+    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
+      cwd: args.cwd
+    });
+    return name === "HEAD" ? "" : name;
+  } catch {
+    return "";
+  }
+}
+
+// scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -7187,6 +7202,23 @@ function isTier(name, branches, protectedNames = DEFAULT_PROTECTED_TIER_NAMES) {
     return false;
   }
   return branches.some((b) => isLongRunningTierBranch(b) && b.nameLeaf === name);
+}
+var ProtectedBranchCommitError = class extends Error {
+  constructor(branch) {
+    super(
+      `Refusing to commit build output onto protected tier branch "${branch}". Experiment/build commits must land on an experiment or feature branch, never a shared tier (main/master/staging/dev or a configured tier). This usually means the feature branch was never cut (an un-reconciled prior feature left stale SCM state). Claim/reconcile the feature, then re-run.`
+    );
+    this.branch = branch;
+    this.name = "ProtectedBranchCommitError";
+  }
+  branch;
+};
+async function assertCommitTargetNotProtected(projectDir) {
+  const current = await getCurrentBranch({ cwd: projectDir });
+  if (!current) return;
+  if (protectedTierNamesFromEnv().has(normalizeTierName(current))) {
+    throw new ProtectedBranchCommitError(current);
+  }
 }
 async function resolveBranchPath(branchNameOrUid, opts) {
   if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
@@ -8571,6 +8603,7 @@ async function commitAllIfChanged(args) {
 
 // scripts/sftdd/cycle-record.ts
 async function commitExperimentCode(projectDir, message) {
+  await assertCommitTargetNotProtected(projectDir);
   return commitAllIfChanged({
     cwd: projectDir,
     message,

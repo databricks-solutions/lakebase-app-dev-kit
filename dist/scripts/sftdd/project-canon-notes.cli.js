@@ -6920,6 +6920,9 @@ init_esm_shims();
 // scripts/lakebase/branch-id.ts
 init_esm_shims();
 
+// scripts/git/inspect.ts
+init_esm_shims();
+
 // scripts/lakebase/constants.ts
 init_esm_shims();
 

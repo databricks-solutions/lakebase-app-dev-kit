@@ -7010,6 +7010,9 @@ function branchNameFromResourcePath(path27) {
   }
 }
 
+// scripts/git/inspect.ts
+init_esm_shims();
+
 // scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {

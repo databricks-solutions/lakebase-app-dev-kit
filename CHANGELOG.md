@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.25] - 2026-07-16
+
+### Fixed
+
+- **A Tier-2 drive of a fresh feature no longer commits build output onto the
+  shared tier when a prior feature shipped out-of-band (FEIP-8023).** With a
+  predecessor feature promoted outside the drive and `.lakebase/workflow-state.json`
+  never reconciled, driving the NEXT feature cut no feature branch and committed
+  the GREEN build straight onto `staging`: `buildCfg` adopted the stale
+  predecessor's branch as this feature's `featureBranch`, so the experiment forked
+  from (and the build committed onto) the wrong branch, bypassing the experiment
+  to feature to promote-PR flow entirely. Two hard-block guards, defense in depth:
+  - **Foreign-claim refusal.** `lakebase-sftdd-drive --feature <F>` now refuses
+    loud (names both features + the remedy, exits non-zero) when the recorded SCM
+    claim names a DIFFERENT feature, before the driver runs, killing the stale
+    experiment-parent derivation at the source. Claim this feature (or reconcile
+    the prior out-of-band one) first.
+  - **Protected-branch commit guard.** The build lane's commit path
+    (`commitExperimentCode`) now refuses to commit onto a protected tier
+    (`main`/`master`/`staging`/`dev` plus any `LAKEBASE_TIER_NAMES` /
+    configured trunk/staging/base names), and the per-cycle commit re-throws that
+    refusal instead of swallowing it. Even with stale bookkeeping, a build commit
+    aimed at a shared branch now fails loud rather than silently polluting it.
+
 ## [0.3.0-beta.24] - 2026-07-15
 
 ### Added

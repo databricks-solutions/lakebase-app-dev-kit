@@ -7789,6 +7789,9 @@ init_cjs_shims();
 // scripts/lakebase/branch-id.ts
 init_cjs_shims();
 
+// scripts/git/inspect.ts
+init_cjs_shims();
+
 // scripts/lakebase/constants.ts
 init_cjs_shims();
 
@@ -9031,6 +9034,12 @@ Fix the file or delete it to re-init.`
     );
   }
   return result.value;
+}
+function isForeignFeatureClaim(scm, featureId) {
+  const recorded = scm?.feature_id?.trim().toLowerCase() ?? "";
+  const driving = featureId.trim().toLowerCase();
+  if (!recorded || !driving) return false;
+  return recorded !== driving;
 }
 function validateWorkflowState(value) {
   const errors = [];
@@ -11748,6 +11757,20 @@ ${help()}`);
   const pauseBefore = pauseMilestone ? pauseBeforeMilestone(pauseMilestone) : void 0;
   const confirmContinue = pauseMilestone ? makeConfirmContinue() : void 0;
   const cfg = buildCfg(args, args.feature);
+  {
+    const scm = readWorkflowState(cfg.projectDir);
+    if (isForeignFeatureClaim(scm, cfg.featureId)) {
+      process.stderr.write(
+        `lakebase-sftdd-drive: refusing to drive "${cfg.featureId}" , the SCM workflow state records a
+DIFFERENT feature "${scm?.feature_id}" (branch ${scm?.branch ?? "?"}). Driving now would fork the
+experiment from the wrong branch and commit build output onto it. Claim this feature first
+(lakebase-scm-claim-feature-branch ${cfg.featureId}), or reconcile the prior out-of-band feature,
+then re-run.
+`
+      );
+      return 2;
+    }
+  }
   resetStaleTerminalPhase(cfg.sftddDir);
   if (args.dryRun) {
     const plan = await planNextAction(cfg, boundOpts.transition);

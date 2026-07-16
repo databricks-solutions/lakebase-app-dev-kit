@@ -7200,6 +7200,11 @@ function branchNameFromResourcePath(path14) {
 
 // scripts/lakebase/branch-utils.ts
 init_esm_shims();
+
+// scripts/git/inspect.ts
+init_esm_shims();
+
+// scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);

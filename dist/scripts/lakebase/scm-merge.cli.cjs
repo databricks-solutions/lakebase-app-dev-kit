@@ -399,6 +399,18 @@ function branchNameFromResourcePath(path11) {
   }
 }
 
+// scripts/git/inspect.ts
+async function getCurrentBranch(args) {
+  try {
+    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
+      cwd: args.cwd
+    });
+    return name === "HEAD" ? "" : name;
+  } catch {
+    return "";
+  }
+}
+
 // scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
@@ -716,18 +728,6 @@ async function pollUntil(args) {
       return { outcome: "timeout", polls, elapsedMs: afterProbeElapsed };
     }
     await sleep(args.intervalMs);
-  }
-}
-
-// scripts/git/inspect.ts
-async function getCurrentBranch(args) {
-  try {
-    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
-      cwd: args.cwd
-    });
-    return name === "HEAD" ? "" : name;
-  } catch {
-    return "";
   }
 }
 

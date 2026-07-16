@@ -282,6 +282,18 @@ function branchNameFromResourcePath(path4) {
   }
 }
 
+// scripts/git/inspect.ts
+async function getCurrentBranch(args) {
+  try {
+    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
+      cwd: args.cwd
+    });
+    return name === "HEAD" ? "" : name;
+  } catch {
+    return "";
+  }
+}
+
 // scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
@@ -376,18 +388,6 @@ function parseBranch(raw) {
 }
 function dbcli(args, host) {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
-}
-
-// scripts/git/inspect.ts
-async function getCurrentBranch(args) {
-  try {
-    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
-      cwd: args.cwd
-    });
-    return name === "HEAD" ? "" : name;
-  } catch {
-    return "";
-  }
 }
 
 // scripts/lakebase/scm-workflow-state.ts

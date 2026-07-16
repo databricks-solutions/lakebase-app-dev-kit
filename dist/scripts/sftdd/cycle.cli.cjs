@@ -7254,6 +7254,21 @@ function branchNameFromResourcePath(path4) {
 
 // scripts/lakebase/branch-utils.ts
 init_cjs_shims();
+
+// scripts/git/inspect.ts
+init_cjs_shims();
+async function getCurrentBranch(args) {
+  try {
+    const name = await exec2("git rev-parse --abbrev-ref HEAD", {
+      cwd: args.cwd
+    });
+    return name === "HEAD" ? "" : name;
+  } catch {
+    return "";
+  }
+}
+
+// scripts/lakebase/branch-utils.ts
 var LakebaseBranchError = class extends Error {
   constructor(message) {
     super(message);
@@ -7324,6 +7339,57 @@ async function getBranchByName(branchNameOrUid, opts) {
 async function getDefaultBranch(opts) {
   const branches = await listBranches(opts);
   return branches.find((b) => b.isDefault);
+}
+var DEFAULT_PROTECTED_TIER_NAMES = /* @__PURE__ */ new Set([
+  "main",
+  "master",
+  "staging",
+  "dev"
+]);
+function normalizeTierName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveProtectedTierNames(extra) {
+  const out = new Set(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) {
+      out.add(k);
+    }
+  }
+  return out;
+}
+function protectedTierNamesFromEnv(env = process.env) {
+  const extra = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) {
+      extra.push(part);
+    }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) {
+      extra.push(v);
+    }
+  }
+  return resolveProtectedTierNames(extra);
+}
+var ProtectedBranchCommitError = class extends Error {
+  constructor(branch) {
+    super(
+      `Refusing to commit build output onto protected tier branch "${branch}". Experiment/build commits must land on an experiment or feature branch, never a shared tier (main/master/staging/dev or a configured tier). This usually means the feature branch was never cut (an un-reconciled prior feature left stale SCM state). Claim/reconcile the feature, then re-run.`
+    );
+    this.branch = branch;
+    this.name = "ProtectedBranchCommitError";
+  }
+  branch;
+};
+async function assertCommitTargetNotProtected(projectDir) {
+  const current = await getCurrentBranch({ cwd: projectDir });
+  if (!current) return;
+  if (protectedTierNamesFromEnv().has(normalizeTierName(current))) {
+    throw new ProtectedBranchCommitError(current);
+  }
 }
 async function resolveBranchPath(branchNameOrUid, opts) {
   if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
@@ -8970,6 +9036,7 @@ async function commitAllIfChanged(args) {
 
 // scripts/sftdd/cycle-record.ts
 async function commitExperimentCode(projectDir, message) {
+  await assertCommitTargetNotProtected(projectDir);
   return commitAllIfChanged({
     cwd: projectDir,
     message,
@@ -8989,7 +9056,8 @@ async function commitExperimentCode(projectDir, message) {
 async function commitCycleWork(sftddDir, message) {
   try {
     await commitExperimentCode((0, import_path9.dirname)(sftddDir), message);
-  } catch {
+  } catch (e) {
+    if (e instanceof ProtectedBranchCommitError) throw e;
   }
 }
 function logCycleEvent2(sftddDir, event) {

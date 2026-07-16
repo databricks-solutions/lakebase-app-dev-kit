@@ -6915,6 +6915,9 @@ init_cjs_shims();
 // scripts/lakebase/branch-id.ts
 init_cjs_shims();
 
+// scripts/git/inspect.ts
+init_cjs_shims();
+
 // scripts/lakebase/constants.ts
 init_cjs_shims();
 
