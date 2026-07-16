@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getConnection } from "./get-connection.js";
 import { resolveMigrationLanguage } from "./migration-layout.js";
+import { normalizeTierName, protectedTierNamesFromEnv } from "./branch-utils.js";
 // Adapter modules auto-register on import; routing below uses
 // resolveSchemaMigrationAdapter() (slice 4). The legacy public API
 // (applySchemaMigrations / rollbackSchemaMigration / schemaMigrationStatus /
@@ -72,6 +73,15 @@ export interface ApplySchemaMigrationsArgs {
   language?: SchemaMigrationLanguage;
   database?: string;
   endpointName?: string;
+  /**
+   * FEIP-8039: allow migrating a PROTECTED TIER branch (main/master/staging/dev
+   * + configured tiers). Default false: a build/experiment migration must target
+   * its own paired feature/experiment branch, never a shared tier , an aborted
+   * build that migrated a tier (or a feature branch it then reset in git only)
+   * leaves the DB ahead of code. The promote path (scm-merge migrating the parent
+   * tier) sets this true, that migration IS the intended tier mutation.
+   */
+  allowTier?: boolean;
 }
 
 export interface ApplySchemaMigrationsResult {
@@ -286,9 +296,75 @@ function adapterFor(projectDir: string, language?: SchemaMigrationLanguage) {
   return resolveSchemaMigrationAdapter(projectDir, override);
 }
 
+// ---- FEIP-8039: protected-tier migration guard + DB-ahead-of-code detection ----
+
+/**
+ * A build/experiment migration was aimed at a PROTECTED TIER branch. Thrown so
+ * the run fails loud instead of mutating a shared tier's DB (which then drifts
+ * ahead of every feature's code, the class of bug behind the phantom alembic
+ * revision + orphan table). The promote path opts in via `allowTier`.
+ */
+export class TierMigrationRefusedError extends Error {
+  constructor(public readonly branch: string) {
+    super(
+      `Refusing to run schema migrations against protected tier branch "${branch}". ` +
+        `A feature build/experiment migrates only its OWN paired branch (or an ephemeral verify branch), ` +
+        `never a shared tier (main/master/staging/dev or a configured tier). If this is the promote step ` +
+        `intentionally migrating the parent tier, pass allowTier: true.`,
+    );
+    this.name = "TierMigrationRefusedError";
+  }
+}
+
+/**
+ * Throw {@link TierMigrationRefusedError} when `branch` is a protected tier
+ * (env-aware set: main/master/staging/dev + LAKEBASE_TIER_NAMES + configured
+ * trunk/staging/base) and `allowTier` is not set. Pure , no DB, no I/O.
+ */
+export function assertMigrationBranchAllowed(
+  branch: string,
+  opts: { allowTier?: boolean },
+  env: Record<string, string | undefined> = process.env,
+): void {
+  if (opts.allowTier) return;
+  if (protectedTierNamesFromEnv(env).has(normalizeTierName(branch))) {
+    throw new TierMigrationRefusedError(branch);
+  }
+}
+
+/**
+ * True when the DB's applied revision has NO corresponding local migration file
+ * , the DB is AHEAD of code (an aborted build applied a migration whose file was
+ * later git-reset away, or a re-cut branch reused a stale polluted DB). A null /
+ * empty applied revision (fresh or unstamped DB) is NOT orphaned. Pure.
+ */
+export function dbRevisionOrphaned(
+  appliedRevision: string | null | undefined,
+  localRevisionIds: string[],
+): boolean {
+  const applied = (appliedRevision ?? "").trim();
+  if (!applied) return false;
+  return !localRevisionIds.includes(applied);
+}
+
+/**
+ * Recover the orphan revision id from alembic's "Can't locate revision
+ * identified by '<rev>'" error , the exact failure when the DB points at a
+ * revision whose migration file is gone (DB ahead of code). Returns the rev id,
+ * or null when the message is unrelated. Pure , parses the error text so no raw
+ * SQL read of alembic_version is needed.
+ */
+export function parseAlembicMissingRevision(stderr: string): string | null {
+  const m = /[Cc]an't locate revision identified by ['"]?([0-9a-f]+)['"]?/.exec(stderr);
+  return m ? m[1] : null;
+}
+
 // ---- applySchemaMigrations -----------------------------------------------------
 
 export async function applySchemaMigrations(args: ApplySchemaMigrationsArgs): Promise<ApplySchemaMigrationsResult> {
+  // FEIP-8039: refuse a protected-tier target before any DB work (the promote
+  // path opts in via allowTier). Keeps a build/experiment from migrating a tier.
+  assertMigrationBranchAllowed(args.branch, { allowTier: args.allowTier });
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.apply({

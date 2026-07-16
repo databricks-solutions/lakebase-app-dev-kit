@@ -234,7 +234,9 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
             return { ok: false, detail: "workflow state is missing project_id / parent_branch" };
           }
           try {
-            await applySchemaMigrations({ instance: inst, branch: parent, projectDir });
+            // allowTier: the local fallback INTENTIONALLY migrates the parent
+            // tier (staging/dev/default) as part of promote (FEIP-8039 guard).
+            await applySchemaMigrations({ instance: inst, branch: parent, projectDir, allowTier: true });
             return { ok: true, detail: `applied pending migrations to ${parent} locally` };
           } catch (e) {
             return { ok: false, detail: e instanceof Error ? e.message : String(e) };

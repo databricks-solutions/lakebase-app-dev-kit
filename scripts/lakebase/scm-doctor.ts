@@ -30,7 +30,13 @@ import {
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { findStaleBranches } from "../sftdd/stale-branches.js";
 import { exec } from "../util/exec.js";
-import { collapseMigrationHeads } from "./schema-migrate.js";
+import {
+  collapseMigrationHeads,
+  listSchemaMigrations,
+  schemaMigrationStatus,
+  dbRevisionOrphaned,
+  parseAlembicMissingRevision,
+} from "./schema-migrate.js";
 import { updateEnvConnection, readEnvVar } from "./env-file.js";
 
 export type DoctorSeverity = "ok" | "warn" | "fail";
@@ -290,6 +296,42 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
     }
   } catch {
     // tool unresolved / CLI absent / no project: not a determinable fault.
+  }
+
+  // 9. DB ahead of code (FEIP-8039): the paired branch DB's applied revision has
+  // NO local migration file , an aborted build migrated the branch and a later
+  // `git reset --hard` removed the file (git-only recovery leaves the DB ahead),
+  // and a re-cut feature reuses that same stale branch. `alembic current` ERRORS
+  // on exactly this state ("Can't locate revision"), so recover the orphan rev
+  // from that error; else compare the reported current rev to local files.
+  // Best-effort + live (reads the branch DB); a missing CLI / unreachable branch
+  // is not a determinable fault.
+  if (instance && state?.branch) {
+    try {
+      const localIds = listSchemaMigrations({ projectDir }).map((m) => m.version);
+      let orphanRev: string | null = null;
+      try {
+        const status = await schemaMigrationStatus({ instance, branch: state.branch, projectDir });
+        if (dbRevisionOrphaned(status.current, localIds)) orphanRev = status.current ?? null;
+      } catch (e) {
+        orphanRev = parseAlembicMissingRevision(e instanceof Error ? e.message : String(e));
+      }
+      if (orphanRev) {
+        findings.push({
+          id: "db-ahead-of-code",
+          severity: "fail",
+          message:
+            `The paired branch DB is AHEAD of code: applied revision '${orphanRev}' has no local migration file. ` +
+            `An aborted build likely migrated this branch and a git reset removed the migration file; ` +
+            `alembic accept/deploy/promote will fail "Can't locate revision".`,
+          suggestion:
+            "reset the paired branch DB to the code head (downgrade/stamp + drop reset-created tables), " +
+            "or delete the branch and re-cut it clean from its tier",
+        });
+      }
+    } catch {
+      // tool unresolved / CLI absent / branch unreachable: not a determinable fault.
+    }
   }
 
   return finalize({
