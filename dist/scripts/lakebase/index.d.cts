@@ -3890,6 +3890,15 @@ interface ApplySchemaMigrationsArgs {
     language?: SchemaMigrationLanguage;
     database?: string;
     endpointName?: string;
+    /**
+     * FEIP-8039: allow migrating a PROTECTED TIER branch (main/master/staging/dev
+     * + configured tiers). Default false: a build/experiment migration must target
+     * its own paired feature/experiment branch, never a shared tier , an aborted
+     * build that migrated a tier (or a feature branch it then reset in git only)
+     * leaves the DB ahead of code. The promote path (scm-merge migrating the parent
+     * tier) sets this true, that migration IS the intended tier mutation.
+     */
+    allowTier?: boolean;
 }
 interface ApplySchemaMigrationsResult {
     applied: AppliedSchemaMigration[];

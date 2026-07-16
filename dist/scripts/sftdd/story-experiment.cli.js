@@ -9574,7 +9574,24 @@ function adapterFor(projectDir, language) {
   const override = language ? toolForLanguage(language) : void 0;
   return resolveSchemaMigrationAdapter(projectDir, override);
 }
+var TierMigrationRefusedError = class extends Error {
+  constructor(branch) {
+    super(
+      `Refusing to run schema migrations against protected tier branch "${branch}". A feature build/experiment migrates only its OWN paired branch (or an ephemeral verify branch), never a shared tier (main/master/staging/dev or a configured tier). If this is the promote step intentionally migrating the parent tier, pass allowTier: true.`
+    );
+    this.branch = branch;
+    this.name = "TierMigrationRefusedError";
+  }
+  branch;
+};
+function assertMigrationBranchAllowed(branch, opts, env = process.env) {
+  if (opts.allowTier) return;
+  if (protectedTierNamesFromEnv(env).has(normalizeTierName(branch))) {
+    throw new TierMigrationRefusedError(branch);
+  }
+}
 async function applySchemaMigrations(args) {
+  assertMigrationBranchAllowed(args.branch, { allowTier: args.allowTier });
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.apply({

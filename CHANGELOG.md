@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.27] - 2026-07-16
+
+### Fixed
+
+- **Design subagents no longer strand artifacts at a malformed project root, and a stray tree self-heals (FEIP-8038).** The story-scoped design roles (spec-author draft, architect-reviewer) were handed RELATIVE artifact paths, so (per FEIP-8006, the Write tool needs an absolute path) each resolved the project root itself and sometimes malformed it , the parent workspace dir and the project dir joined with a hyphen instead of a slash , writing every artifact outside the real project; the out-of-root guard then bailed and the "re-run" remedy looped forever. Two parts: (a) every design directive now names the ABSOLUTE artifact root for its write targets, so no role resolves the root itself; (b) the out-of-root guard now relocates a stray `.sftdd`/`.tdd` tree from the one known malformed sibling (`<parent>-<project>`) back into the real root and re-checks, so the run self-heals instead of deadlocking (and names the sibling in the error otherwise). Bounded to that sibling pattern, no filesystem scan.
+- **A build/experiment migration refuses a protected-tier target, and scm-doctor detects a DB ahead of code (FEIP-8039).** An aborted build ran `alembic upgrade` against its paired Lakebase branch; a later `git reset --hard` rolled back only git, and because feature branches are non-expiring and `createBranch` is idempotent-on-existing, the re-cut feature reused that same stale branch, so its DB carried a phantom `alembic_version` + an orphan table and accept/deploy/promote failed "Can't locate revision". `applySchemaMigrations` now refuses a protected-tier target branch (main/master/staging/dev + configured tiers) before any DB work; the promote path (`scm-merge` local fallback) opts in via `allowTier`, since it migrates the parent tier by design. New `lakebase-scm-doctor` check `db-ahead-of-code` flags a paired branch whose applied revision has no local migration file. (The recover , resetting the polluted branch so the next claim re-forks clean , lands separately with a live smoke.)
+
 ## [0.3.0-beta.26] - 2026-07-16
 
 ### Fixed

@@ -441,6 +441,40 @@ async function getBranchByName(branchNameOrUid, opts) {
     (b) => b.uid === branchNameOrUid || b.name === branchNameOrUid || b.name.endsWith(`/${branchNameOrUid}`)
   );
 }
+var DEFAULT_PROTECTED_TIER_NAMES = /* @__PURE__ */ new Set([
+  "main",
+  "master",
+  "staging",
+  "dev"
+]);
+function normalizeTierName(name) {
+  return name.trim().toLowerCase();
+}
+function resolveProtectedTierNames(extra) {
+  const out = new Set(DEFAULT_PROTECTED_TIER_NAMES);
+  for (const n of extra ?? []) {
+    const k = normalizeTierName(n);
+    if (k) {
+      out.add(k);
+    }
+  }
+  return out;
+}
+function protectedTierNamesFromEnv(env = process.env) {
+  const extra = [];
+  for (const part of (env.LAKEBASE_TIER_NAMES ?? "").split(",")) {
+    if (part.trim()) {
+      extra.push(part);
+    }
+  }
+  for (const key of ["LAKEBASE_TRUNK_BRANCH", "LAKEBASE_STAGING_BRANCH", "LAKEBASE_BASE_BRANCH"]) {
+    const v = env[key];
+    if (v && v.trim()) {
+      extra.push(v);
+    }
+  }
+  return resolveProtectedTierNames(extra);
+}
 async function resolveBranchPath(branchNameOrUid, opts) {
   if (branchNameOrUid.startsWith("projects/") && branchNameOrUid.includes("/branches/")) {
     return branchNameOrUid;
@@ -2226,7 +2260,24 @@ function adapterFor(projectDir, language) {
   const override = language ? toolForLanguage(language) : void 0;
   return resolveSchemaMigrationAdapter(projectDir, override);
 }
+var TierMigrationRefusedError = class extends Error {
+  constructor(branch) {
+    super(
+      `Refusing to run schema migrations against protected tier branch "${branch}". A feature build/experiment migrates only its OWN paired branch (or an ephemeral verify branch), never a shared tier (main/master/staging/dev or a configured tier). If this is the promote step intentionally migrating the parent tier, pass allowTier: true.`
+    );
+    this.branch = branch;
+    this.name = "TierMigrationRefusedError";
+  }
+  branch;
+};
+function assertMigrationBranchAllowed(branch, opts, env = process.env) {
+  if (opts.allowTier) return;
+  if (protectedTierNamesFromEnv(env).has(normalizeTierName(branch))) {
+    throw new TierMigrationRefusedError(branch);
+  }
+}
 async function applySchemaMigrations(args) {
+  assertMigrationBranchAllowed(args.branch, { allowTier: args.allowTier });
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.apply({
@@ -2439,7 +2490,7 @@ async function runScmMergeCli(argv) {
       return { ok: false, detail: "workflow state is missing project_id / parent_branch" };
     }
     try {
-      await applySchemaMigrations({ instance: inst, branch: parent, projectDir });
+      await applySchemaMigrations({ instance: inst, branch: parent, projectDir, allowTier: true });
       return { ok: true, detail: `applied pending migrations to ${parent} locally` };
     } catch (e) {
       return { ok: false, detail: e instanceof Error ? e.message : String(e) };

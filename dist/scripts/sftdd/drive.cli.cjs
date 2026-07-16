@@ -9837,6 +9837,9 @@ function architectConventionsDirective(sftddDir) {
   const layout = conventions.layers.map((l) => `${l.role}=${l.module}${l.renders_via ? ` (${l.renders_via})` : ""}`).join(", ");
   return ` REUSE the established project architecture conventions (set by ${conventions.established_by}): ${layout}. Declare the SAME role -> module paths in architecture.json, do NOT remap or rename an established layer; a divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
 }
+function designRootNote(root, featureId, s) {
+  return ` Write every artifact under the ABSOLUTE artifact root ${root} (this feature: ${root}/features/${featureId}/; this story: ${root}/features/${featureId}/stories/${s}/); use that absolute path and never resolve or guess the project root yourself.`;
+}
 function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
   const root = artifactRoot(sftddDir);
   if ("mode" in action) {
@@ -9857,11 +9860,11 @@ function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
   const s = action.story;
   switch (action.role) {
     case "spec-author":
-      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(sftddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files, the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.`;
+      return `Draft the acceptance criteria for story ${s} and NOTHING else.${storyStubScope(sftddDir, featureId, s)} Write ONE file per AC as acs/<AC>.json (+ optional acs/<AC>.md), and put NOTHING else in acs/ (no test lists, no -tests.json / -test-list.json, no scratch files, the spec gate validates every acs/*.json against the AC schema and rejects non-AC files). The AC id MUST match AC<n>-<slug>: AC1-create-form, AC2-form-accepts-input, ... (an "AC" prefix + a number, then a kebab slug). A bare slug id like "create-form-displays" FAILS the schema and hard-blocks the spec gate. The file's "id" field MUST equal its basename (acs/AC1-foo.json has {"id":"AC1-foo"}). Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any other story in this feature, each other story is drafted in its own separate step that you are not performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here delays ${s} reaching its spec gate and build, and is rejected at the gate.` + designRootNote(root, featureId, s);
     case "architect-reviewer": {
       const arAcIds = storyAcIds(sftddDir, featureId, s);
       const arAcScope = arAcIds.length ? ` Story ${s}'s ACs are: ${arAcIds.join(", ")}.` : "";
-      return `Annotate story ${s}'s acceptance criteria + nfrs.md coverage.${arAcScope} For EVERY one of this story's ACs, write a non-empty "architectural_notes" field into its acs/<AC>.json (the layer it lives in + how it realizes the design). This is your distinctive per-AC product; the design gate verifies every AC carries it and the spec-author's "layer" field does NOT count. architectural_notes are per-AC, so annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story. In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary, service, and repository layers (plus a "models" PACKAGE app/models/, one module per domain object, NOT a flat app/models.py, when it persists entities); set false ONLY for a trivial static/read-through endpoint. An Infra-layer AC or a migration/schema/storage NFR while service_backed is false hard-blocks the gate. When service_backed:true you MUST also declare architecture.json persistence_invariants[]: the DB-level guarantees the schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible, table, and a one-line brief), covering unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints, any transactional-atomicity boundary, and migration reversibility. The test-strategist must cover each with a real-branch test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(sftddDir)}`;
+      return `Annotate story ${s}'s acceptance criteria + nfrs.md coverage.${arAcScope} For EVERY one of this story's ACs, write a non-empty "architectural_notes" field into its acs/<AC>.json (the layer it lives in + how it realizes the design). This is your distinctive per-AC product; the design gate verifies every AC carries it and the spec-author's "layer" field does NOT count. architectural_notes are per-AC, so annotate this story's ACs even when the feature-level architecture.json already exists from an earlier story. In architecture.json, make an EXPLICIT service_backed call (required): set service_backed:true if the feature persists data (a DB table/migration) or carries business logic, and then you MUST declare boundary, service, and repository layers (plus a "models" PACKAGE app/models/, one module per domain object, NOT a flat app/models.py, when it persists entities); set false ONLY for a trivial static/read-through endpoint. An Infra-layer AC or a migration/schema/storage NFR while service_backed is false hard-blocks the gate. When service_backed:true you MUST also declare architecture.json persistence_invariants[]: the DB-level guarantees the schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible, table, and a one-line brief), covering unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints, any transactional-atomicity boundary, and migration reversibility. The test-strategist must cover each with a real-branch test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(sftddDir)}` + designRootNote(root, featureId, s);
     }
     case "test-strategist": {
       const acIds = storyAcIds(sftddDir, featureId, s);
@@ -10974,6 +10977,47 @@ function kitVersion() {
   }
 }
 
+// scripts/sftdd/stray-artifact-recovery.ts
+init_cjs_shims();
+var import_node_fs8 = require("fs");
+var import_node_path11 = require("path");
+function malformedSiblingRoot(projectDir) {
+  const p = projectDir.replace(/\/+$/, "");
+  return `${(0, import_node_path11.dirname)(p)}-${(0, import_node_path11.basename)(p)}`;
+}
+function listFilesRel(dir) {
+  const out = [];
+  const walk2 = (abs, rel) => {
+    for (const entry of (0, import_node_fs8.readdirSync)(abs)) {
+      const childAbs = (0, import_node_path11.join)(abs, entry);
+      const childRel = rel ? (0, import_node_path11.join)(rel, entry) : entry;
+      if ((0, import_node_fs8.statSync)(childAbs).isDirectory()) walk2(childAbs, childRel);
+      else out.push(childRel);
+    }
+  };
+  walk2(dir, "");
+  return out;
+}
+function relocateStrayDesignArtifacts(projectDir) {
+  const sibling = malformedSiblingRoot(projectDir);
+  if (!(0, import_node_fs8.existsSync)(sibling)) return { relocated: false, moved: [] };
+  const moved = [];
+  for (const artRoot of [".sftdd", ".tdd"]) {
+    const strayRoot = (0, import_node_path11.join)(sibling, artRoot);
+    if (!(0, import_node_fs8.existsSync)(strayRoot)) continue;
+    for (const rel of listFilesRel(strayRoot)) moved.push((0, import_node_path11.join)(artRoot, rel));
+    const realRoot = (0, import_node_path11.join)(projectDir, artRoot);
+    (0, import_node_fs8.mkdirSync)(realRoot, { recursive: true });
+    (0, import_node_fs8.cpSync)(strayRoot, realRoot, { recursive: true, force: true });
+    (0, import_node_fs8.rmSync)(strayRoot, { recursive: true, force: true });
+  }
+  try {
+    if ((0, import_node_fs8.readdirSync)(sibling).length === 0) (0, import_node_fs8.rmSync)(sibling, { recursive: true, force: true });
+  } catch {
+  }
+  return moved.length > 0 ? { relocated: true, from: sibling, moved } : { relocated: false, moved: [] };
+}
+
 // scripts/sftdd/drive.cli.ts
 var MAX_PROMPT_TOO_LONG_RETRIES = 2;
 function parseArgs(argv) {
@@ -11092,21 +11136,23 @@ var ReplayCorpusMissError = class extends Error {
   }
 };
 var ArtifactOutOfRootError = class extends Error {
-  constructor(role, label, anyOf, sftddDir) {
+  constructor(role, label, anyOf, sftddDir, checkedSibling) {
     super(
       `role '${role}' produced no ${label} under ${path8.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
-        The subagent likely resolved the project root wrong and wrote outside it (check $HOME and other dirs for a stray copy). Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`
+        The subagent likely resolved the project root wrong and wrote outside it. ` + (checkedSibling ? `Checked (and tried to relocate from) the malformed sibling ${checkedSibling}; nothing there either. ` : `(check $HOME and other dirs for a stray copy). `) + `Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`
     );
     this.role = role;
     this.label = label;
     this.anyOf = anyOf;
     this.sftddDir = sftddDir;
+    this.checkedSibling = checkedSibling;
     this.name = "ArtifactOutOfRootError";
   }
   role;
   label;
   anyOf;
   sftddDir;
+  checkedSibling;
 };
 function spawnClaudeStreaming(args, cwd) {
   return new Promise((resolve2, reject) => {
@@ -11297,7 +11343,7 @@ function execRunner(cfg) {
         return;
       }
       if (cmd.kind === "verify-artifact") {
-        const present = cmd.anyOf.some((p) => {
+        const isPresent = () => cmd.anyOf.some((p) => {
           try {
             const st = fs16.statSync(p);
             return st.isDirectory() ? fs16.readdirSync(p).length > 0 : true;
@@ -11305,8 +11351,23 @@ function execRunner(cfg) {
             return false;
           }
         });
-        if (!present) {
-          throw new ArtifactOutOfRootError(cmd.role, cmd.label, cmd.anyOf, cfg.sftddDir);
+        if (!isPresent()) {
+          const strayFix = relocateStrayDesignArtifacts(cfg.projectDir);
+          if (strayFix.relocated) {
+            process.stderr.write(
+              `[drive] recovered ${strayFix.moved.length} stray artifact(s) from a malformed root (${strayFix.from}) into the project root (FEIP-8038)
+`
+            );
+          }
+          if (!isPresent()) {
+            throw new ArtifactOutOfRootError(
+              cmd.role,
+              cmd.label,
+              cmd.anyOf,
+              cfg.sftddDir,
+              malformedSiblingRoot(cfg.projectDir)
+            );
+          }
         }
         return;
       }

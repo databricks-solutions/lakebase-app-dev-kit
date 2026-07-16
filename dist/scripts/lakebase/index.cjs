@@ -7053,7 +7053,33 @@ function adapterFor(projectDir, language) {
   const override = language ? toolForLanguage(language) : void 0;
   return resolveSchemaMigrationAdapter(projectDir, override);
 }
+var TierMigrationRefusedError = class extends Error {
+  constructor(branch) {
+    super(
+      `Refusing to run schema migrations against protected tier branch "${branch}". A feature build/experiment migrates only its OWN paired branch (or an ephemeral verify branch), never a shared tier (main/master/staging/dev or a configured tier). If this is the promote step intentionally migrating the parent tier, pass allowTier: true.`
+    );
+    this.branch = branch;
+    this.name = "TierMigrationRefusedError";
+  }
+  branch;
+};
+function assertMigrationBranchAllowed(branch, opts, env = process.env) {
+  if (opts.allowTier) return;
+  if (protectedTierNamesFromEnv(env).has(normalizeTierName(branch))) {
+    throw new TierMigrationRefusedError(branch);
+  }
+}
+function dbRevisionOrphaned(appliedRevision, localRevisionIds) {
+  const applied = (appliedRevision ?? "").trim();
+  if (!applied) return false;
+  return !localRevisionIds.includes(applied);
+}
+function parseAlembicMissingRevision(stderr) {
+  const m = /[Cc]an't locate revision identified by ['"]?([0-9a-f]+)['"]?/.exec(stderr);
+  return m ? m[1] : null;
+}
 async function applySchemaMigrations(args) {
+  assertMigrationBranchAllowed(args.branch, { allowTier: args.allowTier });
   const projectDir = args.projectDir ?? process.cwd();
   const adapter = adapterFor(projectDir, args.language);
   const r = await adapter.apply({
@@ -8523,6 +8549,27 @@ async function runDoctor(args) {
       });
     }
   } catch {
+  }
+  if (instance && state?.branch) {
+    try {
+      const localIds = listSchemaMigrations({ projectDir }).map((m) => m.version);
+      let orphanRev = null;
+      try {
+        const status = await schemaMigrationStatus({ instance, branch: state.branch, projectDir });
+        if (dbRevisionOrphaned(status.current, localIds)) orphanRev = status.current ?? null;
+      } catch (e) {
+        orphanRev = parseAlembicMissingRevision(e instanceof Error ? e.message : String(e));
+      }
+      if (orphanRev) {
+        findings.push({
+          id: "db-ahead-of-code",
+          severity: "fail",
+          message: `The paired branch DB is AHEAD of code: applied revision '${orphanRev}' has no local migration file. An aborted build likely migrated this branch and a git reset removed the migration file; alembic accept/deploy/promote will fail "Can't locate revision".`,
+          suggestion: "reset the paired branch DB to the code head (downgrade/stamp + drop reset-created tables), or delete the branch and re-cut it clean from its tier"
+        });
+      }
+    } catch {
+    }
   }
   return finalize({
     projectDir,
