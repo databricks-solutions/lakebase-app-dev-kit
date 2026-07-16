@@ -6,6 +6,47 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.22] - 2026-07-15
+
+### Added
+
+- **`lakebase-sftdd-next`: an authoritative, strictly read-only "what do I do
+  next?" surface (FEIP-8017).** The deterministic drive knows exactly where the
+  workflow is and what it would do next, but only WHILE it runs; every time it
+  stops (a HITL gate, a raised escalation, feature-complete, an error, a killed
+  run) an orchestrating agent otherwise reverse-engineers the next move from
+  source and drifts into freeform (improvised CLIs, manual git, manual state
+  edits). `lakebase-sftdd-next (--feature <F> | --sprint <S>) [--json]` answers,
+  from the SAME engine the drive uses (`deriveDriveState` -> `nextTransition`, so
+  it can never drift): the reconciled state (coarse + pipeline-derived phase,
+  per-story statuses, open gates, blockers), the decision MENU (not just the one
+  next action, but the real HIL choices, e.g. accept/discard/revise at
+  acceptance, each with its correct enact command + a prompt to pose to the
+  human), and a truthful summary. It is strictly read-only: no model spawn, no
+  writes to workflow artifacts, no actions. The drive also auto-emits the feature
+  snapshot to `.sftdd/next.json` on every stop (skipped under replay/record), so
+  an agent's contract becomes "on any stop, read next.json and present its
+  options." The gate -> CLI mapping is now a single structured source
+  (`gateEnactCommand`) that the drive's stdout hint projects from, so the hint
+  and the menu can never diverge. See `references/next-schema.md`.
+
+### Fixed
+
+- **`lakebase-sftdd-feature-status` now reflects per-story-driven completion
+  (FEIP-8016).** A fully built + accepted feature rendered as `Phase: discovery`
+  with its feature-level gates still `open`, because the coarse
+  `workflow-state.json` phase is not advanced per story and so lags behind the
+  per-story `pipeline.json` (the source of truth). The snapshot gains
+  `derived_phase` (DERIVED from the pipeline: `complete` when every story is done
+  + accepted, `build` when a story is past its spec gate, `design` otherwise,
+  `null` when no stories are tracked) and a `stories[]` array of per-story rows;
+  the renderer prefers `derived_phase` and annotates the coarse phase only when
+  it lags. A bounded deploy drive over an already-deployed feature now reads
+  `already complete (0 actions, nothing to do; the per-story pipeline already
+  carried it out)` instead of the misleading `deploy complete in 0 actions`.
+  `derived_phase` + `stories` are append-only additions to the feature-status
+  snapshot's public shape.
+
 ## [0.3.0-beta.21] - 2026-07-15
 
 ### Fixed
