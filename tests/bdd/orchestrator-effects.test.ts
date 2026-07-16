@@ -137,7 +137,9 @@ describe("commandsForAction: invoke-role -> claude", () => {
   });
 
   it("propose + breakdown carry the UI-track E2E directive only when the UI track is on", () => {
-    const task = (cmds: ReturnType<typeof commandsForAction>) => (cmds[0] as { task: string }).task;
+    // breakdown prepends a reset-breakdown cli (FEIP-8024), so find the claude turn.
+    const task = (cmds: ReturnType<typeof commandsForAction>) =>
+      (cmds.find((c) => (c as { kind: string }).kind === "claude") as { task: string }).task;
     // Off: no UI directive.
     expect(task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "propose" }, cfg()))).not.toMatch(/UI track/i);
     expect(task(commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg()))).not.toMatch(/UI track/i);
@@ -220,16 +222,19 @@ describe("commandsForAction: invoke-role -> claude", () => {
     expect(author.some((c) => (c as { kind?: string }).kind === "claude")).toBe(false);
   });
 
-  it("spec-author breakdown also seeds the pipeline (claude + verify-artifact + sync-breakdown)", () => {
+  it("spec-author breakdown resets partial state, then seeds the pipeline (reset + claude + verify-artifact + sync-breakdown)", () => {
     const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
-    // [claude, verify-artifact (FEIP-8006 out-of-root guard), sync-breakdown, reconcile].
-    expect(cmds).toHaveLength(4);
-    expect(cmds[0]).toMatchObject({ kind: "claude", role: "spec-author" });
-    expect(cmds[1]).toMatchObject({ kind: "verify-artifact", role: "spec-author" });
-    expect(cmds[2]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
-    expect((cmds[2] as { args: string[] }).args[0]).toBe("sync-breakdown");
-    expect(cmds[3]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-log" });
-    expect((cmds[3] as { args: string[] }).args).toContain("--reconcile");
+    // [reset-breakdown (FEIP-8024), claude, verify-artifact (FEIP-8006 out-of-root
+    // guard), sync-breakdown, reconcile].
+    expect(cmds).toHaveLength(5);
+    expect(cmds[0]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
+    expect((cmds[0] as { args: string[] }).args[0]).toBe("reset-breakdown"); // runs BEFORE the turn
+    expect(cmds[1]).toMatchObject({ kind: "claude", role: "spec-author" });
+    expect(cmds[2]).toMatchObject({ kind: "verify-artifact", role: "spec-author" });
+    expect(cmds[3]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-pipeline" });
+    expect((cmds[3] as { args: string[] }).args[0]).toBe("sync-breakdown");
+    expect(cmds[4]).toMatchObject({ kind: "cli", bin: "lakebase-sftdd-log" });
+    expect((cmds[4] as { args: string[] }).args).toContain("--reconcile");
   });
 
   it("sprint-scoped planning roles (propose/author-requests) do NOT reconcile", () => {
@@ -1083,9 +1088,13 @@ describe("commandsForAction: FEIP-8006 out-of-root artifact guard (verify-artifa
     // crash would misattribute to the pipeline, not the Spec Author. Order matters.
     const cmds = commandsForAction({ kind: "invoke-role", role: "spec-author", mode: "breakdown" }, cfg());
     const iVerify = cmds.findIndex((c) => (c as { kind: string }).kind === "verify-artifact");
-    const iSync = cmds.findIndex((c) => (c as { bin?: string }).bin === "lakebase-sftdd-pipeline");
+    // Two pipeline commands now bracket the turn (FEIP-8024): reset-breakdown
+    // BEFORE, sync-breakdown AFTER. The guard must precede sync-breakdown.
+    const iSync = cmds.findIndex((c) => (c as { args?: string[] }).args?.[0] === "sync-breakdown");
+    const iReset = cmds.findIndex((c) => (c as { args?: string[] }).args?.[0] === "reset-breakdown");
     expect(iVerify).toBeGreaterThanOrEqual(0);
     expect(iSync).toBeGreaterThan(iVerify);
+    expect(iReset).toBeLessThan(iVerify); // reset runs before the turn + guard
   });
 
   it("build turns (navigator/driver) emit NO verify-artifact (the cycle ledger covers them)", () => {

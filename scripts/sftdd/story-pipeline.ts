@@ -4,9 +4,15 @@
 // .tdd/features/<F>/pipeline.json. Exactly one story builds at a time; the
 // orchestrator owns these transitions.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, rmSync } from "fs";
 import { dirname, join } from "path";
-import { pipelineJson, storiesDir as storiesDirOf, acsDir as acsDirOf } from "./sftdd-paths.js";
+import {
+  pipelineJson,
+  storiesDir as storiesDirOf,
+  acsDir as acsDirOf,
+  featureSpecJson,
+  featureSpecMd,
+} from "./sftdd-paths.js";
 
 export const STORY_STATUSES = [
   "designing",
@@ -196,6 +202,43 @@ export function syncBreakdownToPipeline(
   }
   if (added.length > 0) writePipeline(sftddDir, pipeline);
   return { added, total: Object.keys(pipeline.stories) };
+}
+
+/**
+ * FEIP-8024: clear an INCOMPLETE feature breakdown so a re-dispatch of the
+ * spec-author regenerates from a clean slate instead of deadlocking. A breakdown
+ * is complete iff feature-spec.json has a non-empty `stories[]` (the same signal
+ * the router + guard gate on). When it is NOT complete, the story stubs the
+ * spec-author wrote (`stories/<S>/story.{md,json}`) poison every retry: their
+ * presence makes the agent report "already on disk" and write nothing, while the
+ * missing feature-spec.json keeps failing the guard forever. This removes the
+ * partial stubs (and any empty/partial feature-spec.{json,md}) so the next
+ * breakdown turn starts fresh. A no-op on a complete breakdown (never touches a
+ * real breakdown) and on a clean slate (nothing to remove). The driver runs this
+ * right before every breakdown dispatch (breakdown is dispatched only when the
+ * breakdown is NOT done, so anything on disk here is by definition partial).
+ */
+export function resetIncompleteBreakdown(
+  sftddDir: string,
+  featureId: string,
+): { reset: boolean } {
+  const specPath = featureSpecJson(sftddDir, featureId);
+  let complete = false;
+  try {
+    const spec = JSON.parse(readFileSync(specPath, "utf8")) as { stories?: unknown };
+    complete = Array.isArray(spec.stories) && spec.stories.length > 0;
+  } catch {
+    complete = false; // absent or unreadable = not a complete breakdown
+  }
+  if (complete) return { reset: false };
+  let reset = false;
+  for (const p of [storiesDirOf(sftddDir, featureId), specPath, featureSpecMd(sftddDir, featureId)]) {
+    if (existsSync(p)) {
+      rmSync(p, { recursive: true, force: true });
+      reset = true;
+    }
+  }
+  return { reset };
 }
 
 /**

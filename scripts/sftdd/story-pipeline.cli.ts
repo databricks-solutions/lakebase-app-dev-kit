@@ -40,6 +40,7 @@ import {
   dispatchNext,
   completeActive,
   syncBreakdownToPipeline,
+  resetIncompleteBreakdown,
   surfaceForGate,
   approveStoryGateFromDisk,
   batchedDraftMessage,
@@ -161,6 +162,20 @@ async function main(): Promise<number> {
         process.stdout.write(`  ${s}\t${v.status}${gate}${exp}${acc}\n`);
       }
     }
+    return 0;
+  }
+
+  // FEIP-8024: clear an INCOMPLETE breakdown (partial story stubs with no
+  // populated feature-spec.json) so the next spec-author breakdown regenerates
+  // cleanly instead of deadlocking. Runs before the pipeline read so it operates
+  // on the on-disk breakdown, not pipeline.json. No-op on a complete breakdown.
+  if (args.cmd === "reset-breakdown") {
+    const r = resetIncompleteBreakdown(sftddDir, feature);
+    process.stdout.write(
+      r.reset
+        ? `reset-breakdown: cleared an incomplete breakdown for ${feature} (re-dispatch will regenerate)\n`
+        : `reset-breakdown: breakdown for ${feature} is complete or absent; nothing to reset\n`,
+    );
     return 0;
   }
 

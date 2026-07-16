@@ -548,7 +548,21 @@ function roleTaskBody(
         // supplies (see commandsForAction); it never spawns a role agent.
         return `Provide the sprint's feature-requests.`;
       case "breakdown":
-        return `Break feature ${featureId} down into its stories.${uiTrack ? UI_TRACK_BREAKDOWN : ""}`;
+        // Be explicit that the breakdown deliverable is feature-spec.json (the
+        // artifact the router + guard gate on), authored FRESH, plus the story
+        // stubs , and name the ABSOLUTE root so the subagent never guesses the
+        // project path. The vaguer prior wording ("break it into its stories")
+        // let the Spec Author write only the stubs, then on a re-dispatch see them
+        // present and claim the breakdown done, deadlocking the drive on the
+        // absent feature-spec.json (same class as the propose fix above).
+        return (
+          `Break feature ${featureId} down into its stories. WRITE the breakdown to ${root}: ` +
+          `first ${root}/features/${featureId}/feature-spec.json (id, name, status "draft", tdd_mode, ` +
+          `and a NON-EMPTY stories[] array of the story ids), then a stub dir per story under ` +
+          `${root}/features/${featureId}/stories/<S>/ (story.md + story.json, id + one-line scope; NO acceptance ` +
+          `criteria here). feature-spec.json is REQUIRED , a prose list of stories in your reply is NOT the ` +
+          `breakdown, and do NOT claim it "already exists".${uiTrack ? UI_TRACK_BREAKDOWN : ""}`
+        );
     }
   }
   // UX Designer (UI track): translate the design brief into the project style
@@ -1075,10 +1089,14 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
       if (expectArtifact) {
         cmds.push({ kind: "verify-artifact", role: action.role, anyOf: expectArtifact.anyOf, label: expectArtifact.label });
       }
-      // After the Spec Author breaks the feature down, seed the pipeline from
-      // the stories/ dirs it produced so the streaming lanes have stories to
-      // advance (breakdown writes files, not pipeline.json).
+      // Breakdown is atomic + self-cleaning (FEIP-8024). BEFORE the turn, reset any
+      // INCOMPLETE breakdown (partial story stubs with no populated feature-spec.json)
+      // so a re-dispatch regenerates from a clean slate instead of the agent seeing
+      // stale stubs, reporting "already on disk", writing nothing, and deadlocking on
+      // the missing-feature-spec.json guard forever. AFTER the turn, seed the pipeline
+      // from the stories/ dirs it produced (breakdown writes files, not pipeline.json).
       if ("mode" in action && action.role === "spec-author" && action.mode === "breakdown") {
+        cmds.unshift({ kind: "cli", bin: PIPELINE_BIN, args: ["reset-breakdown", ...tdd] });
         cmds.push({ kind: "cli", bin: PIPELINE_BIN, args: ["sync-breakdown", ...tdd] });
       }
       // After the Test Strategist orders a story's tests, deterministically
