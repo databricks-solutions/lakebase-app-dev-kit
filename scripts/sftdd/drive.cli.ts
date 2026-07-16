@@ -66,6 +66,7 @@ import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
 import { resolveKitBinJs, kitVersion } from "./kit-bin.js";
 import { isForeignFeatureClaim, readWorkflowState } from "../lakebase/scm-workflow-state.js";
+import { relocateStrayDesignArtifacts, malformedSiblingRoot } from "./stray-artifact-recovery.js";
 
 // How many times a single role turn that overflows the model window mid-turn
 // ("Prompt is too long") is retried on a FRESH session before the failure
@@ -213,13 +214,18 @@ class ArtifactOutOfRootError extends Error {
     readonly label: string,
     readonly anyOf: string[],
     readonly sftddDir: string,
+    /** FEIP-8038: the known malformed-sibling root we also checked (+ tried to
+     *  relocate from). Named so the human knows exactly where to look. */
+    readonly checkedSibling?: string,
   ) {
     super(
       `role '${role}' produced no ${label} under ${path.basename(sftddDir)}/ ` +
         `(expected one of: ${anyOf.join(", ")}).\n` +
-        `        The subagent likely resolved the project root wrong and wrote outside it ` +
-        `(check $HOME and other dirs for a stray copy). Nothing downstream can consume the ` +
-        `absent artifact. Re-run to re-dispatch the role.`,
+        `        The subagent likely resolved the project root wrong and wrote outside it. ` +
+        (checkedSibling
+          ? `Checked (and tried to relocate from) the malformed sibling ${checkedSibling}; nothing there either. `
+          : `(check $HOME and other dirs for a stray copy). `) +
+        `Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`,
     );
     this.name = "ArtifactOutOfRootError";
   }
@@ -529,16 +535,37 @@ function execRunner(cfg: DriveEffectsConfig): CommandRunner {
         // ACs). A subagent that resolved the project root wrong wrote it elsewhere;
         // fail loud + attributed HERE, before a downstream effect consumes the
         // absent artifact and crashes with a cryptic, misattributed error.
-        const present = cmd.anyOf.some((p) => {
-          try {
-            const st = fs.statSync(p);
-            return st.isDirectory() ? fs.readdirSync(p).length > 0 : true;
-          } catch {
-            return false;
+        const isPresent = (): boolean =>
+          cmd.anyOf.some((p) => {
+            try {
+              const st = fs.statSync(p);
+              return st.isDirectory() ? fs.readdirSync(p).length > 0 : true;
+            } catch {
+              return false;
+            }
+          });
+        if (!isPresent()) {
+          // FEIP-8038: a subagent may have resolved a MALFORMED project root
+          // (parent + project hyphen-joined) and written the artifact to that
+          // sibling. Relocate a stray .sftdd/.tdd tree from it into the real root
+          // and re-check, so the run self-heals instead of deadlocking on the
+          // "re-run" remedy (which no-ops , the artifact never lands in-root).
+          const strayFix = relocateStrayDesignArtifacts(cfg.projectDir);
+          if (strayFix.relocated) {
+            process.stderr.write(
+              `[drive] recovered ${strayFix.moved.length} stray artifact(s) from a malformed root ` +
+                `(${strayFix.from}) into the project root (FEIP-8038)\n`,
+            );
           }
-        });
-        if (!present) {
-          throw new ArtifactOutOfRootError(cmd.role, cmd.label, cmd.anyOf, cfg.sftddDir);
+          if (!isPresent()) {
+            throw new ArtifactOutOfRootError(
+              cmd.role,
+              cmd.label,
+              cmd.anyOf,
+              cfg.sftddDir,
+              malformedSiblingRoot(cfg.projectDir),
+            );
+          }
         }
         return;
       }

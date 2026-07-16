@@ -520,6 +520,20 @@ function architectConventionsDirective(sftddDir: string): string {
     ` divergent layout hard-blocks the spec gate and mismatches the inherited code.`;
 }
 
+/**
+ * FEIP-8038: anchor a story-scoped design directive to the ABSOLUTE artifact
+ * root so the subagent writes there directly and never resolves (and malforms,
+ * dirname-basename hyphen-joined) the project path itself. The propose/breakdown/
+ * ux directives already interpolate the root; this covers the story-scoped roles.
+ */
+function designRootNote(root: string, featureId: string, s: string): string {
+  return (
+    ` Write every artifact under the ABSOLUTE artifact root ${root}` +
+    ` (this feature: ${root}/features/${featureId}/; this story: ${root}/features/${featureId}/stories/${s}/);` +
+    ` use that absolute path and never resolve or guess the project root yourself.`
+  );
+}
+
 function roleTaskBody(
   action: Extract<WorkflowAction, { kind: "invoke-role" }>,
   featureId: string,
@@ -595,7 +609,8 @@ function roleTaskBody(
         ` Write only under story ${s}'s acs/ directory. Do not create, draft, or modify acceptance criteria for any` +
         ` other story in this feature, each other story is drafted in its own separate step that you are not` +
         ` performing now, and you will be invoked again, once per story, for the rest. Authoring more than ${s} here` +
-        ` delays ${s} reaching its spec gate and build, and is rejected at the gate.`
+        ` delays ${s} reaching its spec gate and build, and is rejected at the gate.` +
+        designRootNote(root, featureId, s)
       );
     case "architect-reviewer": {
       const arAcIds = storyAcIds(sftddDir, featureId, s);
@@ -615,7 +630,8 @@ function roleTaskBody(
         ` schema enforces (each with id, type one of unique|foreign_key|cascade|not_null|check|transactional|migration_reversible,` +
         ` table, and a one-line brief), covering unique/composite keys, foreign keys + cascade rules, NOT NULL / CHECK constraints,` +
         ` any transactional-atomicity boundary, and migration reversibility. The test-strategist must cover each with a real-branch` +
-        ` test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(sftddDir)}`
+        ` test; a service_backed feature with no persistence_invariants hard-blocks the gate.${architectConventionsDirective(sftddDir)}` +
+        designRootNote(root, featureId, s)
       );
     }
     case "test-strategist": {
