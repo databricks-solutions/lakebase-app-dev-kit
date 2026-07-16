@@ -6651,7 +6651,7 @@ init_esm_shims();
 
 // scripts/sftdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync10, readdirSync as readdirSync5, statSync as statSync4 } from "fs";
+import { existsSync as existsSync11, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync5 } from "fs";
 import { join as join9 } from "path";
 
 // scripts/sftdd/test-list.ts
@@ -6675,6 +6675,7 @@ var featuresDir = (tdd) => join(tdd, "features");
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
+var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
@@ -7051,16 +7052,31 @@ function validateGateRecord(parsed, gateName, file) {
   };
 }
 
+// scripts/sftdd/story-pipeline.ts
+init_esm_shims();
+import { existsSync as existsSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync9, mkdirSync as mkdirSync6, readdirSync as readdirSync5, statSync as statSync4 } from "fs";
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync10(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync10(p, "utf8"));
+}
+
 // scripts/sftdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path4) {
-  if (!existsSync10(path4)) return null;
-  return JSON.parse(readFileSync10(path4, "utf8"));
+  if (!existsSync11(path4)) return null;
+  return JSON.parse(readFileSync11(path4, "utf8"));
 }
 function listFeatureStories(sftddDir, featureId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
-  if (!existsSync10(storiesDir2)) return [];
-  return readdirSync5(storiesDir2).filter((d) => statSync4(join9(storiesDir2, d)).isDirectory()).sort();
+  if (!existsSync11(storiesDir2)) return [];
+  return readdirSync6(storiesDir2).filter((d) => statSync5(join9(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
@@ -7092,8 +7108,8 @@ function summarizeTestList(sftddDir, featureId) {
 }
 function readSelectionLogRecent(sftddDir, limit) {
   const path4 = join9(sftddDir, "selection-log.md");
-  if (!existsSync10(path4)) return [];
-  const text = readFileSync10(path4, "utf8");
+  if (!existsSync11(path4)) return [];
+  const text = readFileSync11(path4, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -7133,6 +7149,27 @@ function readWorkflowState(sftddDir) {
     }
   };
 }
+function summarizeStories(sftddDir, featureId) {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
+  }));
+}
+function deriveFeaturePhase(stories) {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
 function getFeatureStatus(sftddDir, featureId) {
   const plans = [];
   for (const storyId of listFeatureStories(sftddDir, featureId)) {
@@ -7162,10 +7199,13 @@ function getFeatureStatus(sftddDir, featureId) {
     smells = [];
   }
   const { phase, pointer } = readWorkflowState(sftddDir);
+  const stories = summarizeStories(sftddDir, featureId);
   return {
     feature_id: featureId,
     current_workflow_phase: phase,
+    derived_phase: deriveFeaturePhase(stories),
     current_workflow_pointer: pointer,
+    stories,
     plans,
     test_list: summarizeTestList(sftddDir, featureId),
     experiments,
@@ -7185,12 +7225,18 @@ function formatTestPassRatio(exp) {
 function renderFeatureStatus(snapshot) {
   const lines = [];
   lines.push(`Feature: ${snapshot.feature_id}`);
-  if (snapshot.current_workflow_phase) {
+  {
     const ptr = snapshot.current_workflow_pointer;
     const focus = ptr?.feature_id === snapshot.feature_id ? " (active workflow)" : ptr?.feature_id ? ` (active workflow on ${ptr.feature_id})` : "";
-    lines.push(`  Phase: ${snapshot.current_workflow_phase}${focus}`);
-  } else {
-    lines.push(`  Phase: unknown (no workflow-state.json)`);
+    if (snapshot.derived_phase) {
+      const coarse = snapshot.current_workflow_phase;
+      const lag = coarse && coarse !== snapshot.derived_phase ? ` [workflow-state.json: ${coarse}]` : "";
+      lines.push(`  Phase: ${snapshot.derived_phase}${focus}${lag}`);
+    } else if (snapshot.current_workflow_phase) {
+      lines.push(`  Phase: ${snapshot.current_workflow_phase}${focus}`);
+    } else {
+      lines.push(`  Phase: unknown (no workflow-state.json)`);
+    }
   }
   if (snapshot.plans.length > 0) {
     for (const { story_id, plan } of snapshot.plans) {
@@ -7211,6 +7257,15 @@ function renderFeatureStatus(snapshot) {
     );
   } else {
     lines.push(`  Test list: not yet written`);
+  }
+  if (snapshot.stories.length > 0) {
+    const done = snapshot.stories.filter((s) => s.status === "done").length;
+    lines.push(`  Stories: ${done}/${snapshot.stories.length} done`);
+    for (const s of snapshot.stories) {
+      const gate = s.gate_status ? ` gate=${s.gate_status}` : "";
+      const acc = s.accepted ? " accepted" : "";
+      lines.push(`    ${s.story_id.padEnd(28)} ${s.status}${gate}${acc}`);
+    }
   }
   lines.push(``);
   if (snapshot.experiments.length > 0) {

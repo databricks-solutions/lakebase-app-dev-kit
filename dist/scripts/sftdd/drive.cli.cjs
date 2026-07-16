@@ -3254,8 +3254,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path8) {
-      let input = path8;
+    function removeDotSegments(path9) {
+      let input = path9;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3508,8 +3508,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path8, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path8 && path8 !== "/" ? path8 : void 0;
+        const [path9, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path9 && path9 !== "/" ? path9 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -6903,8 +6903,8 @@ function migrateLegacyArtifactDir(projectDir = process.cwd()) {
 
 // scripts/sftdd/drive.cli.ts
 var import_node_crypto3 = require("crypto");
-var fs15 = __toESM(require("fs"), 1);
-var path7 = __toESM(require("path"), 1);
+var fs16 = __toESM(require("fs"), 1);
+var path8 = __toESM(require("path"), 1);
 var readline = __toESM(require("readline"), 1);
 
 // scripts/sftdd/replay-artifacts.ts
@@ -8575,133 +8575,157 @@ function firstPendingEscalation(sftddDir, featureId) {
   return fromSmells.length > 0 ? fromSmells.sort((a, b) => a.raised_at < b.raised_at ? -1 : 1)[0] : null;
 }
 
-// scripts/sftdd/workflow-phase.ts
-init_cjs_shims();
-var fs9 = __toESM(require("fs"), 1);
-var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
-function writeWorkflowPhase(sftddDir, phase) {
-  const file = workflowStateJson(sftddDir);
-  let state = {};
-  if (fs9.existsSync(file)) {
-    try {
-      state = JSON.parse(fs9.readFileSync(file, "utf8"));
-    } catch {
-      state = {};
-    }
-  }
-  state.phase = phase;
-  fs9.mkdirSync(sftddDir, { recursive: true });
-  fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-}
-function resetStaleTerminalPhase(sftddDir) {
-  const file = workflowStateJson(sftddDir);
-  if (!fs9.existsSync(file)) return false;
-  let state;
-  try {
-    state = JSON.parse(fs9.readFileSync(file, "utf8"));
-  } catch {
-    return false;
-  }
-  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
-    delete state.phase;
-    fs9.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
-    return true;
-  }
-  return false;
-}
-
-// scripts/sftdd/orchestrator-effects.ts
+// scripts/sftdd/next.ts
 init_cjs_shims();
 var fs12 = __toESM(require("fs"), 1);
-var import_node_path10 = require("path");
+var path6 = __toESM(require("path"), 1);
 
-// scripts/sftdd/orchestrator-derive.ts
+// scripts/sftdd/orchestrator-logging.ts
 init_cjs_shims();
-function isContractStory(storyId) {
-  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
-    storyId
-  );
-}
-function effectiveLoopForStory(runLoop, storyId) {
-  return isContractStory(storyId) ? "ac" : runLoop;
-}
-function storyView(id, e, probe, loop) {
-  const gateApproved = e.gate?.status === "approved";
-  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
+var BUILD_TURNS = /* @__PURE__ */ new Set(["red", "green", "review", "refactor"]);
+function turnSettings(ctx, role, phase) {
+  const turn = BUILD_TURNS.has(phase) ? phase : void 0;
+  const model = ctx.modelForRole?.(role);
+  const effort = ctx.effortForTurn?.(role, turn);
   return {
-    gateApproved,
-    // The gate record exists once the story has been surfaced for review;
-    // awaiting-gate is the pre-record surfaced state.
-    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
-    design: {
-      hasAcs: probe.hasAcs(id),
-      architectAnnotated: probe.architectAnnotated(id),
-      architectProjectable: probe.architectProjectable(id),
-      testListReady: probe.testListReady(id),
-      reflectionPassed: probe.reflectionPassed(id),
-      reflectionVerdictWritten: probe.reflectionVerdictWritten(id)
-    },
-    build: {
-      // An experiment that was discarded is no longer cut (a fresh one is cut
-      // on revise); merged/active both count as cut.
-      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
-      testsWritten: probe.testsWritten(id),
-      codeWritten: probe.codeWritten(id),
-      loop,
-      reviewAc: probe.reviewPendingAc(id),
-      refactorAc: probe.refactorPendingAc(id),
-      reviewStoryPending: probe.reviewPending(id),
-      refactorStoryPending: probe.refactorPending(id),
-      assessGreenAc: probe.assessGreenFailureAc(id),
-      repairRegressionAc: probe.repairRegressionFixAc(id),
-      awaitingAcceptance: e.status === "awaiting-acceptance",
-      deployVerified: probe.storyDeployVerified(id),
-      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
-      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
-      accepted
+    ...model ? { model } : {},
+    ...effort && effort !== "default" ? { effort } : {}
+  };
+}
+function storyOf2(action) {
+  return "story" in action ? action.story : void 0;
+}
+function orchestratorLogEvents(action, ctx = {}) {
+  const feature_id = ctx.featureId;
+  const story = storyOf2(action);
+  const base = { role: "orchestrator", level: "info", feature_id };
+  const withStory = story ? { story } : {};
+  switch (action.kind) {
+    case "invoke-role": {
+      const role = action.role;
+      const mode = "mode" in action ? action.mode : void 0;
+      const buildMode = "buildMode" in action ? action.buildMode : void 0;
+      const ac = "ac" in action ? action.ac : void 0;
+      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
+      const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
+      return [
+        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
+        { role, level: "info", feature_id, ...turnSettings(ctx, role, phase), event: "phase.start", slots: { phase, ...detail } }
+      ];
+    }
+    case "surface-gate":
+      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
+    case "await-acceptance":
+      return [
+        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
+        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
+        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } }
+      ];
+    case "approve-gate":
+      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
+    case "approve-plan-gate":
+      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
+    case "approve-deploy-gate":
+      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
+    case "approve-promote-gate":
+      return [{ ...base, event: "gate.approved", slots: { gate: "promote" } }];
+    case "deploy-complete":
+      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "promote" } }];
+    case "accept":
+      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
+    case "cut-experiment":
+      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
+    case "dispatch":
+      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
+    case "deploy":
+      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
+    case "complete":
+      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
+    case "planning-complete":
+      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
+    case "design-complete":
+      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
+    case "feature-complete":
+      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
+    case "raise-to-hil":
+      return [
+        {
+          ...base,
+          level: "error",
+          event: "escalation.raised",
+          slots: { source: action.source, reason: action.reason, ...withStory }
+        }
+      ];
+    case "done":
+      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
+    default: {
+      const k = action.kind;
+      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
+    }
+  }
+}
+function describeAction(action, ctx = {}) {
+  const ev = orchestratorLogEvents(action, ctx)[0];
+  if (!ev) return action.kind;
+  const renderCtx = {
+    role: ev.role,
+    ...ev.feature_id !== void 0 ? { feature_id: ev.feature_id } : {},
+    ...ev.phase !== void 0 ? { phase: ev.phase } : {},
+    ...ev.slots ?? {}
+  };
+  try {
+    return renderEventMessage(ev.event, renderCtx);
+  } catch {
+    return ev.event;
+  }
+}
+function makeOnAction(opts) {
+  const { featureId, modelForRole, effortForTurn, ...io } = opts;
+  return (action) => {
+    for (const event of orchestratorLogEvents(action, { featureId, modelForRole, effortForTurn })) {
+      try {
+        emitAgentLogEvent(event, io);
+      } catch {
+      }
     }
   };
 }
-function deriveDriveState(pipeline, probe, ctx) {
-  const loop = ctx.loop ?? "story";
-  const stories = {};
-  for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
-  }
-  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
-  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
-  return {
-    phase: ctx.phase,
-    planning: ctx.planning,
-    deploy: ctx.deploy,
-    promote: ctx.promote,
-    breakdownDone,
-    storyOrder,
-    stories,
-    buildActive: pipeline.build_active,
-    escalation: probe.pendingEscalation()
-  };
-}
-function driverPhaseForTdd(tddPhase) {
-  switch (tddPhase) {
-    case "planning":
-      return "planning";
-    case "deploy":
-      return "deploy";
-    case "promote":
-      return "promote";
-    case "shipped":
-    case "done":
-      return "done";
+function gateEnactCommand(gate, ctx = {}) {
+  const you = ctx.approver ?? "<you>";
+  const f = ctx.featureId ?? "<feature-id>";
+  switch (gate.kind) {
+    case "approve-plan-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--sprint", ctx.sprint ?? "<sprint>", "--approver", you] };
+    case "approve-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--story", gate.story, "--approver", you] };
+    case "approve-deploy-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "deploy", "--approver", you] };
+    case "approve-promote-gate":
+      return {
+        bin: "lakebase-sftdd-approve-gate",
+        args: ["--feature", f, "--gate", "promote", "--promote-ref", ctx.featureBranch ?? f, "--approver", you]
+      };
+    case "accept":
+      return { bin: "lakebase-sftdd-pipeline", args: ["accept", "--feature", f, "--story", gate.story, "--approver", you] };
     default:
-      return "feature";
+      return null;
   }
+}
+function approveHint(gate, ctx = {}) {
+  const cmd = gateEnactCommand(gate, ctx);
+  if (cmd) return `${cmd.bin} ${cmd.args.join(" ")}`;
+  const f = ctx.featureId ?? "<feature-id>";
+  return `lakebase-sftdd-approve-gate --feature ${f} --approver <you>`;
 }
 
-// scripts/sftdd/orchestrator-probe.ts
+// scripts/sftdd/feature-status.ts
 init_cjs_shims();
-var fs11 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
+
+// scripts/sftdd/design-spec-gate.ts
+init_cjs_shims();
+
+// scripts/sftdd/spike-carryforward.ts
+init_cjs_shims();
 
 // scripts/sftdd/gates.ts
 init_cjs_shims();
@@ -8797,9 +8821,140 @@ function validateGateRecord(parsed, gateName, file) {
   };
 }
 
-// scripts/lakebase/scm-workflow-state.ts
+// scripts/sftdd/story-pipeline.ts
+init_cjs_shims();
+var import_fs9 = require("fs");
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!(0, import_fs9.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
+}
+
+// scripts/sftdd/feature-status.ts
+function summarizeStories(sftddDir, featureId) {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
+  }));
+}
+function deriveFeaturePhase(stories) {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
+
+// scripts/sftdd/orchestrator-effects.ts
+init_cjs_shims();
+var fs11 = __toESM(require("fs"), 1);
+var import_node_path10 = require("path");
+
+// scripts/sftdd/orchestrator-derive.ts
+init_cjs_shims();
+function isContractStory(storyId) {
+  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
+    storyId
+  );
+}
+function effectiveLoopForStory(runLoop, storyId) {
+  return isContractStory(storyId) ? "ac" : runLoop;
+}
+function storyView(id, e, probe, loop) {
+  const gateApproved = e.gate?.status === "approved";
+  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
+  return {
+    gateApproved,
+    // The gate record exists once the story has been surfaced for review;
+    // awaiting-gate is the pre-record surfaced state.
+    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
+    design: {
+      hasAcs: probe.hasAcs(id),
+      architectAnnotated: probe.architectAnnotated(id),
+      architectProjectable: probe.architectProjectable(id),
+      testListReady: probe.testListReady(id),
+      reflectionPassed: probe.reflectionPassed(id),
+      reflectionVerdictWritten: probe.reflectionVerdictWritten(id)
+    },
+    build: {
+      // An experiment that was discarded is no longer cut (a fresh one is cut
+      // on revise); merged/active both count as cut.
+      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
+      testsWritten: probe.testsWritten(id),
+      codeWritten: probe.codeWritten(id),
+      loop,
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
+      reviewStoryPending: probe.reviewPending(id),
+      refactorStoryPending: probe.refactorPending(id),
+      assessGreenAc: probe.assessGreenFailureAc(id),
+      repairRegressionAc: probe.repairRegressionFixAc(id),
+      awaitingAcceptance: e.status === "awaiting-acceptance",
+      deployVerified: probe.storyDeployVerified(id),
+      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
+      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
+      accepted
+    }
+  };
+}
+function deriveDriveState(pipeline, probe, ctx) {
+  const loop = ctx.loop ?? "story";
+  const stories = {};
+  for (const [id, entry] of Object.entries(pipeline.stories)) {
+    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
+  }
+  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
+  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
+  return {
+    phase: ctx.phase,
+    planning: ctx.planning,
+    deploy: ctx.deploy,
+    promote: ctx.promote,
+    breakdownDone,
+    storyOrder,
+    stories,
+    buildActive: pipeline.build_active,
+    escalation: probe.pendingEscalation()
+  };
+}
+function driverPhaseForTdd(tddPhase) {
+  switch (tddPhase) {
+    case "planning":
+      return "planning";
+    case "deploy":
+      return "deploy";
+    case "promote":
+      return "promote";
+    case "shipped":
+    case "done":
+      return "done";
+    default:
+      return "feature";
+  }
+}
+
+// scripts/sftdd/orchestrator-probe.ts
 init_cjs_shims();
 var fs10 = __toESM(require("fs"), 1);
+var path5 = __toESM(require("path"), 1);
+
+// scripts/lakebase/scm-workflow-state.ts
+init_cjs_shims();
+var fs9 = __toESM(require("fs"), 1);
 var path4 = __toESM(require("path"), 1);
 var SCM_STATES = [
   "scaffold-complete",
@@ -8818,8 +8973,8 @@ function stateFilePath(projectDir) {
 }
 function readWorkflowState(projectDir) {
   const p = stateFilePath(projectDir);
-  if (!fs10.existsSync(p)) return null;
-  const raw = fs10.readFileSync(p, "utf8");
+  if (!fs9.existsSync(p)) return null;
+  const raw = fs9.readFileSync(p, "utf8");
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -8976,16 +9131,16 @@ function validateWorkflowState(value) {
 
 // scripts/sftdd/reflection.ts
 init_cjs_shims();
-var import_fs9 = require("fs");
+var import_fs10 = require("fs");
 var SMELL_FOR_OWNER = {
   "spec-author": "reflect-spec-defect",
   "test-strategist": "reflect-testlist-defect"
 };
 function readReflectVerdict(sftddDir, feature, story) {
   const p = reflectVerdictJson(sftddDir, feature, story);
-  if (!(0, import_fs9.existsSync)(p)) return void 0;
+  if (!(0, import_fs10.existsSync)(p)) return void 0;
   try {
-    return JSON.parse((0, import_fs9.readFileSync)(p, "utf8"));
+    return JSON.parse((0, import_fs10.readFileSync)(p, "utf8"));
   } catch {
     return void 0;
   }
@@ -9000,15 +9155,15 @@ var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
 // scripts/sftdd/architecture-canon.ts
 init_cjs_shims();
-var import_fs10 = require("fs");
+var import_fs11 = require("fs");
 function uniq(xs) {
   return [...new Set(xs.filter((x) => typeof x === "string" && x.length > 0))];
 }
 function readCanon(sftddDir) {
   const f = architectureCanonJson(sftddDir);
-  if (!(0, import_fs10.existsSync)(f)) return void 0;
+  if (!(0, import_fs11.existsSync)(f)) return void 0;
   try {
-    return JSON.parse((0, import_fs10.readFileSync)(f, "utf8"));
+    return JSON.parse((0, import_fs11.readFileSync)(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9046,21 +9201,21 @@ function architectNovelty(canon, storyAcs, storyArchitectureJsonContent) {
 // scripts/sftdd/orchestrator-probe.ts
 function storyCycles2(sftddDir, featureId, story) {
   const base = path5.join(cyclesRootDir(sftddDir), featureId, story);
-  if (!fs11.existsSync(base)) return [];
+  if (!fs10.existsSync(base)) return [];
   const out = [];
-  for (const acDir of fs11.readdirSync(base)) {
+  for (const acDir of fs10.readdirSync(base)) {
     const dir = path5.join(base, acDir);
     let isDir = false;
     try {
-      isDir = fs11.statSync(dir).isDirectory();
+      isDir = fs10.statSync(dir).isDirectory();
     } catch {
       isDir = false;
     }
     if (!isDir) continue;
-    for (const f of fs11.readdirSync(dir)) {
+    for (const f of fs10.readdirSync(dir)) {
       if (!/^cycle-\d+\.json$/.test(f)) continue;
       try {
-        out.push(JSON.parse(fs11.readFileSync(path5.join(dir, f), "utf8")));
+        out.push(JSON.parse(fs10.readFileSync(path5.join(dir, f), "utf8")));
       } catch {
       }
     }
@@ -9068,9 +9223,9 @@ function storyCycles2(sftddDir, featureId, story) {
   return out;
 }
 function readJson(file) {
-  if (!fs11.existsSync(file)) return void 0;
+  if (!fs10.existsSync(file)) return void 0;
   try {
-    return JSON.parse(fs11.readFileSync(file, "utf8"));
+    return JSON.parse(fs10.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
@@ -9081,8 +9236,8 @@ function readDriveContext(sftddDir, featureId, projectDir) {
   const spec = readJson(featureSpecJson(sftddDir, featureId));
   const proposed = spec !== void 0;
   const breakdownDone = Array.isArray(spec?.stories) && spec.stories.length > 0;
-  const requestsAuthored = fs11.existsSync(featureRequestMd(sftddDir, featureId));
-  const deployed = fs11.existsSync(featureDeployEvidenceJson(sftddDir, featureId));
+  const requestsAuthored = fs10.existsSync(featureRequestMd(sftddDir, featureId));
+  const deployed = fs10.existsSync(featureDeployEvidenceJson(sftddDir, featureId));
   const gateApproved = readGateApproved(featureId, sftddDir, "deploy");
   const proj = projectDir ?? path5.dirname(sftddDir);
   let scmState;
@@ -9127,10 +9282,10 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
       const acs = storyAcIds(sftddDir, featureId, story);
       if (acs.length === 0) return false;
       const everyAcNoted = acs.every((ac) => readAcArchitecturalNotes(sftddDir, featureId, ac) !== void 0);
-      return everyAcNoted && fs11.existsSync(architectureJson(sftddDir, featureId));
+      return everyAcNoted && fs10.existsSync(architectureJson(sftddDir, featureId));
     },
     architectProjectable(story) {
-      if (!fs11.existsSync(architectureJson(sftddDir, featureId))) return false;
+      if (!fs10.existsSync(architectureJson(sftddDir, featureId))) return false;
       const canon = readCanon(sftddDir);
       if (!canon) return false;
       if (canon.established_by === featureId) return false;
@@ -9143,9 +9298,9 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
     },
     testListReady(story) {
       const file = storyTestListJson(sftddDir, featureId, story);
-      if (!fs11.existsSync(file)) return false;
+      if (!fs10.existsSync(file)) return false;
       try {
-        const data = JSON.parse(fs11.readFileSync(file, "utf8"));
+        const data = JSON.parse(fs10.readFileSync(file, "utf8"));
         return Array.isArray(data.items) && data.items.length > 0;
       } catch {
         return false;
@@ -9245,21 +9400,6 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
       return base;
     }
   };
-}
-
-// scripts/sftdd/story-pipeline.ts
-init_cjs_shims();
-var import_fs11 = require("fs");
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(sftddDir, featureId) {
-  return pipelineJson(sftddDir, featureId);
-}
-function readPipeline(sftddDir, featureId) {
-  const p = pipelinePath(sftddDir, featureId);
-  if (!(0, import_fs11.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs11.readFileSync)(p, "utf8"));
 }
 
 // scripts/sftdd/response-formatter.ts
@@ -9443,9 +9583,9 @@ function checkTestListMd(content) {
   }
   return violations;
 }
-function canonicalArtifactName(path8) {
-  const base = (0, import_path9.basename)(path8);
-  if ((0, import_path9.basename)((0, import_path9.dirname)(path8)) === "acs" && base.endsWith(".json")) return "ac.json";
+function canonicalArtifactName(path9) {
+  const base = (0, import_path9.basename)(path9);
+  if ((0, import_path9.basename)((0, import_path9.dirname)(path9)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
@@ -9490,7 +9630,7 @@ function uiTrackBuild(root) {
 var AGENT_TERSE_SUFFIX = ` Be terse: produce ONLY the required artifact file(s) on disk, then stop with at most a one-line confirmation. Do NOT print a plan, a summary of what you did, rationale, tables, or restate the artifacts to stdout, that output is wasted latency. The files on disk are the deliverable, not your prose.`;
 function storyStubScope(sftddDir, featureId, storyId) {
   try {
-    const stub = JSON.parse(fs12.readFileSync(storyJson(sftddDir, featureId, storyId), "utf8"));
+    const stub = JSON.parse(fs11.readFileSync(storyJson(sftddDir, featureId, storyId), "utf8"));
     const parts = [
       stub.asA ? `As a ${stub.asA}` : "",
       stub.iWantTo ? `I want to ${stub.iWantTo}` : "",
@@ -9511,7 +9651,7 @@ function contextRubric(sftddDir, featureId, story, ac) {
   }
   if (layers.size) parts.push(`layer${layers.size > 1 ? "s" : ""}=${[...layers].join(", ")}`);
   try {
-    const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
+    const arch = JSON.parse(fs11.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
     const nfrs = (arch.nfrs ?? []).filter(
       (n) => n && typeof n.id === "string" && (n.applies_to === story || n.applies_to === featureId)
     );
@@ -9522,7 +9662,7 @@ function contextRubric(sftddDir, featureId, story, ac) {
   }
   if (layers.has("E2E")) {
     try {
-      const dg = JSON.parse(fs12.readFileSync(designGuideJson(sftddDir), "utf8"));
+      const dg = JSON.parse(fs11.readFileSync(designGuideJson(sftddDir), "utf8"));
       const groups = Object.keys(dg.tokens ?? dg);
       if (groups.length) parts.push(`design-token groups, ${groups.join(", ")}`);
     } catch {
@@ -9625,11 +9765,11 @@ Apply that fix to the PRODUCTION code. Do NOT edit prior tests to force this reg
 function consumeHandback(action, featureId, sftddDir) {
   const story = "story" in action ? action.story : void 0;
   const file = handbackFile(sftddDir, featureId, action.role, story);
-  if (!fs12.existsSync(file)) return "";
+  if (!fs11.existsSync(file)) return "";
   let note = "";
   try {
-    note = fs12.readFileSync(file, "utf8").trim();
-    fs12.rmSync(file, { force: true });
+    note = fs11.readFileSync(file, "utf8").trim();
+    fs11.rmSync(file, { force: true });
   } catch {
     return "";
   }
@@ -9679,7 +9819,7 @@ function roleTaskBody(action, featureId, uiTrack, sftddDir, build) {
       const acScope = acIds.length ? ` The story's ACs are: ${acIds.join(", ")}. Map every test's ac_id to one of these EXACT ids (verbatim, never a bare slug or an invented id), and cover each AC at least once.` : "";
       let dbScope = "";
       try {
-        const arch = JSON.parse(fs12.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
+        const arch = JSON.parse(fs11.readFileSync(architectureJson(sftddDir, featureId), "utf8"));
         if (arch.service_backed === true) {
           const inv = (arch.persistence_invariants ?? []).filter((i) => i && typeof i.id === "string");
           const list = inv.length ? ` The declared persistence invariants are: ${inv.map((i) => `${i.id}${i.brief ? ` (${i.brief})` : ""}`).join("; ")}.` : "";
@@ -10085,16 +10225,19 @@ async function planNextAction(cfg, transition = nextTransition) {
   const action = transition(state);
   return { action, commands: commandsForAction(action, cfg) };
 }
+function readDriveStateFromDisk(sftddDir, featureId, projectDir, opts = {}) {
+  const pipeline = readPipeline(sftddDir, featureId);
+  const probe = diskArtifactProbe(sftddDir, featureId, pipeline.build_active);
+  const ctx = readDriveContext(sftddDir, featureId, projectDir);
+  const state = deriveDriveState(pipeline, probe, ctx);
+  state.uiTrack = opts.uiTrack ?? false;
+  state.designGuideReady = designGuideConformance(sftddDir).ok;
+  return state;
+}
 function buildDriveEffects(cfg) {
   return {
     async readState() {
-      const pipeline = readPipeline(cfg.sftddDir, cfg.featureId);
-      const probe = diskArtifactProbe(cfg.sftddDir, cfg.featureId, pipeline.build_active);
-      const ctx = readDriveContext(cfg.sftddDir, cfg.featureId, cfg.projectDir);
-      const state = deriveDriveState(pipeline, probe, ctx);
-      state.uiTrack = cfg.uiTrack ?? false;
-      state.designGuideReady = designGuideConformance(cfg.sftddDir).ok;
-      return state;
+      return readDriveStateFromDisk(cfg.sftddDir, cfg.featureId, cfg.projectDir, { uiTrack: cfg.uiTrack });
     },
     async perform(action) {
       for (const cmd of commandsForAction(action, cfg)) {
@@ -10108,13 +10251,293 @@ function buildDriveEffects(cfg) {
     onHandback(handoff, detail) {
       const file = handbackFile(cfg.sftddDir, cfg.featureId, handoff.responder, handoff.story);
       try {
-        fs12.mkdirSync((0, import_node_path10.dirname)(file), { recursive: true });
-        fs12.writeFileSync(file, `${detail}
+        fs11.mkdirSync((0, import_node_path10.dirname)(file), { recursive: true });
+        fs11.writeFileSync(file, `${detail}
 `, "utf8");
       } catch {
       }
     }
   };
+}
+
+// scripts/sftdd/next.ts
+function resumeCommand(ctx) {
+  return ctx.sprint && !ctx.featureId ? { bin: "lakebase-sftdd-drive", args: ["--sprint", ctx.sprint] } : { bin: "lakebase-sftdd-drive", args: ["--feature", ctx.featureId ?? "<feature-id>"] };
+}
+function holdOption() {
+  return {
+    id: "hold",
+    title: "Stop here (checkpoint)",
+    hil_prompt: "Checkpoint and resume later?",
+    kind: "noop",
+    enact: null
+  };
+}
+function storyOf3(action) {
+  return "story" in action ? action.story : void 0;
+}
+function buildNextOptions(action, ctx) {
+  const f = ctx.featureId ?? "<feature-id>";
+  const you = ctx.approver ?? "<you>";
+  const gateEnact = gateEnactCommand(action, {
+    featureId: ctx.featureId,
+    sprint: ctx.sprint,
+    approver: ctx.approver,
+    featureBranch: ctx.featureBranch
+  });
+  switch (action.kind) {
+    case "accept": {
+      const story = storyOf3(action) ?? "<story>";
+      return [
+        {
+          id: "acceptance.accept",
+          title: `Accept story ${story}`,
+          hil_prompt: `Accept story ${story}? I will merge its experiment into the feature branch, run its migrations, and tear the experiment down.`,
+          kind: "gate",
+          enact: gateEnact
+          // lakebase-sftdd-pipeline accept ... (owns the merge)
+        },
+        {
+          id: "acceptance.discard",
+          title: `Discard story ${story}`,
+          hil_prompt: `Discard story ${story}? Its experiment is torn down and it leaves the sprint; its code is NOT merged.`,
+          kind: "action",
+          enact: { bin: "lakebase-sftdd-pipeline", args: ["discard", "--feature", f, "--story", story, "--approver", you, "--reason", "<reason>"] }
+        },
+        {
+          id: "acceptance.revise",
+          title: `Revise story ${story}`,
+          hil_prompt: `Send story ${story} back to designing? Its experiment is torn down and it re-enters the design lane; its code is NOT merged.`,
+          kind: "action",
+          enact: { bin: "lakebase-sftdd-pipeline", args: ["revise", "--feature", f, "--story", story, "--approver", you, "--reason", "<reason>"] }
+        },
+        holdOption()
+      ];
+    }
+    case "approve-plan-gate":
+      return [
+        {
+          id: "plan.approve",
+          title: "Approve the sprint plan",
+          hil_prompt: "Approve the sprint plan and lock the backlog so execution can begin?",
+          kind: "gate",
+          enact: gateEnact
+        },
+        holdOption()
+      ];
+    case "approve-gate":
+      return [
+        {
+          id: "spec.approve",
+          title: `Approve story ${storyOf3(action) ?? "<story>"}'s spec`,
+          hil_prompt: `Approve story ${storyOf3(action) ?? "<story>"}'s spec so its build can start? (To send it back, edit the spec and re-run the design lane.)`,
+          kind: "gate",
+          enact: gateEnact
+        },
+        holdOption()
+      ];
+    case "approve-deploy-gate":
+      return [
+        {
+          id: "deploy.approve",
+          title: "Approve the deploy gate",
+          hil_prompt: "The feature deployed + verified locally. Approve the deploy gate to enter promotion?",
+          kind: "gate",
+          enact: gateEnact
+        },
+        holdOption()
+      ];
+    case "approve-promote-gate":
+      return [
+        {
+          id: "promote.approve",
+          title: "Approve the promote gate",
+          hil_prompt: "CI is green on the promotion PR. Approve it so the feature can merge up to the parent tier?",
+          kind: "gate",
+          enact: gateEnact,
+          outward_facing: true
+        },
+        holdOption()
+      ];
+    case "raise-to-hil":
+      return [
+        {
+          id: "resume",
+          title: "Resume the drive (after resolving the blocker below)",
+          hil_prompt: "Once the blocker under `blockers` is resolved, resume the drive?",
+          kind: "action",
+          enact: resumeCommand(ctx),
+          note: "Clear the escalation (and any blocking smell) named in blockers first; the drive will re-derive and retry."
+        },
+        holdOption()
+      ];
+    case "prepare-pr":
+    case "wait-ci":
+    case "merge":
+      return [
+        {
+          id: "resume",
+          title: "Resume the drive (promotion)",
+          hil_prompt: `Continue promotion (${describeAction(action, { featureId: ctx.featureId })})?`,
+          kind: "action",
+          enact: resumeCommand(ctx),
+          outward_facing: true
+        },
+        holdOption()
+      ];
+    case "done":
+      return [
+        {
+          id: "done",
+          title: "Nothing to do (workflow complete)",
+          hil_prompt: "This feature is fully shipped. Start a new feature or sprint?",
+          kind: "noop",
+          enact: null
+        }
+      ];
+    case "feature-complete":
+      return [
+        {
+          id: "resume",
+          title: "Deploy the feature",
+          hil_prompt: "Every story is built + accepted. Deploy the feature (local working-software check) and enter promotion?",
+          kind: "action",
+          enact: resumeCommand(ctx)
+        },
+        holdOption()
+      ];
+    default:
+      return [
+        {
+          id: "resume",
+          title: "Resume the drive",
+          hil_prompt: `Resume the drive to carry out: ${describeAction(action, { featureId: ctx.featureId })}?`,
+          kind: "action",
+          enact: resumeCommand(ctx)
+        },
+        holdOption()
+      ];
+  }
+}
+function openGatesOf(action) {
+  switch (action.kind) {
+    case "approve-plan-gate":
+      return ["plan"];
+    case "approve-gate":
+      return ["spec"];
+    case "accept":
+      return ["acceptance"];
+    case "approve-deploy-gate":
+      return ["deploy"];
+    case "approve-promote-gate":
+      return ["promote"];
+    default:
+      return [];
+  }
+}
+function blockersOf(state) {
+  if (!state.escalation) return [];
+  const e = state.escalation;
+  return [
+    {
+      source: e.source,
+      reason: e.reason,
+      ...e.story_id ? { story: e.story_id } : {},
+      resolver: null,
+      resolver_hint: "Resolve the underlying problem (clear the escalation file under .sftdd/escalations/ and any blocking smell in .sftdd/smells.json), then resume the drive."
+    }
+  ];
+}
+function summarize(scope, action, state, ctx) {
+  const who = scope === "sprint" ? `sprint ${ctx.sprint}` : `feature ${ctx.featureId}`;
+  if (action.kind === "done") {
+    return `${who} is complete: every story was built, accepted, and deployed per story, and the feature is merged. Nothing left to do.`;
+  }
+  if (action.kind === "feature-complete") {
+    return `${who}: every story is built + accepted. Next step is to deploy the feature (local working-software check) and enter promotion.`;
+  }
+  if (action.kind === "raise-to-hil") {
+    return `${who} is BLOCKED and needs a human: ${state.blockers[0]?.reason ?? "an escalation was raised"}. See blockers; resolve it, then resume.`;
+  }
+  if (state.open_gates.length > 0) {
+    return `${who} is at the ${state.open_gates[0]} gate, awaiting a human decision. See options for the choices and how to enact each.`;
+  }
+  return `${who} is mid-flight (${state.derived_phase ?? state.coarse_phase}). The next step is: ${describeAction(action, { featureId: ctx.featureId })}.`;
+}
+function buildNextSnapshot(scope, state, ctx, transition = nextTransition) {
+  const action = transition(state);
+  const stories = {};
+  for (const s of ctx.stories ?? []) stories[s.story_id] = s.status;
+  const nextState = {
+    coarse_phase: state.phase,
+    derived_phase: scope === "feature" ? deriveFeaturePhase(ctx.stories ?? []) : null,
+    stories,
+    open_gates: openGatesOf(action),
+    blockers: blockersOf(state)
+  };
+  const primary = { kind: action.kind, describe: describeAction(action, { featureId: ctx.featureId }) };
+  return {
+    scope,
+    ...ctx.featureId ? { feature: ctx.featureId } : {},
+    ...ctx.sprint ? { sprint: ctx.sprint } : {},
+    state: nextState,
+    primary_action: primary,
+    options: buildNextOptions(action, ctx),
+    summary: summarize(scope, action, nextState, ctx),
+    authoritative_playbook_version: ctx.version ?? "unknown",
+    generated_at: ctx.now ?? (/* @__PURE__ */ new Date()).toISOString()
+  };
+}
+function readFeatureNextSnapshot(sftddDir, featureId, projectDir, ctx = {}) {
+  const state = readDriveStateFromDisk(sftddDir, featureId, projectDir, { uiTrack: ctx.uiTrack });
+  return buildNextSnapshot("feature", state, {
+    ...ctx,
+    featureId,
+    stories: summarizeStories(sftddDir, featureId)
+  });
+}
+function emitNextJson(sftddDir, featureId, projectDir, ctx = {}) {
+  try {
+    const snap = readFeatureNextSnapshot(sftddDir, featureId, projectDir, ctx);
+    fs12.mkdirSync(sftddDir, { recursive: true });
+    fs12.writeFileSync(path6.join(sftddDir, "next.json"), JSON.stringify(snap, null, 2) + "\n", "utf8");
+  } catch {
+  }
+}
+
+// scripts/sftdd/workflow-phase.ts
+init_cjs_shims();
+var fs13 = __toESM(require("fs"), 1);
+var TERMINAL_PHASES = /* @__PURE__ */ new Set(["done", "shipped"]);
+function writeWorkflowPhase(sftddDir, phase) {
+  const file = workflowStateJson(sftddDir);
+  let state = {};
+  if (fs13.existsSync(file)) {
+    try {
+      state = JSON.parse(fs13.readFileSync(file, "utf8"));
+    } catch {
+      state = {};
+    }
+  }
+  state.phase = phase;
+  fs13.mkdirSync(sftddDir, { recursive: true });
+  fs13.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+function resetStaleTerminalPhase(sftddDir) {
+  const file = workflowStateJson(sftddDir);
+  if (!fs13.existsSync(file)) return false;
+  let state;
+  try {
+    state = JSON.parse(fs13.readFileSync(file, "utf8"));
+  } catch {
+    return false;
+  }
+  if (typeof state.phase === "string" && TERMINAL_PHASES.has(state.phase)) {
+    delete state.phase;
+    fs13.writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+    return true;
+  }
+  return false;
 }
 
 // scripts/sftdd/orchestrator-sprint.ts
@@ -10159,9 +10582,9 @@ function readSprintGates(sprint, opts = {}) {
 }
 
 // scripts/sftdd/orchestrator-sprint.ts
-var fs13 = __toESM(require("fs"), 1);
+var fs14 = __toESM(require("fs"), 1);
 function deriveSprintPlanningState(sftddDir, sprint, opts = {}) {
-  const proposed = fs13.existsSync(featureProposalsMd(sftddDir));
+  const proposed = fs14.existsSync(featureProposalsMd(sftddDir));
   const estimated = hasEstimates(sftddDir);
   const backlog = readBacklog(sftddDir, sprint).features;
   const requestsAuthored = backlog.length > 0 && backlog.every((f) => hasFeatureRequest(sftddDir, f.id));
@@ -10502,153 +10925,32 @@ function writeRunConfig(inputs) {
   return cfg;
 }
 
-// scripts/sftdd/orchestrator-logging.ts
-init_cjs_shims();
-var BUILD_TURNS = /* @__PURE__ */ new Set(["red", "green", "review", "refactor"]);
-function turnSettings(ctx, role, phase) {
-  const turn = BUILD_TURNS.has(phase) ? phase : void 0;
-  const model = ctx.modelForRole?.(role);
-  const effort = ctx.effortForTurn?.(role, turn);
-  return {
-    ...model ? { model } : {},
-    ...effort && effort !== "default" ? { effort } : {}
-  };
-}
-function storyOf2(action) {
-  return "story" in action ? action.story : void 0;
-}
-function orchestratorLogEvents(action, ctx = {}) {
-  const feature_id = ctx.featureId;
-  const story = storyOf2(action);
-  const base = { role: "orchestrator", level: "info", feature_id };
-  const withStory = story ? { story } : {};
-  switch (action.kind) {
-    case "invoke-role": {
-      const role = action.role;
-      const mode = "mode" in action ? action.mode : void 0;
-      const buildMode = "buildMode" in action ? action.buildMode : void 0;
-      const ac = "ac" in action ? action.ac : void 0;
-      const phase = mode ?? buildMode ?? (role === "navigator" ? "red" : role === "driver" ? "green" : "design");
-      const detail = { ...withStory, ...mode ? { mode } : {}, ...buildMode ? { buildMode } : {}, ...ac ? { ac } : {} };
-      return [
-        { ...base, event: "handoff", slots: { to_role: role, phase, ...detail } },
-        { role, level: "info", feature_id, ...turnSettings(ctx, role, phase), event: "phase.start", slots: { phase, ...detail } }
-      ];
-    }
-    case "surface-gate":
-      return [{ ...base, event: "gate.surfaced", slots: { gate: "spec", subject: `story ${story}`, ...withStory } }];
-    case "await-acceptance":
-      return [
-        { ...base, event: "handoff", slots: { to_role: "release-engineer", phase: "deploy", ...withStory } },
-        { role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy", ...withStory } },
-        { ...base, event: "gate.surfaced", slots: { gate: "acceptance", subject: `story ${story}`, ...withStory } }
-      ];
-    case "approve-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "spec", ...withStory } }];
-    case "approve-plan-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "plan" } }];
-    case "approve-deploy-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "deploy" } }];
-    case "approve-promote-gate":
-      return [{ ...base, event: "gate.approved", slots: { gate: "promote" } }];
-    case "deploy-complete":
-      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "promote" } }];
-    case "accept":
-      return [{ ...base, event: "experiment.accepted", slots: { ...withStory } }];
-    case "cut-experiment":
-      return [{ ...base, event: "experiment.cut", slots: { ...withStory } }];
-    case "dispatch":
-      return [{ ...base, event: "phase.start", slots: { phase: "build", ...withStory } }];
-    case "deploy":
-      return [{ role: "release-engineer", level: "info", feature_id, event: "phase.start", slots: { phase: "deploy" } }];
-    case "complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "story", outcome: "complete", ...withStory } }];
-    case "planning-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "planning", outcome: "complete" } }];
-    case "design-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "design", outcome: "complete" } }];
-    case "feature-complete":
-      return [{ ...base, event: "phase.end", slots: { phase: "feature", outcome: "complete" } }];
-    case "raise-to-hil":
-      return [
-        {
-          ...base,
-          level: "error",
-          event: "escalation.raised",
-          slots: { source: action.source, reason: action.reason, ...withStory }
-        }
-      ];
-    case "done":
-      return [{ ...base, event: "phase.end", slots: { phase: "workflow", outcome: "complete" } }];
-    default: {
-      const k = action.kind;
-      return [{ ...base, event: "reasoning", slots: { note: `orchestrator: ${k}` } }];
-    }
-  }
-}
-function describeAction(action, ctx = {}) {
-  const ev = orchestratorLogEvents(action, ctx)[0];
-  if (!ev) return action.kind;
-  const renderCtx = {
-    role: ev.role,
-    ...ev.feature_id !== void 0 ? { feature_id: ev.feature_id } : {},
-    ...ev.phase !== void 0 ? { phase: ev.phase } : {},
-    ...ev.slots ?? {}
-  };
-  try {
-    return renderEventMessage(ev.event, renderCtx);
-  } catch {
-    return ev.event;
-  }
-}
-function makeOnAction(opts) {
-  const { featureId, modelForRole, effortForTurn, ...io } = opts;
-  return (action) => {
-    for (const event of orchestratorLogEvents(action, { featureId, modelForRole, effortForTurn })) {
-      try {
-        emitAgentLogEvent(event, io);
-      } catch {
-      }
-    }
-  };
-}
-function approveHint(gate, ctx = {}) {
-  const you = "<you>";
-  const f = ctx.featureId ?? "<feature-id>";
-  switch (gate.kind) {
-    case "approve-plan-gate":
-      return `lakebase-sftdd-approve-gate --sprint ${ctx.sprint ?? "<sprint>"} --approver ${you}`;
-    case "approve-gate":
-      return `lakebase-sftdd-approve-gate --feature ${f} --story ${gate.story} --approver ${you}`;
-    case "approve-deploy-gate":
-      return `lakebase-sftdd-approve-gate --feature ${f} --gate deploy --approver ${you}`;
-    case "approve-promote-gate":
-      return `lakebase-sftdd-approve-gate --feature ${f} --gate promote --approver ${you}`;
-    case "accept":
-      return `lakebase-sftdd-pipeline accept --feature ${f} --story ${gate.story} --approver ${you}`;
-    default:
-      return `lakebase-sftdd-approve-gate --feature ${f} --approver ${you}`;
-  }
-}
-
 // scripts/sftdd/kit-bin.ts
 init_cjs_shims();
 var import_node_child_process6 = require("child_process");
-var fs14 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
-var KIT_ROOT = path6.resolve(__dirname, "..", "..", "..");
+var fs15 = __toESM(require("fs"), 1);
+var path7 = __toESM(require("path"), 1);
+var KIT_ROOT = path7.resolve(__dirname, "..", "..", "..");
 var kitBinMap = null;
 function resolveKitBinJs(bin) {
   if (kitBinMap === null) {
     try {
-      const pkg = JSON.parse(fs14.readFileSync(path6.join(KIT_ROOT, "package.json"), "utf8"));
+      const pkg = JSON.parse(fs15.readFileSync(path7.join(KIT_ROOT, "package.json"), "utf8"));
       kitBinMap = pkg.bin ?? {};
     } catch {
       kitBinMap = {};
     }
   }
   const rel = kitBinMap[bin];
-  return rel ? path6.join(KIT_ROOT, rel) : null;
+  return rel ? path7.join(KIT_ROOT, rel) : null;
+}
+function kitVersion() {
+  try {
+    const pkg = JSON.parse(fs15.readFileSync(path7.join(KIT_ROOT, "package.json"), "utf8"));
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 // scripts/sftdd/drive.cli.ts
@@ -10771,7 +11073,7 @@ var ReplayCorpusMissError = class extends Error {
 var ArtifactOutOfRootError = class extends Error {
   constructor(role, label, anyOf, sftddDir) {
     super(
-      `role '${role}' produced no ${label} under ${path7.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
+      `role '${role}' produced no ${label} under ${path8.basename(sftddDir)}/ (expected one of: ${anyOf.join(", ")}).
         The subagent likely resolved the project root wrong and wrote outside it (check $HOME and other dirs for a stray copy). Nothing downstream can consume the absent artifact. Re-run to re-dispatch the role.`
     );
     this.role = role;
@@ -10976,8 +11278,8 @@ function execRunner(cfg) {
       if (cmd.kind === "verify-artifact") {
         const present = cmd.anyOf.some((p) => {
           try {
-            const st = fs15.statSync(p);
-            return st.isDirectory() ? fs15.readdirSync(p).length > 0 : true;
+            const st = fs16.statSync(p);
+            return st.isDirectory() ? fs16.readdirSync(p).length > 0 : true;
           } catch {
             return false;
           }
@@ -11096,14 +11398,14 @@ function makeConfirmContinue() {
       const poll = setInterval(() => {
         let raw;
         try {
-          raw = fs15.readFileSync(answerFile, "utf8");
+          raw = fs16.readFileSync(answerFile, "utf8");
         } catch {
           return;
         }
         const a = raw.trim().toLowerCase();
         if (a === "") return;
         try {
-          fs15.rmSync(answerFile, { force: true });
+          fs16.rmSync(answerFile, { force: true });
         } catch {
         }
         if (a === "y" || a === "yes") {
@@ -11228,7 +11530,7 @@ async function runSprintMode(args) {
   const sprint = args.sprint;
   const projectDir = args.projectDir ?? process.cwd();
   const sftddDir = args.sftddDir ?? resolveSftddDir(projectDir);
-  const claimJs = path7.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
+  const claimJs = path8.join(__dirname, "..", "lakebase", "scm-claim-feature.cli.js");
   const settings = resolveSftddSettings({ projectDir });
   const gates = effectiveGates(args, projectDir);
   const interactive = gates === "interactive";
@@ -11257,7 +11559,7 @@ async function runSprintMode(args) {
       return backlogFeatureIds(readBacklog(sftddDir, sprint));
     },
     async commitAndPushRequests() {
-      const root = path7.basename(sftddDir);
+      const root = path8.basename(sftddDir);
       for (const id of backlogFeatureIds(readBacklog(sftddDir, sprint))) {
         await spawnCmd("git", ["add", "--", `${root}/features/${id}/feature-request.md`], projectDir).catch(() => void 0);
       }
@@ -11309,7 +11611,7 @@ async function runSprintMode(args) {
         `[sprint] RAISED TO HIL${on} , halting sprint ${sprint}.
 ` + (e?.source ? `        source: ${e.source}
 ` : "") + (e?.reason ? `        reason: ${e.reason}
-` : "") + `        recorded under ${path7.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.
+` : "") + `        recorded under ${path8.basename(sftddDir)}/escalations/ ; resolve it, then re-run to resume.
 `
       );
       return 3;
@@ -11451,7 +11753,7 @@ ${help()}`);
         `[drive] RAISED TO HIL after ${result.iterations} actions , awaiting HIL decision.
         source: ${e?.source}
         reason: ${e?.reason}
-        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.
+        recorded under ${path8.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run to resume.
 `
       );
       return 3;
@@ -11459,13 +11761,17 @@ ${help()}`);
       process.stderr.write(`[drive] stopped at --max-steps ${args.maxSteps} (${result.iterations} actions)
 `);
     } else if (pendingGate) {
-      reportGate(pendingGate, { featureId: cfg.featureId });
+      reportGate(pendingGate, { featureId: cfg.featureId, featureBranch: cfg.featureBranch });
     } else if (pendingInput) {
       reportInput(pendingInput);
       return 2;
     } else if (result.stoppedAtBound) {
-      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)
-`);
+      const label = bound ?? "phase";
+      process.stderr.write(
+        result.iterations === 0 ? `[drive] ${label} already complete (0 actions, nothing to do; the per-story pipeline already carried it out)
+` : `[drive] ${label} complete in ${result.iterations} actions (bounded)
+`
+      );
     } else {
       process.stderr.write(`[drive] done in ${result.iterations} actions
 `);
@@ -11494,7 +11800,7 @@ ${help()}`);
       } catch {
       }
       process.stderr.write(`[drive] ${err.message}
-        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.
+        recorded under ${path8.basename(cfg.sftddDir)}/escalations/ ; fix the responder, then re-run.
 `);
       return 3;
     }
@@ -11519,7 +11825,7 @@ ${help()}`);
       } catch {
       }
       process.stderr.write(`[drive] ${err.message}
-        recorded under ${path7.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
+        recorded under ${path8.basename(cfg.sftddDir)}/escalations/ ; resolve it, then re-run.
 `);
       return 3;
     }
@@ -11536,6 +11842,15 @@ ${help()}`);
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}
 `);
     return 1;
+  } finally {
+    const recordingOrReplaying = !!sftddEnv("REPLAY_DIR") || !!sftddEnv("REPLAY_BUILD_DIR") || !!sftddEnv("RECORD_BUILD_DIR") || !!sftddEnv("RECORD_DIR");
+    if (cfg.featureId && !recordingOrReplaying) {
+      emitNextJson(cfg.sftddDir, cfg.featureId, cfg.projectDir, {
+        uiTrack: cfg.uiTrack,
+        version: kitVersion(),
+        ...cfg.featureBranch ? { featureBranch: cfg.featureBranch } : {}
+      });
+    }
   }
 }
 main().then(

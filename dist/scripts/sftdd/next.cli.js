@@ -8892,7 +8892,10 @@ function gateEnactCommand(gate, ctx = {}) {
     case "approve-deploy-gate":
       return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "deploy", "--approver", you] };
     case "approve-promote-gate":
-      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "promote", "--approver", you] };
+      return {
+        bin: "lakebase-sftdd-approve-gate",
+        args: ["--feature", f, "--gate", "promote", "--promote-ref", ctx.featureBranch ?? f, "--approver", you]
+      };
     case "accept":
       return { bin: "lakebase-sftdd-pipeline", args: ["accept", "--feature", f, "--story", gate.story, "--approver", you] };
     default:
@@ -8919,7 +8922,12 @@ function storyOf2(action) {
 function buildNextOptions(action, ctx) {
   const f = ctx.featureId ?? "<feature-id>";
   const you = ctx.approver ?? "<you>";
-  const gateEnact = gateEnactCommand(action, { featureId: ctx.featureId, sprint: ctx.sprint, approver: ctx.approver });
+  const gateEnact = gateEnactCommand(action, {
+    featureId: ctx.featureId,
+    sprint: ctx.sprint,
+    approver: ctx.approver,
+    featureBranch: ctx.featureBranch
+  });
   switch (action.kind) {
     case "accept": {
       const story = storyOf2(action) ?? "<story>";
@@ -9253,7 +9261,13 @@ ${HELP}`);
     readDriveStateFromDisk(sftddDir, args.feature, projectDir, {
       uiTrack: resolveSftddSettings({ projectDir }).project.uiTrack
     }),
-    { ...ctx, stories: summarizeStories(sftddDir, args.feature) }
+    {
+      ...ctx,
+      stories: summarizeStories(sftddDir, args.feature),
+      // The promote gate's required --promote-ref is the feature's canonical
+      // branch, recorded in the SCM workflow state at claim (FEIP-8019).
+      ...readWorkflowState(projectDir)?.branch ? { featureBranch: readWorkflowState(projectDir).branch } : {}
+    }
   );
   if (args.json) process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
   else process.stdout.write(renderNextSnapshot(snapshot) + "\n");

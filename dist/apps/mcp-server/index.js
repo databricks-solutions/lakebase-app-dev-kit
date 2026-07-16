@@ -7549,6 +7549,7 @@ var featuresDir = (tdd) => join3(tdd, "features");
 var featureDir = (tdd, featureId) => join3(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureTestListJson = (tdd, f) => join3(featureResolved(tdd, f), "test-list.json");
+var pipelineJson = (tdd, f) => join3(featureResolved(tdd, f), "pipeline.json");
 var storiesDir = (tdd, f) => join3(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join3(storiesDir(tdd, f), s);
 function findStoryDir(tdd, f, s) {
@@ -11472,7 +11473,7 @@ function migrationSlug2(description) {
 
 // scripts/sftdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync30, readFileSync as readFileSync19, readdirSync as readdirSync14, statSync as statSync7 } from "fs";
+import { existsSync as existsSync31, readFileSync as readFileSync20, readdirSync as readdirSync15, statSync as statSync8 } from "fs";
 import { join as join32 } from "path";
 
 // scripts/sftdd/test-list.ts
@@ -12168,16 +12169,31 @@ function validateGateRecord(parsed, gateName, file) {
   };
 }
 
+// scripts/sftdd/story-pipeline.ts
+init_esm_shims();
+import { existsSync as existsSync30, readFileSync as readFileSync19, writeFileSync as writeFileSync19, mkdirSync as mkdirSync15, readdirSync as readdirSync14, statSync as statSync7 } from "fs";
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync30(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync19(p, "utf8"));
+}
+
 // scripts/sftdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path27) {
-  if (!existsSync30(path27)) return null;
-  return JSON.parse(readFileSync19(path27, "utf8"));
+  if (!existsSync31(path27)) return null;
+  return JSON.parse(readFileSync20(path27, "utf8"));
 }
 function listFeatureStories(sftddDir, featureId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
-  if (!existsSync30(storiesDir2)) return [];
-  return readdirSync14(storiesDir2).filter((d) => statSync7(join32(storiesDir2, d)).isDirectory()).sort();
+  if (!existsSync31(storiesDir2)) return [];
+  return readdirSync15(storiesDir2).filter((d) => statSync8(join32(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
@@ -12209,8 +12225,8 @@ function summarizeTestList(sftddDir, featureId) {
 }
 function readSelectionLogRecent(sftddDir, limit) {
   const path27 = join32(sftddDir, "selection-log.md");
-  if (!existsSync30(path27)) return [];
-  const text = readFileSync19(path27, "utf8");
+  if (!existsSync31(path27)) return [];
+  const text = readFileSync20(path27, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -12250,6 +12266,27 @@ function readWorkflowState(sftddDir) {
     }
   };
 }
+function summarizeStories(sftddDir, featureId) {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
+  }));
+}
+function deriveFeaturePhase(stories) {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
 function getFeatureStatus(sftddDir, featureId) {
   const plans = [];
   for (const storyId of listFeatureStories(sftddDir, featureId)) {
@@ -12279,10 +12316,13 @@ function getFeatureStatus(sftddDir, featureId) {
     smells = [];
   }
   const { phase, pointer } = readWorkflowState(sftddDir);
+  const stories = summarizeStories(sftddDir, featureId);
   return {
     feature_id: featureId,
     current_workflow_phase: phase,
+    derived_phase: deriveFeaturePhase(stories),
     current_workflow_pointer: pointer,
+    stories,
     plans,
     test_list: summarizeTestList(sftddDir, featureId),
     experiments,
