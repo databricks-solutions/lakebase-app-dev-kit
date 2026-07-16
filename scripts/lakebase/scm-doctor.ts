@@ -22,6 +22,7 @@ import { getOwnerRepo } from "../git/remote.js";
 import { getActionsEnabled } from "../github/repo.js";
 import { adoptScmState, inferTierTopology } from "./scm-adopt-state.js";
 import { recoverOrphans } from "./scm-recover-orphans.js";
+import { abandonFeatureBranch } from "./scm-abandon-feature.js";
 import {
   readWorkflowState,
   type ScmWorkflowState,
@@ -371,6 +372,7 @@ export const FIXABLE_FINDING_IDS = [
   "tier-topology-mismatch",
   "orphan-current-branch",
   "multiple-migration-heads",
+  "db-ahead-of-code",
 ] as const;
 
 export type FixableFindingId = (typeof FIXABLE_FINDING_IDS)[number];
@@ -527,6 +529,19 @@ export async function fixFinding(
           );
         }
         action = `collapsed ${r.headsBefore.length} heads into merge revision ${r.mergeRevision} (commit it)`;
+        break;
+      }
+      case "db-ahead-of-code": {
+        // FEIP-8039: the paired branch DB is ahead of code (a phantom revision +
+        // orphan table from an aborted build the git reset could not undo). The
+        // robust reset is to ABANDON the feature (delete the polluted branch +
+        // reset workflow state to scaffold-complete) so the next claim re-forks a
+        // clean branch from the tier. force: the working tree may be mid-flight;
+        // the branch's committed code is on the feature PR / not lost by design.
+        const r = await abandonFeatureBranch({ projectDir: args.projectDir, instance: args.instance, force: true });
+        action =
+          `abandoned the feature (deleted the polluted paired branch${r.lakebaseDeleted ? "" : " , Lakebase delete reported not-deleted"}) ` +
+          `and reset state to '${r.state.state}'; re-claim to re-fork a clean branch from the tier`;
         break;
       }
     }

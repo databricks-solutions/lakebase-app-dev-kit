@@ -26,6 +26,8 @@ import {
   claimFeatureBranch,
   type ClaimFeatureBranchResult,
 } from "./scm-claim-feature.js";
+import { branchRevisionOrphan } from "./schema-migrate.js";
+import { deletePairedBranch } from "./paired-branch.js";
 
 interface ParsedArgs {
   featureId?: string;
@@ -33,6 +35,7 @@ interface ParsedArgs {
   instance?: string;
   parent?: string;
   noIdempotent?: boolean;
+  resetStaleBranch?: boolean;
   json?: boolean;
   pretty?: boolean;
   help?: boolean;
@@ -55,6 +58,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--no-idempotent":
         out.noIdempotent = true;
+        break;
+      case "--reset-stale-branch":
+        out.resetStaleBranch = true;
         break;
       case "--json":
         out.json = true;
@@ -97,6 +103,9 @@ Flags:
                         - tier 1: project default, tier 2: staging, tier 3: dev)
   --no-idempotent       Re-running with the same feature-id fails instead
                         of returning the existing claim as a no-op.
+  --reset-stale-branch  If the reused paired branch DB is AHEAD of code (a
+                        phantom migration from an aborted build), drop it and
+                        re-fork clean from the tier instead of refusing.
   --json                Machine-readable JSON output
   --pretty              Pretty-print JSON (only with --json)
   -h, --help            Show this help
@@ -197,6 +206,17 @@ export async function runScmClaimFeatureCli(
       instance: args.instance,
       parentBranchOverride: args.parent,
       idempotent: args.noIdempotent !== true,
+      // FEIP-8039: refuse to adopt a reused paired branch whose DB is ahead of
+      // code (a phantom revision an aborted build left behind); --reset-stale-branch
+      // drops + re-forks it clean instead.
+      checkBranchDbAheadOfCode: (a) => branchRevisionOrphan(a),
+      ...(args.resetStaleBranch
+        ? {
+            resetStaleBranch: async (a: { instance: string; branch: string; projectDir: string }) => {
+              await deletePairedBranch({ instance: a.instance, branch: a.branch, cwd: a.projectDir });
+            },
+          }
+        : {}),
     });
     const report = reportFromResult(result);
     if (args.json) {

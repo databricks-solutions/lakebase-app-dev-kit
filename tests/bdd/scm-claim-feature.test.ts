@@ -400,3 +400,69 @@ describe("claimFeatureBranch happy path", () => {
   });
 });
 
+
+describe("claimFeatureBranch db-ahead-of-code guard (FEIP-8039)", () => {
+  function seedClaimable(): void {
+    seedState({ version: 1, state: "scaffold-complete", tier_topology: 2, project_id: "demo-app" });
+  }
+
+  it("REFUSES (db-ahead-of-code) when the probe reports the reused branch DB is ahead of code", async () => {
+    seedClaimable();
+    await expect(
+      scm.claimFeatureBranch({
+        projectDir: tmpDir,
+        featureId: "adjust-stock",
+        now: fixedNow,
+        checkBranchDbAheadOfCode: async () => "20260716070934", // orphan applied rev
+      }),
+    ).rejects.toMatchObject({ name: "ScmClaimError", code: "db-ahead-of-code" });
+    // The claim did NOT advance to feature-claimed (no silent adoption).
+    expect(state.readWorkflowState(tmpDir)?.state).toBe("scaffold-complete");
+  });
+
+  it("proceeds normally when the probe reports the DB matches code (null)", async () => {
+    seedClaimable();
+    const result = await scm.claimFeatureBranch({
+      projectDir: tmpDir,
+      featureId: "adjust-stock",
+      now: fixedNow,
+      checkBranchDbAheadOfCode: async () => null,
+    });
+    expect(result.state.state).toBe("feature-claimed");
+  });
+
+  it("probes the branch that was actually cut (paired.gitBranch), not the raw feature id", async () => {
+    seedClaimable();
+    const seen: string[] = [];
+    await expect(
+      scm.claimFeatureBranch({
+        projectDir: tmpDir,
+        featureId: "adjust-stock",
+        now: fixedNow,
+        checkBranchDbAheadOfCode: async ({ branch }) => {
+          seen.push(branch);
+          return "rev-x";
+        },
+      }),
+    ).rejects.toMatchObject({ code: "db-ahead-of-code" });
+    expect(seen).toEqual(["feature-initial-domain"]); // the mocked cut's gitBranch
+  });
+
+  it("--reset-stale-branch: resets the polluted branch + re-cuts clean, then proceeds", async () => {
+    seedClaimable();
+    let resetTarget = "";
+    const result = await scm.claimFeatureBranch({
+      projectDir: tmpDir,
+      featureId: "adjust-stock",
+      now: fixedNow,
+      checkBranchDbAheadOfCode: async () => "20260716070934",
+      resetStaleBranch: async ({ branch }) => {
+        resetTarget = branch;
+      },
+    });
+    expect(resetTarget).toBe("feature-initial-domain"); // deleted the polluted branch
+    // Re-cut happened (createFeaturePairedBranch called twice) + claim proceeded.
+    expect(mockCreateFeaturePairedBranch).toHaveBeenCalledTimes(2);
+    expect(result.state.state).toBe("feature-claimed");
+  });
+});

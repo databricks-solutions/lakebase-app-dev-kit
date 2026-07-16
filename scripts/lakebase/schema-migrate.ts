@@ -434,6 +434,42 @@ export async function schemaMigrationStatus(args: SchemaMigrationStatusArgs): Pr
   };
 }
 
+// ---- branchRevisionOrphan (FEIP-8039 live probe) -------------------------------
+
+/**
+ * Report whether the branch DB is AHEAD of code: return the applied revision id
+ * that has NO local migration file, or null when the DB matches (or is behind)
+ * code. This is the live probe the claim guard + reconcile use; it wraps the pure
+ * detectors ({@link dbRevisionOrphaned} / {@link parseAlembicMissingRevision}).
+ *
+ * Two ways the DB-ahead state surfaces: `status` succeeds but its `current`
+ * revision is absent from the local versions dir, OR (the common alembic case)
+ * the status shell-out ERRORS with "Can't locate revision identified by '<rev>'"
+ * because the revision's file was git-reset away, in which case we recover the
+ * rev from that error. Any other failure (unreachable branch, no tool) returns
+ * null , this is a best-effort probe, not a hard gate on connectivity.
+ */
+export async function branchRevisionOrphan(args: {
+  instance: string;
+  branch: string;
+  projectDir?: string;
+  language?: SchemaMigrationLanguage;
+}): Promise<string | null> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const localIds = listSchemaMigrations({ projectDir, language: args.language }).map((m) => m.version);
+  try {
+    const status = await schemaMigrationStatus({
+      instance: args.instance,
+      branch: args.branch,
+      projectDir,
+      language: args.language,
+    });
+    return dbRevisionOrphaned(status.current, localIds) ? (status.current ?? null) : null;
+  } catch (e) {
+    return parseAlembicMissingRevision(e instanceof Error ? e.message : String(e));
+  }
+}
+
 // ---- createSchemaMigration -----------------------------------------------------
 //
 // The create side of the adapter contract. The build (Driver) calls this

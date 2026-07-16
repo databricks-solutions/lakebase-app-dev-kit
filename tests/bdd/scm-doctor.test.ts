@@ -10,6 +10,7 @@ const mockGetBranchByName = vi.fn();
 const mockGetCurrentBranch = vi.fn();
 const mockExec = vi.fn();
 const mockCreateFeaturePaired = vi.fn();
+const mockAbandon = vi.fn();
 
 vi.mock("../../scripts/lakebase/branch-utils.js", async () => {
   const actual = await vi.importActual<
@@ -33,6 +34,9 @@ vi.mock("../../scripts/lakebase/convention-branches.js", () => ({
   createFeaturePairedBranch: (...args: unknown[]) =>
     mockCreateFeaturePaired(...args),
 }));
+vi.mock("../../scripts/lakebase/scm-abandon-feature.js", () => ({
+  abandonFeatureBranch: (...args: unknown[]) => mockAbandon(...args),
+}));
 
 const doctor = await import("../../scripts/lakebase/scm-doctor.js");
 const state = await import("../../scripts/lakebase/scm-workflow-state.js");
@@ -46,6 +50,14 @@ beforeEach(() => {
   mockGetCurrentBranch.mockReset();
   mockExec.mockReset();
   mockCreateFeaturePaired.mockReset();
+  mockAbandon.mockReset();
+  mockAbandon.mockResolvedValue({
+    state: { version: 1, state: "scaffold-complete", tier_topology: 2, project_id: "p" },
+    lakebaseDeleted: true,
+    gitLocalDeleted: true,
+    gitRemoteDeleted: false,
+    warnings: [],
+  });
   mockExec.mockResolvedValue("");
   mockCreateFeaturePaired.mockResolvedValue({
     branch: { name: "p/branches/feature-x", uid: "br-x" },
@@ -252,6 +264,45 @@ describe("runDoctor", () => {
         findingId: "no-state-file" as never,
       }),
     ).rejects.toMatchObject({ code: "unsupported-finding" });
+  });
+
+  it("--fix db-ahead-of-code delegates to abandon(force) to reset the polluted branch (FEIP-8039)", async () => {
+    writeEnv("p");
+    state.writeWorkflowState(tmpDir, {
+      version: 1,
+      state: "feature-claimed",
+      tier_topology: 2,
+      project_id: "p",
+      feature_id: "F2-adjust-stock",
+      branch: "feature-f2-adjust-stock",
+      parent_branch: "staging",
+      lakebase_branch_uid: "br-f2",
+      claimed_at: "2026-07-16T00:00:00Z",
+    });
+    mockListBranches.mockResolvedValue(lakebase2Tier());
+    mockGetCurrentBranch.mockResolvedValue("feature-f2-adjust-stock");
+    // Inject the finding so we don't need a live alembic read to produce it.
+    const report = {
+      projectDir: tmpDir,
+      workflowStatePresent: true,
+      findings: [
+        {
+          id: "db-ahead-of-code",
+          severity: "fail" as const,
+          message: "applied revision '20260716070934' has no local migration file",
+        },
+      ],
+      worstSeverity: "fail" as const,
+    };
+    const result = await doctor.fixFinding({
+      projectDir: tmpDir,
+      findingId: "db-ahead-of-code",
+      report: report as never,
+    });
+    expect(mockAbandon).toHaveBeenCalledWith(
+      expect.objectContaining({ projectDir: tmpDir, force: true }),
+    );
+    expect(result.action).toMatch(/abandon|reset|re-fork|deleted/i);
   });
 
   it("flags .env branch drift when LAKEBASE_BRANCH_ID disagrees with state", async () => {

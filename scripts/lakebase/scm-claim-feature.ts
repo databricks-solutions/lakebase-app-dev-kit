@@ -42,7 +42,8 @@ export class ScmClaimError extends Error {
       | "bad-precondition"
       | "missing-instance"
       | "invalid-feature-id"
-      | "already-claimed-other",
+      | "already-claimed-other"
+      | "db-ahead-of-code",
   ) {
     super(message);
     this.name = "ScmClaimError";
@@ -81,6 +82,33 @@ export interface ClaimFeatureBranchArgs {
   idempotent?: boolean;
   /** Optional clock injection for testability. Defaults to `new Date()`. */
   now?: () => Date;
+  /**
+   * FEIP-8039: injected probe run against the freshly cut/REUSED paired branch.
+   * Returns the orphan applied revision when the branch DB is AHEAD of code (an
+   * aborted build migrated it and a git reset removed the migration file, and a
+   * non-expiring feature branch is reused as-is on re-claim), or null when the DB
+   * matches code. When it reports ahead-of-code, the claim REFUSES rather than
+   * silently adopting the polluted branch (unless `resetStaleBranch` is provided).
+   * The CLI wires the live probe (branchRevisionOrphan); unit tests inject a stub.
+   * Omitted = the guard is skipped.
+   */
+  checkBranchDbAheadOfCode?: (args: {
+    instance: string;
+    branch: string;
+    projectDir: string;
+  }) => Promise<string | null>;
+  /**
+   * FEIP-8039: opt-in recover for an ahead-of-code reused branch (the
+   * `--reset-stale-branch` flag). When provided AND the probe reports ahead, the
+   * claim deletes the polluted branch via this seam then re-cuts a clean branch
+   * from the tier and proceeds, instead of refusing. Destructive, so it is
+   * explicit (never the default). The CLI wires it to deletePairedBranch.
+   */
+  resetStaleBranch?: (args: {
+    instance: string;
+    branch: string;
+    projectDir: string;
+  }) => Promise<void>;
 }
 
 export interface ClaimFeatureBranchResult {
@@ -241,12 +269,45 @@ export async function claimFeatureBranch(
     (await resolveParentBranch(current.tier_topology, instance));
 
   // ─── 3. Cut the paired branch via the substrate primitive ───────
-  const paired = await createFeaturePairedBranch({
+  // NB: createFeaturePairedBranch is idempotent-on-existing , a re-claim of a
+  // feature whose (non-expiring) branch still exists REUSES it as-is, DB and all.
+  let paired = await createFeaturePairedBranch({
     instance,
     branch,
     parentBranch,
     cwd: args.projectDir,
   });
+
+  // ─── 3b. Refuse (or reset) a REUSED branch whose DB is AHEAD of code ─────
+  // FEIP-8039: an aborted build migrated this branch and a git reset removed the
+  // migration file; the leftover DB (applied revision with no local file) then
+  // rides into the re-claim. Adopting it silently makes accept/deploy/promote
+  // fail later with a cryptic "Can't locate revision". A fresh cut probes clean.
+  if (args.checkBranchDbAheadOfCode) {
+    const orphanRev = await args.checkBranchDbAheadOfCode({
+      instance,
+      branch: paired.gitBranch,
+      projectDir: args.projectDir,
+    });
+    if (orphanRev) {
+      if (args.resetStaleBranch) {
+        // Explicit opt-in (--reset-stale-branch): drop the polluted branch and
+        // re-cut a clean one from the tier, then proceed.
+        await args.resetStaleBranch({ instance, branch: paired.gitBranch, projectDir: args.projectDir });
+        paired = await createFeaturePairedBranch({ instance, branch, parentBranch, cwd: args.projectDir });
+      } else {
+        throw new ScmClaimError(
+          `Cannot claim ${branch}: the paired Lakebase branch DB is AHEAD of code , applied revision ` +
+            `'${orphanRev}' has no local migration file. This is a reused branch polluted by an earlier ` +
+            `aborted build (its migration was git-reset away but the DB was not). Reset it with ` +
+            `'lakebase-scm-claim-feature-branch ${args.featureId} --reset-stale-branch' (drops the polluted ` +
+            `branch + re-forks clean from the tier), or if the feature is already claimed run ` +
+            `'lakebase-scm-doctor --fix db-ahead-of-code'.`,
+          "db-ahead-of-code",
+        );
+      }
+    }
+  }
 
   // ─── 4. Persist next state ──────────────────────────────────────
   const now = (args.now ?? (() => new Date()))();

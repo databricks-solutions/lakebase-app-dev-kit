@@ -19,6 +19,16 @@ vi.mock("../../scripts/lakebase/convention-branches.js", () => ({
 vi.mock("../../scripts/lakebase/lakebase-project.js", () => ({
   getDefaultBranchId: (...args: unknown[]) => mockGetDefaultBranchId(...args),
 }));
+// The claim CLI wires a LIVE db-ahead-of-code probe (FEIP-8039); stub it clean
+// so these CLI-surface tests stay focused on argv/output/exit codes, not a real
+// alembic read. (Its refuse/reset behavior is covered in scm-claim-feature.test.ts.)
+const mockBranchRevisionOrphan = vi.fn();
+vi.mock("../../scripts/lakebase/schema-migrate.js", () => ({
+  branchRevisionOrphan: (...args: unknown[]) => mockBranchRevisionOrphan(...args),
+}));
+vi.mock("../../scripts/lakebase/paired-branch.js", () => ({
+  deletePairedBranch: vi.fn(),
+}));
 
 const cli = await import("../../scripts/lakebase/scm-claim-feature.cli.js");
 const state = await import("../../scripts/lakebase/scm-workflow-state.js");
@@ -52,6 +62,8 @@ beforeEach(() => {
 
   mockCreateFeaturePairedBranch.mockReset();
   mockGetDefaultBranchId.mockReset();
+  mockBranchRevisionOrphan.mockReset();
+  mockBranchRevisionOrphan.mockResolvedValue(null); // DB matches code by default
   mockCreateFeaturePairedBranch.mockResolvedValue({
     branch: {
       name: "projects/p/branches/feature-initial-domain",
