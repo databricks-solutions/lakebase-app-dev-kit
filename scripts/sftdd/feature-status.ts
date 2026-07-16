@@ -11,6 +11,7 @@ import {
 } from "./experiment";
 import { readSmellsLog, type SmellsLog } from "./smells";
 import { GATE_NAMES, readGates, type GateName, type GateStatus } from "./gates";
+import { readPipeline, type StoryStatus, type StoryGateStatus } from "./story-pipeline";
 
 export type TestListStatus = TestListItem["status"];
 
@@ -57,10 +58,26 @@ export interface PlanStatusEntry {
   plan: ExperimentPlan;
 }
 
+/** A per-story row from pipeline.json (the source of truth for a per-story-driven
+ *  feature's progression, distinct from the coarse feature-level workflow phase). */
+export interface StoryStatusEntry {
+  story_id: string;
+  status: StoryStatus;
+  gate_status: StoryGateStatus | null;
+  accepted: boolean;
+}
+
 export interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
+  /** The feature's phase DERIVED from the per-story pipeline (planning/design/
+   *  build/complete), or null when no stories are tracked yet. This reflects the
+   *  real per-story progression, which the coarse workflow-state.json phase does
+   *  not advance (FEIP-8016). */
+  derived_phase: string | null;
   current_workflow_pointer: WorkflowPointer | null;
+  /** Per-story statuses from pipeline.json (empty when none tracked yet). */
+  stories: StoryStatusEntry[];
   /** Per-story experiment plans: one entry per story that has a plan.json. */
   plans: PlanStatusEntry[];
   test_list: TestListSummary | null;
@@ -188,6 +205,42 @@ function readWorkflowState(sftddDir: string): {
   };
 }
 
+/** The per-story rows from pipeline.json (empty when none tracked yet). */
+function summarizeStories(sftddDir: string, featureId: string): StoryStatusEntry[] {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done",
+  }));
+}
+
+/** Derive the feature's phase from the per-story pipeline, so the display reflects
+ *  the real progression instead of the coarse (and stale) workflow-state phase
+ *  (FEIP-8016). null when no stories are tracked (fall back to the workflow phase).
+ *   - complete: every tracked story is done + accepted
+ *   - build:    at least one story is past its spec gate (ready/building/awaiting-
+ *               acceptance/done, or a gate approved)
+ *   - design:   stories tracked but none has cleared its spec gate yet */
+function deriveFeaturePhase(stories: StoryStatusEntry[]): string | null {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s: StoryStatusEntry): boolean =>
+    s.status === "ready" ||
+    s.status === "building" ||
+    s.status === "awaiting-acceptance" ||
+    s.status === "done" ||
+    s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
+
 export function getFeatureStatus(
   sftddDir: string,
   featureId: string
@@ -227,11 +280,14 @@ export function getFeatureStatus(
   }
 
   const { phase, pointer } = readWorkflowState(sftddDir);
+  const stories = summarizeStories(sftddDir, featureId);
 
   return {
     feature_id: featureId,
     current_workflow_phase: phase,
+    derived_phase: deriveFeaturePhase(stories),
     current_workflow_pointer: pointer,
+    stories,
     plans,
     test_list: summarizeTestList(sftddDir, featureId),
     experiments,
@@ -254,7 +310,7 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
   const lines: string[] = [];
   lines.push(`Feature: ${snapshot.feature_id}`);
 
-  if (snapshot.current_workflow_phase) {
+  {
     const ptr = snapshot.current_workflow_pointer;
     const focus =
       ptr?.feature_id === snapshot.feature_id
@@ -262,9 +318,18 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
         : ptr?.feature_id
           ? ` (active workflow on ${ptr.feature_id})`
           : "";
-    lines.push(`  Phase: ${snapshot.current_workflow_phase}${focus}`);
-  } else {
-    lines.push(`  Phase: unknown (no workflow-state.json)`);
+    if (snapshot.derived_phase) {
+      // The per-story pipeline is the source of truth for a per-story-driven
+      // feature; the coarse workflow-state.json phase is not advanced per story,
+      // so show the derived phase and note the workflow phase only when it lags.
+      const coarse = snapshot.current_workflow_phase;
+      const lag = coarse && coarse !== snapshot.derived_phase ? ` [workflow-state.json: ${coarse}]` : "";
+      lines.push(`  Phase: ${snapshot.derived_phase}${focus}${lag}`);
+    } else if (snapshot.current_workflow_phase) {
+      lines.push(`  Phase: ${snapshot.current_workflow_phase}${focus}`);
+    } else {
+      lines.push(`  Phase: unknown (no workflow-state.json)`);
+    }
   }
 
   if (snapshot.plans.length > 0) {
@@ -290,6 +355,16 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
     );
   } else {
     lines.push(`  Test list: not yet written`);
+  }
+
+  if (snapshot.stories.length > 0) {
+    const done = snapshot.stories.filter((s) => s.status === "done").length;
+    lines.push(`  Stories: ${done}/${snapshot.stories.length} done`);
+    for (const s of snapshot.stories) {
+      const gate = s.gate_status ? ` gate=${s.gate_status}` : "";
+      const acc = s.accepted ? " accepted" : "";
+      lines.push(`    ${s.story_id.padEnd(28)} ${s.status}${gate}${acc}`);
+    }
   }
 
   lines.push(``);

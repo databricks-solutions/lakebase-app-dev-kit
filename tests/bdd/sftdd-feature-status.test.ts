@@ -160,7 +160,9 @@ describe("feature-status N=1 snapshot", () => {
 const TOP_LEVEL_KEYS = [
   "feature_id",
   "current_workflow_phase",
+  "derived_phase",
   "current_workflow_pointer",
+  "stories",
   "plans",
   "test_list",
   "experiments",
@@ -369,6 +371,79 @@ describe("feature-status N≥2 race snapshot", () => {
     for (const exp of s.experiments) {
       expect(Object.keys(exp).sort()).toEqual([...EXPERIMENT_KEYS].sort());
     }
+  });
+});
+
+// FEIP-8016: the feature-level workflow-state.json phase + gates.json are not
+// advanced by the per-story pipeline, so feature-status must reconcile the display
+// with pipeline.json (the source of truth) or a built + accepted feature reads as
+// "discovery / open".
+describe("feature-status reconciles with the per-story pipeline (FEIP-8016)", () => {
+  function stageCompletedPipeline() {
+    // A fully built + accepted feature whose coarse workflow-state still says the
+    // scaffold default (the exact stale state the finding reported).
+    writeFileSync(
+      join(tdd, "workflow-state.json"),
+      JSON.stringify({ phase: "discovery", started_at: "1970-01-01T00:00:00Z", feature_id: null }) + "\n",
+    );
+    writeFileSync(
+      join(tdd, "features", FEATURE_ID, "pipeline.json"),
+      JSON.stringify({
+        version: 1,
+        feature_id: FEATURE_ID,
+        build_queue: [],
+        build_active: null,
+        stories: {
+          S1: { status: "done", gate: { status: "approved", history: [] }, acceptance: { decision: "accepted", history: [] } },
+          S2: { status: "done", gate: { status: "approved", history: [] }, acceptance: { decision: "accepted", history: [] } },
+        },
+      }) + "\n",
+    );
+  }
+
+  it("derives phase=complete from the pipeline when every story is done + accepted", () => {
+    stageCompletedPipeline();
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.derived_phase).toBe("complete");
+    expect(s.current_workflow_phase).toBe("discovery"); // the raw coarse phase, still stale
+    expect(s.stories).toHaveLength(2);
+    expect(s.stories.every((x) => x.status === "done" && x.accepted)).toBe(true);
+  });
+
+  it("renders the derived phase (not the stale coarse one) + a Stories section", () => {
+    stageCompletedPipeline();
+    const text = renderFeatureStatus(getFeatureStatus(tdd, FEATURE_ID));
+    // The headline phase reflects reality, and the stale coarse phase is noted, not hidden.
+    expect(text).toMatch(/Phase: complete.*\[workflow-state\.json: discovery\]/);
+    expect(text).toMatch(/Stories: 2\/2 done/);
+    expect(text).toMatch(/S1\s+done gate=approved accepted/);
+    expect(text).toMatch(/S2\s+done gate=approved accepted/);
+  });
+
+  it("derives phase=build when a story is past its gate but not all done", () => {
+    writeFileSync(
+      join(tdd, "features", FEATURE_ID, "pipeline.json"),
+      JSON.stringify({
+        version: 1,
+        feature_id: FEATURE_ID,
+        build_queue: ["S2"],
+        build_active: "S1",
+        stories: {
+          S1: { status: "building", gate: { status: "approved", history: [] } },
+          S2: { status: "designing" },
+        },
+      }) + "\n",
+    );
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.derived_phase).toBe("build");
+  });
+
+  it("leaves derived_phase null (falls back to the coarse phase) when no stories are tracked", () => {
+    stageN1Fixture(); // writes workflow-state phase=implementation, no pipeline.json
+    const s = getFeatureStatus(tdd, FEATURE_ID);
+    expect(s.derived_phase).toBeNull();
+    expect(s.stories).toEqual([]);
+    expect(renderFeatureStatus(s)).toMatch(/Phase: implementation \(active workflow\)/);
   });
 });
 

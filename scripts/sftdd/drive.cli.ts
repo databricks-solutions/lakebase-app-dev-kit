@@ -1155,7 +1155,15 @@ async function main(): Promise<number> {
       reportInput(pendingInput);
       return 2;
     } else if (result.stoppedAtBound) {
-      process.stderr.write(`[drive] ${bound ?? "phase"} complete in ${result.iterations} actions (bounded)\n`);
+      const label = bound ?? "phase";
+      // 0 actions on a bounded run means the phase was ALREADY satisfied (e.g.
+      // `--only deploy` after every story already deployed + accepted per the
+      // per-story pipeline), NOT a no-op failure. Say so plainly (FEIP-8016).
+      process.stderr.write(
+        result.iterations === 0
+          ? `[drive] ${label} already complete (0 actions, nothing to do; the per-story pipeline already carried it out)\n`
+          : `[drive] ${label} complete in ${result.iterations} actions (bounded)\n`,
+      );
     } else {
       process.stderr.write(`[drive] done in ${result.iterations} actions\n`);
     }

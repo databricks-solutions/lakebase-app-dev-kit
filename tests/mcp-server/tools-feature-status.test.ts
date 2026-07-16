@@ -114,12 +114,14 @@ describe("MCP tool: lakebase_feature_status", () => {
       [
         "current_workflow_phase",
         "current_workflow_pointer",
+        "derived_phase",
         "experiments",
         "feature_id",
         "gates",
         "open_smells",
         "plans",
         "selection_log_recent",
+        "stories",
         "test_list",
       ].sort()
     );

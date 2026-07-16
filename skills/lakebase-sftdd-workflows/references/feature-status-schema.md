@@ -10,7 +10,9 @@ The stable JSON payload emitted by `lakebase-feature-status <featureId> --json` 
 interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
+  derived_phase: string | null; // phase DERIVED from the per-story pipeline (source of truth)
   current_workflow_pointer: WorkflowPointer | null;
+  stories: StoryStatusEntry[]; // per-story rows from pipeline.json (id, status, gate_status, accepted)
   plans: PlanStatusEntry[]; // per-story: one { story_id, plan } per stories/<S>/plan.json
   test_list: TestListSummary | null;
   experiments: ExperimentStatusEntry[];
@@ -23,8 +25,10 @@ interface FeatureStatusSnapshot {
 | Field | Type | Meaning |
 |---|---|---|
 | `feature_id` | string | Echo of the queried feature id. |
-| `current_workflow_phase` | string \| null | Phase from `.sftdd/workflow-state.json` (`discovery` / `architectural-review` / `test-list-construction` / `design-spec-gate` / `implementation` / `synthesis` / `review` / `shipped` / `abandoned`). `null` when `workflow-state.json` is missing. |
+| `current_workflow_phase` | string \| null | The COARSE phase recorded in `.sftdd/workflow-state.json`. For a per-story-driven feature this is not advanced per story, so it can lag (stay `discovery`) while the feature is actually built; prefer `derived_phase`. `null` when `workflow-state.json` is missing. |
+| `derived_phase` | string \| null | The feature phase DERIVED from the per-story `pipeline.json` (the source of truth): `complete` (every story done + accepted), `build` (a story is past its spec gate), or `design` (stories tracked, none gated yet). `null` when no stories are tracked (consumers fall back to `current_workflow_phase`). |
 | `current_workflow_pointer` | object \| null | Active workflow locus (feature/story/ac/cycle/experiment ids). `null` when `workflow-state.json` is missing. The pointer's `feature_id` may differ from the queried `feature_id` (the workflow may be focused elsewhere). |
+| `stories` | array | Per-story rows from `.sftdd/features/<F>/pipeline.json`, each `{story_id, status, gate_status, accepted}`. Empty when no stories are tracked yet. The per-story truth behind `derived_phase`. |
 | `plans` | array | Per-story experiment plans, one entry `{story_id, plan}` per `.sftdd/features/<F>/stories/<story>/plan.json`. Empty until a story's design-spec gate is approved. |
 | `test_list` | object \| null | Aggregated counts from `.sftdd/features/<F>/test-list.json`. `null` when the test list has not been authored yet. |
 | `experiments` | array | One entry per directory under `.sftdd/experiments/<F>/`. Empty when no experiments have been cut. |
