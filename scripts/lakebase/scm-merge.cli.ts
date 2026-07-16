@@ -8,6 +8,9 @@ import {
   mergeFeature,
   type MergeResult,
 } from "./scm-merge.js";
+import { readWorkflowState } from "./scm-workflow-state.js";
+import { runDatabricks } from "./databricks-cli.js";
+import { applySchemaMigrations } from "./schema-migrate.js";
 
 interface ParsedArgs {
   projectDir?: string;
@@ -19,6 +22,8 @@ interface ParsedArgs {
   migrateTimeoutSec?: number;
   migratePollSec?: number;
   migrateTimeoutNonfatal?: boolean;
+  noVerifyMigrateAuth?: boolean;
+  noLocalMigrateFallback?: boolean;
   json?: boolean;
   pretty?: boolean;
   help?: boolean;
@@ -56,6 +61,12 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--migrate-timeout-nonfatal":
         out.migrateTimeoutNonfatal = true;
+        break;
+      case "--no-verify-migrate-auth":
+        out.noVerifyMigrateAuth = true;
+        break;
+      case "--no-local-migrate-fallback":
+        out.noLocalMigrateFallback = true;
         break;
       case "--json":
         out.json = true;
@@ -103,6 +114,17 @@ Flags:
                           fatal. Used by fire-and-confirm callers (the TDD
                           orchestrator) so a slow migrate run does not hang the
                           whole drive.
+  --no-verify-migrate-auth
+                          Skip the pre-merge migrate-auth precondition. Default
+                          (when waiting on the migrate) verifies the local
+                          Databricks credential is usable BEFORE merging, so an
+                          unusable credential fails fast (exit 2) instead of
+                          promoting git without the schema (FEIP-8020).
+  --no-local-migrate-fallback
+                          Skip the local-migrate fallback. Default (when waiting)
+                          applies the parent migrations LOCALLY with a fresh token
+                          if the downstream migrate does not confirm, so git and
+                          Lakebase schema do not diverge (FEIP-8020).
   --json                  Machine-readable JSON output
   --pretty                Pretty-print JSON
   -h, --help              Show this help
@@ -146,6 +168,9 @@ function renderHuman(r: Report): string {
     if (res.migrate.timedOut) {
       lines.push(`  migrate_timed_out    : true (advisory; merge already landed)`);
     }
+    if (res.migrate.appliedLocally) {
+      lines.push(`  migrate_applied_local: true (downstream migrate unconfirmed; applied parent migrations locally)`);
+    }
     if (res.state.migrate_completed_at) {
       lines.push(
         `  migrate_completed_at : ${res.state.migrate_completed_at}`,
@@ -179,6 +204,43 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
     return 0;
   }
   const projectDir = path.resolve(args.projectDir ?? process.cwd());
+  const waitMigrate = args.noWaitMigrate ? false : true;
+  // Interim mitigation for the short-lived-CI-token failure (FEIP-8020). Wired
+  // only when waiting on the migrate + not explicitly disabled.
+  // - verifyMigrateAuth: the local Databricks credential is usable (a proxy that
+  //   also proves the local-migrate fallback below is viable), run BEFORE merging
+  //   so an unusable credential refuses the merge rather than promoting git
+  //   without the schema.
+  // - localMigrateFallback: apply the parent migrations LOCALLY (fresh token via
+  //   the schema-migrate substrate) when the downstream migrate does not confirm.
+  const verifyMigrateAuth =
+    waitMigrate && !args.noVerifyMigrateAuth
+      ? async (): Promise<{ ok: boolean; detail?: string }> => {
+          try {
+            await runDatabricks(["current-user", "me"], { cwd: projectDir });
+            return { ok: true };
+          } catch (e) {
+            return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+          }
+        }
+      : undefined;
+  const localMigrateFallback =
+    waitMigrate && !args.noLocalMigrateFallback
+      ? async (): Promise<{ ok: boolean; detail?: string }> => {
+          const st = readWorkflowState(projectDir);
+          const inst = args.instance ?? st?.project_id;
+          const parent = st?.parent_branch;
+          if (!inst || !parent) {
+            return { ok: false, detail: "workflow state is missing project_id / parent_branch" };
+          }
+          try {
+            await applySchemaMigrations({ instance: inst, branch: parent, projectDir });
+            return { ok: true, detail: `applied pending migrations to ${parent} locally` };
+          } catch (e) {
+            return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+          }
+        }
+      : undefined;
   try {
     const result = await mergeFeature({
       projectDir,
@@ -186,7 +248,7 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
       switchTo: args.switchTo,
       method: args.method,
       skipLocalCleanup: args.skipLocalCleanup,
-      waitMigrate: args.noWaitMigrate ? false : true,
+      waitMigrate,
       migrateTimeoutMs: args.migrateTimeoutSec
         ? args.migrateTimeoutSec * 1000
         : undefined,
@@ -194,6 +256,8 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
         ? args.migratePollSec * 1000
         : undefined,
       migrateTimeoutFatal: args.migrateTimeoutNonfatal ? false : undefined,
+      verifyMigrateAuth,
+      localMigrateFallback,
     });
     const report: Report = { ok: true, result };
     if (args.json) {

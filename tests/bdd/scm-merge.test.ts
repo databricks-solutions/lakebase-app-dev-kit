@@ -515,3 +515,110 @@ describe("mergeFeature wait-migrate SHA matching (clock-skew regression)", () =>
     expect(result.migrate?.conclusion).toBe("success");
   });
 });
+
+// FEIP-8020: the downstream (staging) migrate uses a short-lived CI token frozen
+// at push time that can expire before the run, so git promotes without the
+// schema (a partial promotion). Interim mitigation: a migrate-auth precondition
+// before merging + a local-migrate fallback when the downstream migrate does not
+// confirm. Both are injected here (the CLI wires them to real substrate).
+describe("mergeFeature migrate-auth precondition + local-migrate fallback (FEIP-8020)", () => {
+  function run(conclusion: string) {
+    return {
+      id: 7,
+      branch: "staging",
+      status: "completed",
+      conclusion,
+      createdAt: "2026-06-03T12:00:05Z",
+      event: "push",
+    } as unknown as Parameters<NonNullable<Parameters<typeof merge.mergeFeature>[0]["migrateRunPredicate"]>>[0];
+  }
+  const fixedNow = () => new Date("2026-06-03T12:00:00Z");
+
+  it("refuses to merge when the migrate-auth precondition fails (no partial promotion)", async () => {
+    seedCiGreen();
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        now: fixedNow,
+        verifyMigrateAuth: async () => ({ ok: false, detail: "Invalid Token" }),
+      }),
+    ).rejects.toMatchObject({ code: "migrate-auth" });
+    // fail-fast BEFORE the merge: nothing was merged.
+    expect(mockMergePaired).not.toHaveBeenCalled();
+  });
+
+  it("proceeds + records authVerified when the precondition passes", async () => {
+    seedCiGreen();
+    const verify = vi.fn(async () => ({ ok: true }));
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      now: fixedNow,
+      verifyMigrateAuth: verify,
+      migrateRunPredicate: () => true,
+      fetchRuns: async () => [run("success")],
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+    });
+    expect(verify).toHaveBeenCalledOnce();
+    expect(result.migrate?.conclusion).toBe("success");
+    expect(result.migrate?.authVerified).toBe(true);
+  });
+
+  it("skips the precondition when not waiting on the migrate", async () => {
+    seedCiGreen();
+    const verify = vi.fn(async () => ({ ok: true }));
+    await merge.mergeFeature({ projectDir: tmpDir, waitMigrate: false, now: fixedNow, verifyMigrateAuth: verify });
+    expect(verify).not.toHaveBeenCalled();
+    expect(mockMergePaired).toHaveBeenCalled();
+  });
+
+  it("applies the parent migrations LOCALLY when the downstream migrate FAILS, instead of throwing", async () => {
+    seedCiGreen();
+    const fallback = vi.fn(async () => ({ ok: true, detail: "applied 1 migration" }));
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      now: fixedNow,
+      migrateRunPredicate: () => true,
+      fetchRuns: async () => [run("failure")],
+      localMigrateFallback: fallback,
+      migratePollMs: 1,
+      migrateTimeoutMs: 60_000,
+    });
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(result.migrate?.appliedLocally).toBe(true);
+    expect(result.state.migrate_completed_at).toBeTruthy();
+    expect(result.warnings.some((w) => /LOCALLY/.test(w))).toBe(true);
+  });
+
+  it("throws migrate-failed when the downstream migrate fails AND the local fallback fails", async () => {
+    seedCiGreen();
+    await expect(
+      merge.mergeFeature({
+        projectDir: tmpDir,
+        now: fixedNow,
+        migrateRunPredicate: () => true,
+        fetchRuns: async () => [run("failure")],
+        localMigrateFallback: async () => ({ ok: false, detail: "boom" }),
+        migratePollMs: 1,
+        migrateTimeoutMs: 60_000,
+      }),
+    ).rejects.toMatchObject({ code: "migrate-failed" });
+  });
+
+  it("applies locally on a fatal migrate TIMEOUT (no matching run)", async () => {
+    seedCiGreen();
+    const fallback = vi.fn(async () => ({ ok: true, detail: "applied" }));
+    // NB: use the REAL clock here (not fixedNow) so the poll budget actually
+    // elapses; with a frozen clock pollUntil never times out.
+    const result = await merge.mergeFeature({
+      projectDir: tmpDir,
+      fetchRuns: async () => [], // never a matching run -> timeout
+      sleep: () => Promise.resolve(),
+      localMigrateFallback: fallback,
+      migratePollMs: 1,
+      migrateTimeoutMs: 1,
+    });
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(result.migrate?.appliedLocally).toBe(true);
+  });
+});

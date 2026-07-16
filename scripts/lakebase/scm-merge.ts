@@ -37,7 +37,8 @@ export class ScmMergeError extends Error {
       | "bad-pr-url"
       | "merge-failed"
       | "migrate-failed"
-      | "migrate-timeout",
+      | "migrate-timeout"
+      | "migrate-auth",
   ) {
     super(message);
     this.name = "ScmMergeError";
@@ -93,6 +94,30 @@ export interface MergeArgs {
   sleep?: (ms: number) => Promise<void>;
   /** Clock injection for testability. */
   now?: () => Date;
+  /**
+   * Interim mitigation for the short-lived-CI-token failure (FEIP-8020): a
+   * migrate-AUTH precondition run BEFORE the merge. The downstream migrate
+   * applies the parent's migrations with a Databricks credential; when that
+   * credential is unusable the migrate fails and git promotes without the schema
+   * (a partial promotion). This probe verifies migrations CAN be applied (the
+   * local credential is usable, so the local-migrate fallback below is viable)
+   * before merging, so an unusable credential fails fast rather than merging into
+   * a divergence. Returns {ok:false, detail} to refuse the merge (migrate-auth).
+   * Only runs when waitMigrate is on. Injected in tests; the CLI wires it to a
+   * local `databricks current-user me` check.
+   */
+  verifyMigrateAuth?: () => Promise<{ ok: boolean; detail?: string }>;
+  /**
+   * Interim mitigation for FEIP-8020: apply the parent-tier migrations LOCALLY
+   * (with a freshly-minted token) when the downstream migrate does NOT confirm
+   * (a FAILED conclusion, or a fatal timeout). On success the promote's schema
+   * step is satisfied locally, so git and Lakebase schema do not diverge; on
+   * failure the original migrate error is thrown with the fallback detail
+   * appended. Injected in tests; the CLI wires it to
+   * `lakebase-schema-migrate apply --instance <i> --branch <parent>` (HEAD is
+   * already on the parent branch after the merge).
+   */
+  localMigrateFallback?: () => Promise<{ ok: boolean; detail?: string }>;
 }
 
 export interface MergeResult {
@@ -113,6 +138,11 @@ export interface MergeResult {
      *  asked for a non-fatal timeout (migrateTimeoutFatal=false). The merge has
      *  already landed; this records that migration confirmation was not observed. */
     timedOut?: boolean;
+    /** True iff the migrate-auth precondition ran and passed (FEIP-8020). */
+    authVerified?: boolean;
+    /** True iff the downstream migrate did not confirm and the local-migrate
+     *  fallback applied the parent migrations locally instead (FEIP-8020). */
+    appliedLocally?: boolean;
   };
   warnings: string[];
 }
@@ -204,6 +234,31 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
   }
 
   const instance = args.instance ?? current.project_id;
+
+  // ─── Interim mitigation (FEIP-8020): migrate-auth precondition ───
+  // The downstream migrate applies the parent's migrations with a Databricks
+  // credential; when that credential is unusable the migrate fails and git
+  // promotes WITHOUT the schema (a partial promotion, git ahead of Lakebase).
+  // Verify migrations CAN be applied (the local credential is usable, so the
+  // local-migrate fallback is viable) BEFORE merging, so an unusable credential
+  // fails fast rather than merging into a divergence. Only when waiting on the
+  // migrate; a "merge and walk away" caller (waitMigrate=false) is not promising
+  // a schema outcome, so the precondition does not apply.
+  const wantMigrate = args.waitMigrate !== false;
+  let authVerified = false;
+  if (wantMigrate && args.verifyMigrateAuth) {
+    const probe = await args.verifyMigrateAuth();
+    if (!probe.ok) {
+      throw new ScmMergeError(
+        `Migrate-auth precondition failed: ${probe.detail ?? "the Databricks credential is not usable"}. ` +
+          `Refusing to merge: the downstream migrate would promote git without applying the schema. ` +
+          `Refresh your credential (databricks auth login), then re-run.`,
+        "migrate-auth",
+      );
+    }
+    authVerified = true;
+  }
+
   let paired: Awaited<ReturnType<typeof mergePairedPullRequest>>;
   try {
     paired = await mergePairedPullRequest({
@@ -358,6 +413,32 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
         `Downstream migrate poll errored: ${err instanceof Error ? err.message : String(err)}. Treating as advisory.`,
       );
     }
+    // Interim mitigation (FEIP-8020): when the downstream migrate does not
+    // confirm (a FAILED conclusion, or a fatal timeout), apply the parent
+    // migrations LOCALLY with a freshly-minted token so git and Lakebase schema
+    // do not diverge (a partial promotion). Returns true iff it applied; false
+    // (no fallback provided, or the fallback itself failed) leaves the caller to
+    // throw the original migrate error.
+    const applyLocalFallback = async (reason: string): Promise<boolean> => {
+      if (!args.localMigrateFallback) return false;
+      const r = await args.localMigrateFallback();
+      if (!r.ok) {
+        warnings.push(
+          `Local-migrate fallback FAILED after ${reason}: ${r.detail ?? "unknown error"}. ` +
+            `git promoted but the parent schema is NOT applied (partial promotion); apply it manually.`,
+        );
+        return false;
+      }
+      next = { ...next, migrate_completed_at: nowFn().toISOString() };
+      writeWorkflowState(args.projectDir, next);
+      migrate = { ...(migrate ?? { waited: true, polls }), appliedLocally: true, authVerified };
+      warnings.push(
+        `Downstream migrate did not confirm (${reason}); applied the parent migrations LOCALLY instead. ` +
+          `git and Lakebase schema are in sync${r.detail ? ` (${r.detail})` : ""}.`,
+      );
+      return true;
+    };
+
     if (matched) {
       const runUrl = workflowRunUrl(ownerRepo, matched);
       const conclusion = (matched.conclusion ?? "").toLowerCase();
@@ -366,6 +447,7 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
         runUrl,
         conclusion,
         polls,
+        authVerified,
       };
       if (conclusion === "success") {
         next = {
@@ -375,10 +457,13 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
         };
         writeWorkflowState(args.projectDir, next);
       } else {
-        throw new ScmMergeError(
-          `Downstream migrate workflow finished with conclusion=${conclusion}. Run ${runUrl} for details.`,
-          "migrate-failed",
-        );
+        const applied = await applyLocalFallback(`the downstream migrate finished conclusion=${conclusion} (${runUrl})`);
+        if (!applied) {
+          throw new ScmMergeError(
+            `Downstream migrate workflow finished with conclusion=${conclusion}. Run ${runUrl} for details.`,
+            "migrate-failed",
+          );
+        }
       }
     } else {
       const budgetSec = Math.round(
@@ -387,22 +472,28 @@ export async function mergeFeature(args: MergeArgs): Promise<MergeResult> {
       const lastStatus = lastSeen?.status ?? "(no matching run)";
       const timeoutFatal = args.migrateTimeoutFatal !== false;
       if (timeoutFatal) {
-        migrate = { waited: true, polls };
-        throw new ScmMergeError(
-          `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
-          "migrate-timeout",
+        migrate = { waited: true, polls, authVerified };
+        const applied = await applyLocalFallback(
+          `the downstream migrate did not complete within ${budgetSec}s (last seen: ${lastStatus})`,
+        );
+        if (!applied) {
+          throw new ScmMergeError(
+            `Timed out after ${budgetSec}s waiting for the downstream migrate workflow on "${current.parent_branch}". Last seen status: ${lastStatus}.`,
+            "migrate-timeout",
+          );
+        }
+      } else {
+        // Non-fatal: the GitHub merge + local fast-forward already landed and the
+        // state is already `merged`. Surface the unconfirmed downstream migrate as
+        // a warning + migrate.timedOut so the caller (e.g. the TDD drive) reaches
+        // `done` instead of failing 30 minutes in on a slow/absent migrate run.
+        migrate = { waited: true, polls, timedOut: true, authVerified };
+        warnings.push(
+          `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s ` +
+            `(last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; ` +
+            `the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`,
         );
       }
-      // Non-fatal: the GitHub merge + local fast-forward already landed and the
-      // state is already `merged`. Surface the unconfirmed downstream migrate as
-      // a warning + migrate.timedOut so the caller (e.g. the TDD drive) reaches
-      // `done` instead of failing 30 minutes in on a slow/absent migrate run.
-      migrate = { waited: true, polls, timedOut: true };
-      warnings.push(
-        `Downstream migrate workflow on "${current.parent_branch}" was not confirmed within ${budgetSec}s ` +
-          `(last seen status: ${lastStatus}). The PR merged and your local ${current.parent_branch} is synced; ` +
-          `the migrate run may still be pending or running. Confirm it later via the Actions tab or re-run with --wait-migrate.`,
-      );
     }
   } else {
     migrate = { waited: false, polls: 0 };
