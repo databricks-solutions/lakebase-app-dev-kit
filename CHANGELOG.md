@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.29] - 2026-07-16
+
+### Fixed
+
+- **The pre-push hook now provisions a DURABLE CI credential instead of a ~1h OAuth token (FEIP-8020).** CI reruns and the downstream (staging) migrate authenticate with `DATABRICKS_TOKEN` from GitHub secrets, but `pre-push.sh` synced a short-lived (~1h) OAuth session token (`databricks auth token`) frozen at push time, so a rerun or migrate firing more than an hour after the push failed auth (partial promotion). The `create-token-and-sync-secrets.sh` script (mints a 90-day PAT, OAuth fallback only where PATs are disabled) already shipped but nothing invoked it. `pre-push.sh` now delegates to it, wrapped so a mint/sync failure WARNS rather than blocking the push. A 90-day token re-minted on every push outlives any realistic rerun / migrate window. (The full OAuth service-principal M2M , client-credentials, no long-lived secret at rest , remains a documented future hardening.)
+
 ## [0.3.0-beta.28] - 2026-07-16
 
 ### Fixed
