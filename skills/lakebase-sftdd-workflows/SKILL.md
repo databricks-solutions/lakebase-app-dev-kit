@@ -647,5 +647,6 @@ For non-agent invocation (debugging, CI introspection):
 | Command | Purpose |
 |---|---|
 | `lakebase-feature-status <featureId> [--tdd <dir>] [--json]` | One-screen snapshot of a feature's TDD workflow state. Use `--json` for machine-readable payload. |
+| `lakebase-sftdd-next (--feature <F> \| --sprint <S>) [--json]` | The authoritative, strictly read-only "what do I do next?" surface, computed from the same engine the drive runs on: the reconciled state, the decision menu (the real HIL choices, each with its correct enact command + a prompt to pose), and any blockers. The drive also auto-emits it to `.sftdd/next.json` on every stop, so an orchestrating agent's contract is "on any stop, read next.json and present its options" instead of improvising. See [`references/next-schema.md`](references/next-schema.md). |
 | `node dist/scripts/sftdd/spec-sync.cli.js <tddDir>` | Walk the `.sftdd/` tree and print drift reports. Exits 0 even when reports exist (warn-only). |
 | `node dist/scripts/sftdd/test-list.cli.js <tddDir> <featureId> [storyId]` | Regenerate per-AC views from the feature-level master test list. With a `storyId`, instead write that story's scoped per-story test list (`stories/<story>/test-list-per-story.json`), the streaming build lane's per-story input. |

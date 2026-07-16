@@ -30,6 +30,7 @@ import { recordBuildTurn } from "./record-build.js";
 import { recordTurn, seedRecorderBaseline } from "./turn-recorder.js";
 import { runDriver, driverBoundOptions, ProtocolViolationError, UnexpectedCallbackError, type DriveEffects, type DriverBound, type RunDriverResult, type RunDriverOptions } from "./orchestrator-run.js";
 import { writeEscalation } from "./escalation.js";
+import { emitNextJson } from "./next.js";
 import { emitAgentLogEvent } from "./agent-log.js";
 import { writeWorkflowPhase, resetStaleTerminalPhase } from "./workflow-phase.js";
 import {
@@ -63,7 +64,7 @@ import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, is
 import { writeRunConfig } from "./run-config.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
-import { resolveKitBinJs } from "./kit-bin.js";
+import { resolveKitBinJs, kitVersion } from "./kit-bin.js";
 import { readWorkflowState } from "../lakebase/scm-workflow-state.js";
 
 // How many times a single role turn that overflows the model window mid-turn
@@ -1241,6 +1242,19 @@ async function main(): Promise<number> {
     }
     process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
+  } finally {
+    // Auto-emit the authoritative "what next" snapshot to .sftdd/next.json on
+    // EVERY stop (a gate, an escalation, feature-complete, an error, a killed
+    // run), so an orchestrating agent's contract is "on any stop, read next.json
+    // and present its options" instead of reverse-engineering the next move and
+    // drifting into freeform (FEIP-8017). Feature scope only (the stops that need
+    // it); `lakebase-sftdd-next --sprint` answers sprint scope on demand. Skipped
+    // under replay/record so the recorded corpora stay clean; best-effort inside.
+    const recordingOrReplaying =
+      !!sftddEnv("REPLAY_DIR") || !!sftddEnv("REPLAY_BUILD_DIR") || !!sftddEnv("RECORD_BUILD_DIR") || !!sftddEnv("RECORD_DIR");
+    if (cfg.featureId && !recordingOrReplaying) {
+      emitNextJson(cfg.sftddDir, cfg.featureId, cfg.projectDir, { uiTrack: cfg.uiTrack, version: kitVersion() });
+    }
   }
 }
 

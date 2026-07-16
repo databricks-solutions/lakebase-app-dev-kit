@@ -1486,28 +1486,44 @@ export async function planNextAction(
   return { action, commands: commandsForAction(action, cfg) };
 }
 
+/**
+ * Read the feature's DriveState from disk (pipeline + artifact probe + context +
+ * UI-track gating). The read-only half of buildDriveEffects.readState, extracted
+ * so the strictly read-only consumers (lakebase-sftdd-next, the drive's next.json
+ * auto-emit) get the EXACT same state the drive acts on without constructing a
+ * full DriveEffectsConfig or importing the drive CLI (FEIP-8017).
+ */
+export function readDriveStateFromDisk(
+  sftddDir: string,
+  featureId: string,
+  projectDir: string,
+  opts: { uiTrack?: boolean } = {},
+): import("./orchestrator-drive.js").DriveState {
+  const pipeline = readPipeline(sftddDir, featureId);
+  // Thread the active build story so a smell-derived escalation with no story
+  // scope still resolves to a story for revise-routing.
+  const probe = diskArtifactProbe(sftddDir, featureId, pipeline.build_active);
+  const ctx = readDriveContext(sftddDir, featureId, projectDir);
+  const state = deriveDriveState(pipeline, probe, ctx);
+  // UI track: gate the UX Designer step. uiTrack is config (env); the design
+  // guide's existence is disk truth (project-level, authored once + reused).
+  state.uiTrack = opts.uiTrack ?? false;
+  // The guide is "ready" only when it EXISTS and CONFORMS to its schema, not
+  // merely exists. Otherwise a non-conformant design-guide.json (the UX
+  // Designer drifting on shape) sails through the design lane and only
+  // surfaces at the final feature drain; gating on conformance keeps the UX
+  // Designer pending until the guide is well-formed. Same check the role's
+  // own response-formatter self-check runs, so gate + self-check agree.
+  state.designGuideReady = designGuideConformance(sftddDir).ok;
+  return state;
+}
+
 /** Build a DriveEffects bound to a project: readState from disk, perform via
  *  commandsForAction + the injected runner. */
 export function buildDriveEffects(cfg: DriveEffectsConfig): DriveEffects {
   return {
     async readState() {
-      const pipeline = readPipeline(cfg.sftddDir, cfg.featureId);
-      // Thread the active build story so a smell-derived escalation with no story
-      // scope still resolves to a story for revise-routing.
-      const probe = diskArtifactProbe(cfg.sftddDir, cfg.featureId, pipeline.build_active);
-      const ctx = readDriveContext(cfg.sftddDir, cfg.featureId, cfg.projectDir);
-      const state = deriveDriveState(pipeline, probe, ctx);
-      // UI track: gate the UX Designer step. uiTrack is config (env); the design
-      // guide's existence is disk truth (project-level, authored once + reused).
-      state.uiTrack = cfg.uiTrack ?? false;
-      // The guide is "ready" only when it EXISTS and CONFORMS to its schema, not
-      // merely exists. Otherwise a non-conformant design-guide.json (the UX
-      // Designer drifting on shape) sails through the design lane and only
-      // surfaces at the final feature drain; gating on conformance keeps the UX
-      // Designer pending until the guide is well-formed. Same check the role's
-      // own response-formatter self-check runs, so gate + self-check agree.
-      state.designGuideReady = designGuideConformance(cfg.sftddDir).ok;
-      return state;
+      return readDriveStateFromDisk(cfg.sftddDir, cfg.featureId, cfg.projectDir, { uiTrack: cfg.uiTrack });
     },
     async perform(action) {
       for (const cmd of commandsForAction(action, cfg)) {

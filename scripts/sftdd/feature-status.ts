@@ -205,8 +205,10 @@ function readWorkflowState(sftddDir: string): {
   };
 }
 
-/** The per-story rows from pipeline.json (empty when none tracked yet). */
-function summarizeStories(sftddDir: string, featureId: string): StoryStatusEntry[] {
+/** The per-story rows from pipeline.json (empty when none tracked yet). Exported
+ *  so lakebase-sftdd-next reuses the SAME reconciled view + derived phase as
+ *  feature-status, and the two can never disagree (FEIP-8016/8017). */
+export function summarizeStories(sftddDir: string, featureId: string): StoryStatusEntry[] {
   let pipeline;
   try {
     pipeline = readPipeline(sftddDir, featureId);
@@ -228,7 +230,7 @@ function summarizeStories(sftddDir: string, featureId: string): StoryStatusEntry
  *   - build:    at least one story is past its spec gate (ready/building/awaiting-
  *               acceptance/done, or a gate approved)
  *   - design:   stories tracked but none has cleared its spec gate yet */
-function deriveFeaturePhase(stories: StoryStatusEntry[]): string | null {
+export function deriveFeaturePhase(stories: StoryStatusEntry[]): string | null {
   if (stories.length === 0) return null;
   if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
   const inBuild = (s: StoryStatusEntry): boolean =>

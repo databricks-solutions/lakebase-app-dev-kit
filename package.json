@@ -125,6 +125,7 @@
     "lakebase-sftdd-layering-clean": "./dist/scripts/sftdd/layering-clean.cli.js",
     "lakebase-sftdd-log": "./dist/scripts/sftdd/agent-log.cli.js",
     "lakebase-sftdd-new-migration": "./dist/scripts/lakebase/new-migration.cli.js",
+    "lakebase-sftdd-next": "./dist/scripts/sftdd/next.cli.js",
     "lakebase-sftdd-pipeline": "./dist/scripts/sftdd/story-pipeline.cli.js",
     "lakebase-sftdd-response-formatter": "./dist/scripts/sftdd/response-formatter.cli.js",
     "lakebase-sftdd-scenario-conditions": "./dist/scripts/sftdd/scenario-conditions.cli.js",

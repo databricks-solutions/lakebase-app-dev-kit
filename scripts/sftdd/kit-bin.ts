@@ -32,6 +32,18 @@ export function resolveKitBinJs(bin: string): string | null {
   return rel ? path.join(KIT_ROOT, rel) : null;
 }
 
+/** The kit's own version (package.json `version`), or "unknown" if unreadable.
+ *  Used to stamp advisory surfaces (e.g. next.json's authoritative_playbook_version)
+ *  so a consumer can tell which kit produced the snapshot. */
+export function kitVersion(): string {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(KIT_ROOT, "package.json"), "utf8")) as { version?: string };
+    return pkg.version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 /** Run a kit bin as a synchronous subprocess (inheriting stdio), returning its
  *  exit code. A kit bin resolves to its dist JS run under `node`; a non-kit name
  *  falls back to the bare command on PATH. Throws only when the process cannot be

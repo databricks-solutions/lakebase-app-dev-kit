@@ -202,37 +202,68 @@ export function makeOnAction(
   };
 }
 
+/** A concrete kit-CLI invocation (bin + argv), for programmatic enactment. */
+export interface EnactCommand {
+  bin: string;
+  args: string[];
+}
+
+/** Context for resolving a gate's enact command: the feature/sprint it targets
+ *  and (optionally) the approver to fill in for the `<you>` placeholder. */
+export interface GateEnactContext {
+  featureId?: string;
+  sprint?: string;
+  approver?: string;
+}
+
 /**
- * The EXACT human approval command for a given HITL gate stop (FEIP-8008). Each
- * gate is recorded by a DIFFERENT substrate, so a single generic hint sent the
- * human to the wrong door, e.g. the feature-level `gates.json` spec gate for a
- * PER-STORY spec stop, which recorded the wrong gate and never advanced. Name the
- * door that actually clears THIS stop:
+ * The EXACT substrate command that clears a given HITL gate stop (FEIP-8008),
+ * as STRUCTURED bin + args. Each gate is recorded by a DIFFERENT substrate, so a
+ * single generic command sent the human to the wrong door, e.g. the feature-level
+ * `gates.json` spec gate for a PER-STORY spec stop, which recorded the wrong gate
+ * and never advanced. Name the door that actually clears THIS stop:
  *   - plan gate      -> lakebase-sftdd-approve-gate --sprint
  *   - per-story spec -> lakebase-sftdd-approve-gate --feature --story
  *   - deploy/promote -> lakebase-sftdd-approve-gate --feature --gate <name>
  *   - PO acceptance  -> lakebase-sftdd-pipeline accept --feature --story
- * Pure (no I/O); lives here beside describeAction so the drive's GATE message and
- * any test share ONE mapping.
+ * Returns null for a non-gate action. Pure (no I/O); the SINGLE gate->CLI mapping
+ * shared by approveHint (the drive's stdout hint) and lakebase-sftdd-next (the
+ * authoritative decision menu), so the two can never drift (FEIP-8017).
+ */
+export function gateEnactCommand(
+  gate: WorkflowAction,
+  ctx: GateEnactContext = {},
+): EnactCommand | null {
+  const you = ctx.approver ?? "<you>";
+  const f = ctx.featureId ?? "<feature-id>";
+  switch (gate.kind) {
+    case "approve-plan-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--sprint", ctx.sprint ?? "<sprint>", "--approver", you] };
+    case "approve-gate": // the per-story spec gate (pipeline.json), NOT feature gates.json
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--story", gate.story, "--approver", you] };
+    case "approve-deploy-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "deploy", "--approver", you] };
+    case "approve-promote-gate":
+      return { bin: "lakebase-sftdd-approve-gate", args: ["--feature", f, "--gate", "promote", "--approver", you] };
+    case "accept": // per-story PO acceptance (experiment merge), a pipeline action
+      return { bin: "lakebase-sftdd-pipeline", args: ["accept", "--feature", f, "--story", gate.story, "--approver", you] };
+    default:
+      return null;
+  }
+}
+
+/**
+ * The EXACT human approval command for a HITL gate stop, as a one-line string for
+ * the drive's stdout. A thin projection of `gateEnactCommand` (the one structured
+ * mapping) so the console hint and the `next` decision menu never diverge.
  */
 export function approveHint(
   gate: WorkflowAction,
   ctx: { featureId?: string; sprint?: string } = {},
 ): string {
-  const you = "<you>";
+  const cmd = gateEnactCommand(gate, ctx);
+  if (cmd) return `${cmd.bin} ${cmd.args.join(" ")}`;
+  // Non-gate fallthrough (never a gate in practice): the generic feature door.
   const f = ctx.featureId ?? "<feature-id>";
-  switch (gate.kind) {
-    case "approve-plan-gate":
-      return `lakebase-sftdd-approve-gate --sprint ${ctx.sprint ?? "<sprint>"} --approver ${you}`;
-    case "approve-gate": // the per-story spec gate (pipeline.json), NOT feature gates.json
-      return `lakebase-sftdd-approve-gate --feature ${f} --story ${gate.story} --approver ${you}`;
-    case "approve-deploy-gate":
-      return `lakebase-sftdd-approve-gate --feature ${f} --gate deploy --approver ${you}`;
-    case "approve-promote-gate":
-      return `lakebase-sftdd-approve-gate --feature ${f} --gate promote --approver ${you}`;
-    case "accept": // per-story PO acceptance (experiment merge), a pipeline action
-      return `lakebase-sftdd-pipeline accept --feature ${f} --story ${gate.story} --approver ${you}`;
-    default:
-      return `lakebase-sftdd-approve-gate --feature ${f} --approver ${you}`;
-  }
+  return `lakebase-sftdd-approve-gate --feature ${f} --approver <you>`;
 }

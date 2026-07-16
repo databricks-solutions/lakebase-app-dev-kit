@@ -44,6 +44,7 @@ export default defineConfig({
     "scripts/lakebase/scm-feature-branch.cli": "scripts/lakebase/scm-feature-branch.cli.ts",
     "scripts/github/pr.cli": "scripts/github/pr.cli.ts",
     "scripts/sftdd/feature-status.cli": "scripts/sftdd/feature-status.cli.ts",
+    "scripts/sftdd/next.cli": "scripts/sftdd/next.cli.ts",
     "scripts/sftdd/test-list.cli": "scripts/sftdd/test-list.cli.ts",
     "scripts/sftdd/spec-sync.cli": "scripts/sftdd/spec-sync.cli.ts",
     "scripts/sftdd/human-proxy.cli": "scripts/sftdd/human-proxy.cli.ts",
