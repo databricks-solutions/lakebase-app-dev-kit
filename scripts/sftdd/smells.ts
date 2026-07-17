@@ -783,6 +783,35 @@ export function resolveOpenSmells(
   return n;
 }
 
+/**
+ * Resolve EVERY open smell scoped strictly to a story (regardless of name), for a
+ * clean rebuild of that story (Finding 27). A `rebuild-story` supersedes all prior
+ * observations about the story it is re-driving, so any blocking smell (spec OR
+ * build level) against it must be cleared or the drive re-blocks at raise-to-hil
+ * on a smell for code that no longer exists. Strictly story-scoped: a feature-wide
+ * (story_id undefined) smell is left untouched (it is not this story's to clear).
+ * Marked `cleared` (never `revised`), so it does not spend the one-revise budget.
+ * Returns the resolved smell names.
+ */
+export function resolveAllOpenSmellsForStory(
+  sftddDir: string,
+  story: string,
+  note?: string,
+): string[] {
+  const file = join(sftddDir, "smells.json");
+  if (!existsSync(file)) return [];
+  const log: SmellsLog = JSON.parse(readFileSync(file, "utf8"));
+  const cleared: string[] = [];
+  for (const d of log.detected) {
+    if (d.resolution || d.story_id !== story) continue;
+    d.resolution = note ?? "cleared for rebuild-story";
+    d.resolution_kind = "cleared";
+    cleared.push(d.smell);
+  }
+  if (cleared.length) writeFileSync(file, JSON.stringify(log, null, 2) + "\n");
+  return cleared;
+}
+
 /** How many times this (smell, story) has already been revised: the
  *  count of resolved-as-`revised` entries. The one-revise-per-(smell,story) bound
  *  compares against this so a re-fired-then-revised smell can't loop forever. */

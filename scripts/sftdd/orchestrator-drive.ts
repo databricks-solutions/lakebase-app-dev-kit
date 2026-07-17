@@ -174,6 +174,12 @@ export function nextDesignAction(state: DesignDriveState): DriveAction {
 export interface StoryBuild {
   /** The paired experiment branch was cut. */
   experimentCut: boolean;
+  /** A PRIOR experiment for this story was discarded (revise / rebuild-story), so
+   *  the upcoming cut is a RE-cut. The paired Lakebase branch of the same
+   *  deterministic name may still carry the discarded build's schema, so the
+   *  re-cut must re-fork it clean (--reset-stale-branch), mirroring the ci-pr
+   *  --reset-stale-branch precedent (Finding 27). */
+  experimentDiscarded?: boolean;
   /** The Navigator wrote the (failing) tests for the story. */
   testsWritten: boolean;
   /** The Driver made the tests pass. */
@@ -327,7 +333,7 @@ export type WorkflowAction =
   | { kind: "approve-plan-gate" }
   | { kind: "planning-complete" }
   | { kind: "dispatch"; story: string }
-  | { kind: "cut-experiment"; story: string }
+  | { kind: "cut-experiment"; story: string; resetStaleBranch?: boolean }
   | {
       kind: "invoke-role";
       role: "navigator" | "driver";
@@ -366,7 +372,12 @@ export type WorkflowAction =
 
 /** The next build-lane action for the story the lane is on. */
 function nextBuildAction(story: string, b: StoryBuild): WorkflowAction {
-  if (!b.experimentCut) return { kind: "cut-experiment", story };
+  if (!b.experimentCut) {
+    // A re-cut after a discarded experiment re-forks the polluted paired branch.
+    return b.experimentDiscarded
+      ? { kind: "cut-experiment", story, resetStaleBranch: true }
+      : { kind: "cut-experiment", story };
+  }
   // Per-AC RED -> GREEN -> REVIEW -> REFACTOR: each AC completes its full cycle
   // before the next AC's first test is written. The per-story BUILD list is
   // grouped by AC (scopeToStory), so once an AC's tests are all green its REVIEW

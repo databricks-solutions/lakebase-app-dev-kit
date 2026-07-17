@@ -9,6 +9,7 @@ import {
   writeOutcomes,
   deleteExperiment,
   cutExperiment,
+  type CutExperimentDeps,
 } from "../../scripts/sftdd/experiment";
 
 // LIVE gate uses LAKEBASE_TEST_INSTANCE (the bare project id; substrate's
@@ -34,6 +35,54 @@ afterEach(() => {
 describe("experiment lifecycle (hermetic)", () => {
   it("listExperiments returns empty when no experiments dir exists", () => {
     expect(listExperiments(tdd, "F1", "S1")).toEqual([]);
+  });
+
+  // Finding 27: a re-cut after a discarded experiment must re-fork the polluted
+  // paired branch. cutExperiment(resetStaleBranch) drops it BEFORE forking; the
+  // ordering is proven hermetically via the injected paired-branch ops seam (the
+  // live drop+fork is exercised by the LIVE gate above).
+  function pairedSeam(calls: string[]): CutExperimentDeps {
+    return {
+      createPairedBranch: (async () => {
+        calls.push("create");
+        return { branch: { name: "experiment/S1-exp1" }, gitBranch: "experiment-s1-exp1", gitBranchCreated: true, envSynced: true, warnings: [] };
+      }) as unknown as CutExperimentDeps["createPairedBranch"],
+      deletePairedBranch: (async () => {
+        calls.push("drop");
+        return { deleted: true, warnings: [] };
+      }) as unknown as CutExperimentDeps["deletePairedBranch"],
+    };
+  }
+  const cutArgs = {
+    instance: "lb", sftddDir: "", projectDir: "", featureId: "F1", storyId: "S1",
+    experimentSlug: "exp1", branch: "experiment/S1-exp1", parentBranch: "feature/x",
+  };
+
+  it("resetStaleBranch drops the existing paired branch BEFORE forking (Finding 27)", async () => {
+    const calls: string[] = [];
+    const rec = await cutExperiment({ ...cutArgs, sftddDir: tdd, projectDir: tdd, resetStaleBranch: true }, pairedSeam(calls));
+    expect(calls).toEqual(["drop", "create"]);
+    expect(rec.branch_id).toBe("S1-exp1");
+  });
+
+  it("a first cut (no resetStaleBranch) forks WITHOUT dropping", async () => {
+    const calls: string[] = [];
+    await cutExperiment({ ...cutArgs, sftddDir: tdd, projectDir: tdd }, pairedSeam(calls));
+    expect(calls).toEqual(["create"]);
+  });
+
+  it("a resetStaleBranch drop that throws (no stale branch) still forks clean", async () => {
+    const calls: string[] = [];
+    const seam: CutExperimentDeps = {
+      ...pairedSeam(calls),
+      deletePairedBranch: (async () => {
+        calls.push("drop-throw");
+        throw new Error("branch not found");
+      }) as unknown as CutExperimentDeps["deletePairedBranch"],
+    };
+    const rec = await cutExperiment({ ...cutArgs, sftddDir: tdd, projectDir: tdd, resetStaleBranch: true }, seam);
+    expect(calls).toEqual(["drop-throw", "create"]); // best-effort: the fork still ran
+    expect(rec.branch_id).toBe("S1-exp1");
   });
 
   it("listExperiments reads existing experiment dirs", () => {

@@ -20,6 +20,9 @@ export interface ExperimentArgs {
   reason?: string;
   at?: string;
   revise?: boolean;
+  /** cut: re-fork a pre-existing paired branch of the same name (drop-then-fork),
+   *  for a clean re-cut after a discarded experiment (Finding 27). */
+  resetStaleBranch?: boolean;
   projectDir?: string;
   sftddDir?: string;
 }
@@ -42,6 +45,7 @@ export function parseExperimentArgs(argv: string[]): ExperimentArgs {
     else if (a === "--reason") out.reason = argv[++i];
     else if (a === "--at") out.at = argv[++i];
     else if (a === "--revise") out.revise = true;
+    else if (a === "--reset-stale-branch") out.resetStaleBranch = true;
     else if (a === "--project-dir") out.projectDir = argv[++i];
     else if (a === "--tdd-dir") out.sftddDir = argv[++i];
   }

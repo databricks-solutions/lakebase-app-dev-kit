@@ -46,6 +46,18 @@ describe("driver -> experiment CLI contract (the shipped path, not the module)",
     expect(args[0]).toBe("cut");
     // Validate through the CLI's OWN required-arg contract.
     expect(validateExperimentArgs(parseExperimentArgs(args))).toBeNull();
+    // A first cut does NOT re-fork (nothing stale to reset).
+    expect(args).not.toContain("--reset-stale-branch");
+    expect(parseExperimentArgs(args).resetStaleBranch).toBeUndefined();
+  });
+
+  it("a RE-cut (resetStaleBranch) emits --reset-stale-branch the CLI parses (Finding 27)", () => {
+    const args = experimentArgs({ kind: "cut-experiment", story: "S1-create-bug-form", resetStaleBranch: true }, cfg());
+    expect(args[0]).toBe("cut");
+    expect(args).toContain("--reset-stale-branch");
+    const parsed = parseExperimentArgs(args);
+    expect(parsed.resetStaleBranch).toBe(true);
+    expect(validateExperimentArgs(parsed)).toBeNull();
   });
 
   it("accept emits pipeline accept (which performs the merge), NOT an experiment CLI command (FEIP-8013)", () => {

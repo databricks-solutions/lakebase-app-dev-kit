@@ -131,6 +131,19 @@ export interface CutExperimentArgs extends BranchLookupOpts {
   parentBranch?: string;
   ttl?: string;
   notes?: string;
+  /** A RE-cut after a discarded experiment: drop any pre-existing paired branch of
+   *  this name BEFORE forking, so the rebuild forks clean off feature HEAD instead
+   *  of reusing the branch that still carries the discarded build's schema
+   *  (Finding 27). Mirrors the ci-pr --reset-stale-branch precedent. Best-effort:
+   *  a missing branch is a no-op; the drop never blocks the fork. */
+  resetStaleBranch?: boolean;
+}
+
+/** Injectable paired-branch substrate, so the drop-then-fork ordering is testable
+ *  hermetically. Defaults to the real Lakebase-backed ops. */
+export interface CutExperimentDeps {
+  createPairedBranch?: typeof createPairedBranch;
+  deletePairedBranch?: typeof deletePairedBranch;
 }
 
 export interface ExperimentRecord {
@@ -142,14 +155,28 @@ export interface ExperimentRecord {
   dir: string;
 }
 
-export async function cutExperiment(args: CutExperimentArgs): Promise<ExperimentRecord> {
-  const { sftddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
+export async function cutExperiment(args: CutExperimentArgs, deps: CutExperimentDeps = {}): Promise<ExperimentRecord> {
+  const { sftddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, resetStaleBranch, ...lookup } = args;
+  const create = deps.createPairedBranch ?? createPairedBranch;
+  const dropBranch = deps.deletePairedBranch ?? deletePairedBranch;
+  // Re-cut re-fork (Finding 27): a discarded experiment's paired branch of this
+  // same deterministic name still carries its schema, so reusing it makes the
+  // rebuild's migrations collide. Drop it first so the fork below is clean. The
+  // git branch is torn down too (PAIRED). Best-effort: a missing branch or a
+  // teardown hiccup must not block the fresh fork, which is the whole point.
+  if (resetStaleBranch) {
+    try {
+      await dropBranch({ instance: lookup.instance, branch, cwd: projectDir });
+    } catch {
+      /* no stale branch to drop / teardown raced: proceed to fork clean */
+    }
+  }
   // PAIRED cut through the substrate: Lakebase branch + git branch + .env sync,
   // atomically. The experiment is a child of the feature branch (parentBranch),
   // so it forks Lakebase from the feature branch and git-branches off the
   // currently-checked-out feature branch. ttl when given (ephemeral spike),
   // else noExpiry (matches createFeaturePairedBranch's tier semantics).
-  const paired = await createPairedBranch({
+  const paired = await create({
     instance: lookup.instance,
     branch,
     parentBranch,

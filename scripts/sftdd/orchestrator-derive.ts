@@ -162,6 +162,7 @@ function storyView(
       // An experiment that was discarded is no longer cut (a fresh one is cut
       // on revise); merged/active both count as cut.
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
+      experimentDiscarded: e.experiment != null && e.experiment.status === "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
       loop,

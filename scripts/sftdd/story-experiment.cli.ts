@@ -4,7 +4,7 @@
 // into the tested orchestration (experiment-lifecycle.ts) and records the
 // pipeline-state transition (story-pipeline.ts).
 //
-//   lakebase-sftdd-experiment cut      --feature F --story S --slug X --branch B --parent FB --instance I [--ttl T] [--project-dir P] [--tdd-dir D]
+//   lakebase-sftdd-experiment cut      --feature F --story S --slug X --branch B --parent FB --instance I [--ttl T] [--reset-stale-branch] [--project-dir P] [--tdd-dir D]
 //   lakebase-sftdd-experiment merge    --feature F --story S --slug X --experiment-branch B --feature-branch FB --instance I --approver A [--at ISO] [--project-dir P] [--tdd-dir D]
 //   lakebase-sftdd-experiment discard  --feature F --story S --slug X --instance I --approver A --reason R [--revise] [--at ISO] [--tdd-dir D]
 //
@@ -51,7 +51,7 @@ function usage(msg: string): number {
   process.stderr.write(
     `${msg}\n` +
       `Usage: lakebase-sftdd-experiment <cut|merge|discard> --feature <F> --story <S> --slug <X> --instance <I> [--tdd-dir <D>]\n` +
-      `  cut needs --branch <B> --parent <FB> [--ttl <T>] [--project-dir <P>]\n` +
+      `  cut needs --branch <B> --parent <FB> [--ttl <T>] [--reset-stale-branch] [--project-dir <P>]\n` +
       `  merge needs --experiment-branch <B> --feature-branch <FB> --approver <A> [--at <ISO>] [--project-dir <P>]\n` +
       `  discard needs --approver <A> --reason <R> [--revise] [--at <ISO>]\n`,
   );
@@ -84,6 +84,7 @@ async function main(): Promise<number> {
         branch: args.branch as string,
         parentBranch: args.parent as string,
         ttl: args.ttl,
+        ...(args.resetStaleBranch ? { resetStaleBranch: true } : {}),
       });
       const p = readPipeline(sftddDir, feature);
       cutStoryExperiment(p, story, {
