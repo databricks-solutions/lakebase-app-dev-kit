@@ -7,6 +7,7 @@ import { resolveSftddDir } from "./sftdd-paths.js";
 interface ParsedArgs {
   featureId?: string;
   tdd?: string;
+  projectDir?: string;
   json?: boolean;
   help?: boolean;
 }
@@ -18,6 +19,10 @@ function parseArgs(argv: string[]): ParsedArgs {
     switch (a) {
       case "--tdd":
         out.tdd = argv[++i];
+        break;
+      case "--project-dir":
+      case "--cwd":
+        out.projectDir = argv[++i];
         break;
       case "--json":
         out.json = true;
@@ -42,9 +47,11 @@ Usage:
   lakebase-feature-status <feature-id> [--tdd <dir>] [--json]
 
 Flags:
-  --tdd <dir>   Path to the artifact root (default: ./.sftdd, honors a legacy ./.tdd)
-  --json        Print the snapshot as JSON instead of human-readable text
-  --help, -h    Show this help message
+  --tdd <dir>          Path to the artifact root (default: ./.sftdd, honors a legacy ./.tdd)
+  --project-dir <dir>  Project root that holds .lakebase/ (default: the parent of --tdd);
+                       used to reconcile deploy/promote from the SCM workflow-state
+  --json               Print the snapshot as JSON instead of human-readable text
+  --help, -h           Show this help message
 
 Examples:
   lakebase-feature-status F1-checkout
@@ -63,7 +70,9 @@ function main(): number {
     return 2;
   }
   const sftddDir = args.tdd ?? resolveSftddDir();
-  const snapshot = getFeatureStatus(sftddDir, args.featureId);
+  const snapshot = args.projectDir
+    ? getFeatureStatus(sftddDir, args.featureId, args.projectDir)
+    : getFeatureStatus(sftddDir, args.featureId);
   if (args.json) {
     process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
   } else {

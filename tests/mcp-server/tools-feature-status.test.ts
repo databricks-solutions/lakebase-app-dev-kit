@@ -120,6 +120,7 @@ describe("MCP tool: lakebase_feature_status", () => {
         "gates",
         "open_smells",
         "plans",
+        "progression",
         "selection_log_recent",
         "stories",
         "test_list",

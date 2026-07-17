@@ -169,6 +169,7 @@ const TOP_LEVEL_KEYS = [
   "selection_log_recent",
   "open_smells",
   "gates",
+  "progression",
 ] as const;
 
 const GATE_NAMES = ["spec", "plan", "test_list", "promote"] as const;
@@ -444,6 +445,132 @@ describe("feature-status reconciles with the per-story pipeline (FEIP-8016)", ()
     expect(s.derived_phase).toBeNull();
     expect(s.stories).toEqual([]);
     expect(renderFeatureStatus(s)).toMatch(/Phase: implementation \(active workflow\)/);
+  });
+});
+
+// Finding 13 (handover 2026-07-16): feature-status showed deploy/promote gates as
+// `open` for a feature the drive had already deployed + merged, disagreeing with
+// lakebase-sftdd-next (which reconciles deploy/promote from deploy-evidence + the
+// SCM workflow-state, not the raw gates.json approval bit). feature-status must
+// consume the SAME reconciliation (readDriveContext) so the two surfaces agree.
+describe("feature-status reconciles deploy/promote with the drive engine (Finding 13)", () => {
+  function stageMergedFeature(): { proj: string; sftddDir: string } {
+    const proj = mkdtempSync(join(tmpdir(), "tdd-fs-merged-"));
+    const sftddDir = join(proj, ".sftdd");
+    mkdirSync(join(sftddDir, "features", FEATURE_ID), { recursive: true });
+    // Every story built + accepted.
+    writeFileSync(
+      join(sftddDir, "features", FEATURE_ID, "pipeline.json"),
+      JSON.stringify({
+        version: 1,
+        feature_id: FEATURE_ID,
+        build_queue: [],
+        build_active: null,
+        stories: {
+          S1: { status: "done", gate: { status: "approved", history: [] }, acceptance: { decision: "accepted", history: [] } },
+        },
+      }) + "\n",
+    );
+    // The deploy actually ran (Release Engineer wrote deploy-evidence).
+    writeFileSync(
+      join(sftddDir, "features", FEATURE_ID, "deploy-evidence.json"),
+      JSON.stringify({ deployed_at: "2026-07-16T00:00:00Z" }) + "\n",
+    );
+    // gates.json is STALE: deploy + promote never stamped, still open.
+    writeFileSync(
+      join(sftddDir, "features", FEATURE_ID, "gates.json"),
+      JSON.stringify({
+        feature_id: FEATURE_ID,
+        schema_version: 1,
+        gates: {
+          spec: { status: "approved", history: [] },
+          plan: { status: "approved", history: [] },
+          test_list: { status: "approved", history: [] },
+          promote: { status: "open", history: [] },
+          deploy: { status: "open", history: [] },
+        },
+      }) + "\n",
+    );
+    // The SCM ladder reached `merged` (the ground truth the raw gates.json missed).
+    mkdirSync(join(proj, ".lakebase"), { recursive: true });
+    writeFileSync(
+      join(proj, ".lakebase", "workflow-state.json"),
+      JSON.stringify({
+        version: 1,
+        state: "merged",
+        tier_topology: 2,
+        project_id: "proj-x",
+        feature_id: FEATURE_ID,
+        branch: "feature/f1",
+        parent_branch: "staging",
+        lakebase_branch_uid: "uid-1",
+        claimed_at: "2026-07-16T00:00:00Z",
+        pr_url: "https://github.com/x/y/pull/1",
+        pushed_at: "2026-07-16T00:01:00Z",
+        ci_run_url: "https://github.com/x/y/actions/runs/1",
+        ci_green_at: "2026-07-16T00:02:00Z",
+        merged_at: "2026-07-16T00:03:00Z",
+      }) + "\n",
+    );
+    return { proj, sftddDir };
+  }
+
+  it("progression reports deploy_done + promote_done from deploy-evidence + SCM merge state", () => {
+    const { proj, sftddDir } = stageMergedFeature();
+    try {
+      const s = getFeatureStatus(sftddDir, FEATURE_ID, proj);
+      expect(s.progression).not.toBeNull();
+      expect(s.progression!.deploy_done).toBe(true);
+      expect(s.progression!.promote_done).toBe(true);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("renders deploy/promote as done (not the stale gates.json `open`)", () => {
+    const { proj, sftddDir } = stageMergedFeature();
+    try {
+      const text = renderFeatureStatus(getFeatureStatus(sftddDir, FEATURE_ID, proj));
+      expect(text).toMatch(/deploy\s+done \(deployed\)/);
+      expect(text).toMatch(/promote\s+done \(merged\)/);
+      // The stale bare "open" must be gone for these two.
+      expect(text).not.toMatch(/deploy\s+open/);
+      expect(text).not.toMatch(/promote\s+open/);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves deploy/promote as gates.json shows when the drive has NOT deployed/merged", () => {
+    // No deploy-evidence, SCM only feature-claimed: the overlay must not fire.
+    const proj = mkdtempSync(join(tmpdir(), "tdd-fs-claimed-"));
+    const sftddDir = join(proj, ".sftdd");
+    mkdirSync(join(sftddDir, "features", FEATURE_ID), { recursive: true });
+    mkdirSync(join(proj, ".lakebase"), { recursive: true });
+    writeFileSync(
+      join(proj, ".lakebase", "workflow-state.json"),
+      JSON.stringify({
+        version: 1,
+        state: "feature-claimed",
+        tier_topology: 2,
+        project_id: "proj-x",
+        feature_id: FEATURE_ID,
+        branch: "feature/f1",
+        parent_branch: "staging",
+        lakebase_branch_uid: "uid-1",
+        claimed_at: "2026-07-16T00:00:00Z",
+      }) + "\n",
+    );
+    try {
+      const s = getFeatureStatus(sftddDir, FEATURE_ID, proj);
+      expect(s.progression!.deploy_done).toBe(false);
+      expect(s.progression!.promote_done).toBe(false);
+      const text = renderFeatureStatus(s);
+      expect(text).toMatch(/deploy\s+open/);
+      expect(text).toMatch(/promote\s+open/);
+    } finally {
+      rmSync(proj, { recursive: true, force: true });
+    }
   });
 });
 
