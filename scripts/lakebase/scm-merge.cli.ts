@@ -10,7 +10,7 @@ import {
 } from "./scm-merge.js";
 import { readWorkflowState } from "./scm-workflow-state.js";
 import { runDatabricks } from "./databricks-cli.js";
-import { applySchemaMigrations } from "./schema-migrate.js";
+import { applyAndVerifyTierMigration } from "./schema-migrate.js";
 
 interface ParsedArgs {
   projectDir?: string;
@@ -233,14 +233,14 @@ export async function runScmMergeCli(argv: string[]): Promise<number> {
           if (!inst || !parent) {
             return { ok: false, detail: "workflow state is missing project_id / parent_branch" };
           }
-          try {
-            // allowTier: the local fallback INTENTIONALLY migrates the parent
-            // tier (staging/dev/default) as part of promote (FEIP-8039 guard).
-            await applySchemaMigrations({ instance: inst, branch: parent, projectDir, allowTier: true });
-            return { ok: true, detail: `applied pending migrations to ${parent} locally` };
-          } catch (e) {
-            return { ok: false, detail: e instanceof Error ? e.message : String(e) };
-          }
+          // Apply to the parent tier AND verify it is actually at head before
+          // reporting success (Finding 25). A bare apply exit code is not proof:
+          // it can no-op against the wrong branch or partially apply. When the
+          // target is not verified at head, this returns ok=false with a
+          // `migrate-unconfirmed` detail, so mergeFeature BLOCKS completion
+          // (throws migrate-failed / migrate-timeout) rather than printing a
+          // false "git and Lakebase schema are in sync".
+          return applyAndVerifyTierMigration({ instance: inst, branch: parent, projectDir });
         }
       : undefined;
   try {
