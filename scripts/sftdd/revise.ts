@@ -29,7 +29,7 @@ import {
   resolveSftddDir,
 } from "./sftdd-paths.js";
 import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
-import { markSmellResolved, composeReviseBrief } from "./smells.js";
+import { markSmellResolved, composeReviseBrief, readSmellsLog, specLevelSmell } from "./smells.js";
 import { clearReflectVerdict } from "./reflection.js";
 
 /** Default author identity recorded on a headless self-heal. A real interactive
@@ -193,4 +193,103 @@ export function applyReviseSelfHeal(args: ReviseSelfHealArgs): ReviseSelfHealRes
   });
 
   return { decided: "revise", story: args.story, routedTo: args.routedTo, resolvedSmell };
+}
+
+/** A blocking SPEC-level smell open against a story, mapped to its owning author
+ *  + gate. This is the SAME derivation the driver's revise-route uses (the probe's
+ *  routable field), factored out so the operator-facing `pipeline revise` reaches
+ *  the identical self-heal instead of a hollow reset (Findings 22 + 23). Returns
+ *  the FIRST open, unresolved, spec-level revisable smell for the story, or null. */
+export function revisableSmellForStory(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+): { smell: string; routedTo: "spec-author" | "test-strategist" | "architect-reviewer"; gate: "spec" | "test_list" | "architecture" } | null {
+  let log;
+  try {
+    log = readSmellsLog(sftddDir);
+  } catch {
+    return null;
+  }
+  for (const d of log.detected) {
+    if (d.resolution) continue;
+    // A smell entry scoped to a DIFFERENT story does not apply; an unscoped one
+    // (story_id undefined) may (feature-wide reflect defects), matching the
+    // driver's smellMatches semantics.
+    if (d.story_id !== undefined && d.story_id !== story) continue;
+    const spec = specLevelSmell(d.smell);
+    if (!spec) continue;
+    return { smell: d.smell, routedTo: spec.owning_role, gate: spec.gate_to_rerun };
+  }
+  return null;
+}
+
+export interface ReviseStoryOutcome {
+  /** self-heal = a blocking smell drove a full re-author brief + budget spend;
+   *  plain = no blocking smell, a bare reset back to designing. */
+  mode: "self-heal" | "plain";
+  story: string;
+  smell?: string;
+  routedTo?: string;
+}
+
+/**
+ * The operator `pipeline revise` transition. When a blocking spec-level smell is
+ * open against the story (the reflect gate, ac-overlap, etc.), run the SAME rich
+ * self-heal the driver's auto-route uses: reset to designing, stale + re-brief the
+ * owning author (composeReviseBrief FORCES the missing coverage for a reflect
+ * defect), AND resolve the smell as `revised`. That last step is what Finding 23
+ * was missing (the hollow reset left the smell open, so the next drive re-blocked
+ * at action 000) and what makes the loop converge (Finding 22): the spent budget
+ * turns a re-fire of the same smell into a hard halt instead of an infinite loop.
+ * With no blocking smell, falls back to the plain reset (a PO-initiated revise).
+ */
+export function reviseStoryWithSelfHeal(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+  opts: { approver: string; reason: string; at?: string },
+): ReviseStoryOutcome {
+  const routable = revisableSmellForStory(sftddDir, featureId, story);
+  if (routable) {
+    applyReviseSelfHeal({
+      featureId,
+      story,
+      smell: routable.smell,
+      routedTo: routable.routedTo,
+      gate: routable.gate,
+      reason: opts.reason,
+      approver: opts.approver,
+      sftddDir,
+    });
+    return { mode: "self-heal", story, smell: routable.smell, routedTo: routable.routedTo };
+  }
+  const pipeline = readPipeline(sftddDir, featureId);
+  reviseStory(pipeline, story, {
+    approver: opts.approver,
+    at: opts.at ?? new Date().toISOString(),
+    reason: opts.reason,
+  });
+  writePipeline(sftddDir, pipeline);
+  return { mode: "plain", story };
+}
+
+/** On `discard`, a story leaves the sprint, so any blocking smell against it must
+ *  be resolved too (kind `cleared`, NOT `revised`: discard does not re-author, so
+ *  it does not spend the one-revise budget) or the next drive re-blocks on a smell
+ *  for a story that is gone. Returns the cleared smell name, or null when none. */
+export function clearStoryBlockingSmellOnDiscard(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+  approver: string,
+): string | null {
+  const routable = revisableSmellForStory(sftddDir, featureId, story);
+  if (!routable) return null;
+  markSmellResolved(sftddDir, routable.smell, {
+    story_id: story,
+    kind: "cleared",
+    note: `discarded by ${approver}`,
+  });
+  return routable.smell;
 }

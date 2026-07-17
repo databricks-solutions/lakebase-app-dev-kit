@@ -17,7 +17,8 @@
 //   lakebase-sftdd-pipeline await-acceptance --feature F --story S              (built + deployed -> awaiting-acceptance)
 //   lakebase-sftdd-pipeline accept         --feature F --story S --approver A    (PO accepts -> experiment merged, story done, lane freed)
 //   lakebase-sftdd-pipeline discard        --feature F --story S --approver A --reason R   (PO discards -> torn down, out of sprint)
-//   lakebase-sftdd-pipeline revise         --feature F --story S --approver A --reason R   (PO sends back -> designing)
+//   lakebase-sftdd-pipeline revise         --feature F --story S --approver A --reason R   (PO sends back -> designing; self-heals a blocking smell)
+//   lakebase-sftdd-pipeline resolve-smell  --feature F --smell NAME --approver A [--story S] [--reason R]   (clear a blocking smell without revise/discard)
 //
 // The formal per-story spec gate is surface -> approve-gate; approve-gate is
 // what authorizes the ready transition (it enqueues). `enqueue` stays as the
@@ -49,13 +50,14 @@ import {
   cutStoryExperiment,
   awaitAcceptance,
   discardStory,
-  reviseStory,
   STORY_STATUSES,
   type StoryStatus,
   type StoryPipeline,
 } from "./story-pipeline";
 import { join } from "path";
 import { resolveSftddDir } from "./sftdd-paths.js";
+import { reviseStoryWithSelfHeal, clearStoryBlockingSmellOnDiscard } from "./revise.js";
+import { markSmellResolved } from "./smells.js";
 import { resolveAcceptMergeArgs, experimentMergeArgv } from "./experiment-merge.js";
 import { runKitBinSync } from "./kit-bin.js";
 
@@ -74,6 +76,7 @@ interface Args {
   parentSha?: string;
   lakebaseUid?: string;
   n?: string;
+  smell?: string;
   sftddDir?: string;
   projectDir?: string;
   instance?: string;
@@ -98,6 +101,7 @@ function parse(argv: string[]): Args {
     else if (a === "--parent-sha") out.parentSha = argv[++i];
     else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
     else if (a === "--n") out.n = argv[++i];
+    else if (a === "--smell") out.smell = argv[++i];
     else if (a === "--tdd-dir") out.sftddDir = argv[++i];
     else if (a === "--project-dir") out.projectDir = argv[++i];
     else if (a === "--instance") out.instance = argv[++i];
@@ -109,7 +113,7 @@ function parse(argv: string[]): Args {
 function usage(msg: string): number {
   process.stderr.write(
     `${msg}\n` +
-      `Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise> --feature <F> [--tdd-dir <dir>]\n` +
+      `Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|resolve-smell> --feature <F> [--tdd-dir <dir>]\n` +
       `  set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>\n` +
       `  surface needs --story <S>\n` +
       `  approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]\n` +
@@ -118,7 +122,8 @@ function usage(msg: string): number {
       `  cut-experiment needs --story <S> --slug <X> --branch <B> --parent <FB> [--lakebase-uid <U>] [--parent-sha <SHA>] [--n <N>] [--at <ISO>]\n` +
       `  await-acceptance needs --story <S>\n` +
       `  accept needs --story <S> --approver <A> [--at <ISO>]\n` +
-      `  discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]\n`,
+      `  discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]\n` +
+      `  resolve-smell needs --smell <NAME> --approver <A> [--story <S>] [--reason <R>]\n`,
   );
   return 2;
 }
@@ -326,16 +331,52 @@ async function main(): Promise<number> {
       if (!args.reason) return usage("discard needs --reason");
       discardStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
       writePipeline(sftddDir, pipeline);
-      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed\n`);
+      // A discarded story leaves the sprint; clear any blocking smell against it so
+      // the next drive does not re-block on a smell for a story that is gone.
+      const cleared = clearStoryBlockingSmellOnDiscard(sftddDir, feature, args.story, args.approver);
+      const smellNote = cleared ? `; cleared blocking smell '${cleared}'` : "";
+      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed${smellNote}\n`);
       return 0;
     }
     case "revise": {
       if (!args.story) return usage("revise needs --story");
       if (!args.approver) return usage("revise needs --approver");
       if (!args.reason) return usage("revise needs --reason");
-      reviseStory(pipeline, args.story, { approver: args.approver, at: args.at ?? new Date().toISOString(), reason: args.reason });
-      writePipeline(sftddDir, pipeline);
-      process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed\n`);
+      // Route through the SAME self-heal the driver's auto-route uses: when a
+      // blocking smell is open against the story this resets to designing, RE-BRIEFS
+      // the owning author with the coverage-forcing verdict, AND resolves the smell
+      // (Findings 22 + 23). A hollow reset left the smell open and looped forever.
+      const outcome = reviseStoryWithSelfHeal(sftddDir, feature, args.story, {
+        approver: args.approver,
+        reason: args.reason,
+        ...(args.at ? { at: args.at } : {}),
+      });
+      if (outcome.mode === "self-heal") {
+        process.stdout.write(
+          `revising ${args.story} (${args.reason}); smell '${outcome.smell}' resolved, ` +
+            `${outcome.routedTo} re-briefed, experiment torn down, back to designing\n`,
+        );
+      } else {
+        process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed\n`);
+      }
+      return 0;
+    }
+    case "resolve-smell": {
+      // Explicit escape hatch: resolve a blocking smell without a revise/discard,
+      // so an operator never hand-edits .sftdd/smells.json (Finding 23). Marks the
+      // entry `cleared` (does not spend the revise budget).
+      if (!args.smell) return usage("resolve-smell needs --smell");
+      if (!args.approver) return usage("resolve-smell needs --approver");
+      const ok = markSmellResolved(sftddDir, args.smell, {
+        ...(args.story ? { story_id: args.story } : {}),
+        kind: "cleared",
+        note: `cleared by ${args.approver}${args.reason ? `: ${args.reason}` : ""}`,
+      });
+      if (!ok) {
+        process.stderr.write(`no open smell '${args.smell}'${args.story ? ` for story ${args.story}` : ""} to resolve\n`);
+        return 1;
+      }
+      process.stdout.write(`resolved smell '${args.smell}'${args.story ? ` (story ${args.story})` : ""}\n`);
       return 0;
     }
     default:

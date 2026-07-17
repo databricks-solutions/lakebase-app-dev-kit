@@ -26,7 +26,14 @@ import { recordBlockingSmellFlag } from "../../scripts/sftdd/escalation";
 import { nextTransition, actionLane, type DriveState } from "../../scripts/sftdd/orchestrator-drive";
 import { commandsForAction, type DriveEffectsConfig } from "../../scripts/sftdd/orchestrator-effects";
 import { diskArtifactProbe } from "../../scripts/sftdd/orchestrator-probe";
-import { applyReviseSelfHeal } from "../../scripts/sftdd/revise";
+import {
+  applyReviseSelfHeal,
+  reviseStoryWithSelfHeal,
+  revisableSmellForStory,
+  clearStoryBlockingSmellOnDiscard,
+} from "../../scripts/sftdd/revise";
+import { readFileSync as readFileSyncNode } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { writeReflectVerdict, reflectionVerdictWritten } from "../../scripts/sftdd/reflection";
 import { writePipeline, readPipeline, type StoryPipeline } from "../../scripts/sftdd/story-pipeline";
 import { deriveDriveState } from "../../scripts/sftdd/orchestrator-derive";
@@ -276,6 +283,84 @@ describe("applyReviseSelfHeal (the revise self-heal transition)", () => {
     // re-evaluates the corrected test-list instead of reusing passed:false (the loop
     // that ran the Navigator to the stall guard).
     expect(reflectionVerdictWritten(tdd, FEATURE, STORY)).toBe(false);
+  });
+});
+
+// ---- operator `pipeline revise` self-heals the blocking smell (Findings 22+23) --
+
+describe("reviseStoryWithSelfHeal (operator pipeline revise)", () => {
+  let tdd: string;
+  beforeEach(() => {
+    tdd = mkdtempSync(join(tmpdir(), "tdd-revise-op-"));
+    writePipeline(tdd, pipelineBuilding());
+    seedDesignArtifacts(tdd);
+  });
+  afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+
+  it("self-heals an open reflect smell: resolves it, re-briefs the author, spends the budget (Finding 23)", () => {
+    // The exact reported state: a reflect-testlist-defect blocks the drive.
+    recordBlockingSmellFlag(tdd, "reflect-testlist-defect", "PI7 DELETE-rejection is untested", { story_id: STORY });
+    expect(priorReviseCount(tdd, "reflect-testlist-defect", STORY)).toBe(0);
+
+    const outcome = reviseStoryWithSelfHeal(tdd, FEATURE, STORY, {
+      approver: "po@example.com",
+      reason: "add a fitness test asserting DELETE on stock_adjustments is rejected",
+    });
+
+    expect(outcome.mode).toBe("self-heal");
+    expect(outcome.smell).toBe("reflect-testlist-defect");
+    expect(outcome.routedTo).toBe("test-strategist");
+    // Finding 23: the smell is resolved (the next drive will NOT re-block at action 000).
+    expect(readSmellsLog(tdd).detected.some((d) => !d.resolution && d.smell === "reflect-testlist-defect")).toBe(false);
+    // Finding 22c: the one-revise budget is spent, so a re-fire hard-halts.
+    expect(priorReviseCount(tdd, "reflect-testlist-defect", STORY)).toBe(1);
+    // Finding 22a/b: the coverage-forcing brief reached the test-strategist.
+    const hb = handbackFile(tdd, FEATURE, "test-strategist", STORY);
+    expect(existsSync(hb)).toBe(true);
+    const brief = readFileSync(hb, "utf8");
+    expect(brief).toMatch(/DELETE on stock_adjustments is rejected/);
+    expect(brief).toMatch(/ADD the specific coverage/);
+    // The story is back in the design lane.
+    expect(readPipeline(tdd, FEATURE).stories[STORY].status).toBe("designing");
+  });
+
+  it("falls back to a plain reset when no blocking smell is open", () => {
+    const outcome = reviseStoryWithSelfHeal(tdd, FEATURE, STORY, {
+      approver: "po@example.com",
+      reason: "PO wants a different approach",
+    });
+    expect(outcome.mode).toBe("plain");
+    expect(readPipeline(tdd, FEATURE).stories[STORY].status).toBe("designing");
+  });
+
+  it("revisableSmellForStory ignores a build-level (non-spec) smell", () => {
+    recordBlockingSmellFlag(tdd, "cycle-stall", "stalled", { story_id: STORY });
+    expect(revisableSmellForStory(tdd, FEATURE, STORY)).toBeNull();
+  });
+
+  it("clearStoryBlockingSmellOnDiscard resolves the smell as cleared (not revised)", () => {
+    recordBlockingSmellFlag(tdd, "reflect-testlist-defect", "x", { story_id: STORY });
+    const cleared = clearStoryBlockingSmellOnDiscard(tdd, FEATURE, STORY, "po@example.com");
+    expect(cleared).toBe("reflect-testlist-defect");
+    // Resolved, but NOT as a revise (discard does not spend the one-revise budget).
+    expect(readSmellsLog(tdd).detected.some((d) => !d.resolution && d.smell === "reflect-testlist-defect")).toBe(false);
+    expect(priorReviseCount(tdd, "reflect-testlist-defect", STORY)).toBe(0);
+  });
+});
+
+describe("story-pipeline CLI wires the self-heal (static)", () => {
+  const cliSrc = readFileSyncNode(
+    fileURLToPath(new URL("../../scripts/sftdd/story-pipeline.cli.ts", import.meta.url)),
+    "utf8",
+  );
+  it("revise delegates to reviseStoryWithSelfHeal (not a hollow reviseStory)", () => {
+    expect(cliSrc).toMatch(/reviseStoryWithSelfHeal\(/);
+  });
+  it("discard clears the story's blocking smell", () => {
+    expect(cliSrc).toMatch(/clearStoryBlockingSmellOnDiscard\(/);
+  });
+  it("exposes a resolve-smell subcommand", () => {
+    expect(cliSrc).toMatch(/case "resolve-smell"/);
   });
 });
 
