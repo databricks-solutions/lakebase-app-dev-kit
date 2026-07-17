@@ -158,6 +158,38 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
     // best-effort: no git remote / no token / offline -> skip silently.
   }
 
+  // 1c. CI workflows follow .lakebase/kit-ref? The runtime substrate (scripts/lk)
+  // resolves the kit from .lakebase/kit-ref, but a workflow scaffolded before
+  // FEIP-8050 baked a LITERAL `#v<ver>` pin at every kit call site, so a kit-ref
+  // bump never reached CI (every run executed the stale kit). Flag the old shape
+  // so the human re-emits the kit-ref-aware workflow. Best-effort, file-only.
+  for (const wf of ["pr.yml", "merge.yml"]) {
+    try {
+      const p = path.join(projectDir, ".github", "workflows", wf);
+      if (!fs.existsSync(p)) continue;
+      const body = fs.readFileSync(p, "utf8");
+      // The anti-pattern: a hardcoded version tag right after the kit package ref.
+      if (/lakebase-app-dev-kit#v\d/.test(body)) {
+        findings.push({
+          id: "ci-workflow-kit-pin",
+          severity: "warn",
+          message:
+            `.github/workflows/${wf} hardcodes a kit version pin ` +
+            `(github:databricks-solutions/lakebase-app-dev-kit#v<ver>) instead of ` +
+            `resolving .lakebase/kit-ref at runtime, so bumping .lakebase/kit-ref does ` +
+            `NOT change the kit CI actually runs (FEIP-8050, Finding 24).`,
+          suggestion:
+            "Re-emit the workflows from the current kit templates so they resolve " +
+            "KIT_REF from .lakebase/kit-ref at CI time (updateWorkflows in " +
+            "scripts/lakebase/workflow-drift.ts; lakebase-doctor reports this as " +
+            "workflow-drift). Until then a kit-ref bump will not reach CI.",
+        });
+      }
+    } catch {
+      // best-effort: unreadable workflow -> skip silently.
+    }
+  }
+
   // 2. .env reachability
   if (!env.has("LAKEBASE_PROJECT_ID")) {
     findings.push({

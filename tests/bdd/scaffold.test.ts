@@ -156,14 +156,18 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
     await deployWorkflows(dir);
     const prYml = fs.readFileSync(path.join(dir, ".github", "workflows", "pr.yml"), "utf-8");
     expect(prYml).not.toContain("{{LAKEBASE_KIT_VERSION}}");
-    // The kit's own package.json version is what gets pinned.
+    // The kit's own package.json version is the FALLBACK the Resolve kit ref step
+    // uses when .lakebase/kit-ref is absent (Finding 24: CI follows kit-ref, so the
+    // call sites resolve #"${KIT_REF}" rather than a baked literal pin).
     const kitPkg = JSON.parse(
       fs.readFileSync(
         path.join(__dirname, "..", "..", "package.json"),
         "utf-8"
       )
     ) as { version: string };
-    expect(prYml).toContain(`#v${kitPkg.version}`);
+    expect(prYml).toContain(`KIT_REF:-v${kitPkg.version}`);
+    expect(prYml).toContain('lakebase-app-dev-kit#"${KIT_REF}"');
+    expect(prYml).not.toMatch(/lakebase-app-dev-kit#v\d/);
   });
 
   it("scaffolded pr.yml routes migrations through the substrate's lakebase-schema-migrate CLI", async () => {
@@ -257,9 +261,12 @@ describe("deployWorkflows: {{LAKEBASE_KIT_VERSION}} substitution", () => {
       fs.readFileSync(path.join(__dirname, "..", "..", "package.json"), "utf-8"),
     ) as { version: string };
 
-    // Substitution leaves no placeholder behind.
+    // Substitution leaves no placeholder behind; the kit version is the Resolve
+    // kit ref fallback and the call sites resolve #"${KIT_REF}" (Finding 24).
     expect(mergeYml).not.toContain("{{LAKEBASE_KIT_VERSION}}");
-    expect(mergeYml).toContain(`#v${kitPkg.version}`);
+    expect(mergeYml).toContain(`KIT_REF:-v${kitPkg.version}`);
+    expect(mergeYml).toContain('lakebase-app-dev-kit#"${KIT_REF}"');
+    expect(mergeYml).not.toMatch(/lakebase-app-dev-kit#v\d/);
 
     // Substrate routing for migrations (replaces the language-branched
     // mvnw/uv-run/npx-knex block).
