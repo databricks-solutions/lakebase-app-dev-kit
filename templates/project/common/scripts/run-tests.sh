@@ -41,8 +41,15 @@ if [ -n "${VERIFY_DATABASE_URL:-}" ]; then
   export DATABASE_URL="$VERIFY_DATABASE_URL"
 fi
 
-# Detect project language and run pending migrations before tests
-if [ -f "$REPO_ROOT/pom.xml" ]; then
+# Detect project language and run pending migrations before tests.
+# SFTDD_CLIENT_ONLY (Finding 26): the build's honest-GREEN verify runs the backend
+# via the SFTDD_PYTEST_MARKER two-pass, which exits before the client Vitest block
+# below. To gate build GREEN on the SAME client suite the deploy feature-verify runs,
+# the build makes ONE extra invocation with SFTDD_CLIENT_ONLY=1: skip the backend
+# entirely (no migrations, no pytest) and run only the client Vitest block.
+if [ "$#" -eq 0 ] && [ -n "${SFTDD_CLIENT_ONLY:-}" ]; then
+  echo "Client-only pass (SFTDD_CLIENT_ONLY=1): skipping the backend suite; running the client Vitest suite only."
+elif [ -f "$REPO_ROOT/pom.xml" ]; then
   # Java / Maven – export SPRING_DATASOURCE_* for Maven/Spring
   if [ -z "${SPRING_DATASOURCE_URL:-}" ] && [ -n "${DATABASE_URL:-}" ]; then
     SPRING_DATASOURCE_URL="jdbc:$(echo "$DATABASE_URL" | sed 's|^postgresql://[^@]*@|postgresql://|')"

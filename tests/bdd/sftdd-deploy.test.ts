@@ -654,3 +654,84 @@ describe("ensureDeployedAndVerify: migration-isolation two-pass (Python)", () =>
     expect(markers).toEqual(["<unset>"]);
   });
 });
+
+// Finding 26 (FEIP-8051): the build honest-GREEN verify uses the marked pytest
+// two-pass, which run-tests.sh short-circuits BEFORE its client Vitest block, so a
+// Python + client scaffold never ran the client suite under build GREEN (only the
+// deploy feature-verify, which runs unmarked, caught it). ensureDeployedAndVerify
+// must run the client suite ONCE (SFTDD_CLIENT_ONLY) and refuse GREEN if it fails.
+describe("ensureDeployedAndVerify: client Vitest pass on Python + client (Finding 26)", () => {
+  function fastClock() {
+    let t = 0;
+    return () => new Date((t += 200));
+  }
+  function stagePythonClient(d: string): void {
+    writeFileSync(join(d, "pyproject.toml"), "[project]\nname = 'x'\n");
+    mkdirSync(join(d, "client"), { recursive: true });
+    writeFileSync(join(d, "client", "package.json"), "{}\n");
+  }
+
+  it("runs a client-only pass after the two marked backend passes, and gates GREEN on it", async () => {
+    stagePythonClient(dir);
+    const calls: Array<{ marker: string; clientOnly: string }> = [];
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => {
+        calls.push({
+          marker: env?.SFTDD_PYTEST_MARKER ?? "<unset>",
+          clientOnly: env?.SFTDD_CLIENT_ONLY ?? "<unset>",
+        });
+        return true;
+      },
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(true);
+    // two backend marker passes, then exactly one client-only pass (no marker).
+    expect(calls.map((c) => c.marker)).toEqual(["not migration", "migration", "<unset>"]);
+    expect(calls.filter((c) => c.clientOnly === "1")).toHaveLength(1);
+    // the client pass carries NO pytest marker (it is not a backend pass).
+    expect(calls.find((c) => c.clientOnly === "1")!.marker).toBe("<unset>");
+  });
+
+  it("refuses GREEN when the client suite FAILS even though the backend passed", async () => {
+    stagePythonClient(dir);
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      // Backend (marked) passes; the client-only pass fails , the exact Finding 26 state.
+      runVerify: (_cmd, _cwd, env) => env?.SFTDD_CLIENT_ONLY !== "1",
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(false);
+    expect(res.summary).toMatch(/client/i);
+  });
+
+  it("does NOT run a client pass when there is no client/ workspace (back-compat)", async () => {
+    writeFileSync(join(dir, "pyproject.toml"), "[project]\nname = 'x'\n"); // no client/
+    const clientOnlySeen: string[] = [];
+    const res = await ensureDeployedAndVerify({
+      projectDir: dir,
+      targetName: "localv",
+      startProcess: () => 4242,
+      reachable: async () => true,
+      runVerify: (_cmd, _cwd, env) => {
+        if (env?.SFTDD_CLIENT_ONLY) clientOnlySeen.push(env.SFTDD_CLIENT_ONLY);
+        return true;
+      },
+      stop: () => {},
+      sleep: async () => {},
+      now: fastClock(),
+    });
+    expect(res.passed).toBe(true);
+    expect(clientOnlySeen).toEqual([]);
+  });
+});
