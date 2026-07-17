@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.31] - 2026-07-16
+
+### Fixed
+
+- **The build's honest-GREEN verify now runs the client (Vitest) suite, not just the backend (FEIP-8051, Finding 26).** The build lane could mark a story GREEN while the client Vitest suite failed deterministically; only the later deploy feature-verify caught it, a violation of the core TDD guarantee. Root cause: the build honest-GREEN runs the Python backend via the `SFTDD_PYTEST_MARKER` two-pass, and `run-tests.sh`'s marked branch exited BEFORE its client Vitest block, so the client suite never ran under build GREEN (the deploy gate runs `run-tests.sh` unmarked, reaches the client block, and failed, exposing the drift). Python + client scaffolds only. Now `run-tests.sh` gains `SFTDD_CLIENT_ONLY=1` (skip the backend, run only the client Vitest block), and `ensureDeployedAndVerify` runs one client-only pass after the two marked backend passes (when a `client/` workspace exists), gating GREEN on its captured exit code, so build honest-GREEN gates on the SAME client tests the deploy gate runs. The marked passes stay backend-only (no double-run, migration isolation intact).
+- **The scaffold's client API layer teaches the RFC 9457 Problem Details field-error pattern (Finding 26, secondary).** `client/src/api/client.ts` previously surfaced a validation `detail` only when it was a string, so an object-shaped `detail: { field, message }` refusal was dropped and thrown as a generic error, never reaching a form's `field-<field>-error` seam. It now parses both shapes via `_problemDetail`, carries the field on `ApiError`, and adds a `postJson` mutation helper that throws it, so the driver has a reference for the object-detail + field-seam pattern.
+
 ## [0.3.0-beta.30] - 2026-07-16
 
 Handover findings batch (FEIP-8050): six field findings from a stockflow tier-2 run. Cross-cutting theme: a branch's DB is addressed by its `{instance, branch}` DSN, never `LAKEBASE_BRANCH_ID` / ambient `LAKEBASE_HOST`.

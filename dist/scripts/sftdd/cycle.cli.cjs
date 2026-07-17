@@ -8520,6 +8520,9 @@ function pidFile(projectDir, target) {
 function normalizeVerifyRun(raw) {
   return typeof raw === "boolean" ? { passed: raw, output: "" } : { passed: raw.passed, output: raw.output ?? "" };
 }
+function hasClientWorkspace(projectDir) {
+  return (0, import_node_fs2.existsSync)((0, import_node_path4.join)(projectDir, "client", "package.json"));
+}
 function defaultRunVerify(cmd, cwd, env) {
   try {
     const out = (0, import_node_child_process4.execSync)(cmd, { cwd, stdio: "pipe", env: env ?? process.env });
@@ -8585,6 +8588,7 @@ async function ensureDeployedAndVerify(args) {
   const isPython = (0, import_node_fs2.existsSync)((0, import_node_path4.join)(args.projectDir, "pyproject.toml")) || (0, import_node_fs2.existsSync)((0, import_node_path4.join)(args.projectDir, "requirements.txt"));
   let passed;
   let migrationFailed = false;
+  let clientFailed = false;
   try {
     if (isPython) {
       const mainPassed = (await runVerifyMaybeEphemeral(
@@ -8604,7 +8608,15 @@ async function ensureDeployedAndVerify(args) {
         nowFn
       )).passed : true;
       migrationFailed = mainPassed && !migPassed;
-      passed = mainPassed && migPassed;
+      const backendPassed = mainPassed && migPassed;
+      const clientPassed = backendPassed && hasClientWorkspace(args.projectDir) ? normalizeVerifyRun(
+        runVerify(cfg.verify, args.projectDir, {
+          ...env ?? process.env,
+          SFTDD_CLIENT_ONLY: "1"
+        })
+      ).passed : true;
+      clientFailed = backendPassed && !clientPassed;
+      passed = backendPassed && clientPassed;
     } else {
       passed = (await runVerifyMaybeEphemeral(runVerify, cfg.verify, args.projectDir, env, args.lakebaseBranch, nowFn)).passed;
     }
@@ -8615,7 +8627,7 @@ async function ensureDeployedAndVerify(args) {
     return { passed, reachable: true, summary: "GREEN verify passed against the running app" };
   }
   const regexLint = checkE2eRegexClean({ projectDir: args.projectDir });
-  const base = migrationFailed ? "GREEN verify FAILED on the migration pass (the migration-marked reversibility test failed on its own isolated branch)" : "GREEN verify FAILED against the running app";
+  const base = migrationFailed ? "GREEN verify FAILED on the migration pass (the migration-marked reversibility test failed on its own isolated branch)" : clientFailed ? "GREEN verify FAILED on the client pass (the client Vitest suite failed; the backend suite passed)" : "GREEN verify FAILED against the running app";
   const summary = regexLint.clean ? base : `${base}: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;
   return { passed, reachable: true, summary };
 }
