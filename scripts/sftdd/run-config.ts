@@ -19,6 +19,7 @@ import { sftddEnv } from "./sftdd-env.js";
 import { ARTIFACT_ROOT } from "./sftdd-paths.js";
 import { join } from "path";
 import { ALL_AGENT_ROLES } from "./agent-models.js";
+import { resolveLaunchKitRef } from "./kit-ref.js";
 
 /** The resolved run matrix. Additive fields default to their "off"/"default"
  *  value so an old report reading a new file (or vice versa) stays robust. */
@@ -77,18 +78,6 @@ export interface RunConfigInputs {
   env?: Record<string, string | undefined>;
 }
 
-/** Read `.lakebase/kit-ref` (the pinned kit ref/SHA), trimmed, or undefined. */
-function readKitRef(projectDir: string): string | undefined {
-  const f = join(projectDir, ".lakebase", "kit-ref");
-  if (!existsSync(f)) return undefined;
-  try {
-    const v = readFileSync(f, "utf8").trim();
-    return v.length > 0 ? v : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** Build the resolved run matrix from the driver's config + the environment. */
 export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
   const env = inputs.env ?? process.env;
@@ -114,7 +103,10 @@ export function buildRunConfig(inputs: RunConfigInputs): RunConfig {
   // it stays an explicit env input.
   const label = sftddEnv("RUN_LABEL", env);
   if (label) cfg.run_label = label;
-  const kitRef = readKitRef(inputs.projectDir);
+  // Record the ref the run actually uses (Finding 28): env LAKEBASE_KIT_REF ->
+  // .lakebase/kit-ref.local (the checkout-proof run pin) -> .lakebase/kit-ref, the
+  // SAME precedence the lk shim + the drive's launch pin apply.
+  const kitRef = resolveLaunchKitRef(inputs.projectDir, env);
   if (kitRef) cfg.kit_ref = kitRef;
   return cfg;
 }

@@ -10,7 +10,12 @@
 #   "$(git rev-parse --show-toplevel)/scripts/lk" lakebase-sftdd-intake --feature F1
 #
 # Ref resolution (so it works inside a `claude -p` agent's Bash tool, which does
-# NOT reliably inherit env vars): $LAKEBASE_KIT_REF -> .lakebase/kit-ref -> "main".
+# NOT reliably inherit env vars): $LAKEBASE_KIT_REF -> .lakebase/kit-ref.local ->
+# .lakebase/kit-ref -> "main". `.lakebase/kit-ref.local` is GITIGNORED, so a branch
+# checkout/reset never reverts it: the drive writes it at launch to pin the run's
+# ref for the whole run (the committed `.lakebase/kit-ref` is git-tracked and gets
+# restored by fork-from-origin checkouts, which is how a run silently ran the wrong
+# kit). The committed `.lakebase/kit-ref` stays authoritative for CI.
 # Set LAKEBASE_KIT_DIR to point directly at a kit checkout/install (dev override).
 set -euo pipefail
 
@@ -35,8 +40,12 @@ else
   # Always resolve the repo root: the ref may come from env, but the local-dir
   # recovery hint below is always read from the project.
   root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-  # ref: env -> .lakebase/kit-ref -> main
+  # ref: env -> .lakebase/kit-ref.local (gitignored run pin, survives checkouts)
+  #      -> .lakebase/kit-ref (committed; CI reads it) -> main
   ref="${LAKEBASE_KIT_REF:-}"
+  if [ -z "$ref" ] && [ -f "$root/.lakebase/kit-ref.local" ]; then
+    ref="$(tr -d '[:space:]' < "$root/.lakebase/kit-ref.local")"
+  fi
   if [ -z "$ref" ] && [ -f "$root/.lakebase/kit-ref" ]; then
     ref="$(tr -d '[:space:]' < "$root/.lakebase/kit-ref")"
   fi

@@ -62,6 +62,7 @@ import { resolveSftddSettings, applyProjectOverrides } from "./sftdd-config.js";
 import { parseTurnUsage, assistantTextFromLine, assistantEventSummary, type TurnUsage } from "./claude-usage.js";
 import { resumeFitsBudget, turnContextTokens, CONTEXT_FREE_FRACTION_REQUIRED, isPromptTooLongSignal, startsFreshEachTurn } from "./context-budget.js";
 import { writeRunConfig } from "./run-config.js";
+import { resolveLaunchKitRef, pinRunKitRef, kitRefDriftWarning } from "./kit-ref.js";
 import type { AgentRole } from "./agent-log.js";
 import { makeOnAction, describeAction, approveHint } from "./orchestrator-logging.js";
 import { resolveKitBinJs, kitVersion } from "./kit-bin.js";
@@ -1102,6 +1103,32 @@ async function main(): Promise<number> {
     deployTarget: args.deployTarget,
     sizing: args.noSizing === true ? false : undefined,
   });
+
+  // Pin the kit ref for the WHOLE run to a checkout-proof, gitignored file
+  // (.lakebase/kit-ref.local) BEFORE any feature/sprint drive performs a branch
+  // checkout (Finding 28). The committed .lakebase/kit-ref is git-tracked, so a
+  // claim checkout / experiment re-fork (both fork from origin/<parent>) restores
+  // a branch-committed ref out from under the run, silently running the WRONG kit.
+  // The gitignored .local survives checkouts and the lk shim reads it with
+  // precedence, so the orchestrator + subagents + manual lk calls all keep the
+  // launch ref. Warn loudly when the committed ref drifts from the pinned ref.
+  // Skipped under LAKEBASE_KIT_DIR (dir override) or when no ref is pinned.
+  {
+    const pd = args.projectDir ?? process.cwd();
+    const launchRef = resolveLaunchKitRef(pd, process.env);
+    if (launchRef) {
+      const drift = kitRefDriftWarning(pd, launchRef);
+      if (drift) process.stderr.write(`lakebase-sftdd-drive: ${drift}\n`);
+      const r = pinRunKitRef(pd, launchRef);
+      if (r.pinned) {
+        process.stderr.write(
+          `lakebase-sftdd-drive: pinned kit-ref '${launchRef}' to .lakebase/kit-ref.local for this run` +
+            (r.previous ? ` (was '${r.previous}')` : "") +
+            `.\n`,
+        );
+      }
+    }
+  }
 
   // HITL enforcement: headless proxy gating is only legitimate with an explicit
   // non-interactive signal. Refuse `proxy` in an interactive/dev context so a

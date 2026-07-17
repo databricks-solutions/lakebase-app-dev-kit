@@ -73,6 +73,22 @@ describe("lk resolver shim", () => {
     expect(JSON.parse(r.stdout)).toEqual([]);
   });
 
+  it("reads .lakebase/kit-ref.local with precedence over the committed .lakebase/kit-ref (Finding 28)", () => {
+    // The gitignored run pin (.local) survives branch checkouts and must win over
+    // the committed kit-ref (which a fork-from-origin checkout can revert). Only the
+    // .local ref's cache is seeded, so resolving succeeds ONLY if .local is read;
+    // reading the committed ref would miss the cache and attempt a (failing) install.
+    const cache = join(work, "cache");
+    fakeKitDir(join(cache, "lakebase-app-dev-kit", "localref", "node_modules", PKG));
+    const proj = join(work, "proj");
+    mkdirSync(join(proj, ".lakebase"), { recursive: true });
+    writeFileSync(join(proj, ".lakebase", "kit-ref"), "committedref\n");
+    writeFileSync(join(proj, ".lakebase", "kit-ref.local"), "localref\n");
+    const r = runLk(["lakebase-sftdd-log", "--pinned"], { XDG_CACHE_HOME: cache, LAKEBASE_KIT_REF: "" }, proj);
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual(["--pinned"]);
+  });
+
   it("self-heals a lost cache for a local-only ref from .lakebase/kit-local-dir (offline)", () => {
     // A local-only ref (e.g. a capture pinned to a working tree) exists nowhere
     // on GitHub, so if its cache symlink is lost mid-run lk cannot re-resolve it
