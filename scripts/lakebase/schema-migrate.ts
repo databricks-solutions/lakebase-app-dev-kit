@@ -470,6 +470,62 @@ export async function branchRevisionOrphan(args: {
   }
 }
 
+// ---- applyAndVerifyTierMigration (FEIP-8050 Finding 25) ------------------------
+
+export interface ApplyVerifyResult {
+  ok: boolean;
+  detail: string;
+}
+
+/** Injectable seams so the verify logic is testable without a live DB; both
+ *  default to the real primitives. */
+export interface ApplyVerifyDeps {
+  apply?: (a: ApplySchemaMigrationsArgs) => Promise<ApplySchemaMigrationsResult>;
+  status?: (a: SchemaMigrationStatusArgs) => Promise<SchemaMigrationStatusResult>;
+}
+
+/**
+ * Apply migrations to a TARGET branch and then VERIFY that branch is actually at
+ * code head before reporting success (Finding 25). The promote's local-migrate
+ * fallback previously reported "in sync" purely from the apply exit code, which is
+ * a lie in two ways: the apply can be a NO-OP against the wrong branch (already at
+ * head), and a partial apply can leave the target behind. Reading the target's
+ * own status back (pending == 0) is the only honest confirmation.
+ *
+ * `allowTier` is implied (promote migrates the parent tier). Returns ok=false with
+ * a `migrate-unconfirmed` detail when the target is not verified at head OR the
+ * verification itself cannot run, so the caller BLOCKS completion rather than
+ * printing a false "in sync".
+ */
+export async function applyAndVerifyTierMigration(
+  args: { instance: string; branch: string; projectDir: string; language?: SchemaMigrationLanguage },
+  deps: ApplyVerifyDeps = {},
+): Promise<ApplyVerifyResult> {
+  const apply = deps.apply ?? applySchemaMigrations;
+  const status = deps.status ?? schemaMigrationStatus;
+  try {
+    await apply({ instance: args.instance, branch: args.branch, projectDir: args.projectDir, language: args.language, allowTier: true });
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+  // Read the TARGET branch's own state back: only pending == 0 proves it is at head.
+  try {
+    const st = await status({ instance: args.instance, branch: args.branch, projectDir: args.projectDir, language: args.language });
+    if (st.pending.length > 0) {
+      return {
+        ok: false,
+        detail: `migrate-unconfirmed: ${args.branch} still has ${st.pending.length} pending migration(s) after the local apply (current=${st.current ?? "none"})`,
+      };
+    }
+    return { ok: true, detail: `applied + verified ${args.branch} at head locally (current=${st.current ?? "none"})` };
+  } catch (e) {
+    return {
+      ok: false,
+      detail: `migrate-unconfirmed: could not verify ${args.branch} is at head (${e instanceof Error ? e.message : String(e)})`,
+    };
+  }
+}
+
 // ---- createSchemaMigration -----------------------------------------------------
 //
 // The create side of the adapter contract. The build (Driver) calls this

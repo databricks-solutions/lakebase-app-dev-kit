@@ -17,6 +17,7 @@ import {
   listSchemaMigrations,
   toolForLanguage,
   SchemaMigrationError,
+  applyAndVerifyTierMigration,
 } from "../../scripts/lakebase/schema-migrate.js";
 
 function mkTempDir(): string {
@@ -257,5 +258,62 @@ describe("flyway rollback + knex apply: error paths", () => {
     } finally {
       rm(dir);
     }
+  });
+});
+
+// FEIP-8050 / Finding 25: the promote local-migrate fallback must VERIFY the
+// target branch is at head after applying, and report migrate-unconfirmed (which
+// BLOCKS the merge) instead of a false "in sync" derived from the apply exit code.
+describe("applyAndVerifyTierMigration (Finding 25)", () => {
+  const target = { instance: "p", branch: "staging", projectDir: "/x" };
+  const okApply = async () => ({ applied: [], alreadyAtLatest: false, tool: "alembic" as const });
+
+  it("returns ok when the target verifies at head (no pending after apply)", async () => {
+    const res = await applyAndVerifyTierMigration(target, {
+      apply: okApply,
+      status: async () => ({ current: "rev2", pending: [], tool: "alembic" }),
+    });
+    expect(res.ok).toBe(true);
+    expect(res.detail).toMatch(/staging at head/);
+  });
+
+  it("returns migrate-unconfirmed (ok=false) when the target still has pending migrations", async () => {
+    // The exact failure: the apply ran (against the wrong branch / partially) but
+    // the TARGET staging is still behind, so reporting in-sync would be a lie.
+    const res = await applyAndVerifyTierMigration(target, {
+      apply: okApply,
+      status: async () => ({ current: "rev1", pending: [{ version: "rev2", filename: "rev2.py", description: "", type: "versioned", tool: "alembic" }], tool: "alembic" }),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toMatch(/migrate-unconfirmed/);
+    expect(res.detail).toMatch(/1 pending/);
+  });
+
+  it("returns migrate-unconfirmed when the verification itself cannot run", async () => {
+    const res = await applyAndVerifyTierMigration(target, {
+      apply: okApply,
+      status: async () => { throw new Error("branch unreachable"); },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toMatch(/migrate-unconfirmed: could not verify/);
+  });
+
+  it("returns ok=false with the apply error when the apply itself throws", async () => {
+    const res = await applyAndVerifyTierMigration(target, {
+      apply: async () => { throw new Error("alembic exploded"); },
+      status: async () => ({ current: "rev2", pending: [], tool: "alembic" }),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toMatch(/alembic exploded/);
+  });
+
+  it("scm-merge's local-migrate fallback is wired to the verify (static)", () => {
+    const src = fs.readFileSync(
+      new URL("../../scripts/lakebase/scm-merge.cli.ts", import.meta.url),
+      "utf8",
+    );
+    expect(src).toMatch(/applyAndVerifyTierMigration\(/);
+    // The bare apply-without-verify must be gone from the fallback.
+    expect(src).not.toMatch(/localMigrateFallback[\s\S]*await applySchemaMigrations\(/);
   });
 });
