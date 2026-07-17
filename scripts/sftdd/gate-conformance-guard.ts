@@ -55,33 +55,53 @@ function conformanceReason(inputs: Record<string, string>): string | null {
  * acs/<X>.json (canonicalized to ac.json) is validated. Returns a reason listing
  * violations, or null when all ACs conform (or none exist yet).
  */
+/** The AC-conformance problems for ONE story (parse + schema + intra-story
+ *  independence), scoped to `stories/<story>/acs/`. The single per-story scan both
+ *  the feature-wide gate and the per-story spec-gate approval read, so a truncated
+ *  or non-conformant AC is caught identically wherever it is checked. */
+function storyAcProblems(fdir: string, story: string): string[] {
+  const acsDir = join(fdir, "stories", story, "acs");
+  if (!existsSync(acsDir)) return [];
+  const problems: string[] = [];
+  const acs: Array<{ name: string; content: string }> = [];
+  for (const f of readdirSync(acsDir)) {
+    if (!f.endsWith(".json")) continue;
+    const p = join(acsDir, f);
+    let content: string;
+    try {
+      content = readFileSync(p, "utf8");
+    } catch {
+      continue;
+    }
+    acs.push({ name: f.replace(/\.json$/, ""), content });
+    // checkArtifactConformance JSON.parses first, so a truncated/invalid AC file
+    // (missing closing brace) fails here with "not valid JSON" , the exact defect
+    // that previously slipped past the spec + reflect gates to deploy (Finding 29).
+    const r = checkArtifactConformance(canonicalArtifactName(p), content);
+    if (!r.ok) problems.push(`${story}/acs/${f}: ${r.violations.join("; ")}`);
+  }
+  // AC independence within this story: a later AC must not be a subset of an
+  // earlier one (records independence.distinct_from_prior; blocks the
+  // AC3-subset-of-AC2 overlap that otherwise stalls the build).
+  const indep = checkAcIndependence(acs);
+  if (!indep.ok) problems.push(...indep.violations.map((v) => `${story}/acs: ${v}`));
+  return problems;
+}
+
+/** Conformance reason for ONE story's ACs (Finding 29): every `acs/<X>.json` for
+ *  the story must JSON-parse + conform to ac.schema. Returns a reason listing
+ *  violations, or null when all conform (or none exist yet). Wired into the
+ *  per-story spec-gate approval so a malformed AC is refused at approve time, not
+ *  discovered at deploy gate-conformance. */
+export function storyAcsConformanceReason(fdir: string, story: string): string | null {
+  const problems = storyAcProblems(fdir, story);
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
+
 function acsConformanceReason(fdir: string): string | null {
   const stories = join(fdir, "stories");
   if (!existsSync(stories)) return null;
-  const problems: string[] = [];
-  for (const s of readdirSync(stories)) {
-    const acsDir = join(stories, s, "acs");
-    if (!existsSync(acsDir)) continue;
-    const acs: Array<{ name: string; content: string }> = [];
-    for (const f of readdirSync(acsDir)) {
-      if (!f.endsWith(".json")) continue;
-      const p = join(acsDir, f);
-      let content: string;
-      try {
-        content = readFileSync(p, "utf8");
-      } catch {
-        continue;
-      }
-      acs.push({ name: f.replace(/\.json$/, ""), content });
-      const r = checkArtifactConformance(canonicalArtifactName(p), content);
-      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
-    }
-    // AC independence within this story: a later AC must not be a subset of an
-    // earlier one (records independence.distinct_from_prior; blocks the
-    // AC3-subset-of-AC2 overlap that otherwise stalls the build).
-    const indep = checkAcIndependence(acs);
-    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
-  }
+  const problems = readdirSync(stories).flatMap((s) => storyAcProblems(fdir, s));
   return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
 }
 
