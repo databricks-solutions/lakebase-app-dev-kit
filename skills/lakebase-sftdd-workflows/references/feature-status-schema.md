@@ -19,6 +19,7 @@ interface FeatureStatusSnapshot {
   selection_log_recent: SelectionLogEntry[];
   open_smells: SmellHit[];
   gates: GatesSummary | null;
+  progression: ProgressionSummary | null; // deploy/promote completion reconciled from the drive engine
 }
 ```
 
@@ -35,6 +36,7 @@ interface FeatureStatusSnapshot {
 | `selection_log_recent` | array | Up to the last 5 entries from `.sftdd/selection-log.md`, oldest-first. |
 | `open_smells` | array | Unresolved entries from `.sftdd/smells.json` (entries with no `resolution` field). Global to the `.sftdd/` tree; not filtered per feature in this version. |
 | `gates` | object \| null | Compact view of `.sftdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all four gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/sftdd/gates.readGates()` for the full state including history + artifact_hashes. |
+| `progression` | object \| null | Deploy/promote completion RECONCILED from the drive engine (`readDriveContext`, the same reconciliation `lakebase-sftdd-next` uses): `{coarse_phase, deploy_done, promote_done}`. `deploy_done` is true once `deploy-evidence.json` exists (or the feature has merged); `promote_done` is true once the SCM `.lakebase/workflow-state.json` reaches `merged`. The renderer overlays this onto the `deploy`/`promote` gate lines so a shipped feature reads `done`, not the stale raw `gates.json` `open` bit. `null` when the drive context cannot be read. |
 
 ## Nested types
 

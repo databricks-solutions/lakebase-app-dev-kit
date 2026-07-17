@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
+import { readDriveContext } from "./orchestrator-probe.js";
 import { readMasterTestList, type TestListItem } from "./test-list";
 import { readPlan, type ExperimentPlan } from "./design-spec-gate";
 import { storiesDir as storiesDirOf } from "./sftdd-paths.js";
@@ -67,6 +68,20 @@ export interface StoryStatusEntry {
   accepted: boolean;
 }
 
+/** The deploy/promote completion RECONCILED from the drive engine's own context
+ *  (deploy-evidence.json + the SCM workflow-state ladder), the SAME reconciliation
+ *  lakebase-sftdd-next uses. Lets feature-status show a deployed + merged feature's
+ *  deploy/promote as done instead of the stale gates.json approval bit (Finding 13).
+ *  null when the drive context cannot be read (e.g. the feature was never authored). */
+export interface ProgressionSummary {
+  /** The honored coarse drive phase (planning | feature | deploy | promote | done). */
+  coarse_phase: string;
+  /** The deploy actually ran (deploy-evidence present) or the feature has since merged. */
+  deploy_done: boolean;
+  /** The feature merged up to its parent tier (SCM workflow-state = merged). */
+  promote_done: boolean;
+}
+
 export interface FeatureStatusSnapshot {
   feature_id: string;
   current_workflow_phase: string | null;
@@ -91,6 +106,10 @@ export interface FeatureStatusSnapshot {
    * gates.json file has been written yet.
    */
   gates: GatesSummary | null;
+  /** Deploy/promote completion reconciled from the drive engine, so the gate
+   *  display agrees with lakebase-sftdd-next instead of dumping the raw (and
+   *  stale) gates.json approval bit (Finding 13). null when unreadable. */
+  progression: ProgressionSummary | null;
 }
 
 const MAX_RECENT_LOG_ENTRIES = 5;
@@ -243,9 +262,31 @@ export function deriveFeaturePhase(stories: StoryStatusEntry[]): string | null {
   return "design";
 }
 
+/** Reconcile deploy/promote completion from the drive engine's context (the SAME
+ *  readDriveContext lakebase-sftdd-next consumes), tolerant of an unreadable state.
+ *  `projectDir` reaches the SCM workflow-state at <projectDir>/.lakebase/. */
+function readProgression(
+  sftddDir: string,
+  featureId: string,
+  projectDir: string
+): ProgressionSummary | null {
+  try {
+    const ctx = readDriveContext(sftddDir, featureId, projectDir);
+    return {
+      coarse_phase: ctx.phase,
+      // A merged feature was necessarily deployed first, so merge implies deploy.
+      deploy_done: Boolean(ctx.deploy?.deployed || ctx.promote?.merged),
+      promote_done: Boolean(ctx.promote?.merged),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getFeatureStatus(
   sftddDir: string,
-  featureId: string
+  featureId: string,
+  projectDir: string = dirname(sftddDir)
 ): FeatureStatusSnapshot {
   // Plans live per story now: one plan.json under each
   // features/<F>/stories/<story>/. Collect every story that has one.
@@ -296,6 +337,7 @@ export function getFeatureStatus(
     selection_log_recent: readSelectionLogRecent(sftddDir, MAX_RECENT_LOG_ENTRIES),
     open_smells: smells,
     gates: readGatesSummary(sftddDir, featureId),
+    progression: readProgression(sftddDir, featureId, projectDir),
   };
 }
 
@@ -386,6 +428,19 @@ export function renderFeatureStatus(snapshot: FeatureStatusSnapshot): string {
     lines.push(`Gates:`);
     for (const name of GATE_NAMES) {
       const g = snapshot.gates[name];
+      // Overlay the drive engine's reconciliation onto the raw gates.json bit so a
+      // deployed + merged feature reads done, not the stale `open` (Finding 13). The
+      // ground truth is deploy-evidence / the SCM merge; only overlay when the raw
+      // gate is still open (an explicit approval already renders itself).
+      const p = snapshot.progression;
+      if (name === "deploy" && g.status === "open" && p?.deploy_done) {
+        lines.push(`  ${name.padEnd(10)} done (deployed)`);
+        continue;
+      }
+      if (name === "promote" && g.status === "open" && p?.promote_done) {
+        lines.push(`  ${name.padEnd(10)} done (merged)`);
+        continue;
+      }
       const when = g.approved_at ? ` @ ${g.approved_at}` : "";
       const by = g.approver ? ` by ${g.approver}` : "";
       lines.push(`  ${name.padEnd(10)} ${g.status}${when}${by}`);
