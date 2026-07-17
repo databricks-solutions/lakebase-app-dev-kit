@@ -16,6 +16,7 @@ import {
 } from "./branch-utils.js";
 import { createBranch } from "./branch-create.js";
 import { deleteBranch } from "./branch-delete.js";
+import { branchRevisionOrphan } from "./schema-migrate.js";
 import { ensureEndpoint, getCredential, getEndpoint } from "./branch-endpoint.js";
 import { sanitizeBranchName } from "../util/sanitize-branch-name.js";
 import { KIT_TIMEOUTS } from "./kit-config.js";
@@ -27,6 +28,7 @@ export type ResolveCiBranchStatus =
   | "EXISTS"
   | "VERIFIED"
   | "RECREATED"
+  | "RECREATED_DB_AHEAD"
   | "UNVERIFIED";
 
 export interface ResolveCiBranchArgs {
@@ -50,6 +52,25 @@ export interface ResolveCiBranchArgs {
    * branches (ci-pr-*). Without this flag, source-mismatch is a hard error.
    */
   recreateOnSourceMismatch?: boolean;
+  /**
+   * When true, an existing ci-pr branch whose source parentage is correct is ALSO
+   * probed for db-ahead-of-code (a phantom alembic_version / orphan table inherited
+   * when its source tier was polluted at first cut), and delete+re-forked from the
+   * now-clean source if orphaned (FEIP-8050, Finding 21 GAP B). Without this a
+   * reused ci-pr rides its inherited pollution through even after the source tier
+   * is reconciled, so CI re-fails with the same "Can't locate revision".
+   */
+  resetOnDbAhead?: boolean;
+  /** Project dir holding the local migration files, for the db-ahead probe.
+   *  Default: process.cwd(). */
+  projectDir?: string;
+  /** Injectable db-ahead probe (returns the orphan revision id, or null). Defaults
+   *  to branchRevisionOrphan; injected in tests. */
+  checkBranchDbAheadOfCode?: (a: {
+    instance: string;
+    branch: string;
+    projectDir?: string;
+  }) => Promise<string | null>;
   /** When true, create the primary endpoint if missing. */
   ensureEndpoint?: boolean;
   /** Default: "databricks_postgres". */
@@ -239,29 +260,54 @@ export async function resolveCiBranch(
     );
     const actual = describeSourceBranchLeaf(existing);
     source = actual;
-    if (!actual) {
-      status = "UNVERIFIED";
-    } else if (actual === expected) {
-      status = "VERIFIED";
-    } else if (args.recreateOnSourceMismatch) {
+    // Delete the (disposable ci-pr) branch and re-fork it from `sourceName`, then
+    // wait until ready. Shared by the source-mismatch recreate and the db-ahead
+    // reset below so the two paths can never drift.
+    const recreateFrom = async (sourceName: string): Promise<void> => {
       await deleteBranch({
         instance: args.instance,
         branch: lakebaseName,
         // Disposable CI branches (ci-pr-*) only; never the default.
         allowDefault: false,
       });
-      await waitUntilDeleted(
-        args.instance,
-        lakebaseName,
-        KIT_TIMEOUTS.readyWait
-      );
+      await waitUntilDeleted(args.instance, lakebaseName, KIT_TIMEOUTS.readyWait);
       await createBranch({
         instance: args.instance,
         branch: lakebaseName,
-        parentBranch: expected,
+        parentBranch: sourceName,
         noExpiry: true,
       });
       await waitUntilReady(args.instance, lakebaseName, KIT_TIMEOUTS.readyWait);
+    };
+    if (!actual) {
+      status = "UNVERIFIED";
+    } else if (actual === expected) {
+      // The source parentage is correct, but a ci-pr first cut while its source
+      // tier was polluted rides that pollution through even after the tier is
+      // reconciled (Finding 21 GAP B). Probe the reused branch for db-ahead-of-code
+      // and re-fork it from the now-clean source if orphaned.
+      let orphanRev: string | null = null;
+      if (args.resetOnDbAhead && expected) {
+        const probe = args.checkBranchDbAheadOfCode ?? branchRevisionOrphan;
+        try {
+          orphanRev = await probe({
+            instance: args.instance,
+            branch: lakebaseName,
+            projectDir: args.projectDir ?? process.cwd(),
+          });
+        } catch {
+          orphanRev = null; // best-effort: a probe failure never blocks CI.
+        }
+      }
+      if (orphanRev) {
+        await recreateFrom(expected);
+        status = "RECREATED_DB_AHEAD";
+        source = expected;
+      } else {
+        status = "VERIFIED";
+      }
+    } else if (args.recreateOnSourceMismatch) {
+      await recreateFrom(expected);
       status = "RECREATED";
       source = expected;
     } else {

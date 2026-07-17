@@ -526,6 +526,60 @@ export async function applyAndVerifyTierMigration(
   }
 }
 
+// ---- stampSchemaMigration (FEIP-8050 Finding 21 GAP A) ------------------------
+
+export interface StampSchemaMigrationArgs {
+  instance: string;
+  branch: string;
+  /** The revision to pin the branch's version table to, WITHOUT running migrations. */
+  revision: string;
+  projectDir?: string;
+  language?: SchemaMigrationLanguage;
+  database?: string;
+  endpointName?: string;
+}
+
+/**
+ * Pin a branch's version table to a revision WITHOUT running migrations (the
+ * reconcile primitive for a db-ahead tier). Only version-table tools that expose
+ * a stamp (Alembic) support it; others throw. Threads the branch by {instance,
+ * branch} DSN like every other primitive (never the ambient .env branch).
+ */
+export async function stampSchemaMigration(args: StampSchemaMigrationArgs): Promise<{ stamped: string }> {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  if (!adapter.stamp) {
+    throw new SchemaMigrationError(
+      `Adapter '${adapter.id}' does not support stamp (only version-table tools like Alembic do).`,
+    );
+  }
+  const r = await adapter.stamp({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    revision: args.revision,
+    database: args.database,
+    endpointName: args.endpointName,
+  });
+  if (r.status !== "ok" || !r.stamped_revision) {
+    throw new SchemaMigrationError(r.error ?? "stamp failed");
+  }
+  return { stamped: r.stamped_revision };
+}
+
+/** The local code head: the last migration in apply-order (the revision a clean
+ *  branch should be at). Returns undefined when no local migrations exist OR the
+ *  project's migration tool cannot be detected (both mean "no derivable head"). */
+export function localCodeHead(projectDir: string, language?: SchemaMigrationLanguage): string | undefined {
+  let files: SchemaMigrationFile[];
+  try {
+    files = listSchemaMigrations({ projectDir, language });
+  } catch {
+    return undefined;
+  }
+  return files.length ? files[files.length - 1].version : undefined;
+}
+
 // ---- createSchemaMigration -----------------------------------------------------
 //
 // The create side of the adapter contract. The build (Driver) calls this

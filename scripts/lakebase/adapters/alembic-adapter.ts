@@ -21,6 +21,7 @@ import {
   listAlembicHeads,
   mergeAlembicHeads,
   rollbackAlembic,
+  stampAlembic,
   statusAlembic,
 } from "../schema-migrate-runners/alembic.js";
 import {
@@ -43,6 +44,8 @@ import {
   type SchemaMigrationAdapter,
   type RollbackArgs,
   type RollbackResult,
+  type StampArgs,
+  type StampResult,
   type StatusArgs,
   type StatusResult,
 } from "../schema-migration-adapter.js";
@@ -156,6 +159,20 @@ export const AlembicAdapter: SchemaMigrationAdapter = {
       return {
         rolled_back: [],
         status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  },
+
+  async stamp(args: StampArgs): Promise<StampResult> {
+    const dsn = await buildDsn(args);
+    try {
+      const r = await stampAlembic({ projectDir: args.projectDir, dsn, revision: args.revision });
+      return { status: "ok", stamped_revision: r.stamped, tool_specific: { tool: r.tool } };
+    } catch (err) {
+      return {
+        status: "error",
+        stamped_revision: null,
         error: err instanceof Error ? err.message : String(err),
       };
     }

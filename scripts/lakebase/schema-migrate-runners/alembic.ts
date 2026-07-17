@@ -247,6 +247,20 @@ export async function rollbackAlembic(
   return { rolledBack, tool: "alembic" };
 }
 
+/**
+ * Stamp the branch's alembic_version to `revision` WITHOUT running any migration
+ * (the reconcile primitive for a db-ahead tier, FEIP-8050 Finding 21 GAP A).
+ * `--purge` clears the alembic_version table first, so a PHANTOM current revision
+ * (a rev id with no local file, the "Can't locate revision" state) does not block
+ * the stamp. Pins the branch to a known-good revision so alembic can proceed.
+ */
+export async function stampAlembic(
+  ctx: RunnerCtx & { revision: string }
+): Promise<{ stamped: string; tool: "alembic" }> {
+  await runAlembic(ctx, ["stamp", "--purge", ctx.revision]);
+  return { stamped: ctx.revision, tool: "alembic" };
+}
+
 export async function statusAlembic(ctx: RunnerCtx): Promise<SchemaMigrationStatusResult> {
   const current = await getCurrentRevision(ctx);
   const head = await getHeadRevision(ctx);

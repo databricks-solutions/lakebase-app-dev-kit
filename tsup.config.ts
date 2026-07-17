@@ -39,6 +39,7 @@ export default defineConfig({
     "scripts/lakebase/scm-prepare-pr.cli": "scripts/lakebase/scm-prepare-pr.cli.ts",
     "scripts/lakebase/scm-wait-ci.cli": "scripts/lakebase/scm-wait-ci.cli.ts",
     "scripts/lakebase/scm-merge.cli": "scripts/lakebase/scm-merge.cli.ts",
+    "scripts/lakebase/scm-reconcile-tier.cli": "scripts/lakebase/scm-reconcile-tier.cli.ts",
     "scripts/lakebase/scm-recover-orphans.cli": "scripts/lakebase/scm-recover-orphans.cli.ts",
     "scripts/lakebase/scm-doctor.cli": "scripts/lakebase/scm-doctor.cli.ts",
     "scripts/lakebase/scm-feature-branch.cli": "scripts/lakebase/scm-feature-branch.cli.ts",

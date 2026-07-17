@@ -12,6 +12,7 @@ interface ParsedArgs {
   lakebaseName?: string;
   createFrom?: string;
   recreateOnSourceMismatch?: boolean;
+  resetOnDbAhead?: boolean;
   ensureEndpoint?: boolean;
   githubEnv?: boolean;
   database?: string;
@@ -34,6 +35,9 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--recreate-on-source-mismatch":
         out.recreateOnSourceMismatch = true;
+        break;
+      case "--reset-on-db-ahead":
+        out.resetOnDbAhead = true;
         break;
       case "--ensure-endpoint":
         out.ensureEndpoint = true;
@@ -71,6 +75,10 @@ Flags:
                                If the branch exists but was forked from a different
                                source than --create-from asks for, delete and re-fork.
                                Intended for disposable CI branches (ci-pr-*).
+  --reset-on-db-ahead          If a reused ci-pr's source parentage is correct but
+                               its DB is ahead of code (a phantom revision inherited
+                               when its source tier was polluted), delete and re-fork
+                               from the now-clean source. Intended for ci-pr-*.
   --ensure-endpoint            Create the primary endpoint if it doesn't exist.
   --github-env                 Append vars to $GITHUB_ENV (heredoc for secrets)
                                AND emit NON-SECRET KEY='value' to stdout for the
@@ -140,6 +148,7 @@ async function main(): Promise<number> {
     lakebaseName: args.lakebaseName,
     createFrom: args.createFrom,
     recreateOnSourceMismatch: args.recreateOnSourceMismatch,
+    resetOnDbAhead: args.resetOnDbAhead,
     ensureEndpoint: args.ensureEndpoint,
     database: args.database,
   });
