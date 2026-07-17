@@ -6211,6 +6211,10 @@ async function rollbackAlembic(ctx) {
   const rolledBack = after ? inRange.filter((a) => a.version !== after) : inRange;
   return { rolledBack, tool: "alembic" };
 }
+async function stampAlembic(ctx) {
+  await runAlembic(ctx, ["stamp", "--purge", ctx.revision]);
+  return { stamped: ctx.revision, tool: "alembic" };
+}
 async function statusAlembic(ctx) {
   const current = await getCurrentRevision(ctx);
   const head = await getHeadRevision(ctx);
@@ -6347,6 +6351,19 @@ var AlembicAdapter = {
       return {
         rolled_back: [],
         status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async stamp(args) {
+    const dsn = await buildDsn2(args);
+    try {
+      const r = await stampAlembic({ projectDir: args.projectDir, dsn, revision: args.revision });
+      return { status: "ok", stamped_revision: r.stamped, tool_specific: { tool: r.tool } };
+    } catch (err) {
+      return {
+        status: "error",
+        stamped_revision: null,
         error: err instanceof Error ? err.message : String(err)
       };
     }
@@ -8454,6 +8471,22 @@ async function runDoctor(args) {
       }
     }
   } catch {
+  }
+  for (const wf of ["pr.yml", "merge.yml"]) {
+    try {
+      const p = path28.join(projectDir, ".github", "workflows", wf);
+      if (!fs30.existsSync(p)) continue;
+      const body = fs30.readFileSync(p, "utf8");
+      if (/lakebase-app-dev-kit#v\d/.test(body)) {
+        findings.push({
+          id: "ci-workflow-kit-pin",
+          severity: "warn",
+          message: `.github/workflows/${wf} hardcodes a kit version pin (github:databricks-solutions/lakebase-app-dev-kit#v<ver>) instead of resolving .lakebase/kit-ref at runtime, so bumping .lakebase/kit-ref does NOT change the kit CI actually runs (FEIP-8050, Finding 24).`,
+          suggestion: "Re-emit the workflows from the current kit templates so they resolve KIT_REF from .lakebase/kit-ref at CI time (updateWorkflows in scripts/lakebase/workflow-drift.ts; lakebase-doctor reports this as workflow-drift). Until then a kit-ref bump will not reach CI."
+        });
+      }
+    } catch {
+    }
   }
   if (!env.has("LAKEBASE_PROJECT_ID")) {
     findings.push({

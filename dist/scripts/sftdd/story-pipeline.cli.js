@@ -4134,7 +4134,7 @@ var require_core = __commonJS({
         if (typeof this.opts.loadSchema != "function") {
           throw new Error("options.loadSchema should be a function");
         }
-        const { loadSchema } = this.opts;
+        const { loadSchema: loadSchema2 } = this.opts;
         return runCompileAsync.call(this, schema, meta);
         async function runCompileAsync(_schema, _meta) {
           await loadMetaSchema.call(this, _schema.$schema);
@@ -4174,7 +4174,7 @@ var require_core = __commonJS({
           if (p)
             return p;
           try {
-            return await (this._loading[ref] = loadSchema(ref));
+            return await (this._loading[ref] = loadSchema2(ref));
           } finally {
             delete this._loading[ref];
           }
@@ -6672,6 +6672,7 @@ var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureSpecJson = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.json");
 var featureSpecMd = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.md");
+var featureTestListJson = (tdd, f) => join(featureResolved(tdd, f), "test-list.json");
 var pipelineJson = (tdd, f) => join(featureResolved(tdd, f), "pipeline.json");
 var storiesDir = (tdd, f) => join(featureResolved(tdd, f), "stories");
 var storyDir = (tdd, f, s) => join(storiesDir(tdd, f), s);
@@ -6684,7 +6685,11 @@ function findStoryDir(tdd, f, s) {
   return matches.length === 1 ? join(root, matches[0]) : void 0;
 }
 var storyResolved = (tdd, f, s) => findStoryDir(tdd, f, s) ?? storyDir(tdd, f, s);
+var storyJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "story.json");
 var acsDir = (tdd, f, s) => join(storyResolved(tdd, f, s), "acs");
+var storyTestListJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "test-list-per-story.json");
+var reflectVerdictJson = (tdd, f, s) => join(storyResolved(tdd, f, s), "reflect-verdict.json");
+var handbackFile = (tdd, f, role, story) => join(featureDir(tdd, f), ".handback", `${role}${story ? `.${story}` : ""}.md`);
 function findFeatureDir(tdd, featureId) {
   const root = featuresDir(tdd);
   if (!fs.existsSync(root)) return void 0;
@@ -6692,6 +6697,39 @@ function findFeatureDir(tdd, featureId) {
   if (fs.existsSync(exact)) return exact;
   const matches = fs.readdirSync(root).filter((d) => d === featureId || d.startsWith(`${featureId}-`));
   return matches.length === 1 ? join(root, matches[0]) : void 0;
+}
+function storyAcIds(tdd, f, s) {
+  const ids = /* @__PURE__ */ new Set();
+  const sj = storyJson(tdd, f, s);
+  if (fs.existsSync(sj)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(sj, "utf8"));
+      if (Array.isArray(data.acs)) {
+        for (const a of data.acs) {
+          const id = typeof a === "string" ? a : a?.id;
+          if (typeof id === "string" && id.length > 0) ids.add(id);
+        }
+      }
+    } catch {
+    }
+  }
+  const dir = acsDir(tdd, f, s);
+  if (fs.existsSync(dir)) {
+    try {
+      for (const file of fs.readdirSync(dir)) {
+        const m = /^(.+)\.json$/.exec(file);
+        if (!m) continue;
+        const base = m[1];
+        try {
+          const obj = JSON.parse(fs.readFileSync(join(dir, file), "utf8"));
+          if (obj && typeof obj.id === "string" && obj.id === base) ids.add(base);
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+  return [...ids];
 }
 
 // scripts/sftdd/story-pipeline.ts
@@ -6935,29 +6973,180 @@ function reviseStory(pipeline, storyId, opts) {
   return pipeline;
 }
 
-// scripts/sftdd/experiment-merge.ts
+// scripts/sftdd/revise.ts
+init_esm_shims();
+import { existsSync as existsSync9, readFileSync as readFileSync10, writeFileSync as writeFileSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync3, rmSync as rmSync3 } from "fs";
+import { join as join9, dirname as dirname3 } from "path";
+
+// scripts/sftdd/agent-log.ts
+init_esm_shims();
+import { appendFileSync, existsSync as existsSync3, readFileSync as readFileSync4 } from "fs";
+import { join as join4 } from "path";
+
+// scripts/sftdd/schema-loader.ts
+init_esm_shims();
+var import_ajv = __toESM(require_ajv(), 1);
+import { readFileSync as readFileSync3 } from "fs";
+import { join as join3 } from "path";
+var SCHEMA_DIR = join3(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+ajv.addFormat("date-time", true);
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse(readFileSync3(join3(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
+}
+
+// scripts/sftdd/agent-log-events.ts
+init_esm_shims();
+var EVENT_TEMPLATES = {
+  // Orchestration lifecycle (code-emitted)
+  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
+  "phase.start": { template: "{{role}} START {{phase}}" },
+  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
+  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
+  // Gates (code surfaces; HIL / Human Proxy decides)
+  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
+  "gate.approved": { template: "GATE {{gate}} APPROVED" },
+  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
+  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
+  // Intake & planning
+  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
+  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
+  // Artifacts & design (agent-emitted)
+  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
+  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
+  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
+  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
+  "cycle.red": { template: "RED {{batch}} test(s) in {{cycle_id}} [{{layer}}], lead {{test_id}} ({{ac}}): {{asserts}}" },
+  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
+  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
+  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
+  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
+  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
+  // Experiment lifecycle (code-emitted)
+  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
+  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
+  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
+  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
+  // Deploy / verify (code-emitted from the deploy CLI)
+  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
+  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
+  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
+  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
+  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
+  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
+  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
+  // UX adherence
+  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
+  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
+  // Per-turn model usage (code-emitted by the runner from the claude -p result).
+  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
+  // cache_* + cost_usd ride in metadata (not template slots, so not required).
+  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
+  // Generic (agent-emitted; debug / interim)
+  "reasoning": { template: "{{note}}" },
+  "progress": { template: "{{note}} , {{step}}" }
+};
+var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
+function isKnownEvent(name) {
+  return Object.prototype.hasOwnProperty.call(EVENT_TEMPLATES, name);
+}
+var AgentLogEventError = class extends Error {
+};
+function renderEventMessage(event, slots = {}) {
+  if (!isKnownEvent(event)) {
+    throw new AgentLogEventError(
+      `unknown agent-log event "${event}" (not in the closed vocabulary). Allowed: ${AGENT_LOG_EVENT_NAMES.join(", ")}`
+    );
+  }
+  const tmpl = EVENT_TEMPLATES[event].template;
+  return tmpl.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, name) => {
+    const v = slots[name];
+    if (v === void 0 || v === null || v === "") {
+      throw new AgentLogEventError(`agent-log event "${event}" is missing required slot "${name}"`);
+    }
+    return String(v);
+  });
+}
+
+// scripts/sftdd/agent-log.ts
+function logFilePath(sftddDir) {
+  return join4(sftddDir, "agent-log.jsonl");
+}
+function buildAgentLogEvent(input, now) {
+  const slots = input.slots ?? {};
+  const renderCtx = {
+    role: input.role,
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots
+  };
+  const message = renderEventMessage(input.event, renderCtx);
+  const metadata = {
+    ...input.feature_id !== void 0 ? { feature_id: input.feature_id } : {},
+    ...input.phase !== void 0 ? { phase: input.phase } : {},
+    ...input.cycle_id !== void 0 ? { cycle_id: input.cycle_id } : {},
+    ...slots,
+    ...input.metadata ?? {}
+  };
+  const event = {
+    timestamp: input.timestamp ?? now().toISOString(),
+    level: input.level,
+    role: input.role,
+    // model + effort sit right after role (the per-turn dispatch events carry them).
+    ...input.model ? { model: input.model } : {},
+    ...input.effort ? { effort: input.effort } : {},
+    event: input.event,
+    message,
+    ...Object.keys(metadata).length > 0 ? { metadata } : {}
+  };
+  const validate = getValidator("agent-log-event.schema.json");
+  if (!validate(event)) {
+    throw new Error(`invalid agent log event: ${formatSchemaErrors(validate).join("; ")}`);
+  }
+  return event;
+}
+function emitAgentLogEvent(input, opts = {}) {
+  const sftddDir = opts.sftddDir ?? resolveSftddDir();
+  const now = opts.now ?? (() => /* @__PURE__ */ new Date());
+  const event = buildAgentLogEvent(input, now);
+  appendFileSync(logFilePath(sftddDir), `${JSON.stringify(event)}
+`, "utf8");
+  return event;
+}
+
+// scripts/sftdd/smells.ts
+init_esm_shims();
+import { existsSync as existsSync7, readFileSync as readFileSync8, writeFileSync as writeFileSync5 } from "fs";
+import { join as join8 } from "path";
+
+// scripts/sftdd/run-cycle.ts
 init_esm_shims();
 
-// scripts/sftdd/experiment-lifecycle.ts
-init_esm_shims();
-
-// scripts/sftdd/experiment.ts
-init_esm_shims();
-
-// scripts/lakebase/paired-branch.ts
-init_esm_shims();
-import * as fs4 from "fs";
-import * as path3 from "path";
-import { execFileSync as execFileSync3 } from "child_process";
-
-// scripts/lakebase/branch-create.ts
+// scripts/lakebase/get-connection.ts
 init_esm_shims();
 
 // scripts/lakebase/databricks-cli.ts
 init_esm_shims();
 import { execFile, execFileSync as execFileSync2 } from "child_process";
 import { promisify } from "util";
-import { join as join4 } from "path";
+import { join as join6 } from "path";
 
 // scripts/lakebase/kit-config.ts
 init_esm_shims();
@@ -7106,7 +7295,7 @@ function resolveProfile(opts) {
   if (profileByEnvFile.has(cwd)) {
     fromEnvFile = profileByEnvFile.get(cwd);
   } else {
-    fromEnvFile = readEnvVar(join4(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    fromEnvFile = readEnvVar(join6(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
     profileByEnvFile.set(cwd, fromEnvFile);
   }
   if (fromEnvFile) return fromEnvFile;
@@ -7175,13 +7364,11 @@ function runDatabricksSync(args, opts = {}) {
   }
 }
 
-// scripts/util/poll-until.ts
-init_esm_shims();
+// scripts/lakebase/get-connection.ts
+import { createLakebasePool } from "@databricks/lakebase";
+import { Client } from "pg";
 
-// scripts/util/delay.ts
-init_esm_shims();
-
-// scripts/util/sanitize-branch-name.ts
+// scripts/lakebase/branch-utils.ts
 init_esm_shims();
 
 // scripts/lakebase/branch-id.ts
@@ -7218,9 +7405,6 @@ function branchNameFromResourcePath(path14) {
     return null;
   }
 }
-
-// scripts/lakebase/branch-utils.ts
-init_esm_shims();
 
 // scripts/git/inspect.ts
 init_esm_shims();
@@ -7310,20 +7494,6 @@ function dbcli(args, host) {
   return runDatabricks(args, { host, timeout: KIT_TIMEOUTS.cliDefault });
 }
 
-// scripts/lakebase/lakebase-project.ts
-init_esm_shims();
-
-// scripts/lakebase/branch-delete.ts
-init_esm_shims();
-
-// scripts/lakebase/branch-endpoint.ts
-init_esm_shims();
-
-// scripts/lakebase/get-connection.ts
-init_esm_shims();
-import { createLakebasePool } from "@databricks/lakebase";
-import { Client } from "pg";
-
 // scripts/lakebase/constants.ts
 init_esm_shims();
 var POSTGRES_PORT = 5432;
@@ -7397,7 +7567,384 @@ function dbcli2(args) {
   return runDatabricksSync(args, { timeout: KIT_TIMEOUTS.cliDefault });
 }
 
+// scripts/sftdd/experiment.ts
+init_esm_shims();
+
+// scripts/lakebase/paired-branch.ts
+init_esm_shims();
+import * as fs4 from "fs";
+import * as path3 from "path";
+import { execFileSync as execFileSync3 } from "child_process";
+
+// scripts/lakebase/branch-create.ts
+init_esm_shims();
+
+// scripts/util/poll-until.ts
+init_esm_shims();
+
+// scripts/util/delay.ts
+init_esm_shims();
+
+// scripts/util/sanitize-branch-name.ts
+init_esm_shims();
+
+// scripts/lakebase/lakebase-project.ts
+init_esm_shims();
+
+// scripts/lakebase/branch-delete.ts
+init_esm_shims();
+
+// scripts/lakebase/branch-endpoint.ts
+init_esm_shims();
+
 // scripts/git/status.ts
+init_esm_shims();
+
+// scripts/sftdd/smells.ts
+var SMELL_CATALOG = [
+  {
+    name: "test-list-drift",
+    description: "Test list grew by >25% since cycle start without HITL approval.",
+    proposed_remediation: "PO refinement on spec.",
+    // A drifted/non-orderable test list is a test-strategist decomposition
+    // defect: route the remediation back to Gate 3 on `revise`.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list"
+  },
+  {
+    name: "superseded-tests",
+    description: "A new AC intentionally supersedes behavior encoded in PRIOR tests (often from earlier features); the Navigator flagged them in a superseded-tests allowlist. NOT a contradiction to block (that is test-list-drift), the latest AC wins and the accumulated tests must follow it.",
+    proposed_remediation: "Driver permissively refactors ONLY the flagged tests (and the code) to the new AC, then the honest-GREEN verify re-runs. Bounded to one attempt; an unflagged regression escalates.",
+    level: "build"
+  },
+  {
+    name: "cycle-stall",
+    description: "N cycles in a row with no GREEN.",
+    proposed_remediation: "Re-examine test ordering or spec ambiguity."
+  },
+  {
+    name: "api-coherence-drift",
+    description: "Same concept named differently across two consecutive PASS reviews.",
+    proposed_remediation: "Rename refactor before next test."
+  },
+  {
+    name: "fragility-ratio",
+    description: "One behavior change failed >3 tests.",
+    proposed_remediation: "Refactor + flag tests-mirror-implementation anti-pattern."
+  },
+  {
+    name: "test-cost-spiral",
+    description: "Each subsequent test takes >2x the lines of the prior one.",
+    proposed_remediation: "Reconsider boundary; outer-loop tests probably needed."
+  },
+  {
+    name: "cross-experiment-divergence",
+    description: "Two parallel experiments are solving different problems.",
+    proposed_remediation: "Was an opinion gap hidden? Re-run design-spec gate."
+  },
+  {
+    name: "dead-requirement-signal",
+    description: "An AC has had no scenarios written in N cycles while others mature.",
+    proposed_remediation: "Deprecate or clarify via PO refinement."
+  },
+  {
+    name: "test-deletion-attempt",
+    description: "Driver or human attempts to remove or weaken an existing test.",
+    proposed_remediation: "Hard block. Tests are immutable until the test list itself is renegotiated."
+  },
+  {
+    name: "boundary-violation",
+    description: "Test references a private method or internal helper.",
+    proposed_remediation: "Refactor to public boundary or move to inner-loop list."
+  },
+  {
+    name: "import-time-build-coupling",
+    description: "The app entry module requires an optional build artifact (e.g. client/dist) at module load time, an unconditional StaticFiles mount / asset read at import scope. It greens where the artifact happens to exist and crashes at import everywhere it does not (backend-only test runs, CI before the client build, fresh clones). Caught deterministically by the `lakebase-sftdd-imports-clean` gate; the Navigator may also flag it in REVIEW.",
+    proposed_remediation: "Guard the coupling: mount the compiled client ONLY when its directory exists, and serve a clear 503 from the SPA route when index.html is absent, so the module imports without the artifact. See the dev/prod-parity rule in software-design-principles."
+  },
+  {
+    name: "scaffold-defect",
+    description: "A test cannot run because the project scaffold is missing a piece the kit owns (e.g. tests/e2e/conftest.py + the live_server fixture for an E2E AC, or an absent runner). The role flags it instead of fabricating the missing scaffold itself. Blocking: a fabricated fixture diverges from the shipped one + reintroduces the CI-parity bugs the kit template prevents.",
+    proposed_remediation: "Halt + surface to the HIL. Fix the scaffold (re-run the kit's wiring, e.g. --enable-e2e for the project's language), never hand-author the missing piece in the build."
+  },
+  {
+    name: "ac-overlap",
+    description: "Two acceptance criteria in a story are not independent: satisfying one's `then` inherently satisfies (or contradicts) another, so the dependent AC's test can never go RED without deleting shipped code. A spec/test-list decomposition defect. Blocking, and flagged at the design gate (Gate 3) so it halts BEFORE a build cycle is wasted, rather than surfacing mid-build as a cycle-stall.",
+    proposed_remediation: "Surface to the PO at the gate. Merge the overlapping ACs, differentiate their observable behavior, or (PO decision) accept the dependent AC as already-satisfied. Do not order both as separate cycles.",
+    // An AC overlap is a spec-author decomposition defect: route back to Gate 1.
+    level: "spec",
+    owning_role: "spec-author",
+    gate_to_rerun: "spec"
+  },
+  {
+    name: "reflect-spec-defect",
+    description: "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's SPEC before the build lane: an internal contradiction between ACs, a spec-vs-architecture layer conflict, or an untestable/vacuous AC (no observable outcome). Caught on the cheap design artifacts so it is fixed BEFORE any RED/GREEN/REVIEW cycle runs, the reflection gate is a speed play (a spec fix is far cheaper than re-running build cycles).",
+    proposed_remediation: "Route back to the Spec Author (Gate 1): resolve the contradiction, make the AC observable, or realign the AC with the architecture. Bounded to one automatic revise per story; if the critic still finds the defect after the re-spec, it escalates to the human.",
+    // A spec defect the critic surfaces is a spec-author fix: route back to Gate 1.
+    level: "spec",
+    owning_role: "spec-author",
+    gate_to_rerun: "spec"
+  },
+  {
+    name: "reflect-testlist-defect",
+    description: "The pre-build reflection critic (Navigator, reflect mode) found a defect in the story's TEST-LIST before the build lane: a test that contradicts its AC, an AC with no covering test (coverage gap), an NFR with no fitness test, or a test that asserts at a layer the architecture forbids. Caught on the cheap artifacts so it is fixed BEFORE the build lane.",
+    proposed_remediation: "Route back to the Test Strategist (Gate 3): align the test with its AC, add the missing coverage, or move the assertion to the correct layer. Bounded to one automatic revise per story; if the critic still finds the defect after the re-scope, it escalates to the human.",
+    // A test-list defect the critic surfaces is a test-strategist fix: route back to Gate 3.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list"
+  },
+  {
+    name: "shared-state-aggregate-assertion",
+    description: "A test asserts an ABSOLUTE aggregate over the WHOLE store (an integrity/consistency probe, a global COUNT/SUM , e.g. 'the probe reports exactly 0/2/1 nonconforming rows') without owning the table state it asserts. It passes in the per-cycle build verify (an ISOLATED ephemeral branch holding only its seeded rows) but the honest-GREEN full-feature deploy-verify FAILS it, because that runs the whole suite against the SHARED feature-branch DB where other stories' rows (same nullable columns) inflate the count. A real probe over a real deployed DB can never assert an exact global total anyway.",
+    proposed_remediation: "Route back to the Test Strategist (Gate 3): scope BOTH the seed AND the assertion to the test's own rows (filter the probe/count by the test's SKUs or a marker column, or assert a before-vs-after DELTA), never an absolute whole-table total. Bounded to one automatic revise per story; a second escape escalates to the human.",
+    // A contamination-fragile aggregate assertion is a test-strategist fix: route back to Gate 3.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list"
+  },
+  {
+    name: "architect-canon-gap",
+    description: "The deterministic architect-notes projection (FEIP-7902) found a story whose AC layers or architecture.json dimensions (a persistence-invariant type or an NFR category) the project canon does not yet cover. Projecting a blind architectural_note would guess at placement the canon cannot justify, so the story is routed to the Architect instead: re-annotate the story AND amend the canon so the next feature inherits the new rule. Spec-level + architect-owned; the projection is the default path and this is its reactive self-heal.",
+    proposed_remediation: "Route to the Architect Reviewer (Gate 2 architecture): annotate the uncovered ACs with real architectural_notes and declare the new dimension in architecture.json so reconcile amends the canon. Bounded to one automatic revise per story; a second escape hard-halts to the human.",
+    level: "spec",
+    owning_role: "architect-reviewer",
+    gate_to_rerun: "architecture"
+  },
+  {
+    name: "layering-violation",
+    description: "The boundary/routes layer touches persistence directly (calls the DB session: .query/.add/.commit/.delete on a route handler) or business logic lives in the boundary/templates, instead of delegating to a service + repository. A fat controller violates the layered-architecture contract the architect declared in architecture.json `layers`. Distinct from `boundary-violation` (which is a TEST reaching a private method). Caught deterministically by `lakebase-sftdd-layering-clean`; the Navigator may also flag it in REVIEW.",
+    proposed_remediation: "Extract a service (business logic) + a repository (the ONLY layer that touches the ORM/session); the route handler validates input + delegates. Defended by the layering fitness test (tests/architecture/test_layering.py)."
+  },
+  {
+    name: "ux-adherence",
+    description: "The rendered UI defines the design tokens on :root yet does not USE them at the element level: hardcoded hex colors / raw px where a var(--token) belongs, an ia.md data-testid seam that was never rendered, or an action surface (form/submit) with no feedback affordance (no silent failure / unacknowledged success). Token-level adherence (assertDesignAdherence) cannot see this; the element-level checks in design-adherence.ts do, and the UX Designer flags it in REVIEW. Distinct from `layering-violation` (engineering layering): this is the experience-lens gate.",
+    proposed_remediation: "Consume tokens via var(--token) (no hardcoded hex/px), render every ia.md screen with its data-testid seams, and give every action a perceivable result. Refactor the UI to the design guide; do not weaken the guide to match the drift."
+  },
+  {
+    name: "ui-style-implementation-test",
+    description: "A test for a design-guide-governed styling property asserts the IMPLEMENTATION in the page SOURCE (an inline `style=` attr or raw CSS text, e.g. grepping the HTML for `text-align: right`) instead of the rendered SEAM (the element carries the design-guide class / data-testid) or the design-adherence gate. It greens only while the style stays inline, so the moment the design lane refactors that ad-hoc inline style into a token-driven theme.css class (as the design guide requires), the test breaks and the REFACTOR dead-locks with no valid SUPERSEDED-TESTS path (the test and the design guide cannot both be satisfied). A test-list decomposition defect the pre-build reflection critic flags (routes to the Test Strategist), so it is fixed before a build cycle wastes on it.",
+    proposed_remediation: "Test the SEAM, not the implementation: assert the quantity/styled cell carries its design-guide class or data-testid (the stable contract), and leave the visual property (alignment, tabular-nums, color) to the design-adherence gate / a rendered-output check. Never assert an inline `style=` string the design guide will move into a token-driven class.",
+    // A styling test asserting implementation is a test-strategist decomposition
+    // defect: route back to Gate 3 (test_list) on `revise`.
+    level: "spec",
+    owning_role: "test-strategist",
+    gate_to_rerun: "test_list"
+  },
+  {
+    name: "e2e-inline-regex-flag",
+    description: "An E2E Playwright matcher (to_contain_text/to_have_text/to_have_url/get_by_text) is built from a Python regex carrying INLINE FLAGS , re.compile(r\"(?i)summary\") and the like. Playwright forwards the pattern's `.pattern` string verbatim to the browser's JavaScript regex engine, which does NOT support inline-flag syntax `(?i)`/`(?s)`/`(?m)`, so the regex is invalid and the assertion can never match the running app. The test is structurally un-greenable: the honest-GREEN verify rejects it and the build raises to HIL. Caught deterministically + cheaply (no browser run) by the e2e-regex-clean static lint, which enriches the GREEN-verify failure with the exact file:line + fix.",
+    proposed_remediation: 'Pass the flag as a kwarg, not inline: re.compile("summary", re.IGNORECASE) emits the valid JS regex /summary/i. Or, for a plain case-insensitive substring, use the bare string form Playwright already matches loosely. See the E2E rule in the Navigator role.'
+  },
+  {
+    name: "e2e-row-perma-red",
+    description: "An E2E-tagged test row has failed or had zero recorded runs for N or more consecutive cycles.",
+    proposed_remediation: "Surface to PO: either fix the runner wiring (BASE_URL, paired-branch endpoint, playwright.config), narrow the failing scenario, or retag the AC to a layer with a working runner."
+  },
+  {
+    name: "contract-incompleteness",
+    description: 'A migration DROPPED (or renamed) a column the running code still references , the ORM model field, a query/repository, a serializer/DTO, or a template/view , so the app emits SQL for a column the migrated database no longer has and crashes at runtime ("column X does not exist") even though the migration itself succeeded. The contract half of expand/contract (software-design-principles hard rule 9) was left incomplete: the schema shrank but the code did not follow in the SAME change. Caught DETERMINISTICALLY by the `lakebase-sftdd-contract-clean` gate (it parses the migration\'s net column drops and greps the code tree for residual references), which enriches the GREEN-verify failure with the exact file:line list , no model judgment needed to notice OR localize it.',
+    proposed_remediation: "Driver REPAIR: remove or replace EVERY residual reference (model field, queries, serializers/DTOs, templates/views) in the same change so the code matches the migrated schema. Never edit the migration or a test to hide it. The green-failure fixDirective carries the precise file:line list, so this self-heals without a Navigator assess."
+  },
+  {
+    name: "migration-app-coupling",
+    description: "A migration module imports application code at import scope (e.g. `from app.services... import parse_x`) to reuse app logic in a data migration. A migration is an IMMUTABLE historical artifact; the app is mutable. Coupling the two means a later rename/move/removal of that app symbol breaks replaying the migration from base (the historical revision can no longer import), and every alembic subcommand that builds the revision map (history/heads, not just upgrade) must load the module. It greens under `upgrade` (env.py puts the project root on sys.path) yet fails in CI's `alembic history`/`heads`. Caught DETERMINISTICALLY by the `lakebase-sftdd-migration-clean` gate (it scans the migration files for module-scope app imports), which runs proactively at GREEN even when the local verify passes, so it is fixed before the PR; the Navigator may also flag it in REVIEW.",
+    proposed_remediation: "Driver REPAIR: make the migration self-contained: inline a frozen copy of the needed logic in the migration file (or express the data change in raw SQL). Do not import from app.* at module scope, so the migration stays stable as the app evolves and loads under every alembic subcommand."
+  }
+];
+function specLevelSmell(name) {
+  const def = SMELL_CATALOG.find((s) => s.name === name);
+  if (!def || def.level !== "spec" || !def.owning_role || !def.gate_to_rerun) return null;
+  return { owning_role: def.owning_role, gate_to_rerun: def.gate_to_rerun };
+}
+function composeReviseBrief(input) {
+  const artifact = input.gate === "spec" ? "acceptance criteria" : input.gate === "architecture" ? "architectural annotations + architecture.json" : "ordered test list";
+  const isCoverageDefect = input.smell === "reflect-testlist-defect" || input.smell === "reflect-spec-defect";
+  if (isCoverageDefect) {
+    return `REVISE (reflection gate): ${input.reason}
+
+Re-author this story's ${artifact} to ADD the specific coverage named above. This coverage is REQUIRED: add the missing test(s)/criterion that assert the exact behavior described , do NOT omit it, weaken it, or defer it to an open question. If the stated behavior genuinely cannot be tested as written, name the concrete blocker; do not punt.`;
+  }
+  return `REVISE (Product Owner): ${input.reason}
+
+Re-author this story's ${artifact} to address the above. Do NOT re-emit the same overlap/redundancy; if no honest, not-already-delivered behavior remains, say so as an open question rather than fabricating one.`;
+}
+function readSmellsLog(sftddDir) {
+  const file = join8(sftddDir, "smells.json");
+  if (!existsSync7(file)) return { detected: [] };
+  return JSON.parse(readFileSync8(file, "utf8"));
+}
+function smellMatches(entry, smell, story_id) {
+  if (entry.smell !== smell) return false;
+  if (story_id === void 0) return true;
+  return entry.story_id === void 0 || entry.story_id === story_id;
+}
+function markSmellResolved(sftddDir, smell, opts) {
+  const file = join8(sftddDir, "smells.json");
+  if (!existsSync7(file)) return false;
+  const log = JSON.parse(readFileSync8(file, "utf8"));
+  const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
+  if (!entry) return false;
+  entry.resolution = opts.note ?? `${opts.kind} by PO`;
+  entry.resolution_kind = opts.kind;
+  writeFileSync5(file, JSON.stringify(log, null, 2) + "\n");
+  return true;
+}
+
+// scripts/sftdd/reflection.ts
+init_esm_shims();
+import { existsSync as existsSync8, readFileSync as readFileSync9, writeFileSync as writeFileSync6, mkdirSync as mkdirSync4, rmSync as rmSync2 } from "fs";
+var SMELL_FOR_OWNER = {
+  "spec-author": "reflect-spec-defect",
+  "test-strategist": "reflect-testlist-defect"
+};
+function clearReflectVerdict(sftddDir, feature, story) {
+  const p = reflectVerdictJson(sftddDir, feature, story);
+  if (existsSync8(p)) rmSync2(p, { force: true });
+}
+var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
+
+// scripts/sftdd/revise.ts
+var REVISE_APPROVER = "human-proxy";
+function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
+  clearReflectVerdict(sftddDir, featureId, story);
+  const acIds = new Set(storyAcIds(sftddDir, featureId, story));
+  const master = featureTestListJson(sftddDir, featureId);
+  if (existsSync9(master)) {
+    try {
+      const data = JSON.parse(readFileSync10(master, "utf8"));
+      if (Array.isArray(data.items)) {
+        data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
+        writeFileSync7(master, JSON.stringify(data, null, 2) + "\n");
+      }
+    } catch {
+    }
+  }
+  const perStory = storyTestListJson(sftddDir, featureId, story);
+  if (existsSync9(perStory)) rmSync3(perStory, { force: true });
+  if (gate === "spec") {
+    const dir = acsDir(sftddDir, featureId, story);
+    if (existsSync9(dir)) {
+      for (const f of readdirSync3(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync3(join9(dir, f), { force: true });
+      }
+    }
+  } else if (gate === "architecture") {
+    const dir = acsDir(sftddDir, featureId, story);
+    if (existsSync9(dir)) {
+      for (const f of readdirSync3(dir)) {
+        if (!f.endsWith(".json")) continue;
+        const p = join9(dir, f);
+        try {
+          const ac = JSON.parse(readFileSync10(p, "utf8"));
+          if ("architectural_notes" in ac) {
+            delete ac.architectural_notes;
+            writeFileSync7(p, JSON.stringify(ac, null, 2) + "\n");
+          }
+        } catch {
+        }
+      }
+    }
+  }
+}
+function applyReviseSelfHeal(args) {
+  const sftddDir = args.sftddDir ?? resolveSftddDir();
+  const approver = args.approver ?? REVISE_APPROVER;
+  const at = (/* @__PURE__ */ new Date()).toISOString();
+  try {
+    emitAgentLogEvent(
+      {
+        role: "product-owner",
+        level: "info",
+        event: "gate.modified",
+        feature_id: args.featureId,
+        slots: {
+          gate: args.gate,
+          decision: "revise",
+          routed_to: args.routedTo,
+          smell: args.smell,
+          story: args.story,
+          verdict: args.reason,
+          approver
+        }
+      },
+      { sftddDir }
+    );
+  } catch {
+  }
+  const pipeline = readPipeline(sftddDir, args.featureId);
+  reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
+  writePipeline(sftddDir, pipeline);
+  staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
+  try {
+    const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
+    mkdirSync5(dirname3(hb), { recursive: true });
+    writeFileSync7(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+  } catch {
+  }
+  const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
+    story_id: args.story,
+    kind: "revised",
+    note: `revised by ${approver}: routed to ${args.routedTo} (${args.gate} gate)`
+  });
+  return { decided: "revise", story: args.story, routedTo: args.routedTo, resolvedSmell };
+}
+function revisableSmellForStory(sftddDir, featureId, story) {
+  let log;
+  try {
+    log = readSmellsLog(sftddDir);
+  } catch {
+    return null;
+  }
+  for (const d of log.detected) {
+    if (d.resolution) continue;
+    if (d.story_id !== void 0 && d.story_id !== story) continue;
+    const spec = specLevelSmell(d.smell);
+    if (!spec) continue;
+    return { smell: d.smell, routedTo: spec.owning_role, gate: spec.gate_to_rerun };
+  }
+  return null;
+}
+function reviseStoryWithSelfHeal(sftddDir, featureId, story, opts) {
+  const routable = revisableSmellForStory(sftddDir, featureId, story);
+  if (routable) {
+    applyReviseSelfHeal({
+      featureId,
+      story,
+      smell: routable.smell,
+      routedTo: routable.routedTo,
+      gate: routable.gate,
+      reason: opts.reason,
+      approver: opts.approver,
+      sftddDir
+    });
+    return { mode: "self-heal", story, smell: routable.smell, routedTo: routable.routedTo };
+  }
+  const pipeline = readPipeline(sftddDir, featureId);
+  reviseStory(pipeline, story, {
+    approver: opts.approver,
+    at: opts.at ?? (/* @__PURE__ */ new Date()).toISOString(),
+    reason: opts.reason
+  });
+  writePipeline(sftddDir, pipeline);
+  return { mode: "plain", story };
+}
+function clearStoryBlockingSmellOnDiscard(sftddDir, featureId, story, approver) {
+  const routable = revisableSmellForStory(sftddDir, featureId, story);
+  if (!routable) return null;
+  markSmellResolved(sftddDir, routable.smell, {
+    story_id: story,
+    kind: "cleared",
+    note: `discarded by ${approver}`
+  });
+  return routable.smell;
+}
+
+// scripts/sftdd/experiment-merge.ts
+init_esm_shims();
+
+// scripts/sftdd/experiment-lifecycle.ts
 init_esm_shims();
 
 // scripts/sftdd/cycle-record.ts
@@ -7413,8 +7960,8 @@ init_esm_shims();
 init_esm_shims();
 import { execSync, spawn } from "child_process";
 import { randomBytes } from "crypto";
-import { existsSync as existsSync8, mkdirSync as mkdirSync6, readFileSync as readFileSync9, rmSync as rmSync3, writeFileSync as writeFileSync7 } from "fs";
-import { dirname as dirname4, join as join9 } from "path";
+import { existsSync as existsSync12, mkdirSync as mkdirSync8, readFileSync as readFileSync14, rmSync as rmSync5, writeFileSync as writeFileSync10 } from "fs";
+import { dirname as dirname5, join as join12 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -7423,76 +7970,6 @@ init_esm_shims();
 init_esm_shims();
 import * as fs5 from "fs";
 
-// scripts/sftdd/smells.ts
-init_esm_shims();
-
-// scripts/sftdd/run-cycle.ts
-init_esm_shims();
-
-// scripts/sftdd/agent-log.ts
-init_esm_shims();
-
-// scripts/sftdd/schema-loader.ts
-init_esm_shims();
-var import_ajv = __toESM(require_ajv(), 1);
-import { join as join6 } from "path";
-var SCHEMA_DIR = join6(__dirname, "schemas");
-var ajv = new import_ajv.default({ allErrors: true, strict: false });
-ajv.addFormat("date-time", true);
-
-// scripts/sftdd/agent-log-events.ts
-init_esm_shims();
-var EVENT_TEMPLATES = {
-  // Orchestration lifecycle (code-emitted)
-  "handoff": { template: "dispatch {{to_role}} for {{phase}}" },
-  "phase.start": { template: "{{role}} START {{phase}}" },
-  "phase.end": { template: "{{role}} END {{phase}} ({{outcome}})" },
-  "escalation.raised": { template: "RAISED TO HIL [{{source}}]: {{reason}}" },
-  // Gates (code surfaces; HIL / Human Proxy decides)
-  "gate.surfaced": { template: "GATE {{gate}} awaiting decision , {{subject}}" },
-  "gate.approved": { template: "GATE {{gate}} APPROVED" },
-  "gate.rejected": { template: "GATE {{gate}} REJECTED: {{reason}}" },
-  "gate.modified": { template: "GATE {{gate}} MODIFIED: {{change}}" },
-  // Intake & planning
-  "intake.supplied": { template: "INTAKE supplied {{artifact}}" },
-  "intake.refused": { template: "INTAKE refused {{artifact}}: {{reason}}" },
-  // Artifacts & design (agent-emitted)
-  "artifact.written": { template: "{{role}} wrote {{artifact}} , {{summary}}" },
-  "open.question": { template: "OPEN Q [{{scope}}]: {{question}}" },
-  "concern.flagged": { template: "CONCERN {{concern}} , owner {{owner_layer}}" },
-  // Build cycle (cycle.* family: RED -> GREEN -> REVIEW -> REFACTOR)
-  "cycle.red": { template: "RED {{batch}} test(s) in {{cycle_id}} [{{layer}}], lead {{test_id}} ({{ac}}): {{asserts}}" },
-  "cycle.green": { template: "GREEN {{test_id}} [{{ac}}]: {{change}}" },
-  "cycle.review": { template: "REVIEW [{{ac}}] refactor={{refactor}}: {{rationale}}" },
-  "cycle.refactored": { template: "REFACTOR [{{ac}}]: {{change}}" },
-  "smell.flagged": { template: "SMELL {{smell}} ({{severity}}): {{detail}}" },
-  "runner.missing": { template: "NO RUNNER for layer {{layer}} (test {{test_id}})" },
-  // Experiment lifecycle (code-emitted)
-  "experiment.cut": { template: "EXPERIMENT cut for {{story}}" },
-  "experiment.accepted": { template: "EXPERIMENT accepted (merged) for {{story}}" },
-  "experiment.discarded": { template: "EXPERIMENT discarded for {{story}}: {{reason}}" },
-  "experiment.revised": { template: "EXPERIMENT revised for {{story}}: {{reason}}" },
-  // Deploy / verify (code-emitted from the deploy CLI)
-  "deploy.start": { template: "DEPLOY start {{scope}} -> {{target}}" },
-  "deploy.reachable": { template: "DEPLOY reachable {{url}} (pid {{pid}})" },
-  "deploy.unreachable": { template: "DEPLOY unreachable {{url}}: {{reason}}" },
-  "deploy.verified": { template: "DEPLOY verified {{scope}} @ {{url}} , verify {{verify_status}}" },
-  "deploy.failed": { template: "DEPLOY failed {{scope}}: {{reason}}" },
-  "verify.passed": { template: "VERIFY passed {{scope}} ({{command}})" },
-  "verify.failed": { template: "VERIFY failed {{scope}} ({{command}}): {{summary}}" },
-  // UX adherence
-  "adherence.passed": { template: "ADHERENCE passed {{scope}}" },
-  "adherence.failed": { template: "ADHERENCE failed {{scope}}: {{diffs}}" },
-  // Per-turn model usage (code-emitted by the runner from the claude -p result).
-  // input_tokens is the turn's CONTEXT SIZE (prompt the model processed); the
-  // cache_* + cost_usd ride in metadata (not template slots, so not required).
-  "turn.usage": { template: "{{role}} turn used {{input_tokens}} input + {{output_tokens}} output tokens" },
-  // Generic (agent-emitted; debug / interim)
-  "reasoning": { template: "{{note}}" },
-  "progress": { template: "{{note}} , {{step}}" }
-};
-var AGENT_LOG_EVENT_NAMES = Object.keys(EVENT_TEMPLATES);
-
 // scripts/sftdd/deploy-verify-assess.ts
 init_esm_shims();
 import * as fs6 from "fs";
@@ -7500,8 +7977,8 @@ import * as path4 from "path";
 
 // scripts/sftdd/e2e-regex-clean.ts
 init_esm_shims();
-import { readdirSync as readdirSync4, readFileSync as readFileSync8, statSync as statSync3 } from "fs";
-import { join as join8 } from "path";
+import { readdirSync as readdirSync5, readFileSync as readFileSync13, statSync as statSync3 } from "fs";
+import { join as join11 } from "path";
 
 // scripts/sftdd/ephemeral-verify.ts
 init_esm_shims();
@@ -7509,17 +7986,17 @@ init_esm_shims();
 // scripts/sftdd/supersession.ts
 init_esm_shims();
 import * as fs7 from "fs";
-import { join as join10 } from "path";
+import { join as join13 } from "path";
 
 // scripts/sftdd/contract-clean.ts
 init_esm_shims();
-import { existsSync as existsSync10, readFileSync as readFileSync11, readdirSync as readdirSync6, statSync as statSync4 } from "fs";
-import { join as join11, relative, extname } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync16, readdirSync as readdirSync7, statSync as statSync4 } from "fs";
+import { join as join14, relative, extname } from "path";
 
 // scripts/sftdd/migration-app-clean.ts
 init_esm_shims();
-import { existsSync as existsSync11, readFileSync as readFileSync12, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
-import { join as join12, relative as relative2, extname as extname2 } from "path";
+import { existsSync as existsSync15, readFileSync as readFileSync17, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
+import { join as join15, relative as relative2, extname as extname2 } from "path";
 
 // scripts/git/commits.ts
 init_esm_shims();
@@ -7679,6 +8156,10 @@ async function rollbackAlembic(ctx) {
   const rolledBack = after ? inRange.filter((a) => a.version !== after) : inRange;
   return { rolledBack, tool: "alembic" };
 }
+async function stampAlembic(ctx) {
+  await runAlembic(ctx, ["stamp", "--purge", ctx.revision]);
+  return { stamped: ctx.revision, tool: "alembic" };
+}
 async function statusAlembic(ctx) {
   const current = await getCurrentRevision(ctx);
   const head = await getHeadRevision(ctx);
@@ -7793,6 +8274,19 @@ var AlembicAdapter = {
       return {
         rolled_back: [],
         status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async stamp(args) {
+    const dsn = await buildDsn(args);
+    try {
+      const r = await stampAlembic({ projectDir: args.projectDir, dsn, revision: args.revision });
+      return { status: "ok", stamped_revision: r.stamped, tool_specific: { tool: r.tool } };
+    } catch (err) {
+      return {
+        status: "error",
+        stamped_revision: null,
         error: err instanceof Error ? err.message : String(err)
       };
     }
@@ -8689,6 +9183,7 @@ function parse(argv) {
     else if (a === "--parent-sha") out.parentSha = argv[++i];
     else if (a === "--lakebase-uid") out.lakebaseUid = argv[++i];
     else if (a === "--n") out.n = argv[++i];
+    else if (a === "--smell") out.smell = argv[++i];
     else if (a === "--tdd-dir") out.sftddDir = argv[++i];
     else if (a === "--project-dir") out.projectDir = argv[++i];
     else if (a === "--instance") out.instance = argv[++i];
@@ -8699,7 +9194,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise> --feature <F> [--tdd-dir <dir>]
+Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|resolve-smell> --feature <F> [--tdd-dir <dir>]
   set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>
   surface needs --story <S>
   approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]
@@ -8709,6 +9204,7 @@ Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|en
   await-acceptance needs --story <S>
   accept needs --story <S> --approver <A> [--at <ISO>]
   discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]
+  resolve-smell needs --smell <NAME> --approver <A> [--story <S>] [--reason <R>]
 `
   );
   return 2;
@@ -8895,7 +9391,9 @@ async function main() {
       if (!args.reason) return usage("discard needs --reason");
       discardStory(pipeline, args.story, { approver: args.approver, at: args.at ?? (/* @__PURE__ */ new Date()).toISOString(), reason: args.reason });
       writePipeline(sftddDir, pipeline);
-      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed
+      const cleared = clearStoryBlockingSmellOnDiscard(sftddDir, feature, args.story, args.approver);
+      const smellNote = cleared ? `; cleared blocking smell '${cleared}'` : "";
+      process.stdout.write(`discarded ${args.story} (${args.reason}); experiment torn down, out of sprint, lane freed${smellNote}
 `);
       return 0;
     }
@@ -8903,9 +9401,36 @@ async function main() {
       if (!args.story) return usage("revise needs --story");
       if (!args.approver) return usage("revise needs --approver");
       if (!args.reason) return usage("revise needs --reason");
-      reviseStory(pipeline, args.story, { approver: args.approver, at: args.at ?? (/* @__PURE__ */ new Date()).toISOString(), reason: args.reason });
-      writePipeline(sftddDir, pipeline);
-      process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed
+      const outcome = reviseStoryWithSelfHeal(sftddDir, feature, args.story, {
+        approver: args.approver,
+        reason: args.reason,
+        ...args.at ? { at: args.at } : {}
+      });
+      if (outcome.mode === "self-heal") {
+        process.stdout.write(
+          `revising ${args.story} (${args.reason}); smell '${outcome.smell}' resolved, ${outcome.routedTo} re-briefed, experiment torn down, back to designing
+`
+        );
+      } else {
+        process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed
+`);
+      }
+      return 0;
+    }
+    case "resolve-smell": {
+      if (!args.smell) return usage("resolve-smell needs --smell");
+      if (!args.approver) return usage("resolve-smell needs --approver");
+      const ok = markSmellResolved(sftddDir, args.smell, {
+        ...args.story ? { story_id: args.story } : {},
+        kind: "cleared",
+        note: `cleared by ${args.approver}${args.reason ? `: ${args.reason}` : ""}`
+      });
+      if (!ok) {
+        process.stderr.write(`no open smell '${args.smell}'${args.story ? ` for story ${args.story}` : ""} to resolve
+`);
+        return 1;
+      }
+      process.stdout.write(`resolved smell '${args.smell}'${args.story ? ` (story ${args.story})` : ""}
 `);
       return 0;
     }

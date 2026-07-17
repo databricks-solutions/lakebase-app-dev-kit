@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.30] - 2026-07-16
+
+Handover findings batch (FEIP-8050): six field findings from a stockflow tier-2 run. Cross-cutting theme: a branch's DB is addressed by its `{instance, branch}` DSN, never `LAKEBASE_BRANCH_ID` / ambient `LAKEBASE_HOST`.
+
+### Fixed
+
+- **`lakebase-feature-status` no longer shows a shipped feature's deploy/promote as `open` (Finding 13).** It dumped the raw `gates.json` approval bit, so a feature the drive had already deployed + merged disagreed with `lakebase-sftdd-next` (which reconciles from `deploy-evidence.json` + the SCM workflow-state). feature-status now consumes the SAME reconciliation (`readDriveContext`) via a new `progression` snapshot field and renders `done (deployed)` / `done (merged)`. The CLI gains `--project-dir` to reach `.lakebase/`.
+- **CI workflows follow `.lakebase/kit-ref` instead of a baked version pin (Finding 24).** Scaffolded `pr.yml` / `merge.yml` hardcoded the scaffold-time kit version at every kit call site, so bumping `.lakebase/kit-ref` (which the runtime substrate follows) never reached CI, every run executed the stale kit. Both workflows now resolve `KIT_REF` from `.lakebase/kit-ref` (fallback = the scaffold version) and use `#"${KIT_REF}"` at all call sites. `lakebase-scm-doctor` gains a `ci-workflow-kit-pin` warning that flags workflows still carrying the literal pin.
+- **The `/design` reflect gate and `pipeline revise` now converge instead of looping (Findings 22 + 23).** The operator-facing `lakebase-sftdd-pipeline revise` was hollow: it reset the story but never cleared the blocking smell (so the next drive re-raised it at action 000) and never re-briefed the test-strategist (so the regenerated test block re-omitted the requested coverage, forever). `revise` now runs the same self-heal the driver's auto-route uses: it resolves the smell, writes a coverage-forcing hand-back brief so the test-strategist MUST add the named test, and spends the one-revise budget so a re-fire hard-halts to the human. `discard` clears a discarded story's blocking smell; a new `resolve-smell` subcommand replaces hand-editing `smells.json`.
+- **The promote local-migrate fallback verifies the target before reporting in-sync (Finding 25).** It reported "git and Lakebase schema are in sync" purely from the apply exit code, a lie when the apply no-ops against the wrong branch or applies partially. `applyAndVerifyTierMigration` now reads the TARGET branch's status back (pending == 0) after applying; when it is not verified at head it reports `migrate-unconfirmed`, which BLOCKS workflow completion instead of printing a false in-sync.
+- **Shared tier reconcile + `ci-pr` reset (Finding 21).** Two gaps beyond the beta.27/.28 feature-branch recovery:
+  - CI reused `ci-pr-<N>` across runs, so a branch first cut while its source tier was polluted rode that pollution through even after the tier was reconciled. `lakebase-ci-resolve-branch --reset-on-db-ahead` (wired in `pr.yml`) probes a reused, source-verified `ci-pr` for db-ahead-of-code and re-forks it from the now-clean source.
+  - There was no path to reconcile a shared TIER branch (you cannot delete + recreate staging/prod). New `lakebase-reconcile-tier` reconciles a tier whose DB is ahead of code: it refuses on a healthy tier, drops the named orphan tables (identifier-safe), and stamps the branch to the code head. Backed by a new `stampSchemaMigration` primitive + an Alembic adapter `stamp` (`alembic stamp --purge`, which clears a phantom `alembic_version`).
+
+  The live-DB halves (Finding 25's target verify, Finding 21's tier stamp + table drop, and the `ci-pr` reset) are validated by a live drive; their decision + orchestration logic is hermetically tested via injected seams.
+
 ## [0.3.0-beta.29] - 2026-07-16
 
 ### Fixed

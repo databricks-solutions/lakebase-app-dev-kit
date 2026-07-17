@@ -1491,6 +1491,10 @@ async function rollbackAlembic(ctx) {
   const rolledBack = after ? inRange.filter((a) => a.version !== after) : inRange;
   return { rolledBack, tool: "alembic" };
 }
+async function stampAlembic(ctx) {
+  await runAlembic(ctx, ["stamp", "--purge", ctx.revision]);
+  return { stamped: ctx.revision, tool: "alembic" };
+}
 async function statusAlembic(ctx) {
   const current = await getCurrentRevision(ctx);
   const head = await getHeadRevision(ctx);
@@ -1627,6 +1631,19 @@ var AlembicAdapter = {
       return {
         rolled_back: [],
         status: "error",
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  },
+  async stamp(args) {
+    const dsn = await buildDsn(args);
+    try {
+      const r = await stampAlembic({ projectDir: args.projectDir, dsn, revision: args.revision });
+      return { status: "ok", stamped_revision: r.stamped, tool_specific: { tool: r.tool } };
+    } catch (err) {
+      return {
+        status: "error",
+        stamped_revision: null,
         error: err instanceof Error ? err.message : String(err)
       };
     }
@@ -2296,6 +2313,49 @@ async function applySchemaMigrations(args) {
     tool: adapter.id
   };
 }
+async function schemaMigrationStatus(args) {
+  const projectDir = args.projectDir ?? process.cwd();
+  const adapter = adapterFor(projectDir, args.language);
+  const r = await adapter.status({
+    instance: args.instance,
+    branch: args.branch,
+    projectDir,
+    database: args.database,
+    endpointName: args.endpointName
+  });
+  if (r.status === "error") {
+    throw new SchemaMigrationError(r.error ?? "status failed");
+  }
+  return {
+    current: r.applied_version ?? void 0,
+    pending: r.pending,
+    tool: adapter.id
+  };
+}
+async function applyAndVerifyTierMigration(args, deps = {}) {
+  const apply = deps.apply ?? applySchemaMigrations;
+  const status = deps.status ?? schemaMigrationStatus;
+  try {
+    await apply({ instance: args.instance, branch: args.branch, projectDir: args.projectDir, language: args.language, allowTier: true });
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+  try {
+    const st = await status({ instance: args.instance, branch: args.branch, projectDir: args.projectDir, language: args.language });
+    if (st.pending.length > 0) {
+      return {
+        ok: false,
+        detail: `migrate-unconfirmed: ${args.branch} still has ${st.pending.length} pending migration(s) after the local apply (current=${st.current ?? "none"})`
+      };
+    }
+    return { ok: true, detail: `applied + verified ${args.branch} at head locally (current=${st.current ?? "none"})` };
+  } catch (e) {
+    return {
+      ok: false,
+      detail: `migrate-unconfirmed: could not verify ${args.branch} is at head (${e instanceof Error ? e.message : String(e)})`
+    };
+  }
+}
 function migrationTimestamp(now = /* @__PURE__ */ new Date()) {
   const p = (n) => String(n).padStart(2, "0");
   return `${now.getUTCFullYear()}${p(now.getUTCMonth() + 1)}${p(now.getUTCDate())}${p(now.getUTCHours())}${p(now.getUTCMinutes())}${p(now.getUTCSeconds())}`;
@@ -2489,12 +2549,7 @@ async function runScmMergeCli(argv) {
     if (!inst || !parent) {
       return { ok: false, detail: "workflow state is missing project_id / parent_branch" };
     }
-    try {
-      await applySchemaMigrations({ instance: inst, branch: parent, projectDir, allowTier: true });
-      return { ok: true, detail: `applied pending migrations to ${parent} locally` };
-    } catch (e) {
-      return { ok: false, detail: e instanceof Error ? e.message : String(e) };
-    }
+    return applyAndVerifyTierMigration({ instance: inst, branch: parent, projectDir });
   } : void 0;
   try {
     const result = await mergeFeature({

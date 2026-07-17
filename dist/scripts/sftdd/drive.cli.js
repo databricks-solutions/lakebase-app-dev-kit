@@ -8738,11 +8738,93 @@ function approveHint(gate, ctx = {}) {
 // scripts/sftdd/feature-status.ts
 init_esm_shims();
 
-// scripts/sftdd/design-spec-gate.ts
+// scripts/sftdd/orchestrator-probe.ts
 init_esm_shims();
+import * as fs11 from "fs";
+import * as path6 from "path";
 
-// scripts/sftdd/spike-carryforward.ts
+// scripts/sftdd/orchestrator-derive.ts
 init_esm_shims();
+function isContractStory(storyId) {
+  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
+    storyId
+  );
+}
+function effectiveLoopForStory(runLoop, storyId) {
+  return isContractStory(storyId) ? "ac" : runLoop;
+}
+function storyView(id, e, probe, loop) {
+  const gateApproved = e.gate?.status === "approved";
+  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
+  return {
+    gateApproved,
+    // The gate record exists once the story has been surfaced for review;
+    // awaiting-gate is the pre-record surfaced state.
+    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
+    design: {
+      hasAcs: probe.hasAcs(id),
+      architectAnnotated: probe.architectAnnotated(id),
+      architectProjectable: probe.architectProjectable(id),
+      testListReady: probe.testListReady(id),
+      reflectionPassed: probe.reflectionPassed(id),
+      reflectionVerdictWritten: probe.reflectionVerdictWritten(id)
+    },
+    build: {
+      // An experiment that was discarded is no longer cut (a fresh one is cut
+      // on revise); merged/active both count as cut.
+      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
+      testsWritten: probe.testsWritten(id),
+      codeWritten: probe.codeWritten(id),
+      loop,
+      reviewAc: probe.reviewPendingAc(id),
+      refactorAc: probe.refactorPendingAc(id),
+      reviewStoryPending: probe.reviewPending(id),
+      refactorStoryPending: probe.refactorPending(id),
+      assessGreenAc: probe.assessGreenFailureAc(id),
+      repairRegressionAc: probe.repairRegressionFixAc(id),
+      awaitingAcceptance: e.status === "awaiting-acceptance",
+      deployVerified: probe.storyDeployVerified(id),
+      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
+      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
+      accepted
+    }
+  };
+}
+function deriveDriveState(pipeline, probe, ctx) {
+  const loop = ctx.loop ?? "story";
+  const stories = {};
+  for (const [id, entry] of Object.entries(pipeline.stories)) {
+    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
+  }
+  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
+  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
+  return {
+    phase: ctx.phase,
+    planning: ctx.planning,
+    deploy: ctx.deploy,
+    promote: ctx.promote,
+    breakdownDone,
+    storyOrder,
+    stories,
+    buildActive: pipeline.build_active,
+    escalation: probe.pendingEscalation()
+  };
+}
+function driverPhaseForTdd(tddPhase) {
+  switch (tddPhase) {
+    case "planning":
+      return "planning";
+    case "deploy":
+      return "deploy";
+    case "promote":
+      return "promote";
+    case "shipped":
+    case "done":
+      return "done";
+    default:
+      return "feature";
+  }
+}
 
 // scripts/sftdd/gates.ts
 init_esm_shims();
@@ -8837,137 +8919,6 @@ function validateGateRecord(parsed, gateName, file) {
     history: history ?? []
   };
 }
-
-// scripts/sftdd/story-pipeline.ts
-init_esm_shims();
-import { existsSync as existsSync20, readFileSync as readFileSync19, writeFileSync as writeFileSync13, mkdirSync as mkdirSync11, readdirSync as readdirSync12, statSync as statSync9, rmSync as rmSync6 } from "fs";
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(sftddDir, featureId) {
-  return pipelineJson(sftddDir, featureId);
-}
-function readPipeline(sftddDir, featureId) {
-  const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync20(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync19(p, "utf8"));
-}
-
-// scripts/sftdd/feature-status.ts
-function summarizeStories(sftddDir, featureId) {
-  let pipeline;
-  try {
-    pipeline = readPipeline(sftddDir, featureId);
-  } catch {
-    return [];
-  }
-  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
-    story_id,
-    status: e.status,
-    gate_status: e.gate?.status ?? null,
-    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
-  }));
-}
-function deriveFeaturePhase(stories) {
-  if (stories.length === 0) return null;
-  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
-  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
-  if (stories.some(inBuild)) return "build";
-  return "design";
-}
-
-// scripts/sftdd/orchestrator-effects.ts
-init_esm_shims();
-import * as fs12 from "fs";
-import { dirname as dirname9 } from "path";
-
-// scripts/sftdd/orchestrator-derive.ts
-init_esm_shims();
-function isContractStory(storyId) {
-  return /(^|[-_])(drop|remove|delete|rename|deprecate|cleanup|retire)([-_]|$)|dropp|remov|delet|renam|deprecat/i.test(
-    storyId
-  );
-}
-function effectiveLoopForStory(runLoop, storyId) {
-  return isContractStory(storyId) ? "ac" : runLoop;
-}
-function storyView(id, e, probe, loop) {
-  const gateApproved = e.gate?.status === "approved";
-  const accepted = e.acceptance?.decision === "accepted" || e.status === "done";
-  return {
-    gateApproved,
-    // The gate record exists once the story has been surfaced for review;
-    // awaiting-gate is the pre-record surfaced state.
-    gateSurfaced: e.gate != null || e.status === "awaiting-gate",
-    design: {
-      hasAcs: probe.hasAcs(id),
-      architectAnnotated: probe.architectAnnotated(id),
-      architectProjectable: probe.architectProjectable(id),
-      testListReady: probe.testListReady(id),
-      reflectionPassed: probe.reflectionPassed(id),
-      reflectionVerdictWritten: probe.reflectionVerdictWritten(id)
-    },
-    build: {
-      // An experiment that was discarded is no longer cut (a fresh one is cut
-      // on revise); merged/active both count as cut.
-      experimentCut: e.experiment != null && e.experiment.status !== "discarded",
-      testsWritten: probe.testsWritten(id),
-      codeWritten: probe.codeWritten(id),
-      loop,
-      reviewAc: probe.reviewPendingAc(id),
-      refactorAc: probe.refactorPendingAc(id),
-      reviewStoryPending: probe.reviewPending(id),
-      refactorStoryPending: probe.refactorPending(id),
-      assessGreenAc: probe.assessGreenFailureAc(id),
-      repairRegressionAc: probe.repairRegressionFixAc(id),
-      awaitingAcceptance: e.status === "awaiting-acceptance",
-      deployVerified: probe.storyDeployVerified(id),
-      deployVerifyAssessEligible: probe.deployVerifyAssessEligible(id),
-      deployVerifyRefactorPending: probe.deployVerifyRefactorPending(id),
-      accepted
-    }
-  };
-}
-function deriveDriveState(pipeline, probe, ctx) {
-  const loop = ctx.loop ?? "story";
-  const stories = {};
-  for (const [id, entry] of Object.entries(pipeline.stories)) {
-    stories[id] = storyView(id, entry, probe, effectiveLoopForStory(loop, id));
-  }
-  const storyOrder = ctx.storyOrder ?? Object.keys(pipeline.stories);
-  const breakdownDone = ctx.breakdownDone || storyOrder.length > 0;
-  return {
-    phase: ctx.phase,
-    planning: ctx.planning,
-    deploy: ctx.deploy,
-    promote: ctx.promote,
-    breakdownDone,
-    storyOrder,
-    stories,
-    buildActive: pipeline.build_active,
-    escalation: probe.pendingEscalation()
-  };
-}
-function driverPhaseForTdd(tddPhase) {
-  switch (tddPhase) {
-    case "planning":
-      return "planning";
-    case "deploy":
-      return "deploy";
-    case "promote":
-      return "promote";
-    case "shipped":
-    case "done":
-      return "done";
-    default:
-      return "feature";
-  }
-}
-
-// scripts/sftdd/orchestrator-probe.ts
-init_esm_shims();
-import * as fs11 from "fs";
-import * as path6 from "path";
 
 // scripts/sftdd/workflow-phase.ts
 init_esm_shims();
@@ -9191,16 +9142,16 @@ function validateWorkflowState(value) {
 
 // scripts/sftdd/reflection.ts
 init_esm_shims();
-import { existsSync as existsSync23, readFileSync as readFileSync22, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, rmSync as rmSync7 } from "fs";
+import { existsSync as existsSync22, readFileSync as readFileSync21, writeFileSync as writeFileSync15, mkdirSync as mkdirSync13, rmSync as rmSync6 } from "fs";
 var SMELL_FOR_OWNER = {
   "spec-author": "reflect-spec-defect",
   "test-strategist": "reflect-testlist-defect"
 };
 function readReflectVerdict(sftddDir, feature, story) {
   const p = reflectVerdictJson(sftddDir, feature, story);
-  if (!existsSync23(p)) return void 0;
+  if (!existsSync22(p)) return void 0;
   try {
-    return JSON.parse(readFileSync22(p, "utf8"));
+    return JSON.parse(readFileSync21(p, "utf8"));
   } catch {
     return void 0;
   }
@@ -9215,15 +9166,15 @@ var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
 // scripts/sftdd/architecture-canon.ts
 init_esm_shims();
-import { existsSync as existsSync24, readFileSync as readFileSync23, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync13 } from "fs";
+import { existsSync as existsSync23, readFileSync as readFileSync22, writeFileSync as writeFileSync16, mkdirSync as mkdirSync14, readdirSync as readdirSync12 } from "fs";
 function uniq(xs) {
   return [...new Set(xs.filter((x) => typeof x === "string" && x.length > 0))];
 }
 function readCanon(sftddDir) {
   const f = architectureCanonJson(sftddDir);
-  if (!existsSync24(f)) return void 0;
+  if (!existsSync23(f)) return void 0;
   try {
-    return JSON.parse(readFileSync23(f, "utf8"));
+    return JSON.parse(readFileSync22(f, "utf8"));
   } catch {
     return void 0;
   }
@@ -9464,6 +9415,55 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
     }
   };
 }
+
+// scripts/sftdd/design-spec-gate.ts
+init_esm_shims();
+
+// scripts/sftdd/spike-carryforward.ts
+init_esm_shims();
+
+// scripts/sftdd/story-pipeline.ts
+init_esm_shims();
+import { existsSync as existsSync25, readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync14, statSync as statSync10, rmSync as rmSync7 } from "fs";
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync25(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync24(p, "utf8"));
+}
+
+// scripts/sftdd/feature-status.ts
+function summarizeStories(sftddDir, featureId) {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
+  }));
+}
+function deriveFeaturePhase(stories) {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
+
+// scripts/sftdd/orchestrator-effects.ts
+init_esm_shims();
+import * as fs12 from "fs";
+import { dirname as dirname9 } from "path";
 
 // scripts/sftdd/response-formatter.ts
 init_esm_shims();
