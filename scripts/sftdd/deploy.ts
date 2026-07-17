@@ -352,6 +352,12 @@ function normalizeVerifyRun(raw: boolean | { passed: boolean; output?: string })
     : { passed: raw.passed, output: raw.output ?? "" };
 }
 
+/** True when the project has a React client workspace (client/package.json), whose
+ *  Vitest suite is part of the authoritative full run (Finding 26). */
+function hasClientWorkspace(projectDir: string): boolean {
+  return existsSync(join(projectDir, "client", "package.json"));
+}
+
 function defaultRunVerify(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): VerifyRun {
   try {
     const out = execSync(cmd, { cwd, stdio: "pipe", env: env ?? process.env });
@@ -786,6 +792,7 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
     existsSync(join(args.projectDir, "pyproject.toml")) || existsSync(join(args.projectDir, "requirements.txt"));
   let passed: boolean;
   let migrationFailed = false;
+  let clientFailed = false;
   try {
     if (isPython) {
       const mainPassed = (await runVerifyMaybeEphemeral(
@@ -809,7 +816,26 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
           )).passed
         : true;
       migrationFailed = mainPassed && !migPassed;
-      passed = mainPassed && migPassed;
+      const backendPassed = mainPassed && migPassed;
+      // Finding 26: the marked pytest passes are BACKEND-ONLY (run-tests.sh's
+      // SFTDD_PYTEST_MARKER early-exit short-circuits before its client Vitest block),
+      // so build honest-GREEN would never run the client suite on a Python + client
+      // scaffold, a false GREEN the deploy feature-verify (unmarked, so it reaches the
+      // client block) later caught. Run the client suite ONCE here (SFTDD_CLIENT_ONLY:
+      // run-tests.sh skips the backend and runs only `cd client && npm test`) so build
+      // GREEN gates on the SAME client tests. No DB, so no ephemeral branch; a failing
+      // client test refuses GREEN. Only when a client/ workspace exists.
+      const clientPassed =
+        backendPassed && hasClientWorkspace(args.projectDir)
+          ? normalizeVerifyRun(
+              runVerify(cfg.verify, args.projectDir, {
+                ...(env ?? process.env),
+                SFTDD_CLIENT_ONLY: "1",
+              }),
+            ).passed
+          : true;
+      clientFailed = backendPassed && !clientPassed;
+      passed = backendPassed && clientPassed;
     } else {
       passed = (await runVerifyMaybeEphemeral(runVerify, cfg.verify, args.projectDir, env, args.lakebaseBranch, nowFn)).passed;
     }
@@ -827,7 +853,9 @@ export async function ensureDeployedAndVerify(args: CycleVerifyArgs): Promise<Cy
   const regexLint = checkE2eRegexClean({ projectDir: args.projectDir });
   const base = migrationFailed
     ? "GREEN verify FAILED on the migration pass (the migration-marked reversibility test failed on its own isolated branch)"
-    : "GREEN verify FAILED against the running app";
+    : clientFailed
+      ? "GREEN verify FAILED on the client pass (the client Vitest suite failed; the backend suite passed)"
+      : "GREEN verify FAILED against the running app";
   const summary = regexLint.clean
     ? base
     : `${base}: e2e-inline-regex-flag , ${summarizeE2eRegexViolations(regexLint.violations)}. ${E2E_REGEX_REMEDIATION}`;

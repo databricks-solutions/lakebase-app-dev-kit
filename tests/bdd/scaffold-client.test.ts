@@ -62,6 +62,20 @@ describe("deployClientProject", () => {
     }
   });
 
+  it("api/client.ts teaches the Problem Details field-error pattern (Finding 26)", () => {
+    const target = mkTarget();
+    deployClientProject(target, "demoapp", { templatesDir: TEMPLATES });
+    const client = read(target, "client/src/api/client.ts");
+    // Parses BOTH a string `detail` and an object `{ field, message }` detail, so a
+    // field-scoped validation refusal survives to the UI instead of being dropped.
+    expect(client).toMatch(/_problemDetail/);
+    expect(client).toMatch(/typeof detail === "string"/);
+    expect(client).toMatch(/field/);
+    // A mutation helper + ApiError.field so a form can render field-<field>-error.
+    expect(client).toMatch(/export async function postJson/);
+    expect(client).toMatch(/field-<field>-error/);
+  });
+
   it("substitutes {{PROJECT_NAME}} and leaves no unresolved placeholder", () => {
     const target = mkTarget();
     deployClientProject(target, "warehouse-ui", { templatesDir: TEMPLATES });
