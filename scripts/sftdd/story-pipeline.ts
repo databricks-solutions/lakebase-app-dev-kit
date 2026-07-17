@@ -13,6 +13,7 @@ import {
   featureSpecJson,
   featureSpecMd,
 } from "./sftdd-paths.js";
+import { featureDir, storyAcsConformanceReason } from "./gate-conformance-guard.js";
 
 export const STORY_STATUSES = [
   "designing",
@@ -420,6 +421,14 @@ export function approveStoryGateFromDisk(
   const pipeline = readPipeline(sftddDir, feature);
   const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length > 0) return { ok: false, batched };
+  // Finding 29: refuse to approve a story whose ACs are malformed (truncated /
+  // invalid JSON) or non-conformant. The spec gate previously did not parse the AC
+  // files on this per-story approve path, so a spec-author's truncated AC (missing
+  // closing brace) passed here + the reflect gate and only surfaced at deploy
+  // gate-conformance, long after build + accept. This runs the SAME per-story
+  // conformance the deploy gate trusts, so the defect fails at approve time.
+  const acReason = storyAcsConformanceReason(featureDir(sftddDir, feature), story);
+  if (acReason) return { ok: false, error: acReason };
   try {
     approveStoryGate(pipeline, story, {
       approver: opts.approver,
