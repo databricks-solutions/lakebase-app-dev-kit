@@ -7364,16 +7364,16 @@ function isAllSchemas(schema) {
 }
 function buildSchemaQuery(schema) {
   const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
-  const join42 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  const join43 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
   if (isAllSchemas(schema)) {
     return {
-      text: `SELECT ${cols} ` + join42 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
+      text: `SELECT ${cols} ` + join43 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
       values: []
     };
   }
   const one = (schema ?? "").trim() || "public";
   return {
-    text: `SELECT ${cols} ` + join42 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
+    text: `SELECT ${cols} ` + join43 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
     values: [one]
   };
 }
@@ -12410,6 +12410,19 @@ function readPlan(sftddDir, featureId, storyId) {
 // scripts/sftdd/story-pipeline.ts
 init_cjs_shims();
 var import_fs7 = require("fs");
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_cjs_shims();
+var import_node_fs5 = require("fs");
+var import_node_path8 = require("path");
+
+// scripts/sftdd/artifact-conformance.ts
+init_cjs_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_cjs_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

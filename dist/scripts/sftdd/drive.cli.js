@@ -9427,50 +9427,12 @@ init_esm_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync25, readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15, readdirSync as readdirSync14, statSync as statSync10, rmSync as rmSync7 } from "fs";
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(sftddDir, featureId) {
-  return pipelineJson(sftddDir, featureId);
-}
-function readPipeline(sftddDir, featureId) {
-  const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync25(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync24(p, "utf8"));
-}
+import { existsSync as existsSync27, readFileSync as readFileSync26, writeFileSync as writeFileSync18, mkdirSync as mkdirSync16, readdirSync as readdirSync15, statSync as statSync11, rmSync as rmSync7 } from "fs";
 
-// scripts/sftdd/feature-status.ts
-function summarizeStories(sftddDir, featureId) {
-  let pipeline;
-  try {
-    pipeline = readPipeline(sftddDir, featureId);
-  } catch {
-    return [];
-  }
-  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
-    story_id,
-    status: e.status,
-    gate_status: e.gate?.status ?? null,
-    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
-  }));
-}
-function deriveFeaturePhase(stories) {
-  if (stories.length === 0) return null;
-  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
-  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
-  if (stories.some(inBuild)) return "build";
-  return "design";
-}
-
-// scripts/sftdd/orchestrator-effects.ts
+// scripts/sftdd/gate-conformance-guard.ts
 init_esm_shims();
-import * as fs12 from "fs";
-import { dirname as dirname9 } from "path";
-
-// scripts/sftdd/response-formatter.ts
-init_esm_shims();
-import { existsSync as existsSync26, readFileSync as readFileSync25, readdirSync as readdirSync15 } from "fs";
+import { existsSync as existsSync26, readFileSync as readFileSync25, readdirSync as readdirSync14, statSync as statSync10 } from "fs";
+import { join as join24 } from "path";
 
 // scripts/sftdd/artifact-conformance.ts
 init_esm_shims();
@@ -9655,33 +9617,76 @@ function canonicalArtifactName(path10) {
   return base;
 }
 
+// scripts/sftdd/architecture-conventions.ts
+init_esm_shims();
+import { existsSync as existsSync25, readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync15 } from "fs";
+function readConventions(sftddDir) {
+  const f = architectureConventionsJson(sftddDir);
+  if (!existsSync25(f)) return void 0;
+  try {
+    return JSON.parse(readFileSync24(f, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+
+// scripts/sftdd/story-pipeline.ts
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync27(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync26(p, "utf8"));
+}
+
+// scripts/sftdd/feature-status.ts
+function summarizeStories(sftddDir, featureId) {
+  let pipeline;
+  try {
+    pipeline = readPipeline(sftddDir, featureId);
+  } catch {
+    return [];
+  }
+  return Object.entries(pipeline.stories).map(([story_id, e]) => ({
+    story_id,
+    status: e.status,
+    gate_status: e.gate?.status ?? null,
+    accepted: e.acceptance?.decision === "accepted" || e.status === "done"
+  }));
+}
+function deriveFeaturePhase(stories) {
+  if (stories.length === 0) return null;
+  if (stories.every((s) => s.status === "done" && s.accepted)) return "complete";
+  const inBuild = (s) => s.status === "ready" || s.status === "building" || s.status === "awaiting-acceptance" || s.status === "done" || s.gate_status === "approved";
+  if (stories.some(inBuild)) return "build";
+  return "design";
+}
+
+// scripts/sftdd/orchestrator-effects.ts
+init_esm_shims();
+import * as fs12 from "fs";
+import { dirname as dirname9 } from "path";
+
 // scripts/sftdd/response-formatter.ts
+init_esm_shims();
+import { existsSync as existsSync28, readFileSync as readFileSync27, readdirSync as readdirSync16 } from "fs";
 function designGuideConformance(sftddDir) {
   const file = designGuideJson(sftddDir);
-  if (!existsSync26(file)) {
+  if (!existsSync28(file)) {
     return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
   }
   let content;
   try {
-    content = readFileSync25(file, "utf8");
+    content = readFileSync27(file, "utf8");
   } catch (e) {
     return { ok: false, problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` };
   }
   const r = checkArtifactConformance(canonicalArtifactName(file), content);
   return r.ok ? { ok: true } : { ok: false, problem: r.violations.join("; ") };
-}
-
-// scripts/sftdd/architecture-conventions.ts
-init_esm_shims();
-import { existsSync as existsSync27, readFileSync as readFileSync26, writeFileSync as writeFileSync18, mkdirSync as mkdirSync16 } from "fs";
-function readConventions(sftddDir) {
-  const f = architectureConventionsJson(sftddDir);
-  if (!existsSync27(f)) return void 0;
-  try {
-    return JSON.parse(readFileSync26(f, "utf8"));
-  } catch {
-    return void 0;
-  }
 }
 
 // scripts/sftdd/orchestrator-effects.ts
@@ -10583,7 +10588,7 @@ init_esm_shims();
 
 // scripts/sftdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync29, mkdirSync as mkdirSync19, readFileSync as readFileSync28, renameSync as renameSync4, unlinkSync as unlinkSync2, writeFileSync as writeFileSync21 } from "fs";
+import { existsSync as existsSync30, mkdirSync as mkdirSync19, readFileSync as readFileSync29, renameSync as renameSync4, unlinkSync as unlinkSync2, writeFileSync as writeFileSync21 } from "fs";
 
 // scripts/sftdd/gate-hash.ts
 init_esm_shims();
@@ -10603,10 +10608,10 @@ function sprintGatesFile(sftddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const file = sprintGatesFile(sftddDir, sprint);
-  if (!existsSync29(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync30(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync28(file, "utf8"));
+    parsed = JSON.parse(readFileSync29(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -10674,8 +10679,8 @@ async function runSprint(effects) {
 
 // scripts/sftdd/agent-models.ts
 init_esm_shims();
-import { existsSync as existsSync31, readFileSync as readFileSync29, writeFileSync as writeFileSync22, mkdirSync as mkdirSync20 } from "fs";
-import { dirname as dirname10, join as join25 } from "path";
+import { existsSync as existsSync32, readFileSync as readFileSync30, writeFileSync as writeFileSync22, mkdirSync as mkdirSync20 } from "fs";
+import { dirname as dirname10, join as join26 } from "path";
 var RECOMMENDED_MODELS = {
   "spec-author": "opus",
   "architect-reviewer": "opus",
@@ -10687,11 +10692,11 @@ var RECOMMENDED_MODELS = {
   "release-engineer": "sonnet"
 };
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
-var AGENT_CONFIG_REL = join25(".lakebase", "agent-config.json");
+var AGENT_CONFIG_REL = join26(".lakebase", "agent-config.json");
 function readAgentConfig(projectDir) {
-  const p = join25(projectDir, AGENT_CONFIG_REL);
-  if (!existsSync31(p)) return void 0;
-  return JSON.parse(readFileSync29(p, "utf8"));
+  const p = join26(projectDir, AGENT_CONFIG_REL);
+  if (!existsSync32(p)) return void 0;
+  return JSON.parse(readFileSync30(p, "utf8"));
 }
 function resolveModelForRole(role, projectDir) {
   const spawnable = role;
@@ -10701,17 +10706,17 @@ function resolveModelForRole(role, projectDir) {
 
 // scripts/sftdd/sftdd-config.ts
 init_esm_shims();
-import { existsSync as existsSync32, readFileSync as readFileSync30, mkdirSync as mkdirSync21, writeFileSync as writeFileSync23 } from "fs";
-import { dirname as dirname11, join as join26 } from "path";
-var SFTDD_CONFIG_REL = join26(".lakebase", "sftdd-config.json");
-var LEGACY_TDD_CONFIG_REL = join26(".lakebase", "tdd-config.json");
+import { existsSync as existsSync33, readFileSync as readFileSync31, mkdirSync as mkdirSync21, writeFileSync as writeFileSync23 } from "fs";
+import { dirname as dirname11, join as join27 } from "path";
+var SFTDD_CONFIG_REL = join27(".lakebase", "sftdd-config.json");
+var LEGACY_TDD_CONFIG_REL = join27(".lakebase", "tdd-config.json");
 var TDD_CONFIG_REL = SFTDD_CONFIG_REL;
 function loadSftddConfig(projectDir) {
   for (const rel of [SFTDD_CONFIG_REL, LEGACY_TDD_CONFIG_REL]) {
-    const f = join26(projectDir, rel);
-    if (!existsSync32(f)) continue;
+    const f = join27(projectDir, rel);
+    if (!existsSync33(f)) continue;
     try {
-      return JSON.parse(readFileSync30(f, "utf8"));
+      return JSON.parse(readFileSync31(f, "utf8"));
     } catch {
       return void 0;
     }
@@ -10788,8 +10793,8 @@ function defaultSftddConfig() {
   };
 }
 function writeSftddConfig(projectDir, config, opts) {
-  const f = join26(projectDir, TDD_CONFIG_REL);
-  if (existsSync32(f) && !opts?.force) return false;
+  const f = join27(projectDir, TDD_CONFIG_REL);
+  if (existsSync33(f) && !opts?.force) return false;
   mkdirSync21(dirname11(f), { recursive: true });
   writeFileSync23(f, JSON.stringify(config, null, 2) + "\n");
   return true;
@@ -10914,19 +10919,55 @@ function isPromptTooLongSignal(line) {
 
 // scripts/sftdd/run-config.ts
 init_esm_shims();
-import { existsSync as existsSync33, mkdirSync as mkdirSync22, readFileSync as readFileSync31, writeFileSync as writeFileSync24 } from "fs";
-import { join as join27 } from "path";
-var RUN_CONFIG_REL = join27(ARTIFACT_ROOT, "run-config.json");
-function readKitRef(projectDir) {
-  const f = join27(projectDir, ".lakebase", "kit-ref");
-  if (!existsSync33(f)) return void 0;
+import { existsSync as existsSync35, mkdirSync as mkdirSync23, readFileSync as readFileSync33, writeFileSync as writeFileSync25 } from "fs";
+import { join as join29 } from "path";
+
+// scripts/sftdd/kit-ref.ts
+init_esm_shims();
+import { existsSync as existsSync34, readFileSync as readFileSync32, writeFileSync as writeFileSync24, mkdirSync as mkdirSync22 } from "fs";
+import { dirname as dirname12, join as join28 } from "path";
+var KIT_REF_FILE = "kit-ref";
+var KIT_REF_LOCAL_FILE = "kit-ref.local";
+function lakebaseFile(projectDir, name) {
+  return join28(projectDir, ".lakebase", name);
+}
+function readTrimmed(file) {
+  if (!existsSync34(file)) return void 0;
   try {
-    const v = readFileSync31(f, "utf8").trim();
+    const v = readFileSync32(file, "utf8").trim();
     return v.length > 0 ? v : void 0;
   } catch {
     return void 0;
   }
 }
+function committedKitRef(projectDir) {
+  return readTrimmed(lakebaseFile(projectDir, KIT_REF_FILE));
+}
+function localKitRef(projectDir) {
+  return readTrimmed(lakebaseFile(projectDir, KIT_REF_LOCAL_FILE));
+}
+function resolveLaunchKitRef(projectDir, env = process.env) {
+  if (env.LAKEBASE_KIT_DIR) return void 0;
+  const fromEnv = env.LAKEBASE_KIT_REF?.trim();
+  if (fromEnv) return fromEnv;
+  return localKitRef(projectDir) ?? committedKitRef(projectDir);
+}
+function pinRunKitRef(projectDir, ref) {
+  const file = lakebaseFile(projectDir, KIT_REF_LOCAL_FILE);
+  const previous = readTrimmed(file);
+  if (previous === ref) return { pinned: false, ref };
+  mkdirSync22(dirname12(file), { recursive: true });
+  writeFileSync24(file, ref + "\n", "utf8");
+  return { pinned: true, ref, ...previous ? { previous } : {} };
+}
+function kitRefDriftWarning(projectDir, launchRef) {
+  const committed = committedKitRef(projectDir);
+  if (!committed || committed === launchRef) return void 0;
+  return `kit-ref drift: the committed .lakebase/kit-ref is '${committed}' but this run is pinned to '${launchRef}' (.lakebase/kit-ref.local). A branch checkout restored the committed ref; the run keeps the pinned ref. If '${committed}' is intended, update .lakebase/kit-ref.local or unset the pin.`;
+}
+
+// scripts/sftdd/run-config.ts
+var RUN_CONFIG_REL = join29(ARTIFACT_ROOT, "run-config.json");
 function buildRunConfig(inputs) {
   const env = inputs.env ?? process.env;
   const models = {};
@@ -10949,7 +10990,7 @@ function buildRunConfig(inputs) {
   if (inputs.batchCap !== void 0) cfg.batch_cap = inputs.batchCap;
   const label = sftddEnv("RUN_LABEL", env);
   if (label) cfg.run_label = label;
-  const kitRef = readKitRef(inputs.projectDir);
+  const kitRef = resolveLaunchKitRef(inputs.projectDir, env);
   if (kitRef) cfg.kit_ref = kitRef;
   return cfg;
 }
@@ -10957,12 +10998,12 @@ function writeRunConfig(inputs) {
   const cfg = buildRunConfig(inputs);
   const body = JSON.stringify(cfg, null, 2) + "\n";
   try {
-    mkdirSync22(inputs.sftddDir, { recursive: true });
-    writeFileSync24(join27(inputs.sftddDir, "run-config.json"), body);
+    mkdirSync23(inputs.sftddDir, { recursive: true });
+    writeFileSync25(join29(inputs.sftddDir, "run-config.json"), body);
     const recordDir = sftddEnv("RECORD_DIR", inputs.env ?? process.env)?.trim();
     if (recordDir) {
-      mkdirSync22(recordDir, { recursive: true });
-      writeFileSync24(join27(recordDir, "run-config.json"), body);
+      mkdirSync23(recordDir, { recursive: true });
+      writeFileSync25(join29(recordDir, "run-config.json"), body);
     }
   } catch {
   }
@@ -10999,19 +11040,19 @@ function kitVersion() {
 
 // scripts/sftdd/stray-artifact-recovery.ts
 init_esm_shims();
-import { existsSync as existsSync34, mkdirSync as mkdirSync23, cpSync as cpSync4, rmSync as rmSync9, readdirSync as readdirSync16, statSync as statSync11 } from "fs";
-import { join as join29, dirname as dirname12, basename as basename2 } from "path";
+import { existsSync as existsSync36, mkdirSync as mkdirSync24, cpSync as cpSync4, rmSync as rmSync9, readdirSync as readdirSync17, statSync as statSync12 } from "fs";
+import { join as join31, dirname as dirname13, basename as basename2 } from "path";
 function malformedSiblingRoot(projectDir) {
   const p = projectDir.replace(/\/+$/, "");
-  return `${dirname12(p)}-${basename2(p)}`;
+  return `${dirname13(p)}-${basename2(p)}`;
 }
 function listFilesRel(dir) {
   const out = [];
   const walk2 = (abs, rel) => {
-    for (const entry of readdirSync16(abs)) {
-      const childAbs = join29(abs, entry);
-      const childRel = rel ? join29(rel, entry) : entry;
-      if (statSync11(childAbs).isDirectory()) walk2(childAbs, childRel);
+    for (const entry of readdirSync17(abs)) {
+      const childAbs = join31(abs, entry);
+      const childRel = rel ? join31(rel, entry) : entry;
+      if (statSync12(childAbs).isDirectory()) walk2(childAbs, childRel);
       else out.push(childRel);
     }
   };
@@ -11020,19 +11061,19 @@ function listFilesRel(dir) {
 }
 function relocateStrayDesignArtifacts(projectDir) {
   const sibling = malformedSiblingRoot(projectDir);
-  if (!existsSync34(sibling)) return { relocated: false, moved: [] };
+  if (!existsSync36(sibling)) return { relocated: false, moved: [] };
   const moved = [];
   for (const artRoot of [".sftdd", ".tdd"]) {
-    const strayRoot = join29(sibling, artRoot);
-    if (!existsSync34(strayRoot)) continue;
-    for (const rel of listFilesRel(strayRoot)) moved.push(join29(artRoot, rel));
-    const realRoot = join29(projectDir, artRoot);
-    mkdirSync23(realRoot, { recursive: true });
+    const strayRoot = join31(sibling, artRoot);
+    if (!existsSync36(strayRoot)) continue;
+    for (const rel of listFilesRel(strayRoot)) moved.push(join31(artRoot, rel));
+    const realRoot = join31(projectDir, artRoot);
+    mkdirSync24(realRoot, { recursive: true });
     cpSync4(strayRoot, realRoot, { recursive: true, force: true });
     rmSync9(strayRoot, { recursive: true, force: true });
   }
   try {
-    if (readdirSync16(sibling).length === 0) rmSync9(sibling, { recursive: true, force: true });
+    if (readdirSync17(sibling).length === 0) rmSync9(sibling, { recursive: true, force: true });
   } catch {
   }
   return moved.length > 0 ? { relocated: true, from: sibling, moved } : { relocated: false, moved: [] };
@@ -11796,6 +11837,22 @@ async function main() {
     deployTarget: args.deployTarget,
     sizing: args.noSizing === true ? false : void 0
   });
+  {
+    const pd = args.projectDir ?? process.cwd();
+    const launchRef = resolveLaunchKitRef(pd, process.env);
+    if (launchRef) {
+      const drift = kitRefDriftWarning(pd, launchRef);
+      if (drift) process.stderr.write(`lakebase-sftdd-drive: ${drift}
+`);
+      const r = pinRunKitRef(pd, launchRef);
+      if (r.pinned) {
+        process.stderr.write(
+          `lakebase-sftdd-drive: pinned kit-ref '${launchRef}' to .lakebase/kit-ref.local for this run` + (r.previous ? ` (was '${r.previous}')` : "") + `.
+`
+        );
+      }
+    }
+  }
   if (effectiveGates(args, args.projectDir ?? process.cwd()) === "proxy" && !hasNonInteractiveSignal()) {
     process.stderr.write(
       `lakebase-sftdd-drive: gate mode 'proxy' (Human Proxy approves headlessly) requires an explicit

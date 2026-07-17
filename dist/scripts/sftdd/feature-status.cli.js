@@ -6651,8 +6651,8 @@ init_esm_shims();
 
 // scripts/sftdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync20, readFileSync as readFileSync21, readdirSync as readdirSync12, statSync as statSync9 } from "fs";
-import { dirname as dirname5, join as join17 } from "path";
+import { existsSync as existsSync21, readFileSync as readFileSync22, readdirSync as readdirSync13, statSync as statSync10 } from "fs";
+import { dirname as dirname5, join as join18 } from "path";
 
 // scripts/sftdd/orchestrator-probe.ts
 init_esm_shims();
@@ -7404,7 +7404,20 @@ function readPlan(sftddDir, featureId, storyId) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync19, readFileSync as readFileSync20, writeFileSync as writeFileSync15, mkdirSync as mkdirSync12, readdirSync as readdirSync11, statSync as statSync8, rmSync as rmSync4 } from "fs";
+import { existsSync as existsSync20, readFileSync as readFileSync21, writeFileSync as writeFileSync15, mkdirSync as mkdirSync12, readdirSync as readdirSync12, statSync as statSync9, rmSync as rmSync4 } from "fs";
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_esm_shims();
+import { existsSync as existsSync19, readFileSync as readFileSync20, readdirSync as readdirSync11, statSync as statSync8 } from "fs";
+import { join as join17 } from "path";
+
+// scripts/sftdd/artifact-conformance.ts
+init_esm_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_esm_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -7413,24 +7426,24 @@ function pipelinePath(sftddDir, featureId) {
 }
 function readPipeline(sftddDir, featureId) {
   const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync19(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync20(p, "utf8"));
+  if (!existsSync20(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync21(p, "utf8"));
 }
 
 // scripts/sftdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path7) {
-  if (!existsSync20(path7)) return null;
-  return JSON.parse(readFileSync21(path7, "utf8"));
+  if (!existsSync21(path7)) return null;
+  return JSON.parse(readFileSync22(path7, "utf8"));
 }
 function listFeatureStories(sftddDir, featureId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
-  if (!existsSync20(storiesDir2)) return [];
-  return readdirSync12(storiesDir2).filter((d) => statSync9(join17(storiesDir2, d)).isDirectory()).sort();
+  if (!existsSync21(storiesDir2)) return [];
+  return readdirSync13(storiesDir2).filter((d) => statSync10(join18(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    join17(experimentDir2, "timeline.json")
+    join18(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -7457,9 +7470,9 @@ function summarizeTestList(sftddDir, featureId) {
   }
 }
 function readSelectionLogRecent(sftddDir, limit) {
-  const path7 = join17(sftddDir, "selection-log.md");
-  if (!existsSync20(path7)) return [];
-  const text = readFileSync21(path7, "utf8");
+  const path7 = join18(sftddDir, "selection-log.md");
+  if (!existsSync21(path7)) return [];
+  const text = readFileSync22(path7, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -7486,7 +7499,7 @@ function readGatesSummary(sftddDir, featureId) {
   }
 }
 function readWorkflowState2(sftddDir) {
-  const state = readJsonIfExists(join17(sftddDir, "workflow-state.json"));
+  const state = readJsonIfExists(join18(sftddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,

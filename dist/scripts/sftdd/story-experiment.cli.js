@@ -8192,8 +8192,52 @@ init_esm_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync3, statSync as statSync3, rmSync } from "fs";
-import { dirname as dirname2, join as join6 } from "path";
+import { existsSync as existsSync7, readFileSync as readFileSync8, writeFileSync as writeFileSync5, mkdirSync as mkdirSync4, readdirSync as readdirSync4, statSync as statSync4, rmSync } from "fs";
+import { dirname as dirname2, join as join8 } from "path";
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_esm_shims();
+import { existsSync as existsSync6, readFileSync as readFileSync7, readdirSync as readdirSync3, statSync as statSync3 } from "fs";
+import { join as join7 } from "path";
+
+// scripts/sftdd/artifact-conformance.ts
+init_esm_shims();
+
+// scripts/sftdd/schema-loader.ts
+init_esm_shims();
+var import_ajv = __toESM(require_ajv(), 1);
+import { readFileSync as readFileSync6 } from "fs";
+import { join as join6 } from "path";
+var SCHEMA_DIR = join6(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+ajv.addFormat("date-time", true);
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse(readFileSync6(join6(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
+}
+
+// scripts/sftdd/test-list.ts
+init_esm_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_esm_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -8202,8 +8246,8 @@ function pipelinePath(sftddDir, featureId) {
 }
 function readPipeline(sftddDir, featureId) {
   const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync6(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync6(p, "utf8"));
+  if (!existsSync7(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync8(p, "utf8"));
 }
 function writePipeline(sftddDir, pipeline) {
   const p = pipelinePath(sftddDir, pipeline.feature_id);
@@ -8298,23 +8342,20 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/sftdd/cycle-record.ts
 init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync16, readdirSync as readdirSync9, statSync as statSync7, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9, rmSync as rmSync5 } from "fs";
+import { existsSync as existsSync16, readFileSync as readFileSync17, readdirSync as readdirSync10, statSync as statSync8, writeFileSync as writeFileSync10, mkdirSync as mkdirSync9, rmSync as rmSync5 } from "fs";
 
 // scripts/sftdd/sftdd-env.ts
 init_esm_shims();
 
 // scripts/sftdd/cycle-record.ts
-import { join as join16, dirname as dirname5 } from "path";
-
-// scripts/sftdd/test-list.ts
-init_esm_shims();
+import { join as join17, dirname as dirname5 } from "path";
 
 // scripts/sftdd/deploy.ts
 init_esm_shims();
 import { execSync, spawn } from "child_process";
 import { randomBytes } from "crypto";
-import { existsSync as existsSync10, mkdirSync as mkdirSync7, readFileSync as readFileSync12, rmSync as rmSync3, writeFileSync as writeFileSync8 } from "fs";
-import { dirname as dirname4, join as join11 } from "path";
+import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync13, rmSync as rmSync3, writeFileSync as writeFileSync8 } from "fs";
+import { dirname as dirname4, join as join12 } from "path";
 
 // scripts/lakebase/deploy-targets.ts
 init_esm_shims();
@@ -8331,36 +8372,8 @@ init_esm_shims();
 
 // scripts/sftdd/agent-log.ts
 init_esm_shims();
-import { appendFileSync, existsSync as existsSync7, readFileSync as readFileSync8 } from "fs";
-import { join as join8 } from "path";
-
-// scripts/sftdd/schema-loader.ts
-init_esm_shims();
-var import_ajv = __toESM(require_ajv(), 1);
-import { readFileSync as readFileSync7 } from "fs";
-import { join as join7 } from "path";
-var SCHEMA_DIR = join7(__dirname, "schemas");
-var ajv = new import_ajv.default({ allErrors: true, strict: false });
-ajv.addFormat("date-time", true);
-var validatorCache = /* @__PURE__ */ new Map();
-function loadSchema(name) {
-  return JSON.parse(readFileSync7(join7(SCHEMA_DIR, name), "utf8"));
-}
-function getValidator(name) {
-  const cached = validatorCache.get(name);
-  if (cached) return cached;
-  const validate = ajv.compile(loadSchema(name));
-  validatorCache.set(name, validate);
-  return validate;
-}
-function formatSchemaErrors(validate) {
-  const errors = validate.errors ?? [];
-  if (errors.length === 0) return ["schema validation failed"];
-  return errors.map((e) => {
-    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
-    return `${where}: ${e.message ?? "invalid"}`;
-  });
-}
+import { appendFileSync, existsSync as existsSync8, readFileSync as readFileSync9 } from "fs";
+import { join as join9 } from "path";
 
 // scripts/sftdd/agent-log-events.ts
 init_esm_shims();
@@ -8437,7 +8450,7 @@ function renderEventMessage(event, slots = {}) {
 
 // scripts/sftdd/agent-log.ts
 function logFilePath(sftddDir) {
-  return join8(sftddDir, "agent-log.jsonl");
+  return join9(sftddDir, "agent-log.jsonl");
 }
 function buildAgentLogEvent(input, now) {
   const slots = input.slots ?? {};
@@ -8489,8 +8502,8 @@ import * as path4 from "path";
 
 // scripts/sftdd/e2e-regex-clean.ts
 init_esm_shims();
-import { readdirSync as readdirSync5, readFileSync as readFileSync11, statSync as statSync4 } from "fs";
-import { join as join10 } from "path";
+import { readdirSync as readdirSync6, readFileSync as readFileSync12, statSync as statSync5 } from "fs";
+import { join as join11 } from "path";
 
 // scripts/sftdd/ephemeral-verify.ts
 init_esm_shims();
@@ -8498,22 +8511,22 @@ init_esm_shims();
 // scripts/sftdd/supersession.ts
 init_esm_shims();
 import * as fs7 from "fs";
-import { join as join12 } from "path";
+import { join as join13 } from "path";
 
 // scripts/sftdd/contract-clean.ts
 init_esm_shims();
-import { existsSync as existsSync12, readFileSync as readFileSync14, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
-import { join as join13, relative, extname } from "path";
+import { existsSync as existsSync13, readFileSync as readFileSync15, readdirSync as readdirSync8, statSync as statSync6 } from "fs";
+import { join as join14, relative, extname } from "path";
 
 // scripts/sftdd/migration-app-clean.ts
 init_esm_shims();
-import { existsSync as existsSync13, readFileSync as readFileSync15, readdirSync as readdirSync8, statSync as statSync6 } from "fs";
-import { join as join14, relative as relative2, extname as extname2 } from "path";
+import { existsSync as existsSync14, readFileSync as readFileSync16, readdirSync as readdirSync9, statSync as statSync7 } from "fs";
+import { join as join15, relative as relative2, extname as extname2 } from "path";
 
 // scripts/git/commits.ts
 init_esm_shims();
-import { existsSync as existsSync14 } from "fs";
-import { join as join15 } from "path";
+import { existsSync as existsSync15 } from "fs";
+import { join as join16 } from "path";
 var SOURCE_EXTENSIONS = /* @__PURE__ */ new Set([
   ".py",
   ".ts",
@@ -8599,7 +8612,7 @@ async function commitAllIfChanged(args) {
     await exec2("git add -A", { cwd: args.cwd });
   }
   for (const inc of args.include ?? []) {
-    if (existsSync14(join15(args.cwd, inc))) {
+    if (existsSync15(join16(args.cwd, inc))) {
       await exec2(`git add -f -- ${shq(inc)}`, { cwd: args.cwd });
     }
   }
@@ -8629,17 +8642,17 @@ async function commitExperimentCode(projectDir, message) {
   });
 }
 function resetStoryBuildState(sftddDir, featureId, story) {
-  const cyclesDir = join16(cyclesRootDir(sftddDir), featureId, story);
+  const cyclesDir = join17(cyclesRootDir(sftddDir), featureId, story);
   let cyclesCleared = false;
-  if (existsSync15(cyclesDir)) {
+  if (existsSync16(cyclesDir)) {
     rmSync5(cyclesDir, { recursive: true, force: true });
     cyclesCleared = true;
   }
   let testItemsReset = 0;
   const tlPath = storyTestListJson(sftddDir, featureId, story);
-  if (existsSync15(tlPath)) {
+  if (existsSync16(tlPath)) {
     try {
-      const tl = JSON.parse(readFileSync16(tlPath, "utf8"));
+      const tl = JSON.parse(readFileSync17(tlPath, "utf8"));
       for (const item of tl.items ?? []) {
         if (item.status && item.status !== "pending") {
           item.status = "pending";

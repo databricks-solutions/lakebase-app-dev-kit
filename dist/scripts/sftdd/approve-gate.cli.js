@@ -7782,30 +7782,36 @@ function conformanceReason(inputs) {
   }
   return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
 }
+function storyAcProblems(fdir, story) {
+  const acsDir2 = join9(fdir, "stories", story, "acs");
+  if (!existsSync9(acsDir2)) return [];
+  const problems = [];
+  const acs = [];
+  for (const f of readdirSync5(acsDir2)) {
+    if (!f.endsWith(".json")) continue;
+    const p = join9(acsDir2, f);
+    let content;
+    try {
+      content = readFileSync10(p, "utf8");
+    } catch {
+      continue;
+    }
+    acs.push({ name: f.replace(/\.json$/, ""), content });
+    const r = checkArtifactConformance(canonicalArtifactName(p), content);
+    if (!r.ok) problems.push(`${story}/acs/${f}: ${r.violations.join("; ")}`);
+  }
+  const indep = checkAcIndependence(acs);
+  if (!indep.ok) problems.push(...indep.violations.map((v) => `${story}/acs: ${v}`));
+  return problems;
+}
+function storyAcsConformanceReason(fdir, story) {
+  const problems = storyAcProblems(fdir, story);
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
 function acsConformanceReason(fdir) {
   const stories = join9(fdir, "stories");
   if (!existsSync9(stories)) return null;
-  const problems = [];
-  for (const s of readdirSync5(stories)) {
-    const acsDir2 = join9(stories, s, "acs");
-    if (!existsSync9(acsDir2)) continue;
-    const acs = [];
-    for (const f of readdirSync5(acsDir2)) {
-      if (!f.endsWith(".json")) continue;
-      const p = join9(acsDir2, f);
-      let content;
-      try {
-        content = readFileSync10(p, "utf8");
-      } catch {
-        continue;
-      }
-      acs.push({ name: f.replace(/\.json$/, ""), content });
-      const r = checkArtifactConformance(canonicalArtifactName(p), content);
-      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
-    }
-    const indep = checkAcIndependence(acs);
-    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
-  }
+  const problems = readdirSync5(stories).flatMap((s) => storyAcProblems(fdir, s));
   return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
 }
 function storyIndependenceReason(fdir) {
@@ -8179,6 +8185,8 @@ function approveStoryGateFromDisk(sftddDir, feature, story, opts) {
   const pipeline = readPipeline(sftddDir, feature);
   const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length > 0) return { ok: false, batched };
+  const acReason = storyAcsConformanceReason(featureDir2(sftddDir, feature), story);
+  if (acReason) return { ok: false, error: acReason };
   try {
     approveStoryGate(pipeline, story, {
       approver: opts.approver,

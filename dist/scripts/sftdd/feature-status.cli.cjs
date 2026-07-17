@@ -7400,6 +7400,19 @@ function readPlan(sftddDir, featureId, storyId) {
 // scripts/sftdd/story-pipeline.ts
 init_cjs_shims();
 var import_fs6 = require("fs");
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_cjs_shims();
+var import_node_fs5 = require("fs");
+var import_node_path8 = require("path");
+
+// scripts/sftdd/artifact-conformance.ts
+init_cjs_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_cjs_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }

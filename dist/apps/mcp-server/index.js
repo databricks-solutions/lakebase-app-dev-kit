@@ -7359,16 +7359,16 @@ function isAllSchemas(schema) {
 }
 function buildSchemaQuery(schema) {
   const cols = "c.table_schema, c.table_name, c.column_name, c.data_type";
-  const join42 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
+  const join43 = "FROM information_schema.columns c JOIN pg_tables t ON c.table_name = t.tablename AND c.table_schema = t.schemaname ";
   if (isAllSchemas(schema)) {
     return {
-      text: `SELECT ${cols} ` + join42 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
+      text: `SELECT ${cols} ` + join43 + `WHERE ${SYSTEM_SCHEMA_FILTER} ORDER BY c.table_schema, c.table_name, c.ordinal_position`,
       values: []
     };
   }
   const one = (schema ?? "").trim() || "public";
   return {
-    text: `SELECT ${cols} ` + join42 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
+    text: `SELECT ${cols} ` + join43 + "WHERE c.table_schema = $1 ORDER BY c.table_name, c.ordinal_position",
     values: [one]
   };
 }
@@ -11560,8 +11560,8 @@ function migrationSlug2(description) {
 
 // scripts/sftdd/feature-status.ts
 init_esm_shims();
-import { existsSync as existsSync39, readFileSync as readFileSync29, readdirSync as readdirSync21, statSync as statSync12 } from "fs";
-import { dirname as dirname12, join as join39 } from "path";
+import { existsSync as existsSync40, readFileSync as readFileSync30, readdirSync as readdirSync22, statSync as statSync13 } from "fs";
+import { dirname as dirname12, join as join40 } from "path";
 
 // scripts/sftdd/orchestrator-probe.ts
 init_esm_shims();
@@ -12404,7 +12404,20 @@ function readPlan(sftddDir, featureId, storyId) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync38, readFileSync as readFileSync28, writeFileSync as writeFileSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync20, statSync as statSync11, rmSync as rmSync7 } from "fs";
+import { existsSync as existsSync39, readFileSync as readFileSync29, writeFileSync as writeFileSync24, mkdirSync as mkdirSync20, readdirSync as readdirSync21, statSync as statSync12, rmSync as rmSync7 } from "fs";
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_esm_shims();
+import { existsSync as existsSync38, readFileSync as readFileSync28, readdirSync as readdirSync20, statSync as statSync11 } from "fs";
+import { join as join39 } from "path";
+
+// scripts/sftdd/artifact-conformance.ts
+init_esm_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_esm_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -12413,24 +12426,24 @@ function pipelinePath(sftddDir, featureId) {
 }
 function readPipeline(sftddDir, featureId) {
   const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync38(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync28(p, "utf8"));
+  if (!existsSync39(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync29(p, "utf8"));
 }
 
 // scripts/sftdd/feature-status.ts
 var MAX_RECENT_LOG_ENTRIES = 5;
 function readJsonIfExists(path29) {
-  if (!existsSync39(path29)) return null;
-  return JSON.parse(readFileSync29(path29, "utf8"));
+  if (!existsSync40(path29)) return null;
+  return JSON.parse(readFileSync30(path29, "utf8"));
 }
 function listFeatureStories(sftddDir, featureId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
-  if (!existsSync39(storiesDir2)) return [];
-  return readdirSync21(storiesDir2).filter((d) => statSync12(join39(storiesDir2, d)).isDirectory()).sort();
+  if (!existsSync40(storiesDir2)) return [];
+  return readdirSync22(storiesDir2).filter((d) => statSync13(join40(storiesDir2, d)).isDirectory()).sort();
 }
 function timelineCycleCount(experimentDir2) {
   const timeline = readJsonIfExists(
-    join39(experimentDir2, "timeline.json")
+    join40(experimentDir2, "timeline.json")
   );
   return timeline?.entries?.length ?? 0;
 }
@@ -12457,9 +12470,9 @@ function summarizeTestList(sftddDir, featureId) {
   }
 }
 function readSelectionLogRecent(sftddDir, limit) {
-  const path29 = join39(sftddDir, "selection-log.md");
-  if (!existsSync39(path29)) return [];
-  const text = readFileSync29(path29, "utf8");
+  const path29 = join40(sftddDir, "selection-log.md");
+  if (!existsSync40(path29)) return [];
+  const text = readFileSync30(path29, "utf8");
   const entries = [];
   const headingRe = /^##\s+(\S+T\S+?)\s+–\s+(.+?)$/gm;
   let match;
@@ -12486,7 +12499,7 @@ function readGatesSummary(sftddDir, featureId) {
   }
 }
 function readWorkflowState2(sftddDir) {
-  const state = readJsonIfExists(join39(sftddDir, "workflow-state.json"));
+  const state = readJsonIfExists(join40(sftddDir, "workflow-state.json"));
   if (!state) return { phase: null, pointer: null };
   return {
     phase: state.phase ?? null,

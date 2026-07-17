@@ -8450,22 +8450,12 @@ function diskArtifactProbe(sftddDir, featureId, buildActive) {
 
 // scripts/sftdd/story-pipeline.ts
 init_esm_shims();
-import { existsSync as existsSync21, readFileSync as readFileSync23, writeFileSync as writeFileSync17, mkdirSync as mkdirSync14, readdirSync as readdirSync11, statSync as statSync7, rmSync as rmSync6 } from "fs";
-function initPipeline(featureId) {
-  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
-}
-function pipelinePath(sftddDir, featureId) {
-  return pipelineJson(sftddDir, featureId);
-}
-function readPipeline(sftddDir, featureId) {
-  const p = pipelinePath(sftddDir, featureId);
-  if (!existsSync21(p)) return initPipeline(featureId);
-  return JSON.parse(readFileSync23(p, "utf8"));
-}
+import { existsSync as existsSync22, readFileSync as readFileSync24, writeFileSync as writeFileSync17, mkdirSync as mkdirSync14, readdirSync as readdirSync12, statSync as statSync8, rmSync as rmSync6 } from "fs";
 
-// scripts/sftdd/response-formatter.ts
+// scripts/sftdd/gate-conformance-guard.ts
 init_esm_shims();
-import { existsSync as existsSync22, readFileSync as readFileSync24, readdirSync as readdirSync12 } from "fs";
+import { existsSync as existsSync21, readFileSync as readFileSync23, readdirSync as readdirSync11, statSync as statSync7 } from "fs";
+import { join as join20 } from "path";
 
 // scripts/sftdd/artifact-conformance.ts
 init_esm_shims();
@@ -8650,24 +8640,39 @@ function canonicalArtifactName(path9) {
   return base;
 }
 
+// scripts/sftdd/architecture-conventions.ts
+init_esm_shims();
+
+// scripts/sftdd/story-pipeline.ts
+function initPipeline(featureId) {
+  return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
+}
+function pipelinePath(sftddDir, featureId) {
+  return pipelineJson(sftddDir, featureId);
+}
+function readPipeline(sftddDir, featureId) {
+  const p = pipelinePath(sftddDir, featureId);
+  if (!existsSync22(p)) return initPipeline(featureId);
+  return JSON.parse(readFileSync24(p, "utf8"));
+}
+
 // scripts/sftdd/response-formatter.ts
+init_esm_shims();
+import { existsSync as existsSync23, readFileSync as readFileSync25, readdirSync as readdirSync13 } from "fs";
 function designGuideConformance(sftddDir) {
   const file = designGuideJson(sftddDir);
-  if (!existsSync22(file)) {
+  if (!existsSync23(file)) {
     return { ok: false, problem: "design-guide.json not written (the machine-checkable token source of truth)" };
   }
   let content;
   try {
-    content = readFileSync24(file, "utf8");
+    content = readFileSync25(file, "utf8");
   } catch (e) {
     return { ok: false, problem: `unreadable: ${e instanceof Error ? e.message : String(e)}` };
   }
   const r = checkArtifactConformance(canonicalArtifactName(file), content);
   return r.ok ? { ok: true } : { ok: false, problem: r.violations.join("; ") };
 }
-
-// scripts/sftdd/architecture-conventions.ts
-init_esm_shims();
 
 // scripts/sftdd/orchestrator-effects.ts
 function readDriveStateFromDisk(sftddDir, featureId, projectDir, opts = {}) {
@@ -8685,7 +8690,7 @@ init_esm_shims();
 
 // scripts/sftdd/sprint-gates.ts
 init_esm_shims();
-import { existsSync as existsSync24, mkdirSync as mkdirSync16, readFileSync as readFileSync26, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync19 } from "fs";
+import { existsSync as existsSync25, mkdirSync as mkdirSync16, readFileSync as readFileSync27, renameSync as renameSync3, unlinkSync as unlinkSync2, writeFileSync as writeFileSync19 } from "fs";
 
 // scripts/sftdd/gate-hash.ts
 init_esm_shims();
@@ -8705,10 +8710,10 @@ function sprintGatesFile(sftddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const file = sprintGatesFile(sftddDir, sprint);
-  if (!existsSync24(file)) return defaultSprintGatesState(sprint);
+  if (!existsSync25(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync26(file, "utf8"));
+    parsed = JSON.parse(readFileSync27(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);

@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.33] - 2026-07-17
+
+Three field findings from the F4-pick-outbound feature of a live stockflow tier-2 run (FEIP-8070).
+
+### Fixed
+
+- **The drive pins the run's kit-ref to a checkout-proof `.lakebase/kit-ref.local` (Finding 28, High).** `.lakebase/kit-ref` is git-tracked, so the drive's branch operations (claim checkout, experiment cut/re-fork, which fork from `origin/<parent>`) silently restored a branch-committed kit-ref over an operator's working-tree bump, running the WRONG kit version mid-run with no signal (an entire F4 story built on the stale backend; `assertCleanForFork` even ignores `.lakebase/`, so the bump was clobbered without blocking the fork). The drive now resolves the launch ref once at startup and writes it to a gitignored `.lakebase/kit-ref.local`, which survives checkouts (git never touches untracked files); the `lk` shim reads `.local` with precedence over the committed `.lakebase/kit-ref` (which stays tracked, CI resolves its `KIT_REF` from it), so the whole run (orchestrator, subagents, and manual `lk` calls) keeps the launch ref. The drive warns loudly on drift between the committed and pinned ref. New `kit-ref.ts` service (`resolveLaunchKitRef` / `pinRunKitRef` / `kitRefDriftWarning`); `run-config` records the effective ref.
+- **The per-story spec gate refuses a truncated / invalid-JSON AC at approve time (Finding 29, Medium).** A spec-author could write a truncated AC file (ending right after `architectural_notes` with no closing brace); the spec gate and reflect gate never JSON-parsed the AC files, so it passed both and only failed at deploy `gate-conformance` ("not valid JSON"), long after build + accept. `approveStoryGateFromDisk` now runs the SAME per-story conformance the deploy gate trusts (new `storyAcsConformanceReason`, reusing `checkArtifactConformance`), so a malformed AC is refused where it is produced.
+
+### Added
+
+- **`lakebase-scm-doctor` gains a `scm-state-git-tracked` warning (Finding 28 sibling).** `.lakebase/workflow-state.json` (the per-working-tree SCM claim state) is git-tracked, so a branch checkout or `git reset --hard origin/<tier>` can restore a stale committed claim over the live one; the finding flags this so a wrong-claim refusal after a checkout is understood as this, not a real conflict.
+
+### Changed
+
+- **Migration-reversibility tests must seed idempotently (Finding 30, Medium).** The agent-generated migration-reversibility test seeded a fixed-key row with a plain `INSERT` + `finally` cleanup; a run killed mid-test (the runtime caps long drives) commits the seed but never cleans up, so every later run on the long-lived reused branch DB failed on a duplicate-key `UniqueViolation` unrelated to the code under test. The guidance in `test-strategist.md` + `navigator.md` now requires an idempotent seed at the START (a per-run-unique key, or `DELETE`-before-`INSERT` / `INSERT ... ON CONFLICT DO NOTHING`) in addition to the `finally` cleanup.
+
 ## [0.3.0-beta.32] - 2026-07-17
 
 ### Fixed

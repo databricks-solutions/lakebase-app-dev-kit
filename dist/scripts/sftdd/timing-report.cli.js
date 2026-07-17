@@ -7015,13 +7015,13 @@ function formatTimingReport(report) {
 
 // scripts/sftdd/run-config.ts
 init_esm_shims();
-import { existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync3, writeFileSync as writeFileSync2 } from "fs";
+import { existsSync as existsSync4, mkdirSync as mkdirSync3, readFileSync as readFileSync4, writeFileSync as writeFileSync3 } from "fs";
 
 // scripts/sftdd/sftdd-env.ts
 init_esm_shims();
 
 // scripts/sftdd/run-config.ts
-import { join as join5 } from "path";
+import { join as join6 } from "path";
 
 // scripts/sftdd/agent-models.ts
 init_esm_shims();
@@ -7039,13 +7039,18 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = join4(".lakebase", "agent-config.json");
 
+// scripts/sftdd/kit-ref.ts
+init_esm_shims();
+import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2, mkdirSync as mkdirSync2 } from "fs";
+import { dirname as dirname2, join as join5 } from "path";
+
 // scripts/sftdd/run-config.ts
-var RUN_CONFIG_REL = join5(ARTIFACT_ROOT, "run-config.json");
+var RUN_CONFIG_REL = join6(ARTIFACT_ROOT, "run-config.json");
 function readRunConfig(sftddDir) {
-  const f = join5(sftddDir, "run-config.json");
-  if (!existsSync3(f)) return void 0;
+  const f = join6(sftddDir, "run-config.json");
+  if (!existsSync4(f)) return void 0;
   try {
-    return JSON.parse(readFileSync3(f, "utf8"));
+    return JSON.parse(readFileSync4(f, "utf8"));
   } catch {
     return void 0;
   }

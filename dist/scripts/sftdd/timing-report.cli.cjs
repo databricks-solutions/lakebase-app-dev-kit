@@ -7047,6 +7047,11 @@ var RECOMMENDED_MODELS = {
 var ALL_AGENT_ROLES = Object.keys(RECOMMENDED_MODELS);
 var AGENT_CONFIG_REL = (0, import_path3.join)(".lakebase", "agent-config.json");
 
+// scripts/sftdd/kit-ref.ts
+init_cjs_shims();
+var import_node_fs2 = require("fs");
+var import_node_path2 = require("path");
+
 // scripts/sftdd/run-config.ts
 var RUN_CONFIG_REL = (0, import_path4.join)(ARTIFACT_ROOT, "run-config.json");
 function readRunConfig(sftddDir) {

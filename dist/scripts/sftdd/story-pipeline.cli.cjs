@@ -6646,8 +6646,8 @@ init_cjs_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_cjs_shims();
-var import_fs = require("fs");
-var import_path = require("path");
+var import_fs2 = require("fs");
+var import_path3 = require("path");
 
 // scripts/sftdd/sftdd-paths.ts
 init_cjs_shims();
@@ -6730,6 +6730,295 @@ function storyAcIds(tdd, f, s) {
   return [...ids];
 }
 
+// scripts/sftdd/gate-conformance-guard.ts
+init_cjs_shims();
+var import_node_fs = require("fs");
+var import_node_path2 = require("path");
+
+// scripts/sftdd/artifact-conformance.ts
+init_cjs_shims();
+var import_path2 = require("path");
+
+// scripts/sftdd/schema-loader.ts
+init_cjs_shims();
+var import_fs = require("fs");
+var import_path = require("path");
+var import_ajv = __toESM(require_ajv(), 1);
+var SCHEMA_DIR = (0, import_path.join)(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+ajv.addFormat("date-time", true);
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse((0, import_fs.readFileSync)((0, import_path.join)(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
+}
+
+// scripts/sftdd/artifact-conformance.ts
+var ARTIFACT_FORMATS = {
+  "feature-spec.json": { kind: "json-schema", schema: "feature.schema.json" },
+  "story.json": { kind: "json-schema", schema: "story.schema.json" },
+  "ac.json": { kind: "json-schema", schema: "ac.schema.json" },
+  "test-list.json": { kind: "json-schema", schema: "test-list.schema.json" },
+  "plan.json": { kind: "json-schema", schema: "plan.schema.json" },
+  "architecture.json": { kind: "json-schema", schema: "architecture.schema.json" },
+  "workflow-state.json": { kind: "json-schema", schema: "workflow-state.schema.json" },
+  // Release Engineer's deploy-gate evidence (reachability + feature-verify).
+  "deploy-evidence.json": { kind: "json-schema", schema: "deploy-evidence.schema.json" },
+  // UX Designer (UI projects only): the machine-checkable design tokens.
+  "design-guide.json": { kind: "json-schema", schema: "design-guide.schema.json" },
+  // Architect Reviewer's section 6 + Gate 2 adjudication surface.
+  "architecture.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Architectural Concerns Mapping", match: "architectural concerns mapping" },
+      { label: "Pattern proposals", match: "pattern proposal" },
+      { label: "Risks", match: "risk" },
+      { label: "Gate decisions", match: "decision" },
+      { label: "Sign-off", match: "sign-off" }
+    ]
+  },
+  // Spec Author's draft-spec narrative.
+  "feature-spec.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Summary", match: "summary" },
+      { label: "Stories", match: "stories" },
+      { label: "Out of scope", match: "out of scope" },
+      { label: "Open questions", match: "open question" }
+    ]
+  },
+  // Feature Requester's original ask: the Spec Author's INPUT. Free-form
+  // narrative; only H1 + non-empty body required. Never overwritten.
+  "feature-request.md": { kind: "md-narrative" },
+  // Spec Author's sprint backlog proposal: the artifact the sprint PLAN gate
+  // locks. Free-form narrative; H1 + non-empty body required.
+  "feature-proposals.md": { kind: "md-narrative" },
+  // Product Owner's project-level overview (replaces the old spec.md).
+  "product-overview.md": { kind: "md-narrative" },
+  // HIL non-functional-requirements brief (the Architect's intake). The HIL
+  // states required NFRs (each with a stable R<n> id), preferences, and
+  // out-of-bounds items. The Architect must carry every Required item into
+  // architecture.json via a matching brief_ref (see checkNfrCoverage). Project
+  // -level (.tdd/nfrs.md) or per-feature (.tdd/features/<F>/nfrs.md).
+  "nfrs.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Required", match: "required" },
+      { label: "Preferences", match: "preference" },
+      { label: "Out of bounds", match: "out of bounds" }
+    ]
+  },
+  // HIL design brief (UI projects): the human's reference sites + what to take
+  // from each. The design analogue of product-overview.md, the source the UX
+  // Designer teases the design out of. A brief with no references is
+  // meaningless, so a
+  // References section is the one hard requirement.
+  "design-brief.md": {
+    kind: "md-sections",
+    sections: [{ label: "References", match: "reference" }]
+  },
+  // UX Designer narrative artifacts (UI projects only). design-guide.md
+  // sections are grounded in a real shipped guide (partner-asset-tracker
+  // STYLE_GUIDE.md); design-guide.json carries the machine-checkable tokens.
+  "design-guide.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Design Philosophy", match: "philosophy" },
+      { label: "UI Framework", match: "framework" },
+      { label: "Typography", match: "typography" },
+      { label: "Color Palette", match: "color" },
+      { label: "Spacing", match: "spacing" },
+      { label: "Components", match: "components" },
+      { label: "User Feedback Principles", match: "feedback" }
+    ]
+  },
+  "ia.md": {
+    kind: "md-sections",
+    sections: [
+      { label: "Screens", match: "screens" },
+      { label: "Navigation", match: "navigation" },
+      { label: "User flows", match: "flow" }
+    ]
+  },
+  // Beck-style ordered list rendered from test-list.json.
+  "test-list.md": { kind: "test-list-md" }
+};
+function checkArtifactConformance(name, content) {
+  const spec = ARTIFACT_FORMATS[name];
+  if (spec === void 0) return { ok: true };
+  switch (spec.kind) {
+    case "json-schema":
+      return checkJsonSchema(name, content, spec.schema);
+    case "md-narrative":
+      return finalize(checkMdNarrative(name, content));
+    case "md-sections":
+      return finalize(checkMdSections(name, content, spec.sections));
+    case "test-list-md":
+      return finalize(checkTestListMd(content));
+  }
+}
+function finalize(violations) {
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function checkJsonSchema(name, content, schemaFile) {
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    return { ok: false, violations: [`${name} is not valid JSON: ${cause}`] };
+  }
+  const validate = getValidator(schemaFile);
+  if (validate(parsed)) return { ok: true };
+  return { ok: false, violations: formatSchemaErrors(validate).map((e) => `${name} ${e}`) };
+}
+var HEADING_RE = /^(#{1,6})\s+(.*\S)\s*$/;
+function parseHeadings(content) {
+  const out = [];
+  for (const line of content.split("\n")) {
+    const m = HEADING_RE.exec(line);
+    if (m) out.push({ level: m[1].length, text: m[2] });
+  }
+  return out;
+}
+function hasH1(headings) {
+  return headings.some((h) => h.level === 1);
+}
+function hasBody(content) {
+  return content.split("\n").some((line) => {
+    const t = line.trim();
+    return t.length > 0 && !HEADING_RE.test(line);
+  });
+}
+function checkMdNarrative(name, content) {
+  const violations = [];
+  const headings = parseHeadings(content);
+  if (!hasH1(headings)) violations.push(`${name} has no H1 title`);
+  if (!hasBody(content)) violations.push(`${name} has an empty body (title only)`);
+  return violations;
+}
+function checkMdSections(name, content, sections) {
+  const violations = [];
+  const headings = parseHeadings(content);
+  if (!hasH1(headings)) violations.push(`${name} has no H1 title`);
+  const headingText = headings.map((h) => h.text.toLowerCase());
+  for (const section of sections) {
+    if (!headingText.some((t) => t.includes(section.match))) {
+      violations.push(`${name} missing required section: ${section.label}`);
+    }
+  }
+  return violations;
+}
+var TEST_ITEM_RE = /^\s*[-*]\s*\[[ xX]?\]\s*T\d/;
+var AC_REF_RE = /\bAC\s*\d/i;
+function checkTestListMd(content) {
+  const violations = [];
+  const headings = parseHeadings(content);
+  if (!hasH1(headings)) violations.push("test-list.md has no H1 title");
+  if (!/ordered for\s*:/i.test(content)) {
+    violations.push('test-list.md missing "Ordered for:" ordering rationale');
+  }
+  if (!headings.some((h) => h.text.toLowerCase().includes("deferred"))) {
+    violations.push("test-list.md missing required section: Deferred / skipped");
+  }
+  for (const line of content.split("\n")) {
+    if (TEST_ITEM_RE.test(line) && !AC_REF_RE.test(line)) {
+      violations.push(`test-list.md has a test item with no AC reference (orphan): ${line.trim()}`);
+    }
+  }
+  return violations;
+}
+function checkAcIndependence(acs) {
+  const parsed = [];
+  for (const a of acs) {
+    let obj;
+    try {
+      obj = JSON.parse(a.content);
+    } catch {
+      continue;
+    }
+    const idForNum = typeof obj.id === "string" ? obj.id : a.name;
+    const m = /^AC(\d+)/.exec(idForNum);
+    if (!m) continue;
+    parsed.push({ name: typeof obj.id === "string" ? obj.id : a.name, num: parseInt(m[1], 10), indep: obj.independence });
+  }
+  if (parsed.length < 2) return { ok: true };
+  const firstNum = Math.min(...parsed.map((p) => p.num));
+  const violations = [];
+  for (const p of parsed) {
+    if (p.num === firstNum) continue;
+    const i = p.indep;
+    if (!i || typeof i !== "object") {
+      violations.push(
+        `${p.name}: missing independence determination (every AC after the first must record independence.distinct_from_prior + rationale; apply the AC-independence test, or fold/re-scope it)`
+      );
+    } else if (i.distinct_from_prior !== true) {
+      violations.push(
+        `${p.name}: independence.distinct_from_prior is not true (this AC's outcome is already delivered by an earlier AC; fold it into that AC or re-scope it to a distinct, independently-RED-able outcome)`
+      );
+    } else if (typeof i.rationale !== "string" || i.rationale.trim().length === 0) {
+      violations.push(`${p.name}: independence.rationale is empty (state the distinct outcome this AC adds beyond the earlier ACs)`);
+    }
+  }
+  return violations.length === 0 ? { ok: true } : { ok: false, violations };
+}
+function canonicalArtifactName(path13) {
+  const base = (0, import_path2.basename)(path13);
+  if ((0, import_path2.basename)((0, import_path2.dirname)(path13)) === "acs" && base.endsWith(".json")) return "ac.json";
+  return base;
+}
+
+// scripts/sftdd/test-list.ts
+init_cjs_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_cjs_shims();
+
+// scripts/sftdd/gate-conformance-guard.ts
+function featureDir2(sftddDir, featureId) {
+  return featureResolved(sftddDir, featureId);
+}
+function storyAcProblems(fdir, story) {
+  const acsDir2 = (0, import_node_path2.join)(fdir, "stories", story, "acs");
+  if (!(0, import_node_fs.existsSync)(acsDir2)) return [];
+  const problems = [];
+  const acs = [];
+  for (const f of (0, import_node_fs.readdirSync)(acsDir2)) {
+    if (!f.endsWith(".json")) continue;
+    const p = (0, import_node_path2.join)(acsDir2, f);
+    let content;
+    try {
+      content = (0, import_node_fs.readFileSync)(p, "utf8");
+    } catch {
+      continue;
+    }
+    acs.push({ name: f.replace(/\.json$/, ""), content });
+    const r = checkArtifactConformance(canonicalArtifactName(p), content);
+    if (!r.ok) problems.push(`${story}/acs/${f}: ${r.violations.join("; ")}`);
+  }
+  const indep = checkAcIndependence(acs);
+  if (!indep.ok) problems.push(...indep.violations.map((v) => `${story}/acs: ${v}`));
+  return problems;
+}
+function storyAcsConformanceReason(fdir, story) {
+  const problems = storyAcProblems(fdir, story);
+  return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
+}
+
 // scripts/sftdd/story-pipeline.ts
 var STORY_STATUSES = [
   "designing",
@@ -6748,13 +7037,13 @@ function pipelinePath(sftddDir, featureId) {
 }
 function readPipeline(sftddDir, featureId) {
   const p = pipelinePath(sftddDir, featureId);
-  if (!(0, import_fs.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs.readFileSync)(p, "utf8"));
+  if (!(0, import_fs2.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs2.readFileSync)(p, "utf8"));
 }
 function writePipeline(sftddDir, pipeline) {
   const p = pipelinePath(sftddDir, pipeline.feature_id);
-  (0, import_fs.mkdirSync)((0, import_path.dirname)(p), { recursive: true });
-  (0, import_fs.writeFileSync)(p, JSON.stringify(pipeline, null, 2) + "\n");
+  (0, import_fs2.mkdirSync)((0, import_path3.dirname)(p), { recursive: true });
+  (0, import_fs2.writeFileSync)(p, JSON.stringify(pipeline, null, 2) + "\n");
 }
 function setStoryStatus(pipeline, storyId, status) {
   const existing = pipeline.stories[storyId];
@@ -6765,11 +7054,11 @@ function syncBreakdownToPipeline(sftddDir, featureId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
   const pipeline = readPipeline(sftddDir, featureId);
   const added = [];
-  if ((0, import_fs.existsSync)(storiesDir2)) {
-    for (const storyId of (0, import_fs.readdirSync)(storiesDir2).sort()) {
+  if ((0, import_fs2.existsSync)(storiesDir2)) {
+    for (const storyId of (0, import_fs2.readdirSync)(storiesDir2).sort()) {
       let isDir = false;
       try {
-        isDir = (0, import_fs.statSync)((0, import_path.join)(storiesDir2, storyId)).isDirectory();
+        isDir = (0, import_fs2.statSync)((0, import_path3.join)(storiesDir2, storyId)).isDirectory();
       } catch {
         isDir = false;
       }
@@ -6787,7 +7076,7 @@ function resetIncompleteBreakdown(sftddDir, featureId) {
   const specPath = featureSpecJson(sftddDir, featureId);
   let complete = false;
   try {
-    const spec = JSON.parse((0, import_fs.readFileSync)(specPath, "utf8"));
+    const spec = JSON.parse((0, import_fs2.readFileSync)(specPath, "utf8"));
     complete = Array.isArray(spec.stories) && spec.stories.length > 0;
   } catch {
     complete = false;
@@ -6795,8 +7084,8 @@ function resetIncompleteBreakdown(sftddDir, featureId) {
   if (complete) return { reset: false };
   let reset = false;
   for (const p of [storiesDir(sftddDir, featureId), specPath, featureSpecMd(sftddDir, featureId)]) {
-    if ((0, import_fs.existsSync)(p)) {
-      (0, import_fs.rmSync)(p, { recursive: true, force: true });
+    if ((0, import_fs2.existsSync)(p)) {
+      (0, import_fs2.rmSync)(p, { recursive: true, force: true });
       reset = true;
     }
   }
@@ -6824,14 +7113,14 @@ function completeActive(pipeline) {
 }
 function storyHasAcceptanceCriteria(sftddDir, featureId, storyId) {
   const acsDir2 = acsDir(sftddDir, featureId, storyId);
-  if (!(0, import_fs.existsSync)(acsDir2)) return false;
-  return (0, import_fs.readdirSync)(acsDir2).some((f) => f.endsWith(".json"));
+  if (!(0, import_fs2.existsSync)(acsDir2)) return false;
+  return (0, import_fs2.readdirSync)(acsDir2).some((f) => f.endsWith(".json"));
 }
 function findBatchedDraftStories(sftddDir, featureId, pipeline, gatingStoryId) {
   const storiesDir2 = storiesDir(sftddDir, featureId);
-  if (!(0, import_fs.existsSync)(storiesDir2)) return [];
+  if (!(0, import_fs2.existsSync)(storiesDir2)) return [];
   const offenders = [];
-  for (const storyId of (0, import_fs.readdirSync)(storiesDir2)) {
+  for (const storyId of (0, import_fs2.readdirSync)(storiesDir2)) {
     if (storyId === gatingStoryId) continue;
     if (!storyHasAcceptanceCriteria(sftddDir, featureId, storyId)) continue;
     const status = pipeline.stories[storyId]?.status;
@@ -6872,6 +7161,8 @@ function approveStoryGateFromDisk(sftddDir, feature, story, opts) {
   const pipeline = readPipeline(sftddDir, feature);
   const batched = findBatchedDraftStories(sftddDir, feature, pipeline, story);
   if (batched.length > 0) return { ok: false, batched };
+  const acReason = storyAcsConformanceReason(featureDir2(sftddDir, feature), story);
+  if (acReason) return { ok: false, error: acReason };
   try {
     approveStoryGate(pipeline, story, {
       approver: opts.approver,
@@ -6973,41 +7264,13 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/sftdd/revise.ts
 init_cjs_shims();
-var import_node_fs5 = require("fs");
-var import_node_path8 = require("path");
+var import_node_fs6 = require("fs");
+var import_node_path9 = require("path");
 
 // scripts/sftdd/agent-log.ts
 init_cjs_shims();
 var import_fs3 = require("fs");
-var import_path3 = require("path");
-
-// scripts/sftdd/schema-loader.ts
-init_cjs_shims();
-var import_fs2 = require("fs");
-var import_path2 = require("path");
-var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
-var ajv = new import_ajv.default({ allErrors: true, strict: false });
-ajv.addFormat("date-time", true);
-var validatorCache = /* @__PURE__ */ new Map();
-function loadSchema(name) {
-  return JSON.parse((0, import_fs2.readFileSync)((0, import_path2.join)(SCHEMA_DIR, name), "utf8"));
-}
-function getValidator(name) {
-  const cached = validatorCache.get(name);
-  if (cached) return cached;
-  const validate = ajv.compile(loadSchema(name));
-  validatorCache.set(name, validate);
-  return validate;
-}
-function formatSchemaErrors(validate) {
-  const errors = validate.errors ?? [];
-  if (errors.length === 0) return ["schema validation failed"];
-  return errors.map((e) => {
-    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
-    return `${where}: ${e.message ?? "invalid"}`;
-  });
-}
+var import_path4 = require("path");
 
 // scripts/sftdd/agent-log-events.ts
 init_cjs_shims();
@@ -7084,7 +7347,7 @@ function renderEventMessage(event, slots = {}) {
 
 // scripts/sftdd/agent-log.ts
 function logFilePath(sftddDir) {
-  return (0, import_path3.join)(sftddDir, "agent-log.jsonl");
+  return (0, import_path4.join)(sftddDir, "agent-log.jsonl");
 }
 function buildAgentLogEvent(input, now) {
   const slots = input.slots ?? {};
@@ -7132,7 +7395,7 @@ function emitAgentLogEvent(input, opts = {}) {
 // scripts/sftdd/smells.ts
 init_cjs_shims();
 var import_fs4 = require("fs");
-var import_path4 = require("path");
+var import_path5 = require("path");
 
 // scripts/sftdd/run-cycle.ts
 init_cjs_shims();
@@ -7144,7 +7407,7 @@ init_cjs_shims();
 init_cjs_shims();
 var import_node_child_process2 = require("child_process");
 var import_node_util = require("util");
-var import_node_path2 = require("path");
+var import_node_path3 = require("path");
 
 // scripts/lakebase/kit-config.ts
 init_cjs_shims();
@@ -7293,7 +7556,7 @@ function resolveProfile(opts) {
   if (profileByEnvFile.has(cwd)) {
     fromEnvFile = profileByEnvFile.get(cwd);
   } else {
-    fromEnvFile = readEnvVar((0, import_node_path2.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
+    fromEnvFile = readEnvVar((0, import_node_path3.join)(cwd, ".env"), "DATABRICKS_CONFIG_PROFILE");
     profileByEnvFile.set(cwd, fromEnvFile);
   }
   if (fromEnvFile) return fromEnvFile;
@@ -7769,7 +8032,7 @@ Re-author this story's ${artifact} to ADD the specific coverage named above. Thi
 Re-author this story's ${artifact} to address the above. Do NOT re-emit the same overlap/redundancy; if no honest, not-already-delivered behavior remains, say so as an open question rather than fabricating one.`;
 }
 function readSmellsLog(sftddDir) {
-  const file = (0, import_path4.join)(sftddDir, "smells.json");
+  const file = (0, import_path5.join)(sftddDir, "smells.json");
   if (!(0, import_fs4.existsSync)(file)) return { detected: [] };
   return JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
 }
@@ -7779,7 +8042,7 @@ function smellMatches(entry, smell, story_id) {
   return entry.story_id === void 0 || entry.story_id === story_id;
 }
 function markSmellResolved(sftddDir, smell, opts) {
-  const file = (0, import_path4.join)(sftddDir, "smells.json");
+  const file = (0, import_path5.join)(sftddDir, "smells.json");
   if (!(0, import_fs4.existsSync)(file)) return false;
   const log = JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
   const entry = log.detected.find((d) => !d.resolution && smellMatches(d, smell, opts.story_id));
@@ -7790,7 +8053,7 @@ function markSmellResolved(sftddDir, smell, opts) {
   return true;
 }
 function resolveAllOpenSmellsForStory(sftddDir, story, note) {
-  const file = (0, import_path4.join)(sftddDir, "smells.json");
+  const file = (0, import_path5.join)(sftddDir, "smells.json");
   if (!(0, import_fs4.existsSync)(file)) return [];
   const log = JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
   const cleared = [];
@@ -7825,17 +8088,14 @@ var import_fs6 = require("fs");
 init_cjs_shims();
 
 // scripts/sftdd/cycle-record.ts
-var import_path5 = require("path");
-
-// scripts/sftdd/test-list.ts
-init_cjs_shims();
+var import_path6 = require("path");
 
 // scripts/sftdd/deploy.ts
 init_cjs_shims();
 var import_node_child_process4 = require("child_process");
 var import_node_crypto = require("crypto");
-var import_node_fs2 = require("fs");
-var import_node_path4 = require("path");
+var import_node_fs3 = require("fs");
+var import_node_path5 = require("path");
 
 // scripts/lakebase/deploy-targets.ts
 init_cjs_shims();
@@ -7882,8 +8142,8 @@ var path3 = __toESM(require("path"), 1);
 
 // scripts/sftdd/e2e-regex-clean.ts
 init_cjs_shims();
-var import_node_fs = require("fs");
-var import_node_path3 = require("path");
+var import_node_fs2 = require("fs");
+var import_node_path4 = require("path");
 
 // scripts/sftdd/ephemeral-verify.ts
 init_cjs_shims();
@@ -7891,24 +8151,24 @@ init_cjs_shims();
 // scripts/sftdd/supersession.ts
 init_cjs_shims();
 var fs7 = __toESM(require("fs"), 1);
-var import_node_path5 = require("path");
+var import_node_path6 = require("path");
 
 // scripts/sftdd/contract-clean.ts
 init_cjs_shims();
-var import_node_fs3 = require("fs");
-var import_node_path6 = require("path");
+var import_node_fs4 = require("fs");
+var import_node_path7 = require("path");
 
 // scripts/sftdd/migration-app-clean.ts
 init_cjs_shims();
-var import_node_fs4 = require("fs");
-var import_node_path7 = require("path");
+var import_node_fs5 = require("fs");
+var import_node_path8 = require("path");
 
 // scripts/git/commits.ts
 init_cjs_shims();
 
 // scripts/sftdd/cycle-record.ts
 function resetStoryBuildState(sftddDir, featureId, story) {
-  const cyclesDir = (0, import_path5.join)(cyclesRootDir(sftddDir), featureId, story);
+  const cyclesDir = (0, import_path6.join)(cyclesRootDir(sftddDir), featureId, story);
   let cyclesCleared = false;
   if ((0, import_fs6.existsSync)(cyclesDir)) {
     (0, import_fs6.rmSync)(cyclesDir, { recursive: true, force: true });
@@ -7938,36 +8198,36 @@ function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
   clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
-  if ((0, import_node_fs5.existsSync)(master)) {
+  if ((0, import_node_fs6.existsSync)(master)) {
     try {
-      const data = JSON.parse((0, import_node_fs5.readFileSync)(master, "utf8"));
+      const data = JSON.parse((0, import_node_fs6.readFileSync)(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        (0, import_node_fs5.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
+        (0, import_node_fs6.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if ((0, import_node_fs5.existsSync)(perStory)) (0, import_node_fs5.rmSync)(perStory, { force: true });
+  if ((0, import_node_fs6.existsSync)(perStory)) (0, import_node_fs6.rmSync)(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs5.existsSync)(dir)) {
-      for (const f of (0, import_node_fs5.readdirSync)(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs5.rmSync)((0, import_node_path8.join)(dir, f), { force: true });
+    if ((0, import_node_fs6.existsSync)(dir)) {
+      for (const f of (0, import_node_fs6.readdirSync)(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs6.rmSync)((0, import_node_path9.join)(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs5.existsSync)(dir)) {
-      for (const f of (0, import_node_fs5.readdirSync)(dir)) {
+    if ((0, import_node_fs6.existsSync)(dir)) {
+      for (const f of (0, import_node_fs6.readdirSync)(dir)) {
         if (!f.endsWith(".json")) continue;
-        const p = (0, import_node_path8.join)(dir, f);
+        const p = (0, import_node_path9.join)(dir, f);
         try {
-          const ac = JSON.parse((0, import_node_fs5.readFileSync)(p, "utf8"));
+          const ac = JSON.parse((0, import_node_fs6.readFileSync)(p, "utf8"));
           if ("architectural_notes" in ac) {
             delete ac.architectural_notes;
-            (0, import_node_fs5.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
+            (0, import_node_fs6.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
           }
         } catch {
         }
@@ -8007,8 +8267,8 @@ function applyReviseSelfHeal(args) {
   staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
-    (0, import_node_fs5.mkdirSync)((0, import_node_path8.dirname)(hb), { recursive: true });
-    (0, import_node_fs5.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+    (0, import_node_fs6.mkdirSync)((0, import_node_path9.dirname)(hb), { recursive: true });
+    (0, import_node_fs6.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
   }
   const resolvedSmell = markSmellResolved(sftddDir, args.smell, {

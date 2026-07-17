@@ -8187,8 +8187,52 @@ init_cjs_shims();
 
 // scripts/sftdd/story-pipeline.ts
 init_cjs_shims();
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+
+// scripts/sftdd/gate-conformance-guard.ts
+init_cjs_shims();
+var import_node_fs = require("fs");
+var import_node_path3 = require("path");
+
+// scripts/sftdd/artifact-conformance.ts
+init_cjs_shims();
+
+// scripts/sftdd/schema-loader.ts
+init_cjs_shims();
 var import_fs2 = require("fs");
 var import_path2 = require("path");
+var import_ajv = __toESM(require_ajv(), 1);
+var SCHEMA_DIR = (0, import_path2.join)(__dirname, "schemas");
+var ajv = new import_ajv.default({ allErrors: true, strict: false });
+ajv.addFormat("date-time", true);
+var validatorCache = /* @__PURE__ */ new Map();
+function loadSchema(name) {
+  return JSON.parse((0, import_fs2.readFileSync)((0, import_path2.join)(SCHEMA_DIR, name), "utf8"));
+}
+function getValidator(name) {
+  const cached = validatorCache.get(name);
+  if (cached) return cached;
+  const validate = ajv.compile(loadSchema(name));
+  validatorCache.set(name, validate);
+  return validate;
+}
+function formatSchemaErrors(validate) {
+  const errors = validate.errors ?? [];
+  if (errors.length === 0) return ["schema validation failed"];
+  return errors.map((e) => {
+    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
+    return `${where}: ${e.message ?? "invalid"}`;
+  });
+}
+
+// scripts/sftdd/test-list.ts
+init_cjs_shims();
+
+// scripts/sftdd/architecture-conventions.ts
+init_cjs_shims();
+
+// scripts/sftdd/story-pipeline.ts
 function initPipeline(featureId) {
   return { version: 1, feature_id: featureId, stories: {}, build_queue: [], build_active: null };
 }
@@ -8197,13 +8241,13 @@ function pipelinePath(sftddDir, featureId) {
 }
 function readPipeline(sftddDir, featureId) {
   const p = pipelinePath(sftddDir, featureId);
-  if (!(0, import_fs2.existsSync)(p)) return initPipeline(featureId);
-  return JSON.parse((0, import_fs2.readFileSync)(p, "utf8"));
+  if (!(0, import_fs3.existsSync)(p)) return initPipeline(featureId);
+  return JSON.parse((0, import_fs3.readFileSync)(p, "utf8"));
 }
 function writePipeline(sftddDir, pipeline) {
   const p = pipelinePath(sftddDir, pipeline.feature_id);
-  (0, import_fs2.mkdirSync)((0, import_path2.dirname)(p), { recursive: true });
-  (0, import_fs2.writeFileSync)(p, JSON.stringify(pipeline, null, 2) + "\n");
+  (0, import_fs3.mkdirSync)((0, import_path3.dirname)(p), { recursive: true });
+  (0, import_fs3.writeFileSync)(p, JSON.stringify(pipeline, null, 2) + "\n");
 }
 function setStoryStatus(pipeline, storyId, status) {
   const existing = pipeline.stories[storyId];
@@ -8301,15 +8345,12 @@ init_cjs_shims();
 // scripts/sftdd/cycle-record.ts
 var import_path6 = require("path");
 
-// scripts/sftdd/test-list.ts
-init_cjs_shims();
-
 // scripts/sftdd/deploy.ts
 init_cjs_shims();
 var import_node_child_process4 = require("child_process");
 var import_node_crypto = require("crypto");
-var import_node_fs2 = require("fs");
-var import_node_path4 = require("path");
+var import_node_fs3 = require("fs");
+var import_node_path5 = require("path");
 
 // scripts/lakebase/deploy-targets.ts
 init_cjs_shims();
@@ -8328,34 +8369,6 @@ init_cjs_shims();
 init_cjs_shims();
 var import_fs4 = require("fs");
 var import_path4 = require("path");
-
-// scripts/sftdd/schema-loader.ts
-init_cjs_shims();
-var import_fs3 = require("fs");
-var import_path3 = require("path");
-var import_ajv = __toESM(require_ajv(), 1);
-var SCHEMA_DIR = (0, import_path3.join)(__dirname, "schemas");
-var ajv = new import_ajv.default({ allErrors: true, strict: false });
-ajv.addFormat("date-time", true);
-var validatorCache = /* @__PURE__ */ new Map();
-function loadSchema(name) {
-  return JSON.parse((0, import_fs3.readFileSync)((0, import_path3.join)(SCHEMA_DIR, name), "utf8"));
-}
-function getValidator(name) {
-  const cached = validatorCache.get(name);
-  if (cached) return cached;
-  const validate = ajv.compile(loadSchema(name));
-  validatorCache.set(name, validate);
-  return validate;
-}
-function formatSchemaErrors(validate) {
-  const errors = validate.errors ?? [];
-  if (errors.length === 0) return ["schema validation failed"];
-  return errors.map((e) => {
-    const where = e.instancePath && e.instancePath.length > 0 ? e.instancePath : "(root)";
-    return `${where}: ${e.message ?? "invalid"}`;
-  });
-}
 
 // scripts/sftdd/agent-log-events.ts
 init_cjs_shims();
@@ -8484,8 +8497,8 @@ var path3 = __toESM(require("path"), 1);
 
 // scripts/sftdd/e2e-regex-clean.ts
 init_cjs_shims();
-var import_node_fs = require("fs");
-var import_node_path3 = require("path");
+var import_node_fs2 = require("fs");
+var import_node_path4 = require("path");
 
 // scripts/sftdd/ephemeral-verify.ts
 init_cjs_shims();
@@ -8493,17 +8506,17 @@ init_cjs_shims();
 // scripts/sftdd/supersession.ts
 init_cjs_shims();
 var fs7 = __toESM(require("fs"), 1);
-var import_node_path5 = require("path");
+var import_node_path6 = require("path");
 
 // scripts/sftdd/contract-clean.ts
 init_cjs_shims();
-var import_node_fs3 = require("fs");
-var import_node_path6 = require("path");
+var import_node_fs4 = require("fs");
+var import_node_path7 = require("path");
 
 // scripts/sftdd/migration-app-clean.ts
 init_cjs_shims();
-var import_node_fs4 = require("fs");
-var import_node_path7 = require("path");
+var import_node_fs5 = require("fs");
+var import_node_path8 = require("path");
 
 // scripts/git/commits.ts
 init_cjs_shims();

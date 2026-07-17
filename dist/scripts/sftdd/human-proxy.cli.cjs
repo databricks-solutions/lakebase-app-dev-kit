@@ -7786,30 +7786,32 @@ function conformanceReason(inputs) {
   }
   return problems.length === 0 ? null : `format conformance failed: ${problems.join("; ")}`;
 }
+function storyAcProblems(fdir, story) {
+  const acsDir2 = (0, import_node_path2.join)(fdir, "stories", story, "acs");
+  if (!(0, import_node_fs2.existsSync)(acsDir2)) return [];
+  const problems = [];
+  const acs = [];
+  for (const f of (0, import_node_fs2.readdirSync)(acsDir2)) {
+    if (!f.endsWith(".json")) continue;
+    const p = (0, import_node_path2.join)(acsDir2, f);
+    let content;
+    try {
+      content = (0, import_node_fs2.readFileSync)(p, "utf8");
+    } catch {
+      continue;
+    }
+    acs.push({ name: f.replace(/\.json$/, ""), content });
+    const r = checkArtifactConformance(canonicalArtifactName(p), content);
+    if (!r.ok) problems.push(`${story}/acs/${f}: ${r.violations.join("; ")}`);
+  }
+  const indep = checkAcIndependence(acs);
+  if (!indep.ok) problems.push(...indep.violations.map((v) => `${story}/acs: ${v}`));
+  return problems;
+}
 function acsConformanceReason(fdir) {
   const stories = (0, import_node_path2.join)(fdir, "stories");
   if (!(0, import_node_fs2.existsSync)(stories)) return null;
-  const problems = [];
-  for (const s of (0, import_node_fs2.readdirSync)(stories)) {
-    const acsDir2 = (0, import_node_path2.join)(stories, s, "acs");
-    if (!(0, import_node_fs2.existsSync)(acsDir2)) continue;
-    const acs = [];
-    for (const f of (0, import_node_fs2.readdirSync)(acsDir2)) {
-      if (!f.endsWith(".json")) continue;
-      const p = (0, import_node_path2.join)(acsDir2, f);
-      let content;
-      try {
-        content = (0, import_node_fs2.readFileSync)(p, "utf8");
-      } catch {
-        continue;
-      }
-      acs.push({ name: f.replace(/\.json$/, ""), content });
-      const r = checkArtifactConformance(canonicalArtifactName(p), content);
-      if (!r.ok) problems.push(`${s}/acs/${f}: ${r.violations.join("; ")}`);
-    }
-    const indep = checkAcIndependence(acs);
-    if (!indep.ok) problems.push(...indep.violations.map((v) => `${s}/acs: ${v}`));
-  }
+  const problems = (0, import_node_fs2.readdirSync)(stories).flatMap((s) => storyAcProblems(fdir, s));
   return problems.length === 0 ? null : `AC conformance failed: ${problems.join("; ")}`;
 }
 function storyIndependenceReason(fdir) {
