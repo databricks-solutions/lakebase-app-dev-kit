@@ -8056,9 +8056,17 @@ function experimentsRoot(sftddDir, featureId, storyId) {
 function experimentDir(sftddDir, featureId, storyId, slug) {
   return join4(experimentsRoot(sftddDir, featureId, storyId), slug);
 }
-async function cutExperiment(args) {
-  const { sftddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, ...lookup } = args;
-  const paired = await createPairedBranch({
+async function cutExperiment(args, deps = {}) {
+  const { sftddDir, projectDir, featureId, storyId, experimentSlug, branch, parentBranch, ttl, notes, resetStaleBranch, ...lookup } = args;
+  const create = deps.createPairedBranch ?? createPairedBranch;
+  const dropBranch = deps.deletePairedBranch ?? deletePairedBranch;
+  if (resetStaleBranch) {
+    try {
+      await dropBranch({ instance: lookup.instance, branch, cwd: projectDir });
+    } catch {
+    }
+  }
+  const paired = await create({
     instance: lookup.instance,
     branch,
     parentBranch,
@@ -9707,6 +9715,7 @@ function parseExperimentArgs(argv) {
     else if (a === "--reason") out.reason = argv[++i];
     else if (a === "--at") out.at = argv[++i];
     else if (a === "--revise") out.revise = true;
+    else if (a === "--reset-stale-branch") out.resetStaleBranch = true;
     else if (a === "--project-dir") out.projectDir = argv[++i];
     else if (a === "--tdd-dir") out.sftddDir = argv[++i];
   }
@@ -9744,7 +9753,7 @@ function usage(msg) {
   process.stderr.write(
     `${msg}
 Usage: lakebase-sftdd-experiment <cut|merge|discard> --feature <F> --story <S> --slug <X> --instance <I> [--tdd-dir <D>]
-  cut needs --branch <B> --parent <FB> [--ttl <T>] [--project-dir <P>]
+  cut needs --branch <B> --parent <FB> [--ttl <T>] [--reset-stale-branch] [--project-dir <P>]
   merge needs --experiment-branch <B> --feature-branch <FB> --approver <A> [--at <ISO>] [--project-dir <P>]
   discard needs --approver <A> --reason <R> [--revise] [--at <ISO>]
 `
@@ -9773,7 +9782,8 @@ async function main() {
         experimentSlug: slug,
         branch: args.branch,
         parentBranch: args.parent,
-        ttl: args.ttl
+        ttl: args.ttl,
+        ...args.resetStaleBranch ? { resetStaleBranch: true } : {}
       });
       const p = readPipeline(sftddDir, feature);
       cutStoryExperiment(p, story, {

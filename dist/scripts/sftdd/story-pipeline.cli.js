@@ -6668,6 +6668,9 @@ function resolveSftddDir(projectDir = process.cwd()) {
   return next;
 }
 var featuresDir = (tdd) => join(tdd, "features");
+var cyclesRootDir = (tdd) => join(tdd, "cycles");
+var escalationsDir = (tdd) => join(tdd, "escalations");
+var escalationFile = (tdd, id) => join(escalationsDir(tdd), `${id}.json`);
 var featureDir = (tdd, featureId) => join(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureSpecJson = (tdd, f) => join(featureResolved(tdd, f), "feature-spec.json");
@@ -6975,8 +6978,8 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/sftdd/revise.ts
 init_esm_shims();
-import { existsSync as existsSync9, readFileSync as readFileSync10, writeFileSync as writeFileSync7, mkdirSync as mkdirSync5, readdirSync as readdirSync3, rmSync as rmSync3 } from "fs";
-import { join as join9, dirname as dirname3 } from "path";
+import { existsSync as existsSync16, readFileSync as readFileSync18, writeFileSync as writeFileSync12, mkdirSync as mkdirSync10, readdirSync as readdirSync9, rmSync as rmSync7 } from "fs";
+import { join as join16, dirname as dirname6 } from "path";
 
 // scripts/sftdd/agent-log.ts
 init_esm_shims();
@@ -7791,6 +7794,20 @@ function markSmellResolved(sftddDir, smell, opts) {
   writeFileSync5(file, JSON.stringify(log, null, 2) + "\n");
   return true;
 }
+function resolveAllOpenSmellsForStory(sftddDir, story, note) {
+  const file = join8(sftddDir, "smells.json");
+  if (!existsSync7(file)) return [];
+  const log = JSON.parse(readFileSync8(file, "utf8"));
+  const cleared = [];
+  for (const d of log.detected) {
+    if (d.resolution || d.story_id !== story) continue;
+    d.resolution = note ?? "cleared for rebuild-story";
+    d.resolution_kind = "cleared";
+    cleared.push(d.smell);
+  }
+  if (cleared.length) writeFileSync5(file, JSON.stringify(log, null, 2) + "\n");
+  return cleared;
+}
 
 // scripts/sftdd/reflection.ts
 init_esm_shims();
@@ -7805,42 +7822,157 @@ function clearReflectVerdict(sftddDir, feature, story) {
 }
 var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
+// scripts/sftdd/cycle-record.ts
+init_esm_shims();
+import { existsSync as existsSync15, readFileSync as readFileSync17, readdirSync as readdirSync8, statSync as statSync6, writeFileSync as writeFileSync11, mkdirSync as mkdirSync9, rmSync as rmSync6 } from "fs";
+
+// scripts/sftdd/sftdd-env.ts
+init_esm_shims();
+
+// scripts/sftdd/cycle-record.ts
+import { join as join15, dirname as dirname5 } from "path";
+
+// scripts/sftdd/test-list.ts
+init_esm_shims();
+
+// scripts/sftdd/deploy.ts
+init_esm_shims();
+import { execSync, spawn } from "child_process";
+import { randomBytes } from "crypto";
+import { existsSync as existsSync11, mkdirSync as mkdirSync7, readFileSync as readFileSync13, rmSync as rmSync4, writeFileSync as writeFileSync9 } from "fs";
+import { dirname as dirname4, join as join11 } from "path";
+
+// scripts/lakebase/deploy-targets.ts
+init_esm_shims();
+
+// scripts/sftdd/escalation.ts
+init_esm_shims();
+import * as fs5 from "fs";
+function readEscalationFile(file) {
+  if (!fs5.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs5.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function readEscalations(sftddDir) {
+  const dir = escalationsDir(sftddDir);
+  if (!fs5.existsSync(dir)) return [];
+  const out = [];
+  for (const f of fs5.readdirSync(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const e = readEscalationFile(`${dir}/${f}`);
+    if (e) out.push(e);
+  }
+  return out;
+}
+function resolveEscalationsForStory(sftddDir, featureId, story, at = (/* @__PURE__ */ new Date()).toISOString()) {
+  const dir = escalationsDir(sftddDir);
+  const resolved = [];
+  for (const e of readEscalations(sftddDir)) {
+    if (e.resolved_at) continue;
+    if (e.story_id !== story) continue;
+    if (e.feature_id !== void 0 && e.feature_id !== featureId) continue;
+    fs5.writeFileSync(escalationFile(sftddDir, e.id), JSON.stringify({ ...e, resolved_at: at }, null, 2) + "\n", "utf8");
+    resolved.push(e.id);
+  }
+  return resolved;
+}
+
+// scripts/sftdd/deploy-verify-assess.ts
+init_esm_shims();
+import * as fs6 from "fs";
+import * as path4 from "path";
+
+// scripts/sftdd/e2e-regex-clean.ts
+init_esm_shims();
+import { readdirSync as readdirSync4, readFileSync as readFileSync12, statSync as statSync3 } from "fs";
+import { join as join10 } from "path";
+
+// scripts/sftdd/ephemeral-verify.ts
+init_esm_shims();
+
+// scripts/sftdd/supersession.ts
+init_esm_shims();
+import * as fs7 from "fs";
+import { join as join12 } from "path";
+
+// scripts/sftdd/contract-clean.ts
+init_esm_shims();
+import { existsSync as existsSync13, readFileSync as readFileSync15, readdirSync as readdirSync6, statSync as statSync4 } from "fs";
+import { join as join13, relative, extname } from "path";
+
+// scripts/sftdd/migration-app-clean.ts
+init_esm_shims();
+import { existsSync as existsSync14, readFileSync as readFileSync16, readdirSync as readdirSync7, statSync as statSync5 } from "fs";
+import { join as join14, relative as relative2, extname as extname2 } from "path";
+
+// scripts/git/commits.ts
+init_esm_shims();
+
+// scripts/sftdd/cycle-record.ts
+function resetStoryBuildState(sftddDir, featureId, story) {
+  const cyclesDir = join15(cyclesRootDir(sftddDir), featureId, story);
+  let cyclesCleared = false;
+  if (existsSync15(cyclesDir)) {
+    rmSync6(cyclesDir, { recursive: true, force: true });
+    cyclesCleared = true;
+  }
+  let testItemsReset = 0;
+  const tlPath = storyTestListJson(sftddDir, featureId, story);
+  if (existsSync15(tlPath)) {
+    try {
+      const tl = JSON.parse(readFileSync17(tlPath, "utf8"));
+      for (const item of tl.items ?? []) {
+        if (item.status && item.status !== "pending") {
+          item.status = "pending";
+          testItemsReset++;
+        }
+      }
+      writeFileSync11(tlPath, JSON.stringify(tl, null, 2) + "\n");
+    } catch {
+    }
+  }
+  return { cyclesCleared, testItemsReset };
+}
+
 // scripts/sftdd/revise.ts
 var REVISE_APPROVER = "human-proxy";
 function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
   clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
-  if (existsSync9(master)) {
+  if (existsSync16(master)) {
     try {
-      const data = JSON.parse(readFileSync10(master, "utf8"));
+      const data = JSON.parse(readFileSync18(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        writeFileSync7(master, JSON.stringify(data, null, 2) + "\n");
+        writeFileSync12(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if (existsSync9(perStory)) rmSync3(perStory, { force: true });
+  if (existsSync16(perStory)) rmSync7(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
-    if (existsSync9(dir)) {
-      for (const f of readdirSync3(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) rmSync3(join9(dir, f), { force: true });
+    if (existsSync16(dir)) {
+      for (const f of readdirSync9(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) rmSync7(join16(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {
     const dir = acsDir(sftddDir, featureId, story);
-    if (existsSync9(dir)) {
-      for (const f of readdirSync3(dir)) {
+    if (existsSync16(dir)) {
+      for (const f of readdirSync9(dir)) {
         if (!f.endsWith(".json")) continue;
-        const p = join9(dir, f);
+        const p = join16(dir, f);
         try {
-          const ac = JSON.parse(readFileSync10(p, "utf8"));
+          const ac = JSON.parse(readFileSync18(p, "utf8"));
           if ("architectural_notes" in ac) {
             delete ac.architectural_notes;
-            writeFileSync7(p, JSON.stringify(ac, null, 2) + "\n");
+            writeFileSync12(p, JSON.stringify(ac, null, 2) + "\n");
           }
         } catch {
         }
@@ -7876,11 +8008,12 @@ function applyReviseSelfHeal(args) {
   const pipeline = readPipeline(sftddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(sftddDir, pipeline);
+  resetStoryBuildState(sftddDir, args.featureId, args.story);
   staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
-    mkdirSync5(dirname3(hb), { recursive: true });
-    writeFileSync7(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+    mkdirSync10(dirname6(hb), { recursive: true });
+    writeFileSync12(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
   }
   const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
@@ -7928,7 +8061,44 @@ function reviseStoryWithSelfHeal(sftddDir, featureId, story, opts) {
     reason: opts.reason
   });
   writePipeline(sftddDir, pipeline);
+  resetStoryBuildState(sftddDir, featureId, story);
   return { mode: "plain", story };
+}
+function rebuildStory(sftddDir, featureId, story, opts) {
+  const at = opts?.at ?? (/* @__PURE__ */ new Date()).toISOString();
+  const pipeline = readPipeline(sftddDir, featureId);
+  const entry = pipeline.stories[story];
+  if (!entry) throw new Error(`rebuild-story: story ${story} is not in the pipeline for ${featureId}`);
+  if (pipeline.build_active !== null && pipeline.build_active !== story) {
+    throw new Error(
+      `rebuild-story: the build lane is busy on ${pipeline.build_active}; complete, revise, or discard it before rebuilding ${story}.`
+    );
+  }
+  const build = resetStoryBuildState(sftddDir, featureId, story);
+  const escalationsCleared = resolveEscalationsForStory(sftddDir, featureId, story, at);
+  const smellsCleared = resolveAllOpenSmellsForStory(
+    sftddDir,
+    story,
+    `cleared for rebuild-story by ${opts?.approver ?? "operator"}`
+  );
+  let experimentReset = false;
+  if (entry.experiment && entry.experiment.status !== "discarded") {
+    entry.experiment.status = "discarded";
+    entry.experiment.closed_at = at;
+    experimentReset = true;
+  }
+  setStoryStatus(pipeline, story, "building");
+  pipeline.build_active = story;
+  const idx = pipeline.build_queue.indexOf(story);
+  if (idx !== -1) pipeline.build_queue.splice(idx, 1);
+  writePipeline(sftddDir, pipeline);
+  return {
+    cyclesCleared: build.cyclesCleared,
+    testItemsReset: build.testItemsReset,
+    escalationsCleared,
+    smellsCleared,
+    experimentReset
+  };
 }
 function clearStoryBlockingSmellOnDiscard(sftddDir, featureId, story, approver) {
   const routable = revisableSmellForStory(sftddDir, featureId, story);
@@ -7945,60 +8115,6 @@ function clearStoryBlockingSmellOnDiscard(sftddDir, featureId, story, approver) 
 init_esm_shims();
 
 // scripts/sftdd/experiment-lifecycle.ts
-init_esm_shims();
-
-// scripts/sftdd/cycle-record.ts
-init_esm_shims();
-
-// scripts/sftdd/sftdd-env.ts
-init_esm_shims();
-
-// scripts/sftdd/test-list.ts
-init_esm_shims();
-
-// scripts/sftdd/deploy.ts
-init_esm_shims();
-import { execSync, spawn } from "child_process";
-import { randomBytes } from "crypto";
-import { existsSync as existsSync12, mkdirSync as mkdirSync8, readFileSync as readFileSync14, rmSync as rmSync5, writeFileSync as writeFileSync10 } from "fs";
-import { dirname as dirname5, join as join12 } from "path";
-
-// scripts/lakebase/deploy-targets.ts
-init_esm_shims();
-
-// scripts/sftdd/escalation.ts
-init_esm_shims();
-import * as fs5 from "fs";
-
-// scripts/sftdd/deploy-verify-assess.ts
-init_esm_shims();
-import * as fs6 from "fs";
-import * as path4 from "path";
-
-// scripts/sftdd/e2e-regex-clean.ts
-init_esm_shims();
-import { readdirSync as readdirSync5, readFileSync as readFileSync13, statSync as statSync3 } from "fs";
-import { join as join11 } from "path";
-
-// scripts/sftdd/ephemeral-verify.ts
-init_esm_shims();
-
-// scripts/sftdd/supersession.ts
-init_esm_shims();
-import * as fs7 from "fs";
-import { join as join13 } from "path";
-
-// scripts/sftdd/contract-clean.ts
-init_esm_shims();
-import { existsSync as existsSync14, readFileSync as readFileSync16, readdirSync as readdirSync7, statSync as statSync4 } from "fs";
-import { join as join14, relative, extname } from "path";
-
-// scripts/sftdd/migration-app-clean.ts
-init_esm_shims();
-import { existsSync as existsSync15, readFileSync as readFileSync17, readdirSync as readdirSync8, statSync as statSync5 } from "fs";
-import { join as join15, relative as relative2, extname as extname2 } from "path";
-
-// scripts/git/commits.ts
 init_esm_shims();
 
 // scripts/lakebase/schema-migrate.ts
@@ -9194,7 +9310,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|resolve-smell> --feature <F> [--tdd-dir <dir>]
+Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|rebuild-story|resolve-smell> --feature <F> [--tdd-dir <dir>]
   set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>
   surface needs --story <S>
   approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]
@@ -9204,6 +9320,7 @@ Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|en
   await-acceptance needs --story <S>
   accept needs --story <S> --approver <A> [--at <ISO>]
   discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]
+  rebuild-story needs --story <S> [--approver <A>] [--at <ISO>]
   resolve-smell needs --smell <NAME> --approver <A> [--story <S>] [--reason <R>]
 `
   );
@@ -9415,6 +9532,30 @@ async function main() {
         process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed
 `);
       }
+      return 0;
+    }
+    case "rebuild-story": {
+      if (!args.story) return usage("rebuild-story needs --story");
+      let r;
+      try {
+        r = rebuildStory(sftddDir, feature, args.story, {
+          ...args.approver ? { approver: args.approver } : {},
+          ...args.at ? { at: args.at } : {}
+        });
+      } catch (e) {
+        process.stderr.write(`rebuild-story: ${e instanceof Error ? e.message : String(e)}
+`);
+        return 2;
+      }
+      const parts = [
+        r.cyclesCleared ? "cleared build cycles" : "no build cycles to clear",
+        `${r.testItemsReset} test item(s) reset`,
+        `${r.escalationsCleared.length} escalation(s) cleared`,
+        r.smellsCleared.length ? `smells cleared: ${r.smellsCleared.join(", ")}` : "no smells to clear",
+        r.experimentReset ? "experiment reset for re-fork" : "no experiment to reset"
+      ];
+      process.stdout.write(`rebuild-story ${args.story}: ${parts.join("; ")}; back on the build lane (building)
+`);
       return 0;
     }
     case "resolve-smell": {

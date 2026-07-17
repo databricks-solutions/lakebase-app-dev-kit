@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.32] - 2026-07-17
+
+### Fixed
+
+- **A re-driven story now re-runs RED/GREEN instead of reusing its stale (false-GREEN) build (FEIP-8052, Finding 27).** `discard` / `pipeline revise` / `set --status building` reset the pipeline status but left the per-story cycle records under `.sftdd/cycles/` intact. The drive derives "build already GREEN" (`codeWritten` → `storyTestProgress.allGreen`) from those stale `green_at` files, so a story sent back to be rebuilt skipped the RED/GREEN cycle and jumped straight to deploy, re-failing the same deploy-verify in a loop; recovery required hand-deleting kit-internal cycle records + the paired Lakebase experiment branch. Root cause: split-brain, `resetStoryBuildState` (the exact clear-cycles primitive) existed but was wired into only the `lakebase-sftdd-experiment discard --revise` door. Now both revise doors (`applyReviseSelfHeal` + the plain reset) call it, so the operator `pipeline revise` and the driver's auto revise-route re-drive from a clean slate.
+
+### Added
+
+- **`lakebase-sftdd-pipeline rebuild-story` (Finding 27).** The sanctioned "re-drive this story from a clean slate" op, replacing the `rm -rf .sftdd/cycles/...` recovery dance. It clears the build cycles + test-list, BOTH HIL escalation sources (escalation files and blocking smells, the dual-source rule), marks the experiment for a clean re-fork, and puts the story back on the single build lane (refuses when the lane is busy with a different story).
+- **`lakebase-sftdd-experiment cut --reset-stale-branch` (Finding 27).** Drops a pre-existing paired branch of the same deterministic name before forking, so a re-cut after a discarded experiment re-forks clean off feature HEAD instead of reusing the branch that still carries the discarded build's schema (mirroring the ci-pr `--reset-stale-branch` precedent). The drive auto-passes it on a re-cut after a discarded experiment. The drop-then-fork ordering is hermetically tested via an injected paired-branch ops seam; the live DROP + re-fork against a real Lakebase branch is validated by a live drive.
+
 ## [0.3.0-beta.31] - 2026-07-16
 
 ### Fixed

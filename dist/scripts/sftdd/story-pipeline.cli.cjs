@@ -6663,6 +6663,9 @@ function resolveSftddDir(projectDir = process.cwd()) {
   return next;
 }
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
+var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
+var escalationsDir = (tdd) => (0, import_node_path.join)(tdd, "escalations");
+var escalationFile = (tdd, id) => (0, import_node_path.join)(escalationsDir(tdd), `${id}.json`);
 var featureDir = (tdd, featureId) => (0, import_node_path.join)(featuresDir(tdd), featureId);
 var featureResolved = (tdd, f) => findFeatureDir(tdd, f) ?? featureDir(tdd, f);
 var featureSpecJson = (tdd, f) => (0, import_node_path.join)(featureResolved(tdd, f), "feature-spec.json");
@@ -6970,8 +6973,8 @@ function reviseStory(pipeline, storyId, opts) {
 
 // scripts/sftdd/revise.ts
 init_cjs_shims();
-var import_node_fs = require("fs");
-var import_node_path3 = require("path");
+var import_node_fs5 = require("fs");
+var import_node_path8 = require("path");
 
 // scripts/sftdd/agent-log.ts
 init_cjs_shims();
@@ -7786,6 +7789,20 @@ function markSmellResolved(sftddDir, smell, opts) {
   (0, import_fs4.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
   return true;
 }
+function resolveAllOpenSmellsForStory(sftddDir, story, note) {
+  const file = (0, import_path4.join)(sftddDir, "smells.json");
+  if (!(0, import_fs4.existsSync)(file)) return [];
+  const log = JSON.parse((0, import_fs4.readFileSync)(file, "utf8"));
+  const cleared = [];
+  for (const d of log.detected) {
+    if (d.resolution || d.story_id !== story) continue;
+    d.resolution = note ?? "cleared for rebuild-story";
+    d.resolution_kind = "cleared";
+    cleared.push(d.smell);
+  }
+  if (cleared.length) (0, import_fs4.writeFileSync)(file, JSON.stringify(log, null, 2) + "\n");
+  return cleared;
+}
 
 // scripts/sftdd/reflection.ts
 init_cjs_shims();
@@ -7800,42 +7817,157 @@ function clearReflectVerdict(sftddDir, feature, story) {
 }
 var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
+// scripts/sftdd/cycle-record.ts
+init_cjs_shims();
+var import_fs6 = require("fs");
+
+// scripts/sftdd/sftdd-env.ts
+init_cjs_shims();
+
+// scripts/sftdd/cycle-record.ts
+var import_path5 = require("path");
+
+// scripts/sftdd/test-list.ts
+init_cjs_shims();
+
+// scripts/sftdd/deploy.ts
+init_cjs_shims();
+var import_node_child_process4 = require("child_process");
+var import_node_crypto = require("crypto");
+var import_node_fs2 = require("fs");
+var import_node_path4 = require("path");
+
+// scripts/lakebase/deploy-targets.ts
+init_cjs_shims();
+
+// scripts/sftdd/escalation.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+function readEscalationFile(file) {
+  if (!fs5.existsSync(file)) return void 0;
+  try {
+    return JSON.parse(fs5.readFileSync(file, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+function readEscalations(sftddDir) {
+  const dir = escalationsDir(sftddDir);
+  if (!fs5.existsSync(dir)) return [];
+  const out = [];
+  for (const f of fs5.readdirSync(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const e = readEscalationFile(`${dir}/${f}`);
+    if (e) out.push(e);
+  }
+  return out;
+}
+function resolveEscalationsForStory(sftddDir, featureId, story, at = (/* @__PURE__ */ new Date()).toISOString()) {
+  const dir = escalationsDir(sftddDir);
+  const resolved = [];
+  for (const e of readEscalations(sftddDir)) {
+    if (e.resolved_at) continue;
+    if (e.story_id !== story) continue;
+    if (e.feature_id !== void 0 && e.feature_id !== featureId) continue;
+    fs5.writeFileSync(escalationFile(sftddDir, e.id), JSON.stringify({ ...e, resolved_at: at }, null, 2) + "\n", "utf8");
+    resolved.push(e.id);
+  }
+  return resolved;
+}
+
+// scripts/sftdd/deploy-verify-assess.ts
+init_cjs_shims();
+var fs6 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
+
+// scripts/sftdd/e2e-regex-clean.ts
+init_cjs_shims();
+var import_node_fs = require("fs");
+var import_node_path3 = require("path");
+
+// scripts/sftdd/ephemeral-verify.ts
+init_cjs_shims();
+
+// scripts/sftdd/supersession.ts
+init_cjs_shims();
+var fs7 = __toESM(require("fs"), 1);
+var import_node_path5 = require("path");
+
+// scripts/sftdd/contract-clean.ts
+init_cjs_shims();
+var import_node_fs3 = require("fs");
+var import_node_path6 = require("path");
+
+// scripts/sftdd/migration-app-clean.ts
+init_cjs_shims();
+var import_node_fs4 = require("fs");
+var import_node_path7 = require("path");
+
+// scripts/git/commits.ts
+init_cjs_shims();
+
+// scripts/sftdd/cycle-record.ts
+function resetStoryBuildState(sftddDir, featureId, story) {
+  const cyclesDir = (0, import_path5.join)(cyclesRootDir(sftddDir), featureId, story);
+  let cyclesCleared = false;
+  if ((0, import_fs6.existsSync)(cyclesDir)) {
+    (0, import_fs6.rmSync)(cyclesDir, { recursive: true, force: true });
+    cyclesCleared = true;
+  }
+  let testItemsReset = 0;
+  const tlPath = storyTestListJson(sftddDir, featureId, story);
+  if ((0, import_fs6.existsSync)(tlPath)) {
+    try {
+      const tl = JSON.parse((0, import_fs6.readFileSync)(tlPath, "utf8"));
+      for (const item of tl.items ?? []) {
+        if (item.status && item.status !== "pending") {
+          item.status = "pending";
+          testItemsReset++;
+        }
+      }
+      (0, import_fs6.writeFileSync)(tlPath, JSON.stringify(tl, null, 2) + "\n");
+    } catch {
+    }
+  }
+  return { cyclesCleared, testItemsReset };
+}
+
 // scripts/sftdd/revise.ts
 var REVISE_APPROVER = "human-proxy";
 function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
   clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
-  if ((0, import_node_fs.existsSync)(master)) {
+  if ((0, import_node_fs5.existsSync)(master)) {
     try {
-      const data = JSON.parse((0, import_node_fs.readFileSync)(master, "utf8"));
+      const data = JSON.parse((0, import_node_fs5.readFileSync)(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        (0, import_node_fs.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
+        (0, import_node_fs5.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if ((0, import_node_fs.existsSync)(perStory)) (0, import_node_fs.rmSync)(perStory, { force: true });
+  if ((0, import_node_fs5.existsSync)(perStory)) (0, import_node_fs5.rmSync)(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs.existsSync)(dir)) {
-      for (const f of (0, import_node_fs.readdirSync)(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs.rmSync)((0, import_node_path3.join)(dir, f), { force: true });
+    if ((0, import_node_fs5.existsSync)(dir)) {
+      for (const f of (0, import_node_fs5.readdirSync)(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs5.rmSync)((0, import_node_path8.join)(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs.existsSync)(dir)) {
-      for (const f of (0, import_node_fs.readdirSync)(dir)) {
+    if ((0, import_node_fs5.existsSync)(dir)) {
+      for (const f of (0, import_node_fs5.readdirSync)(dir)) {
         if (!f.endsWith(".json")) continue;
-        const p = (0, import_node_path3.join)(dir, f);
+        const p = (0, import_node_path8.join)(dir, f);
         try {
-          const ac = JSON.parse((0, import_node_fs.readFileSync)(p, "utf8"));
+          const ac = JSON.parse((0, import_node_fs5.readFileSync)(p, "utf8"));
           if ("architectural_notes" in ac) {
             delete ac.architectural_notes;
-            (0, import_node_fs.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
+            (0, import_node_fs5.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
           }
         } catch {
         }
@@ -7871,11 +8003,12 @@ function applyReviseSelfHeal(args) {
   const pipeline = readPipeline(sftddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(sftddDir, pipeline);
+  resetStoryBuildState(sftddDir, args.featureId, args.story);
   staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
-    (0, import_node_fs.mkdirSync)((0, import_node_path3.dirname)(hb), { recursive: true });
-    (0, import_node_fs.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+    (0, import_node_fs5.mkdirSync)((0, import_node_path8.dirname)(hb), { recursive: true });
+    (0, import_node_fs5.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
   }
   const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
@@ -7923,7 +8056,44 @@ function reviseStoryWithSelfHeal(sftddDir, featureId, story, opts) {
     reason: opts.reason
   });
   writePipeline(sftddDir, pipeline);
+  resetStoryBuildState(sftddDir, featureId, story);
   return { mode: "plain", story };
+}
+function rebuildStory(sftddDir, featureId, story, opts) {
+  const at = opts?.at ?? (/* @__PURE__ */ new Date()).toISOString();
+  const pipeline = readPipeline(sftddDir, featureId);
+  const entry = pipeline.stories[story];
+  if (!entry) throw new Error(`rebuild-story: story ${story} is not in the pipeline for ${featureId}`);
+  if (pipeline.build_active !== null && pipeline.build_active !== story) {
+    throw new Error(
+      `rebuild-story: the build lane is busy on ${pipeline.build_active}; complete, revise, or discard it before rebuilding ${story}.`
+    );
+  }
+  const build = resetStoryBuildState(sftddDir, featureId, story);
+  const escalationsCleared = resolveEscalationsForStory(sftddDir, featureId, story, at);
+  const smellsCleared = resolveAllOpenSmellsForStory(
+    sftddDir,
+    story,
+    `cleared for rebuild-story by ${opts?.approver ?? "operator"}`
+  );
+  let experimentReset = false;
+  if (entry.experiment && entry.experiment.status !== "discarded") {
+    entry.experiment.status = "discarded";
+    entry.experiment.closed_at = at;
+    experimentReset = true;
+  }
+  setStoryStatus(pipeline, story, "building");
+  pipeline.build_active = story;
+  const idx = pipeline.build_queue.indexOf(story);
+  if (idx !== -1) pipeline.build_queue.splice(idx, 1);
+  writePipeline(sftddDir, pipeline);
+  return {
+    cyclesCleared: build.cyclesCleared,
+    testItemsReset: build.testItemsReset,
+    escalationsCleared,
+    smellsCleared,
+    experimentReset
+  };
 }
 function clearStoryBlockingSmellOnDiscard(sftddDir, featureId, story, approver) {
   const routable = revisableSmellForStory(sftddDir, featureId, story);
@@ -7940,60 +8110,6 @@ function clearStoryBlockingSmellOnDiscard(sftddDir, featureId, story, approver) 
 init_cjs_shims();
 
 // scripts/sftdd/experiment-lifecycle.ts
-init_cjs_shims();
-
-// scripts/sftdd/cycle-record.ts
-init_cjs_shims();
-
-// scripts/sftdd/sftdd-env.ts
-init_cjs_shims();
-
-// scripts/sftdd/test-list.ts
-init_cjs_shims();
-
-// scripts/sftdd/deploy.ts
-init_cjs_shims();
-var import_node_child_process4 = require("child_process");
-var import_node_crypto = require("crypto");
-var import_node_fs3 = require("fs");
-var import_node_path5 = require("path");
-
-// scripts/lakebase/deploy-targets.ts
-init_cjs_shims();
-
-// scripts/sftdd/escalation.ts
-init_cjs_shims();
-var fs5 = __toESM(require("fs"), 1);
-
-// scripts/sftdd/deploy-verify-assess.ts
-init_cjs_shims();
-var fs6 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
-
-// scripts/sftdd/e2e-regex-clean.ts
-init_cjs_shims();
-var import_node_fs2 = require("fs");
-var import_node_path4 = require("path");
-
-// scripts/sftdd/ephemeral-verify.ts
-init_cjs_shims();
-
-// scripts/sftdd/supersession.ts
-init_cjs_shims();
-var fs7 = __toESM(require("fs"), 1);
-var import_node_path6 = require("path");
-
-// scripts/sftdd/contract-clean.ts
-init_cjs_shims();
-var import_node_fs4 = require("fs");
-var import_node_path7 = require("path");
-
-// scripts/sftdd/migration-app-clean.ts
-init_cjs_shims();
-var import_node_fs5 = require("fs");
-var import_node_path8 = require("path");
-
-// scripts/git/commits.ts
 init_cjs_shims();
 
 // scripts/lakebase/schema-migrate.ts
@@ -9189,7 +9305,7 @@ function parse(argv) {
 function usage(msg) {
   process.stderr.write(
     `${msg}
-Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|resolve-smell> --feature <F> [--tdd-dir <dir>]
+Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|rebuild-story|resolve-smell> --feature <F> [--tdd-dir <dir>]
   set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>
   surface needs --story <S>
   approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]
@@ -9199,6 +9315,7 @@ Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|en
   await-acceptance needs --story <S>
   accept needs --story <S> --approver <A> [--at <ISO>]
   discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]
+  rebuild-story needs --story <S> [--approver <A>] [--at <ISO>]
   resolve-smell needs --smell <NAME> --approver <A> [--story <S>] [--reason <R>]
 `
   );
@@ -9410,6 +9527,30 @@ async function main() {
         process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed
 `);
       }
+      return 0;
+    }
+    case "rebuild-story": {
+      if (!args.story) return usage("rebuild-story needs --story");
+      let r;
+      try {
+        r = rebuildStory(sftddDir, feature, args.story, {
+          ...args.approver ? { approver: args.approver } : {},
+          ...args.at ? { at: args.at } : {}
+        });
+      } catch (e) {
+        process.stderr.write(`rebuild-story: ${e instanceof Error ? e.message : String(e)}
+`);
+        return 2;
+      }
+      const parts = [
+        r.cyclesCleared ? "cleared build cycles" : "no build cycles to clear",
+        `${r.testItemsReset} test item(s) reset`,
+        `${r.escalationsCleared.length} escalation(s) cleared`,
+        r.smellsCleared.length ? `smells cleared: ${r.smellsCleared.join(", ")}` : "no smells to clear",
+        r.experimentReset ? "experiment reset for re-fork" : "no experiment to reset"
+      ];
+      process.stdout.write(`rebuild-story ${args.story}: ${parts.join("; ")}; back on the build lane (building)
+`);
       return 0;
     }
     case "resolve-smell": {

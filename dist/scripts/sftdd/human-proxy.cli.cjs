@@ -3262,8 +3262,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path3) {
-      let input = path3;
+    function removeDotSegments(path4) {
+      let input = path4;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3516,8 +3516,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path3, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
+        const [path4, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3683,49 +3683,49 @@ var require_fast_uri = __commonJS({
       schemelessOptions.skipEscape = true;
       return serialize(resolved, schemelessOptions);
     }
-    function resolveComponent(base, relative, options, skipNormalization) {
+    function resolveComponent(base, relative3, options, skipNormalization) {
       const target = {};
       if (!skipNormalization) {
         base = parse(serialize(base, options), options);
-        relative = parse(serialize(relative, options), options);
+        relative3 = parse(serialize(relative3, options), options);
       }
       options = options || {};
-      if (!options.tolerant && relative.scheme) {
-        target.scheme = relative.scheme;
-        target.userinfo = relative.userinfo;
-        target.host = relative.host;
-        target.port = relative.port;
-        target.path = removeDotSegments(relative.path || "");
-        target.query = relative.query;
+      if (!options.tolerant && relative3.scheme) {
+        target.scheme = relative3.scheme;
+        target.userinfo = relative3.userinfo;
+        target.host = relative3.host;
+        target.port = relative3.port;
+        target.path = removeDotSegments(relative3.path || "");
+        target.query = relative3.query;
       } else {
-        if (relative.userinfo !== void 0 || relative.host !== void 0 || relative.port !== void 0) {
-          target.userinfo = relative.userinfo;
-          target.host = relative.host;
-          target.port = relative.port;
-          target.path = removeDotSegments(relative.path || "");
-          target.query = relative.query;
+        if (relative3.userinfo !== void 0 || relative3.host !== void 0 || relative3.port !== void 0) {
+          target.userinfo = relative3.userinfo;
+          target.host = relative3.host;
+          target.port = relative3.port;
+          target.path = removeDotSegments(relative3.path || "");
+          target.query = relative3.query;
         } else {
-          if (!relative.path) {
+          if (!relative3.path) {
             target.path = base.path;
-            if (relative.query !== void 0) {
-              target.query = relative.query;
+            if (relative3.query !== void 0) {
+              target.query = relative3.query;
             } else {
               target.query = base.query;
             }
           } else {
-            if (relative.path[0] === "/") {
-              target.path = removeDotSegments(relative.path);
+            if (relative3.path[0] === "/") {
+              target.path = removeDotSegments(relative3.path);
             } else {
               if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
-                target.path = "/" + relative.path;
+                target.path = "/" + relative3.path;
               } else if (!base.path) {
-                target.path = relative.path;
+                target.path = relative3.path;
               } else {
-                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
+                target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative3.path;
               }
               target.path = removeDotSegments(target.path);
             }
-            target.query = relative.query;
+            target.query = relative3.query;
           }
           target.userinfo = base.userinfo;
           target.host = base.host;
@@ -3733,7 +3733,7 @@ var require_fast_uri = __commonJS({
         }
         target.scheme = base.scheme;
       }
-      target.fragment = relative.fragment;
+      target.fragment = relative3.fragment;
       return target;
     }
     function equal(uriA, uriB, options) {
@@ -6712,6 +6712,7 @@ function resolveSftddDir(projectDir = process.cwd()) {
 var featuresDir = (tdd) => (0, import_node_path.join)(tdd, "features");
 var planningDir = (tdd) => (0, import_node_path.join)(tdd, "planning");
 var sprintsDir = (tdd) => (0, import_node_path.join)(tdd, "sprints");
+var cyclesRootDir = (tdd) => (0, import_node_path.join)(tdd, "cycles");
 var nfrsMd = (tdd) => (0, import_node_path.join)(tdd, "nfrs.md");
 var architectureDir = (tdd) => (0, import_node_path.join)(tdd, "architecture");
 var architectureConventionsJson = (tdd) => (0, import_node_path.join)(architectureDir(tdd), "conventions.json");
@@ -7563,9 +7564,9 @@ function checkInvariantCoverageDistinct(perStory) {
   }
   return violations.length === 0 ? { ok: true } : { ok: false, violations };
 }
-function canonicalArtifactName(path3) {
-  const base = (0, import_path5.basename)(path3);
-  if ((0, import_path5.basename)((0, import_path5.dirname)(path3)) === "acs" && base.endsWith(".json")) return "ac.json";
+function canonicalArtifactName(path4) {
+  const base = (0, import_path5.basename)(path4);
+  if ((0, import_path5.basename)((0, import_path5.dirname)(path4)) === "acs" && base.endsWith(".json")) return "ac.json";
   return base;
 }
 
@@ -8222,8 +8223,8 @@ Candidate features for this sprint, projected deterministically from the recorde
 
 // scripts/sftdd/revise.ts
 init_cjs_shims();
-var import_node_fs4 = require("fs");
-var import_node_path5 = require("path");
+var import_node_fs8 = require("fs");
+var import_node_path10 = require("path");
 
 // scripts/sftdd/story-pipeline.ts
 init_cjs_shims();
@@ -8448,42 +8449,118 @@ function clearReflectVerdict(sftddDir, feature, story) {
 }
 var REFLECT_SMELLS = Object.values(SMELL_FOR_OWNER);
 
+// scripts/sftdd/cycle-record.ts
+init_cjs_shims();
+var import_fs11 = require("fs");
+var import_path10 = require("path");
+
+// scripts/sftdd/deploy.ts
+init_cjs_shims();
+var import_node_child_process4 = require("child_process");
+var import_node_crypto = require("crypto");
+var import_node_fs5 = require("fs");
+var import_node_path6 = require("path");
+
+// scripts/lakebase/deploy-targets.ts
+init_cjs_shims();
+
+// scripts/sftdd/escalation.ts
+init_cjs_shims();
+var fs5 = __toESM(require("fs"), 1);
+
+// scripts/sftdd/deploy-verify-assess.ts
+init_cjs_shims();
+var fs6 = __toESM(require("fs"), 1);
+var path3 = __toESM(require("path"), 1);
+
+// scripts/sftdd/e2e-regex-clean.ts
+init_cjs_shims();
+var import_node_fs4 = require("fs");
+var import_node_path5 = require("path");
+
+// scripts/sftdd/ephemeral-verify.ts
+init_cjs_shims();
+
+// scripts/sftdd/supersession.ts
+init_cjs_shims();
+var fs7 = __toESM(require("fs"), 1);
+var import_node_path7 = require("path");
+
+// scripts/sftdd/contract-clean.ts
+init_cjs_shims();
+var import_node_fs6 = require("fs");
+var import_node_path8 = require("path");
+
+// scripts/sftdd/migration-app-clean.ts
+init_cjs_shims();
+var import_node_fs7 = require("fs");
+var import_node_path9 = require("path");
+
+// scripts/git/commits.ts
+init_cjs_shims();
+
+// scripts/sftdd/cycle-record.ts
+function resetStoryBuildState(sftddDir, featureId, story) {
+  const cyclesDir = (0, import_path10.join)(cyclesRootDir(sftddDir), featureId, story);
+  let cyclesCleared = false;
+  if ((0, import_fs11.existsSync)(cyclesDir)) {
+    (0, import_fs11.rmSync)(cyclesDir, { recursive: true, force: true });
+    cyclesCleared = true;
+  }
+  let testItemsReset = 0;
+  const tlPath = storyTestListJson(sftddDir, featureId, story);
+  if ((0, import_fs11.existsSync)(tlPath)) {
+    try {
+      const tl = JSON.parse((0, import_fs11.readFileSync)(tlPath, "utf8"));
+      for (const item of tl.items ?? []) {
+        if (item.status && item.status !== "pending") {
+          item.status = "pending";
+          testItemsReset++;
+        }
+      }
+      (0, import_fs11.writeFileSync)(tlPath, JSON.stringify(tl, null, 2) + "\n");
+    } catch {
+    }
+  }
+  return { cyclesCleared, testItemsReset };
+}
+
 // scripts/sftdd/revise.ts
 var REVISE_APPROVER = "human-proxy";
 function staleStoryArtifactsForRevise(sftddDir, featureId, story, gate) {
   clearReflectVerdict(sftddDir, featureId, story);
   const acIds = new Set(storyAcIds(sftddDir, featureId, story));
   const master = featureTestListJson(sftddDir, featureId);
-  if ((0, import_node_fs4.existsSync)(master)) {
+  if ((0, import_node_fs8.existsSync)(master)) {
     try {
-      const data = JSON.parse((0, import_node_fs4.readFileSync)(master, "utf8"));
+      const data = JSON.parse((0, import_node_fs8.readFileSync)(master, "utf8"));
       if (Array.isArray(data.items)) {
         data.items = data.items.filter((it) => !it.ac_id || !acIds.has(it.ac_id));
-        (0, import_node_fs4.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
+        (0, import_node_fs8.writeFileSync)(master, JSON.stringify(data, null, 2) + "\n");
       }
     } catch {
     }
   }
   const perStory = storyTestListJson(sftddDir, featureId, story);
-  if ((0, import_node_fs4.existsSync)(perStory)) (0, import_node_fs4.rmSync)(perStory, { force: true });
+  if ((0, import_node_fs8.existsSync)(perStory)) (0, import_node_fs8.rmSync)(perStory, { force: true });
   if (gate === "spec") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs4.existsSync)(dir)) {
-      for (const f of (0, import_node_fs4.readdirSync)(dir)) {
-        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs4.rmSync)((0, import_node_path5.join)(dir, f), { force: true });
+    if ((0, import_node_fs8.existsSync)(dir)) {
+      for (const f of (0, import_node_fs8.readdirSync)(dir)) {
+        if (f.endsWith(".json") || f.endsWith(".md")) (0, import_node_fs8.rmSync)((0, import_node_path10.join)(dir, f), { force: true });
       }
     }
   } else if (gate === "architecture") {
     const dir = acsDir(sftddDir, featureId, story);
-    if ((0, import_node_fs4.existsSync)(dir)) {
-      for (const f of (0, import_node_fs4.readdirSync)(dir)) {
+    if ((0, import_node_fs8.existsSync)(dir)) {
+      for (const f of (0, import_node_fs8.readdirSync)(dir)) {
         if (!f.endsWith(".json")) continue;
-        const p = (0, import_node_path5.join)(dir, f);
+        const p = (0, import_node_path10.join)(dir, f);
         try {
-          const ac = JSON.parse((0, import_node_fs4.readFileSync)(p, "utf8"));
+          const ac = JSON.parse((0, import_node_fs8.readFileSync)(p, "utf8"));
           if ("architectural_notes" in ac) {
             delete ac.architectural_notes;
-            (0, import_node_fs4.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
+            (0, import_node_fs8.writeFileSync)(p, JSON.stringify(ac, null, 2) + "\n");
           }
         } catch {
         }
@@ -8519,11 +8596,12 @@ function applyReviseSelfHeal(args) {
   const pipeline = readPipeline(sftddDir, args.featureId);
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(sftddDir, pipeline);
+  resetStoryBuildState(sftddDir, args.featureId, args.story);
   staleStoryArtifactsForRevise(sftddDir, args.featureId, args.story, args.gate);
   try {
     const hb = handbackFile(sftddDir, args.featureId, args.routedTo, args.story);
-    (0, import_node_fs4.mkdirSync)((0, import_node_path5.dirname)(hb), { recursive: true });
-    (0, import_node_fs4.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
+    (0, import_node_fs8.mkdirSync)((0, import_node_path10.dirname)(hb), { recursive: true });
+    (0, import_node_fs8.writeFileSync)(hb, composeReviseBrief({ smell: args.smell, gate: args.gate, reason: args.reason }));
   } catch {
   }
   const resolvedSmell = markSmellResolved(sftddDir, args.smell, {
@@ -8536,7 +8614,7 @@ function applyReviseSelfHeal(args) {
 
 // scripts/sftdd/sprint-gates.ts
 init_cjs_shims();
-var import_node_fs5 = require("fs");
+var import_node_fs9 = require("fs");
 var SPRINT_GATES_SCHEMA_VERSION = 1;
 var PLAN_GATE_ARTIFACT = "feature-proposals.md";
 function defaultSprintGatesState(sprint) {
@@ -8552,10 +8630,10 @@ function sprintGatesFile(sftddDir, sprint) {
 function readSprintGates(sprint, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
   const file = sprintGatesFile(sftddDir, sprint);
-  if (!(0, import_node_fs5.existsSync)(file)) return defaultSprintGatesState(sprint);
+  if (!(0, import_node_fs9.existsSync)(file)) return defaultSprintGatesState(sprint);
   let parsed;
   try {
-    parsed = JSON.parse((0, import_node_fs5.readFileSync)(file, "utf8"));
+    parsed = JSON.parse((0, import_node_fs9.readFileSync)(file, "utf8"));
   } catch (err) {
     const cause = err instanceof Error ? err.message : String(err);
     throw new Error(`sprint gates.json at ${file} is not valid JSON: ${cause}`);
@@ -8569,15 +8647,15 @@ function readSprintGates(sprint, opts = {}) {
 }
 function writeSprintGates(state, opts = {}) {
   const sftddDir = opts.sftddDir ?? resolveSftddDir();
-  (0, import_node_fs5.mkdirSync)(sprintDir(sftddDir, state.sprint), { recursive: true });
+  (0, import_node_fs9.mkdirSync)(sprintDir(sftddDir, state.sprint), { recursive: true });
   const file = sprintGatesJson(sftddDir, state.sprint);
   const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
-  (0, import_node_fs5.writeFileSync)(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  (0, import_node_fs9.writeFileSync)(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
-    (0, import_node_fs5.renameSync)(tmp, file);
+    (0, import_node_fs9.renameSync)(tmp, file);
   } catch (err) {
     try {
-      (0, import_node_fs5.unlinkSync)(tmp);
+      (0, import_node_fs9.unlinkSync)(tmp);
     } catch {
     }
     throw err;
@@ -8588,10 +8666,10 @@ function approveSprintPlanGate(args) {
   if (args.approver.length === 0) return { ok: false, reason: "approver must not be empty" };
   const sftddDir = args.sftddDir ?? resolveSftddDir();
   const file = featureProposalsMd(sftddDir);
-  if (!(0, import_node_fs5.existsSync)(file)) {
+  if (!(0, import_node_fs9.existsSync)(file)) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not found (no sprint plan to review)` };
   }
-  const content = (0, import_node_fs5.readFileSync)(file, "utf8");
+  const content = (0, import_node_fs9.readFileSync)(file, "utf8");
   const conf = checkArtifactConformance(PLAN_GATE_ARTIFACT, content);
   if (!conf.ok) {
     return { ok: false, reason: `${PLAN_GATE_ARTIFACT} not conformant: ${(conf.violations ?? []).join("; ")}` };

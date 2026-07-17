@@ -7296,7 +7296,9 @@ function nextDesignAction(state) {
   return { kind: "design-complete" };
 }
 function nextBuildAction(story, b) {
-  if (!b.experimentCut) return { kind: "cut-experiment", story };
+  if (!b.experimentCut) {
+    return b.experimentDiscarded ? { kind: "cut-experiment", story, resetStaleBranch: true } : { kind: "cut-experiment", story };
+  }
   if ((b.loop ?? "story") === "story") {
     if (b.reviewStoryPending) return { kind: "invoke-role", role: "navigator", story, buildMode: "review" };
     if (b.refactorStoryPending) return { kind: "invoke-role", role: "driver", story, buildMode: "refactor" };
@@ -8759,6 +8761,7 @@ function storyView(id, e, probe, loop) {
       // An experiment that was discarded is no longer cut (a fresh one is cut
       // on revise); merged/active both count as cut.
       experimentCut: e.experiment != null && e.experiment.status !== "discarded",
+      experimentDiscarded: e.experiment != null && e.experiment.status === "discarded",
       testsWritten: probe.testsWritten(id),
       codeWritten: probe.codeWritten(id),
       loop,
@@ -10115,7 +10118,10 @@ function commandsForAction(action, cfg) {
             "--project-dir",
             cfg.projectDir,
             "--tdd-dir",
-            cfg.sftddDir
+            cfg.sftddDir,
+            // A re-cut after a discarded experiment re-forks the stale paired branch
+            // clean (Finding 27); a first cut omits it (nothing to reset).
+            ...action.resetStaleBranch ? ["--reset-stale-branch"] : []
           ]
         }
       ];
