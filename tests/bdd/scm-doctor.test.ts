@@ -333,3 +333,40 @@ describe("runDoctor", () => {
     ).toBeDefined();
   });
 });
+
+// FEIP-8050 / Finding 24: flag CI workflows that hardcode a kit version pin
+// instead of resolving .lakebase/kit-ref at runtime, so a kit-ref bump never
+// reaches CI.
+describe("runDoctor: ci-workflow-kit-pin (Finding 24)", () => {
+  function writeWorkflow(name: string, body: string): void {
+    const dir = path.join(tmpDir, ".github", "workflows");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), body);
+  }
+
+  it("flags a workflow that hardcodes github:...lakebase-app-dev-kit#v<ver>", async () => {
+    writeEnv("p");
+    mockListBranches.mockResolvedValue(lakebase2Tier());
+    mockGetCurrentBranch.mockResolvedValue("staging");
+    writeWorkflow(
+      "pr.yml",
+      "jobs:\n  x:\n    steps:\n      - run: npx --package=github:databricks-solutions/lakebase-app-dev-kit#v0.3.0-beta.15 lakebase-schema-migrate\n",
+    );
+    const report = await doctor.runDoctor({ projectDir: tmpDir });
+    const f = report.findings.find((x) => x.id === "ci-workflow-kit-pin");
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("warn");
+  });
+
+  it("does NOT flag a workflow that resolves #\"${KIT_REF}\" from .lakebase/kit-ref", async () => {
+    writeEnv("p");
+    mockListBranches.mockResolvedValue(lakebase2Tier());
+    mockGetCurrentBranch.mockResolvedValue("staging");
+    writeWorkflow(
+      "pr.yml",
+      'jobs:\n  x:\n    steps:\n      - run: |\n          KIT_REF="$(tr -d "[:space:]" < .lakebase/kit-ref)"\n      - run: npx --package=github:databricks-solutions/lakebase-app-dev-kit#"${KIT_REF}" lakebase-schema-migrate\n',
+    );
+    const report = await doctor.runDoctor({ projectDir: tmpDir });
+    expect(report.findings.find((x) => x.id === "ci-workflow-kit-pin")).toBeUndefined();
+  });
+});
