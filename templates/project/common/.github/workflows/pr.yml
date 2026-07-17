@@ -205,6 +205,10 @@ jobs:
           # forked from a different parent (e.g. a prior run when base.ref was
           # main, but now base.ref is staging), delete + re-fork from the
           # correct parent. CI branches are disposable so this is always safe.
+          # --reset-on-db-ahead: if ci-pr-N's parent is correct but its DB is ahead
+          # of code (a phantom revision inherited when the source tier was polluted
+          # at first cut), delete + re-fork from the now-clean source, so a reused
+          # ci-pr does not ride stale pollution through after the tier is reconciled.
           # --ensure-endpoint creates the primary endpoint if it doesn't exist.
           #
           # --github-env writes tokens/DATABASE_URL to $GITHUB_ENV (visible to
@@ -215,6 +219,7 @@ jobs:
                 --lakebase-name "$CI_BRANCH_NAME" \
                 --create-from "$PR_BASE_REF" \
                 --recreate-on-source-mismatch \
+                --reset-on-db-ahead \
                 --ensure-endpoint \
                 --github-env)"; then
             write_skip "**Reason:** Could not create CI branch \`$CI_BRANCH_NAME\` forked from \`$PR_BASE_REF\`. Check the workflow log above."

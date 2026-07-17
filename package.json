@@ -103,6 +103,7 @@
     "lakebase-scm-doctor": "./dist/scripts/lakebase/scm-doctor.cli.js",
     "lakebase-scm-feature-branch": "./dist/scripts/lakebase/scm-feature-branch.cli.js",
     "lakebase-scm-merge": "./dist/scripts/lakebase/scm-merge.cli.js",
+    "lakebase-reconcile-tier": "./dist/scripts/lakebase/scm-reconcile-tier.cli.js",
     "lakebase-scm-prepare-pr": "./dist/scripts/lakebase/scm-prepare-pr.cli.js",
     "lakebase-scm-recover-orphans": "./dist/scripts/lakebase/scm-recover-orphans.cli.js",
     "lakebase-scm-state": "./dist/scripts/lakebase/scm-state.cli.js",

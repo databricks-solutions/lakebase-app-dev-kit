@@ -92,6 +92,25 @@ export interface StatusResult {
   tool_specific?: Record<string, unknown>;
 }
 
+export interface StampArgs {
+  instance: string;
+  branch: string;
+  projectDir: string;
+  /** The revision to pin the branch's version table to, WITHOUT running migrations
+   *  (e.g. "head" or a concrete rev id). */
+  revision: string;
+  database?: string;
+  endpointName?: string;
+}
+
+export interface StampResult {
+  status: "ok" | "error" | "unsupported";
+  /** The revision the branch was stamped to (null on error/unsupported). */
+  stamped_revision: string | null;
+  error?: string;
+  tool_specific?: Record<string, unknown>;
+}
+
 export interface ListArgs {
   projectDir: string;
 }
@@ -199,6 +218,13 @@ export interface SchemaMigrationAdapter {
   rollback?(args: RollbackArgs): Promise<RollbackResult>;
 
   status(args: StatusArgs): Promise<StatusResult>;
+
+  /**
+   * Pin the branch's version table to a revision WITHOUT running migrations
+   * (the reconcile primitive for a db-ahead tier). OPTIONAL: only DAG/version-table
+   * tools that expose a stamp (Alembic) implement it; adapters omit it otherwise.
+   */
+  stamp?(args: StampArgs): Promise<StampResult>;
 
   list(args: ListArgs): Promise<ListResult>;
 
