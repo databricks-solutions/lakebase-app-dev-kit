@@ -68,6 +68,17 @@ describe("deployGitignore", () => {
     expect(content).not.toMatch(/^\.sftdd\/\*/m);
   });
 
+  it("ignores the kit-ref run pin (.lakebase/kit-ref.local) but NOT the committed kit-ref (Finding 28)", async () => {
+    // The gitignored run pin must never be committed, so a branch checkout cannot
+    // revert it and silently run the wrong kit. The committed .lakebase/kit-ref
+    // stays tracked (CI resolves KIT_REF from it), so it must NOT be ignored.
+    const dir = mkTmp();
+    await deployGitignore(dir, "python");
+    const content = fs.readFileSync(path.join(dir, ".gitignore"), "utf-8");
+    expect(content).toMatch(/^\.lakebase\/kit-ref\.local$/m);
+    expect(content).not.toMatch(/^\.lakebase\/kit-ref$/m);
+  });
+
   it("merges python extras when language=python", async () => {
     const dir = mkTmp();
     await deployGitignore(dir, "python");

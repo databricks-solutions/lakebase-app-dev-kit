@@ -9,6 +9,7 @@
 // an error rather than performing a related-but-different remediation.
 
 import * as fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { resolveSftddDir } from "../sftdd/sftdd-paths.js";
 import * as path from "node:path";
 import {
@@ -85,6 +86,17 @@ function readEnv(projectDir: string): Map<string, string> {
 
 function leafOf(b: LakebaseBranchInfo): string {
   return b.name.split("/").pop() ?? b.name;
+}
+
+/** True iff `rel` (repo-relative) is git-tracked in projectDir. Best-effort: no
+ *  git / not a repo -> false. */
+function isGitTracked(projectDir: string, rel: string): boolean {
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", "--", rel], { cwd: projectDir, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function worstOf(a: DoctorSeverity, b: DoctorSeverity): DoctorSeverity {
@@ -188,6 +200,31 @@ export async function runDoctor(args: DoctorArgs): Promise<DoctorReport> {
     } catch {
       // best-effort: unreadable workflow -> skip silently.
     }
+  }
+
+  // 1d. Runtime SCM claim state git-tracked? .lakebase/workflow-state.json records
+  // the per-working-tree feature claim, but being git-tracked means a branch
+  // checkout / `git reset --hard origin/<tier>` restores a branch-COMMITTED (stale)
+  // claim over the live one, forcing an abandon+reclaim dance (Finding 28 sibling
+  // of the kit-ref revert). Flag it so a wrong-claim refusal after a checkout is
+  // understood as this, not a real conflict. Best-effort, git-only.
+  try {
+    if (isGitTracked(projectDir, ".lakebase/workflow-state.json")) {
+      findings.push({
+        id: "scm-state-git-tracked",
+        severity: "warn",
+        message:
+          ".lakebase/workflow-state.json (the per-working-tree SCM claim state) is git-tracked, so a branch " +
+          "checkout or `git reset --hard origin/<tier>` can restore a stale committed claim over the live one " +
+          "(the foreign-claim guard then refuses to drive until you abandon + reclaim).",
+        suggestion:
+          "If a wrong-feature-claim refusal follows a checkout, run lakebase-scm-adopt-state (or abandon + " +
+          "reclaim) to re-establish the live claim. The kit-ref run pin (.lakebase/kit-ref.local) already " +
+          "protects the kit version from the same checkout revert.",
+      });
+    }
+  } catch {
+    // best-effort: no git / not a repo -> skip silently.
   }
 
   // 2. .env reachability

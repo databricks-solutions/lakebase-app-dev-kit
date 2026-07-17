@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const mockListBranches = vi.fn();
 const mockGetBranchByName = vi.fn();
@@ -368,5 +369,39 @@ describe("runDoctor: ci-workflow-kit-pin (Finding 24)", () => {
     );
     const report = await doctor.runDoctor({ projectDir: tmpDir });
     expect(report.findings.find((x) => x.id === "ci-workflow-kit-pin")).toBeUndefined();
+  });
+});
+
+describe("runDoctor: scm-state-git-tracked (Finding 28)", () => {
+  const gitEnv = {
+    ...process.env,
+    GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t",
+    GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t",
+  };
+  function git(...args: string[]): void {
+    execFileSync("git", args, { cwd: tmpDir, stdio: "ignore", env: gitEnv });
+  }
+  function seedState(): void {
+    writeEnv("p");
+    mockListBranches.mockResolvedValue(lakebase2Tier());
+    mockGetCurrentBranch.mockResolvedValue("staging");
+    git("init", "-q");
+    state.writeWorkflowState(tmpDir, { version: 1, state: "scaffold-complete", tier_topology: 2, project_id: "p" });
+  }
+
+  it("flags a git-tracked .lakebase/workflow-state.json (checkout can restore a stale claim)", async () => {
+    seedState();
+    git("add", "--", ".lakebase/workflow-state.json");
+    git("commit", "-q", "-m", "state");
+    const report = await doctor.runDoctor({ projectDir: tmpDir });
+    const f = report.findings.find((x) => x.id === "scm-state-git-tracked");
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("warn");
+  });
+
+  it("does NOT flag an untracked workflow-state.json", async () => {
+    seedState(); // written but never git-added
+    const report = await doctor.runDoctor({ projectDir: tmpDir });
+    expect(report.findings.find((x) => x.id === "scm-state-git-tracked")).toBeUndefined();
   });
 });

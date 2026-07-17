@@ -1,4 +1,4 @@
-# Lakebase project — common ignores
+# Lakebase project – common ignores
 .env
 application-local.properties
 .tmp/
@@ -13,6 +13,14 @@ application-local.properties
 # workflow-state.json, product-overview.md, nfrs.md, design/) is unaffected.
 .sftdd/agent-log.jsonl
 .sftdd/run-config.json
+
+# The kit-ref RUN PIN: a WORKSPACE-local, checkout-proof override of the committed
+# `.lakebase/kit-ref`. The drive writes it at launch to pin the run's kit version
+# for the whole run; it MUST stay gitignored so a branch checkout/reset (which
+# forks from origin/<parent>) can never restore a branch-committed kit-ref out from
+# under the run and silently execute the wrong kit version. The committed
+# `.lakebase/kit-ref` stays tracked (CI resolves its KIT_REF from it).
+.lakebase/kit-ref.local
 
 # Per-agent local memory: each role subagent (memory: project) persists its own
 # learnings here mid-run. It is local + churny (re-written every run), not feature
