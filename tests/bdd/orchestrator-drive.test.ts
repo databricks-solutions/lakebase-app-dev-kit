@@ -230,6 +230,16 @@ describe("nextTransition: build lane (after a story is gated)", () => {
     expect(nextTransition(st)).toEqual({ kind: "complete", story: "S1" });
   });
 
+  it("re-cuts with resetStaleBranch when a prior experiment was discarded (Finding 27)", () => {
+    // A revised / rebuilt story has a DISCARDED experiment (experimentCut false,
+    // experimentDiscarded true): the re-cut must re-fork the polluted paired
+    // branch clean rather than reuse it.
+    const v = gatedUnbuilt();
+    v.build.experimentDiscarded = true;
+    const st = ws({ stories: { S1: v }, buildActive: "S1" });
+    expect(nextTransition(st)).toEqual({ kind: "cut-experiment", story: "S1", resetStaleBranch: true });
+  });
+
   it("opt-in 'ac' granularity: does a pending AC's REVIEW before writing the next AC's tests (per-AC RED-GREEN-REVIEW-REFACTOR)", () => {
     // AC1's tests are all green (reviewAc=AC1) but the story is not all-green yet
     // (AC2's tests are still pending -> testsWritten false). The lane must REVIEW

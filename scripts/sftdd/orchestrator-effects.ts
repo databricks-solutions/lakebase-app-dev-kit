@@ -1250,6 +1250,9 @@ export function commandsForAction(action: WorkflowAction, cfg: DriveEffectsConfi
             cfg.projectDir,
             "--tdd-dir",
             cfg.sftddDir,
+            // A re-cut after a discarded experiment re-forks the stale paired branch
+            // clean (Finding 27); a first cut omits it (nothing to reset).
+            ...(action.resetStaleBranch ? ["--reset-stale-branch"] : []),
           ],
         },
       ];

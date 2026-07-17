@@ -22,7 +22,7 @@ import {
   priorReviseCount,
   readSmellsLog,
 } from "../../scripts/sftdd/smells";
-import { recordBlockingSmellFlag } from "../../scripts/sftdd/escalation";
+import { recordBlockingSmellFlag, writeEscalation, readEscalations } from "../../scripts/sftdd/escalation";
 import { nextTransition, actionLane, type DriveState } from "../../scripts/sftdd/orchestrator-drive";
 import { commandsForAction, type DriveEffectsConfig } from "../../scripts/sftdd/orchestrator-effects";
 import { diskArtifactProbe } from "../../scripts/sftdd/orchestrator-probe";
@@ -31,7 +31,10 @@ import {
   reviseStoryWithSelfHeal,
   revisableSmellForStory,
   clearStoryBlockingSmellOnDiscard,
+  rebuildStory,
 } from "../../scripts/sftdd/revise";
+import { storyTestProgress } from "../../scripts/sftdd/cycle-record";
+import { cyclesRootDir } from "../../scripts/sftdd/sftdd-paths";
 import { readFileSync as readFileSyncNode } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { writeReflectVerdict, reflectionVerdictWritten } from "../../scripts/sftdd/reflection";
@@ -206,6 +209,32 @@ function seedDesignArtifacts(tdd: string): void {
   );
 }
 
+/** Seed a GREEN cycle on disk for AC1-x/T1 (red_at + green_at), mirroring a story
+ *  the build lane already drove green. resetStoryBuildState must remove it so a
+ *  revised/rebuilt story re-drives RED/GREEN instead of resurrecting the stale
+ *  green_at against a regenerated (same-id) test-list (Finding 27). */
+function seedGreenCycle(tdd: string): void {
+  const dir = join(cyclesRootDir(tdd), FEATURE, STORY, "AC1-x");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "cycle-001.json"),
+    JSON.stringify({
+      cycle_id: "cycle-001",
+      feature_id: FEATURE,
+      story_id: STORY,
+      ac_id: "AC1-x",
+      test_id: "T1",
+      red_at: "2026-07-17T00:00:00.000Z",
+      green_at: "2026-07-17T00:01:00.000Z",
+    }) + "\n",
+  );
+}
+
+/** True when the story has any cycle artifact on disk. */
+function hasCycles(tdd: string): boolean {
+  return existsSync(join(cyclesRootDir(tdd), FEATURE, STORY));
+}
+
 describe("applyReviseSelfHeal (the revise self-heal transition)", () => {
   let tdd: string;
   beforeEach(() => {
@@ -237,6 +266,19 @@ describe("applyReviseSelfHeal (the revise self-heal transition)", () => {
 
     // The smell is resolved-as-revised: the one-revise budget is now spent.
     expect(priorReviseCount(tdd, "ac-overlap", STORY)).toBe(1);
+  });
+
+  it("resets the story's BUILD state so it re-drives RED/GREEN, not re-deploy (Finding 27)", () => {
+    // A revised story that kept its stale green_at cycles resurrects allGreen once
+    // the design lane regenerates a same-id test-list, so the drive skips the build
+    // and re-fails at deploy. The revise must clear the cycle records.
+    seedGreenCycle(tdd);
+    expect(hasCycles(tdd)).toBe(true);
+    applyReviseSelfHeal({
+      featureId: FEATURE, story: STORY, smell: "ac-overlap",
+      routedTo: "spec-author", gate: "spec", reason: "AC4 implied by AC2", sftddDir: tdd,
+    });
+    expect(hasCycles(tdd)).toBe(false);
   });
 
   it("is NOT hollow: stales the owning author's artifacts + writes the verdict brief", () => {
@@ -333,6 +375,21 @@ describe("reviseStoryWithSelfHeal (operator pipeline revise)", () => {
     expect(readPipeline(tdd, FEATURE).stories[STORY].status).toBe("designing");
   });
 
+  it("the PLAIN reset also clears stale build cycles so the story re-drives (Finding 27)", () => {
+    // The plain (no-smell) revise flips status to designing but leaves the test
+    // list intact, so without a cycle reset every item reads green from the stale
+    // cycles and the build lane skips straight to deploy.
+    seedGreenCycle(tdd);
+    expect(storyTestProgress(tdd, FEATURE, STORY).allGreen).toBe(true);
+    const outcome = reviseStoryWithSelfHeal(tdd, FEATURE, STORY, {
+      approver: "po@example.com",
+      reason: "PO wants a different approach",
+    });
+    expect(outcome.mode).toBe("plain");
+    expect(hasCycles(tdd)).toBe(false);
+    expect(storyTestProgress(tdd, FEATURE, STORY).allGreen).toBe(false);
+  });
+
   it("revisableSmellForStory ignores a build-level (non-spec) smell", () => {
     recordBlockingSmellFlag(tdd, "cycle-stall", "stalled", { story_id: STORY });
     expect(revisableSmellForStory(tdd, FEATURE, STORY)).toBeNull();
@@ -345,6 +402,67 @@ describe("reviseStoryWithSelfHeal (operator pipeline revise)", () => {
     // Resolved, but NOT as a revise (discard does not spend the one-revise budget).
     expect(readSmellsLog(tdd).detected.some((d) => !d.resolution && d.smell === "reflect-testlist-defect")).toBe(false);
     expect(priorReviseCount(tdd, "reflect-testlist-defect", STORY)).toBe(0);
+  });
+});
+
+// ---- rebuild-story: the explicit clean-slate re-drive op (Finding 27) ----------
+
+describe("rebuildStory (pipeline rebuild-story)", () => {
+  let tdd: string;
+  beforeEach(() => {
+    tdd = mkdtempSync(join(tmpdir(), "tdd-rebuild-"));
+    writePipeline(tdd, pipelineBuilding()); // STORY building + active, experiment active
+    seedDesignArtifacts(tdd);
+  });
+  afterEach(() => rmSync(tdd, { recursive: true, force: true }));
+
+  it("clears cycles, escalations, smells, re-forks the experiment, and re-lanes the story", () => {
+    seedGreenCycle(tdd);
+    // The two escalation sources that pin a story to the HIL after a false-GREEN:
+    writeEscalation(tdd, { source: "deploy-verify", reason: "S2 verify failed", feature_id: FEATURE, story_id: STORY });
+    // A build-level blocking smell (rebuild clears these too, not just spec-level).
+    recordBlockingSmellFlag(tdd, "cycle-stall", "stuck at deploy", { story_id: STORY });
+    expect(hasCycles(tdd)).toBe(true);
+
+    const r = rebuildStory(tdd, FEATURE, STORY, { approver: "po@example.com" });
+
+    expect(r.cyclesCleared).toBe(true);
+    expect(r.testItemsReset).toBeGreaterThanOrEqual(0);
+    expect(r.escalationsCleared).toHaveLength(1);
+    expect(r.smellsCleared).toContain("cycle-stall");
+    expect(r.experimentReset).toBe(true);
+
+    // Build state is clean -> the drive re-runs RED/GREEN, not deploy.
+    expect(hasCycles(tdd)).toBe(false);
+    expect(storyTestProgress(tdd, FEATURE, STORY).allGreen).toBe(false);
+    // Both HIL sources are cleared (dual-source rule): no unresolved escalation,
+    // no open smell for the story.
+    expect(readEscalations(tdd).every((e) => e.resolved_at || e.story_id !== STORY)).toBe(true);
+    expect(readSmellsLog(tdd).detected.some((d) => !d.resolution && d.story_id === STORY)).toBe(false);
+    // The story is back on the single build lane from a clean slate.
+    const p = readPipeline(tdd, FEATURE);
+    expect(p.stories[STORY].status).toBe("building");
+    expect(p.build_active).toBe(STORY);
+    expect(p.stories[STORY].experiment?.status).toBe("discarded");
+  });
+
+  it("refuses when the build lane is busy on a different story (single-lane invariant)", () => {
+    const p = readPipeline(tdd, FEATURE);
+    p.build_active = "S9-other";
+    writePipeline(tdd, p);
+    expect(() => rebuildStory(tdd, FEATURE, STORY)).toThrow(/busy on S9-other/);
+  });
+
+  it("throws when the story is not in the pipeline", () => {
+    expect(() => rebuildStory(tdd, FEATURE, "S404-missing")).toThrow(/not in the pipeline/);
+  });
+
+  it("is idempotent enough to re-run: a second call is a clean no-op on the cycles", () => {
+    seedGreenCycle(tdd);
+    rebuildStory(tdd, FEATURE, STORY);
+    const r2 = rebuildStory(tdd, FEATURE, STORY);
+    expect(r2.cyclesCleared).toBe(false);
+    expect(r2.escalationsCleared).toHaveLength(0);
   });
 });
 
@@ -361,6 +479,10 @@ describe("story-pipeline CLI wires the self-heal (static)", () => {
   });
   it("exposes a resolve-smell subcommand", () => {
     expect(cliSrc).toMatch(/case "resolve-smell"/);
+  });
+  it("exposes a rebuild-story subcommand wired to rebuildStory", () => {
+    expect(cliSrc).toMatch(/case "rebuild-story"/);
+    expect(cliSrc).toMatch(/rebuildStory\(/);
   });
 });
 

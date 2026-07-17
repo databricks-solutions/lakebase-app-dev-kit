@@ -18,6 +18,7 @@
 //   lakebase-sftdd-pipeline accept         --feature F --story S --approver A    (PO accepts -> experiment merged, story done, lane freed)
 //   lakebase-sftdd-pipeline discard        --feature F --story S --approver A --reason R   (PO discards -> torn down, out of sprint)
 //   lakebase-sftdd-pipeline revise         --feature F --story S --approver A --reason R   (PO sends back -> designing; self-heals a blocking smell)
+//   lakebase-sftdd-pipeline rebuild-story  --feature F --story S [--approver A] [--at ISO]  (clean-slate re-drive: clears build cycles + escalations + smells, re-forks the experiment, back on the build lane)
 //   lakebase-sftdd-pipeline resolve-smell  --feature F --smell NAME --approver A [--story S] [--reason R]   (clear a blocking smell without revise/discard)
 //
 // The formal per-story spec gate is surface -> approve-gate; approve-gate is
@@ -56,7 +57,7 @@ import {
 } from "./story-pipeline";
 import { join } from "path";
 import { resolveSftddDir } from "./sftdd-paths.js";
-import { reviseStoryWithSelfHeal, clearStoryBlockingSmellOnDiscard } from "./revise.js";
+import { reviseStoryWithSelfHeal, clearStoryBlockingSmellOnDiscard, rebuildStory } from "./revise.js";
 import { markSmellResolved } from "./smells.js";
 import { resolveAcceptMergeArgs, experimentMergeArgv } from "./experiment-merge.js";
 import { runKitBinSync } from "./kit-bin.js";
@@ -113,7 +114,7 @@ function parse(argv: string[]): Args {
 function usage(msg: string): number {
   process.stderr.write(
     `${msg}\n` +
-      `Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|resolve-smell> --feature <F> [--tdd-dir <dir>]\n` +
+      `Usage: lakebase-sftdd-pipeline <status|set|surface|approve-gate|withdraw-gate|enqueue|dispatch|complete|cut-experiment|await-acceptance|accept|discard|revise|rebuild-story|resolve-smell> --feature <F> [--tdd-dir <dir>]\n` +
       `  set additionally needs --story <S> --status <${STORY_STATUSES.join("|")}>\n` +
       `  surface needs --story <S>\n` +
       `  approve-gate needs --story <S> --approver <A> [--spec-hash <H>] [--at <ISO>]\n` +
@@ -123,6 +124,7 @@ function usage(msg: string): number {
       `  await-acceptance needs --story <S>\n` +
       `  accept needs --story <S> --approver <A> [--at <ISO>]\n` +
       `  discard / revise need --story <S> --approver <A> --reason <R> [--at <ISO>]\n` +
+      `  rebuild-story needs --story <S> [--approver <A>] [--at <ISO>]\n` +
       `  resolve-smell needs --smell <NAME> --approver <A> [--story <S>] [--reason <R>]\n`,
   );
   return 2;
@@ -359,6 +361,33 @@ async function main(): Promise<number> {
       } else {
         process.stdout.write(`revising ${args.story} (${args.reason}); experiment torn down, back to designing, lane freed\n`);
       }
+      return 0;
+    }
+    case "rebuild-story": {
+      // The sanctioned "re-drive this story from a clean slate" op (Finding 27):
+      // clears the build cycles + test-list, the story's HIL escalations AND
+      // blocking smells, resets the experiment for a clean re-fork, and puts the
+      // story back on the build lane , so recovering a story after a caught
+      // false-GREEN never needs `rm -rf .sftdd/cycles/...` + hand-edits.
+      if (!args.story) return usage("rebuild-story needs --story");
+      let r;
+      try {
+        r = rebuildStory(sftddDir, feature, args.story, {
+          ...(args.approver ? { approver: args.approver } : {}),
+          ...(args.at ? { at: args.at } : {}),
+        });
+      } catch (e) {
+        process.stderr.write(`rebuild-story: ${e instanceof Error ? e.message : String(e)}\n`);
+        return 2;
+      }
+      const parts = [
+        r.cyclesCleared ? "cleared build cycles" : "no build cycles to clear",
+        `${r.testItemsReset} test item(s) reset`,
+        `${r.escalationsCleared.length} escalation(s) cleared`,
+        r.smellsCleared.length ? `smells cleared: ${r.smellsCleared.join(", ")}` : "no smells to clear",
+        r.experimentReset ? "experiment reset for re-fork" : "no experiment to reset",
+      ];
+      process.stdout.write(`rebuild-story ${args.story}: ${parts.join("; ")}; back on the build lane (building)\n`);
       return 0;
     }
     case "resolve-smell": {

@@ -28,9 +28,17 @@ import {
   storyAcIds,
   resolveSftddDir,
 } from "./sftdd-paths.js";
-import { readPipeline, writePipeline, reviseStory } from "./story-pipeline.js";
-import { markSmellResolved, composeReviseBrief, readSmellsLog, specLevelSmell } from "./smells.js";
+import { readPipeline, writePipeline, reviseStory, setStoryStatus } from "./story-pipeline.js";
+import {
+  markSmellResolved,
+  composeReviseBrief,
+  readSmellsLog,
+  specLevelSmell,
+  resolveAllOpenSmellsForStory,
+} from "./smells.js";
 import { clearReflectVerdict } from "./reflection.js";
+import { resetStoryBuildState } from "./cycle-record.js";
+import { resolveEscalationsForStory } from "./escalation.js";
 
 /** Default author identity recorded on a headless self-heal. A real interactive
  *  decision passes the human's identity through `approver`. */
@@ -172,6 +180,15 @@ export function applyReviseSelfHeal(args: ReviseSelfHealArgs): ReviseSelfHealRes
   reviseStory(pipeline, args.story, { approver, at, reason: args.reason });
   writePipeline(sftddDir, pipeline);
 
+  // 2a. Reset the story's BUILD state (Finding 27). reviseStory only flips the
+  // pipeline status; the build lane derives "pending" from the cycle records on
+  // disk, so a status-only revise leaves every stale green_at behind. Once the
+  // design lane regenerates a same-id test-list those cycles re-match and the
+  // story reads allGreen, so the drive skips RED/GREEN straight back to deploy and
+  // re-fails on the same stale build. Clearing the cycles makes it genuinely
+  // re-drive , the SAME reset the `experiment discard --revise` door already does.
+  resetStoryBuildState(sftddDir, args.featureId, args.story);
+
   // 2b. Force the owning author to actually RE-AUTHOR: stale its artifact so the
   // design lane re-invokes it, and deliver the verdict as a smell-aware hand-back
   // brief (composeReviseBrief FORCES missing coverage for a reflect defect, keeps
@@ -271,7 +288,92 @@ export function reviseStoryWithSelfHeal(
     reason: opts.reason,
   });
   writePipeline(sftddDir, pipeline);
+  // Finding 27: even the plain reset must clear the stale build cycles, or the
+  // (still-present) test-list reads allGreen off them and the build lane skips.
+  resetStoryBuildState(sftddDir, featureId, story);
   return { mode: "plain", story };
+}
+
+export interface RebuildStoryResult {
+  /** Cycle artifacts were removed (the story's build was cleared). */
+  cyclesCleared: boolean;
+  /** How many per-story test-list items were flipped back to `pending`. */
+  testItemsReset: number;
+  /** Explicit HIL escalation files resolved (deploy-verify / driver-green halts). */
+  escalationsCleared: string[];
+  /** Blocking smells resolved for the story. */
+  smellsCleared: string[];
+  /** The prior experiment was marked discarded so the drive re-forks it clean. */
+  experimentReset: boolean;
+}
+
+/**
+ * `pipeline rebuild-story`: the explicit, sanctioned "re-drive this story from a
+ * clean slate" operator op (Finding 27), so recovering a story after a caught
+ * false-GREEN (or any build-lane defect) never requires hand-deleting kit-internal
+ * state (`rm -rf .sftdd/cycles/...`). It clears EVERY on-disk source that would
+ * otherwise make the re-drive skip the build or immediately re-halt:
+ *   1. the build cycle records + test-list statuses (resetStoryBuildState), so the
+ *      story reads pending again and the lane re-runs RED/GREEN;
+ *   2. the story's explicit HIL escalation files AND its blocking smells , the two
+ *      escalation sources, either of which alone would pin it back to raise-to-hil;
+ *   3. the prior experiment record (-> discarded), so the drive re-cuts a FRESH
+ *      experiment branch (with --reset-stale-branch) instead of reusing the
+ *      polluted one.
+ * It then puts the story back on the single build lane (status building + active).
+ * Single-lane invariant: refuses (throws) when the lane is busy with a DIFFERENT
+ * story. Throws when the story is not in the pipeline.
+ */
+export function rebuildStory(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+  opts?: { approver?: string; at?: string },
+): RebuildStoryResult {
+  const at = opts?.at ?? new Date().toISOString();
+  const pipeline = readPipeline(sftddDir, featureId);
+  const entry = pipeline.stories[story];
+  if (!entry) throw new Error(`rebuild-story: story ${story} is not in the pipeline for ${featureId}`);
+  if (pipeline.build_active !== null && pipeline.build_active !== story) {
+    throw new Error(
+      `rebuild-story: the build lane is busy on ${pipeline.build_active}; ` +
+        `complete, revise, or discard it before rebuilding ${story}.`,
+    );
+  }
+
+  const build = resetStoryBuildState(sftddDir, featureId, story);
+  const escalationsCleared = resolveEscalationsForStory(sftddDir, featureId, story, at);
+  const smellsCleared = resolveAllOpenSmellsForStory(
+    sftddDir,
+    story,
+    `cleared for rebuild-story by ${opts?.approver ?? "operator"}`,
+  );
+
+  // Re-fork the experiment on the next cut: a discarded experiment record makes
+  // the drive re-cut (experimentCut reads false) and pass --reset-stale-branch, so
+  // the rebuild forks a clean paired branch off feature HEAD rather than reusing
+  // the branch that carries the discarded build's schema.
+  let experimentReset = false;
+  if (entry.experiment && entry.experiment.status !== "discarded") {
+    entry.experiment.status = "discarded";
+    entry.experiment.closed_at = at;
+    experimentReset = true;
+  }
+
+  // Put the story back on the single build lane from the clean slate.
+  setStoryStatus(pipeline, story, "building");
+  pipeline.build_active = story;
+  const idx = pipeline.build_queue.indexOf(story);
+  if (idx !== -1) pipeline.build_queue.splice(idx, 1);
+  writePipeline(sftddDir, pipeline);
+
+  return {
+    cyclesCleared: build.cyclesCleared,
+    testItemsReset: build.testItemsReset,
+    escalationsCleared,
+    smellsCleared,
+    experimentReset,
+  };
 }
 
 /** On `discard`, a story leaves the sprint, so any blocking smell against it must

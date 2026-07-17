@@ -89,6 +89,10 @@ describe("deriveDriveState: gate + acceptance mapping", () => {
     expect(st.stories.S1.build.accepted).toBe(true);
     expect(st.stories.S1.build.experimentCut).toBe(true);
     expect(st.stories.S2.build.experimentCut).toBe(false);
+    // Finding 27: a discarded experiment marks the story for a re-cut re-fork
+    // (--reset-stale-branch); a merged/active one does not.
+    expect(st.stories.S2.build.experimentDiscarded).toBe(true);
+    expect(st.stories.S1.build.experimentDiscarded).toBe(false);
   });
 });
 

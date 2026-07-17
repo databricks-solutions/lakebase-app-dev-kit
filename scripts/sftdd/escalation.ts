@@ -128,6 +128,32 @@ export function readEscalations(sftddDir: string): Escalation[] {
   return out;
 }
 
+/** Resolve (stamp `resolved_at` on) every unresolved explicit FILE escalation
+ *  for a story , the deploy-verify / driver-green halts that pin a story to the
+ *  HIL. This is the escalation-file half of a clean rebuild (Finding 27): a
+ *  status/cycle reset alone leaves the halting escalation on disk, so the drive
+ *  still pre-empts to raise-to-hil. The SMELL-derived half (blocking smells in
+ *  smells.json) is cleared separately by the smell resolvers , the dual-source
+ *  rule. Returns the ids it resolved (empty when none matched). A story-scoped
+ *  match: an escalation with no story_id is feature-wide and left untouched. */
+export function resolveEscalationsForStory(
+  sftddDir: string,
+  featureId: string,
+  story: string,
+  at: string = new Date().toISOString(),
+): string[] {
+  const dir = escalationsDir(sftddDir);
+  const resolved: string[] = [];
+  for (const e of readEscalations(sftddDir)) {
+    if (e.resolved_at) continue;
+    if (e.story_id !== story) continue;
+    if (e.feature_id !== undefined && e.feature_id !== featureId) continue;
+    fs.writeFileSync(escalationFile(sftddDir, e.id), JSON.stringify({ ...e, resolved_at: at }, null, 2) + "\n", "utf8");
+    resolved.push(e.id);
+  }
+  return resolved;
+}
+
 /** Escalations derived from unresolved BLOCKING bad-smells in `.tdd/smells.json`.
  *  The Navigator flags a smell (e.g. test-list-drift on a contradictory test);
  *  if it is in BLOCKING_SMELLS and unresolved, it becomes an HIL escalation
