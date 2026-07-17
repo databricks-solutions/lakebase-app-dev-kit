@@ -7,6 +7,7 @@ const SKILL_PATH = join(SKILL_DIR, "SKILL.md");
 const README_PATH = join(SKILL_DIR, "README.md");
 const NAV_PATH = join(SKILL_DIR, "agents", "navigator.md");
 const DRV_PATH = join(SKILL_DIR, "agents", "driver.md");
+const TS_PATH = join(SKILL_DIR, "agents", "test-strategist.md");
 
 const NINE_RULES_PHRASES = [
   "immutable until the test list itself is renegotiated",
@@ -80,5 +81,19 @@ describe("lakebase-sftdd-workflows hard rules", () => {
   it("driver.md prohibits mocking the database", () => {
     const drv = readFileSync(DRV_PATH, "utf8");
     expect(drv.toLowerCase()).toContain("no mocks for the database");
+  });
+
+  // Finding 30: a fixed-key seed with only `finally` cleanup poisons every later
+  // run on a reused branch DB when a run is killed mid-test. The migration-test
+  // guidance in BOTH design roles must require an idempotent seed at the START.
+  it("test-strategist.md + navigator.md require an idempotent migration-test seed", () => {
+    for (const p of [TS_PATH, NAV_PATH]) {
+      const doc = readFileSync(p, "utf8");
+      expect(doc.toLowerCase()).toMatch(/idempotent/);
+      // A per-run key OR a delete/on-conflict guard before the insert.
+      expect(doc).toMatch(/uuid|ON CONFLICT|DELETE the fixed key/i);
+      // And it must say the finally cleanup alone is insufficient.
+      expect(doc.toLowerCase()).toMatch(/finally/);
+    }
   });
 });
