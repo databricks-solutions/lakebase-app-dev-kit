@@ -1,6 +1,6 @@
 # Redefine "protected tier" = named AND long-running
 
-Status: planned. Owner: SCM substrate + extension. Cross-repo (kit + lakebase-scm-extension).
+Status: kit half implemented (`resolveProtectedTierNames` / `DEFAULT_PROTECTED_TIER_NAMES` / `LAKEBASE_TIER_NAMES` in `branch-utils.ts`); only the separate lakebase-scm-extension repo half is outstanding. Owner: SCM substrate + extension. Cross-repo (kit + lakebase-scm-extension).
 
 ## Decision (confirmed with the user)
 

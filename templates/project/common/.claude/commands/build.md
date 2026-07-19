@@ -59,4 +59,4 @@ Hooks are owned by the project; this command file only consults them when presen
 
 Pinned to: `${KIT_VERSION_AT_SCAFFOLD}`
 
-The future `lakebase-update-commands` bin will re-pull this command's canonical template while preserving your pre/post hooks.
+The `lakebase-update-commands` bin re-pulls this command's canonical template while preserving your pre/post hooks.

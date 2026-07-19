@@ -1,5 +1,11 @@
 # Orchestrator as a deterministic driver
 
+Status: SHIPPED. The deterministic driver (`lakebase-sftdd-drive`, with
+`nextTransition` as its pure core) is the sole orchestrator for both headless and
+interactive runs; the LLM scrum-master agent was purged, and the `/plan`,
+`/design`, `/build`, `/deploy`, `/spike`, `/sprint` command docs exist. The phase
+list below is historical.
+
 ## Problem
 
 The scrum-master orchestrator is an LLM (`claude -p --agent scrum-master`) that

@@ -1,6 +1,7 @@
 # Orchestrated HIL intake for /design, /build, /ship (design, for review)
 
-Status: **proposal, not yet implemented.** Defines a single orchestrated path
+Status: **largely implemented** (plan steps 1, 2, 4, 5 and Decision 1's
+`brief_ref` landed; steps 3, 6, 7 remain). Defines a single orchestrated path
 through `/design` -> `/build` -> `/ship` that runs identically for real and
 test. The orchestrator interviews the human-in-the-loop (HIL) at intake steps,
 generates the HIL-authored intake artifacts, and pauses at gates. In headless
