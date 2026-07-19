@@ -174,7 +174,7 @@ sprint plan gate.
   are). User-confirmed 2026-06-07.
 
 - **Phase 2, sprint plan gate (mirror the deploy gate).** RECOMMENDED scope:
-  sprint-scoped `.tdd/sprints/<name>/gates.json` reusing the `GateRecord` shape
+  sprint-scoped `.sftdd/sprints/<name>/gates.json` reusing the `GateRecord` shape
   + a thin sprint variant of read/write/drain (smallest generalization, same
   teeth pattern; avoids a risky full feature|sprint refactor of the gate
   substrate). Plan gate artifact = the sprint backlog (feature-proposals.md +
@@ -189,7 +189,7 @@ sprint plan gate.
   at the phase boundary. Hermetic tests per bound.
 
 - **Phase 4, sprint mode (`--sprint`, the `/sprint` orchestrator).** A sprint
-  backlog manifest (`.tdd/sprints/<name>/backlog.json`, the feature ids).
+  backlog manifest (`.sftdd/sprints/<name>/backlog.json`, the feature ids).
   `--sprint` runs planning (plan gate) -> reads the backlog -> per feature:
   claim + drive (design -> build -> deploy) in one process. Sprint-level
   readState/context. Hermetic full-sprint e2e.
