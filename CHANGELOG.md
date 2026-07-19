@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0-beta.34] - 2026-07-19
+
+Documentation audit remediation (FEIP-8085), plus one CLI help-text fix. Docs match the code at this version.
+
+### Fixed
+
+- **`lakebase-branch --help` no longer advertises the deleted `create-tier` subcommand.** The unpaired `create-tier` was removed, but the help text (usage line, flags section, example) and two code comments still listed it; repointed to the shipped `create-paired-tier`. Help-text and comments only, no logic change.
+- **Documentation brought current with the shipped code (FEIP-8085).** A four-agent audit corrected two classes of staleness: completed items still labeled proposal/future (eight `docs/refactor/*` proposals whose work shipped, five scaffolded command docs calling the shipped `lakebase-update-commands` bin "future", the SCM SKILL's shipped "future work" and stale `alpha.45` stamps), and instruction drift from the code. The largest drift fixes are in the `lakebase-sftdd-workflows` skill (read by agents at runtime): the experiment APIs are now documented story-scoped (a `storyId` threaded through the primitives + the `experiments/<feature>/<story>/<slug>/` path), the 5th `deploy` gate is in every gate list, and the model-resolution source, roles table, entry points, `feature-status-schema` example, and `CONFIG` `clientFramework` row are corrected. SCM/root docs dropped a phantom `lakebase-get-connection --write-env` flag, fixed `create-tier` -> `create-paired-tier` in the root README, `migrate-live*` -> `schema-migrate-live*` in CONTRIBUTING, and added the `.lakebase/kit-ref.local` run pin to the capture runbook's kit-ref resolution order.
+
+### Added
+
+- **Anti-recurrence test: `SKILL.md` must name every gate in `GATE_NAMES`.** The SFTDD skill's gate documentation had drifted behind the code (the `deploy` gate was added but the named-gate list was not); the test fails if a future gate is added without updating the doc.
+
 ## [0.3.0-beta.33] - 2026-07-17
 
 Three field findings from the F4-pick-outbound feature of a live stockflow tier-2 run (FEIP-8070).

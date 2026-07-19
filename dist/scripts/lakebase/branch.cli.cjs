@@ -1491,9 +1491,6 @@ Subcommands:
   show             Show one branch (project path, parent, expiration, state)
   create           Create a Lakebase branch (no git side-effects)
   create-paired    Create Lakebase branch + matching git branch + .env update
-  create-tier <feature|test|uat|perf>
-                   Create a convention-tier Lakebase branch (default fork from staging).
-                   No git side-effects; use create-paired-tier for the paired variant.
   create-paired-tier <feature|test|uat|perf>
                    Create the convention-tier PAIRED branch (Lakebase + git + .env)
                    atomically. The canonical way to claim a feature branch:
@@ -1515,11 +1512,11 @@ Common flags:
   --host <host>            DATABRICKS_HOST override
   --pretty                 Pretty-print JSON output
 
-create / create-paired / create-tier:
+create / create-paired / create-paired-tier:
   --parent <name>          Parent branch override
   --ttl <duration>         TTL (e.g. "604800s" for 7 days)
   --no-expiry              Set no_expiry=true (long-running tiers only)
-  --strict-parent          (create-tier) Throw if convention's default parent missing
+  --strict-parent          (create-paired-tier) Throw if convention's default parent missing
 
 create-paired / delete-paired / checkout-paired / sync-env:
   --cwd <dir>              Project directory (default: process cwd)
@@ -1535,7 +1532,7 @@ Examples:
   lakebase-branch show --instance proj-x --branch staging
   lakebase-branch create --instance proj-x --branch feat/foo --parent staging
   lakebase-branch create-paired --instance proj-x --branch feat/foo --cwd .
-  lakebase-branch create-tier feature --instance proj-x --branch feat/foo
+  lakebase-branch create-paired-tier feature --instance proj-x --branch feat/foo --cwd .
   lakebase-branch delete --instance proj-x --branch feat/foo
   lakebase-branch delete-paired --instance proj-x --branch feat/foo --cwd .
   lakebase-branch checkout-paired --cwd .
