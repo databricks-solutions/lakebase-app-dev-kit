@@ -68,4 +68,4 @@ its own deploy gate.
 
 Pinned to: `${KIT_VERSION_AT_SCAFFOLD}`
 
-The future `lakebase-update-commands` bin re-pulls this command's canonical template while preserving any project hooks.
+The `lakebase-update-commands` bin re-pulls this command's canonical template while preserving any project hooks.

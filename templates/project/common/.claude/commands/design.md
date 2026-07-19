@@ -125,4 +125,4 @@ The post-hook is owned by the project, not the substrate: this command file only
 
 Pinned to: `${KIT_VERSION_AT_SCAFFOLD}`
 
-Bumping the kit may shift agent prompts. The future `lakebase-update-commands` bin will re-pull canonical templates while preserving the post-hook file above.
+Bumping the kit may shift agent prompts. The `lakebase-update-commands` bin re-pulls canonical templates while preserving the post-hook file above.

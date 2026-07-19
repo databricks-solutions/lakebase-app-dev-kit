@@ -133,4 +133,4 @@ If `.claude/commands/plan.pre-hook.md` / `plan.post-hook.md` exist, they run bef
 
 Pinned to: `${KIT_VERSION_AT_SCAFFOLD}`
 
-The future `lakebase-update-commands` bin re-pulls this command's canonical template while preserving your hooks.
+The `lakebase-update-commands` bin re-pulls this command's canonical template while preserving your hooks.

@@ -1,6 +1,6 @@
 # AC independence (shift-left) + blocking-smell revise-routing
 
-> Part A (shift-left) is implemented; Part B (revise-routing + Human-Proxy self-heal) is design only.
+> Part A (shift-left) is implemented; Part B (revise-routing + Human-Proxy self-heal) is implemented (Phase 2 landed); only interactive (`--gates interactive`) accept|revise parity remains.
 
 ## Problem
 

@@ -1,6 +1,6 @@
 # Architect canon: decide once, conform deterministically, live turn only on novelty
 
-Status: design only; not built. Parent: FEIP-7461 (umbrella: SCM + TDD workflows
+Parent: FEIP-7461 (umbrella: SCM + TDD workflows
 as executable state machines). Sibling of the design-guide + architecture-
 conventions work; builds directly on the revise-routing self-heal (FEIP-7626).
 

@@ -1,6 +1,6 @@
 # Per-role agent runtime + /plan & /deploy parity + state-machine phases
 
-**Status**: Design proposal, 2026-06-06
+**Status**: Phases A-F, H landed; Phase G (release-substrate audit) + Phase K (plugin live-validation) open.
 **Umbrella scope**: workflows as executable state machines
 **Scope**: per-role agent runtime: isolated memory + own system prompt with a relay header; artifact-as-API + conformance gate as its type-check. Relay headers landed 2026-06-05; the isolating runtime is what this document designs.
 **Related**: (model tiers as a parent-linked hierarchy), the SCM/TDD state-machine doc (`scm-tdd-workflow-state-machines.md`).

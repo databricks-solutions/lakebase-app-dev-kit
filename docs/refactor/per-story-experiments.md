@@ -1,6 +1,6 @@
 # Per-story experiments (build isolation + throw-away) with PO acceptance
 
-**Status**: Design proposal, 2026-06-07
+**Status**: implemented (phases 1-5); phase 6 live re-validate gated.
 **Scope**: per-story experiments: build isolation + PO accept/discard/revise
 **Umbrella scope**: workflows as executable state machines
 **Builds on**: (per-story pipelined design->build) (per-role agent runtime)
