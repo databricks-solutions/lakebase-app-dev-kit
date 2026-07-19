@@ -129,7 +129,7 @@ The package exposes many bins (the full set is the `bin` map in `package.json`; 
 - `lakebase-doctor` – health check the local env: CLI version, auth, `.env` shape, project reachability, git remote, language, hooks. Exit codes 0/1/2 = OK/WARN/FAIL.
 
 **Branch lifecycle**
-- `lakebase-branch` – list / show / create / create-paired / create-tier (feature/test/uat/perf) / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep.
+- `lakebase-branch` – list / show / create / create-paired / create-paired-tier (feature/test/uat/perf) / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep.
 
 **PR flow**
 - `lakebase-pr` – open / merge / merge-paired (deletes Lakebase feature branch on merge) / status / files / reviews / comments

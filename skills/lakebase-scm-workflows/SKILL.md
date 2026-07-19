@@ -104,7 +104,7 @@ const { state, paired, alreadyClaimed } = await claimFeatureBranch({
 });
 ```
 
-### Full SCM CLI surface (alpha.45, phase C)
+### Full SCM CLI surface (phase C)
 
 The workflow is driven entirely by CLI bins, one per transition. Each enforces its precondition in code, calls the underlying substrate primitives, and writes the new state row.
 
@@ -119,10 +119,11 @@ The workflow is driven entirely by CLI bins, one per transition. Each enforces i
 | `lakebase-scm-prepare-pr` | feature-claimed -> pr-ready | git push + createPullRequest |
 | `lakebase-scm-wait-ci [--timeout-sec N]` | pr-ready -> ci-green | getPullRequest poll loop |
 | `lakebase-scm-merge [--method squash\|merge\|rebase]` | ci-green -> merged | mergePairedPullRequest + git cleanup |
+| `lakebase-reconcile-tier --branch <tier>` | reconcile a shared tier whose DB is ahead of code (destructive; refuses when not db-ahead) | reconcileTierBranch (drop named orphan tables + stamp the tier to the code head) |
 
 All bins support `--project-dir <dir>` (default cwd), `--json`, `--pretty`, and `--help`.
 
-End-to-end usage (alpha.45):
+End-to-end usage:
 
 ```bash
 # Scaffold a fresh project (Step 8c seeds scaffold-complete).
@@ -147,13 +148,13 @@ lakebase-scm-state --json --pretty
 lakebase-scm-doctor
 ```
 
-Exit-code conventions across all bins: `0` success / idempotent no-op / clean doctor report, `1` no state file (or doctor warnings only), `2` precondition refused (or doctor failures), `3` substrate failure. `lakebase-scm-wait-ci` adds `3` for CI failure (state unchanged) and `4` for timeout (state unchanged).
+Exit-code conventions across all bins: `0` success / idempotent no-op / clean doctor report, `1` no state file (or doctor warnings only), `2` precondition refused (or doctor failures), `3` substrate failure. `lakebase-scm-wait-ci` adds `3` for CI failure (state unchanged) and `4` for timeout (state unchanged). `lakebase-scm-merge` also returns `4` when the downstream migrate fails or times out (the git + PR state IS already merged).
 
 ### Phase C: substrate-only-path is now enforced
 
 The post-checkout git hook (`templates/project/common/scripts/post-checkout.sh`) used to silently create Lakebase branches as a fallback for orphan git branches. Phase C retires that fallback: a `git checkout -b feature/foo` with no prior substrate call leaves `.env` untouched and the hook prints a clear error pointing the user at `lakebase-scm-claim-feature-branch` or `lakebase-scm-recover-orphans`. The substrate is the only path; the SCM workflow is how that path is enforced in code.
 
-Future work past phase C: downstream-CI wait in `lakebase-scm-merge` (block until merge.yml applies migrations to production) and `lakebase-scm-doctor --fix <id>` for targeted remediations.
+`lakebase-scm-merge` waits on the downstream migrate by default: after merging it blocks until the parent-branch migrate workflow applies the migrations, so git and the Lakebase schema do not diverge. `--no-wait-migrate` opts out (returns as soon as the PR merges + local syncs), and a migrate that fails or times out exits `4` with the git + PR state already merged. For targeted remediation, `lakebase-scm-doctor --fix <finding-id>` applies the fix for one finding (supported ids come from `FIXABLE_FINDING_IDS`) and attaches a post-fix report.
 
 ## Sync without an IDE – the git hooks
 
@@ -324,8 +325,11 @@ await checkoutPaired({ cwd: process.cwd() });
 lakebase-get-connection --output dsn --instance proj-checkout --branch feature-add-orders
 # -> postgresql://... DSN
 
-lakebase-get-connection --output dsn --instance proj-checkout --branch feature-add-orders --write-env
-# -> Same DSN, but also rewrites .env DATABASE_URL block (recovery from broken post-checkout hook)
+# To (re)write the .env connection block, use the substrate helpers (get-connection does not write .env):
+lakebase-branch sync-env
+# -> refreshes .env to point at the current branch's endpoint (mints a fresh credential)
+lakebase-resolve-profile --write-env .env
+# -> heals .env: pins DATABRICKS_CONFIG_PROFILE after its DATABRICKS_HOST (recovery from broken post-checkout hook)
 ```
 
 ```ts

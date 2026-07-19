@@ -14,9 +14,9 @@ Thanks for your interest in contributing to `lakebase-app-dev-kit`. This is a [D
 ### Additional tooling unlocked by live tiers
 
 - **GitHub CLI (`gh`)** authenticated to your GitHub account, for the self-hosted-runner suite. The live driver defaults to running it; pass `--no-github-runner` to opt out (see "Live testing" below).
-- **JDK 17+ and the Flyway CLI** for `migrate-live-flyway.test.ts`. The live driver downloads Flyway Community CLI from `${LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL}` on first run if `flyway` is not already on PATH; pre-installing via `brew install flyway` is fine.
-- A Python venv with **alembic + sqlalchemy + psycopg2-binary** for `migrate-live.test.ts`. The live driver auto-provisions `.venv-live-tests/` on first run.
-- **Node.js** with `npm` and `npx` on PATH for `migrate-live-knex.test.ts`. The suite self-installs `knex` + `pg` into a scratch project directory in its `beforeAll()`; no script-level provisioning needed.
+- **JDK 17+ and the Flyway CLI** for `schema-migrate-live-flyway.test.ts`. The live driver downloads Flyway Community CLI from `${LAKEBASE_KIT_REGISTRY_MAVEN_CENTRAL}` on first run if `flyway` is not already on PATH; pre-installing via `brew install flyway` is fine.
+- A Python venv with **alembic + sqlalchemy + psycopg2-binary** for `schema-migrate-live.test.ts`. The live driver auto-provisions `.venv-live-tests/` on first run.
+- **Node.js** with `npm` and `npx` on PATH for `schema-migrate-live-knex.test.ts`. The suite self-installs `knex` + `pg` into a scratch project directory in its `beforeAll()`; no script-level provisioning needed.
 
 ### One-time setup
 
@@ -135,7 +135,7 @@ Older runner that supports `--read-only` and `--all` modes. Use when you only ne
 
 | Mode | Required env + tools | What runs | Creates resources? |
 |---|---|---|---|
-| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway`, `npm` | `tests/bdd/migrate-live.test.ts` (alembic) + `tests/bdd/migrate-live-flyway.test.ts` + `tests/bdd/migrate-live-knex.test.ts` | Yes: `migrate-7091-<ts>` + `migrate-7098-<ts>` + `migrate-7099-<ts>` Lakebase projects, each deleted in their suite's `afterAll()` |
+| default (migrate) | `DATABRICKS_HOST`, `LAKEBASE_TEST_E2E=1`, authenticated `databricks` CLI, `python3`, `java`, `flyway`, `npm` | `tests/bdd/schema-migrate-live.test.ts` (alembic) + `tests/bdd/schema-migrate-live-flyway.test.ts` + `tests/bdd/schema-migrate-live-knex.test.ts` | Yes: `migrate-7091-<ts>` + `migrate-7098-<ts>` + `migrate-7099-<ts>` Lakebase projects, each deleted in their suite's `afterAll()` |
 | `--read-only` | `LAKEBASE_TEST_INSTANCE`, `LAKEBASE_TEST_BRANCH` | Read-only schema / endpoint / DSN suites against the configured branch | No |
 | `--all` | both of the above | Everything vitest discovers when gating env is satisfied | Yes (default mode) |
 
@@ -237,7 +237,7 @@ Use GitHub Issues. Include:
 - The CLI verb or function name you ran
 - The exact error message + stderr (with secrets redacted)
 - Output of `databricks postgres list-branches "<project-path>"` for branch-related bugs
-- Versions: `node --version` (>= 20), `databricks --version` (>= 1.0.0), `python3 --version` (>= 3.10), this kit's version (`package.json#version` or the pinned commit sha). Include `flyway --version` and `java --version` if a migrate-live-flyway test was involved.
+- Versions: `node --version` (>= 20), `databricks --version` (>= 1.0.0), `python3 --version` (>= 3.10), this kit's version (`package.json#version` or the pinned commit sha). Include `flyway --version` and `java --version` if a schema-migrate-live-flyway test was involved.
 
 ## Code of conduct
 
