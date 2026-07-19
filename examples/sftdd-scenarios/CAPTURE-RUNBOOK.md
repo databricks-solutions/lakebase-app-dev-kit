@@ -35,8 +35,9 @@ first. Do not invent a way around it.
 
 1. `LAKEBASE_KIT_DIR` , a kit checkout/install used DIRECTLY. No cache, no
    network, `--warm`/`--rewarm` are no-ops.
-2. else ref = `LAKEBASE_KIT_REF` -> `.lakebase/kit-ref` -> `main`, installed from
-   GitHub into a shared cache at `~/.cache/lakebase-app-dev-kit/<ref>`.
+2. else ref = `LAKEBASE_KIT_REF` -> `.lakebase/kit-ref.local` (gitignored run pin,
+   survives checkouts) -> `.lakebase/kit-ref` (committed; CI reads it) -> `main`,
+   installed from GitHub into a shared cache at `~/.cache/lakebase-app-dev-kit/<ref>`.
 
 Two facts that cause split-brain runs:
 
@@ -74,10 +75,15 @@ identical kit.
 1. Commit + push the kit to a branch or SHA.
 2. Write that ref into the project's `.lakebase/kit-ref` (create it if absent;
    default is `main`).
-3. `./scripts/lk --rewarm` in the project , forces a fresh install of the
+3. Pin or clear `.lakebase/kit-ref.local`: it is gitignored and WINS over
+   `.lakebase/kit-ref`, and the drive writes the launch ref into it at start
+   (`pinRunKitRef`). Either write the same ref into `.lakebase/kit-ref.local` or
+   delete it, so a leftover local pin from a previous run cannot silently override
+   the ref you just set.
+4. `./scripts/lk --rewarm` in the project , forces a fresh install of the
    resolved SHA into the cache (content-addressed, so a moved branch cannot serve
    stale `dist`).
-4. Leave `LAKEBASE_KIT_DIR` UNSET so orchestrator + agents both resolve the same
+5. Leave `LAKEBASE_KIT_DIR` UNSET so orchestrator + agents both resolve the same
    cached ref.
 
 Never mix the two: `LAKEBASE_KIT_DIR` set AND a `.lakebase/kit-ref` that names a

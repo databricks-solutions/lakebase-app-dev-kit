@@ -168,7 +168,7 @@ Happens when the post-checkout hook is missing, disabled, or you switched branch
 
 > "My `.env` DSN looks stale – refresh it to point at the Lakebase branch matching the git branch I'm currently on."
 
-The agent reads the current git branch, calls `lakebase-get-connection --output dsn --write-env` for that branch, and confirms the new `DATABASE_URL`. If you hit this often, ask: "Reinstall the git hooks" – that runs `bash .githooks/install.sh`.
+The agent reads the current git branch, runs `lakebase-branch sync-env` to rewrite `.env` for that branch (or `lakebase-resolve-profile --write-env .env` to heal the profile pin), and confirms the new `DATABASE_URL`. If you hit this often, ask: "Reinstall the git hooks" – that runs `bash .githooks/install.sh`.
 
 ### 5. Catch drifted scaffold files and refresh them safely
 
@@ -218,7 +218,7 @@ The same flow applies to the `--enable-e2e`-scaffolded `playwright.config.ts` + 
 | `lakebase-branch` | Branch lifecycle: list / show / create / create-paired / create-tier / delete / delete-paired / checkout-paired / sync-env. Paired ops keep git + Lakebase + `.env` in lockstep. |
 | `lakebase-pr` | PR flow: open / merge / merge-paired / status (by --head) / files / reviews / comments. `merge-paired` deletes the matching Lakebase feature branch on merge. |
 | `lakebase-doctor` | Health-check the local env. Run first when something looks off. Exit codes 0/1/2 = OK/WARN/FAIL for CI. |
-| `lakebase-get-connection` | Mint a DSN string (`--output dsn`) or pg.Pool (`--output pool`) against any branch. Add `--write-env` to refresh `.env`. |
+| `lakebase-get-connection` | Mint a DSN string (`--output dsn`) or pg.Pool (`--output pool`) against any branch. To refresh `.env`, use `lakebase-branch sync-env` or `lakebase-resolve-profile --write-env`. |
 | `lakebase-schema-diff` | Parent-aware schema diff between any branch and its parent (or a comparison override). |
 | `lakebase-schema-migrate` | Apply / rollback / status / list schema migrations against a branch (Flyway / Alembic / Knex). |
 | `lakebase-cut-backup` | Cut a no-expiry backup branch off a source branch. |
@@ -276,7 +276,7 @@ Every CLI bin is a thin wrapper around a substrate function published from `@dat
 - `setRepoSecret`, `setRepoSecrets`, `listSecretNames` (CI secrets sync)
 
 **Env file** (`./lakebase`):
-- `writeEnvFile`, `updateEnvConnection` (the `.env` writes behind `--write-env` and the post-checkout hook)
+- `writeEnvFile`, `updateEnvConnection` (the `.env` writes behind the post-checkout hook and `lakebase-resolve-profile --write-env`)
 
 **Infra runner**:
 - `runInfraSuite(args)` returning `InfraSuiteResult`, plus `formatJUnit(result)` for CI report emission. This is what `lakebase-infra-runner` and the scaffolded `test:infra` script call.
