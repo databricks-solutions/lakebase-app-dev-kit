@@ -75,7 +75,7 @@ The same orchestrated path runs for real and headless; headless, the Human Proxy
 
 ## Headless / Human Proxy mode
 
-By default every gate is HITL (the workflow halts for the Product Owner). When `LAKEBASE_SFTDD_HUMAN_PROXY=1` (set by CI and the smoke), the approver role is **performed by** the `human-proxy` identity, a diligent stand-in, not a rubber stamp. It approves a `gates.json` gate (`spec`/`plan`/`test_list`/`promote`) and emits `gate.approved` only when both hold:
+By default every gate is HITL (the workflow halts for the Product Owner). When `LAKEBASE_SFTDD_HUMAN_PROXY=1` (set by CI and the smoke), the approver role is **performed by** the `human-proxy` identity, a diligent stand-in, not a rubber stamp. For the artifact gates (`spec`/`plan`/`test_list`/`promote`), it approves a `gates.json` gate and emits `gate.approved` only when both hold (the `deploy` gate is certified differently, see the `/deploy` bullet below):
 - **Given the artifacts:** the gate's expected artifacts EXIST (a missing one is refused).
 - **Format-conformant:** each validates against its declared format (JSON against its schema; narrative MD against its required sections, see `references/spec-format.md` + `lakebase-sftdd-gate-conformance`). A malformed artifact, or one missing a required section, is refused.
 
@@ -111,7 +111,7 @@ Each role is a separate agent definition under [`agents/`](agents/) with frontma
 - [`agents/release-engineer.md`](agents/release-engineer.md) – `/deploy`: deploys the built increment to its target, polls reachable, runs the feature verify, hands the evidence to the PO for the deploy gate. Composes on `lakebase-release-workflows` for remote/release-on-merge.
 The **orchestrator** is the deterministic driver (`lakebase-sftdd-drive`), **not an LLM agent**: it routes over `workflow-state.json`, hands each phase to the right role agent above, carries artifacts forward, and surfaces every gate to the PO. It writes no spec/code/test/deploy.
 
-**How the orchestrator runs them.** The role defs are scaffolded into the project's `.claude/agents/` (so Claude Code can discover + spawn them; the skill copy is the source). The driver computes the next action as a pure function of the recorded state, then spawns the role for that phase via `claude -p --agent <role>`. Routing is code, not a model: there is no LLM orchestrator session. Before spawning a role, the driver resolves the model from the project's `.lakebase/agent-config.json`: `lakebase-sftdd-agent-model --role <role>` returns `override ?? recommended ?? inherit` (the HIL sets per-project overrides at `lakebase-create-project`; each role's recommended model lives in its definition's `model:`).
+**How the orchestrator runs them.** The role defs are scaffolded into the project's `.claude/agents/` (so Claude Code can discover + spawn them; the skill copy is the source). The driver computes the next action as a pure function of the recorded state, then spawns the role for that phase via `claude -p --agent <role>`. Routing is code, not a model: there is no LLM orchestrator session. Before spawning a role, the driver resolves the model from the project's `.lakebase/sftdd-config.json` via `resolveSftddSettings` (`roles.<role>.model`, the single source of truth for project settings). Resolution is `sftdd-config.json role model ?? legacy .lakebase/agent-config.json (override ?? recommended) ?? built-in recommended ?? inherit`: `agent-config.json` is honored only as a fallback for projects scaffolded before `sftdd-config.json`. The HIL sets per-project models at `lakebase-create-project`; each role's recommended model lives in its definition's `model:` (mirrored in `RECOMMENDED_MODELS`).
 
 ## References
 
@@ -157,7 +157,7 @@ import { analyzeForGate, recordPlan, writePlan } from "@databricks-solutions/lak
 import { canCutAnotherExperiment } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/budget";
 import { attachSpikeInputs } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/spike-carryforward";
 
-const analysis = analyzeForGate(".sftdd", "F1");
+const analysis = analyzeForGate(".sftdd", "F1", "S1");
 // analysis.opinion_gaps[]            – items the analyzer flagged as opinion gaps
 // analysis.proposed_plan              – { mode: "N=1" | "N>=2", N, strategies[], budget, rationale }
 // analysis.proposed_plan.budget.per_experiment
@@ -309,7 +309,7 @@ import { readPlan } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/desig
 
 // Each cycle, after recording the runner outcome and before queuing
 // the next one, ask the substrate if this experiment is over its cap.
-const plan = readPlan(".sftdd", "F1");
+const plan = readPlan(".sftdd", "F1", "S1");
 const check = checkPerExperimentCap({
   tddDir: ".sftdd",
   featureId: "F1",
@@ -350,7 +350,7 @@ import { compareExperiments }
 import { renderComparisonReport, writeComparisonReport }
   from "@databricks-solutions/lakebase-app-dev-kit/sftdd/comparison-report";
 
-const report = compareExperiments(".sftdd", "F1");
+const report = compareExperiments(".sftdd", "F1", "S1");
 // report.rows[].signal       – "winning" | "stalled" | "abandoned" | "running"
 //                              | "capped" | "unknown"
 // report.rows[].capped       – populated when a per-experiment cap fired:
@@ -376,6 +376,7 @@ import { promoteExperiment }
 const result = promoteExperiment({
   tddDir: ".sftdd",
   featureId: "F1",
+  storyId: "S1",
   winnerSlug: "exp-postgres-arrays",
   hitlApproved: true,
   approverEmail: "kevin@example.com",
@@ -395,6 +396,7 @@ const result = await synthesizeExperiments({
   instance: "proj-checkout",
   tddDir: ".sftdd",
   featureId: "F1",
+  storyId: "S1",
   picks: [
     { source_slug: "exp-postgres-arrays", capability: "storage schema" },
     { source_slug: "exp-json-blob",       capability: "API surface" },
@@ -437,7 +439,7 @@ Design: [ADR-0004](../../../docs/adr/ADR-0004-tdd-gates-state-machine.md).
 
 `.sftdd/features/<F>/gates.json` is the substrate's authoritative gate state. `selection-log.md` stays as the human-readable narrative-of-record; the substrate dual-writes it at every state change. **Agents read `gates.json`; humans read the log.** Never regex-scan the log for state.
 
-Named gates: `spec` / `plan` / `test_list` / `promote`. Statuses: `open` / `approved` / `superseded` / `withdrawn`. Each gate's record carries the approver, timestamp, captured artifact hashes (sha256 of normalized content), and a `history[]` log of every action.
+Named gates: `spec` / `plan` / `test_list` / `promote` / `deploy`. Statuses: `open` / `approved` / `superseded` / `withdrawn`. Each gate's record carries the approver, timestamp, captured artifact hashes (sha256 of normalized content), and a `history[]` log of every action.
 
 ```ts
 import {
@@ -491,6 +493,7 @@ withdrawGate({
 | `plan` | `plan.json` |
 | `test_list` | `test-list.json` |
 | `promote` | `promote_ref` (synthesized string: `<winner-slug>:<branch_id>`) |
+| `deploy` | certified from deploy-evidence (reachable + verify), not a hashed artifactInputs set |
 
 **Concurrent-safe:** `approveGate` and `withdrawGate` serialize through a `.gates.lock` file (`fs.openSync` with `wx` flag). Two callers cannot lose either approval. Override: `HUSKY=0` not applicable here; the lock is mandatory.
 
@@ -605,27 +608,27 @@ import { compareExperiments } from "@databricks-solutions/lakebase-app-dev-kit/s
 import { promoteExperiment } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/promote-experiment";
 import { synthesizeExperiments } from "@databricks-solutions/lakebase-app-dev-kit/sftdd/synthesis";
 
-const tdd = ".sftdd"; const featureId = "F1";
+const tdd = ".sftdd"; const featureId = "F1"; const storyId = "S1";
 
-await cutExperiment({ instance: "proj-checkout", tddDir: tdd, featureId,
+await cutExperiment({ instance: "proj-checkout", tddDir: tdd, featureId, storyId,
   experimentSlug: "exp-postgres-arrays", branch: "checkout-pg-arrays", parentBranch: "staging" });
-await cutExperiment({ instance: "proj-checkout", tddDir: tdd, featureId,
+await cutExperiment({ instance: "proj-checkout", tddDir: tdd, featureId, storyId,
   experimentSlug: "exp-json-blob", branch: "checkout-json-blob", parentBranch: "staging" });
 
 // ... cycles run on each branch via beginCycle/markGreen ...
 
-writeOutcomes(tdd, featureId, "exp-postgres-arrays", { status: "succeeded", tests_passed: 5 });
-writeOutcomes(tdd, featureId, "exp-json-blob",       { status: "succeeded", tests_passed: 5 });
+writeOutcomes(tdd, featureId, storyId, "exp-postgres-arrays", { status: "succeeded", tests_passed: 5 });
+writeOutcomes(tdd, featureId, storyId, "exp-json-blob",       { status: "succeeded", tests_passed: 5 });
 
-const report = compareExperiments(tdd, featureId);
+const report = compareExperiments(tdd, featureId, storyId);
 
 if (report.recommendation === "promote") {
   const winner = report.rows.find((r) => r.signal === "winning")!;
-  promoteExperiment({ tddDir: tdd, featureId, winnerSlug: winner.experiment_slug,
+  promoteExperiment({ tddDir: tdd, featureId, storyId, winnerSlug: winner.experiment_slug,
                       hitlApproved: true, approverEmail: "kevin@example.com" });
 } else if (report.recommendation === "synthesize") {
   await synthesizeExperiments({
-    instance: "proj-checkout", tddDir: tdd, featureId,
+    instance: "proj-checkout", tddDir: tdd, featureId, storyId,
     picks: [
       { source_slug: "exp-postgres-arrays", capability: "storage schema" },
       { source_slug: "exp-json-blob",       capability: "API surface" },

@@ -55,6 +55,7 @@ The substrate API keeps "experiment" as the noun for the rigorous TDD branch; it
 | **Orchestrator** | The deterministic driver (`lakebase-sftdd-drive`), not an agent. Routes over `workflow-state.json`: runs the design-spec gate; spawns experiments to budget; runs cycles; watches smells; presents outcomes to HITL. | `lakebase-sftdd-drive` (code, not an agent def). |
 | **Navigator** | PLAN, RED (writes failing tests), REVIEW. Never weakens an assertion. | [`agents/navigator.md`](agents/navigator.md) |
 | **Driver** | GREEN (minimal honest code), REFACTOR. Never deletes or weakens a test. | [`agents/driver.md`](agents/driver.md) |
+| **Release Engineer** | `/deploy`: deploys the built increment to its target, polls reachable, runs the feature verify, and hands the evidence to the PO for the `deploy` gate. Composes on `lakebase-release-workflows`. | [`agents/release-engineer.md`](agents/release-engineer.md) |
 | **Product Owner / HITL** | Owns the project-level `product-overview.md` (open-ended intent; software is a product), ACs, test list ordering. Decides promote vs synthesize. Owns every gate. | The human. |
 
 ## Phases and gates
@@ -68,6 +69,7 @@ Phases 0–3 are the **SDD (Spec Driven Development)** lane: they produce and fr
 | 2 Test-list construction | SDD | Ordered `test-list.{md,json}` at feature level | **Gate 3 – Test list ordering** |
 | 3 Design-spec gate | SDD | Experiment plan in `selection-log.md` (N, strategies, budget) | **Gate 4 – Experiment plan** |
 | 4 Implementation | TDD | Per-experiment cycles producing tests + code | Continuous: smells; final: promote / synthesize choice |
+| 5 Deploy | TDD | Deployed increment (reachable + verify) on the paired branch | **`deploy` gate** |
 
 Each phase has a defined predecessor + artifact contract. The orchestrator refuses to transition if prior artifacts are missing or invalid. The SDD-to-TDD handoff is hard: the build lane cannot start until the `spec` and `test_list` gates are approved, so TDD always builds against a frozen, reviewed spec.
 
@@ -214,8 +216,11 @@ For when you want to run something directly without the agent. Most TDD work goe
 
 ## Project-level entry points
 
+- **`/sprint [name]`** – the top-level orchestrator: runs sprint planning to the plan gate, then claims + drives each backlog feature `design` → `build` → `deploy`. Resumable; halts at the next HITL gate.
+- **`/plan [name]`** – sprint planning above the per-feature loop: the Spec Author proposes the breakdown, the Architect t-shirt-sizes it, the PO commits the backlog, gated at the sprint plan gate. Stops there (does not flow into design).
 - **`/design`** – the **SDD (Spec Driven Development)** lane: wraps Spec Author + Architect Reviewer + Test Strategist phases to produce the gated, executable spec. Scaffolded into new projects by `lakebase-create-project`. Project-specific JIRA hierarchy creation lives in `design.pre-hook.md`.
 - **`/build`** – the **TDD (Test Driven Development)** lane: wraps the Orchestrator running RED → GREEN → REFACTOR against the frozen spec. Scaffolded into new projects by `lakebase-create-project`. Project-specific PR/merge ceremony lives in `build.post-hook.md`.
+- **`/deploy <feature-id>`** – deploys the merged feature (or one story's branch), verifies reachable + feature-verify, and surfaces the `deploy` gate for the PO. The local target is the one implemented; remote release rides the scaffolded `merge.yml`.
 - **`/ship`** – lives in `lakebase-release-workflows`. Not part of this skill.
 
 The substrate itself ships no installed slash commands; the scaffolder writes the command files into the project at `lakebase-create-project` time (templated, with a kit-version pin). The substrate's runtime surface stays skills + agents + scripts + CLI bins. The MCP server (`apps/mcp-server/`) exposes the tool surface for MCP-capable consumers.
@@ -243,9 +248,9 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `cutExperiment(args)` | Cut a paired Lakebase branch for an experiment and write its record under `.sftdd/experiments/<feature>/<slug>/`. |
-| `listExperiments(tddDir, featureId)` | Enumerate experiment records for a feature. |
-| `readOutcomes(tddDir, featureId, slug)` / `writeOutcomes(...)` | Read/write the per-experiment `outcomes.json` (tag matrix, tests passed/failed, schema diff summary). |
+| `cutExperiment(args)` | Cut a paired Lakebase branch for an experiment and write its record under `.sftdd/experiments/<feature>/<story>/<slug>/`. |
+| `listExperiments(tddDir, featureId, storyId)` | Enumerate a story's experiment records. |
+| `readOutcomes(tddDir, featureId, storyId, slug)` / `writeOutcomes(...)` | Read/write the per-experiment `outcomes.json` (tag matrix, tests passed/failed, schema diff summary). |
 | `recordTagRun(outcomes, tag, verdict)` / `tagRunCount(outcomes, tag)` / `acLayerToTag(layer)` | Helpers for maintaining the tag-matrix bookkeeping on `outcomes.json`. |
 | `deleteExperiment(args)` | Tear down a Lakebase branch and (optionally) the on-disk experiment record. HITL-gated. |
 | `cutSpike(args)` / `listSpikes(tddDir)` / `deleteSpike(args)` | Same lifecycle for the spike side-mode under `.sftdd/spikes/`. |
@@ -281,14 +286,14 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 |---|---|
 | `analyzeForGate(input, options?)` | The design-spec analyzer. Scans the approved test list for opinion-gap signals and returns an `ExperimentPlan` proposal (N, strategies, budget incl. `per_experiment` default cap, rationale, plus `spike_inputs[]` populated automatically from any tagged spike under `.sftdd/spikes/`). |
 | `recordPlan(tddDir, plan, deciderEmail?)` | Persist an approved plan to `plan.json` and append the decision to `selection-log.md`. |
-| `readPlan(tddDir, featureId)` / `writePlan(tddDir, plan)` | Direct plan IO. |
+| `readPlan(tddDir, featureId, storyId)` / `writePlan(tddDir, plan)` | Direct plan IO. |
 | `checkE2eGate({ tddDir, featureId })` | Pre-merge guard: refuses to advance if any `[E2E]`-tagged AC is still red. |
 
 ### Gates and integrity
 
 | Primitive | Purpose |
 |---|---|
-| `approveGate({ featureId, gate, decider, artifacts })` | Record HITL approval for one of `spec | plan | test_list | promote`. Throws `GateAlreadyClosedError` on double-approve. |
+| `approveGate({ featureId, gate, approver, hitlApproved, artifactInputs })` | Record HITL approval for one of `spec | plan | test_list | promote | deploy`. Throws `GateAlreadyClosedError` on double-approve. |
 | `withdrawGate(args)` | Revoke a previously approved gate (e.g. after a smell flags drift). |
 | `verifyGateIntegrity({ tddDir, featureId, gate })` | Re-hash referenced artifacts and report drift since approval. |
 | `readGates(featureId, opts?)` / `writeGates(state, opts?)` / `defaultGatesState(featureId)` | Direct gate-state IO. |
@@ -300,10 +305,10 @@ import { cutExperiment, listExperiments, deleteExperiment } from "@databricks-so
 
 | Primitive | Purpose |
 |---|---|
-| `compareExperiments(tddDir, featureId)` | Build a `ComparisonReport` (rows + tag matrix) over a feature's experiments. |
+| `compareExperiments(tddDir, featureId, storyId)` | Build a `ComparisonReport` (rows + tag matrix) over a story's experiments. |
 | `writeComparisonReport(args)` / `renderComparisonReport(report)` | Persist and render the Markdown comparison artifact. |
-| `promoteExperiment({ tddDir, featureId, slug, hitlApproved })` | Promote one experiment into the feature PR; archive the rest. `hitlApproved` is mandatory. |
-| `synthesizeExperiments({ tddDir, featureId, picks, hitlApproved })` | Cut a fresh synthesis branch built from capabilities picked across experiments. `hitlApproved` is mandatory. |
+| `promoteExperiment({ tddDir, featureId, storyId, winnerSlug, hitlApproved })` | Promote one experiment into the feature PR; archive the rest. `hitlApproved` is mandatory. |
+| `synthesizeExperiments({ tddDir, featureId, storyId, picks, hitlApproved })` | Cut a fresh synthesis branch built from capabilities picked across experiments. `hitlApproved` is mandatory. |
 
 ### Smells
 

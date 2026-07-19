@@ -37,13 +37,14 @@ This `.sftdd/` tree is the artifact of **Spec Driven Development (SDD)**: the de
           test-list-per-ac.json      ← generated transform from feature test-list.json
   experiments/
     F1-partner-submits-assets/
-      exp-1-postgres-arrays/
-        notes.md                     ← strategy summary, learning
-        branch.txt                   ← Lakebase branch id
-        outcomes.json                ← {tests_passed, schema_diff_summary, code_diff_lines, status}
-        timeline.json                ← cycles + smell triggers + HITL interventions
-      exp-2-json-blob/
-        ...
+      S1-submit-form/                ← story scope (experiments are story-scoped)
+        exp-1-postgres-arrays/
+          notes.md                   ← strategy summary, learning
+          branch.txt                 ← Lakebase branch id
+          outcomes.json              ← {tests_passed, schema_diff_summary, code_diff_lines, status}
+          timeline.json              ← cycles + smell triggers + HITL interventions
+        exp-2-json-blob/
+          ...
   spikes/
     F1-explore-storage/
       notes.md

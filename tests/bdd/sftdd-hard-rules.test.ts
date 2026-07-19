@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { GATE_NAMES } from "../../scripts/sftdd/gates";
 
 const SKILL_DIR = join(__dirname, "..", "..", "skills", "lakebase-sftdd-workflows");
 const SKILL_PATH = join(SKILL_DIR, "SKILL.md");
@@ -81,6 +82,16 @@ describe("lakebase-sftdd-workflows hard rules", () => {
   it("driver.md prohibits mocking the database", () => {
     const drv = readFileSync(DRV_PATH, "utf8");
     expect(drv.toLowerCase()).toContain("no mocks for the database");
+  });
+
+  // Anti-recurrence guard: SKILL.md's gate documentation drifted behind the code
+  // once (the `deploy` gate was added to GATE_NAMES but the named-gate list still
+  // read spec/plan/test_list/promote). Fail if a gate exists in code but is never
+  // mentioned in SKILL.md, so a future gate addition forces a doc update.
+  it("SKILL.md names every gate in GATE_NAMES", () => {
+    for (const gate of GATE_NAMES) {
+      expect(skill, `SKILL.md should mention the '${gate}' gate`).toContain(`\`${gate}\``);
+    }
   });
 
   // Finding 30: a fixed-key seed with only `finally` cleanup poisons every later
