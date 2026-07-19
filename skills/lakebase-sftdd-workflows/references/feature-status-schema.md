@@ -35,7 +35,7 @@ interface FeatureStatusSnapshot {
 | `experiments` | array | One entry per directory under `.sftdd/experiments/<F>/`. Empty when no experiments have been cut. |
 | `selection_log_recent` | array | Up to the last 5 entries from `.sftdd/selection-log.md`, oldest-first. |
 | `open_smells` | array | Unresolved entries from `.sftdd/smells.json` (entries with no `resolution` field). Global to the `.sftdd/` tree; not filtered per feature in this version. |
-| `gates` | object \| null | Compact view of `.sftdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all four gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/sftdd/gates.readGates()` for the full state including history + artifact_hashes. |
+| `gates` | object \| null | Compact view of `.sftdd/features/<F>/gates.json` (ADR-0004 structured HITL state). `null` when the feature directory does not exist. Default-open shape (all five gates `status: "open"`) returned when the directory exists but no `gates.json` file has been written yet. Use `scripts/sftdd/gates.readGates()` for the full state including history + artifact_hashes. |
 | `progression` | object \| null | Deploy/promote completion RECONCILED from the drive engine (`readDriveContext`, the same reconciliation `lakebase-sftdd-next` uses): `{coarse_phase, deploy_done, promote_done}`. `deploy_done` is true once `deploy-evidence.json` exists (or the feature has merged); `promote_done` is true once the SCM `.lakebase/workflow-state.json` reaches `merged`. The renderer overlays this onto the `deploy`/`promote` gate lines so a shipped feature reads `done`, not the stale raw `gates.json` `open` bit. `null` when the drive context cannot be read. |
 
 ## Nested types
@@ -59,6 +59,7 @@ See `scripts/sftdd/design-spec-gate.ts`. Persisted at `.sftdd/features/<F>/plan.
 ```ts
 interface ExperimentPlan {
   feature_id: string;
+  story_id: string; // experiments are story-scoped; one plan.json per story
   N: number;
   mode: "N=1" | "N>=2";
   strategies: Array<{ name: string; rationale: string }>;
@@ -66,6 +67,7 @@ interface ExperimentPlan {
     concurrent_branches: number;
     wall_clock_minutes: number;
     agent_pairs: number;
+    per_experiment?: { max_cycles?: number; max_wall_clock_minutes?: number }; // default { max_cycles: 30, max_wall_clock_minutes: 60 }
   };
   rationale: string;
 }
@@ -91,6 +93,7 @@ interface TestListSummary {
 
 ```ts
 interface ExperimentStatusEntry {
+  story_id: string; // experiments are story-scoped
   slug: string;
   branch_id: string;
   status: "running" | "succeeded" | "failed" | "abandoned" | null;
@@ -113,7 +116,7 @@ interface SelectionLogEntry {
 ### GatesSummary
 
 ```ts
-type GateName = "spec" | "plan" | "test_list" | "promote";
+type GateName = "spec" | "plan" | "test_list" | "promote" | "deploy";
 type GateStatus = "open" | "approved" | "superseded" | "withdrawn";
 
 interface GateSummary {
@@ -146,22 +149,37 @@ interface SmellHit {
 ```json
 {
   "feature_id": "F1-checkout",
-  "current_workflow_phase": "implementation",
+  "current_workflow_phase": "discovery",
+  "derived_phase": "build",
   "current_workflow_pointer": {
     "feature_id": "F1-checkout",
-    "story_id": null,
+    "story_id": "S1-submit",
     "ac_id": null,
     "cycle_id": "C1",
     "experiment_id": null
   },
-  "plan": {
-    "feature_id": "F1-checkout",
-    "N": 1,
-    "mode": "N=1",
-    "strategies": [{ "name": "checkout", "rationale": "default" }],
-    "budget": { "concurrent_branches": 1, "wall_clock_minutes": 120, "agent_pairs": 1 },
-    "rationale": "no opinion gaps detected"
-  },
+  "stories": [
+    { "story_id": "S1-submit", "status": "building", "gate_status": "approved", "accepted": false }
+  ],
+  "plans": [
+    {
+      "story_id": "S1-submit",
+      "plan": {
+        "feature_id": "F1-checkout",
+        "story_id": "S1-submit",
+        "N": 1,
+        "mode": "N=1",
+        "strategies": [{ "name": "single-experiment", "rationale": "Iterative refinement; no parallel race needed." }],
+        "budget": {
+          "concurrent_branches": 1,
+          "wall_clock_minutes": 180,
+          "agent_pairs": 1,
+          "per_experiment": { "max_cycles": 30, "max_wall_clock_minutes": 60 }
+        },
+        "rationale": "no opinion gaps detected"
+      }
+    }
+  ],
   "test_list": {
     "total": 5,
     "by_status": { "pending": 3, "red": 0, "green": 1, "refactored": 1, "skipped": 0 },
@@ -169,7 +187,8 @@ interface SmellHit {
   },
   "experiments": [
     {
-      "slug": "checkout",
+      "story_id": "S1-submit",
+      "slug": "s1-submit",
       "branch_id": "br-feat-add-orders",
       "status": "running",
       "tests_passed": 2,
@@ -179,15 +198,17 @@ interface SmellHit {
     }
   ],
   "selection_log_recent": [
-    { "timestamp": "2026-05-27T10:00:00Z", "title": "Experiment plan for F1-checkout" }
+    { "timestamp": "2026-05-27T10:00:00Z", "title": "Experiment plan for F1-checkout/S1-submit" }
   ],
   "open_smells": [],
   "gates": {
     "spec": { "status": "approved", "approver": "po@example.com", "approved_at": "2026-05-31T20:00:00.000Z" },
     "plan": { "status": "approved", "approver": "po@example.com", "approved_at": "2026-05-31T21:00:00.000Z" },
     "test_list": { "status": "open", "approver": null, "approved_at": null },
-    "promote": { "status": "open", "approver": null, "approved_at": null }
-  }
+    "promote": { "status": "open", "approver": null, "approved_at": null },
+    "deploy": { "status": "open", "approver": null, "approved_at": null }
+  },
+  "progression": { "coarse_phase": "feature", "deploy_done": false, "promote_done": false }
 }
 ```
 

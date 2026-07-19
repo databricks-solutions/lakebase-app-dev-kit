@@ -41,6 +41,7 @@ Read via `resolveSftddSettings({ projectDir })` in `scripts/sftdd/sftdd-config.t
 | UX track on/off | `project.uiTrack` | create-project `--ui-track` (the ONE door for the UX lane) |
 | Gate policy (`interactive` \| `proxy`) | `project.gates` | create-project (seed); drive `--gates` (write-through) |
 | Deploy target | `project.deployTarget` | create-project (seed); drive `--deploy-target` (write-through) |
+| Client framework (`react` \| `none`) | `project.clientFramework` | create-project `--client` (defaults to `react` when `--ui-track`, else `none`) |
 
 **Derived, not stored:** the e2e harness is NOT a `sftdd-config.json` field. It is
 derived at scaffold time: `enableE2e = uiTrack || (explicit --enable-e2e ?? language
